@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
-import { getBCToken, bcPageWithNext } from "@/lib/bc"
+import { getBCTokenAny, bcPageWithNext } from "@/lib/bc"
 import { prisma } from "@/lib/prisma"
 import { isAuthedOrCron } from "@/lib/auth-or-cron"
 
@@ -10,7 +10,7 @@ export const maxDuration = 300
 export async function GET() {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
-  const token = await getBCToken()
+  const token = await getBCTokenAny()
   if (!token) return NextResponse.json({ error: "BC_NOT_CONNECTED" }, { status: 503 })
   const { rows, count } = await bcPageWithNext(token, "Totes_Excel", { $top: 2, "$count": "true" })
   if (!rows.length) return NextResponse.json({ bcCount: count ?? null, fields: [], sample: null })
@@ -23,7 +23,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   if (!await isAuthedOrCron(req)) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
-  const token = await getBCToken()
+  const token = await getBCTokenAny()
   if (!token) return NextResponse.json({ error: "BC_NOT_CONNECTED" }, { status: 503 })
 
   let full = false

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getBCToken, bcPageWithNext } from "@/lib/bc"
+import { getBCTokenAny, bcPageWithNext } from "@/lib/bc"
 import { prisma } from "@/lib/prisma"
 import { isAuthedOrCron } from "@/lib/auth-or-cron"
 
@@ -43,7 +43,7 @@ function parseFloat_(v: any): number | null {
 export async function POST(req: NextRequest) {
   if (!await isAuthedOrCron(req)) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
-  const token = await getBCToken()
+  const token = await getBCTokenAny()
   if (!token) return NextResponse.json({ error: "BC_NOT_CONNECTED" }, { status: 503 })
 
   let full = false
