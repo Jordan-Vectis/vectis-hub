@@ -2011,11 +2011,12 @@ export default function BCWarehousePage() {
         // Refresh status periodically so the user sees the count climb
         if (safety % 4 === 0) await fetchStatus()
       }
-      await fetch("/api/warehouse/sync/auction-lines", { method: "POST" })
-      await fetch("/api/warehouse/sync/changelog", { method: "POST" })
-      await fetch("/api/warehouse/sync/totes", { method: "POST" })
-      await fetch("/api/warehouse/sync/totes-active", { method: "POST" })
-      await fetch("/api/warehouse/sync/auction-names", { method: "POST" })
+      const opts = { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }
+      await fetch("/api/warehouse/sync/auction-lines",  opts)
+      await fetch("/api/warehouse/sync/changelog",      opts)
+      await fetch("/api/warehouse/sync/totes",          opts)
+      await fetch("/api/warehouse/sync/totes-active",   opts)
+      await fetch("/api/warehouse/sync/auction-names",  opts)
       await fetchStatus()
     } finally {
       syncingRef.current = false
