@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "node server.js",
     "build": "prisma generate && NODE_OPTIONS='--max-old-space-size=2048' next build",
-    "start": "prisma migrate deploy && node server.js",
+    "start": "node server.js",
     "lint": "eslint"
   },
   "dependencies": {
