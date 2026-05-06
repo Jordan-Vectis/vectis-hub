@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server"
-import { auth } from "@/auth"
+import { NextRequest, NextResponse } from "next/server"
 import { getBCToken, bcPage } from "@/lib/bc"
 import { prisma } from "@/lib/prisma"
+import { isAuthedOrCron } from "@/lib/auth-or-cron"
 
 // POST /api/warehouse/sync/auction-names
 // Populates WarehouseItem.auctionName for every distinct auctionCode in the DB.
@@ -10,10 +10,9 @@ import { prisma } from "@/lib/prisma"
 // updateMany all items sharing that code.
 // Runs after receipt-lines + auction-lines sync so codes are already present.
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   try {
-    const session = await auth()
-    if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+    if (!await isAuthedOrCron(req)) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
     const token = await getBCToken()
     if (!token) return NextResponse.json({ error: "BC_NOT_CONNECTED" }, { status: 503 })

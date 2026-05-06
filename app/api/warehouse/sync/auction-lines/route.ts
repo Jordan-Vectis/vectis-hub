@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/auth"
 import { getBCToken, bcPageWithNext } from "@/lib/bc"
 import { prisma } from "@/lib/prisma"
+import { isAuthedOrCron } from "@/lib/auth-or-cron"
 
 export const maxDuration = 300
 
@@ -17,8 +17,7 @@ function parseBool(v: any): boolean | null {
 // Same pattern as receipt-lines: BC nextLink pagination, parallel upserts,
 // loop-driven by the client until more === false.
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+  if (!await isAuthedOrCron(req)) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
   const token = await getBCToken()
   if (!token) return NextResponse.json({ error: "BC_NOT_CONNECTED" }, { status: 503 })

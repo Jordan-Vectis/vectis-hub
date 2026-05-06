@@ -51,5 +51,25 @@ app.prepare().then(async () => {
   httpServer.listen(port, () => {
     console.log(`> Vectis Hub ready on http://localhost:${port}`)
     console.log(`> Socket.IO live auction server active`)
+
+    // Background warehouse sync — runs every 20 minutes.
+    // First run is delayed 2 minutes to let Next.js finish initialising.
+    const SYNC_INTERVAL_MS = 20 * 60 * 1000
+    const SYNC_INITIAL_DELAY_MS = 2 * 60 * 1000
+    function runWarehouseSync() {
+      const secret = process.env.CRON_SECRET
+      if (!secret) { console.warn('[cron] CRON_SECRET not set — skipping warehouse sync') ; return }
+      fetch(`http://localhost:${port}/api/cron/bc-warehouse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
+      })
+        .then(r => r.json())
+        .then(d => console.log('[cron/bc-warehouse] complete', JSON.stringify(d.results ?? {})))
+        .catch(e => console.warn('[cron/bc-warehouse] error:', e.message))
+    }
+    setTimeout(() => {
+      runWarehouseSync()
+      setInterval(runWarehouseSync, SYNC_INTERVAL_MS)
+    }, SYNC_INITIAL_DELAY_MS)
   })
 })
