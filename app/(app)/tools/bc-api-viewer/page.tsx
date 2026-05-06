@@ -5,9 +5,12 @@ import { useState } from "react"
 // ─── Known endpoints ──────────────────────────────────────────────────────────
 
 const KNOWN_ENDPOINTS = [
+  { label: "Auction Line",           value: "EVA_AuctionLine" },
+  { label: "Auction Lines",          value: "Auction_Lines_Excel" },
   { label: "Auction Receipt Lines",  value: "Auction_Receipt_Lines_Excel" },
   { label: "Receipt Lines",          value: "Receipt_Lines_Excel" },
   { label: "Receipt Totes",          value: "Receipt_Totes_Excel" },
+  { label: "Totes",                  value: "Totes_Excel" },
   { label: "Change Log Entries",     value: "ChangeLogEntries" },
   { label: "Shipment Requests",      value: "ShipmentRequestAPI" },
   { label: "Collection List",        value: "CollectionList" },

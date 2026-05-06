@@ -567,6 +567,7 @@ model WarehouseItem {
 
   // Sale / Auction
   auctionCode  String?           // EVA_SalesAllocation
+  auctionName  String?           // EVA_AuctionName (from Auction_Lines_Excel)
   auctionDate  String?           // EVA_AuctionDate
   lotNo        String?           // EVA_LotNo
   currentLotNo String?           // EVA_CurrentLotNo (auction lines)
@@ -618,17 +619,17 @@ model WarehouseSyncLog {
 // Synced separately from WarehouseItem (which tracks individual items).
 // A tote may be at a location even if items inside don't yet have one.
 model WarehouseTote {
-  id            String    @id @default(cuid())
-  toteNo        String    @unique
-  location      String?
-  binCode       String?
-  receiptNo     String?
-  vendorNo      String?
-  vendorName    String?
-  status        String?
-  bcModifiedAt  DateTime?
-  syncedAt      DateTime  @default(now())
+  id           String   @id @default(cuid())
+  toteNo       String   @unique
+  location     String?
+  receiptNo    String?
+  vendorNo     String?
+  vendorName   String?
+  status       String?
+  catalogued   Boolean?
+  syncedAt     DateTime @default(now())
 
   @@index([location])
   @@index([toteNo])
+  @@index([catalogued])
 }

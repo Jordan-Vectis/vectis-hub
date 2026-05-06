@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/auth"
-import { getBCToken, bcPageWithNext } from "@/lib/bc"
+import { getBCTokenAny, bcPageWithNext } from "@/lib/bc"
 import { prisma } from "@/lib/prisma"
+import { isAuthedOrCron } from "@/lib/auth-or-cron"
 
 export const maxDuration = 300
 
@@ -10,10 +10,9 @@ export const maxDuration = 300
 // locationScannedAt on matching WarehouseItems. Uses BC nextLink pagination
 // so it can walk the entire change log past the ~38k $skip cap.
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+  if (!await isAuthedOrCron(req)) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
-  const token = await getBCToken()
+  const token = await getBCTokenAny()
   if (!token) return NextResponse.json({ error: "BC_NOT_CONNECTED" }, { status: 503 })
 
   let full = false

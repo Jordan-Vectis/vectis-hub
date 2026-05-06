@@ -197,4 +197,16 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     glow:               "hover:shadow-red-900/40",
     appKey:             "AUCTION_CONTROLLER",
   },
+  {
+    key:                "AI_PRESENTER",
+    href:               "/tools/avatar",
+    defaultLabel:       "AI Presenter",
+    defaultDescription: "Realistic AI avatar presenter — reads lot descriptions aloud with live lip-sync and head movement.",
+    icon:               "🎙️",
+    border:             "border-fuchsia-500",
+    iconBg:             "text-fuchsia-400",
+    btnBg:              "bg-fuchsia-600 hover:bg-fuchsia-500",
+    glow:               "hover:shadow-fuchsia-900/40",
+    appKey:             "AI_PRESENTER",
+  },
 ]
