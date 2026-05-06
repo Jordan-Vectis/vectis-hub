@@ -39,16 +39,15 @@ export async function POST(req: NextRequest) {
       }
 
       case "create": {
-        // Use presenter_id for D-ID's stock presenters (more reliable than source_url)
-        const { presenterId } = body
-        if (!presenterId) {
+        const { presenterUrl } = body
+        if (!presenterUrl) {
           return NextResponse.json({ error: "No presenter selected" }, { status: 400 })
         }
 
         const res = await fetch(`${DID_API}/talks/streams`, {
           method:  "POST",
           headers: didHeaders(),
-          body:    JSON.stringify({ presenter_id: presenterId }),
+          body:    JSON.stringify({ source_url: presenterUrl }),
         })
 
         if (!res.ok) {

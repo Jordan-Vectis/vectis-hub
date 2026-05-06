@@ -9,7 +9,7 @@ type Presenter = {
   id?:           string
   name:          string
   thumbnail_url: string
-  image_url?:    string
+  image_url?:    string  // higher-res face image if available, else fall back to thumbnail_url
 }
 
 const STATUS_LABEL: Record<Status, string> = {
@@ -102,7 +102,7 @@ export default function AvatarPage() {
     setStatus("connected")
   }, [])
 
-  const connect = useCallback(async (presenterId: string) => {
+  const connect = useCallback(async (presenterUrl: string) => {
     await cleanup(true)
     setStatus("connecting")
     setError(null)
@@ -118,7 +118,7 @@ export default function AvatarPage() {
       const createRes = await fetch("/api/avatar", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ action: "create", presenterId }),
+        body:    JSON.stringify({ action: "create", presenterUrl }),
       })
 
       if (!createRes.ok) {
@@ -360,7 +360,7 @@ export default function AvatarPage() {
             <h2 className="text-gray-400 text-xs font-semibold uppercase tracking-widest mb-3">Connection</h2>
             {status === "idle" || status === "error" ? (
               <button
-                onClick={() => selectedPresenter && connect(selectedPresenter.presenter_id ?? selectedPresenter.id ?? "")}
+                onClick={() => selectedPresenter && connect(selectedPresenter.image_url ?? selectedPresenter.thumbnail_url)}
                 disabled={!selectedPresenter || loadingPresenters}
                 className="w-full py-2.5 bg-[#2AB4A6] hover:bg-[#22a090] active:bg-[#1a8078] text-black font-semibold rounded-lg transition-colors text-sm disabled:opacity-40 disabled:cursor-not-allowed"
               >
