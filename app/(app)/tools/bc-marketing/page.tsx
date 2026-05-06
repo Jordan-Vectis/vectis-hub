@@ -55,7 +55,7 @@ function fmt(n: number | null) {
 function htmlToPlain(html: string) {
   return html
     .replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi, "$1\n\n")
-    .replace(/<p[^>]*>(.*?)<\/p>/gis, "$1\n\n")
+    .replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, "$1\n\n")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<strong[^>]*>(.*?)<\/strong>/gi, "$1")
     .replace(/<em[^>]*>(.*?)<\/em>/gi, "$1")
