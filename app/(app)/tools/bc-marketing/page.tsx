@@ -1,45 +1,36 @@
 "use client"
 
-import { useState } from "react"
-import Logo from "@/components/logo"
+import { useState, useEffect } from "react"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Lot = {
-  uniqueId:    string
-  lotNo:       string | null
-  description: string | null
-  category:    string | null
-  hammerPrice: number | null
-  lowEstimate: number | null
-  highEstimate:number | null
-  auctionCode: string | null
-  auctionName: string | null
-  auctionDate: string | null
+  uniqueId:     string
+  lotNo:        string | null
+  description:  string | null
+  category:     string | null
+  hammerPrice:  number | null
+  lowEstimate:  number | null
+  highEstimate: number | null
+  auctionCode:  string | null
+  auctionName:  string | null
+  auctionDate:  string | null
 }
 
-type Tab = "article-generator"
-
 const ARTICLE_TYPES = [
-  { value: "sale_highlight",   label: "Sale Highlight",    desc: "News article showcasing the top results from a sale" },
-  { value: "news_story",       label: "News Story",        desc: "Website news story in Vectis editorial style" },
-  { value: "collectors_guide", label: "Collector's Guide", desc: "Informative guide for collectors based on the lots" },
-  { value: "market_report",    label: "Market Report",     desc: "Analysis of prices and trends for a category" },
+  { value: "sale_highlight",   label: "Sale Highlight",    desc: "Top results from a sale" },
+  { value: "news_story",       label: "News Story",        desc: "Vectis editorial style" },
+  { value: "collectors_guide", label: "Collector's Guide", desc: "Guide for enthusiasts" },
+  { value: "market_report",    label: "Market Report",     desc: "Trends & price analysis" },
 ]
 
 const MONTHS = [
-  { value: "01", label: "January" },
-  { value: "02", label: "February" },
-  { value: "03", label: "March" },
-  { value: "04", label: "April" },
-  { value: "05", label: "May" },
-  { value: "06", label: "June" },
-  { value: "07", label: "July" },
-  { value: "08", label: "August" },
-  { value: "09", label: "September" },
-  { value: "10", label: "October" },
-  { value: "11", label: "November" },
-  { value: "12", label: "December" },
+  { value: "01", label: "January" },   { value: "02", label: "February" },
+  { value: "03", label: "March" },     { value: "04", label: "April" },
+  { value: "05", label: "May" },       { value: "06", label: "June" },
+  { value: "07", label: "July" },      { value: "08", label: "August" },
+  { value: "09", label: "September" }, { value: "10", label: "October" },
+  { value: "11", label: "November" },  { value: "12", label: "December" },
 ]
 
 const THIS_YEAR = new Date().getFullYear()
@@ -77,6 +68,9 @@ function ArticleGeneratorTab() {
   const [topN,        setTopN]        = useState(10)
   const [articleType, setArticleType] = useState("sale_highlight")
 
+  // Categories dropdown
+  const [categories, setCategories] = useState<string[]>([])
+
   // State
   const [loadingLots,    setLoadingLots]    = useState(false)
   const [lotsError,      setLotsError]      = useState<string | null>(null)
@@ -88,6 +82,14 @@ function ArticleGeneratorTab() {
 
   const [copied, setCopied] = useState<"plain" | "html" | null>(null)
 
+  // Load categories on mount
+  useEffect(() => {
+    fetch("/api/marketing/categories")
+      .then(r => r.json())
+      .then(d => { if (d.categories) setCategories(d.categories) })
+      .catch(() => {})
+  }, [])
+
   async function findLots() {
     setLoadingLots(true)
     setLotsError(null)
@@ -95,9 +97,9 @@ function ArticleGeneratorTab() {
     setArticle(null)
 
     const params = new URLSearchParams()
-    if (keyword)  params.set("keyword",  keyword.trim())
-    if (category) params.set("category", category.trim())
-    if (month && year) params.set("month", `${year}-${month}`)
+    if (keyword)       params.set("keyword",  keyword.trim())
+    if (category)      params.set("category", category)
+    if (month && year) params.set("month",    `${year}-${month}`)
     params.set("topN", String(topN))
 
     try {
@@ -145,11 +147,11 @@ function ArticleGeneratorTab() {
   const selectedType = ARTICLE_TYPES.find(t => t.value === articleType)
 
   return (
-    <div className="space-y-6">
+    <div className="flex-1 overflow-y-auto p-6 space-y-6">
 
-      {/* ── Filter Panel ─────────────────────────────────────────────────── */}
+      {/* ── Filter Panel ────────────────────────────────────────────────── */}
       <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 space-y-4">
-        <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Filters</h2>
+        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Filters</h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Keyword */}
@@ -165,17 +167,17 @@ function ArticleGeneratorTab() {
             />
           </div>
 
-          {/* Category */}
+          {/* Category dropdown */}
           <div>
             <label className="block text-xs text-gray-400 mb-1">Category</label>
-            <input
-              type="text"
+            <select
               value={category}
               onChange={e => setCategory(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && findLots()}
-              placeholder="e.g. Diecast, Comics…"
-              className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-pink-500"
-            />
+              className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-pink-500"
+            >
+              <option value="">All categories</option>
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
           </div>
 
           {/* Month / Year */}
@@ -203,7 +205,7 @@ function ArticleGeneratorTab() {
 
           {/* Top N */}
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Top N lots (by hammer price)</label>
+            <label className="block text-xs text-gray-400 mb-1">Top N by hammer price</label>
             <select
               value={topN}
               onChange={e => setTopN(Number(e.target.value))}
@@ -238,9 +240,7 @@ function ArticleGeneratorTab() {
               {lots.length === 0 ? "No lots found" : `${lots.length} lot${lots.length === 1 ? "" : "s"} found`}
             </span>
             {lots.length > 0 && (
-              <span className="text-xs text-gray-500">
-                Sorted by hammer price (highest first)
-              </span>
+              <span className="text-xs text-gray-500">Sorted by hammer price (highest first)</span>
             )}
           </div>
 
@@ -285,13 +285,12 @@ function ArticleGeneratorTab() {
         </div>
       )}
 
-      {/* ── Article Generator ────────────────────────────────────────────── */}
+      {/* ── Article Type + Generate ──────────────────────────────────────── */}
       {lots !== null && lots.length > 0 && (
         <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Generate Article</h2>
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Generate Article</h2>
 
-          {/* Article type selector */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {ARTICLE_TYPES.map(t => (
               <button
                 key={t.value}
@@ -361,6 +360,7 @@ function ArticleGeneratorTab() {
           />
         </div>
       )}
+
     </div>
   )
 }
@@ -368,35 +368,17 @@ function ArticleGeneratorTab() {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function BcMarketingPage() {
-  const [tab, setTab] = useState<Tab>("article-generator")
-
   return (
-    <div className="min-h-screen bg-gray-950 text-white px-4 py-8 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-8">
-        <Logo className="h-8 w-auto opacity-80" />
-        <div>
-          <h1 className="text-2xl font-bold text-white">BC Marketing</h1>
-          <p className="text-gray-400 text-sm">AI-powered marketing tools for Vectis auction results</p>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-gray-800">
-        <button
-          onClick={() => setTab("article-generator")}
-          className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-            tab === "article-generator"
-              ? "bg-gray-800 text-pink-400 border-b-2 border-pink-500"
-              : "text-gray-400 hover:text-gray-200"
-          }`}
-        >
+    <div className="flex flex-col h-full bg-gray-950 text-white">
+      {/* Tab bar */}
+      <div className="flex gap-1 px-4 pt-3 border-b border-gray-800 shrink-0">
+        <button className="px-4 py-2 text-sm rounded-t transition-colors bg-gray-800 text-white border-b-2 border-pink-500">
           📰 SEO Article Generator
         </button>
       </div>
 
-      {/* Tab Content */}
-      {tab === "article-generator" && <ArticleGeneratorTab />}
+      {/* Content */}
+      <ArticleGeneratorTab />
     </div>
   )
 }
