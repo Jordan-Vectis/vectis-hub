@@ -139,6 +139,7 @@ export default function AvatarPage() {
       pc.ontrack = (event) => {
         if (videoRef.current && event.streams[0]) {
           videoRef.current.srcObject = event.streams[0]
+          videoRef.current.play().catch(() => {})
         }
         markConnected()
       }
@@ -265,6 +266,7 @@ export default function AvatarPage() {
               ref={videoRef}
               autoPlay
               playsInline
+              onLoadedMetadata={() => videoRef.current?.play().catch(() => {})}
               className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${isLive ? "opacity-100" : "opacity-0"}`}
             />
 
