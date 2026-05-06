@@ -209,4 +209,16 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     glow:               "hover:shadow-fuchsia-900/40",
     appKey:             "AI_PRESENTER",
   },
+  {
+    key:                "BC_MARKETING",
+    href:               "/tools/bc-marketing",
+    defaultLabel:       "BC Marketing",
+    defaultDescription: "AI-powered marketing tools — generate SEO news articles from auction results.",
+    icon:               "📰",
+    border:             "border-pink-500",
+    iconBg:             "text-pink-400",
+    btnBg:              "bg-pink-600 hover:bg-pink-500",
+    glow:               "hover:shadow-pink-900/40",
+    appKey:             "BC_MARKETING",
+  },
 ]

@@ -1,4 +1,4 @@
-export type AppKey = "CRM" | "AUCTION_AI" | "CATALOGUING" | "BC_REPORTS" | "SALEROOM_TRAINER" | "WAREHOUSE" | "AUCTION_CONTROLLER" | "BC_WAREHOUSE" | "AI_PRESENTER"
+export type AppKey = "CRM" | "AUCTION_AI" | "CATALOGUING" | "BC_REPORTS" | "SALEROOM_TRAINER" | "WAREHOUSE" | "AUCTION_CONTROLLER" | "BC_WAREHOUSE" | "AI_PRESENTER" | "BC_MARKETING"
 
 export const ALL_APPS: { key: AppKey; label: string }[] = [
   { key: "CRM",                label: "CRM" },
@@ -10,6 +10,7 @@ export const ALL_APPS: { key: AppKey; label: string }[] = [
   { key: "AUCTION_CONTROLLER", label: "Auction Controller" },
   { key: "BC_WAREHOUSE",       label: "BC Warehouse" },
   { key: "AI_PRESENTER",       label: "AI Presenter" },
+  { key: "BC_MARKETING",       label: "BC Marketing" },
 ]
 
 export function hasAppAccess(role: string, allowedApps: string[], appKey: AppKey): boolean {
