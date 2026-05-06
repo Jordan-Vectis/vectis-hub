@@ -54,7 +54,7 @@ app.prepare().then(async () => {
 
     // Background warehouse sync — runs every 20 minutes.
     // First run is delayed 2 minutes to let Next.js finish initialising.
-    const SYNC_INTERVAL_MS = 20 * 60 * 1000
+    const SYNC_INTERVAL_MS = 12 * 60 * 60 * 1000
     const SYNC_INITIAL_DELAY_MS = 2 * 60 * 1000
     function runWarehouseSync() {
       const secret = process.env.CRON_SECRET
