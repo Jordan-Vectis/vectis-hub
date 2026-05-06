@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
 
-    const { lots, articleType } = await req.json() as { lots: Lot[]; articleType: string }
+    const { lots, articleType, modelId } = await req.json() as { lots: Lot[]; articleType: string; modelId?: string }
 
     if (!lots?.length) return NextResponse.json({ error: "No lots provided" }, { status: 422 })
     if (lots.length > 100) return NextResponse.json({ error: "Too many lots (max 100)" }, { status: 422 })
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
     const prompt = buildPrompt(lots, articleType ?? "sale_highlight")
 
     const genai = new GoogleGenerativeAI(apiKey)
-    const model = genai.getGenerativeModel({ model: "gemini-2.0-flash" })
+    const model = genai.getGenerativeModel({ model: modelId || "gemini-2.5-flash-preview-04-17" })
 
     const result   = await model.generateContent(prompt)
     const response = result.response

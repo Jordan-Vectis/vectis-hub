@@ -7,6 +7,7 @@ import { useState, useEffect } from "react"
 type Lot = {
   uniqueId:     string
   lotNo:        string | null
+  currentLotNo: string | null
   description:  string | null
   category:     string | null
   hammerPrice:  number | null
@@ -71,6 +72,10 @@ function ArticleGeneratorTab() {
   // Categories dropdown
   const [categories, setCategories] = useState<string[]>([])
 
+  // Model selector
+  const [modelList, setModelList] = useState<string[]>(["gemini-2.5-flash-preview-04-17"])
+  const [modelId,   setModelId]   = useState("gemini-2.5-flash-preview-04-17")
+
   // State
   const [loadingLots,    setLoadingLots]    = useState(false)
   const [lotsError,      setLotsError]      = useState<string | null>(null)
@@ -82,11 +87,15 @@ function ArticleGeneratorTab() {
 
   const [copied, setCopied] = useState<"plain" | "html" | null>(null)
 
-  // Load categories on mount
+  // Load categories and model list on mount
   useEffect(() => {
     fetch("/api/marketing/categories")
       .then(r => r.json())
       .then(d => { if (d.categories) setCategories(d.categories) })
+      .catch(() => {})
+    fetch("/api/auction-ai/models")
+      .then(r => r.json())
+      .then(d => { if (d.models?.length) { setModelList(d.models); setModelId(d.models[0]) } })
       .catch(() => {})
   }, [])
 
@@ -124,7 +133,7 @@ function ArticleGeneratorTab() {
       const res  = await fetch("/api/marketing/article", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ lots, articleType }),
+        body:    JSON.stringify({ lots, articleType, modelId }),
       })
       const data = await res.json()
       if (!res.ok) { setArticleError(data.error ?? "Failed to generate article"); return }
@@ -262,7 +271,7 @@ function ArticleGeneratorTab() {
                   {lots.map((lot, i) => (
                     <tr key={lot.uniqueId} className="border-b border-gray-800 hover:bg-gray-800/50">
                       <td className="px-4 py-2 text-gray-500">{i + 1}</td>
-                      <td className="px-4 py-2 text-gray-300 whitespace-nowrap">{lot.lotNo ?? lot.uniqueId}</td>
+                      <td className="px-4 py-2 text-gray-300 whitespace-nowrap">{lot.currentLotNo ?? lot.lotNo ?? lot.uniqueId}</td>
                       <td className="px-4 py-2 text-gray-200 max-w-xs truncate">{lot.description ?? "—"}</td>
                       <td className="px-4 py-2 text-gray-400">{lot.category ?? "—"}</td>
                       <td className="px-4 py-2 text-gray-400 whitespace-nowrap">
@@ -307,13 +316,22 @@ function ArticleGeneratorTab() {
             ))}
           </div>
 
-          <button
-            onClick={generateArticle}
-            disabled={loadingArticle}
-            className="bg-pink-600 hover:bg-pink-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-2 rounded-lg transition-colors"
-          >
-            {loadingArticle ? "Generating…" : `Generate ${selectedType?.label ?? "Article"}`}
-          </button>
+          <div className="flex items-center gap-3 flex-wrap">
+            <select
+              value={modelId}
+              onChange={e => setModelId(e.target.value)}
+              className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-pink-500"
+            >
+              {modelList.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+            <button
+              onClick={generateArticle}
+              disabled={loadingArticle}
+              className="bg-pink-600 hover:bg-pink-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-2 rounded-lg transition-colors"
+            >
+              {loadingArticle ? "Generating…" : `Generate ${selectedType?.label ?? "Article"}`}
+            </button>
+          </div>
 
           {articleError && (
             <div className="bg-red-900/40 border border-red-700 rounded-xl px-4 py-3 text-red-300 text-sm">
