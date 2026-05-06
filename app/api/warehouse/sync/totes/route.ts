@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { auth } from "@/auth"
 import { getBCToken, bcPageWithNext } from "@/lib/bc"
 import { prisma } from "@/lib/prisma"
 import { isAuthedOrCron } from "@/lib/auth-or-cron"
