@@ -59,6 +59,7 @@ app.prepare().then(async () => {
     function runWarehouseSync() {
       const secret = process.env.CRON_SECRET
       if (!secret) { console.warn('[cron] CRON_SECRET not set — skipping warehouse sync') ; return }
+      console.log('[cron/bc-warehouse] starting background sync')
       fetch(`http://localhost:${port}/api/cron/bc-warehouse`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
