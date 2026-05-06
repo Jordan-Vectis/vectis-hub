@@ -32,6 +32,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, codesFound: 0, namesWritten: 0, message: "No auction codes in DB" })
     }
 
+    // Hardcoded overrides — applied after BC lookup so they always win
+    const OVERRIDES: Record<string, string> = {
+      "A999": "Lost/Missing/Re-Receipted & Lots with BC Issues",
+    }
+
     const BATCH      = 20
     let namesWritten = 0
     const errors: string[] = []
@@ -68,6 +73,16 @@ export async function POST(req: NextRequest) {
         await Promise.all(updates)
       } catch (e: any) {
         errors.push(e.message)
+      }
+    }
+
+    // Apply hardcoded overrides
+    for (const [code, name] of Object.entries(OVERRIDES)) {
+      if (codes.includes(code)) {
+        await prisma.warehouseItem.updateMany({
+          where: { auctionCode: code },
+          data:  { auctionName: name },
+        }).then(res => { namesWritten += res.count })
       }
     }
 
