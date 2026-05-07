@@ -113,6 +113,17 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(await res.json())
       }
 
+      case "keepalive": {
+        const { id, session_id } = body
+        // Fire-and-forget — we don't care if it fails
+        fetch(`${DID_API}/talks/streams/${id}/keepalive`, {
+          method:  "POST",
+          headers: didHeaders(),
+          body:    JSON.stringify({ session_id }),
+        }).catch(() => {})
+        return NextResponse.json({ ok: true })
+      }
+
       case "delete": {
         const { id, session_id } = body
         await fetch(`${DID_API}/talks/streams/${id}`, {

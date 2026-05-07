@@ -35,8 +35,9 @@ export default function AvatarPage() {
   const videoRef     = useRef<HTMLVideoElement>(null)
   const pcRef        = useRef<RTCPeerConnection | null>(null)
   const streamRef    = useRef<{ id: string; session_id: string } | null>(null)
-  const speakTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const connectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const speakTimer     = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const connectTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const keepaliveTimer = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Screen-reading refs — all mutable so interval callbacks are never stale
   const screenStreamRef    = useRef<MediaStream | null>(null)
@@ -86,8 +87,9 @@ export default function AvatarPage() {
   // ── Avatar connection ────────────────────────────────────────────────────────
 
   const cleanup = useCallback(async (silent = false) => {
-    if (speakTimer.current)   clearTimeout(speakTimer.current)
-    if (connectTimer.current) clearTimeout(connectTimer.current)
+    if (speakTimer.current)     clearTimeout(speakTimer.current)
+    if (connectTimer.current)   clearTimeout(connectTimer.current)
+    if (keepaliveTimer.current) clearInterval(keepaliveTimer.current)
     if (streamRef.current) {
       const { id, session_id } = streamRef.current
       if (!silent) {
@@ -113,6 +115,16 @@ export default function AvatarPage() {
   const markConnected = useCallback(() => {
     if (connectTimer.current) clearTimeout(connectTimer.current)
     setStatus("connected")
+    // Send D-ID keepalive every 20 s — without it the stream drops after ~30 s of silence
+    if (keepaliveTimer.current) clearInterval(keepaliveTimer.current)
+    keepaliveTimer.current = setInterval(() => {
+      const sd = streamDataRef.current
+      if (!sd) return
+      fetch("/api/avatar", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "keepalive", id: sd.id, session_id: sd.session_id }),
+      }).catch(() => {})
+    }, 20_000)
   }, [])
 
   const connect = useCallback(async (presenterUrl: string) => {
