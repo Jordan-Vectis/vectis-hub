@@ -1,6 +1,38 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 
+// Cache the working model name for the lifetime of the server process
+let cachedModel: string | null = null
+
+async function findWorkingModel(apiKey: string): Promise<string> {
+  if (cachedModel) return cachedModel
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}&pageSize=50`,
+  )
+  if (!res.ok) throw new Error(`ListModels failed: ${res.status}`)
+
+  const data = await res.json()
+  const models: { name: string; supportedGenerationMethods?: string[] }[] = data.models ?? []
+
+  // Pick the first flash/pro model that supports generateContent
+  const preferred = ["flash", "pro"]
+  for (const pref of preferred) {
+    const found = models.find(
+      (m) =>
+        m.name.toLowerCase().includes(pref) &&
+        m.supportedGenerationMethods?.includes("generateContent"),
+    )
+    if (found) {
+      cachedModel = found.name.replace("models/", "")
+      console.log("read-lot: using model", cachedModel)
+      return cachedModel
+    }
+  }
+
+  throw new Error(`No suitable model found. Available: ${models.map((m) => m.name).join(", ")}`)
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await auth()
@@ -12,22 +44,17 @@ export async function POST(req: NextRequest) {
     const { imageBase64 } = await req.json()
     if (!imageBase64) return NextResponse.json({ error: "No image provided" }, { status: 400 })
 
-    // Call Gemini v1 REST API directly — the 0.x SDK is pinned to v1beta which
-    // doesn't support newer models for multimodal requests
+    const modelId = await findWorkingModel(apiKey)
+
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1/models/${modelId}:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{
             parts: [
-              {
-                inline_data: {
-                  mime_type: "image/jpeg",
-                  data: imageBase64,
-                },
-              },
+              { inline_data: { mime_type: "image/jpeg", data: imageBase64 } },
               {
                 text: `This is a screenshot of a live online auction page. Extract ONLY:
 - lotNumber: the current lot number shown (digits only, e.g. "558")
@@ -47,6 +74,8 @@ If a field is not visible or unclear, use null for that field.`,
     )
 
     if (!res.ok) {
+      // Clear cache so next request re-discovers the model
+      cachedModel = null
       const errText = await res.text()
       return NextResponse.json({ error: errText }, { status: res.status })
     }
@@ -54,7 +83,6 @@ If a field is not visible or unclear, use null for that field.`,
     const json = await res.json()
     const text = (json.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim()
 
-    // Strip markdown code fences if present
     const cleaned = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim()
 
     try {
