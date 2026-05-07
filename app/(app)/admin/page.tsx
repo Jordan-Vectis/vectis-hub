@@ -22,6 +22,12 @@ const sections = [
     icon:        "🏠",
   },
   {
+    href:        "/admin/role-defaults",
+    label:       "Role Defaults",
+    description: "Set default app access for each role — applied to new users automatically and pushable to existing ones.",
+    icon:        "🔑",
+  },
+  {
     href:        "/admin/cataloguing-reports",
     label:       "Cataloguing Reports",
     description: "View time-per-lot reports across all cataloguers — average speed, method breakdown and recent activity.",

@@ -381,6 +381,13 @@ model AppCard {
   description String?
 }
 
+model RoleDefault {
+  role           String   @id  // "COLLECTIONS" | "CATALOGUER"
+  allowedApps    String[] @default([])
+  appPermissions Json?
+  updatedAt      DateTime @updatedAt
+}
+
 model BCCatalogueDay {
   date      String   @id       // "YYYY-MM-DD" — marks this date was fully fetched from BC
   fetchedAt DateTime @default(now())

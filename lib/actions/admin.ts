@@ -26,14 +26,20 @@ export async function createUser(formData: FormData) {
 
   const hashed = await bcrypt.hash(password, 12)
 
+  const roleDefault = role !== "ADMIN"
+    ? await prisma.roleDefault.findUnique({ where: { role } })
+    : null
+
   await prisma.user.create({
     data: {
       name,
       email,
-      username: username || null,
-      password: hashed,
+      username:       username || null,
+      password:       hashed,
       role,
-      departmentId: departmentId || null,
+      departmentId:   departmentId || null,
+      allowedApps:    roleDefault?.allowedApps ?? [],
+      appPermissions: roleDefault?.appPermissions ?? undefined,
     },
   })
 
