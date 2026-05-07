@@ -13,10 +13,26 @@ const app  = next({ dev })
 const handle = app.getRequestHandler()
 
 // Run pending Prisma migrations on startup.
-// Wrapped in try/catch with a 30s timeout so a failure or lock contention
-// never prevents the server from starting.
+// Some migrations were previously applied via `prisma db push` so the column
+// already exists but the migration isn't recorded — we resolve those first so
+// migrate deploy doesn't choke on them.
 async function runMigrations() {
   const { execSync } = require('child_process')
+
+  // Migrations to mark as applied without running (column already exists from db push)
+  const preResolve = [
+    '20260506090000_warehouse_tote_catalogued',
+  ]
+
+  for (const name of preResolve) {
+    try {
+      execSync(`npx prisma migrate resolve --applied "${name}"`, { timeout: 15000, stdio: 'pipe' })
+      console.log(`> Resolved migration: ${name}`)
+    } catch {
+      // Already resolved or not in failed state — safe to ignore
+    }
+  }
+
   try {
     execSync('npx prisma migrate deploy', { timeout: 30000, stdio: 'inherit' })
     console.log('> Migrations applied')
