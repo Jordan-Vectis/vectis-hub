@@ -122,13 +122,20 @@ export default function EditUserForm({ userId, name, email, username, role, depa
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ allowedApps: selectedApps, appPermissions: newAppPermissions }),
       })
+      const data = await res.json().catch(() => ({}))
       if (res.ok) {
-        setAppsMsg("Saved")
-        router.refresh()
-        setTimeout(() => setAppsMsg(null), 2000)
+        const persistedApps = (data?.persisted?.allowedApps ?? []) as string[]
+        const sent = [...selectedApps].sort().join(",")
+        const got = [...persistedApps].sort().join(",")
+        if (sent === got) {
+          setAppsMsg("Saved")
+          router.refresh()
+          setTimeout(() => setAppsMsg(null), 2000)
+        } else {
+          setAppsMsg(`DB mismatch — sent [${sent}] but DB has [${got}]`)
+        }
       } else {
-        const data = await res.json().catch(() => ({}))
-        setAppsMsg(data.error ?? "Failed to save")
+        setAppsMsg(data?.error ?? "Failed to save")
       }
     })
   }

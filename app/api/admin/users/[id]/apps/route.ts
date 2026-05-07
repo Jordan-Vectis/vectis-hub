@@ -15,7 +15,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         ...(appPermissions !== undefined ? { appPermissions } : {}),
       },
     })
-    return NextResponse.json({ ok: true })
+    // Re-read to confirm persistence
+    const verify = await prisma.user.findUnique({
+      where: { id },
+      select: { allowedApps: true, appPermissions: true },
+    })
+    console.log("user apps PUT:", { id, sent: { allowedApps, appPermissions }, persisted: verify })
+    return NextResponse.json({ ok: true, persisted: verify })
   } catch (e: any) {
     console.error("user apps PUT error:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
