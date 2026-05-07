@@ -37,3 +37,26 @@ export async function GET() {
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
   }
 }
+
+export async function PATCH(req: Request) {
+  try {
+    const session = await auth()
+    if (!session || session.user.role !== "ADMIN") {
+      return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+    }
+
+    const { filename, content } = await req.json()
+    if (!filename || typeof content !== "string") {
+      return NextResponse.json({ error: "filename and content required" }, { status: 400 })
+    }
+    if (filename.includes("..") || filename.includes("/") || !filename.endsWith(".md")) {
+      return NextResponse.json({ error: "Invalid filename" }, { status: 400 })
+    }
+
+    await fs.writeFile(path.join(MEMORY_DIR, filename), content, "utf-8")
+    return NextResponse.json({ ok: true })
+  } catch (e: any) {
+    console.error("memory PATCH error:", e)
+    return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
+  }
+}
