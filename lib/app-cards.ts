@@ -1,5 +1,14 @@
 import type { AppKey } from "@/lib/apps"
 
+export const SECTION_DEFS = [
+  { key: "CATALOGUING_AI",   label: "Cataloguing & AI" },
+  { key: "BUSINESS_CENTRAL", label: "Business Central" },
+  { key: "OPERATIONS",       label: "Operations" },
+  { key: "AUCTION",          label: "Auction" },
+] as const
+
+export type SectionKey = typeof SECTION_DEFS[number]["key"]
+
 export type AppCardDef = {
   key: string
   href: string
@@ -10,8 +19,9 @@ export type AppCardDef = {
   iconBg: string
   btnBg: string
   glow: string
-  appKey?: AppKey // undefined = admin-only card
-  allUsers?: boolean // true = visible to all logged-in users regardless of role/apps
+  group?: SectionKey  // undefined = standalone (rendered outside any section)
+  appKey?: AppKey     // undefined = admin-only card
+  allUsers?: boolean  // true = visible to all logged-in users regardless of role/apps
   comingSoon?: boolean
 }
 
@@ -26,6 +36,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-green-400",
     btnBg:              "bg-green-600 hover:bg-green-500",
     glow:               "hover:shadow-green-900/40",
+    group:              "OPERATIONS",
     allUsers:           true,
   },
   {
@@ -38,6 +49,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-blue-400",
     btnBg:              "bg-blue-600 hover:bg-blue-500",
     glow:               "hover:shadow-blue-900/40",
+    group:              "OPERATIONS",
     appKey:             "CRM",
   },
   {
@@ -50,6 +62,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-amber-400",
     btnBg:              "bg-amber-600 hover:bg-amber-500",
     glow:               "hover:shadow-amber-900/40",
+    group:              "CATALOGUING_AI",
     appKey:             "AUCTION_AI",
   },
   {
@@ -62,6 +75,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-teal-400",
     btnBg:              "bg-teal-600 hover:bg-teal-500",
     glow:               "hover:shadow-teal-900/40",
+    group:              "CATALOGUING_AI",
     appKey:             "CATALOGUING",
   },
   {
@@ -74,6 +88,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-red-400",
     btnBg:              "bg-red-600 hover:bg-red-500",
     glow:               "hover:shadow-red-900/40",
+    group:              "BUSINESS_CENTRAL",
     appKey:             "BC_REPORTS",
   },
   {
@@ -86,6 +101,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-orange-400",
     btnBg:              "bg-orange-600 hover:bg-orange-500",
     glow:               "hover:shadow-orange-900/40",
+    group:              "BUSINESS_CENTRAL",
     appKey:             "BC_WAREHOUSE",
   },
   {
@@ -98,6 +114,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-cyan-400",
     btnBg:              "bg-cyan-600 hover:bg-cyan-500",
     glow:               "hover:shadow-cyan-900/40",
+    group:              "OPERATIONS",
     appKey:             "WAREHOUSE",
   },
   {
@@ -110,6 +127,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-indigo-400",
     btnBg:              "bg-indigo-600 hover:bg-indigo-500",
     glow:               "hover:shadow-indigo-900/40",
+    group:              "BUSINESS_CENTRAL",
     appKey:             "BC_WAREHOUSE",
   },
   {
@@ -122,6 +140,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-slate-400",
     btnBg:              "bg-slate-600 hover:bg-slate-500",
     glow:               "hover:shadow-slate-900/40",
+    // no group — standalone card rendered outside any section
     // no appKey — admin-only
   },
   {
@@ -134,6 +153,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-violet-400",
     btnBg:              "bg-violet-600 hover:bg-violet-500",
     glow:               "hover:shadow-violet-900/40",
+    group:              "OPERATIONS",
     allUsers:           true,
   },
   {
@@ -146,6 +166,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-emerald-400",
     btnBg:              "bg-emerald-600 hover:bg-emerald-500",
     glow:               "hover:shadow-emerald-900/40",
+    group:              "OPERATIONS",
     allUsers:           true,
     comingSoon:         true,
   },
@@ -159,6 +180,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-orange-400",
     btnBg:              "bg-orange-600 hover:bg-orange-500",
     glow:               "hover:shadow-orange-900/40",
+    group:              "OPERATIONS",
     allUsers:           true,
   },
   {
@@ -171,6 +193,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-purple-400",
     btnBg:              "bg-purple-600 hover:bg-purple-500",
     glow:               "hover:shadow-purple-900/40",
+    group:              "AUCTION",
     appKey:             "SALEROOM_TRAINER",
   },
   {
@@ -183,6 +206,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-sky-400",
     btnBg:              "bg-sky-600 hover:bg-sky-500",
     glow:               "hover:shadow-sky-900/40",
+    group:              "AUCTION",
     allUsers:           true,
   },
   {
@@ -195,6 +219,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-red-400",
     btnBg:              "bg-red-600 hover:bg-red-500",
     glow:               "hover:shadow-red-900/40",
+    group:              "AUCTION",
     appKey:             "AUCTION_CONTROLLER",
   },
   {
@@ -207,6 +232,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-fuchsia-400",
     btnBg:              "bg-fuchsia-600 hover:bg-fuchsia-500",
     glow:               "hover:shadow-fuchsia-900/40",
+    group:              "AUCTION",
     appKey:             "AI_PRESENTER",
   },
   {
@@ -219,6 +245,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-pink-400",
     btnBg:              "bg-pink-600 hover:bg-pink-500",
     glow:               "hover:shadow-pink-900/40",
+    group:              "BUSINESS_CENTRAL",
     appKey:             "BC_MARKETING",
   },
 ]
