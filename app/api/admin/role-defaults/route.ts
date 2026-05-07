@@ -30,7 +30,7 @@ export async function PUT(req: NextRequest) {
     await prisma.roleDefault.upsert({
       where:  { role },
       create: { role, allowedApps, appPermissions, updatedAt: new Date() },
-      update: { allowedApps, appPermissions, updatedAt: new Date() },
+      update: { allowedApps: { set: allowedApps }, appPermissions, updatedAt: new Date() },
     })
 
     return NextResponse.json({ ok: true })

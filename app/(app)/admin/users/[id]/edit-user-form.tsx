@@ -122,8 +122,14 @@ export default function EditUserForm({ userId, name, email, username, role, depa
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ allowedApps: selectedApps, appPermissions: newAppPermissions }),
       })
-      setAppsMsg(res.ok ? "Saved" : "Failed to save")
-      if (res.ok) setTimeout(() => setAppsMsg(null), 2000)
+      if (res.ok) {
+        setAppsMsg("Saved")
+        router.refresh()
+        setTimeout(() => setAppsMsg(null), 2000)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setAppsMsg(data.error ?? "Failed to save")
+      }
     })
   }
 

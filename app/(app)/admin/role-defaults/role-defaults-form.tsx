@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { ALL_APPS, APP_SECTIONS, WAREHOUSE_ROLES } from "@/lib/apps"
 import type { AppKey, WarehouseRole } from "@/lib/apps"
 import { APP_CARD_DEFS, SECTION_DEFS } from "@/lib/app-cards"
@@ -58,6 +59,7 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
     storedHubCards && storedHubCards.length > 0 ? storedHubCards : ALL_USER_CARD_KEYS
   )
 
+  const router = useRouter()
   const [saveMsg, setSaveMsg]         = useState<string | null>(null)
   const [savePending, startSave]      = useTransition()
   const [applyMsg, setApplyMsg]       = useState<string | null>(null)
@@ -109,8 +111,14 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ role: roleKey, allowedApps: selectedApps, appPermissions }),
       })
-      setSaveMsg(res.ok ? "Saved" : "Failed to save")
-      if (res.ok) setTimeout(() => setSaveMsg(null), 2000)
+      if (res.ok) {
+        setSaveMsg("Saved")
+        router.refresh()
+        setTimeout(() => setSaveMsg(null), 2000)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setSaveMsg(data.error ?? "Failed to save")
+      }
     })
   }
 
