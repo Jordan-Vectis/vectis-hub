@@ -13,33 +13,21 @@ type Presenter = {
 }
 
 type LotReading = {
-  lotNumber:   string | null
-  currentBid:  string | null
-  askingBid:   string | null
+  lotNumber:  string | null
+  currentBid: string | null
+  askingBid:  string | null
 }
 
 const STATUS_LABEL: Record<Status, string> = {
-  idle:       "Offline",
-  connecting: "Connecting…",
-  connected:  "Live",
-  speaking:   "Speaking…",
-  error:      "Error",
+  idle: "Offline", connecting: "Connecting…", connected: "Live", speaking: "Speaking…", error: "Error",
 }
-
 const STATUS_DOT: Record<Status, string> = {
-  idle:       "bg-gray-600",
-  connecting: "bg-yellow-400 animate-pulse",
-  connected:  "bg-[#2AB4A6] animate-pulse",
-  speaking:   "bg-blue-400 animate-pulse",
-  error:      "bg-red-500",
+  idle: "bg-gray-600", connecting: "bg-yellow-400 animate-pulse",
+  connected: "bg-[#2AB4A6] animate-pulse", speaking: "bg-blue-400 animate-pulse", error: "bg-red-500",
 }
-
 const STATUS_TEXT: Record<Status, string> = {
-  idle:       "text-gray-400",
-  connecting: "text-yellow-400",
-  connected:  "text-[#2AB4A6]",
-  speaking:   "text-blue-400",
-  error:      "text-red-400",
+  idle: "text-gray-400", connecting: "text-yellow-400",
+  connected: "text-[#2AB4A6]", speaking: "text-blue-400", error: "text-red-400",
 }
 
 export default function AvatarPage() {
@@ -50,32 +38,39 @@ export default function AvatarPage() {
   const speakTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
   const connectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Screen-reading refs
-  const screenStreamRef  = useRef<MediaStream | null>(null)
-  const screenVideoRef   = useRef<HTMLVideoElement | null>(null)
-  const watchIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const lastLotRef       = useRef<string | null>(null)
-  const isReadingRef     = useRef(false) // prevent overlapping Gemini calls
+  // Screen-reading refs — all mutable so interval callbacks are never stale
+  const screenStreamRef    = useRef<MediaStream | null>(null)
+  const screenVideoRef     = useRef<HTMLVideoElement | null>(null)
+  const watchIntervalRef   = useRef<ReturnType<typeof setInterval> | null>(null)
+  const lastLotRef         = useRef<string | null>(null)
+  const isReadingRef       = useRef(false)
+  const statusRef          = useRef<Status>("idle")      // mirrors status state, never stale
+  const streamDataRef      = useRef<{ id: string; session_id: string } | null>(null) // mirrors streamRef for interval use
 
   // Avatar state
-  const [status,     setStatus]     = useState<Status>("idle")
-  const [error,      setError]      = useState<string | null>(null)
-  const [script,     setScript]     = useState("")
-  const [presenters, setPresenters] = useState<Presenter[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [status,            setStatus]           = useState<Status>("idle")
+  const [error,             setError]            = useState<string | null>(null)
+  const [script,            setScript]           = useState("")
+  const [presenters,        setPresenters]        = useState<Presenter[]>([])
+  const [selectedId,        setSelectedId]        = useState<string | null>(null)
   const [loadingPresenters, setLoadingPresenters] = useState(true)
 
   // Auto-read state
-  const [isWatching,   setIsWatching]   = useState(false)
-  const [watchedLot,   setWatchedLot]   = useState<LotReading | null>(null)
+  const [isWatching,    setIsWatching]    = useState(false)
+  const [watchedLot,    setWatchedLot]    = useState<LotReading | null>(null)
   const [readingStatus, setReadingStatus] = useState<"idle" | "reading" | "error">("idle")
+  const [lastReadRaw,   setLastReadRaw]   = useState<string | null>(null) // debug: show what Gemini saw
 
-  // Load presenters on mount
+  // Keep statusRef in sync
+  useEffect(() => { statusRef.current = status }, [status])
+  // Keep streamDataRef in sync
+  useEffect(() => { streamDataRef.current = streamRef.current }, [status]) // re-sync on any status change
+
+  // Load presenters
   useEffect(() => {
     fetch("/api/avatar", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ action: "presenters" }),
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "presenters" }),
     })
       .then((r) => r.json())
       .then((data: Presenter[]) => {
@@ -86,37 +81,30 @@ export default function AvatarPage() {
       .finally(() => setLoadingPresenters(false))
   }, [])
 
-  const selectedPresenter = presenters.find(
-    (p) => (p.presenter_id ?? p.id) === selectedId,
-  )
+  const selectedPresenter = presenters.find((p) => (p.presenter_id ?? p.id) === selectedId)
 
   // ── Avatar connection ────────────────────────────────────────────────────────
 
   const cleanup = useCallback(async (silent = false) => {
     if (speakTimer.current)   clearTimeout(speakTimer.current)
     if (connectTimer.current) clearTimeout(connectTimer.current)
-
     if (streamRef.current) {
       const { id, session_id } = streamRef.current
       if (!silent) {
         fetch("/api/avatar", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ action: "delete", id, session_id }),
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "delete", id, session_id }),
         }).catch(() => {})
       }
-      streamRef.current = null
+      streamRef.current     = null
+      streamDataRef.current = null
     }
-
     if (pcRef.current) {
-      pcRef.current.ontrack                    = null
-      pcRef.current.onicecandidate             = null
-      pcRef.current.oniceconnectionstatechange = null
-      pcRef.current.onconnectionstatechange    = null
+      pcRef.current.ontrack = pcRef.current.onicecandidate =
+        pcRef.current.oniceconnectionstatechange = pcRef.current.onconnectionstatechange = null
       pcRef.current.close()
       pcRef.current = null
     }
-
     if (videoRef.current) videoRef.current.srcObject = null
   }, [])
 
@@ -131,29 +119,31 @@ export default function AvatarPage() {
     await cleanup(true)
     setStatus("connecting")
     setError(null)
-
     connectTimer.current = setTimeout(() => {
-      setStatus("error")
-      setError("Connection timed out — please try again")
-      cleanup(true)
+      setStatus("error"); setError("Connection timed out — please try again"); cleanup(true)
     }, 30_000)
 
     try {
       const createRes = await fetch("/api/avatar", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ action: "create", presenterUrl }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "create", presenterUrl }),
       })
-
       if (!createRes.ok) {
         const { error: msg } = await createRes.json().catch(() => ({}))
         throw new Error(msg ?? `HTTP ${createRes.status}`)
       }
-
       const data = await createRes.json()
       const { id, session_id, offer } = data
-      const iceServers = data.ice_servers ?? data.iceServers ?? []
-      streamRef.current = { id, session_id }
+
+      // Normalise ICE servers — D-ID sometimes returns `url` (string) instead of `urls` (array)
+      const rawIce: any[] = data.ice_servers ?? data.iceServers ?? []
+      const iceServers = rawIce.map((s) => ({
+        ...s,
+        urls: s.urls ?? (s.url ? [s.url] : []),
+      }))
+
+      streamRef.current     = { id, session_id }
+      streamDataRef.current = { id, session_id }
 
       const pc = new RTCPeerConnection({ iceServers })
       pcRef.current = pc
@@ -165,55 +155,47 @@ export default function AvatarPage() {
         }
         markConnected()
       }
-
       pc.onconnectionstatechange = () => {
-        if (pc.connectionState === "connected") markConnected()
-        if (pc.connectionState === "failed" || pc.connectionState === "closed") {
+        const s = pc.connectionState
+        if (s === "connected") markConnected()
+        if (s === "failed") {
           setStatus("error")
-          setError("WebRTC connection failed")
+          setError(`WebRTC failed (ICE state: ${pc.iceConnectionState}) — click Connect to retry`)
           cleanup(true)
         }
+        if (s === "closed") {
+          if (statusRef.current !== "idle") { setStatus("error"); setError("Stream closed unexpectedly") }
+        }
       }
-
       pc.oniceconnectionstatechange = () => {
         const s = pc.iceConnectionState
         if (s === "connected" || s === "completed") markConnected()
         if (s === "failed") {
           setStatus("error")
-          setError("ICE connection failed — try again")
+          setError("ICE connection failed — check network or try again")
           cleanup(true)
         }
       }
-
       pc.onicecandidate = (event) => {
         if (!event.candidate || !streamRef.current) return
         fetch("/api/avatar", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ action: "ice", id, session_id, candidate: event.candidate }),
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "ice", id, session_id, candidate: event.candidate }),
         }).catch(() => {})
       }
 
       await pc.setRemoteDescription(new RTCSessionDescription(offer))
       const answer = await pc.createAnswer()
       await pc.setLocalDescription(answer)
-
       const sdpRes = await fetch("/api/avatar", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({
-          action: "sdp", id, session_id,
-          answer: { type: answer.type, sdp: answer.sdp },
-        }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sdp", id, session_id, answer: { type: answer.type, sdp: answer.sdp } }),
       })
-
       if (!sdpRes.ok) throw new Error("SDP exchange failed")
 
     } catch (err) {
       if (connectTimer.current) clearTimeout(connectTimer.current)
-      setStatus("error")
-      setError(err instanceof Error ? err.message : "Connection failed")
-      cleanup(true)
+      setStatus("error"); setError(err instanceof Error ? err.message : "Connection failed"); cleanup(true)
     }
   }, [cleanup, markConnected])
 
@@ -224,121 +206,111 @@ export default function AvatarPage() {
     }
   }, [status, cleanup])
 
-  const disconnect = useCallback(async () => {
-    await cleanup()
-    setStatus("idle")
-  }, [cleanup])
+  const disconnect = useCallback(async () => { await cleanup(); setStatus("idle") }, [cleanup])
 
   // ── Speaking ─────────────────────────────────────────────────────────────────
 
-  const speakText = useCallback(async (text: string) => {
-    if (!streamRef.current || status !== "connected") return
-
+  // Uses refs so it's safe to call from interval callbacks without stale closures
+  const speakTextDirect = useCallback(async (text: string) => {
+    const sd = streamDataRef.current
+    if (!sd || statusRef.current !== "connected") return
     setStatus("speaking")
-    const { id, session_id } = streamRef.current
-
     try {
       const res = await fetch("/api/avatar", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ action: "speak", id, session_id, text }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "speak", id: sd.id, session_id: sd.session_id, text }),
       })
-
       if (!res.ok) {
         const { error: msg } = await res.json().catch(() => ({}))
         throw new Error(msg ?? "Speak failed")
       }
-
       const words = text.split(/\s+/).length
       speakTimer.current = setTimeout(
         () => setStatus("connected"),
         Math.ceil((words / 140) * 60_000) + 2_000,
       )
     } catch (err) {
-      setStatus("error")
-      setError(err instanceof Error ? err.message : "Failed to speak")
+      setStatus("error"); setError(err instanceof Error ? err.message : "Failed to speak")
     }
-  }, [status])
+  }, [])
 
   const speak = useCallback(() => {
-    if (script.trim().length >= 3) speakText(script.trim())
-  }, [script, speakText])
+    if (script.trim().length >= 3) speakTextDirect(script.trim())
+  }, [script, speakTextDirect])
 
   // ── Screen reading ────────────────────────────────────────────────────────────
 
   const stopWatching = useCallback(() => {
     if (watchIntervalRef.current) clearInterval(watchIntervalRef.current)
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach((t) => t.stop())
-      screenStreamRef.current = null
-    }
-    screenVideoRef.current = null
+    screenStreamRef.current?.getTracks().forEach((t) => t.stop())
+    screenStreamRef.current = null
+    screenVideoRef.current  = null
     isReadingRef.current    = false
     lastLotRef.current      = null
     setIsWatching(false)
     setWatchedLot(null)
     setReadingStatus("idle")
+    setLastReadRaw(null)
   }, [])
 
-  const captureAndRead = useCallback(async () => {
-    if (isReadingRef.current || !screenVideoRef.current) return
+  // Stable capture function — uses only refs, never stale
+  const doCapture = useCallback(async () => {
+    if (isReadingRef.current) return
+    const vid = screenVideoRef.current
+    if (!vid || !vid.videoWidth) return  // not ready yet
+
     isReadingRef.current = true
     setReadingStatus("reading")
 
     try {
-      const vid = screenVideoRef.current
       const canvas = document.createElement("canvas")
-      canvas.width  = vid.videoWidth  || 1280
-      canvas.height = vid.videoHeight || 720
+      canvas.width  = vid.videoWidth
+      canvas.height = vid.videoHeight
       canvas.getContext("2d")?.drawImage(vid, 0, 0)
-      const base64 = canvas.toDataURL("image/jpeg", 0.75).split(",")[1]
+      const base64 = canvas.toDataURL("image/jpeg", 0.8).split(",")[1]
 
       const res = await fetch("/api/avatar/read-lot", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ imageBase64: base64 }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: base64 }),
       })
 
       if (!res.ok) { setReadingStatus("error"); return }
 
       const data: LotReading = await res.json()
       setReadingStatus("idle")
+      setLastReadRaw(JSON.stringify(data))
 
       if (!data.lotNumber) return
-
       setWatchedLot(data)
 
-      // Auto-speak when lot number changes
+      // Only speak if lot number changed
       if (data.lotNumber !== lastLotRef.current) {
         lastLotRef.current = data.lotNumber
 
-        const parts: string[] = [`Lot ${data.lotNumber}.`]
+        const parts = [`Lot ${data.lotNumber}.`]
         if (data.askingBid)  parts.push(`Asking bid ${data.askingBid}.`)
         if (data.currentBid) parts.push(`Current bid ${data.currentBid}.`)
-        const line = parts.join(" ")
 
-        // Queue speak — waits if currently speaking
-        const trySpeak = () => {
-          if (streamRef.current && status === "connected") {
-            speakText(line)
-          } else if (status === "speaking") {
-            setTimeout(trySpeak, 2_000)
-          }
+        // statusRef and streamDataRef are always fresh — no stale closure risk
+        if (streamDataRef.current && statusRef.current === "connected") {
+          speakTextDirect(parts.join(" "))
         }
-        trySpeak()
       }
     } catch {
       setReadingStatus("error")
     } finally {
       isReadingRef.current = false
     }
-  }, [speakText, status])
+  }, [speakTextDirect])
+
+  // Keep a ref to doCapture so the interval always calls the latest version
+  const doCaptureRef = useRef(doCapture)
+  useEffect(() => { doCaptureRef.current = doCapture }, [doCapture])
 
   const startWatching = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: 2 },
-        audio: false,
+        video: { frameRate: 2 }, audio: false,
       } as DisplayMediaStreamOptions)
 
       screenStreamRef.current = stream
@@ -346,29 +318,34 @@ export default function AvatarPage() {
       const vid = document.createElement("video")
       vid.srcObject = stream
       vid.muted     = true
+
+      // Wait for metadata so videoWidth/videoHeight are valid
+      await new Promise<void>((resolve) => {
+        if (vid.readyState >= 1) { resolve(); return }
+        vid.addEventListener("loadedmetadata", () => resolve(), { once: true })
+      })
       await vid.play()
       screenVideoRef.current = vid
 
       lastLotRef.current = null
       setIsWatching(true)
       setWatchedLot(null)
+      setLastReadRaw(null)
 
-      // Read immediately, then every 4 seconds
-      captureAndRead()
-      watchIntervalRef.current = setInterval(captureAndRead, 4_000)
+      // First read immediately, then every 4 seconds
+      doCaptureRef.current()
+      watchIntervalRef.current = setInterval(() => doCaptureRef.current(), 4_000)
 
-      // Auto-stop if user ends screen share
       stream.getVideoTracks()[0].addEventListener("ended", stopWatching)
     } catch {
-      // User cancelled screen picker — ignore
+      // User cancelled share picker — ignore
     }
-  }, [captureAndRead, stopWatching])
+  }, [stopWatching])
 
   const isLive = status === "connected" || status === "speaking"
 
   return (
     <div className="min-h-screen bg-[#1C1C1E] flex flex-col">
-      {/* Top bar */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
         <div>
           <h1 className="text-xl font-bold text-white tracking-tight">AI Presenter</h1>
@@ -385,16 +362,11 @@ export default function AvatarPage() {
         <div className="flex-1 flex items-center justify-center p-8 bg-[#111113]">
           <div
             className={`relative w-full max-w-2xl rounded-2xl overflow-hidden transition-all duration-700 ${
-              isLive
-                ? "border-2 border-[#2AB4A6] shadow-[0_0_40px_rgba(42,180,166,0.25)]"
-                : "border-2 border-gray-800"
+              isLive ? "border-2 border-[#2AB4A6] shadow-[0_0_40px_rgba(42,180,166,0.25)]" : "border-2 border-gray-800"
             }`}
             style={{ aspectRatio: "16/9" }}
           >
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
+            <video ref={videoRef} autoPlay playsInline
               onLoadedMetadata={() => videoRef.current?.play().catch(() => {})}
               className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${isLive ? "opacity-100" : "opacity-0"}`}
             />
@@ -402,26 +374,20 @@ export default function AvatarPage() {
             {!isLive && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-[#0D0D0F]">
                 {selectedPresenter && status === "idle" ? (
-                  <img
-                    src={selectedPresenter.thumbnail_url}
-                    alt={selectedPresenter.name}
-                    className="w-32 h-32 rounded-full object-cover border-2 border-gray-700 opacity-40"
-                  />
+                  <img src={selectedPresenter.thumbnail_url} alt={selectedPresenter.name}
+                    className="w-32 h-32 rounded-full object-cover border-2 border-gray-700 opacity-40" />
                 ) : (
                   <div className={`w-28 h-28 rounded-full border-2 flex items-center justify-center ${
                     status === "connecting" ? "border-yellow-500/40 bg-yellow-500/5 animate-pulse"
                     : status === "error"   ? "border-red-500/40 bg-red-500/5"
-                    : "border-gray-700 bg-gray-800/30"
-                  }`}>
+                    : "border-gray-700 bg-gray-800/30"}`}>
                     <span className="text-5xl">{status === "error" ? "⚠️" : "🎙️"}</span>
                   </div>
                 )}
                 <div className="text-center px-8">
                   {status === "error" && error ? (
-                    <>
-                      <p className="text-red-400 text-sm font-medium">Connection error</p>
-                      <p className="text-gray-500 text-xs mt-1">{error}</p>
-                    </>
+                    <><p className="text-red-400 text-sm font-medium">Connection error</p>
+                    <p className="text-gray-500 text-xs mt-1">{error}</p></>
                   ) : status === "connecting" ? (
                     <p className="text-yellow-400/80 text-sm">Establishing stream…</p>
                   ) : (
@@ -435,38 +401,32 @@ export default function AvatarPage() {
 
             {status === "speaking" && (
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/70 backdrop-blur-sm rounded-full px-4 py-1.5">
-                {[1, 2, 3, 4].map((i) => (
+                {[1,2,3,4].map((i) => (
                   <div key={i} className="w-1 rounded-full bg-[#2AB4A6]"
-                    style={{ height: `${8 + i * 4}px`, animation: `wavebar 0.6s ease-in-out ${i * 0.1}s infinite alternate` }}
-                  />
+                    style={{ height: `${8+i*4}px`, animation: `wavebar 0.6s ease-in-out ${i*0.1}s infinite alternate` }} />
                 ))}
                 <span className="text-[#2AB4A6] text-xs font-medium ml-1.5">Speaking</span>
               </div>
             )}
 
-            {/* Current lot badge when watching */}
             {isWatching && watchedLot?.lotNumber && (
               <div className="absolute top-3 left-3 bg-black/70 backdrop-blur-sm rounded-lg px-3 py-1.5">
                 <p className="text-white text-sm font-bold">Lot {watchedLot.lotNumber}</p>
-                {watchedLot.askingBid && (
-                  <p className="text-[#2AB4A6] text-xs">Asking {watchedLot.askingBid}</p>
-                )}
+                {watchedLot.askingBid && <p className="text-[#2AB4A6] text-xs">Asking {watchedLot.askingBid}</p>}
               </div>
             )}
           </div>
         </div>
 
-        {/* Controls panel */}
+        {/* Controls */}
         <div className="w-80 flex-shrink-0 border-l border-gray-800 bg-[#1C1C1E] flex flex-col p-5 gap-4 overflow-y-auto">
 
-          {/* Presenter picker */}
+          {/* Presenter */}
           <div className="bg-[#2C2C2E] rounded-xl p-4 border border-gray-800">
             <h2 className="text-gray-400 text-xs font-semibold uppercase tracking-widest mb-3">Presenter</h2>
-            {loadingPresenters ? (
-              <p className="text-gray-600 text-xs text-center py-2">Loading…</p>
-            ) : presenters.length === 0 ? (
-              <p className="text-red-400 text-xs">Could not load presenters</p>
-            ) : (
+            {loadingPresenters ? <p className="text-gray-600 text-xs text-center py-2">Loading…</p>
+            : presenters.length === 0 ? <p className="text-red-400 text-xs">Could not load presenters</p>
+            : (
               <div className="grid grid-cols-3 gap-2">
                 {presenters.map((p) => {
                   const pid = p.presenter_id ?? p.id ?? ""
@@ -476,8 +436,7 @@ export default function AvatarPage() {
                         selectedId === pid
                           ? "ring-2 ring-[#2AB4A6] ring-offset-1 ring-offset-[#2C2C2E] opacity-100"
                           : "ring-1 ring-gray-700 hover:ring-gray-500 opacity-50 hover:opacity-80"
-                      }`}
-                    >
+                      }`}>
                       <img src={p.thumbnail_url} alt={p.name} className="w-full h-full object-cover" />
                       {selectedId === pid && <div className="absolute inset-0 bg-[#2AB4A6]/10" />}
                     </button>
@@ -498,19 +457,14 @@ export default function AvatarPage() {
                 onClick={() => selectedPresenter && connect(selectedPresenter.image_url ?? selectedPresenter.thumbnail_url)}
                 disabled={!selectedPresenter || loadingPresenters}
                 className="w-full py-2.5 bg-[#2AB4A6] hover:bg-[#22a090] text-black font-semibold rounded-lg transition-colors text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Connect Avatar
-              </button>
+              >Connect Avatar</button>
             ) : (
               <button onClick={disconnect}
-                className="w-full py-2.5 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-colors text-sm"
-              >
+                className="w-full py-2.5 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-colors text-sm">
                 {status === "connecting" ? "Cancel" : "Disconnect"}
               </button>
             )}
-            {status === "connecting" && (
-              <p className="text-yellow-400/70 text-xs text-center mt-2">Takes a few seconds…</p>
-            )}
+            {status === "connecting" && <p className="text-yellow-400/70 text-xs text-center mt-2">Takes a few seconds…</p>}
           </div>
 
           {/* Auto-Read */}
@@ -525,45 +479,41 @@ export default function AvatarPage() {
               )}
             </div>
             <p className="text-gray-600 text-xs mb-3 leading-relaxed">
-              Share the auction page — the avatar speaks each new lot automatically.
+              Share the auction tab — avatar auto-speaks each new lot.
             </p>
-
             {!isWatching ? (
-              <button
-                onClick={startWatching}
-                disabled={!isLive}
-                className="w-full py-2.5 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-semibold rounded-lg transition-colors text-sm disabled:opacity-30 disabled:cursor-not-allowed"
-              >
+              <button onClick={startWatching} disabled={!isLive}
+                className="w-full py-2.5 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-semibold rounded-lg transition-colors text-sm disabled:opacity-30 disabled:cursor-not-allowed">
                 🖥️  Share Screen
               </button>
             ) : (
-              <button
-                onClick={stopWatching}
-                className="w-full py-2.5 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-colors text-sm"
-              >
+              <button onClick={stopWatching}
+                className="w-full py-2.5 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-colors text-sm">
                 Stop Watching
               </button>
             )}
-
-            {!isLive && !isWatching && (
-              <p className="text-gray-600 text-xs text-center mt-2">Connect avatar first</p>
-            )}
+            {!isLive && !isWatching && <p className="text-gray-600 text-xs text-center mt-2">Connect avatar first</p>}
 
             {watchedLot && (
-              <div className="mt-3 bg-[#111113] rounded-lg p-3 border border-gray-700">
+              <div className="mt-3 bg-[#111113] rounded-lg p-3 border border-gray-700 space-y-1">
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-500">Lot</span>
                   <span className="text-white font-bold">{watchedLot.lotNumber ?? "—"}</span>
                 </div>
-                <div className="flex justify-between text-xs mt-1">
+                <div className="flex justify-between text-xs">
                   <span className="text-gray-500">Current bid</span>
                   <span className="text-white">{watchedLot.currentBid ?? "—"}</span>
                 </div>
-                <div className="flex justify-between text-xs mt-1">
-                  <span className="text-gray-500">Asking bid</span>
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-500">Asking</span>
                   <span className="text-[#2AB4A6] font-medium">{watchedLot.askingBid ?? "—"}</span>
                 </div>
               </div>
+            )}
+
+            {/* Debug: show last Gemini response */}
+            {isWatching && lastReadRaw && !watchedLot?.lotNumber && (
+              <p className="mt-2 text-gray-600 text-xs break-all">Last read: {lastReadRaw}</p>
             )}
           </div>
 
@@ -573,38 +523,25 @@ export default function AvatarPage() {
               <h2 className="text-gray-400 text-xs font-semibold uppercase tracking-widest">Manual Script</h2>
               <span className={`text-xs ${script.length > 3000 ? "text-red-400" : "text-gray-600"}`}>{script.length}</span>
             </div>
-            <textarea
-              value={script}
-              onChange={(e) => setScript(e.target.value)}
+            <textarea value={script} onChange={(e) => setScript(e.target.value)}
               placeholder="Or type a manual script and click Speak…"
               className="min-h-[100px] bg-[#111113] text-white text-sm rounded-lg p-3 border border-gray-700 focus:border-[#2AB4A6] focus:outline-none resize-none placeholder-gray-700 leading-relaxed"
-              maxLength={5000}
-            />
+              maxLength={5000} />
             <div className="mt-3 flex gap-2">
-              <button
-                onClick={speak}
-                disabled={status !== "connected" || script.trim().length < 3}
-                className="flex-1 py-2.5 bg-[#2AB4A6] hover:bg-[#22a090] text-black font-semibold rounded-lg transition-colors text-sm disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {status === "speaking" ? (
-                  <><span className="inline-block w-3 h-3 border-2 border-black border-t-transparent rounded-full animate-spin" />Speaking…</>
-                ) : "▶ Speak"}
+              <button onClick={speak} disabled={status !== "connected" || script.trim().length < 3}
+                className="flex-1 py-2.5 bg-[#2AB4A6] hover:bg-[#22a090] text-black font-semibold rounded-lg transition-colors text-sm disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                {status === "speaking"
+                  ? <><span className="inline-block w-3 h-3 border-2 border-black border-t-transparent rounded-full animate-spin" />Speaking…</>
+                  : "▶ Speak"}
               </button>
-              {script && (
-                <button onClick={() => setScript("")} className="px-3 text-gray-600 hover:text-gray-400 text-xs transition-colors">
-                  Clear
-                </button>
-              )}
+              {script && <button onClick={() => setScript("")} className="px-3 text-gray-600 hover:text-gray-400 text-xs">Clear</button>}
             </div>
           </div>
         </div>
       </div>
 
       <style>{`
-        @keyframes wavebar {
-          from { transform: scaleY(0.6); }
-          to   { transform: scaleY(1.4); }
-        }
+        @keyframes wavebar { from { transform: scaleY(0.6); } to { transform: scaleY(1.4); } }
       `}</style>
     </div>
   )
