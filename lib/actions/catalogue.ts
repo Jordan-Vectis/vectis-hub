@@ -604,7 +604,8 @@ function extractLotData(formData: FormData) {
     category:        str("category"),
     subCategory: str("subCategory"),
     brand:       str("brand"),
-    notes:       str("notes"),
-    status:      (formData.get("status") as string) || "ENTERED",
+    notes:        str("notes"),
+    extraDetails: str("extraDetails"),
+    status:       (formData.get("status") as string) || "ENTERED",
   }
 }
