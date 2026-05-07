@@ -5,6 +5,12 @@ import RunMigrationsButton from "./run-migrations-button"
 
 const sections = [
   {
+    href:        "/admin/about",
+    label:       "About",
+    description: "How every section of the app works, what it depends on, and the rules that govern it.",
+    icon:        "📖",
+  },
+  {
     href:        "/admin/users",
     label:       "Users & Permissions",
     description: "Add and remove users, set roles and control which apps each person can access.",
