@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     if (!imageBase64) return NextResponse.json({ error: "No image provided" }, { status: 400 })
 
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
 
     const result = await model.generateContent([
       {
