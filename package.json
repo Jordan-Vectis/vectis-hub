@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "node server.js",
-    "build": "prisma generate && NODE_OPTIONS='--max-old-space-size=2048' next build",
+    "build": "prisma generate && prisma migrate deploy && NODE_OPTIONS='--max-old-space-size=2048' next build",
     "start": "node server.js",
     "lint": "eslint"
   },
