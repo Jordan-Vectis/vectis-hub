@@ -1676,6 +1676,11 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
                 className={`${input} resize-none`} />
             </div>
             <div>
+              <label className={lbl}>Extra Details <span className="text-gray-600 font-normal">(SEO paragraph — generated on Lot History tab)</span></label>
+              <textarea name="extraDetails" rows={5} defaultValue={lot.extraDetails ?? ""}
+                className={`${input} resize-none`} placeholder="No extra details yet — generate them on the Lot History tab." />
+            </div>
+            <div>
               <div className="flex items-center gap-2 mb-1">
                 <label className={lbl} style={{ margin: 0 }}>Condition</label>
                 {cond1 && <button type="button" onClick={() => setCond1("")} className="text-xs text-gray-500 hover:text-red-400 transition-colors leading-none">× clear</button>}

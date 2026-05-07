@@ -3,6 +3,20 @@
 import { useState, useEffect, useRef } from "react"
 import { saveLotExtraDetails } from "@/lib/actions/catalogue"
 
+const LS_KEY = "lot_history_instructions"
+
+const DEFAULT_INSTRUCTIONS = `Write a single, long, detailed SEO-optimised paragraph (250–400 words) about the item described below. This paragraph will appear on the auction lot page to help collectors find it via search engines.
+
+The paragraph should cover ALL of the following where relevant:
+- History and background of the manufacturer or brand (founding, key years, notable products, country of origin)
+- What makes this specific type of item collectable and desirable
+- Details about the particular item: model, era, variant, features, materials
+- Why collectors seek this out (rarity, nostalgia, investment value, cultural significance)
+- Any notable information about the condition or completeness
+- Relevant keywords woven in naturally (brand name, product type, era, materials, collector terms)
+
+Write in flowing, informative prose — NOT as bullet points. British English throughout. Do not start with "This" or "The item". Do not mention Vectis by name. Output plain text only — no HTML tags, no headings, no markdown.`
+
 interface Lot {
   id:           string
   lotNumber:    string
@@ -37,6 +51,11 @@ export default function LotHistoryTab({ auctionId, lots }: Props) {
   const [modelList,  setModelList]  = useState<string[]>([DEFAULT_MODEL])
   const [modelId,    setModelId]    = useState(DEFAULT_MODEL)
 
+  // Editable instructions
+  const [instructions,     setInstructions]     = useState(DEFAULT_INSTRUCTIONS)
+  const [showInstructions, setShowInstructions] = useState(false)
+  const [instructionsDirty, setInstructionsDirty] = useState(false)
+
   // Per-lot state map
   const [states, setStates] = useState<Record<string, LotState>>(() => {
     const m: Record<string, LotState> = {}
@@ -55,6 +74,11 @@ export default function LotHistoryTab({ auctionId, lots }: Props) {
       .then(r => r.json())
       .then(d => { if (d.models?.length) { setModelList(d.models); setModelId(d.models[0]) } })
       .catch(() => {})
+    // Load saved instructions from localStorage
+    try {
+      const saved = localStorage.getItem(LS_KEY)
+      if (saved) { setInstructions(saved); setInstructionsDirty(true) }
+    } catch {}
   }, [])
 
   function updateState(lotId: string, patch: Partial<LotState>) {
@@ -69,6 +93,7 @@ export default function LotHistoryTab({ auctionId, lots }: Props) {
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({
           modelId,
+          customInstructions: instructions !== DEFAULT_INSTRUCTIONS ? instructions : undefined,
           lot: {
             lotNumber:   lot.lotNumber,
             title:       lot.title,
@@ -165,10 +190,48 @@ export default function LotHistoryTab({ auctionId, lots }: Props) {
           </button>
         )}
 
+        <button
+          onClick={() => setShowInstructions(v => !v)}
+          className={`text-sm px-3 py-2 rounded-lg border transition-colors ${showInstructions ? "border-[#2AB4A6] text-[#2AB4A6] bg-[#2AB4A6]/10" : "border-gray-700 text-gray-400 hover:border-gray-500"}`}
+        >
+          {showInstructions ? "▲" : "▼"} Instructions{instructionsDirty ? " ✎" : ""}
+        </button>
+
         <span className="text-sm text-gray-400 ml-auto">
           {savedCount} / {lots.length} lots have extra details
         </span>
       </div>
+
+      {/* Editable instructions panel */}
+      {showInstructions && (
+        <div className="bg-[#1C1C1E] border border-gray-700 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-400">These instructions are sent to the AI along with each lot's details. Edit to change the style or focus of the generated text.</p>
+            {instructionsDirty && (
+              <button
+                onClick={() => {
+                  setInstructions(DEFAULT_INSTRUCTIONS)
+                  setInstructionsDirty(false)
+                  try { localStorage.removeItem(LS_KEY) } catch {}
+                }}
+                className="text-xs text-red-400 hover:text-red-300 whitespace-nowrap ml-3"
+              >
+                Reset to default
+              </button>
+            )}
+          </div>
+          <textarea
+            value={instructions}
+            onChange={e => {
+              setInstructions(e.target.value)
+              setInstructionsDirty(e.target.value !== DEFAULT_INSTRUCTIONS)
+              try { localStorage.setItem(LS_KEY, e.target.value) } catch {}
+            }}
+            rows={12}
+            className="w-full bg-[#2C2C2E] border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 font-mono focus:outline-none focus:ring-2 focus:ring-[#2AB4A6] resize-none"
+          />
+        </div>
+      )}
 
       {/* Progress bar */}
       {allProgress && (
