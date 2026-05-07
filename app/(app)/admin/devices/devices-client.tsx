@@ -11,7 +11,7 @@ type Device = {
   notes: string | null
   assignedToId: string | null
   assignedTo: User | null
-  createdAt: string
+  createdAt: Date | string
 }
 
 interface Props {
