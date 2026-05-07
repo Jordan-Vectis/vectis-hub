@@ -2,17 +2,18 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth()
     if (!session || session.user.role !== "ADMIN") {
       return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
     }
 
+    const { id } = await params
     const { serialNumber, name, deviceType, notes, assignedToId } = await req.json()
 
     const device = await prisma.device.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         ...(serialNumber !== undefined && { serialNumber: serialNumber.trim() }),
         ...(name !== undefined && { name: name.trim() }),
@@ -33,14 +34,15 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 }
 
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth()
     if (!session || session.user.role !== "ADMIN") {
       return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
     }
 
-    await prisma.device.delete({ where: { id: params.id } })
+    const { id } = await params
+    await prisma.device.delete({ where: { id } })
     return NextResponse.json({ ok: true })
   } catch (e: any) {
     console.error("devices DELETE error:", e)
