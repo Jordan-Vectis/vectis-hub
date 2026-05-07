@@ -40,6 +40,12 @@ const sections = [
     description: "View time-per-lot reports across all cataloguers — average speed, method breakdown and recent activity.",
     icon:        "📊",
   },
+  {
+    href:        "/admin/memory",
+    label:       "Claude Memory",
+    description: "Browse what Claude remembers about you, this project, and how to work with you. Only available locally.",
+    icon:        "🧠",
+  },
 ]
 
 export default async function AdminOverviewPage() {
