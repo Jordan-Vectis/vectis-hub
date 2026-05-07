@@ -15,6 +15,12 @@ const MIGRATIONS = [
     "updatedAt"      TIMESTAMP(3) NOT NULL,
     CONSTRAINT "RoleDefault_pkey" PRIMARY KEY ("role")
   )`,
+  `CREATE TABLE IF NOT EXISTS "ClaudeMemory" (
+    "filename"  TEXT NOT NULL,
+    "content"   TEXT NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "ClaudeMemory_pkey" PRIMARY KEY ("filename")
+  )`,
 ]
 
 export async function POST() {

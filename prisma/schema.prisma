@@ -626,6 +626,12 @@ model WarehouseSyncLog {
 // Receipt_Totes_Excel — physical totes tracked in BC.
 // Synced separately from WarehouseItem (which tracks individual items).
 // A tote may be at a location even if items inside don't yet have one.
+model ClaudeMemory {
+  filename  String   @id
+  content   String
+  updatedAt DateTime @updatedAt
+}
+
 model WarehouseTote {
   id           String   @id @default(cuid())
   toteNo       String   @unique

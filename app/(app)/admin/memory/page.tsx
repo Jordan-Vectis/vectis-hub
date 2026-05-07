@@ -48,22 +48,36 @@ function renderInline(text: string): React.ReactNode {
 
 export default function MemoryPage() {
   const [entries, setEntries]         = useState<Entry[] | null>(null)
-  const [unavailable, setUnavailable] = useState<string | null>(null)
   const [open, setOpen]               = useState<string | null>(null)
   const [editing, setEditing]         = useState<string | null>(null)
   const [draft, setDraft]             = useState("")
   const [saving, setSaving]           = useState(false)
+  const [syncing, setSyncing]         = useState(false)
   const [loading, setLoading]         = useState(true)
 
-  useEffect(() => {
+  function load() {
+    setLoading(true)
     fetch("/api/admin/memory")
       .then(r => r.json())
-      .then(data => {
-        if (data.unavailable) { setUnavailable(data.reason); return }
-        setEntries(data.entries ?? [])
-      })
+      .then(data => setEntries(data.entries ?? []))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { load() }, [])
+
+  async function syncFromDisk() {
+    setSyncing(true)
+    try {
+      const res = await fetch("/api/admin/memory", { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? "Sync failed")
+      load()
+    } catch (e: any) {
+      alert(e.message)
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   function startEdit(entry: Entry) {
     setDraft(entry.content)
@@ -97,22 +111,31 @@ export default function MemoryPage() {
 
   return (
     <div className="p-8 max-w-3xl">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Claude Memory</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          What Claude remembers about you, this project, and how to work with you. Only available when running locally.
-        </p>
+      <div className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Claude Memory</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            What Claude remembers about you, this project, and how to work with you.
+          </p>
+        </div>
+        <button
+          onClick={syncFromDisk}
+          disabled={syncing}
+          className="shrink-0 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-300 px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+        >
+          {syncing ? "Syncing…" : "Sync from disk"}
+        </button>
       </div>
 
       {loading && <p className="text-sm text-gray-400">Loading…</p>}
 
-      {unavailable && (
+      {entries && entries.length === 0 && !loading && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 text-sm text-amber-800">
-          {unavailable}
+          No memory entries in the database yet. Run the app locally and click &ldquo;Sync from disk&rdquo; to populate.
         </div>
       )}
 
-      {entries && (
+      {entries && entries.length > 0 && (
         <div className="flex flex-col gap-3">
           {entries.map(entry => {
             const isOpen    = open === entry.filename
