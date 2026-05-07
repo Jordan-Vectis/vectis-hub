@@ -57,6 +57,7 @@ model User {
   valuations          Valuation[]
   contactLogs         ContactLog[]
   bcToken             BCToken?
+  devices             Device[]
 }
 
 model BCToken {
@@ -626,6 +627,18 @@ model WarehouseSyncLog {
 // Receipt_Totes_Excel — physical totes tracked in BC.
 // Synced separately from WarehouseItem (which tracks individual items).
 // A tote may be at a location even if items inside don't yet have one.
+model Device {
+  id           String   @id @default(cuid())
+  serialNumber String   @unique
+  name         String
+  deviceType   String   @default("iPad")
+  notes        String?
+  assignedTo   User?    @relation(fields: [assignedToId], references: [id])
+  assignedToId String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
 model ClaudeMemory {
   filename  String   @id
   content   String

@@ -41,9 +41,15 @@ const sections = [
     icon:        "📊",
   },
   {
+    href:        "/admin/devices",
+    label:       "Devices",
+    description: "Register and track tablets and other devices used by staff. Record serial numbers and assign to users.",
+    icon:        "📱",
+  },
+  {
     href:        "/admin/memory",
     label:       "Claude Memory",
-    description: "Browse what Claude remembers about you, this project, and how to work with you. Only available locally.",
+    description: "Browse what Claude remembers about you, this project, and how to work with you.",
     icon:        "🧠",
   },
 ]

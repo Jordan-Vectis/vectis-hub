@@ -15,6 +15,18 @@ const MIGRATIONS = [
     "updatedAt"      TIMESTAMP(3) NOT NULL,
     CONSTRAINT "RoleDefault_pkey" PRIMARY KEY ("role")
   )`,
+  `CREATE TABLE IF NOT EXISTS "Device" (
+    "id"           TEXT NOT NULL,
+    "serialNumber" TEXT NOT NULL,
+    "name"         TEXT NOT NULL,
+    "deviceType"   TEXT NOT NULL DEFAULT 'iPad',
+    "notes"        TEXT,
+    "assignedToId" TEXT,
+    "createdAt"    TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt"    TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "Device_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "Device_serialNumber_key" UNIQUE ("serialNumber")
+  )`,
   `CREATE TABLE IF NOT EXISTS "ClaudeMemory" (
     "filename"  TEXT NOT NULL,
     "content"   TEXT NOT NULL,
