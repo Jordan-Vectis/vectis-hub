@@ -32,21 +32,21 @@ const STATUS_TEXT: Record<Status, string> = {
 
 export default function AvatarPage() {
   // Avatar WebRTC refs
-  const videoRef     = useRef<HTMLVideoElement>(null)
-  const pcRef        = useRef<RTCPeerConnection | null>(null)
-  const streamRef    = useRef<{ id: string; session_id: string } | null>(null)
+  const videoRef       = useRef<HTMLVideoElement>(null)
+  const pcRef          = useRef<RTCPeerConnection | null>(null)
+  const streamRef      = useRef<{ id: string; session_id: string } | null>(null)
   const speakTimer     = useRef<ReturnType<typeof setTimeout> | null>(null)
   const connectTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
   const keepaliveTimer = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Screen-reading refs — all mutable so interval callbacks are never stale
-  const screenStreamRef    = useRef<MediaStream | null>(null)
-  const screenVideoRef     = useRef<HTMLVideoElement | null>(null)
-  const watchIntervalRef   = useRef<ReturnType<typeof setInterval> | null>(null)
-  const lastLotRef         = useRef<string | null>(null)
-  const isReadingRef       = useRef(false)
-  const statusRef          = useRef<Status>("idle")      // mirrors status state, never stale
-  const streamDataRef      = useRef<{ id: string; session_id: string } | null>(null) // mirrors streamRef for interval use
+  const screenStreamRef  = useRef<MediaStream | null>(null)
+  const screenVideoRef   = useRef<HTMLVideoElement | null>(null)
+  const watchIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const lastLotRef       = useRef<string | null>(null)
+  const isReadingRef     = useRef(false)
+  const statusRef        = useRef<Status>("idle")
+  const streamDataRef    = useRef<{ id: string; session_id: string } | null>(null)
 
   // Avatar state
   const [status,            setStatus]           = useState<Status>("idle")
@@ -60,12 +60,14 @@ export default function AvatarPage() {
   const [isWatching,    setIsWatching]    = useState(false)
   const [watchedLot,    setWatchedLot]    = useState<LotReading | null>(null)
   const [readingStatus, setReadingStatus] = useState<"idle" | "reading" | "error">("idle")
-  const [lastReadRaw,   setLastReadRaw]   = useState<string | null>(null) // debug: show what Gemini saw
+  const [readCount,     setReadCount]     = useState(0)
+  const [lastReadRaw,   setLastReadRaw]   = useState<string | null>(null)
+  const [lastSpoke,     setLastSpoke]     = useState<string | null>(null)
+  const [readError,     setReadError]     = useState<string | null>(null)
 
-  // Keep statusRef in sync
+  // Keep refs in sync with state
   useEffect(() => { statusRef.current = status }, [status])
-  // Keep streamDataRef in sync
-  useEffect(() => { streamDataRef.current = streamRef.current }, [status]) // re-sync on any status change
+  useEffect(() => { streamDataRef.current = streamRef.current }, [status])
 
   // Load presenters
   useEffect(() => {
@@ -115,7 +117,7 @@ export default function AvatarPage() {
   const markConnected = useCallback(() => {
     if (connectTimer.current) clearTimeout(connectTimer.current)
     setStatus("connected")
-    // Send D-ID keepalive every 20 s — without it the stream drops after ~30 s of silence
+    // Keep the D-ID stream alive every 20 s — without this it drops after ~30 s of silence
     if (keepaliveTimer.current) clearInterval(keepaliveTimer.current)
     keepaliveTimer.current = setInterval(() => {
       const sd = streamDataRef.current
@@ -172,7 +174,7 @@ export default function AvatarPage() {
         if (s === "connected") markConnected()
         if (s === "failed") {
           setStatus("error")
-          setError(`WebRTC failed (ICE state: ${pc.iceConnectionState}) — click Connect to retry`)
+          setError(`WebRTC failed (ICE: ${pc.iceConnectionState}) — click Connect to retry`)
           cleanup(true)
         }
         if (s === "closed") {
@@ -222,7 +224,6 @@ export default function AvatarPage() {
 
   // ── Speaking ─────────────────────────────────────────────────────────────────
 
-  // Uses refs so it's safe to call from interval callbacks without stale closures
   const speakTextDirect = useCallback(async (text: string) => {
     const sd = streamDataRef.current
     if (!sd || statusRef.current !== "connected") return
@@ -236,6 +237,7 @@ export default function AvatarPage() {
         const { error: msg } = await res.json().catch(() => ({}))
         throw new Error(msg ?? "Speak failed")
       }
+      setLastSpoke(new Date().toLocaleTimeString())
       const words = text.split(/\s+/).length
       speakTimer.current = setTimeout(
         () => setStatus("connected"),
@@ -263,30 +265,43 @@ export default function AvatarPage() {
     setWatchedLot(null)
     setReadingStatus("idle")
     setLastReadRaw(null)
+    setReadCount(0)
+    setLastSpoke(null)
+    setReadError(null)
   }, [])
 
-  // Stable capture function — uses only refs, never stale
   const doCapture = useCallback(async () => {
     if (isReadingRef.current) return
     const vid = screenVideoRef.current
-    if (!vid || !vid.videoWidth) return  // not ready yet
+    if (!vid || !vid.videoWidth) return
 
     isReadingRef.current = true
     setReadingStatus("reading")
+    setReadError(null)
 
     try {
+      // Downscale to max 1280px wide so Gemini gets a fast, clear image
+      const MAX_W = 1280
+      const scale = Math.min(1, MAX_W / vid.videoWidth)
       const canvas = document.createElement("canvas")
-      canvas.width  = vid.videoWidth
-      canvas.height = vid.videoHeight
-      canvas.getContext("2d")?.drawImage(vid, 0, 0)
-      const base64 = canvas.toDataURL("image/jpeg", 0.8).split(",")[1]
+      canvas.width  = Math.round(vid.videoWidth  * scale)
+      canvas.height = Math.round(vid.videoHeight * scale)
+      canvas.getContext("2d")?.drawImage(vid, 0, 0, canvas.width, canvas.height)
+      const base64 = canvas.toDataURL("image/jpeg", 0.85).split(",")[1]
 
       const res = await fetch("/api/avatar/read-lot", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageBase64: base64 }),
       })
 
-      if (!res.ok) { setReadingStatus("error"); return }
+      setReadCount((c) => c + 1)
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => `HTTP ${res.status}`)
+        setReadError(`API error: ${txt}`)
+        setReadingStatus("error")
+        return
+      }
 
       const data: LotReading = await res.json()
       setReadingStatus("idle")
@@ -295,7 +310,6 @@ export default function AvatarPage() {
       if (!data.lotNumber) return
       setWatchedLot(data)
 
-      // Only speak if lot number changed
       if (data.lotNumber !== lastLotRef.current) {
         lastLotRef.current = data.lotNumber
 
@@ -303,19 +317,18 @@ export default function AvatarPage() {
         if (data.askingBid)  parts.push(`Asking bid ${data.askingBid}.`)
         if (data.currentBid) parts.push(`Current bid ${data.currentBid}.`)
 
-        // statusRef and streamDataRef are always fresh — no stale closure risk
         if (streamDataRef.current && statusRef.current === "connected") {
           speakTextDirect(parts.join(" "))
         }
       }
-    } catch {
+    } catch (err) {
+      setReadError(err instanceof Error ? err.message : "Capture failed")
       setReadingStatus("error")
     } finally {
       isReadingRef.current = false
     }
   }, [speakTextDirect])
 
-  // Keep a ref to doCapture so the interval always calls the latest version
   const doCaptureRef = useRef(doCapture)
   useEffect(() => { doCaptureRef.current = doCapture }, [doCapture])
 
@@ -331,7 +344,6 @@ export default function AvatarPage() {
       vid.srcObject = stream
       vid.muted     = true
 
-      // Wait for metadata so videoWidth/videoHeight are valid
       await new Promise<void>((resolve) => {
         if (vid.readyState >= 1) { resolve(); return }
         vid.addEventListener("loadedmetadata", () => resolve(), { once: true })
@@ -343,11 +355,12 @@ export default function AvatarPage() {
       setIsWatching(true)
       setWatchedLot(null)
       setLastReadRaw(null)
+      setReadCount(0)
+      setLastSpoke(null)
+      setReadError(null)
 
-      // First read immediately, then every 4 seconds
       doCaptureRef.current()
       watchIntervalRef.current = setInterval(() => doCaptureRef.current(), 4_000)
-
       stream.getVideoTracks()[0].addEventListener("ended", stopWatching)
     } catch {
       // User cancelled share picker — ignore
@@ -484,9 +497,13 @@ export default function AvatarPage() {
             <div className="flex items-center justify-between mb-1">
               <h2 className="text-gray-400 text-xs font-semibold uppercase tracking-widest">Auto-Read</h2>
               {isWatching && (
-                <span className={`text-xs flex items-center gap-1 ${readingStatus === "reading" ? "text-yellow-400" : "text-[#2AB4A6]"}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${readingStatus === "reading" ? "bg-yellow-400 animate-pulse" : "bg-[#2AB4A6] animate-pulse"}`} />
-                  {readingStatus === "reading" ? "Reading…" : "Watching"}
+                <span className={`text-xs flex items-center gap-1 ${
+                  readingStatus === "error" ? "text-red-400" :
+                  readingStatus === "reading" ? "text-yellow-400" : "text-[#2AB4A6]"}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${
+                    readingStatus === "error" ? "bg-red-400" :
+                    readingStatus === "reading" ? "bg-yellow-400 animate-pulse" : "bg-[#2AB4A6] animate-pulse"}`} />
+                  {readingStatus === "error" ? "Error" : readingStatus === "reading" ? "Reading…" : "Watching"}
                 </span>
               )}
             </div>
@@ -506,26 +523,47 @@ export default function AvatarPage() {
             )}
             {!isLive && !isWatching && <p className="text-gray-600 text-xs text-center mt-2">Connect avatar first</p>}
 
-            {watchedLot && (
-              <div className="mt-3 bg-[#111113] rounded-lg p-3 border border-gray-700 space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">Lot</span>
-                  <span className="text-white font-bold">{watchedLot.lotNumber ?? "—"}</span>
+            {/* Debug panel — always visible when watching */}
+            {isWatching && (
+              <div className="mt-3 space-y-2">
+                {/* Live lot data */}
+                <div className="bg-[#111113] rounded-lg p-3 border border-gray-700 space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500">Reads done</span>
+                    <span className="text-gray-300 font-mono">{readCount}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500">Lot seen</span>
+                    <span className="text-white font-bold">{watchedLot?.lotNumber ?? "—"}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500">Current bid</span>
+                    <span className="text-white">{watchedLot?.currentBid ?? "—"}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500">Asking bid</span>
+                    <span className="text-[#2AB4A6] font-medium">{watchedLot?.askingBid ?? "—"}</span>
+                  </div>
+                  {lastSpoke && (
+                    <div className="flex justify-between text-xs pt-1 border-t border-gray-800">
+                      <span className="text-gray-500">Last spoke</span>
+                      <span className="text-green-400">{lastSpoke}</span>
+                    </div>
+                  )}
                 </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">Current bid</span>
-                  <span className="text-white">{watchedLot.currentBid ?? "—"}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">Asking</span>
-                  <span className="text-[#2AB4A6] font-medium">{watchedLot.askingBid ?? "—"}</span>
-                </div>
-              </div>
-            )}
 
-            {/* Debug: show last Gemini response */}
-            {isWatching && lastReadRaw && !watchedLot?.lotNumber && (
-              <p className="mt-2 text-gray-600 text-xs break-all">Last read: {lastReadRaw}</p>
+                {/* Raw Gemini response */}
+                {lastReadRaw && (
+                  <p className="text-gray-600 text-[10px] font-mono break-all leading-relaxed">
+                    Gemini: {lastReadRaw}
+                  </p>
+                )}
+
+                {/* Error message */}
+                {readError && (
+                  <p className="text-red-400 text-xs break-words">⚠ {readError}</p>
+                )}
+              </div>
             )}
           </div>
 
