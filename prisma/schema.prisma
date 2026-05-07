@@ -314,6 +314,7 @@ model CatalogueLot {
   subCategory  String?
   brand        String?
   notes        String?
+  extraDetails String?  @db.Text
   imageUrls    String[]         @default([])
   status        String           @default("ENTERED")
   aiUpgraded    Boolean          @default(false)

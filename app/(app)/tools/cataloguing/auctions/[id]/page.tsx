@@ -107,6 +107,7 @@ export default async function AuctionDetailPage({
           aiUpgraded: l.aiUpgraded,
           createdByName: l.createdByName,
           imageUrls: l.imageUrls,
+          extraDetails: l.extraDetails ?? null,
         }))}
       />
       </div>

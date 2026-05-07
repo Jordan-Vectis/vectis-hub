@@ -9,12 +9,13 @@ import ImportTab from "./import-tab"
 import PhotoUploadTab from "./photo-upload-tab"
 import AiUpgradeTab from "./ai-upgrade-tab"
 import StatsTab from "./stats-tab"
+import LotHistoryTab from "./lot-history-tab"
 import * as XLSX from "xlsx"
 import JSZip from "jszip"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "settings" | "add-lot" | "manage-lots" | "photo-only" | "import" | "upload-photos" | "ai-upgrade" | "stats"
+type Tab = "settings" | "add-lot" | "manage-lots" | "photo-only" | "import" | "upload-photos" | "ai-upgrade" | "stats" | "lot-history"
 
 interface Auction {
   id: string; code: string; name: string; auctionDate: Date | null
@@ -29,6 +30,7 @@ interface Lot {
   tote: string | null; receipt: string | null; receiptUniqueId: string | null; category: string | null
   subCategory: string | null; brand: string | null; notes: string | null
   status: string; aiUpgraded: boolean; createdByName: string | null; imageUrls: string[]
+  extraDetails: string | null
 }
 
 
@@ -262,6 +264,7 @@ export default function AuctionTabs({ auction, lots }: { auction: Auction; lots:
     { id: "upload-photos", label: "Upload Photos" },
     { id: "ai-upgrade",   label: "✨ AI Upgrade" },
     { id: "stats",        label: "📊 Statistics" },
+    { id: "lot-history",  label: "📖 Lot History" },
     { id: "settings",     label: "Auction Settings" },
   ]
 
@@ -390,6 +393,26 @@ export default function AuctionTabs({ auction, lots }: { auction: Auction; lots:
         )}
 
         {tab === "stats" && <StatsTab lots={lots} auction={auction} />}
+
+        {tab === "lot-history" && (
+          <LotHistoryTab
+            auctionId={auction.id}
+            lots={lots.map(l => ({
+              id:           l.id,
+              lotNumber:    l.lotNumber,
+              title:        l.title,
+              description:  l.description,
+              keyPoints:    l.keyPoints,
+              category:     l.category,
+              subCategory:  l.subCategory,
+              brand:        l.brand,
+              condition:    l.condition,
+              estimateLow:  l.estimateLow,
+              estimateHigh: l.estimateHigh,
+              extraDetails: l.extraDetails,
+            }))}
+          />
+        )}
       </div>
 
       {showDupeChecker && (
