@@ -39,15 +39,19 @@ export async function POST(req: NextRequest) {
       }
 
       case "create": {
-        const { presenterUrl } = body
-        if (!presenterUrl) {
+        // Use /clips/streams with presenter_id — this is the correct API for clip presenters
+        const { presenterId } = body
+        if (!presenterId) {
           return NextResponse.json({ error: "No presenter selected" }, { status: 400 })
         }
 
-        const res = await fetch(`${DID_API}/talks/streams`, {
+        const res = await fetch(`${DID_API}/clips/streams`, {
           method:  "POST",
           headers: didHeaders(),
-          body:    JSON.stringify({ source_url: presenterUrl }),
+          body:    JSON.stringify({
+            presenter_id: presenterId,
+            driver_url:   "bank://lively",
+          }),
         })
 
         if (!res.ok) {
@@ -60,7 +64,7 @@ export async function POST(req: NextRequest) {
 
       case "sdp": {
         const { id, session_id, answer } = body
-        const res = await fetch(`${DID_API}/talks/streams/${id}/sdp`, {
+        const res = await fetch(`${DID_API}/clips/streams/${id}/sdp`, {
           method:  "POST",
           headers: didHeaders(),
           body:    JSON.stringify({ answer, session_id }),
@@ -73,7 +77,7 @@ export async function POST(req: NextRequest) {
       case "ice": {
         const { id, session_id, candidate } = body
         // D-ID requires the candidate fields flattened — NOT nested under a candidate object
-        const res = await fetch(`${DID_API}/talks/streams/${id}/ice`, {
+        const res = await fetch(`${DID_API}/clips/streams/${id}/ice`, {
           method:  "POST",
           headers: didHeaders(),
           body:    JSON.stringify({
@@ -90,7 +94,7 @@ export async function POST(req: NextRequest) {
 
       case "speak": {
         const { id, session_id, text } = body
-        const res = await fetch(`${DID_API}/talks/streams/${id}`, {
+        const res = await fetch(`${DID_API}/clips/streams/${id}`, {
           method:  "POST",
           headers: didHeaders(),
           body:    JSON.stringify({
@@ -116,7 +120,7 @@ export async function POST(req: NextRequest) {
       case "keepalive": {
         const { id, session_id } = body
         // Fire-and-forget — we don't care if it fails
-        fetch(`${DID_API}/talks/streams/${id}/keepalive`, {
+        fetch(`${DID_API}/clips/streams/${id}/keepalive`, {
           method:  "POST",
           headers: didHeaders(),
           body:    JSON.stringify({ session_id }),
@@ -126,7 +130,7 @@ export async function POST(req: NextRequest) {
 
       case "delete": {
         const { id, session_id } = body
-        await fetch(`${DID_API}/talks/streams/${id}`, {
+        await fetch(`${DID_API}/clips/streams/${id}`, {
           method:  "DELETE",
           headers: didHeaders(),
           body:    JSON.stringify({ session_id }),

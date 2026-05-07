@@ -127,7 +127,7 @@ export default function AvatarPage() {
     }, 20_000)
   }, [])
 
-  const connect = useCallback(async (presenterUrl: string) => {
+  const connect = useCallback(async (presenterId: string) => {
     await cleanup(true)
     setStatus("connecting")
     setError(null)
@@ -138,7 +138,7 @@ export default function AvatarPage() {
     try {
       const createRes = await fetch("/api/avatar", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "create", presenterUrl }),
+        body: JSON.stringify({ action: "create", presenterId }),
       })
       if (!createRes.ok) {
         const { error: msg } = await createRes.json().catch(() => ({}))
@@ -466,7 +466,7 @@ export default function AvatarPage() {
             <h2 className="text-gray-400 text-xs font-semibold uppercase tracking-widest mb-3">Connection</h2>
             {status === "idle" || status === "error" ? (
               <button
-                onClick={() => selectedPresenter && connect(selectedPresenter.image_url ?? selectedPresenter.thumbnail_url)}
+                onClick={() => selectedPresenter && connect(selectedPresenter.presenter_id ?? selectedPresenter.id ?? "")}
                 disabled={!selectedPresenter || loadingPresenters}
                 className="w-full py-2.5 bg-[#2AB4A6] hover:bg-[#22a090] text-black font-semibold rounded-lg transition-colors text-sm disabled:opacity-40 disabled:cursor-not-allowed"
               >Connect Avatar</button>
