@@ -4,7 +4,7 @@ import fs from "fs/promises"
 import path from "path"
 
 const MEMORY_DIR = path.join(
-  process.env.HOME ?? process.env.USERPROFILE ?? "",
+  process.env.USERPROFILE || process.env.HOME || "",
   ".claude", "projects", "C--Dev-apps", "memory"
 )
 
