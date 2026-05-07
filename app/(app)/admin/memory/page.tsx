@@ -205,19 +205,49 @@ function renderBody(body: string) {
 }
 
 export default function MemoryPage() {
-  const [open, setOpen] = useState<string | null>(null)
+  const [open, setOpen]       = useState<string | null>(null)
+  const [entries, setEntries] = useState<Entry[]>(ENTRIES)
+
+  function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
+    files.forEach(file => {
+      if (!file.name.endsWith(".md")) return
+      const reader = new FileReader()
+      reader.onload = ev => {
+        const content = ev.target?.result as string
+        setEntries(prev => {
+          const existing = prev.findIndex(e => e.filename === file.name)
+          if (existing >= 0) {
+            const next = [...prev]
+            next[existing] = { filename: file.name, content }
+            return next
+          }
+          return [...prev, { filename: file.name, content }].sort((a, b) => a.filename.localeCompare(b.filename))
+        })
+        setOpen(file.name)
+      }
+      reader.readAsText(file)
+    })
+    e.target.value = ""
+  }
 
   return (
     <div className="p-8 max-w-3xl">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Claude Memory</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          What Claude remembers about you, this project, and how to work with you.
-        </p>
+      <div className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Claude Memory</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            What Claude remembers about you, this project, and how to work with you.
+          </p>
+        </div>
+        <label className="shrink-0 cursor-pointer text-sm text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-300 px-4 py-2 rounded-lg transition-colors">
+          Upload .md
+          <input type="file" accept=".md" multiple onChange={handleUpload} className="hidden" />
+        </label>
       </div>
 
       <div className="flex flex-col gap-3">
-        {ENTRIES.map(entry => {
+        {entries.map(entry => {
           const { meta, body } = parseFrontmatter(entry.content)
           const isOpen    = open === entry.filename
           const typeClass = TYPE_COLOURS[meta.type ?? ""] ?? "bg-gray-100 text-gray-600"
