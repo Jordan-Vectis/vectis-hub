@@ -3,8 +3,7 @@
 import { useState } from "react"
 
 // ─── Static memory content ────────────────────────────────────────────────────
-// This file is updated by Claude whenever memory files change.
-// Last synced: 2026-05-07
+// Updated by Claude alongside memory file changes. Last synced: 2026-05-07
 
 type Entry = { filename: string; content: string }
 
@@ -17,20 +16,24 @@ description: Jordan Orange, works at Vectis toy auction house, non-technical, Wi
 type: user
 ---
 
-- Name: Jordan Orange (jordan.orange@hambletongroup.com)
+- Name: Jordan Orange (jordan.orange@hambletongroup.com / it@vectis.co.uk)
 - Works at Vectis, a toy and collectables auction house
 - Non-technical — happy to defer to recommendations on stack, hosting, tooling
-- Prefers questions one at a time and concise responses
+- Prefers concise responses — one paragraph max, lead with the answer
 - Uses Windows 11, PowerShell, VS Code
-- GitHub username: Jordan-Vectis`,
+- GitHub username: Jordan-Vectis
+- Always accesses the app via the Railway staging/production URL — never runs it locally with npm run dev
+- Staff use iPads around the warehouse and cataloguing areas — device tracking feature being planned
+- Another developer (unnamed) also works on the same staging branch and pushes changes independently`,
   },
   {
     filename: "project_vectis_crm.md",
     content: `---
 name: Vectis Hub Project
-description: Full spec, tech stack, and deployment details for the Vectis Hub app
+description: Full spec, tech stack, deployment details, and current feature state for the Vectis Hub app
 type: project
 ---
+
 # Vectis Hub
 
 **Production URL:** https://vectis-crm-production.up.railway.app
@@ -48,6 +51,8 @@ type: project
 - Google Gemini API (lot description generation, BC Marketing articles)
 - Royal Mail Click & Drop API (packing/dispatch)
 - Business Central OData API (BC Reports, BC Warehouse, BC Marketing)
+- Cloudflare R2 for lot photo storage
+- D-ID API for AI Presenter avatar
 
 ## Key config notes
 - \`prisma generate\` runs as part of \`npm run build\`
@@ -57,6 +62,7 @@ type: project
 - Prisma client generated at \`app/generated/prisma/\`
 - \`DATABASE_URL\`, \`AUTH_SECRET\`, \`NEXTAUTH_URL\` set in Railway Variables
 - \`prisma migrate deploy\` runs on startup via server.js (DATABASE_URL not available at build time)
+- Jordan never runs the app locally — always uses the Railway staging URL
 
 ## Roles
 - **ADMIN** — full access, hardcoded for it@vectis.co.uk
@@ -67,21 +73,81 @@ type: project
 - Default branch for all work: \`staging\`
 - Never push to \`main\` unless Jordan explicitly says "push to main"
 - Always pull from remote staging before pushing (another developer works on the same branch)
-- Merge to production: \`git fetch origin main && git checkout main && git merge origin/staging --no-edit && git push origin main && git checkout staging\``,
+- Merge to production: \`git fetch origin main && git checkout main && git merge origin/staging --no-edit && git push origin main && git checkout staging\`
+
+## Admin section — current features
+- **About** (\`/admin/about\`) — comprehensive documentation for every app, all sub-tabs, DB models, rules, dependencies, and hardcoded constants. Updated 2026-05-07.
+- **Users & Permissions** — grouped by section matching hub page layout
+- **Role Defaults** — default allowedApps + appPermissions per role, auto-applied on user creation
+- **Home Page** — drag-to-reorder hub cards
+- **Departments** — cataloguer department management
+- **Cataloguing Reports** — time-per-lot stats
+- **Run Migrations** — emergency SQL button (all migrations must also be added here)
+- **Claude Memory** (\`/admin/memory\`) — static page with memory content hardcoded in ENTRIES array. Jordan can also upload .md files manually. Updated alongside memory files on each session.
+
+## Hub page sections
+- Cataloguing & AI: Auction AI, Cataloguing, BC Marketing
+- Business Central: BC Reports, BC Warehouse, BC API Viewer
+- Operations: Warehouse, Submissions, Customers, Databases, Packing/Dispatch
+- Auction: Website, Auction Controller, Saleroom Trainer, AI Presenter
+- Admin: standalone card
+
+## Planned features
+- iPad device tracking — register devices by localStorage UUID, check-in system showing who has each iPad`,
   },
   {
     filename: "feedback_vectis.md",
     content: `---
-name: Vectis CRM Feedback
-description: Preferences and patterns learned while building the Vectis app
+name: General Feedback & Collaboration Style
+description: How Jordan likes to work — tone, approach, and patterns to avoid
 type: feedback
 ---
 
-Keep responses short — one paragraph max unless explaining something technical.
+Keep responses short — one paragraph max unless explaining something technical. Lead with the action or answer, skip preamble.
 
-**Why:** User explicitly asked for concise answers early in the session.
+**Why:** User explicitly asked for concise answers early on.
 
-**How to apply:** Lead with the action or answer, skip preamble. Use bullet points or tables only when they genuinely help.`,
+**How to apply:** No summaries at the end of responses, no "here's what I did" recaps, no headers in conversational replies.
+
+---
+
+Jordan always uses the Railway staging URL — never runs the app locally. Any feature that only works locally is useless to him.
+
+**Why:** Jordan got frustrated multiple times when features were built assuming local access (e.g. memory file reading from disk).
+
+**How to apply:** Before building anything that reads from disk, env vars only available locally, or requires npm run dev — stop and think whether it will work on Railway. If not, find a different approach.
+
+---
+
+When Jordan says something simple like "take a copy and put it on the site", do exactly that — don't architect a syncing system with DB tables, API routes, and seed scripts.
+
+**Why:** Jordan had to repeat himself multiple times while I kept overcomplicating the memory viewer.
+
+**How to apply:** Match the complexity of the solution to the simplicity of the request. If they say "put a copy on the site", embed the content statically.
+
+---
+
+Don't suggest Jordan open the browser console or run commands to fix things.
+
+**Why:** Jordan called this out as a bad suggestion when I told him to run fetch() in the console to trigger a migration.
+
+**How to apply:** Any admin operation that might need to be triggered manually must have a proper UI button (like the Run Migrations button).`,
+  },
+  {
+    filename: "feedback_memory_workflow.md",
+    content: `---
+name: Memory file workflow
+description: When updating memory files, always update the static page content at the same time
+type: feedback
+---
+
+The Claude Memory viewer at /admin/memory is a static page — the memory content is hardcoded directly into \`app/(app)/admin/memory/page.tsx\` as a const ENTRIES array.
+
+**Rule:** Whenever memory files are written or updated, also update the corresponding entry in the ENTRIES array in the page file and push to staging.
+
+**Why:** Jordan can't run the app locally, so the only way he can see updated memory is if it's baked into the deployed page. A memory file written to disk but not reflected in the page is invisible to him.
+
+**How to apply:** At the end of any session where memory files are written, update \`app/(app)/admin/memory/page.tsx\` with the new content and commit + push to staging in the same operation.`,
   },
   {
     filename: "feedback_file_saving.md",
@@ -153,9 +219,10 @@ type: reference
 
 # Memory Index
 
-- [User Profile](user_profile.md) — Jordan Orange, Vectis auction house, non-technical, Windows 11, GitHub: Jordan-Vectis
-- [Vectis Hub Project](project_vectis_crm.md) — Full spec, stack, deployment details and live URL for Vectis Hub
-- [Feedback](feedback_vectis.md) — Keep responses short, one paragraph max
+- [User Profile](user_profile.md) — Jordan Orange, Vectis auction house, non-technical, always uses Railway URL never local
+- [Vectis Hub Project](project_vectis_crm.md) — Full spec, stack, deployment, current admin features, planned iPad tracking
+- [General Feedback](feedback_vectis.md) — Keep responses short; don't build local-only features; don't overcomplicate simple requests; no console commands
+- [Memory Workflow](feedback_memory_workflow.md) — Always update the static memory page alongside memory files and push to staging
 - [File Saving Preference](feedback_file_saving.md) — Always ask where to save files before saving them
 - [App Naming](feedback_naming.md) — Don't call it a CRM; it's "the app"
 - [Migration Pattern](feedback_migrations.md) — Always add new migrations to run-migrations endpoint; prisma migrate deploy unreliable on Railway
