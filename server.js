@@ -12,19 +12,6 @@ const port = parseInt(process.env.PORT || '3000', 10)
 const app  = next({ dev })
 const handle = app.getRequestHandler()
 
-// Run pending Prisma migrations on startup.
-// Wrapped in try/catch with a 30s timeout so a failure or lock contention
-// never prevents the server from starting.
-async function runMigrations() {
-  const { execSync } = require('child_process')
-  try {
-    execSync('npx prisma migrate deploy', { timeout: 30000, stdio: 'inherit' })
-    console.log('> Migrations applied')
-  } catch (e) {
-    console.warn('> prisma migrate deploy failed or timed out — server will start anyway:', e.message)
-  }
-}
-
 // On startup, reset any stale ACTIVE/PAUSED live auctions to PENDING.
 // The in-memory state is always lost on restart, so the public site
 // must not show a live banner until a clerk explicitly presses Start.
@@ -44,7 +31,6 @@ async function resetStaleLiveAuctions() {
 }
 
 app.prepare().then(async () => {
-  await runMigrations()
   await resetStaleLiveAuctions()
 
   const httpServer = createServer((req, res) => {
