@@ -67,14 +67,22 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
 
   const roleUsers = users.filter(u => u.role === roleKey)
 
-  // Map AppKey → section
+  // Build unified sections: app-access items + hub-card-visibility items together
   const appKeyToSection: Partial<Record<string, string>> = {}
   for (const card of APP_CARD_DEFS) {
     if (card.appKey && card.group) appKeyToSection[card.appKey] = card.group
   }
-  const groupedApps = SECTION_DEFS
-    .map(s => ({ ...s, apps: ALL_APPS.filter(a => appKeyToSection[a.key] === s.key) }))
-    .filter(s => s.apps.length > 0)
+  const sections = SECTION_DEFS.map(s => ({
+    ...s,
+    items: [
+      ...ALL_APPS
+        .filter(a => appKeyToSection[a.key] === s.key)
+        .map(a => ({ type: "app" as const, key: a.key, label: a.label, icon: "" })),
+      ...APP_CARD_DEFS
+        .filter(c => c.allUsers && c.group === s.key)
+        .map(c => ({ type: "hub" as const, key: c.key, label: c.defaultLabel, icon: c.icon })),
+    ],
+  })).filter(s => s.items.length > 0)
 
   function toggleApp(key: AppKey) {
     setSelectedApps(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
@@ -134,31 +142,35 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
       <h2 className="font-semibold text-gray-800 mb-1">{roleLabel}</h2>
       <p className="text-sm text-gray-500 mb-5">Default app access for new {roleLabel} users.</p>
 
-      {/* ── Tool apps grouped by section ── */}
+      {/* ── All items grouped by section ── */}
       <div className="flex flex-col gap-6 mb-6">
-        {groupedApps.map(section => (
+        {sections.map(section => (
           <div key={section.key}>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">{section.label}</p>
             <div className="flex flex-col gap-3">
-              {section.apps.map(app => (
-                <div key={app.key}>
+              {section.items.map(item => (
+                <div key={item.key}>
                   <label className="flex items-center gap-3 cursor-pointer group">
                     <div
-                      onClick={() => toggleApp(app.key)}
+                      onClick={() => item.type === "app" ? toggleApp(item.key as AppKey) : toggleHubCard(item.key)}
                       className={`w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
-                        selectedApps.includes(app.key) ? "bg-blue-600 border-blue-600" : "border-gray-300 group-hover:border-blue-400"
+                        (item.type === "app" ? selectedApps.includes(item.key) : hubCards.includes(item.key))
+                          ? "bg-blue-600 border-blue-600"
+                          : "border-gray-300 group-hover:border-blue-400"
                       }`}
                     >
-                      {selectedApps.includes(app.key) && (
+                      {(item.type === "app" ? selectedApps.includes(item.key) : hubCards.includes(item.key)) && (
                         <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 12 12">
                           <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
                       )}
                     </div>
-                    <span className="text-sm text-gray-700 group-hover:text-gray-900 font-medium">{app.label}</span>
+                    <span className="text-sm text-gray-700 group-hover:text-gray-900 font-medium">
+                      {item.icon && <span className="mr-1">{item.icon}</span>}{item.label}
+                    </span>
                   </label>
 
-                  {app.key === "WAREHOUSE" && selectedApps.includes("WAREHOUSE") && (
+                  {item.type === "app" && item.key === "WAREHOUSE" && selectedApps.includes("WAREHOUSE") && (
                     <div className="ml-8 mt-2">
                       <label className="block text-xs font-medium text-gray-600 mb-1">Warehouse Role</label>
                       <select
@@ -166,23 +178,21 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
                         onChange={e => setWarehouseRole(e.target.value as WarehouseRole)}
                         className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
-                        {WAREHOUSE_ROLES.map(r => (
-                          <option key={r.value} value={r.value}>{r.label}</option>
-                        ))}
+                        {WAREHOUSE_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                       </select>
                     </div>
                   )}
 
-                  {APP_SECTIONS[app.key as AppKey] && selectedApps.includes(app.key) && (
+                  {item.type === "app" && APP_SECTIONS[item.key as AppKey] && selectedApps.includes(item.key) && (
                     <div className="ml-8 mt-2">
                       <p className="text-xs font-medium text-gray-500 mb-2">Visible sections</p>
                       <div className="flex flex-col gap-2">
-                        {APP_SECTIONS[app.key as AppKey]!.map(section => {
-                          const checked = (appSections[app.key] ?? []).includes(section.key)
+                        {APP_SECTIONS[item.key as AppKey]!.map(s => {
+                          const checked = (appSections[item.key] ?? []).includes(s.key)
                           return (
-                            <label key={section.key} className="flex items-center gap-2 cursor-pointer group">
+                            <label key={s.key} className="flex items-center gap-2 cursor-pointer group">
                               <div
-                                onClick={() => toggleSection(app.key, section.key)}
+                                onClick={() => toggleSection(item.key, s.key)}
                                 className={`w-4 h-4 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
                                   checked ? "bg-blue-500 border-blue-500" : "border-gray-300 group-hover:border-blue-400"
                                 }`}
@@ -193,7 +203,7 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
                                   </svg>
                                 )}
                               </div>
-                              <span className="text-xs text-gray-600 group-hover:text-gray-900">{section.label}</span>
+                              <span className="text-xs text-gray-600 group-hover:text-gray-900">{s.label}</span>
                             </label>
                           )
                         })}
@@ -205,31 +215,6 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
             </div>
           </div>
         ))}
-      </div>
-
-      {/* ── Hub cards ── */}
-      <div className="border-t border-gray-100 pt-5 mb-6">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Hub Cards</p>
-        <p className="text-xs text-gray-400 mb-3">These cards are shown to all users — untick to hide by default.</p>
-        <div className="flex flex-col gap-3">
-          {APP_CARD_DEFS.filter(c => c.allUsers).map(card => (
-            <label key={card.key} className="flex items-center gap-3 cursor-pointer group">
-              <div
-                onClick={() => toggleHubCard(card.key)}
-                className={`w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
-                  hubCards.includes(card.key) ? "bg-blue-600 border-blue-600" : "border-gray-300 group-hover:border-blue-400"
-                }`}
-              >
-                {hubCards.includes(card.key) && (
-                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 12 12">
-                    <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                )}
-              </div>
-              <span className="text-sm text-gray-700 group-hover:text-gray-900 font-medium">{card.icon} {card.defaultLabel}</span>
-            </label>
-          ))}
-        </div>
       </div>
 
       {/* ── Save defaults ── */}
