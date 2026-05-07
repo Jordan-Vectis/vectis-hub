@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
+import RunMigrationsButton from "./run-migrations-button"
 
 const sections = [
   {
@@ -56,6 +57,7 @@ export default async function AdminOverviewPage() {
           </Link>
         ))}
       </div>
+      <RunMigrationsButton />
     </div>
   )
 }
