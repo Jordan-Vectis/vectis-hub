@@ -5,16 +5,17 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 export const maxDuration = 120
 
 type Lot = {
-  uniqueId:    string
-  lotNo:       string | null
-  description: string | null
-  category:    string | null
-  hammerPrice: number | null
-  lowEstimate: number | null
-  highEstimate:number | null
-  auctionCode: string | null
-  auctionName: string | null
-  auctionDate: string | null
+  uniqueId:     string
+  lotNo:        string | null
+  currentLotNo: string | null
+  description:  string | null
+  category:     string | null
+  hammerPrice:  number | null
+  lowEstimate:  number | null
+  highEstimate: number | null
+  auctionCode:  string | null
+  auctionName:  string | null
+  auctionDate:  string | null
 }
 
 function fmtPrice(n: number | null) {
@@ -22,17 +23,25 @@ function fmtPrice(n: number | null) {
   return "£" + n.toLocaleString("en-GB", { minimumFractionDigits: 0 })
 }
 
+function fmtDate(d: string | null) {
+  if (!d) return null
+  const parsed = new Date(d)
+  if (isNaN(parsed.getTime())) return d
+  return parsed.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
+}
+
 function buildPrompt(lots: Lot[], articleType: string): string {
-  // Describe the lot data
+  // Describe the lot data — include lot number, sale name, and date explicitly
   const lotLines = lots.map((l, i) => {
     const price   = l.hammerPrice ? `sold for ${fmtPrice(l.hammerPrice)}` : "unsold"
     const est     = l.lowEstimate && l.highEstimate
       ? ` (estimate ${fmtPrice(l.lowEstimate)}–${fmtPrice(l.highEstimate)})`
       : ""
     const sale    = l.auctionName ?? l.auctionCode ?? "Unknown Sale"
-    const date    = l.auctionDate ? ` on ${l.auctionDate}` : ""
-    const lotRef  = l.lotNo ? ` (Lot ${l.lotNo})` : ""
-    return `${i + 1}. ${l.description ?? "Unnamed lot"}${lotRef} — ${price}${est} — ${sale}${date}`
+    const date    = fmtDate(l.auctionDate)
+    const lotRef  = (l.currentLotNo ?? l.lotNo) ? ` — Lot ${l.currentLotNo ?? l.lotNo}` : ""
+    const saleLine = date ? `${sale} (${date})` : sale
+    return `${i + 1}. ${l.description ?? "Unnamed lot"}${lotRef} — ${price}${est} — ${saleLine}`
   }).join("\n")
 
   const saleNames   = [...new Set(lots.map(l => l.auctionName ?? l.auctionCode).filter(Boolean))].join(", ")
@@ -77,7 +86,8 @@ IMPORTANT REQUIREMENTS:
 - Do NOT include <!DOCTYPE>, <html>, <head>, or <body> tags — just the article content HTML
 - Do NOT add placeholder links or made-up URLs — only reference vectis.co.uk
 - Aim for 400–600 words
-- Be specific: mention real lot descriptions and prices from the data below
+- Be specific: reference real lot numbers (e.g. "Lot 42"), the auction/sale name, and the date of each sale when mentioning individual results
+- Always name the specific sale (e.g. "Dolls & Bears — Day 1, 13th January 2026") at least once near the start of the article
 - The article should be genuinely useful for SEO — naturally include relevant keywords
 
 AUCTION DATA:
