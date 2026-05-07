@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { auth } from "@/auth"
 
 // ─── Content ─────────────────────────────────────────────────────────────────
 
@@ -27,16 +26,18 @@ const APPS: App[] = [
     icon: "✨",
     name: "Auction AI",
     path: "/tools/auction-ai",
-    overview: "Generates professional lot descriptions and key points from photographs using Google Gemini AI. Supports bulk batch runs across an entire auction or individual chat-style sessions for single lots.",
+    overview: "Generates professional lot descriptions and key points from photographs using Google Gemini AI. Supports bulk batch runs across an entire auction, single-lot chat sessions, a description copier, barcode sorter, duplicate checker, and a model tester.",
     howItWorks: [
       {
         label: "Batch Run",
         items: [
           "Upload photos named by barcode or unique ID (e.g. F066001.jpg, R000016-413_2.jpg). The filename determines which lot the photo belongs to.",
-          "Select an auction code. The system loads all lots for that auction and matches photos to them by filename.",
+          "Select an auction code. The system loads all lots for that auction and matches photos to them by filename (strips extension, strips trailing _N suffix).",
           "Click Run — the server sends each lot's photos to Gemini with the configured AI preset instructions, waits 12 seconds between lots to stay within rate limits, then saves the result directly to the CatalogueLot record.",
-          "The client shows live progress. If Gemini returns a rate-limit error, it retries with exponential back-off (60 s → 120 s → 240 s … up to 30 minutes) and alternates between primary and fallback models.",
+          "The client shows live progress. If Gemini returns a rate-limit error, it retries with exponential back-off (60 s → 120 s → 240 s → 480 s … up to 30 minutes) and alternates between primary and fallback models.",
           "The run only truly fails a lot if the user clicks Cancel or Gemini blocks the content (content blocks never succeed on retry).",
+          "Already-saved lots are auto-deselected when new photos are loaded in the same session.",
+          "Auction code is optional — if provided, each lot is saved to the DB immediately after it succeeds. If not, results are held in-memory only.",
         ],
       },
       {
@@ -44,13 +45,40 @@ const APPS: App[] = [
         items: [
           "Single-lot chat with Gemini — upload up to 6 images and have a free-form conversation to refine a description.",
           "Conversation history is maintained for the session so follow-up messages have context.",
+          "Optional Google Search grounding can be enabled to let Gemini pull in live product/collector information.",
+          "Output can be copied as plain text or raw HTML.",
+          "System instruction presets are customisable and stored per user in the DB.",
+        ],
+      },
+      {
+        label: "Barcode Sorter",
+        items: [
+          "Scan or type barcodes from physical labels to categorise and sort uploaded photo files.",
+          "Useful when photos have been uploaded without correct filenames and need to be matched to lots manually.",
         ],
       },
       {
         label: "Description Copier",
         items: [
-          "Loads lot data (preloaded from the Cataloguing page via localStorage key copier_preload) and lets you copy descriptions individually or in bulk.",
-          "Sort order is configurable: Unique ID, Barcode, or Lot Number.",
+          "Loads lot data preloaded from the Cataloguing page via localStorage key copier_preload and lets you copy descriptions individually or in bulk.",
+          "Sort order is configurable: Unique ID, Barcode, or Lot Number. The sort uses the actual field for the active mode (not a generic folder field) so the jump list and card display stay in sync.",
+          "Folder field is always receiptUniqueId || lotNumber — never lotNumber alone (lots created via Apply to Auction have empty lotNumber).",
+          "rowLabel() helper drives the jump list, search filter, and card ID display — they all use the same function.",
+        ],
+      },
+      {
+        label: "Duplicate Checker",
+        items: [
+          "Groups lots by receiptUniqueId (case-insensitive trim) and shows any groups with 2 or more lots.",
+          "Each duplicate group is scored to identify which lot record is the most complete: description +4, title +2, keyPoints +1, estimateLow +1, estimateHigh +1, lotNumber +1, barcode +1, vendor +1, each image +2.",
+          "The highest-scoring record is highlighted as the one to keep. The lower-scoring duplicate can be deleted from here.",
+        ],
+      },
+      {
+        label: "Model Tester",
+        items: [
+          "Send the same prompt to multiple Gemini models in sequence to compare output quality and speed.",
+          "Models run sequentially with a 1-second gap between them — never in parallel, as firing all models concurrently burns quota and causes 429 rate-limit errors that pollute the results.",
         ],
       },
       {
@@ -63,11 +91,11 @@ const APPS: App[] = [
     dependsOn: [
       "Google Gemini API (primary: gemini-2.5-flash-preview, user-selectable fallback)",
       "PostgreSQL — AuctionRun, AuctionLot, AiPreset, CatalogueLot, MacroFile tables",
-      "Railway file storage for uploaded photos (temp, per-request)",
+      "Google Search API (optional grounding in chat tab)",
     ],
     rules: [
       "Max 24 images per lot in batch mode; max 6 in chat mode.",
-      "Server route maxDuration is 300 seconds. Client retry loop is infinite — never give up on rate limits or transient errors.",
+      "Server route maxDuration is 300 seconds (batch) and 120 seconds (chat). Client retry loop is infinite — never give up on rate limits or transient errors.",
       "Rate-limit backoff: exponential starting at 60 s, capped at 30 minutes. Other errors: linear starting at 12 s, capped at 30 s.",
       "Alternate between primary and fallback model on every retry so if one is still rate-limited the other gets a chance.",
       "12-second delay between lots on the server to stay within Gemini quota.",
@@ -75,8 +103,10 @@ const APPS: App[] = [
       "Always check response.promptFeedback?.blockReason and response.candidates?.[0]?.finishReason before calling .text(). Calling .text() on a blocked response throws and loses the reason.",
       "Description lines must be joined with \\n, never with a space. Collapsing to a space destroys list and paragraph formatting.",
       "503 errors from Gemini are transient — retry, do not surface as permanent failure.",
-      "Content blocks (SAFETY, etc.) abort the lot immediately and are shown as FAILED — they will never succeed on retry.",
+      "Content blocks (SAFETY etc.) abort the lot immediately and are shown as FAILED — they will never succeed on retry.",
       "FAILED status should only appear if the user explicitly cancels a lot mid-run.",
+      "Chat route returns 422 (not 500) on Gemini content block, with the block reason in the error message.",
+      "Model Tester: always run models sequentially with a 1-second gap — never Promise.all.",
     ],
   },
 
@@ -90,8 +120,9 @@ const APPS: App[] = [
       {
         label: "Auction Manager",
         items: [
-          "Create and manage CatalogueAuction records. Each auction has a code, name, date, type (General, Diecast, Trains, etc.) and status flags (locked, finished, complete, published).",
-          "Once published, the auction and its lots appear on the public website.",
+          "Create and manage CatalogueAuction records. Each auction has a code, name, date, type (General, Diecast, Trains, Vinyl, TV/Film, Matchbox, Comics, Bears, Dolls) and status flags (locked, finished, complete, published).",
+          "Once published = true, the auction and its lots appear on the public website.",
+          "A CatalogueAuction must have auctionDate set for the calendar sidebar on the public site to display it correctly.",
         ],
       },
       {
@@ -100,6 +131,14 @@ const APPS: App[] = [
           "Step-by-step form for creating a lot: barcode scan → vendor lookup → categories → estimate → condition → key points → description.",
           "Barcode is matched against existing lots via three-way lookup: lotNumber, barcode, and receiptUniqueId.",
           "Title is auto-extracted from the first sentence of the description (max 83 characters, truncated with …).",
+        ],
+      },
+      {
+        label: "Photo Upload",
+        items: [
+          "Bulk photo upload with automatic filename-to-lot matching.",
+          "Filenames are parsed: strip extension, strip trailing _N suffix (e.g. F066001_2.jpg → F066001). Non-ASCII characters are stripped before barcode testing.",
+          "Lot lookup checks all three identifier fields: lotNumber, barcode, and receiptUniqueId.",
         ],
       },
       {
@@ -117,41 +156,122 @@ const APPS: App[] = [
         ],
       },
       {
-        label: "Photo Upload",
-        items: [
-          "Bulk photo upload with automatic filename-to-lot matching.",
-          "Filenames are parsed: strip extension, strip trailing _N suffix (e.g. F066001_2.jpg → F066001).",
-        ],
-      },
-      {
         label: "Lotting Up",
         items: [
-          "Cross-references lots against BC warehouse data to check which items have been received.",
+          "Cross-references lots against BC warehouse data to check which items have been received at the warehouse.",
         ],
       },
       {
         label: "Research",
         items: [
-          "Research tools for cataloguers — time spent here is logged for reporting.",
+          "Research tools for cataloguers — time spent here is logged per-user for the Cataloguing Reports in Admin.",
+        ],
+      },
+      {
+        label: "Apply to Auction (AI Runs)",
+        items: [
+          "Converts AI run results into CatalogueLot records. Detects unique ID format (/^[A-Za-z]\\d{4,7}-\\d{1,6}$/) and routes to receiptUniqueId (leaving lotNumber empty) or to lotNumber.",
+          "Deduplication checks both existingLotNumbers and existingUniqueIds sets before creating any record.",
         ],
       },
     ],
     dependsOn: [
-      "PostgreSQL — CatalogueAuction, CatalogueLot, CataloguePhotoSession, CatalogueTimingLog tables",
+      "PostgreSQL — CatalogueAuction, CatalogueLot, CataloguePhotoSession, CatalogueTimingLog, ResearchLog tables",
       "Google Gemini API — AI Upgrade and Lot History Generator tabs",
       "BC warehouse data (WarehouseItem) — for vendor lookup and Lotting Up",
-      "Railway/S3 storage — lot photos",
     ],
     rules: [
       "Lot title maximum is 83 characters — truncate with … if exceeded.",
       "Three identifier fields exist and are NOT interchangeable: receiptUniqueId (format: R000016-413), barcode (format: F066001), lotNumber (integer string). Never store a unique ID in lotNumber.",
       "Lots created via Apply to Auction from AI runs will have an empty lotNumber — this is correct. A lot with receiptUniqueId is fully identified.",
+      "Unique ID detection regex: /^[A-Za-z]\\d{4,7}-\\d{1,6}$/. Barcode regex: /^[A-Za-z]\\d{6,7}$/.",
       "Lot status values: ENTERED | REVIEWED | PUBLISHED | SOLD | UNSOLD | WITHDRAWN. Default on creation: ENTERED.",
       "Auction types: GENERAL | DIECAST | TRAINS | VINYL | TV_FILM | MATCHBOX | COMICS | BEARS | DOLLS.",
-      "Estimate regex: /£([\\d,]+)\\s*[–\\-]\\s*£?([\\d,]+)/ — accepts en-dash and hyphen, optional £ on second value.",
-      "Description Copier: Folder field must always be receiptUniqueId || lotNumber — never lotNumber alone. Lots from Apply to Auction have empty lotNumber.",
-      "Bidding increment rounding applies when setting starting bids — see RULES.md for the full table.",
-      "Photo filename matching strips extension and trailing _N suffix before lookup. Lot lookup checks all three identifier fields.",
+      "Estimate regex: /£([\\d,]+)\\s*[–\\-]\\s*£?([\\d,]+)/ — accepts en-dash and hyphen, optional £ on second value, strip commas.",
+      "Bidding increment rounding: £0–50 → nearest £5; £50–200 → nearest £10; £200–700 → nearest £20; £700–1000 → nearest £50; £1000–3000 → nearest £100; £3000–7000 → nearest £200; £7000–10000 → nearest £500; £10000+ → nearest £1000.",
+      "Description Copier: Folder field must always be receiptUniqueId || lotNumber — never lotNumber alone.",
+      "Photo filename matching strips extension and trailing _N suffix, then strips non-ASCII, before three-way lot lookup.",
+    ],
+  },
+
+  {
+    key: "bc-warehouse",
+    icon: "🗺️",
+    name: "BC Warehouse",
+    path: "/tools/bc-warehouse",
+    overview: "Business Central warehouse tools for tracking physical inventory. Includes a live location heatmap, sale checklist, tote analytics, location history per item or tote, and a full BC data sync interface.",
+    howItWorks: [
+      {
+        label: "Heatmap",
+        items: [
+          "Visual aisle/bay/shelf grid showing how full each warehouse location is. Colour-coded by fill level: empty, 1–2 items, 3–5, 6–9, 10+.",
+          "Unlocated items count is shown in a chip. Filter by aisle, auction code, or cataloguing status.",
+        ],
+      },
+      {
+        label: "Sale Checklist",
+        items: [
+          "Lists upcoming auctions and expands to show which items are in the warehouse, their location, and any missing items.",
+          "Tracks vendor and withdrawal status per item.",
+        ],
+      },
+      {
+        label: "Search by Location",
+        items: [
+          "Enter a warehouse location code to see all items and totes currently stored there.",
+          "Location code pattern: e.g. A10A1 = aisle A10, bay A, shelf 1.",
+        ],
+      },
+      {
+        label: "Location History",
+        items: [
+          "Two modes: Tote number and Barcode (default: Tote).",
+          "Tote mode queries BC location change log directly for the tote number.",
+          "Barcode mode is two-step: first resolves barcode to BC item key via BC API, then fetches location changes for that item.",
+          "Results show movements: From / To / Changed by / Date. Most recent row is highlighted with a blue tint.",
+          "Staff names are resolved via a hardcoded SALESPERSON_NAMES lookup table in the component.",
+          "A no-results state shows a styled card explaining the item may not have been moved or the change log was not active.",
+        ],
+      },
+      {
+        label: "Tote Data",
+        items: [
+          "Analytics on active totes: counts by category, by location, paginated for 150+ totes.",
+          "Shows which categories have the most physical totes in the warehouse at a given time.",
+        ],
+      },
+      {
+        label: "Data Sync",
+        items: [
+          "Shows item count, tote count, last sync time and running status.",
+          "Syncs from four BC sources: Receipt_Lines_Excel (warehouse items), Auction_Lines_Excel (auction allocation), location changelog, and tote data.",
+          "A background cron runs every 12 hours to keep data fresh. Manual sync can be triggered from this tab.",
+          "WarehouseItem.uniqueId is the primary key for matching against CatalogueLot.receiptUniqueId.",
+        ],
+      },
+      {
+        label: "DB Explorer",
+        items: [
+          "Raw search across the local WarehouseItem and WarehouseTote tables — useful for debugging sync issues or finding specific items.",
+        ],
+      },
+    ],
+    dependsOn: [
+      "Business Central OData API (Receipt_Lines_Excel, Auction_Lines_Excel, location change log, tote data)",
+      "PostgreSQL — WarehouseItem, WarehouseTote, WarehouseSyncLog tables",
+      "BCToken (per-user OAuth token) for API authentication",
+    ],
+    rules: [
+      "DO NOT change the design or behaviour of the Location History tab. It was accidentally replaced in an earlier rewrite and had to be manually restored.",
+      "Location History API route is /api/bc/location-history — not /api/warehouse/location-history.",
+      "BC fetch timeouts: 30 seconds per page, 45 seconds total. Page size: 500 items per request ($top=500).",
+      "Token refresh buffer: 60 seconds before expiry — refresh before it runs out.",
+      "getBCTokenAny() picks any valid non-expired token for background/cron use — no specific user needs to be logged into BC.",
+      "Auction names: WarehouseItem.auctionName is the primary source and is populated by the sale-checklist route by filtering Auction_Lines_Excel by known EVA_UniqueID values.",
+      "$apply=groupby is NOT supported by BC OData — do not use it.",
+      "Auction_Lines_Excel is item-level (one row per lot) — never use $top alone to get all auction names, you'll miss most codes.",
+      "Do not use CatalogueAuction for names in any BC warehouse view — it is the local cataloguing system and may have stale or wrong names for BC auction codes.",
+      "BC field reference: Auction_Lines_Excel (code: EVA_SalesAllocation, name: EVA_AuctionName); Receipt_Lines_Excel (EVA_SalesAllocation matches WarehouseItem.auctionCode, no name field).",
     ],
   },
 
@@ -163,68 +283,43 @@ const APPS: App[] = [
     overview: "Business Central reporting dashboard covering cataloguing activity, packing records, and warehouse metrics. Data is fetched from BC on demand and cached locally for fast display.",
     howItWorks: [
       {
-        label: "How it works",
+        label: "Cataloguing Report",
         items: [
-          "Connects to the Business Central OData API using a per-user OAuth token (staff log in with their BC credentials).",
-          "Cataloguing report fetches EVA_CataloguedBy and EVA_CataloguedDateTime from Auction_Receipt_Lines_Excel, grouped by date and user.",
-          "Packing report fetches despatch records, grouped by staff member and document number.",
-          "Data is stored locally in BCCatalogueDay / BCPackingDay tables so subsequent loads are fast — only new dates are fetched from BC.",
-          "A background cron runs every 12 hours to keep data fresh.",
-          "ShipMaps: visualises where parcels are being sent, derived from packing data.",
+          "Fetches EVA_CataloguedBy and EVA_CataloguedDateTime from Auction_Receipt_Lines_Excel, grouped by date and user.",
+          "Shows lots catalogued per person per day. Data is stored in BCCatalogueDay/BCCatalogueEntry tables so only new dates are fetched from BC on subsequent loads.",
+        ],
+      },
+      {
+        label: "Packing Report",
+        items: [
+          "Fetches despatch records from BC, grouped by staff member and document number.",
+          "Includes a capacity modeller: configure staff count, sales/month, lots/sale, working days, collections/day to estimate backlog.",
+          "Monthly auction receipt lines for the last 3 months. Data cached in BCPackingDay/BCPackingEntry tables.",
+        ],
+      },
+      {
+        label: "Warehouse Report",
+        items: [
+          "Tote counts by category and cataloguer derived from WarehouseItem and WarehouseTote sync.",
+        ],
+      },
+      {
+        label: "ShipMaps",
+        items: [
+          "Visualises where parcels are being sent geographically, derived from packing/despatch data.",
         ],
       },
     ],
     dependsOn: [
-      "Business Central OData API (Dynamics 365)",
+      "Business Central OData API (Auction_Receipt_Lines_Excel, ShipmentRequestAPI, CollectionList)",
       "PostgreSQL — BCCatalogueDay, BCPackingDay, BCCatalogueEntry, BCPackingEntry tables",
-      "BCToken (per-user OAuth token stored in DB)",
-    ],
-    rules: [
-      "BC OData fetch timeouts: 30 seconds per page, 45 seconds for the full fetch.",
-      "Page size: 500 items per BC request ($top=500).",
-      "Token refresh buffer: 60 seconds before expiry — refresh before it runs out.",
-      "getBCTokenAny() picks any valid non-expired token for background/cron use (no user context needed).",
-      "Auction_Lines_Excel is item-level (one row per lot) — never use $top alone to get auction names. Filter by known EVA_UniqueID values.",
-      "$apply=groupby is NOT supported by BC OData — do not use it.",
-      "To resolve auction names: read WarehouseItem.auctionName from the local DB — it is populated by the sale-checklist route.",
-      "Do not use CatalogueAuction for names in BC warehouse views — it is the local cataloguing system and may have stale data.",
-    ],
-  },
-
-  {
-    key: "bc-warehouse",
-    icon: "🗺️",
-    name: "BC Warehouse",
-    path: "/tools/bc-warehouse",
-    overview: "Business Central warehouse tools including location history per tote or barcode, a visual tote map, and a stock overview. All data comes directly from BC in real time.",
-    howItWorks: [
-      {
-        label: "Location History Tab",
-        items: [
-          "Two modes: Tote number and Barcode (default: Tote).",
-          "Tote mode: queries BC location change log directly for the tote number.",
-          "Barcode mode: two-step — first resolves barcode to BC item key, then fetches location changes for that item.",
-          "Results show movements: From / To / Changed by / Date. Most recent row is highlighted.",
-          "Staff names are resolved via a hardcoded SALESPERSON_NAMES lookup table in the component.",
-        ],
-      },
-      {
-        label: "Tote Map & Stock Overview",
-        items: [
-          "Synced from BC via the background warehouse sync cron (every 12 hours).",
-          "WarehouseItem and WarehouseTote tables are the local cache of BC data.",
-        ],
-      },
-    ],
-    dependsOn: [
-      "Business Central OData API",
-      "PostgreSQL — WarehouseItem, WarehouseTote, WarehouseSyncLog tables",
       "BCToken for authentication",
     ],
     rules: [
-      "DO NOT change the design or behaviour of the Location History tab. It was accidentally replaced in an earlier rewrite and had to be manually restored.",
-      "Location History API route is /api/bc/location-history — not /api/warehouse/location-history.",
-      "The no-results state must show a styled card explaining the item may not have been moved or the change log wasn't active.",
+      "BC fetch timeouts: 30 seconds per page, 45 seconds total. Page size: 500 per request.",
+      "Token refresh buffer: 60 seconds before expiry.",
+      "getBCTokenAny() is used — no specific user needs to be logged in to BC for background report fetches.",
+      "Do not use CatalogueAuction for names in BC report views — use BC source data or WarehouseItem.auctionName.",
     ],
   },
 
@@ -239,10 +334,12 @@ const APPS: App[] = [
         label: "How it works",
         items: [
           "Filter lots from the local WarehouseItem table by keyword (searches description), category, and/or month/year of auction.",
-          "Results are sorted by hammer price (highest first). You choose how many to include (Top 5 to Top 50).",
+          "Results are sorted by hammer price (highest first). Choose how many to include (Top 5 to Top 50).",
           "Select an article type: Sale Highlight, News Story, Collector's Guide, or Market Report.",
           "The selected lots are sent to Gemini along with the article type — Gemini writes the article in HTML format.",
           "Output can be copied as plain text or raw HTML for use in a CMS or email.",
+          "System instruction presets are customisable and stored per user.",
+          "Model is user-selectable from the available Gemini model list.",
         ],
       },
     ],
@@ -251,8 +348,7 @@ const APPS: App[] = [
       "PostgreSQL — WarehouseItem table (BC auction data synced locally)",
     ],
     rules: [
-      "Lot links to the public website cannot be auto-generated — the Vectis website URL contains internal IDs not available in BC data.",
-      "Model is user-selectable from the available Gemini model list.",
+      "Lot links to the public Vectis website cannot be auto-generated — the site URL structure contains internal IDs that are not available in BC data.",
     ],
   },
 
@@ -267,7 +363,7 @@ const APPS: App[] = [
         label: "How it works",
         items: [
           "Type any BC endpoint path (e.g. Auction_Lines_Excel, Receipt_Lines_Excel).",
-          "The server authenticates with BC using any valid staff token and fetches a sample of records.",
+          "The server authenticates with BC using any valid staff token (getBCTokenAny) and fetches a sample of records.",
           "Results are displayed as a structured table showing all field names and their values.",
         ],
       },
@@ -284,20 +380,21 @@ const APPS: App[] = [
   {
     key: "warehouse",
     icon: "🏭",
-    name: "Warehouse",
+    name: "Warehouse (Internal)",
     path: "/tools/warehouse",
-    overview: "Internal Vectis warehouse management system for tracking physical items through the warehouse. Manages inbound receipts, container locations, and item movements.",
+    overview: "Internal Vectis warehouse management system for tracking physical items through the warehouse. Manages inbound receipts, container locations, and item movements independently of Business Central.",
     howItWorks: [
       {
-        label: "Sections",
+        label: "Sub-sections",
         items: [
-          "Inbound: Log new receipts and containers arriving at the warehouse.",
-          "Locate: Find where a specific container or item is currently stored.",
-          "Lookup: Search containers and receipts by barcode, receipt number, or vendor.",
-          "Customers: View receipt history per customer (manager+ role).",
-          "Receipts: Full receipt list with container detail (manager+ role).",
-          "History: Movement log showing who moved what and when (manager+ role).",
-          "Reports: Warehouse statistics and summaries (admin role only).",
+          "Dashboard: overview stats (customer count, receipt count, open receipts, container count) and the last 10 movements.",
+          "Inbound: log new receipts and containers arriving at the warehouse, link to a Contact record.",
+          "Locate: find where a specific container or item is currently stored by scanning or typing its ID.",
+          "Lookup Location: browse all containers and items at a specific warehouse location.",
+          "Customers: view receipt history per customer — requires manager+ role.",
+          "Receipts: full receipt list with container detail and print functionality — requires manager+ role.",
+          "History: movement log showing who moved what and when — requires manager+ role.",
+          "Reports: warehouse statistics and summaries — requires admin role.",
         ],
       },
     ],
@@ -305,27 +402,36 @@ const APPS: App[] = [
       "PostgreSQL — WarehouseReceipt, WarehouseContainer, WarehouseLocation, WarehouseMovement, Contact tables",
     ],
     rules: [
-      "Three warehouse roles control access: warehouse (Inbound, Locate, Lookup only), manager (adds Customers, Receipts, History), admin (full access including Reports).",
-      "Warehouse role is set per-user in App Access & Permissions and is separate from the main system role.",
+      "Three warehouse roles control access within this tool: warehouse (Inbound, Locate, Lookup only), manager (adds Customers, Receipts, History), admin (full access including Reports).",
+      "Warehouse role is set per-user in App Access & Permissions and is separate from the main system role (ADMIN, COLLECTIONS, CATALOGUER).",
+      "Receipt status: open or closed.",
     ],
   },
 
   {
     key: "crm",
     icon: "📋",
-    name: "CRM",
+    name: "Submissions",
     path: "/submissions",
-    overview: "Customer submission management system used by the Collections team. Tracks items from initial customer enquiry through valuation, customer decision, and logistics.",
+    overview: "Customer submission management used by the Collections team. Tracks items from initial customer enquiry through valuation, customer decision, and logistics.",
     howItWorks: [
       {
         label: "Workflow",
         items: [
           "Collections creates a submission for a customer (via email, web form, phone, or walk-in) with one or more items.",
           "Submission is assigned to a department and cataloguer for valuation.",
-          "Cataloguer logs an estimated value and comments per item.",
-          "Collections contacts the customer and logs the outcome.",
-          "If declined: submission moves to the follow-up queue with a count and last-contact date.",
-          "If approved: logistics are arranged — either the customer sends items in, or a collection is scheduled with address and contact details.",
+          "Cataloguer logs an estimated value and comments per item via the Valuation record.",
+          "Collections contacts the customer and logs the outcome via ContactLog.",
+          "If declined: submission moves to the follow-up queue with a follow-up count and last-contact date.",
+          "If approved: logistics are arranged — either SENT_IN (customer posts items) or COLLECTION (Vectis collects from customer address).",
+        ],
+      },
+      {
+        label: "Access control",
+        items: [
+          "ADMIN and COLLECTIONS roles can create, update, and delete submissions.",
+          "CATALOGUER role can add valuations only.",
+          "Contact channels: EMAIL, WEB_FORM, PHONE, WALK_IN.",
         ],
       },
     ],
@@ -333,9 +439,9 @@ const APPS: App[] = [
       "PostgreSQL — Submission, Item, Valuation, ContactLog, Logistics, Contact, Department tables",
     ],
     rules: [
-      "Submission status values: PENDING_ASSIGNMENT, PENDING_VALUATION, VALUATION_COMPLETE, PENDING_CUSTOMER_DECISION, APPROVED, DECLINED, FOLLOW_UP, COLLECTION_PENDING, ARRIVED, COMPLETED.",
+      "Submission status flow: PENDING_ASSIGNMENT → PENDING_VALUATION → VALUATION_COMPLETE → PENDING_CUSTOMER_DECISION → APPROVED / DECLINED → FOLLOW_UP → COLLECTION_PENDING → ARRIVED → COMPLETED.",
+      "Logistics types: SENT_IN or COLLECTION.",
       "Contact channels: EMAIL, WEB_FORM, PHONE, WALK_IN.",
-      "Logistics types: SENT_IN (customer posts items) or COLLECTION (Vectis collects from customer).",
     ],
   },
 
@@ -344,20 +450,28 @@ const APPS: App[] = [
     icon: "👥",
     name: "Customers",
     path: "/contacts",
-    overview: "Unified customer database combining BC contact data with local submission and bidding history. Visible to all users.",
+    overview: "Unified customer database combining BC contact data with local submission and bidding history.",
     howItWorks: [
       {
-        label: "How it works",
+        label: "List & search",
         items: [
-          "Contact records are synced from Business Central and stored locally.",
-          "Each contact can be a seller (linked to WarehouseReceipts) and/or a buyer (linked to CustomerAccount for bidding).",
-          "View seller history, buyer activity, and contact details in one place.",
+          "Search by name, phone, email, postcode, address, or customer ID. Shows 50 results per page.",
+          "Create new customers via a modal — salutation options: Mr, Mrs, Ms, Miss, Dr, Prof.",
+        ],
+      },
+      {
+        label: "Customer detail overlay (4 tabs)",
+        items: [
+          "Details: basic info (salutation, name, contact, address, notes), isSeller and isBuyer flags, save edits.",
+          "Seller/Warehouse: linked warehouse receipts with status, containers, and a link to the warehouse tool.",
+          "Buyer/CRM: linked submissions with status, channel, date, and a link to the submission.",
+          "Documents: print receipt, auction pre/post-sale advice, vendor statements.",
         ],
       },
     ],
     dependsOn: [
-      "PostgreSQL — Contact, WarehouseReceipt, CustomerAccount, Submission tables",
-      "BC sync for initial contact data",
+      "PostgreSQL — Contact, WarehouseReceipt, Submission, CustomerAccount tables",
+      "BC sync for initial contact data population",
     ],
     rules: [],
   },
@@ -367,20 +481,27 @@ const APPS: App[] = [
     icon: "🗄️",
     name: "Databases",
     path: "/databases",
-    overview: "Unified search interface across all major data stores — customers, receipts, and warehouse totes. Visible to all users.",
+    overview: "Read-only search interface across all major data stores. Seven tabbed tables with high row limits for bulk data review.",
     howItWorks: [
       {
-        label: "How it works",
+        label: "Tabs",
         items: [
-          "Single search bar queries across Contact, WarehouseReceipt, and WarehouseTote tables simultaneously.",
-          "Results are grouped by type for clarity.",
+          "Contacts — customer master data (up to 3,000 rows).",
+          "Receipts — warehouse receipts with commission rates (up to 3,000 rows).",
+          "Containers — totes/boxes with receipt link and last location (up to 3,000 rows).",
+          "Lots — catalogue lots with auction, status, condition, estimate, hammer price, image count (up to 5,000 rows).",
+          "Auctions — catalogue auctions (all rows).",
+          "Locations — warehouse location codes (all rows).",
+          "Commission Bids — customer max bids placed on lots (up to 5,000 rows).",
         ],
       },
     ],
     dependsOn: [
-      "PostgreSQL — Contact, WarehouseReceipt, WarehouseTote tables",
+      "PostgreSQL — Contact, WarehouseReceipt, WarehouseContainer, CatalogueLot, CatalogueAuction, WarehouseLocation, CommissionBid tables",
     ],
-    rules: [],
+    rules: [
+      "Read-only — no edits or deletes from this view.",
+    ],
   },
 
   {
@@ -393,10 +514,12 @@ const APPS: App[] = [
       {
         label: "How it works",
         items: [
-          "Create a parcel record with recipient details, weight, and service code (e.g. TPP48 — 48-hour tracked).",
+          "Create a parcel record with recipient details (name, company, address, postcode, email, phone), package format (Letter, Large Letter, Small/Medium Parcel), weight, and Royal Mail service code.",
           "Assign CatalogueLots to the parcel so the packing team knows what's inside.",
           "Submit to Royal Mail Click & Drop API — returns a tracking number and PDF label.",
-          "At end of day, generate and submit a despatch manifest to finalise the collection.",
+          "At end of day, generate and submit a despatch manifest to finalise the collection with Royal Mail.",
+          "Parcel tabs: All, Pending, Label Ready, Dispatched.",
+          "20+ Royal Mail service options: Tracked 24/48 with/without signature, Special Delivery tiers (NDA, SDA/SDB/SDC/SDD), express, etc.",
         ],
       },
     ],
@@ -405,8 +528,9 @@ const APPS: App[] = [
       "PostgreSQL — Parcel, ParcelLot, CatalogueLot, CustomerAccount tables",
     ],
     rules: [
-      "Parcel status values: PENDING, LABEL_CREATED, DISPATCHED, CANCELLED.",
+      "Parcel status values: PENDING → LABEL_CREATED → DISPATCHED → CANCELLED.",
       "Default package format: Parcel. Default service: TPP48 (48-hour tracked).",
+      "Minimum required fields: recipient name, address line 1, city, postcode.",
     ],
   },
 
@@ -415,21 +539,22 @@ const APPS: App[] = [
     icon: "🌐",
     name: "Website",
     path: "/website",
-    overview: "Admin interface for the public-facing Vectis auction website. The website itself is part of this same application — the /(site) routes serve the public pages.",
+    overview: "Admin interface for the public-facing Vectis auction website. The public site is part of this same application — the /(site) routes serve it. Buyers can browse lots, register to bid, and place commission bids.",
     howItWorks: [
       {
-        label: "Public site",
+        label: "Public site (/(site) routes)",
         items: [
-          "Auction pages: lists published CatalogueAuctions and their lots. Buyers can browse lots, register to bid, and place commission bids.",
+          "Auction pages: lists published CatalogueAuctions and their lots. Lots appear only when their auction has published = true.",
           "Live auction room: real-time bidding interface powered by Socket.IO. Buyers see the current lot and can place live bids.",
-          "Account portal: buyers can register, manage their details, view their bids and purchase history.",
+          "Account portal: buyers register, manage details, view bids and purchase history.",
         ],
       },
       {
-        label: "Admin — Website section",
+        label: "Website admin section",
         items: [
-          "Hero banner management: create and reorder homepage hero slides.",
-          "View published auctions and lot counts.",
+          "Website Preview tab: live iframe previewing the public site (Home, Auctions, Login, Register, Account) — useful for checking how published content looks without leaving the admin panel.",
+          "Back End Controller tab: live auction control interface with WebRTC and bid management, embedded as an iframe.",
+          "Banner Manager: create, edit, and reorder homepage hero banner slides.",
         ],
       },
     ],
@@ -439,7 +564,7 @@ const APPS: App[] = [
     ],
     rules: [
       "Lots only appear on the public site when their auction has published = true.",
-      "A CatalogueAuction must have auctionDate set for the calendar sidebar to display it correctly.",
+      "A CatalogueAuction must have auctionDate set for the calendar sidebar on the public site to display it correctly.",
     ],
   },
 
@@ -451,25 +576,53 @@ const APPS: App[] = [
     overview: "Live auction clerking panel used during a sale. The auctioneer controls lot progression and bid increments; the system handles auto-bids and real-time updates to the buyer-facing live room.",
     howItWorks: [
       {
-        label: "How it works",
+        label: "Pre-sale",
         items: [
-          "Select a published auction and start the live sale. The LiveAuction record is set to ACTIVE.",
-          "Auctioneer view: advance through lots, accept bids, hammer at the winning price.",
-          "Auto-bids (commission bids placed in advance by buyers) are processed automatically — the system bids on their behalf up to their maximum.",
-          "Buyer-facing live room (/(site)/auctions/[code]/live) receives real-time updates via Socket.IO — current lot, current bid, hammer events.",
-          "Results view: summary of all hammered lots with final prices.",
-          "On server restart, any ACTIVE or PAUSED auction is automatically reset to PENDING to prevent a stale live banner on the public site.",
+          "Clerk authenticates with a password, then selects a published auction to operate.",
+          "LiveAuction record is set to ACTIVE when the sale begins.",
+        ],
+      },
+      {
+        label: "During the sale",
+        items: [
+          "Auctioneer advances through lots sequentially or jumps to a specific lot number.",
+          "Bid source buttons: Room, Telephone, Invaluable, Saleroom, Online.",
+          "Online bids require manual acceptance from the clerk before they're registered.",
+          "Auto-bids (commission bids placed in advance by buyers) are processed automatically — the system bids on their behalf up to their maximum, using the standard increment table.",
+          "Fair Warning and Hammer are single-button controls. Sold popup auto-advances after 3 seconds.",
+          "The clerk can pause the auction and display a custom message to viewers.",
+        ],
+      },
+      {
+        label: "Camera broadcast",
+        items: [
+          "The controller can broadcast a live video feed to the buyer-facing live room via WebRTC (ICE candidates, SDP exchange).",
+          "Buyers in the live room see the current lot, current bid, and the camera feed simultaneously.",
+        ],
+      },
+      {
+        label: "Results view",
+        items: [
+          "Summary of all hammered lots with final prices. Recent results panel shows the last 10 sold lots.",
+        ],
+      },
+      {
+        label: "Real-time (Socket.IO)",
+        items: [
+          "Buyer-facing live room at /(site)/auctions/[code]/live receives real-time updates: current lot, current bid, hammer events.",
+          "On server restart, any ACTIVE or PAUSED auction is automatically reset to PENDING to prevent a stale live banner showing on the public site.",
         ],
       },
     ],
     dependsOn: [
       "Socket.IO — real-time bidding events between auctioneer and buyer room",
       "PostgreSQL — LiveAuction, CatalogueLot, CommissionBid, BidderRegistration tables",
+      "WebRTC — video broadcast from clerk camera to buyer room",
     ],
     rules: [
       "LiveAuction status values: PENDING, ACTIVE, PAUSED, COMPLETE.",
       "On server restart, stale ACTIVE/PAUSED auctions are reset to PENDING automatically.",
-      "Bidding increments follow the standard Vectis rounding table (£0–50 nearest £5, £50–200 nearest £10, etc.).",
+      "Bidding increments follow the standard Vectis rounding table: £0–50 nearest £5; £50–200 nearest £10; £200–700 nearest £20; £700–1000 nearest £50; £1000–3000 nearest £100; £3000–7000 nearest £200; £7000–10000 nearest £500; £10000+ nearest £1000.",
     ],
   },
 
@@ -483,6 +636,7 @@ const APPS: App[] = [
       {
         label: "How it works",
         items: [
+          "Loads an embedded HTML5 training module (saleroom-trainer.html).",
           "Presents simulated lots with estimates and asks the trainee to manage the bidding process.",
           "Tracks correct and incorrect bid increments, timing, and hammer decisions.",
           "No data is written to any production tables — all state is session-local.",
@@ -500,22 +654,37 @@ const APPS: App[] = [
     icon: "🎙️",
     name: "AI Presenter",
     path: "/tools/avatar",
-    overview: "Realistic AI avatar presenter that reads lot descriptions aloud with live lip-sync and head movement. Intended for use during live sales or promotional video content.",
+    overview: "Realistic AI avatar presenter that reads lot descriptions aloud with live lip-sync. Connects to D-ID via WebRTC. Can auto-read from the auction controller screen in real time.",
     howItWorks: [
       {
-        label: "How it works",
+        label: "Manual mode",
         items: [
-          "Input a lot description or any text.",
-          "The system streams the text to an AI avatar service which generates a video of a realistic presenter speaking the text with synchronised lip movement.",
-          "Output is displayed in real time within the browser.",
+          "Select a presenter from the D-ID library (thumbnail gallery, 3-column grid).",
+          "Type any text and click Speak — the avatar reads it aloud with synchronised lip movement streamed back via WebRTC.",
+          "Connection states: Idle → Connecting → Connected → Speaking → Error.",
+          "A 20-second keepalive heartbeat is sent to D-ID to maintain the stream (D-ID drops idle streams after ~30 seconds).",
+        ],
+      },
+      {
+        label: "Auto-Read (Screen Sharing)",
+        items: [
+          "Share the auction controller browser tab.",
+          "Gemini vision reads the lot number, current bid, and asking bid every 4 seconds at max 2 FPS, downscaled to a max 1280px-wide frame.",
+          "When the lot number changes, the presenter automatically speaks the new lot description.",
+          "Speech duration is estimated as: Math.ceil((wordCount / 140) * 60000) + 2000 ms.",
         ],
       },
     ],
     dependsOn: [
-      "External AI avatar/video synthesis API (HeyGen or equivalent)",
-      "Streaming video delivery",
+      "D-ID API — presenter library, WebRTC stream creation, SDP/ICE exchange, keepalive, speak endpoint",
+      "Google Gemini API — vision reading of auction controller screen (auto-read mode)",
+      "WebRTC — peer connection for video/audio stream from D-ID to browser",
     ],
-    rules: [],
+    rules: [
+      "Keepalive must fire every 20 seconds while connected — D-ID drops the stream after ~30 seconds of silence.",
+      "Auto-read screen capture: max 2 FPS, max 1280px wide. Do not increase — higher rates burn Gemini quota unnecessarily.",
+      "Presenter records may use either presenter_id or id field — both must be handled.",
+    ],
   },
 
   {
@@ -526,14 +695,59 @@ const APPS: App[] = [
     overview: "System administration area. Only accessible to users with the ADMIN role. Covers user management, app permissions, system configuration, and database maintenance.",
     howItWorks: [
       {
-        label: "Sections",
+        label: "Users & Permissions",
         items: [
-          "Users & Permissions: create users (with role-default permissions auto-applied), edit details, set app access, manage section visibility within apps, change passwords.",
-          "Departments: manage cataloguer departments used in the CRM.",
-          "Home Page: drag-to-reorder hub cards, toggle visibility, mark as featured, customise labels and descriptions.",
-          "Role Defaults: set default app access per role (Collections, Cataloguer). Applied automatically to new users; can be pushed to existing users individually or in bulk.",
-          "Cataloguing Reports: view time-per-lot statistics across all cataloguers — average speed, method breakdown (wizard vs photo-only), recent session activity.",
-          "Run Migrations: emergency button to apply any missing database column or table changes without redeploying.",
+          "Create users (role-default permissions are auto-applied on creation), edit details, set app access per section, manage permissions within apps (e.g. warehouse role), change passwords.",
+          "App access and hub card visibility are grouped by section (Cataloguing & AI, Business Central, Operations, Auction) to match the hub page layout.",
+        ],
+      },
+      {
+        label: "Role Defaults",
+        items: [
+          "Set default app access per role (Collections, Cataloguer). Stored in the RoleDefault table.",
+          "Applied automatically to new users when created via the createUser action.",
+          "Can be pushed to existing users individually (pick mode) or all at once (apply-all mode).",
+        ],
+      },
+      {
+        label: "Home Page",
+        items: [
+          "Drag-to-reorder hub cards, toggle visibility, mark as featured, customise labels and descriptions.",
+          "Reorder state is stored in the AppCard table per user.",
+        ],
+      },
+      {
+        label: "Departments",
+        items: [
+          "Manage cataloguer departments used when assigning submissions in the CRM.",
+        ],
+      },
+      {
+        label: "Cataloguing Reports",
+        items: [
+          "View time-per-lot statistics across all cataloguers — average speed, method breakdown (wizard vs photo-only vs tablet), recent session activity.",
+          "Data sourced from CatalogueTimingLog and ResearchLog.",
+        ],
+      },
+      {
+        label: "Run Migrations",
+        items: [
+          "Emergency button that applies any missing database columns or tables without redeploying.",
+          "Uses IF NOT EXISTS SQL so it is always safe to run — it will never drop or modify existing data.",
+          "Any new migration added to the codebase must also be added to the /api/admin/run-migrations MIGRATIONS array.",
+        ],
+      },
+      {
+        label: "Claude Memory",
+        items: [
+          "Reads Claude's memory markdown files from the local ~/.claude/projects directory and renders them as a colour-coded accordion.",
+          "Only available when running locally — shows a friendly unavailable notice on Railway.",
+        ],
+      },
+      {
+        label: "About",
+        items: [
+          "This page — documentation for every app section, its dependencies, and the rules that must be followed.",
         ],
       },
     ],
@@ -544,10 +758,11 @@ const APPS: App[] = [
     ],
     rules: [
       "Superadmin email it@vectis.co.uk is hardcoded to always receive the ADMIN role regardless of what the database says.",
-      "ADMIN users always have access to all apps — app permission checkboxes are ignored for admins.",
+      "ADMIN users always have access to all apps — app permission checkboxes are ignored for ADMINs.",
       "User roles: ADMIN, COLLECTIONS, CATALOGUER.",
       "Prisma migrate deploy runs on server startup via server.js. If it fails silently, use the Run Migrations button on this page.",
-      "Any new database migration should also be added to the run-migrations endpoint (/api/admin/run-migrations) so it can be applied manually if needed.",
+      "Any new database migration must also be added to /api/admin/run-migrations so it can be applied manually if needed.",
+      "New users automatically receive the role-default permissions for their role (fetched from RoleDefault table on createUser).",
     ],
   },
 ]
@@ -566,8 +781,8 @@ function Chevron({ open }: { open: boolean }) {
 }
 
 export default function AboutPage() {
-  const [search, setSearch]             = useState("")
-  const [openKeys, setOpenKeys]         = useState<Set<string>>(new Set())
+  const [search, setSearch]     = useState("")
+  const [openKeys, setOpenKeys] = useState<Set<string>>(new Set())
 
   function toggle(key: string) {
     setOpenKeys(prev => {
@@ -577,13 +792,8 @@ export default function AboutPage() {
     })
   }
 
-  function expandAll() {
-    setOpenKeys(new Set(APPS.map(a => a.key)))
-  }
-
-  function collapseAll() {
-    setOpenKeys(new Set())
-  }
+  function expandAll()   { setOpenKeys(new Set(APPS.map(a => a.key))) }
+  function collapseAll() { setOpenKeys(new Set()) }
 
   const q = search.toLowerCase().trim()
   const filtered = q
@@ -605,7 +815,6 @@ export default function AboutPage() {
         </p>
       </div>
 
-      {/* Search + controls */}
       <div className="flex items-center gap-3 mb-6">
         <input
           type="text"
@@ -618,7 +827,6 @@ export default function AboutPage() {
         <button onClick={collapseAll} className="text-xs text-gray-500 hover:text-gray-700 px-3 py-2 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">Collapse all</button>
       </div>
 
-      {/* App list */}
       <div className="flex flex-col gap-3">
         {filtered.length === 0 && (
           <p className="text-sm text-gray-400 italic py-8 text-center">No apps match your search.</p>
@@ -628,7 +836,6 @@ export default function AboutPage() {
           const open = openKeys.has(app.key)
           return (
             <div key={app.key} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-              {/* Header */}
               <button
                 onClick={() => toggle(app.key)}
                 className="w-full flex items-center gap-4 px-6 py-4 text-left hover:bg-gray-50 transition-colors"
@@ -644,11 +851,9 @@ export default function AboutPage() {
                 <Chevron open={open} />
               </button>
 
-              {/* Body */}
               {open && (
                 <div className="border-t border-gray-100 px-6 py-5 space-y-6">
 
-                  {/* How it works */}
                   {app.howItWorks.map(section => (
                     <div key={section.label}>
                       <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">{section.label}</h3>
@@ -663,7 +868,6 @@ export default function AboutPage() {
                     </div>
                   ))}
 
-                  {/* Depends on */}
                   <div>
                     <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Depends On</h3>
                     <ul className="space-y-1.5">
@@ -676,7 +880,6 @@ export default function AboutPage() {
                     </ul>
                   </div>
 
-                  {/* Rules */}
                   {app.rules.length > 0 && (
                     <div>
                       <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Rules & Notes</h3>
