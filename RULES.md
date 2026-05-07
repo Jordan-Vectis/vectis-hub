@@ -23,6 +23,14 @@ The app is hosted on **Railway**, not Vercel. Never reference a `.vercel.app` UR
 - Auto-deploys: push to `main` → production, push to `staging` → staging environment on Railway
 - Never tell the user to open a `vercel.app` URL for any reason
 
+## ⚠ Branch / Deploy Rules — MUST follow every time
+
+**Never push to `main` unless the user explicitly says to.** Phrases like "push it", "deploy it", or "merge it" are NOT enough — the user must specifically say "push to main" or "merge to production".
+
+Default branch for all new work is **`staging`** unless told otherwise.
+
+Before every git push, ask yourself: "Did the user explicitly name `main`?" If not, push to `staging` only.
+
 ---
 
 ## General
