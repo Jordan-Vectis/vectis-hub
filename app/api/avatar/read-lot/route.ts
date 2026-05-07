@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
-import { GoogleGenerativeAI } from "@google/generative-ai"
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,18 +12,24 @@ export async function POST(req: NextRequest) {
     const { imageBase64 } = await req.json()
     if (!imageBase64) return NextResponse.json({ error: "No image provided" }, { status: 400 })
 
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
-
-    const result = await model.generateContent([
+    // Call Gemini v1 REST API directly — the 0.x SDK is pinned to v1beta which
+    // doesn't support newer models for multimodal requests
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
       {
-        inlineData: {
-          mimeType: "image/jpeg",
-          data: imageBase64,
-        },
-      },
-      {
-        text: `This is a screenshot of a live online auction page. Extract ONLY:
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              {
+                inline_data: {
+                  mime_type: "image/jpeg",
+                  data: imageBase64,
+                },
+              },
+              {
+                text: `This is a screenshot of a live online auction page. Extract ONLY:
 - lotNumber: the current lot number shown (digits only, e.g. "558")
 - askingBid: the asking bid or next bid amount (e.g. "£80")
 - currentBid: the current bid amount (e.g. "£70")
@@ -33,12 +38,23 @@ Respond with ONLY valid JSON, no other text:
 {"lotNumber":"558","currentBid":"£70","askingBid":"£80"}
 
 If a field is not visible or unclear, use null for that field.`,
+              },
+            ],
+          }],
+          generationConfig: { temperature: 0, maxOutputTokens: 100 },
+        }),
       },
-    ])
+    )
 
-    const text = result.response.text().trim()
+    if (!res.ok) {
+      const errText = await res.text()
+      return NextResponse.json({ error: errText }, { status: res.status })
+    }
 
-    // Strip markdown code fences if Gemini wraps in ```json
+    const json = await res.json()
+    const text = (json.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim()
+
+    // Strip markdown code fences if present
     const cleaned = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim()
 
     try {
