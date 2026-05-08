@@ -26,8 +26,10 @@ export async function GET(req: NextRequest) {
     const aislesRaw = searchParams.get("aisles")?.trim() ?? ""
     const search    = searchParams.get("search")?.trim() ?? "COL"  // collection prefix
 
+    // Accept comma, space, period, semicolon, slash or pipe as separators —
+    // common typos shouldn't silently turn 'A36.A37' into one bogus aisle.
     const aisles = aislesRaw
-      .split(/[,\s]+/)
+      .split(/[,\s.;/|]+/)
       .map(s => s.trim().toUpperCase())
       .filter(Boolean)
 

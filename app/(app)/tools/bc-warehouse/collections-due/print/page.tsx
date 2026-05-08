@@ -62,7 +62,7 @@ export default function CollectionsDuePrintPage() {
   const groupByDocket = params.get("groupByDocket") === "1"
 
   const aisleList = aislesParam
-    .split(/[,\s]+/)
+    .split(/[,\s.;/|]+/)
     .map(s => s.trim().toUpperCase())
     .filter(Boolean)
 

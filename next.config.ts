@@ -1,16 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // pdfkit ships its standard PostScript fonts as separate .afm files inside
-  // node_modules/pdfkit/js/data. Next.js's file-trace doesn't pick these up
-  // automatically because they're loaded at runtime via fs.readFileSync, so
-  // serverless deploys end up missing Helvetica.afm and the route 500s.
-  // This tells Next to include them.
-  outputFileTracingIncludes: {
-    "/api/warehouse/collections-due/pdf": [
-      "./node_modules/pdfkit/js/data/**/*",
-    ],
-  },
   experimental: {
     serverActions: {
       bodySizeLimit: "20mb",

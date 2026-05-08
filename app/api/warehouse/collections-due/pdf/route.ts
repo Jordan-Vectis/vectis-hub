@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { getBCToken, bcFetchAll } from "@/lib/bc"
-import PDFDocument from "pdfkit"
+import { PDFDocument, StandardFonts, PDFFont, PDFPage, rgb } from "pdf-lib"
 
 export const maxDuration = 60
 export const runtime = "nodejs"
 
 // GET /api/warehouse/collections-due/pdf?aisles=A39,A40
 //
-// Server-side PDF generator. Each aisle gets its own page (or pages) with
-// its own header so different reports can be handed to different pickers.
-// Returns application/pdf as a downloadable file.
+// Server-side PDF generator using pdf-lib (pure JS — no filesystem font
+// reads, serverless-safe). Each aisle gets its own page(s) with its own
+// header so different reports can be handed to different pickers.
 
 type Item = {
   uniqueId:     string
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
     const search    = searchParams.get("search")?.trim() ?? "COL"
 
     const aisleList = aislesRaw
-      .split(/[,\s]+/)
+      .split(/[,\s.;/|]+/)
       .map(s => s.trim().toUpperCase())
       .filter(Boolean)
 
@@ -88,16 +88,15 @@ export async function GET(req: NextRequest) {
     }
     if (other.length > 0) aisleGroups.push({ aisle: "Other", items: other })
 
-    // Build the PDF
-    const pdfBuffer = await buildPdf(aisleGroups)
+    const pdfBytes = await buildPdf(aisleGroups)
 
     const filename = `collections-due-${aisleList.join("-")}-${new Date().toISOString().slice(0, 10)}.pdf`
-    return new NextResponse(new Uint8Array(pdfBuffer), {
+    return new NextResponse(new Uint8Array(pdfBytes), {
       status: 200,
       headers: {
         "Content-Type":        "application/pdf",
         "Content-Disposition": `attachment; filename="${filename}"`,
-        "Content-Length":      String(pdfBuffer.length),
+        "Content-Length":      String(pdfBytes.length),
       },
     })
   } catch (e: any) {
@@ -106,133 +105,197 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// ─── PDF builder ─────────────────────────────────────────────────────────────
+// ─── PDF builder (pdf-lib) ──────────────────────────────────────────────────
 
-function buildPdf(aisleGroups: { aisle: string; items: Item[] }[]): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    try {
-      const doc = new PDFDocument({
-        size:    "A4",
-        margins: { top: 36, bottom: 36, left: 36, right: 36 },
-        info:    { Title: "Collections Due", Author: "Vectis Auctions" },
-      })
+// A4 portrait dimensions in points
+const PAGE_W   = 595.28
+const PAGE_H   = 841.89
+const MARGIN   = 36
+const CONTENT_W = PAGE_W - MARGIN * 2
 
-      const chunks: Buffer[] = []
-      doc.on("data",  (c: Buffer) => chunks.push(c))
-      doc.on("end",   ()          => resolve(Buffer.concat(chunks)))
-      doc.on("error", reject)
+// Column layout (x positions are left edges, w is width)
+const COL = {
+  location:     { x: MARGIN,             w: 60  },
+  barcode:      { x: MARGIN + 64,        w: 60  },
+  description:  { x: MARGIN + 128,       w: 240 },
+  collectionNo: { x: MARGIN + 372,       w: 105 },
+  tick:         { x: MARGIN + 481,       w: 18  },
+}
 
-      const printedDate = new Date().toLocaleDateString("en-GB", {
-        weekday: "short", day: "numeric", month: "long", year: "numeric",
-      })
+async function buildPdf(aisleGroups: { aisle: string; items: Item[] }[]): Promise<Uint8Array> {
+  const doc = await PDFDocument.create()
+  doc.setTitle("Collections Due")
+  doc.setAuthor("Vectis Auctions")
 
-      aisleGroups.forEach((group, idx) => {
-        if (idx > 0) doc.addPage()
-        renderAisleReport(doc, group.aisle, group.items, printedDate)
-      })
+  const helv  = await doc.embedFont(StandardFonts.Helvetica)
+  const helvB = await doc.embedFont(StandardFonts.HelveticaBold)
+  const mono  = await doc.embedFont(StandardFonts.Courier)
 
-      // No groups → empty report
-      if (aisleGroups.length === 0) {
-        doc.fontSize(14).text("No matching items found.", { align: "center" })
-      }
+  const printedDate = new Date().toLocaleDateString("en-GB", {
+    weekday: "short", day: "numeric", month: "long", year: "numeric",
+  })
 
-      doc.end()
-    } catch (e) {
-      reject(e)
+  if (aisleGroups.length === 0) {
+    const page = doc.addPage([PAGE_W, PAGE_H])
+    page.drawText("No matching items found.", {
+      x: MARGIN, y: PAGE_H - MARGIN - 20,
+      size: 12, font: helv, color: rgb(0, 0, 0),
+    })
+  } else {
+    for (const group of aisleGroups) {
+      renderAisleReport(doc, group.aisle, group.items, printedDate, { helv, helvB, mono })
     }
+  }
+
+  return await doc.save()
+}
+
+type Fonts = { helv: PDFFont; helvB: PDFFont; mono: PDFFont }
+
+function renderAisleReport(
+  doc:         PDFDocument,
+  aisle:       string,
+  items:       Item[],
+  printedDate: string,
+  fonts:       Fonts,
+) {
+  const black = rgb(0, 0, 0)
+  const grey  = rgb(0.27, 0.27, 0.27)
+  const lite  = rgb(0.8, 0.8, 0.8)
+
+  let page = doc.addPage([PAGE_W, PAGE_H])
+  // y starts at the top of the printable area and decreases as we draw down
+  let y = PAGE_H - MARGIN
+
+  // ── Aisle report header ─────────────────────────────────
+  page.drawText("Vectis Auctions — Collections Due", {
+    x: MARGIN, y: y - 14, size: 16, font: fonts.helvB, color: black,
+  })
+  page.drawText("Items with a collection docket awaiting dispatch", {
+    x: MARGIN, y: y - 30, size: 9, font: fonts.helv, color: grey,
+  })
+
+  // Right-aligned date / aisle / count
+  drawRight(page, `Printed ${printedDate}`,                     PAGE_W - MARGIN, y - 10, 9,  fonts.helv,  grey)
+  drawRight(page, `Aisle: ${aisle}`,                            PAGE_W - MARGIN, y - 22, 11, fonts.helvB, black)
+  drawRight(page, `${items.length} item${items.length === 1 ? "" : "s"}`, PAGE_W - MARGIN, y - 36, 9, fonts.helv, grey)
+
+  y = y - 50
+  page.drawLine({
+    start: { x: MARGIN,              y },
+    end:   { x: PAGE_W - MARGIN,     y },
+    thickness: 1.5, color: black,
+  })
+  y -= 14
+
+  // ── Table header ────────────────────────────────────────
+  drawTableHeader(page, y, fonts.helvB)
+  y -= 18
+
+  // ── Table rows ──────────────────────────────────────────
+  for (const it of items) {
+    const descLines = wrapText(it.description, fonts.helv, 8, COL.description.w - 4)
+    const rowHeight = Math.max(descLines.length * 10, 12) + 4
+
+    // Start a new page if this row won't fit
+    if (y - rowHeight < MARGIN + 24) {
+      page = doc.addPage([PAGE_W, PAGE_H])
+      y = PAGE_H - MARGIN
+      drawTableHeader(page, y, fonts.helvB)
+      y -= 18
+    }
+
+    page.drawText(it.location,     { x: COL.location.x,     y: y - 8, size: 8, font: fonts.mono, color: black })
+    page.drawText(it.barcode,      { x: COL.barcode.x,      y: y - 8, size: 8, font: fonts.mono, color: black })
+    descLines.forEach((line, i) => {
+      page.drawText(line, { x: COL.description.x, y: y - 8 - i * 10, size: 8, font: fonts.helv, color: black })
+    })
+    page.drawText(it.collectionNo, { x: COL.collectionNo.x, y: y - 8, size: 8, font: fonts.mono, color: black })
+    // Tickbox
+    page.drawRectangle({
+      x: COL.tick.x + 4, y: y - 11, width: 9, height: 9,
+      borderColor: black, borderWidth: 0.6,
+    })
+
+    y -= rowHeight
+
+    // Light separator
+    page.drawLine({
+      start: { x: MARGIN,          y },
+      end:   { x: PAGE_W - MARGIN, y },
+      thickness: 0.3, color: lite,
+    })
+  }
+
+  // ── Total row ───────────────────────────────────────────
+  if (y - 24 < MARGIN) {
+    page = doc.addPage([PAGE_W, PAGE_H])
+    y = PAGE_H - MARGIN
+  }
+  y -= 6
+  page.drawLine({
+    start: { x: MARGIN,          y },
+    end:   { x: PAGE_W - MARGIN, y },
+    thickness: 1.2, color: black,
+  })
+  page.drawText(`Aisle ${aisle} total: ${items.length} item${items.length === 1 ? "" : "s"}`, {
+    x: MARGIN, y: y - 12, size: 9, font: fonts.helvB, color: black,
   })
 }
 
-// Column layout for the items table
-const COL = {
-  location:     { x: 36,  width: 60  },
-  barcode:      { x: 100, width: 60  },
-  description:  { x: 164, width: 240 },
-  collectionNo: { x: 408, width: 100 },
-  tick:         { x: 512, width: 22  },
+function drawTableHeader(page: PDFPage, y: number, font: PDFFont) {
+  const black = rgb(0, 0, 0)
+  page.drawText("LOCATION",       { x: COL.location.x,     y: y - 8, size: 8, font, color: black })
+  page.drawText("BARCODE",        { x: COL.barcode.x,      y: y - 8, size: 8, font, color: black })
+  page.drawText("DESCRIPTION",    { x: COL.description.x,  y: y - 8, size: 8, font, color: black })
+  page.drawText("COLLECTION NO.", { x: COL.collectionNo.x, y: y - 8, size: 8, font, color: black })
+  page.drawText("✓",              { x: COL.tick.x + 4,     y: y - 8, size: 8, font, color: black })
+  page.drawLine({
+    start: { x: MARGIN,          y: y - 12 },
+    end:   { x: PAGE_W - MARGIN, y: y - 12 },
+    thickness: 0.8, color: black,
+  })
 }
 
-function renderAisleReport(doc: PDFKit.PDFDocument, aisle: string, items: Item[], printedDate: string) {
-  const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right
+function drawRight(page: PDFPage, text: string, rightX: number, y: number, size: number, font: PDFFont, color: any) {
+  const w = font.widthOfTextAtSize(text, size)
+  page.drawText(text, { x: rightX - w, y, size, font, color })
+}
 
-  // Header
-  doc.font("Helvetica-Bold").fontSize(16)
-     .text("Vectis Auctions — Collections Due", doc.page.margins.left, doc.page.margins.top)
-  doc.font("Helvetica").fontSize(9).fillColor("#444")
-     .text("Items with a collection docket awaiting dispatch")
+// Word-wrap text to fit a maximum width given a specific font and size.
+// pdf-lib doesn't auto-wrap, so we do it manually.
+function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+  // Strip non-printable / control characters that pdf-lib's WinAnsi encoder rejects.
+  const safe = text.replace(/[^\x20-\x7E£€]/g, " ").replace(/\s+/g, " ").trim()
+  if (!safe) return [""]
 
-  doc.font("Helvetica").fontSize(9).fillColor("#444")
-  const headerRightY = doc.page.margins.top
-  doc.text(`Printed ${printedDate}`,            doc.page.margins.left, headerRightY, { align: "right", width: pageWidth })
-  doc.text(`Aisle: ${aisle}`,                   doc.page.margins.left, headerRightY + 12, { align: "right", width: pageWidth })
-  doc.text(`${items.length} item${items.length === 1 ? "" : "s"}`, doc.page.margins.left, headerRightY + 24, { align: "right", width: pageWidth })
-
-  doc.fillColor("#000")
-
-  // Move below header
-  let y = doc.page.margins.top + 50
-  doc.moveTo(doc.page.margins.left, y).lineTo(doc.page.width - doc.page.margins.right, y).lineWidth(1.5).stroke()
-  y += 8
-
-  // Table header row
-  drawTableHeader(doc, y)
-  y += 18
-
-  doc.font("Helvetica").fontSize(8).fillColor("#000")
-
-  for (const it of items) {
-    // Calculate row height (description can wrap)
-    const descHeight = doc.heightOfString(it.description, { width: COL.description.width })
-    const rowHeight  = Math.max(descHeight, 12) + 6
-
-    // Page break if row won't fit
-    if (y + rowHeight > doc.page.height - doc.page.margins.bottom - 24) {
-      doc.addPage()
-      y = doc.page.margins.top
-      drawTableHeader(doc, y)
-      y += 18
-      doc.font("Helvetica").fontSize(8).fillColor("#000")
+  const words = safe.split(" ")
+  const lines: string[] = []
+  let line = ""
+  for (const w of words) {
+    const trial = line ? `${line} ${w}` : w
+    if (font.widthOfTextAtSize(trial, size) <= maxWidth) {
+      line = trial
+    } else {
+      if (line) lines.push(line)
+      // If a single word is wider than maxWidth, hard-truncate it
+      if (font.widthOfTextAtSize(w, size) > maxWidth) {
+        line = ""
+        let chunk = ""
+        for (const ch of w) {
+          if (font.widthOfTextAtSize(chunk + ch, size) > maxWidth) {
+            lines.push(chunk)
+            chunk = ch
+          } else {
+            chunk += ch
+          }
+        }
+        line = chunk
+      } else {
+        line = w
+      }
     }
-
-    // Row content
-    doc.font("Courier").fontSize(8)
-    doc.text(it.location,     COL.location.x,     y, { width: COL.location.width })
-    doc.text(it.barcode,      COL.barcode.x,      y, { width: COL.barcode.width })
-    doc.font("Helvetica").fontSize(8)
-    doc.text(it.description,  COL.description.x,  y, { width: COL.description.width })
-    doc.font("Courier").fontSize(8)
-    doc.text(it.collectionNo, COL.collectionNo.x, y, { width: COL.collectionNo.width })
-    doc.font("Helvetica").fontSize(10)
-    doc.text("☐",             COL.tick.x,         y, { width: COL.tick.width, align: "center" })
-
-    y += rowHeight
-
-    // Light separator line
-    doc.moveTo(doc.page.margins.left, y - 2)
-       .lineTo(doc.page.width - doc.page.margins.right, y - 2)
-       .lineWidth(0.3).strokeColor("#ccc").stroke().strokeColor("#000")
   }
-
-  // Total row
-  if (y + 30 > doc.page.height - doc.page.margins.bottom) {
-    doc.addPage()
-    y = doc.page.margins.top
-  }
-  y += 4
-  doc.moveTo(doc.page.margins.left, y).lineTo(doc.page.width - doc.page.margins.right, y).lineWidth(1.2).stroke()
-  doc.font("Helvetica-Bold").fontSize(9).fillColor("#000")
-     .text(`Aisle ${aisle} total: ${items.length} item${items.length === 1 ? "" : "s"}`,
-           doc.page.margins.left, y + 6)
-}
-
-function drawTableHeader(doc: PDFKit.PDFDocument, y: number) {
-  doc.font("Helvetica-Bold").fontSize(8).fillColor("#000")
-  doc.text("LOCATION",       COL.location.x,     y, { width: COL.location.width })
-  doc.text("BARCODE",        COL.barcode.x,      y, { width: COL.barcode.width })
-  doc.text("DESCRIPTION",    COL.description.x,  y, { width: COL.description.width })
-  doc.text("COLLECTION NO.", COL.collectionNo.x, y, { width: COL.collectionNo.width })
-  doc.text("✓",              COL.tick.x,         y, { width: COL.tick.width, align: "center" })
-  doc.moveTo(doc.page.margins.left, y + 12)
-     .lineTo(doc.page.width - doc.page.margins.right, y + 12)
-     .lineWidth(0.8).stroke()
+  if (line) lines.push(line)
+  return lines.length > 0 ? lines : [""]
 }
