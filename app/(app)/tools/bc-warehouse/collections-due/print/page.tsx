@@ -61,12 +61,39 @@ export default function CollectionsDuePrintPage() {
     <div className="bg-white text-black min-h-screen">
       <style jsx global>{`
         @media print {
-          .no-print { display: none !important; }
-          body { background: white !important; }
           @page { margin: 12mm; size: A4 portrait; }
-          thead { display: table-header-group; }   /* repeat headers per page */
-          tr, .docket-block { page-break-inside: avoid; }
+
+          html, body {
+            background: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: auto !important;
+          }
+
+          /* Drop the screen layout — let the @page margin do all the spacing */
+          .page {
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+          }
+
+          .no-print { display: none !important; }
+
+          /* Repeat thead/tfoot on each printed page */
+          thead { display: table-header-group; }
+          tfoot { display: table-footer-group; }
+
+          /* Don't split rows or docket blocks across pages */
+          tr, .docket-block {
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+
+          /* Ensure tables fill the printable width */
+          table { width: 100% !important; }
         }
+
         @media screen {
           .page { max-width: 210mm; margin: 0 auto; padding: 16mm; }
         }
