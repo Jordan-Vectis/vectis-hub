@@ -49,6 +49,12 @@ export type Vendor = {
   vendorName: string
 }
 
+export type Sale = {
+  auctionCode: string
+  auctionName: string
+  auctionDate: string
+}
+
 export const CONTENT_TYPES = [
   // Articles
   { value: "sale_highlight",   label: "Sale Highlight",      group: "Articles",       desc: "Top results from a sale" },

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Lot, CONTENT_TYPES, CONTENT_GROUPS, MONTHS, YEARS, fmt, htmlToPlain } from "./types"
+import { Lot, Sale, CONTENT_TYPES, CONTENT_GROUPS, MONTHS, YEARS, fmt, htmlToPlain } from "./types"
 
 export default function ContentGeneratorTab() {
   // Filters
@@ -14,7 +14,11 @@ export default function ContentGeneratorTab() {
   const [contentType, setContentType] = useState("sale_highlight")
   const [length,      setLength]      = useState<"short" | "medium" | "long" | "max">("medium")
 
-  const [categories, setCategories] = useState<string[]>([])
+  const [categories, setCategories]       = useState<string[]>([])
+  const [allSales,   setAllSales]          = useState<Sale[]>([])
+  const [selectedSales, setSelectedSales]  = useState<string[]>([])  // array of auctionCodes
+  const [salesPickerOpen, setSalesPickerOpen] = useState(false)
+  const [salesSearch, setSalesSearch]      = useState("")
   const [modelList, setModelList]   = useState<string[]>(["gemini-2.5-flash-preview-04-17"])
   const [modelId,   setModelId]     = useState("gemini-2.5-flash-preview-04-17")
 
@@ -34,6 +38,7 @@ export default function ContentGeneratorTab() {
 
   useEffect(() => {
     fetch("/api/marketing/categories").then(r => r.json()).then(d => { if (d.categories) setCategories(d.categories) }).catch(() => {})
+    fetch("/api/marketing/sales").then(r => r.json()).then(d => { if (d.sales) setAllSales(d.sales) }).catch(() => {})
     fetch("/api/auction-ai/models").then(r => r.json()).then(d => {
       if (d.models?.length) {
         setModelList(d.models)
@@ -73,6 +78,7 @@ export default function ContentGeneratorTab() {
     if (month && year) params.set("month",    `${year}-${month}`)
     else if (year)     params.set("year",     year)   // year-only filter
     else if (month)    params.set("month",    month)  // month-only (current year)
+    if (selectedSales.length > 0) params.set("auctionCodes", selectedSales.join(","))
     params.set("mode", mode)
     params.set("topN", String(topN))
 
@@ -236,6 +242,116 @@ export default function ContentGeneratorTab() {
               {[5, 10, 15, 20, 25, 50].map(n => <option key={n} value={n}>Top {n}</option>)}
             </select>
           </div>
+        </div>
+
+        {/* Specific sales picker */}
+        <div>
+          <label className="block text-xs text-gray-400 mb-1.5">Specific sales (optional — leave empty to search across all)</label>
+          <div className="relative">
+            <button
+              onClick={() => setSalesPickerOpen(o => !o)}
+              type="button"
+              className="w-full text-left bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white hover:border-gray-500 focus:outline-none focus:border-pink-500 flex items-center justify-between gap-2"
+            >
+              <span className="truncate">
+                {selectedSales.length === 0
+                  ? <span className="text-gray-500">All sales</span>
+                  : `${selectedSales.length} sale${selectedSales.length === 1 ? "" : "s"} selected`
+                }
+              </span>
+              <span className="text-gray-500 text-xs shrink-0">{salesPickerOpen ? "▲" : "▼"}</span>
+            </button>
+
+            {salesPickerOpen && (
+              <div className="absolute z-20 mt-1 w-full bg-gray-900 border border-gray-700 rounded-lg shadow-2xl max-h-96 overflow-hidden flex flex-col">
+                <div className="p-2 border-b border-gray-800 flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={salesSearch}
+                    onChange={e => setSalesSearch(e.target.value)}
+                    placeholder="Filter by name, code or date…"
+                    className="flex-1 bg-gray-800 border border-gray-700 rounded-md px-2 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-pink-500"
+                    autoFocus
+                  />
+                  {selectedSales.length > 0 && (
+                    <button
+                      onClick={() => setSelectedSales([])}
+                      className="text-xs text-gray-400 hover:text-pink-400 px-2 py-1"
+                    >Clear</button>
+                  )}
+                  <button
+                    onClick={() => setSalesPickerOpen(false)}
+                    className="text-xs text-gray-400 hover:text-white px-2 py-1"
+                  >Done</button>
+                </div>
+
+                <div className="overflow-y-auto flex-1">
+                  {(() => {
+                    const q = salesSearch.toLowerCase().trim()
+                    const filtered = q
+                      ? allSales.filter(s =>
+                          s.auctionName.toLowerCase().includes(q) ||
+                          s.auctionCode.toLowerCase().includes(q) ||
+                          s.auctionDate.toLowerCase().includes(q)
+                        )
+                      : allSales
+                    if (filtered.length === 0) {
+                      return <p className="text-xs text-gray-500 p-3">No sales match.</p>
+                    }
+                    return filtered.slice(0, 200).map(s => {
+                      const checked = selectedSales.includes(s.auctionCode)
+                      return (
+                        <label key={s.auctionCode}
+                          className={`flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-800 ${checked ? "bg-gray-800/50" : ""}`}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              setSelectedSales(prev =>
+                                prev.includes(s.auctionCode)
+                                  ? prev.filter(c => c !== s.auctionCode)
+                                  : [...prev, s.auctionCode]
+                              )
+                            }}
+                            className="accent-pink-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm text-gray-200 truncate">{s.auctionName || <span className="text-gray-500 italic">No name</span>}</div>
+                            <div className="text-[11px] text-gray-500">
+                              {s.auctionDate
+                                ? new Date(s.auctionDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+                                : "—"}
+                              <span className="ml-2 font-mono text-gray-600">{s.auctionCode}</span>
+                            </div>
+                          </div>
+                        </label>
+                      )
+                    })
+                  })()}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Selected sale chips */}
+          {selectedSales.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {selectedSales.map(code => {
+                const s = allSales.find(x => x.auctionCode === code)
+                const label = s?.auctionName || code
+                return (
+                  <span key={code} className="inline-flex items-center gap-1.5 bg-pink-900/40 border border-pink-800 text-pink-200 text-xs px-2 py-1 rounded-md">
+                    <span className="truncate max-w-[200px]">{label}</span>
+                    <button
+                      onClick={() => setSelectedSales(prev => prev.filter(c => c !== code))}
+                      className="text-pink-400 hover:text-white"
+                      aria-label="Remove"
+                    >×</button>
+                  </span>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         <button onClick={findLots} disabled={loadingLots}

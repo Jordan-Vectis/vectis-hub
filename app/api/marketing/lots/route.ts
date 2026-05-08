@@ -21,6 +21,9 @@ export async function GET(req: NextRequest) {
     const year     = searchParams.get("year")?.trim()     ?? ""  // "YYYY" — used when no month picked
     const mode     = searchParams.get("mode")?.trim()     ?? "sold"  // "sold" | "upcoming" | "all"
     const vendorNo = searchParams.get("vendorNo")?.trim() ?? ""
+    // Comma-separated list of auctionCodes to limit results to specific sales
+    const auctionCodesRaw = searchParams.get("auctionCodes")?.trim() ?? ""
+    const auctionCodes    = auctionCodesRaw ? auctionCodesRaw.split(",").map(s => s.trim()).filter(Boolean) : []
     const topN     = Math.min(Math.max(parseInt(searchParams.get("topN") ?? "10", 10) || 10, 1), 100)
 
     // Build where clause
@@ -38,6 +41,10 @@ export async function GET(req: NextRequest) {
 
     if (vendorNo) {
       where.vendorNo = vendorNo
+    }
+
+    if (auctionCodes.length > 0) {
+      where.auctionCode = { in: auctionCodes }
     }
 
     if (keyword) {
