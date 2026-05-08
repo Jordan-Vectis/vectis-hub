@@ -1369,6 +1369,33 @@ function DbExplorerTab() {
   const [count,   setCount]   = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
 
+  // Re-pull auction names from BC. Use this when a sale name in the DB looks
+  // stale — e.g. an auction was renamed in BC but our cached value didn't update.
+  const [refreshingNames, setRefreshingNames] = useState(false)
+  const [refreshMsg,      setRefreshMsg]      = useState<string | null>(null)
+
+  async function refreshAuctionNames() {
+    if (refreshingNames) return
+    setRefreshingNames(true)
+    setRefreshMsg(null)
+    try {
+      const res = await fetch("/api/warehouse/sync/auction-names", { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) {
+        setRefreshMsg(data.error ?? "Failed — check BC connection")
+        return
+      }
+      setRefreshMsg(`✓ Refreshed — ${data.namesWritten ?? 0} rows updated across ${data.codesFound ?? 0} sales`)
+      // Re-run the current search so the user sees the fresh values
+      if (count !== null) await search()
+      setTimeout(() => setRefreshMsg(null), 6000)
+    } catch {
+      setRefreshMsg("Network error")
+    } finally {
+      setRefreshingNames(false)
+    }
+  }
+
   const fields = table === "items" ? ITEM_FIELDS : TOTE_FIELDS
 
   async function search() {
@@ -1389,9 +1416,26 @@ function DbExplorerTab() {
 
   return (
     <div className="p-4 space-y-4 h-full overflow-auto">
-      <div>
-        <h2 className="text-lg font-semibold text-white">DB Explorer</h2>
-        <p className="text-sm text-gray-400">Inspect raw data stored in the database</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-lg font-semibold text-white">DB Explorer</h2>
+          <p className="text-sm text-gray-400">Inspect raw data stored in the database</p>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          {refreshMsg && (
+            <span className={`text-xs ${refreshMsg.startsWith("✓") ? "text-emerald-400" : "text-amber-400"}`}>
+              {refreshMsg}
+            </span>
+          )}
+          <button
+            onClick={refreshAuctionNames}
+            disabled={refreshingNames}
+            title="Re-pull all auction names from BC. Use this when a cached sale name in the DB looks stale."
+            className="text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-gray-600 disabled:opacity-50 text-gray-200 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+          >
+            {refreshingNames ? "Refreshing…" : "↻ Refresh auction names from BC"}
+          </button>
+        </div>
       </div>
 
       {/* Controls */}
