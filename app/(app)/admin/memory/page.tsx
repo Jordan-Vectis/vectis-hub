@@ -3,11 +3,65 @@
 import { useState } from "react"
 
 // ─── Static memory content ────────────────────────────────────────────────────
-// Updated by Claude alongside memory file changes. Last synced: 2026-05-07
+// Updated by Claude alongside memory file changes. Last synced: 2026-05-08
 
 type Entry = { filename: string; content: string }
 
 const ENTRIES: Entry[] = [
+  {
+    filename: "vectis_company_facts.md",
+    content: `---
+name: Vectis Company Facts
+purpose: Authoritative reference for Vectis Auctions company facts. Used in any AI prompt that generates Vectis-branded content (BC Marketing tool, etc.). Keep updated as the business changes.
+last_updated: 2026-05-08
+---
+
+# Vectis Auctions — Company Facts
+
+## Identity
+- Name: Vectis Auctions Ltd ("Vectis Auctions" or "Vectis")
+- Founded: 1988 by Roger and Jill Mazillius on the Isle of Wight
+- Acquired: 1996 by Bryan Goodall (current owner)
+- Self-description: "professional, reliable and friendly service"
+
+## Location
+- Head Office: Thornaby, Teesside, North East England
+- Address: Vectis Auctions Ltd, Fleck Way, Teesside Industrial Estate, Thornaby, TS17 9JZ, UK
+- Phone: +44 (0)1642 750616
+- Hours: Mon–Fri 9am–5pm UK
+
+## Scale (2021 figures)
+- 30,000 sq ft premises, 52 staff
+- £7m turnover, 70+ auctions/year, ~70,000 lots/year
+- Currently ~10 auctions/month, ~500 lots/day
+
+## Auction format
+- Live online (worldwide), with postal and telephone bidding
+- Telephone bidding: £100 minimum, no charge to caller
+- Buyer's premium: 22.5% +VAT (27% total)
+- Reserve: 60% of bottom estimate
+
+## Departments
+Star Wars (+ Star Wars Lego), Music & Memorabilia, TV & Film, Dolls,
+Military Toy Figures, Trains & Model Railway, Retro Toys, Vintage Diecast,
+Vintage Toys, Teddy Bears, Lego, Retro Gaming, Matchbox, Sports Memorabilia,
+Trading Cards, Corgi, Dinky, Action Man, Comics, Tinplate, Action Figures,
+Airfix and Model Kits, Militaria Memorabilia, Transformers, Barbie.
+Catch-all: Lead, Plastic, Games, Constructional Toys, Railwayana, Books, Annuals.
+
+## Contact emails
+- collections@vectis.co.uk — auctioning your collectables
+- admin@vectis.co.uk — general enquiries
+- accounts@vectis.co.uk — accounts & payable
+- dispatch@vectis.co.uk — postage & packing
+
+## Website
+Only allowed URL in AI-generated content: vectis.co.uk
+
+## Brand voice rules
+**Always:** British English, professional & friendly tone, exact year(s) from data, only facts from this file.
+**Never:** invent staff/founders/quotes beyond Bryan Goodall + Mazillius, claim awards/superlatives, reference URLs other than vectis.co.uk, use the word "CRM".`,
+  },
   {
     filename: "user_profile.md",
     content: `---
