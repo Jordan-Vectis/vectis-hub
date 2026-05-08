@@ -46,19 +46,49 @@ export async function POST(req: NextRequest) {
       const filter = batch.map(c => `EVA_SalesAllocation eq '${c}'`).join(" or ")
 
       try {
-        // Large $top to ensure we get at least one row per code in the batch
+        // Large $top so we have multiple rows per code; auction codes
+        // sometimes get reused for new sales (old + new under same code),
+        // and we need enough rows to detect that.
         const bcRows = await bcPage(token, "Auction_Lines_Excel", {
           $filter: filter,
-          $top:    batch.length * 15,
+          $top:    batch.length * 50,
         })
 
-        // Group by EVA_SalesAllocation — take first non-empty name per code
-        const nameByCode = new Map<string, string>()
+        // For each code, collect every distinct (name, latestDate) pair seen.
+        // Codes that have been reused for multiple sales will produce more
+        // than one entry — we then pick the name with the most recent date.
+        // If no usable date is present, fall back to the most-frequent name.
+        type SeenName = { name: string; latestDate: string; count: number }
+        const seenByCode = new Map<string, Map<string, SeenName>>()
+
         for (const r of bcRows) {
           const code = String(r.EVA_SalesAllocation ?? "").trim().toUpperCase()
           const name = String(r.EVA_AuctionName    ?? "").trim()
-          if (!code || !name || nameByCode.has(code)) continue
-          nameByCode.set(code, name)
+          if (!code || !name) continue
+          const date = String(r.EVA_AuctionDate ?? "").trim() // "YYYY-MM-DD" or empty
+
+          const inner = seenByCode.get(code) ?? new Map<string, SeenName>()
+          const existing = inner.get(name) ?? { name, latestDate: "", count: 0 }
+          existing.count++
+          if (date && date > existing.latestDate) existing.latestDate = date
+          inner.set(name, existing)
+          seenByCode.set(code, inner)
+        }
+
+        // Pick the winning name per code: latest date wins; otherwise mode.
+        const nameByCode = new Map<string, string>()
+        for (const [code, inner] of seenByCode) {
+          const candidates = [...inner.values()]
+          if (candidates.length === 0) continue
+          candidates.sort((a, b) => {
+            // Prefer the one with a real date — newest first
+            if (a.latestDate && b.latestDate) return b.latestDate.localeCompare(a.latestDate)
+            if (a.latestDate) return -1
+            if (b.latestDate) return  1
+            // Both missing date — pick most frequent
+            return b.count - a.count
+          })
+          nameByCode.set(code, candidates[0].name)
         }
 
         const updates: Promise<any>[] = []
