@@ -334,6 +334,7 @@ function CataloguingTab() {
           const msg = JSON.parse(line)
           if (msg.type === "progress") setProgress({ done: msg.done, total: msg.total })
           else if (msg.type === "result") setData(msg.data)
+          else if (msg.type === "error")  throw new Error(msg.error)
         }
       }
     } catch (e: any) { setError(e.message) }
@@ -445,6 +446,7 @@ function PackingTab() {
           const msg = JSON.parse(line)
           if (msg.type === "progress") setProgress({ done: msg.done, total: msg.total })
           else if (msg.type === "result") setData(msg.data)
+          else if (msg.type === "error")  throw new Error(msg.error)
         }
       }
     } catch (e: any) { setError(e.message) }

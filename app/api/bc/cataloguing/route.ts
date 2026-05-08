@@ -96,6 +96,9 @@ export async function GET(req: NextRequest) {
       function send(obj: object) {
         controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"))
       }
+      // Wrap the whole pipeline in try/catch so a Prisma/BC failure surfaces
+      // as a readable {type:'error'} line instead of an interrupted stream.
+      try {
 
       // ── 1. Fetch uncached / today dates from BC ──────────────────────────────
       const freshRows: { User_ID: string; Date_and_Time: string }[] = []
@@ -220,6 +223,18 @@ export async function GET(req: NextRequest) {
 
       send({ type: "result", data: { dailyAvg, totalLots, monthly, meta: { total: totalCount, userCount } } })
       controller.close()
+      } catch (e: any) {
+        const msg = e?.message ?? "Unknown server error"
+        // Prisma "column does not exist" → user needs to run migrations
+        const hint = /column .* does not exist|mode/i.test(msg)
+          ? " (tip: run /admin → Run Migrations to add the new 'mode' column)"
+          : ""
+        console.error("[bc/cataloguing] stream error:", e)
+        try {
+          send({ type: "error", error: `${msg}${hint}` })
+        } catch {}
+        controller.close()
+      }
     },
   })
 
