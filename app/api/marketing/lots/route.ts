@@ -35,11 +35,13 @@ export async function GET(req: NextRequest) {
     if (mode === "sold") {
       where.hammerPrice = { gt: 0 }
     } else if (mode === "upcoming") {
-      // Upcoming = has estimate, no hammer price yet, future date
-      where.hammerPrice = null
+      // Upcoming = NOT sold yet. BC stores either NULL or 0 for unsold lots,
+      // so we just exclude anything with a positive hammer price. Estimates
+      // are NOT required — a freshly-catalogued lot may not have one yet,
+      // but we still want it to appear in a sale preview.
       where.OR = [
-        { lowEstimate:  { gt: 0 } },
-        { highEstimate: { gt: 0 } },
+        { hammerPrice: null },
+        { hammerPrice: { lte: 0 } },
       ]
     }
 
