@@ -92,10 +92,60 @@ ends with relevant hashtags (8–15 hashtags, mix of broad + niche).
 Structure each as: <h2>Variant N</h2><p>caption</p><p><em>#hashtags</em></p>
 Output: HTML.`,
 
-  social_facebook: `Write 3 Facebook post variants based on these auction lots/results.
-Each post: 80–150 words, conversational tone, asks a question to drive engagement,
-includes a CTA to vectis.co.uk. Less hashtag-heavy than Instagram (3–5 hashtags max).
-Structure each as: <h2>Variant N</h2><p>caption</p>
+  social_facebook: `Write 3 Facebook post variants in the actual Vectis Auctions Facebook voice.
+
+VECTIS FACEBOOK STYLE — read carefully, this is how they actually post:
+
+Tone: factual but playful. Lifts in puns and wordplay where they fit
+naturally ("tea-rific £5,635", "Out Of This World results"). Storytelling
+on individual lots — Vectis loves narrative beats like "After an intense
+internet battle between two online bidders, the tiny model sold for a
+'steep' £5,635". Use "Our [X] Auction" not "Vectis's [X] Auction".
+
+Three sub-types of post — pick whichever fits the supplied lot data,
+but vary across the three variants if the data supports it:
+
+  1. SINGLE-LOT HIGHLIGHT (use when one standout result is the story):
+     - Open with a punny headline naming the lot + price
+       ("Dinky 455 Brooke Bond Tea Van sold for a tea-rific £5,635")
+     - 1 short context paragraph (rarity, manufacturer, why it matters)
+     - 1 short drama paragraph (bidding battle / surprise outcome)
+     - Link line on its own: 🔗 https://www.vectis.co.uk/…
+     - 3–5 hashtags max, lowercase, mix specific + brand
+       e.g. #dinkytoys #auctionhighlight #tealovers #vectisauctions
+
+  2. SALE ANNOUNCEMENT (use when promoting an upcoming/live sale):
+     - 📣 or 🎬 emoji opener + sale title and date
+     - One paragraph listing categories/highlights using REAL names
+       from the data ("Star Wars, Game of Thrones, Lord of the Rings,
+       Batman, James Bond" etc.)
+     - Live time: "Live auction will start at 09:30 (UK) online at vectis.co.uk"
+     - "Can't wait until the [date]? View the catalogue NOW and place your bids here 👉 https://www.vectis.co.uk/…"
+     - 15–25 hashtags, lowercase, mix broad + niche
+       e.g. #vectisauctions #vectis #collectablestoys #vintage #toys
+       #toystagram #auctionhighlights #onlineauctionhouse + 5–8
+       category-specific (#StarWars, #Disney, #marvel etc.)
+
+  3. RESULTS RECAP (use when summarising a sale that just happened):
+     - Open with achievement line + emoji
+       ("achieved some Out Of This World results 👏")
+     - Soft consigning CTA: "Do you have a [category] Collection you
+       would like to auction? Contact us to find out how."
+     - Contact details:
+       🌐 vectis.co.uk
+       📩 collections@vectis.co.uk
+       📞 01642 750616
+     - 3–5 hashtags
+       e.g. #StarWarsDay #AuctionHighlights #collectables
+
+Universal conventions across all three sub-types:
+- British English ("realised", "colour")
+- Emojis used sparingly and contextually — never decorative spam
+- Phone shown as "01642 750616" (no country code prefix in social copy)
+- Consigning email: collections@vectis.co.uk
+- Buying / website: vectis.co.uk
+
+Output structure: <h2>Variant N — [sub-type label]</h2><p>caption text</p>
 Output: HTML.`,
 
   social_twitter: `Write 5 short Twitter/X post variants. Each under 280 characters including hashtags.
