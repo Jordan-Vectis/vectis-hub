@@ -93,72 +93,53 @@ export async function POST(req: NextRequest) {
       "A999": "Lost/Missing/Re-Receipted & Lots with BC Issues",
     }
 
-    const BATCH      = 20
     let namesWritten = 0
+    let codesProcessed = 0
     const errors: string[] = []
 
-    for (let i = 0; i < codes.length; i += BATCH) {
-      const batch  = codes.slice(i, i + BATCH)
-      const filter = batch.map(c => `EVA_AuctionNo eq '${c}'`).join(" or ")
+    // Process codes one at a time. Earlier we tried batching 20 codes per BC
+    // call with $top: 1000, but BC's row distribution across an OR filter is
+    // uneven — codes with thousands of historical rows would dominate and
+    // crowd newer sales out of the response, leaving them stuck with stale
+    // names. One-code-at-a-time is slower but 100% reliable: every code gets
+    // its own focused query and a fair sample of rows.
+    type SeenName = { name: string; latestDate: string; count: number }
 
+    for (const code of codes) {
       try {
-        // Large $top so we have multiple rows per code; auction codes
-        // sometimes get reused for new sales (old + new under same code),
-        // and we need enough rows to detect that.
         const bcRows = await bcPage(token, "Auction_Lines_Excel", {
-          $filter: filter,
-          $top:    batch.length * 50,
+          $filter: `EVA_AuctionNo eq '${code}'`,
+          $top:    100,  // 100 rows is plenty to detect the right name + handle reused codes
         })
 
-        // For each code, collect every distinct (name, latestDate) pair seen.
-        // Codes that have been reused for multiple sales will produce more
-        // than one entry — we then pick the name with the most recent date.
-        // If no usable date is present, fall back to the most-frequent name.
-        type SeenName = { name: string; latestDate: string; count: number }
-        const seenByCode = new Map<string, Map<string, SeenName>>()
-
+        const seen = new Map<string, SeenName>()
         for (const r of bcRows) {
-          const code = String(r.EVA_AuctionNo ?? "").trim().toUpperCase()
-          const name = String(r.EVA_AuctionName    ?? "").trim()
-          if (!code || !name) continue
-          const date = String(r.EVA_AuctionDate ?? "").trim() // "YYYY-MM-DD" or empty
-
-          const inner = seenByCode.get(code) ?? new Map<string, SeenName>()
-          const existing = inner.get(name) ?? { name, latestDate: "", count: 0 }
-          existing.count++
-          if (date && date > existing.latestDate) existing.latestDate = date
-          inner.set(name, existing)
-          seenByCode.set(code, inner)
+          const name = String(r.EVA_AuctionName ?? "").trim()
+          if (!name) continue
+          const date = String(r.EVA_AuctionDate ?? "").trim()
+          const e = seen.get(name) ?? { name, latestDate: "", count: 0 }
+          e.count++
+          if (date && date > e.latestDate) e.latestDate = date
+          seen.set(name, e)
         }
 
-        // Pick the winning name per code: latest date wins; otherwise mode.
-        const nameByCode = new Map<string, string>()
-        for (const [code, inner] of seenByCode) {
-          const candidates = [...inner.values()]
-          if (candidates.length === 0) continue
-          candidates.sort((a, b) => {
-            // Prefer the one with a real date — newest first
-            if (a.latestDate && b.latestDate) return b.latestDate.localeCompare(a.latestDate)
-            if (a.latestDate) return -1
-            if (b.latestDate) return  1
-            // Both missing date — pick most frequent
-            return b.count - a.count
-          })
-          nameByCode.set(code, candidates[0].name)
-        }
+        if (seen.size === 0) continue
+        const candidates = [...seen.values()].sort((a, b) => {
+          if (a.latestDate && b.latestDate) return b.latestDate.localeCompare(a.latestDate)
+          if (a.latestDate) return -1
+          if (b.latestDate) return  1
+          return b.count - a.count
+        })
+        const winner = candidates[0].name
 
-        const updates: Promise<any>[] = []
-        for (const [code, name] of nameByCode) {
-          updates.push(
-            prisma.warehouseItem.updateMany({
-              where: { auctionCode: code },
-              data:  { auctionName: name },
-            }).then(res => { namesWritten += res.count }),
-          )
-        }
-        await Promise.all(updates)
+        const r = await prisma.warehouseItem.updateMany({
+          where: { auctionCode: code },
+          data:  { auctionName: winner },
+        })
+        namesWritten += r.count
+        codesProcessed++
       } catch (e: any) {
-        errors.push(e.message)
+        errors.push(`${code}: ${e.message}`)
       }
     }
 
@@ -173,10 +154,11 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      ok:           errors.length === 0,
-      codesFound:   codes.length,
+      ok:             errors.length === 0,
+      codesFound:     codes.length,
+      codesProcessed,
       namesWritten,
-      errors:       errors.length > 0 ? errors : undefined,
+      errors:         errors.length > 0 ? errors : undefined,
     })
   } catch (e: any) {
     console.error("auction-names sync error:", e)
