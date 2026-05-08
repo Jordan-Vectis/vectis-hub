@@ -303,39 +303,57 @@ function ProgressBar({ done, total, label, unit }: { done: number; total: number
 function CataloguingTab() {
   const [from, setFrom] = useState(daysAgo(29))
   const [to, setTo]     = useState(today())
-  const [mode, setMode] = useState<"barcode" | "uniqueid">("barcode")
+  const [mode, setMode] = useState<"barcode" | "uniqueid" | "compare">("barcode")
   const [data, setData] = useState<CatData | null>(null)
+  const [compareData, setCompareData] = useState<{ barcode: CatData; uniqueid: CatData } | null>(null)
   const [loading, setLoading]   = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [error, setError]       = useState<string | null>(null)
   const [subTab, setSubTab]     = useState("Daily Average")
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const load = useCallback(async (f: string, t: string, m: "barcode" | "uniqueid") => {
+  // Load a single mode's data — returns the parsed result or throws.
+  async function loadOne(f: string, t: string, m: "barcode" | "uniqueid", onProgress?: (p: { done: number; total: number }) => void): Promise<CatData> {
+    const res = await window.fetch(`/api/bc/cataloguing?from=${f}&to=${t}&mode=${m}`)
+    if (!res.ok) { const j = await res.json(); throw new Error(j.error ?? res.statusText) }
+    const reader  = res.body!.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
+    let result: CatData | null = null
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split("\n")
+      buffer = lines.pop()!
+      for (const line of lines) {
+        if (!line.trim()) continue
+        const msg = JSON.parse(line)
+        if (msg.type === "progress") onProgress?.({ done: msg.done, total: msg.total })
+        else if (msg.type === "result") result = msg.data
+        else if (msg.type === "error")  throw new Error(msg.error)
+      }
+    }
+    if (!result) throw new Error("No result received")
+    return result
+  }
+
+  const load = useCallback(async (f: string, t: string, m: "barcode" | "uniqueid" | "compare") => {
     if (!f || !t) return
     setLoading(true); setError(null); setProgress(null)
-    // keep previous data visible while reloading
     try {
-      const res = await window.fetch(`/api/bc/cataloguing?from=${f}&to=${t}&mode=${m}`)
-      if (!res.ok) { const j = await res.json(); throw new Error(j.error ?? res.statusText) }
-
-      const reader  = res.body!.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ""
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split("\n")
-        buffer = lines.pop()!
-        for (const line of lines) {
-          if (!line.trim()) continue
-          const msg = JSON.parse(line)
-          if (msg.type === "progress") setProgress({ done: msg.done, total: msg.total })
-          else if (msg.type === "result") setData(msg.data)
-          else if (msg.type === "error")  throw new Error(msg.error)
-        }
+      if (m === "compare") {
+        // Fetch both in parallel — both share cache so this is fast on warm data
+        const [bc, ui] = await Promise.all([
+          loadOne(f, t, "barcode",  p => setProgress(p)),
+          loadOne(f, t, "uniqueid", p => setProgress(p)),
+        ])
+        setCompareData({ barcode: bc, uniqueid: ui })
+        setData(null)
+      } else {
+        const r = await loadOne(f, t, m, p => setProgress(p))
+        setData(r)
+        setCompareData(null)
       }
     } catch (e: any) { setError(e.message) }
     finally { setLoading(false); setProgress(null) }
@@ -371,7 +389,7 @@ function CataloguingTab() {
       {/* Counting-method toggle */}
       <div className="mb-4">
         <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Counting method</p>
-        <div className="inline-flex gap-1 bg-gray-900 border border-gray-800 rounded-lg p-0.5">
+        <div className="inline-flex gap-1 bg-gray-900 border border-gray-800 rounded-lg p-0.5 flex-wrap">
           <button
             onClick={() => setMode("barcode")}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
@@ -386,6 +404,13 @@ function CataloguingTab() {
             }`}
             title="Counts only Auction Line UniqueID Insertions — matches BC's Insertion-filtered view"
           >Auction Line UniqueID (insertions only)</button>
+          <button
+            onClick={() => setMode("compare")}
+            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+              mode === "compare" ? "bg-blue-600 text-white font-semibold" : "text-gray-400 hover:text-white"
+            }`}
+            title="Shows both numbers per user side by side, with the difference (barcode edits minus new lots)"
+          >Compare both</button>
         </div>
       </div>
 
@@ -404,7 +429,138 @@ function CataloguingTab() {
           {subTab === "Lots by Month" && <><HBar data={data.monthly} valueKey="total" labelKey="label" /><ExportBtn onClick={() => exportXlsx(data.monthly, `cataloguing_monthly_${mode}`)} /></>}
         </div>
       )}
+
+      {compareData && (
+        <CompareView from={from} to={to} compare={compareData} loading={loading} />
+      )}
     </div>
+  )
+}
+
+// ─── Compare-both view ───────────────────────────────────────────────────────
+// Shows the two counting methods side by side per user, plus the gap.
+// Gap = (Barcode total) − (UniqueID total). Positive gap = the cataloguer
+// edited barcodes more often than they created new lots; negative gap shouldn't
+// really happen but we colour-code it just in case.
+
+function CompareView({
+  from, to, compare, loading,
+}: {
+  from:    string
+  to:      string
+  compare: { barcode: CatData; uniqueid: CatData }
+  loading: boolean
+}) {
+  const [sortBy, setSortBy] = useState<"barcode" | "uniqueid" | "gap" | "user">("uniqueid")
+
+  // Merge both datasets keyed by user
+  const byUser = new Map<string, { user: string; barcode: number; uniqueid: number; barcodeAvg: number; uniqueidAvg: number }>()
+  for (const r of compare.barcode.totalLots) {
+    byUser.set(r.user, { user: r.user, barcode: r.total, uniqueid: 0, barcodeAvg: 0, uniqueidAvg: 0 })
+  }
+  for (const r of compare.uniqueid.totalLots) {
+    const e = byUser.get(r.user) ?? { user: r.user, barcode: 0, uniqueid: 0, barcodeAvg: 0, uniqueidAvg: 0 }
+    e.uniqueid = r.total
+    byUser.set(r.user, e)
+  }
+  for (const r of compare.barcode.dailyAvg)  { const e = byUser.get(r.user); if (e) e.barcodeAvg  = r.avg }
+  for (const r of compare.uniqueid.dailyAvg) { const e = byUser.get(r.user); if (e) e.uniqueidAvg = r.avg }
+
+  const merged = [...byUser.values()].map(r => ({
+    ...r,
+    gap: r.barcode - r.uniqueid,
+  }))
+
+  const sorted = [...merged].sort((a, b) => {
+    switch (sortBy) {
+      case "user":     return a.user.localeCompare(b.user)
+      case "barcode":  return b.barcode - a.barcode
+      case "uniqueid": return b.uniqueid - a.uniqueid
+      case "gap":      return b.gap - a.gap
+    }
+  })
+
+  const totalBarcode  = merged.reduce((s, r) => s + r.barcode, 0)
+  const totalUniqueid = merged.reduce((s, r) => s + r.uniqueid, 0)
+  const totalGap      = totalBarcode - totalUniqueid
+
+  return (
+    <div className={loading ? "opacity-40 pointer-events-none transition-opacity" : "transition-opacity"}>
+      <MetaBar text={`${from} — ${to}  ·  ${totalBarcode.toLocaleString()} barcode events  ·  ${totalUniqueid.toLocaleString()} new lots  ·  ${totalGap.toLocaleString()} gap`} />
+
+      <div className="bg-gray-900/30 border border-gray-800 rounded-lg p-3 mb-4 text-xs text-gray-300">
+        <strong className="text-white">How to read this:</strong> "Barcode" counts every change to a lot's
+        Internal Barcode (insertions + edits). "New lots" counts only Auction Line UniqueID Insertions.
+        The <strong>Gap</strong> is Barcode − New lots — i.e. how many barcode edits a cataloguer made on top
+        of creating new lots. A high gap means lots of corrections; a low gap means clean entry.
+      </div>
+
+      <div className="overflow-x-auto border border-gray-800 rounded-lg">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-900 text-gray-400 text-xs">
+            <tr>
+              <SortHeader label="User"             active={sortBy === "user"}     onClick={() => setSortBy("user")}     align="left" />
+              <SortHeader label="Barcode (any)"    active={sortBy === "barcode"}  onClick={() => setSortBy("barcode")}  align="right" />
+              <SortHeader label="Avg / day"        active={false}                 onClick={() => {}}                     align="right" small />
+              <SortHeader label="New lots"         active={sortBy === "uniqueid"} onClick={() => setSortBy("uniqueid")} align="right" />
+              <SortHeader label="Avg / day"        active={false}                 onClick={() => {}}                     align="right" small />
+              <SortHeader label="Gap (edits)"      active={sortBy === "gap"}      onClick={() => setSortBy("gap")}       align="right" />
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map(r => (
+              <tr key={r.user} className="border-t border-gray-800 hover:bg-gray-900/40">
+                <td className="px-3 py-2 text-gray-200 font-mono">{r.user}</td>
+                <td className="px-3 py-2 text-right text-blue-300 font-semibold">{r.barcode.toLocaleString()}</td>
+                <td className="px-3 py-2 text-right text-gray-500 text-xs">{r.barcodeAvg.toFixed(1)}</td>
+                <td className="px-3 py-2 text-right text-emerald-300 font-semibold">{r.uniqueid.toLocaleString()}</td>
+                <td className="px-3 py-2 text-right text-gray-500 text-xs">{r.uniqueidAvg.toFixed(1)}</td>
+                <td className={`px-3 py-2 text-right font-semibold ${r.gap > 0 ? "text-amber-300" : r.gap < 0 ? "text-red-400" : "text-gray-400"}`}>
+                  {r.gap > 0 ? "+" : ""}{r.gap.toLocaleString()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-gray-700 bg-gray-900/60 font-bold text-gray-200">
+              <td className="px-3 py-2">Total</td>
+              <td className="px-3 py-2 text-right text-blue-200">{totalBarcode.toLocaleString()}</td>
+              <td className="px-3 py-2 text-right text-gray-500 text-xs">—</td>
+              <td className="px-3 py-2 text-right text-emerald-200">{totalUniqueid.toLocaleString()}</td>
+              <td className="px-3 py-2 text-right text-gray-500 text-xs">—</td>
+              <td className={`px-3 py-2 text-right ${totalGap > 0 ? "text-amber-200" : "text-gray-400"}`}>
+                {totalGap > 0 ? "+" : ""}{totalGap.toLocaleString()}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div className="mt-4">
+        <ExportBtn onClick={() => exportXlsx(sorted, "cataloguing_compare")} />
+      </div>
+    </div>
+  )
+}
+
+function SortHeader({
+  label, active, onClick, align, small,
+}: {
+  label:   string
+  active:  boolean
+  onClick: () => void
+  align:   "left" | "right"
+  small?:  boolean
+}) {
+  return (
+    <th
+      onClick={onClick}
+      className={`px-3 py-2 cursor-pointer hover:text-white select-none whitespace-nowrap ${
+        align === "right" ? "text-right" : "text-left"
+      } ${small ? "text-[10px] text-gray-500" : ""} ${active ? "text-blue-400" : ""}`}
+    >
+      {label} {active && "↓"}
+    </th>
   )
 }
 
