@@ -276,7 +276,15 @@ function LotsTable({ lots }: { lots: any[] }) {
             <td className="px-4 py-2 text-gray-200 max-w-xs truncate">{l.description ?? "—"}</td>
             <td className="px-4 py-2 text-gray-400">{l.category ?? "—"}</td>
             <td className="px-4 py-2 font-semibold text-green-400 whitespace-nowrap">{fmt(l.hammerPrice)}</td>
-            <td className="px-4 py-2 text-gray-400 text-xs whitespace-nowrap">{l.auctionName ?? l.auctionCode ?? "—"}</td>
+            <td className="px-4 py-2 text-xs whitespace-nowrap">
+              <div className="text-gray-300">{l.auctionName ?? l.auctionCode ?? "—"}</div>
+              {l.auctionDate && (
+                <div className="text-gray-500 text-[11px] mt-0.5">
+                  {new Date(l.auctionDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                  {l.auctionCode && l.auctionName && <span className="ml-1.5 text-gray-600">· {l.auctionCode}</span>}
+                </div>
+              )}
+            </td>
           </tr>
         ))}
       </tbody>

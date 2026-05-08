@@ -287,7 +287,15 @@ export default function ContentGeneratorTab() {
                         {lot.lowEstimate && lot.highEstimate ? `${fmt(lot.lowEstimate)}–${fmt(lot.highEstimate)}` : "—"}
                       </td>
                       <td className="px-4 py-2 font-semibold text-green-400 whitespace-nowrap">{lot.hammerPrice ? fmt(lot.hammerPrice) : "—"}</td>
-                      <td className="px-4 py-2 text-gray-400 text-xs whitespace-nowrap">{lot.auctionName ?? lot.auctionCode ?? "—"}</td>
+                      <td className="px-4 py-2 text-xs whitespace-nowrap">
+                        <div className="text-gray-300">{lot.auctionName ?? lot.auctionCode ?? "—"}</div>
+                        {lot.auctionDate && (
+                          <div className="text-gray-500 text-[11px] mt-0.5">
+                            {new Date(lot.auctionDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                            {lot.auctionCode && lot.auctionName && <span className="ml-1.5 text-gray-600">· {lot.auctionCode}</span>}
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
