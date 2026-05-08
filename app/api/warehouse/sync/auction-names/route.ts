@@ -26,6 +26,54 @@ export async function POST(req: NextRequest) {
     const token = await getBCTokenAny()
     if (!token) return NextResponse.json({ error: "BC_NOT_CONNECTED" }, { status: 503 })
 
+    // Optional ?code=F066 — diagnostic mode that processes a single code and
+    // returns verbose info about what BC sent back and what we wrote.
+    const debugCode = new URL(req.url).searchParams.get("code")?.trim().toUpperCase()
+    if (debugCode) {
+      const bcRows = await bcPage(token, "Auction_Lines_Excel", {
+        $filter: `EVA_AuctionNo eq '${debugCode}'`,
+        $top:    100,
+      })
+      const namesSeen = new Map<string, { count: number; latestDate: string }>()
+      for (const r of bcRows) {
+        const name = String(r.EVA_AuctionName ?? "").trim()
+        const date = String(r.EVA_AuctionDate ?? "").trim()
+        if (!name) continue
+        const e = namesSeen.get(name) ?? { count: 0, latestDate: "" }
+        e.count++
+        if (date && date > e.latestDate) e.latestDate = date
+        namesSeen.set(name, e)
+      }
+      const candidates = [...namesSeen.entries()].map(([name, v]) => ({ name, ...v }))
+      candidates.sort((a, b) => {
+        if (a.latestDate && b.latestDate) return b.latestDate.localeCompare(a.latestDate)
+        if (a.latestDate) return -1
+        if (b.latestDate) return  1
+        return b.count - a.count
+      })
+      const winner = candidates[0]?.name ?? null
+      let updated = 0
+      if (winner) {
+        const r = await prisma.warehouseItem.updateMany({
+          where: { auctionCode: debugCode },
+          data:  { auctionName: winner },
+        })
+        updated = r.count
+      }
+      const after = await prisma.warehouseItem.findFirst({
+        where:  { auctionCode: debugCode },
+        select: { auctionCode: true, auctionName: true },
+      })
+      return NextResponse.json({
+        debugCode,
+        bcRowsReceived: bcRows.length,
+        candidates,
+        winner,
+        updateManyCount: updated,
+        afterUpdate: after,
+      })
+    }
+
     // Get all distinct auction codes — refresh all names, not just missing ones,
     // so corrected names from BC always overwrite stale cached values.
     const rows = await prisma.warehouseItem.findMany({
