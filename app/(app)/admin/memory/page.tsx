@@ -60,7 +60,7 @@ Only allowed URL in AI-generated content: vectis.co.uk
 
 ## Brand voice rules
 **Always:** British English, professional & friendly tone, exact year(s) from data, only facts from this file.
-**Never:** invent staff/founders/quotes beyond Bryan Goodall + Mazillius, claim awards/superlatives, reference URLs other than vectis.co.uk, use the word "CRM".`,
+**Never:** invent staff/founders/quotes beyond Bryan Goodall + Mazillius, claim awards/superlatives, reference URLs other than vectis.co.uk, use the word "CRM", or expose internal BC auction codes (e.g. F025, DM0126) — these are staff-only references; use the human-readable sale name for public content.`,
   },
   {
     filename: "user_profile.md",

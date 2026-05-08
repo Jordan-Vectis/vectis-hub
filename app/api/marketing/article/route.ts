@@ -179,9 +179,11 @@ function buildPrompt(lots: Lot[], articleType: string, length: "short" | "medium
   const lotBlocks = lots.map((l, i) => {
     const headline   = l.catTitle ?? l.description ?? "Unnamed lot"
     const lotRef     = (l.currentLotNo ?? l.lotNo) ? `Lot ${l.currentLotNo ?? l.lotNo}` : ""
-    const sale       = l.auctionName ?? l.auctionCode ?? "Unknown Sale"
+    // Never expose the internal BC auction code (e.g. "F025") to the model.
+    // If we have no public-facing auction name, omit the sale name entirely.
+    const sale       = l.auctionName ?? null
     const date       = fmtDate(l.auctionDate)
-    const saleLine   = [sale, date].filter(Boolean).join(" · ")
+    const saleLine   = [sale, date].filter(Boolean).join(" · ") || "Sale name not specified"
 
     const priceLine  = l.hammerPrice
       ? `Hammer: ${fmtPrice(l.hammerPrice)}${performance(l)}`
@@ -217,7 +219,8 @@ function buildPrompt(lots: Lot[], articleType: string, length: "short" | "medium
     return lines.join("\n")
   }).join("\n\n")
 
-  const saleNames   = [...new Set(lots.map(l => l.auctionName ?? l.auctionCode).filter(Boolean))].join(", ")
+  // Use only public auction names — never the internal BC code (auctionCode)
+  const saleNames   = [...new Set(lots.map(l => l.auctionName).filter(Boolean))].join(", ")
   const categories  = [...new Set(lots.map(l => l.category).filter(Boolean))].join(", ")
   const totalValue  = lots.reduce((s, l) => s + (l.hammerPrice ?? 0), 0)
 
@@ -319,6 +322,12 @@ DO NOT under any circumstances:
 - Claim "world's largest", "world's leading", award wins, or similar
   superlatives unless the user-supplied data explicitly says so.
 - Use the word "CRM".
+- Mention any internal Vectis reference codes. Specifically: NEVER print
+  short codes that look like a letter followed by digits (e.g. "F025",
+  "DM0126", "TR2025") in the article. These are internal Business Central
+  auction codes used only by staff. Use the human-readable sale name
+  instead. If a lot has no human-readable sale name, refer to it simply
+  as "the sale" or by date — never expose the code.
 
 ALWAYS:
 - British English: "realised", "colour", "specialise", "catalogue".
