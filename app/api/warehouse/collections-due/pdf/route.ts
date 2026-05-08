@@ -205,12 +205,12 @@ function renderAisleReport(
       y -= 18
     }
 
-    page.drawText(it.location,     { x: COL.location.x,     y: y - 8, size: 8, font: fonts.mono, color: black })
-    page.drawText(it.barcode,      { x: COL.barcode.x,      y: y - 8, size: 8, font: fonts.mono, color: black })
+    page.drawText(safeAscii(it.location),     { x: COL.location.x,     y: y - 8, size: 8, font: fonts.mono, color: black })
+    page.drawText(safeAscii(it.barcode),      { x: COL.barcode.x,      y: y - 8, size: 8, font: fonts.mono, color: black })
     descLines.forEach((line, i) => {
       page.drawText(line, { x: COL.description.x, y: y - 8 - i * 10, size: 8, font: fonts.helv, color: black })
     })
-    page.drawText(it.collectionNo, { x: COL.collectionNo.x, y: y - 8, size: 8, font: fonts.mono, color: black })
+    page.drawText(safeAscii(it.collectionNo), { x: COL.collectionNo.x, y: y - 8, size: 8, font: fonts.mono, color: black })
     // Tickbox
     page.drawRectangle({
       x: COL.tick.x + 4, y: y - 11, width: 9, height: 9,
@@ -249,7 +249,7 @@ function drawTableHeader(page: PDFPage, y: number, font: PDFFont) {
   page.drawText("BARCODE",        { x: COL.barcode.x,      y: y - 8, size: 8, font, color: black })
   page.drawText("DESCRIPTION",    { x: COL.description.x,  y: y - 8, size: 8, font, color: black })
   page.drawText("COLLECTION NO.", { x: COL.collectionNo.x, y: y - 8, size: 8, font, color: black })
-  page.drawText("✓",              { x: COL.tick.x + 4,     y: y - 8, size: 8, font, color: black })
+  page.drawText("DONE",           { x: COL.tick.x - 2,     y: y - 8, size: 8, font, color: black })
   page.drawLine({
     start: { x: MARGIN,          y: y - 12 },
     end:   { x: PAGE_W - MARGIN, y: y - 12 },
@@ -258,15 +258,39 @@ function drawTableHeader(page: PDFPage, y: number, font: PDFFont) {
 }
 
 function drawRight(page: PDFPage, text: string, rightX: number, y: number, size: number, font: PDFFont, color: any) {
-  const w = font.widthOfTextAtSize(text, size)
-  page.drawText(text, { x: rightX - w, y, size, font, color })
+  const safe = safeAscii(text)
+  const w = font.widthOfTextAtSize(safe, size)
+  page.drawText(safe, { x: rightX - w, y, size, font, color })
+}
+
+// Strip anything pdf-lib's WinAnsi encoder can't handle. Used for short
+// fields (location codes, barcodes, totals lines) where wrapText overhead
+// isn't needed but the same encoding rules apply.
+function safeAscii(text: string): string {
+  return text
+    .replace(/[‘’‚‛]/g, "'")
+    .replace(/[“”„‟]/g, '"')
+    .replace(/[–—]/g, "-")
+    .replace(/…/g, "...")
+    .replace(/ /g, " ")
+    .replace(/[^\x20-\x7E£€]/g, "")
 }
 
 // Word-wrap text to fit a maximum width given a specific font and size.
 // pdf-lib doesn't auto-wrap, so we do it manually.
 function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
-  // Strip non-printable / control characters that pdf-lib's WinAnsi encoder rejects.
-  const safe = text.replace(/[^\x20-\x7E£€]/g, " ").replace(/\s+/g, " ").trim()
+  // pdf-lib's standard fonts use WinAnsi which only encodes a subset of
+  // characters. Replace common Unicode lookalikes with ASCII equivalents,
+  // then strip anything outside printable ASCII to be safe.
+  const safe = text
+    .replace(/[‘’‚‛]/g, "'")  // smart single quotes
+    .replace(/[“”„‟]/g, '"')  // smart double quotes
+    .replace(/[–—]/g, "-")              // en-dash / em-dash
+    .replace(/…/g, "...")                    // ellipsis
+    .replace(/ /g, " ")                      // non-breaking space
+    .replace(/[^\x20-\x7E£€]/g, " ")              // strip anything else not WinAnsi-safe
+    .replace(/\s+/g, " ")
+    .trim()
   if (!safe) return [""]
 
   const words = safe.split(" ")
