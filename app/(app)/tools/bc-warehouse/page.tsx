@@ -1405,12 +1405,31 @@ function CollectionsDueTab() {
     }
   }
 
-  function openPrintView() {
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
+  async function downloadPdf() {
     if (!items || items.length === 0) return
-    const aisles = aislesText.trim()
-    const w = window.open(`/tools/bc-warehouse/collections-due/print?aisles=${encodeURIComponent(aisles)}&groupByDocket=${groupByDocket ? "1" : "0"}`, "_blank")
-    if (!w) {
-      alert("Pop-up blocked — allow pop-ups for this site to use the printable view.")
+    setDownloadingPdf(true)
+    try {
+      const aisles = aislesText.trim()
+      const url = `/api/warehouse/collections-due/pdf?aisles=${encodeURIComponent(aisles)}`
+      const res = await fetch(url)
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error ?? "PDF generation failed")
+        return
+      }
+      const blob = await res.blob()
+      const link = document.createElement("a")
+      link.href = URL.createObjectURL(blob)
+      link.download = `collections-due-${aisles.replace(/[^A-Za-z0-9]+/g, "-")}-${new Date().toISOString().slice(0, 10)}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(link.href)
+    } catch {
+      alert("Network error while downloading PDF")
+    } finally {
+      setDownloadingPdf(false)
     }
   }
 
@@ -1496,11 +1515,12 @@ function CollectionsDueTab() {
             </p>
             {items.length > 0 && (
               <button
-                onClick={openPrintView}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
-                title="Opens a print-styled view in a new tab. Use Ctrl+P / Cmd+P to print or save as PDF."
+                onClick={downloadPdf}
+                disabled={downloadingPdf}
+                className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+                title="Download a PDF with each aisle on its own report."
               >
-                🖨 Open Printable View
+                {downloadingPdf ? "Generating PDF…" : "📄 Download PDF"}
               </button>
             )}
           </div>
