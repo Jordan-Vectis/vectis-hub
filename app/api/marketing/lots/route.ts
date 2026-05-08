@@ -17,7 +17,8 @@ export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl
     const keyword  = searchParams.get("keyword")?.trim()  ?? ""
     const category = searchParams.get("category")?.trim() ?? ""
-    const month    = searchParams.get("month")?.trim()    ?? "" // "YYYY-MM"
+    const month    = searchParams.get("month")?.trim()    ?? "" // "YYYY-MM" or just "YYYY"
+    const year     = searchParams.get("year")?.trim()     ?? ""  // "YYYY" — used when no month picked
     const mode     = searchParams.get("mode")?.trim()     ?? "sold"  // "sold" | "upcoming" | "all"
     const vendorNo = searchParams.get("vendorNo")?.trim() ?? ""
     const topN     = Math.min(Math.max(parseInt(searchParams.get("topN") ?? "10", 10) || 10, 1), 100)
@@ -48,8 +49,11 @@ export async function GET(req: NextRequest) {
     }
 
     if (month) {
-      // auctionDate is a string stored as "YYYY-MM-DD" — filter by prefix
+      // "YYYY-MM" prefix — most specific
       where.auctionDate = { startsWith: month }
+    } else if (year) {
+      // Year alone — match any month within that year
+      where.auctionDate = { startsWith: year }
     }
 
     const rows = await prisma.warehouseItem.findMany({

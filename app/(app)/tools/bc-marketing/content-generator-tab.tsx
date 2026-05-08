@@ -12,6 +12,7 @@ export default function ContentGeneratorTab() {
   const [topN,        setTopN]        = useState(10)
   const [mode,        setMode]        = useState<"sold" | "upcoming">("sold")
   const [contentType, setContentType] = useState("sale_highlight")
+  const [length,      setLength]      = useState<"short" | "medium" | "long" | "max">("medium")
 
   const [categories, setCategories] = useState<string[]>([])
   const [modelList, setModelList]   = useState<string[]>(["gemini-2.5-flash-preview-04-17"])
@@ -70,6 +71,8 @@ export default function ContentGeneratorTab() {
     if (keyword)       params.set("keyword",  keyword.trim())
     if (category)      params.set("category", category)
     if (month && year) params.set("month",    `${year}-${month}`)
+    else if (year)     params.set("year",     year)   // year-only filter
+    else if (month)    params.set("month",    month)  // month-only (current year)
     params.set("mode", mode)
     params.set("topN", String(topN))
 
@@ -95,7 +98,7 @@ export default function ContentGeneratorTab() {
       const res  = await fetch("/api/marketing/article", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ lots, articleType: contentType, modelId }),
+        body:    JSON.stringify({ lots, articleType: contentType, modelId, length }),
       })
       const data = await res.json()
       if (!res.ok) { setArticleError(data.error ?? "Failed to generate"); return }
@@ -298,6 +301,27 @@ export default function ContentGeneratorTab() {
       {lots !== null && lots.length > 0 && (
         <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 space-y-4">
           <div className="flex items-center gap-3 flex-wrap">
+            {/* Length selector */}
+            <div className="flex items-center gap-1 bg-gray-800 border border-gray-600 rounded-lg p-0.5">
+              {(["short", "medium", "long", "max"] as const).map(l => (
+                <button
+                  key={l}
+                  onClick={() => setLength(l)}
+                  className={`px-3 py-1.5 text-xs rounded transition-colors capitalize ${
+                    length === l ? "bg-pink-600 text-white" : "text-gray-400 hover:text-white"
+                  }`}
+                  title={
+                    l === "short"  ? "Concise — about half the default length" :
+                    l === "medium" ? "Default — the type's standard word range" :
+                    l === "long"   ? "Detailed — about 1.5–2× the default" :
+                                     "Maximum — as long as the model will write"
+                  }
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+
             <div className="flex items-center gap-1.5">
               <select value={modelId} onChange={e => setModelId(e.target.value)}
                 className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-pink-500">

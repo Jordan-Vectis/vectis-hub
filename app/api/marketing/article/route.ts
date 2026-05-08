@@ -151,7 +151,16 @@ Structure: <h1>Year in Review headline</h1>
 Output: HTML. 600–900 words.`,
 }
 
-function buildPrompt(lots: Lot[], articleType: string): string {
+// Length presets — overrides the per-type word range. Empty string for "medium"
+// means "leave the type's default in place".
+const LENGTH_PRESETS: Record<string, { instruction: string; maxTokens: number }> = {
+  short:  { instruction: `LENGTH OVERRIDE: write a CONCISE version — roughly half the type's default word count. Cut adjective stacking, keep one example per section, finish with one short closing line.`, maxTokens: 2048 },
+  medium: { instruction: ``, maxTokens: 4096 },
+  long:   { instruction: `LENGTH OVERRIDE: write an EXTENDED version — roughly 1.5–2× the type's default word count. Add an extra paragraph per section, dwell on more lots in detail, expand market context.`, maxTokens: 8192 },
+  max:    { instruction: `LENGTH OVERRIDE: write the MOST DETAILED version you can produce. Cover every lot in the data with a full paragraph, expand on manufacturer history and collecting context, include extensive market commentary. Do not pad with filler — every paragraph must have substance, but use as many paragraphs as the lot data supports. Aim for 2,000+ words if the data supports it.`, maxTokens: 16384 },
+}
+
+function buildPrompt(lots: Lot[], articleType: string, length: "short" | "medium" | "long" | "max"): string {
   // Strip basic HTML tags from cataloguer descriptions (they often contain <p>, <br>, <ul> etc.)
   const stripHtml = (s: string | null | undefined) =>
     !s ? "" : s.replace(/<br\s*\/?>/gi, "\n").replace(/<\/?(p|ul|ol|li|strong|em|h[1-6])[^>]*>/gi, "").replace(/<[^>]+>/g, "").trim()
@@ -222,11 +231,14 @@ function buildPrompt(lots: Lot[], articleType: string): string {
       ? `Year covered: ${years[0]} — use this exact year, do not invent a range`
       : `Years covered: ${years.join(", ")} — use these exact years, do not invent a range`
 
-  const instruction = TYPE_INSTRUCTIONS[articleType] ?? TYPE_INSTRUCTIONS.sale_highlight
+  const instruction      = TYPE_INSTRUCTIONS[articleType] ?? TYPE_INSTRUCTIONS.sale_highlight
+  const lengthOverride   = LENGTH_PRESETS[length]?.instruction ?? ""
 
   return `You are a professional copywriter for Vectis Auctions, a specialist toy and collectables auction house based at Thornaby on Teesside in the North East of England.
 
 ${instruction}
+
+${lengthOverride}
 
 ═══════════════════════════════════════════════════════════════════
 BRAND VOICE — STRICT RULES (read carefully)
@@ -346,15 +358,22 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
 
-    const { lots, articleType, modelId } = await req.json() as { lots: Lot[]; articleType: string; modelId?: string }
+    const { lots, articleType, modelId, length } = await req.json() as {
+      lots: Lot[]; articleType: string; modelId?: string; length?: "short" | "medium" | "long" | "max"
+    }
 
     if (!lots?.length) return NextResponse.json({ error: "No lots provided" }, { status: 422 })
     if (lots.length > 100) return NextResponse.json({ error: "Too many lots (max 100)" }, { status: 422 })
 
-    const prompt = buildPrompt(lots, articleType ?? "sale_highlight")
+    const lengthKey = length ?? "medium"
+    const prompt    = buildPrompt(lots, articleType ?? "sale_highlight", lengthKey)
+    const maxTokens = LENGTH_PRESETS[lengthKey]?.maxTokens ?? 4096
 
     const genai = new GoogleGenerativeAI(apiKey)
-    const model = genai.getGenerativeModel({ model: modelId || "gemini-2.5-flash-preview-04-17" })
+    const model = genai.getGenerativeModel({
+      model: modelId || "gemini-2.5-flash-preview-04-17",
+      generationConfig: { maxOutputTokens: maxTokens },
+    })
 
     const result   = await model.generateContent(prompt)
     const response = result.response
