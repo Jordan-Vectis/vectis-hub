@@ -303,6 +303,7 @@ function ProgressBar({ done, total, label, unit }: { done: number; total: number
 function CataloguingTab() {
   const [from, setFrom] = useState(daysAgo(29))
   const [to, setTo]     = useState(today())
+  const [mode, setMode] = useState<"barcode" | "uniqueid">("barcode")
   const [data, setData] = useState<CatData | null>(null)
   const [loading, setLoading]   = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
@@ -310,12 +311,12 @@ function CataloguingTab() {
   const [subTab, setSubTab]     = useState("Daily Average")
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const load = useCallback(async (f: string, t: string) => {
+  const load = useCallback(async (f: string, t: string, m: "barcode" | "uniqueid") => {
     if (!f || !t) return
     setLoading(true); setError(null); setProgress(null)
     // keep previous data visible while reloading
     try {
-      const res = await window.fetch(`/api/bc/cataloguing?from=${f}&to=${t}`)
+      const res = await window.fetch(`/api/bc/cataloguing?from=${f}&to=${t}&mode=${m}`)
       if (!res.ok) { const j = await res.json(); throw new Error(j.error ?? res.statusText) }
 
       const reader  = res.body!.getReader()
@@ -340,18 +341,25 @@ function CataloguingTab() {
   }, [])
 
   // Auto-load on first render
-  useEffect(() => { load(from, to) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(from, to, mode) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-load when the mode changes
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    load(from, to, mode)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode])
 
   function handleManualChange(f: string, t: string) {
     setFrom(f); setTo(t)
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => load(f, t), 700)
+    debounceRef.current = setTimeout(() => load(f, t, mode), 700)
   }
 
   function handlePreset(f: string, t: string) {
     setFrom(f); setTo(t)
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    load(f, t)
+    load(f, t, mode)
   }
 
   return (
@@ -359,9 +367,30 @@ function CataloguingTab() {
       <h2 className="text-lg font-semibold text-white mb-4">Cataloguing Report</h2>
       <DateRange from={from} to={to} onChange={handleManualChange} onPreset={handlePreset} />
 
+      {/* Counting-method toggle */}
+      <div className="mb-4">
+        <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Counting method</p>
+        <div className="inline-flex gap-1 bg-gray-900 border border-gray-800 rounded-lg p-0.5">
+          <button
+            onClick={() => setMode("barcode")}
+            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+              mode === "barcode" ? "bg-blue-600 text-white font-semibold" : "text-gray-400 hover:text-white"
+            }`}
+            title="Counts every change to the Internal Barcode field — the original report"
+          >Internal Barcode (any change)</button>
+          <button
+            onClick={() => setMode("uniqueid")}
+            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+              mode === "uniqueid" ? "bg-blue-600 text-white font-semibold" : "text-gray-400 hover:text-white"
+            }`}
+            title="Counts only Auction Line UniqueID Insertions — matches BC's Insertion-filtered view"
+          >Auction Line UniqueID (insertions only)</button>
+        </div>
+      </div>
+
       {loading && progress && <ProgressBar done={progress.done} total={progress.total} unit="chunks" />}
       {loading && !progress && <p className="text-xs text-gray-500 mb-4">Connecting…</p>}
-      {!loading && <LoadBtn loading={loading} onClick={() => load(from, to)} />}
+      {!loading && <LoadBtn loading={loading} onClick={() => load(from, to, mode)} />}
 
       {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
 
@@ -369,9 +398,9 @@ function CataloguingTab() {
         <div className={loading ? "opacity-40 pointer-events-none transition-opacity" : "transition-opacity"}>
           <MetaBar text={`${from} — ${to}  ·  ${data.meta.total.toLocaleString()} entries  ·  ${data.meta.userCount} users`} />
           <SubTabs tabs={["Daily Average", "Total Lots", "Lots by Month"]} active={subTab} onChange={setSubTab} />
-          {subTab === "Daily Average" && <><HBar data={data.dailyAvg} valueKey="avg" labelKey="user" /><ExportBtn onClick={() => exportXlsx(data.dailyAvg, "cataloguing_daily_avg")} /></>}
-          {subTab === "Total Lots"    && <><HBar data={data.totalLots} valueKey="total" labelKey="user" /><ExportBtn onClick={() => exportXlsx(data.totalLots, "cataloguing_total_lots")} /></>}
-          {subTab === "Lots by Month" && <><HBar data={data.monthly} valueKey="total" labelKey="label" /><ExportBtn onClick={() => exportXlsx(data.monthly, "cataloguing_monthly")} /></>}
+          {subTab === "Daily Average" && <><HBar data={data.dailyAvg} valueKey="avg" labelKey="user" /><ExportBtn onClick={() => exportXlsx(data.dailyAvg, `cataloguing_daily_avg_${mode}`)} /></>}
+          {subTab === "Total Lots"    && <><HBar data={data.totalLots} valueKey="total" labelKey="user" /><ExportBtn onClick={() => exportXlsx(data.totalLots, `cataloguing_total_lots_${mode}`)} /></>}
+          {subTab === "Lots by Month" && <><HBar data={data.monthly} valueKey="total" labelKey="label" /><ExportBtn onClick={() => exportXlsx(data.monthly, `cataloguing_monthly_${mode}`)} /></>}
         </div>
       )}
     </div>

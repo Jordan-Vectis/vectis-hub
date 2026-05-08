@@ -55,6 +55,14 @@ const MIGRATIONS = [
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
     CONSTRAINT "MarketingHashtag_pkey" PRIMARY KEY ("id")
   )`,
+  // BC cataloguing-report cache: split into two modes (barcode | uniqueid).
+  // Existing rows keep their default 'barcode' value, no data loss.
+  `ALTER TABLE "BCCatalogueDay"   ADD COLUMN IF NOT EXISTS "mode" TEXT NOT NULL DEFAULT 'barcode'`,
+  `ALTER TABLE "BCCatalogueEntry" ADD COLUMN IF NOT EXISTS "mode" TEXT NOT NULL DEFAULT 'barcode'`,
+  `ALTER TABLE "BCCatalogueDay"   DROP CONSTRAINT IF EXISTS "BCCatalogueDay_pkey"`,
+  `ALTER TABLE "BCCatalogueEntry" DROP CONSTRAINT IF EXISTS "BCCatalogueEntry_pkey"`,
+  `ALTER TABLE "BCCatalogueDay"   ADD CONSTRAINT "BCCatalogueDay_pkey"   PRIMARY KEY ("date", "mode")`,
+  `ALTER TABLE "BCCatalogueEntry" ADD CONSTRAINT "BCCatalogueEntry_pkey" PRIMARY KEY ("date", "userId", "mode")`,
 ]
 
 export async function POST() {

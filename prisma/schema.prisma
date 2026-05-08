@@ -412,17 +412,21 @@ model MarketingHashtag {
 }
 
 model BCCatalogueDay {
-  date      String   @id       // "YYYY-MM-DD" — marks this date was fully fetched from BC
+  date      String                       // "YYYY-MM-DD" — marks this date was fully fetched from BC
+  mode      String   @default("barcode") // "barcode" (Internal Barcode mods) | "uniqueid" (Auction Line UniqueID inserts)
   fetchedAt DateTime @default(now())
+
+  @@id([date, mode])
 }
 
 model BCCatalogueEntry {
   date   String
   userId String
+  mode   String @default("barcode")
   count  Int
 
-  @@id([date, userId])
-  @@index([date])
+  @@id([date, userId, mode])
+  @@index([date, mode])
 }
 
 model BCPackingDay {

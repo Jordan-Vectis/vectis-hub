@@ -9,6 +9,81 @@ type Entry = { filename: string; content: string }
 
 const ENTRIES: Entry[] = [
   {
+    filename: "bc_api_reference.md",
+    content: `---
+name: BC OData API Reference
+purpose: Authoritative notes about Vectis's Business Central OData API — field names, endpoint quirks, and bugs hit in production. Read before any new BC sync or query code.
+last_updated: 2026-05-08
+---
+
+# Business Central OData — Reference & Gotchas
+
+## Diagnostic tool — always use this first
+\`/api/bc/api-viewer?endpoint=<EndpointName>&limit=1[&filter=...]\` returns sample row + every field name. Use BEFORE guessing field names.
+
+## Field naming convention
+PascalCase with underscores: \`User_ID\`, \`Date_and_Time\`, \`Field_Caption\`, \`Type_of_Change\`, \`EVA_AuctionNo\`. Vectis custom = \`EVA_\` prefix; some others = \`PTE_\` prefix.
+
+## Endpoint reference (verified)
+
+### Auction_Lines_Excel
+- Auction code: **EVA_AuctionNo** (NOT EVA_SalesAllocation)
+- Auction name: EVA_AuctionName
+- Date: EVA_AuctionDate
+- Unique ID: EVA_UniqueID
+- Description: EVA_ShortDescription
+- Hammer/estimates: EVA_HammerPrice, EVA_LowEstimate, EVA_HighEstimate
+- Catalogued: EVA_CataloguedBy, EVA_CataloguedDateTime
+- Category: EVA_ArticleCategoryCode, EVA_ArticleSubcategoryCode
+- Collection docket: EVA_CollectionNo
+- Location: EVA_ArticleLocationCode
+
+### Receipt_Lines_Excel
+- Auction code: **EVA_SalesAllocation** (NOT EVA_AuctionNo!)
+- Internal barcode: PTE_InternalBarcode
+- No EVA_AuctionName — must look up via Auction_Lines_Excel
+
+### Auction_Receipt_Lines_Excel
+- Auction code: EVA_SalesAllocation (same as Receipt_Lines_Excel)
+
+### ChangeLogEntries (verified 2026-05-08)
+- Entry_No, User_ID, Date_and_Time
+- Table_No, Table_Caption (e.g. "Auction Line", "Web Invoices")
+- Field_No, Field_Caption (e.g. "Internal Barcode", "UniqueID", "AuthCode")
+- **Type_of_Change**: "Insertion" | "Modification" | "Deletion"
+- Old_Value, New_Value
+- Primary_Key_Field_1_Value (auction code, e.g. F077)
+- Primary_Key_Field_2_Value (unique ID, e.g. R008269-4)
+
+## Critical gotchas (all hit in production)
+
+**Field names DIFFER between similar endpoints.** EVA_AuctionNo vs EVA_SalesAllocation. Wrong field = 400 BadRequest. If errors are caught per-batch, fails silently.
+
+**Complex OR filters time out.** Don't OR 8 startswith() clauses across thousands of rows. Use Promise.allSettled with one focused query per key.
+
+**Auction codes get reused across years.** Sort by EVA_AuctionDate DESC and pick most recent — NOT first row encountered.
+
+**Cached fields go stale.** WarehouseItem.auctionName is a cache; use the "Refresh auction names from BC" button in DB Explorer to re-pull.
+
+**Pagination — use @odata.nextLink, not $skip.** BC has a ~38k row $skip limit. Use bcPageWithNext.
+
+**Date filter syntax — OData v4.** Bare ISO 8601: \`Date_and_Time ge 2026-05-08T00:00:00Z\`. No datetime'…' wrapper.
+
+**ge vs gt for incremental syncs.** Use ge so boundary rows aren't skipped.
+
+## Cataloguing report — two modes
+
+- **barcode** (default): Field_Caption='Internal Barcode', no type filter — counts edits + insertions.
+- **uniqueid**: Table_Caption='Auction Line' and Field_Caption='UniqueID' and Type_of_Change='Insertion' — strict per-lot insertion count, matches BC's filtered view.
+
+Cache (BCCatalogueDay, BCCatalogueEntry) is namespaced by mode via composite PK. Nightly cron at /api/cron/bc-catalogue refreshes both. UI toggle on /tools/bc-reports.
+
+## When adding a new BC integration
+1. Call /api/bc/api-viewer first to confirm field names.
+2. Cross-check this file.
+3. **If field names differ from another endpoint, document it here.**`,
+  },
+  {
     filename: "vectis_company_facts.md",
     content: `---
 name: Vectis Company Facts

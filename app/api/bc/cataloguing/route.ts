@@ -43,7 +43,14 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const from = searchParams.get("from") ?? ""
   const to   = searchParams.get("to")   ?? ""
+  // mode: "barcode" — count Internal Barcode field changes (default, original behaviour)
+  //       "uniqueid" — count Auction Line UniqueID Insertions (matches BC's
+  //                    Field=UniqueID + Table=Auction Line + Type=Insertion view)
+  const mode = (searchParams.get("mode") ?? "barcode") as "barcode" | "uniqueid"
   if (!from || !to) return new Response(JSON.stringify({ error: "Missing from/to" }), { status: 400 })
+  if (mode !== "barcode" && mode !== "uniqueid") {
+    return new Response(JSON.stringify({ error: "Invalid mode" }), { status: 400 })
+  }
 
   const dateFrom = new Date(from + "T00:00:00Z")
   const dateTo   = new Date(to   + "T00:00:00Z")
@@ -58,10 +65,14 @@ export async function GET(req: NextRequest) {
 
   const todayStr = toDateStr(new Date())
 
-  // Check which past dates are already cached (today is always live)
+  // Check which past dates are already cached (today is always live).
+  // Cache is namespaced by mode so the two reports don't trample each other.
   const pastDates = allDates.filter(dt => dt < todayStr)
   const cachedDays = pastDates.length > 0
-    ? await prisma.bCCatalogueDay.findMany({ where: { date: { in: pastDates } }, select: { date: true } })
+    ? await prisma.bCCatalogueDay.findMany({
+        where: { date: { in: pastDates }, mode },
+        select: { date: true },
+      })
     : []
   const cachedSet = new Set(cachedDays.map(r => r.date))
 
@@ -94,10 +105,16 @@ export async function GET(req: NextRequest) {
         const batch = chunks.slice(i, i + PARALLEL)
         const results = await Promise.all(
           batch.map(async ({ start, end }) => {
+            // Two filter shapes:
+            //   barcode  — every change to the Internal Barcode field (legacy report)
+            //   uniqueid — Auction Line UniqueID Insertions (matches BC's Insertion-filtered view)
+            const modeFilter = mode === "uniqueid"
+              ? `Table_Caption eq 'Auction Line' and Field_Caption eq 'UniqueID' and Type_of_Change eq 'Insertion'`
+              : `Field_Caption eq 'Internal Barcode'`
             const filter =
               `Date_and_Time ge ${start}T00:00:00Z ` +
               `and Date_and_Time le ${end}T23:59:59Z ` +
-              `and Field_Caption eq 'Internal Barcode'`
+              `and ${modeFilter}`
             try {
               return await bcFetchAll(token, "ChangeLogEntries", filter, "User_ID,Date_and_Time")
             } catch {
@@ -124,16 +141,16 @@ export async function GET(req: NextRequest) {
         const entryUpserts = daysToCache.flatMap(day =>
           Object.entries(agg[day] ?? {}).map(([userId, count]) =>
             prisma.bCCatalogueEntry.upsert({
-              where:  { date_userId: { date: day, userId } },
-              create: { date: day, userId, count },
+              where:  { date_userId_mode: { date: day, userId, mode } },
+              create: { date: day, userId, mode, count },
               update: { count },
             })
           )
         )
         const dayUpserts = daysToCache.map(date =>
           prisma.bCCatalogueDay.upsert({
-            where:  { date },
-            create: { date },
+            where:  { date_mode: { date, mode } },
+            create: { date, mode },
             update: { fetchedAt: new Date() },
           })
         )
@@ -143,7 +160,7 @@ export async function GET(req: NextRequest) {
       // ── 3. Load already-cached dates from DB ─────────────────────────────────
       const alreadyCached = pastDates.filter(dt => cachedSet.has(dt))
       const dbEntries = alreadyCached.length > 0
-        ? await prisma.bCCatalogueEntry.findMany({ where: { date: { in: alreadyCached } } })
+        ? await prisma.bCCatalogueEntry.findMany({ where: { date: { in: alreadyCached }, mode } })
         : []
 
       // ── 4. Merge and compute stats ────────────────────────────────────────────
