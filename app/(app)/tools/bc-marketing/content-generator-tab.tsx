@@ -9,7 +9,7 @@ export default function ContentGeneratorTab() {
   const [category,    setCategory]    = useState("")
   const [month,       setMonth]       = useState("")
   const [year,        setYear]        = useState("")
-  const [topN,        setTopN]        = useState(10)
+  const [topN,        setTopN]        = useState<number | "all">(10)
   const [mode,        setMode]        = useState<"sold" | "upcoming">("sold")
   const [contentType, setContentType] = useState("sale_highlight")
   const [length,      setLength]      = useState<"short" | "medium" | "long" | "max">("medium")
@@ -80,7 +80,7 @@ export default function ContentGeneratorTab() {
     else if (month)    params.set("month",    month)  // month-only (current year)
     if (selectedSales.length > 0) params.set("auctionCodes", selectedSales.join(","))
     params.set("mode", mode)
-    params.set("topN", String(topN))
+    params.set("topN", topN === "all" ? "all" : String(topN))
 
     try {
       const res  = await fetch(`/api/marketing/lots?${params}`)
@@ -188,20 +188,30 @@ export default function ContentGeneratorTab() {
 
       {/* ── Filters ──────────────────────────────────────────────────────── */}
       <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-            {mode === "upcoming" ? "Upcoming Lots" : "Sold Lots"} · Filters
-          </h2>
-          <div className="flex gap-1 text-xs">
+        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Filters</h2>
+
+        {/* Mode — Sold vs Upcoming */}
+        <div>
+          <label className="block text-xs text-gray-400 mb-1.5">Lot status</label>
+          <div className="inline-flex gap-1 bg-gray-800 border border-gray-700 rounded-lg p-0.5">
             <button
               onClick={() => setMode("sold")}
-              className={`px-3 py-1 rounded-md transition-colors ${mode === "sold" ? "bg-pink-600 text-white" : "bg-gray-800 text-gray-400 hover:text-white"}`}
-            >Sold</button>
+              className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
+                mode === "sold" ? "bg-pink-600 text-white font-semibold" : "text-gray-400 hover:text-white"
+              }`}
+            >🔨 Sold lots</button>
             <button
               onClick={() => setMode("upcoming")}
-              className={`px-3 py-1 rounded-md transition-colors ${mode === "upcoming" ? "bg-pink-600 text-white" : "bg-gray-800 text-gray-400 hover:text-white"}`}
-            >Upcoming</button>
+              className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
+                mode === "upcoming" ? "bg-pink-600 text-white font-semibold" : "text-gray-400 hover:text-white"
+              }`}
+            >📅 Upcoming lots</button>
           </div>
+          <p className="text-[11px] text-gray-500 mt-1.5">
+            {mode === "sold"
+              ? "Lots with a hammer price — use for sale highlights, market reports, year-in-review."
+              : "Lots not yet sold (pre-sale) — use for sale previews, teaser articles, social posts before an auction."}
+          </p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -236,10 +246,16 @@ export default function ContentGeneratorTab() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Top N by {mode === "upcoming" ? "estimate" : "hammer price"}</label>
-            <select value={topN} onChange={e => setTopN(Number(e.target.value))}
-              className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-pink-500">
-              {[5, 10, 15, 20, 25, 50].map(n => <option key={n} value={n}>Top {n}</option>)}
+            <label className="block text-xs text-gray-400 mb-1">
+              Limit (sorted by {mode === "upcoming" ? "estimate" : "hammer price"})
+            </label>
+            <select
+              value={String(topN)}
+              onChange={e => setTopN(e.target.value === "all" ? "all" : Number(e.target.value))}
+              className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-pink-500"
+            >
+              {[5, 10, 15, 20, 25, 50, 100, 250].map(n => <option key={n} value={n}>Top {n}</option>)}
+              <option value="all">Show all (no limit)</option>
             </select>
           </div>
         </div>

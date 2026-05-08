@@ -24,7 +24,11 @@ export async function GET(req: NextRequest) {
     // Comma-separated list of auctionCodes to limit results to specific sales
     const auctionCodesRaw = searchParams.get("auctionCodes")?.trim() ?? ""
     const auctionCodes    = auctionCodesRaw ? auctionCodesRaw.split(",").map(s => s.trim()).filter(Boolean) : []
-    const topN     = Math.min(Math.max(parseInt(searchParams.get("topN") ?? "10", 10) || 10, 1), 100)
+    // topN: positive number = take N; "all" or 0/negative = no limit (cap at 1000)
+    const topNRaw  = searchParams.get("topN")?.trim() ?? "10"
+    const topN     = topNRaw === "all"
+      ? 1000
+      : Math.min(Math.max(parseInt(topNRaw, 10) || 10, 1), 1000)
 
     // Build where clause
     const where: any = {}

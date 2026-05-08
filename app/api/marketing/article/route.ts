@@ -372,7 +372,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!lots?.length) return NextResponse.json({ error: "No lots provided" }, { status: 422 })
-    if (lots.length > 100) return NextResponse.json({ error: "Too many lots (max 100)" }, { status: 422 })
+    if (lots.length > 500) return NextResponse.json({ error: "Too many lots (max 500)" }, { status: 422 })
 
     const lengthKey = length ?? "medium"
     const prompt    = buildPrompt(lots, articleType ?? "sale_highlight", lengthKey)
