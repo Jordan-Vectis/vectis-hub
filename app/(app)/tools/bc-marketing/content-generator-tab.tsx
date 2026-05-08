@@ -29,12 +29,29 @@ export default function ContentGeneratorTab() {
   const [savingMsg, setSavingMsg] = useState<string | null>(null)
   const [saveTitle, setSaveTitle] = useState("")
 
+  const [savedDefault, setSavedDefault] = useState<string | null>(null)
+
   useEffect(() => {
     fetch("/api/marketing/categories").then(r => r.json()).then(d => { if (d.categories) setCategories(d.categories) }).catch(() => {})
     fetch("/api/auction-ai/models").then(r => r.json()).then(d => {
-      if (d.models?.length) { setModelList(d.models); setModelId(d.models[0]) }
+      if (d.models?.length) {
+        setModelList(d.models)
+        // Honour saved default if it's still in the available list, otherwise use first
+        const saved = typeof window !== "undefined" ? localStorage.getItem("bc_marketing_default_model") : null
+        setSavedDefault(saved)
+        setModelId(saved && d.models.includes(saved) ? saved : d.models[0])
+      }
     }).catch(() => {})
   }, [])
+
+  function setAsDefault() {
+    localStorage.setItem("bc_marketing_default_model", modelId)
+    setSavedDefault(modelId)
+  }
+  function clearDefault() {
+    localStorage.removeItem("bc_marketing_default_model")
+    setSavedDefault(null)
+  }
 
   // Auto-switch mode when contentType changes to preview_teaser
   useEffect(() => {
@@ -281,10 +298,29 @@ export default function ContentGeneratorTab() {
       {lots !== null && lots.length > 0 && (
         <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 space-y-4">
           <div className="flex items-center gap-3 flex-wrap">
-            <select value={modelId} onChange={e => setModelId(e.target.value)}
-              className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-pink-500">
-              {modelList.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
+            <div className="flex items-center gap-1.5">
+              <select value={modelId} onChange={e => setModelId(e.target.value)}
+                className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-pink-500">
+                {modelList.map(m => <option key={m} value={m}>{m}{savedDefault === m ? " ★" : ""}</option>)}
+              </select>
+              {savedDefault === modelId ? (
+                <button
+                  onClick={clearDefault}
+                  title="Clear default — will use first model in list next time"
+                  className="text-xs text-amber-400 hover:text-amber-300 px-2 py-1 rounded transition-colors"
+                >
+                  ★ Default · clear
+                </button>
+              ) : (
+                <button
+                  onClick={setAsDefault}
+                  title="Use this model by default whenever you load the page"
+                  className="text-xs text-gray-400 hover:text-pink-400 px-2 py-1 rounded transition-colors"
+                >
+                  Set as default
+                </button>
+              )}
+            </div>
             <button onClick={generateArticle} disabled={loadingArticle}
               className="bg-pink-600 hover:bg-pink-500 disabled:opacity-50 text-white text-sm font-semibold px-5 py-2 rounded-lg transition-colors">
               {loadingArticle ? "Generating…" : `Generate ${selectedType?.label ?? ""}`}
