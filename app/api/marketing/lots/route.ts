@@ -33,16 +33,18 @@ export async function GET(req: NextRequest) {
     // Build where clause
     const where: any = {}
     if (mode === "sold") {
+      // Sold = a hammer price is on record
       where.hammerPrice = { gt: 0 }
     } else if (mode === "upcoming") {
-      // Upcoming = NOT sold yet. BC stores either NULL or 0 for unsold lots,
-      // so we just exclude anything with a positive hammer price. Estimates
-      // are NOT required — a freshly-catalogued lot may not have one yet,
-      // but we still want it to appear in a sale preview.
-      where.OR = [
-        { hammerPrice: null },
-        { hammerPrice: { lte: 0 } },
-      ]
+      // Upcoming = the auction hasn't happened yet (date today or later).
+      // We don't filter on hammerPrice — BC may store 0, NULL, or even a
+      // placeholder. The auction date is the canonical signal. If the user
+      // has already narrowed to specific sales via auctionCodes, we trust
+      // that and skip the date filter entirely (let them preview anything).
+      const today = new Date().toISOString().slice(0, 10) // "YYYY-MM-DD"
+      if (auctionCodes.length === 0) {
+        where.auctionDate = { gte: today }
+      }
     }
 
     if (vendorNo) {
