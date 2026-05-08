@@ -18,11 +18,25 @@ export async function GET(req: NextRequest) {
     const keyword  = searchParams.get("keyword")?.trim()  ?? ""
     const category = searchParams.get("category")?.trim() ?? ""
     const month    = searchParams.get("month")?.trim()    ?? "" // "YYYY-MM"
+    const mode     = searchParams.get("mode")?.trim()     ?? "sold"  // "sold" | "upcoming" | "all"
+    const vendorNo = searchParams.get("vendorNo")?.trim() ?? ""
     const topN     = Math.min(Math.max(parseInt(searchParams.get("topN") ?? "10", 10) || 10, 1), 100)
 
-    // Build where clause — only sold lots (hammerPrice > 0)
-    const where: any = {
-      hammerPrice: { gt: 0 },
+    // Build where clause
+    const where: any = {}
+    if (mode === "sold") {
+      where.hammerPrice = { gt: 0 }
+    } else if (mode === "upcoming") {
+      // Upcoming = has estimate, no hammer price yet, future date
+      where.hammerPrice = null
+      where.OR = [
+        { lowEstimate:  { gt: 0 } },
+        { highEstimate: { gt: 0 } },
+      ]
+    }
+
+    if (vendorNo) {
+      where.vendorNo = vendorNo
     }
 
     if (keyword) {
@@ -52,8 +66,12 @@ export async function GET(req: NextRequest) {
         auctionCode:  true,
         auctionName:  true,
         auctionDate:  true,
+        vendorNo:     true,
+        vendorName:   true,
       },
-      orderBy: { hammerPrice: "desc" },
+      orderBy: mode === "upcoming"
+        ? [{ highEstimate: "desc" }, { lowEstimate: "desc" }]
+        : { hammerPrice: "desc" },
       take: topN,
     })
 

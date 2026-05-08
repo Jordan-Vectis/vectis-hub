@@ -33,6 +33,28 @@ const MIGRATIONS = [
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
     CONSTRAINT "ClaudeMemory_pkey" PRIMARY KEY ("filename")
   )`,
+  `CREATE TABLE IF NOT EXISTS "MarketingDraft" (
+    "id"            TEXT NOT NULL,
+    "title"         TEXT NOT NULL,
+    "contentType"   TEXT NOT NULL,
+    "content"       TEXT NOT NULL,
+    "status"        TEXT NOT NULL DEFAULT 'DRAFT',
+    "publishedUrl"  TEXT,
+    "createdById"   TEXT,
+    "createdByName" TEXT,
+    "lotsSnapshot"  JSONB,
+    "notes"         TEXT,
+    "createdAt"     TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt"     TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "MarketingDraft_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE TABLE IF NOT EXISTS "MarketingHashtag" (
+    "id"        TEXT NOT NULL,
+    "category"  TEXT NOT NULL,
+    "hashtags"  TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "MarketingHashtag_pkey" PRIMARY KEY ("id")
+  )`,
 ]
 
 export async function POST() {

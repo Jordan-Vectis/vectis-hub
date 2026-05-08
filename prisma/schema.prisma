@@ -389,6 +389,28 @@ model RoleDefault {
   updatedAt      DateTime @updatedAt
 }
 
+model MarketingDraft {
+  id           String   @id @default(cuid())
+  title        String
+  contentType  String   // "sale_highlight" | "news_story" | "email_newsletter" | "social_instagram" | etc.
+  content      String   // HTML or plain text
+  status       String   @default("DRAFT")  // DRAFT | APPROVED | PUBLISHED
+  publishedUrl String?
+  createdById  String?
+  createdByName String?
+  lotsSnapshot Json?    // The lots used to generate, kept for re-generation
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model MarketingHashtag {
+  id         String   @id @default(cuid())
+  category   String   // "Diecast" | "Star Wars" | "Trains" | "General" etc.
+  hashtags   String[] @default([])
+  updatedAt  DateTime @updatedAt
+}
+
 model BCCatalogueDay {
   date      String   @id       // "YYYY-MM-DD" — marks this date was fully fetched from BC
   fetchedAt DateTime @default(now())

@@ -30,8 +30,120 @@ function fmtDate(d: string | null) {
   return parsed.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
 }
 
+const TYPE_INSTRUCTIONS: Record<string, string> = {
+  // ── Articles ──────────────────────────────────────────────────────────────
+  sale_highlight: `Write a news article for the Vectis website highlighting these top auction results.
+Lead with the most impressive result. Mention specific hammer prices to give the article credibility.
+The tone should be enthusiastic but professional — like a press release from a respected auction house.
+Structure: H1 headline, 2–3 paragraphs covering the headline lots, a paragraph on overall performance,
+and a short call-to-action encouraging collectors to register for future sales at vectis.co.uk.
+Output: HTML (h1, h2, p, strong, em). 400–600 words.`,
+
+  news_story: `Write a news story article in the style of https://www.vectis.co.uk/news-stories/news.
+It should read like editorial content: engaging, informative, conversational but authoritative.
+Include specific lot descriptions and prices to bring the results to life.
+Structure: H1 headline, introduction paragraph, main body (2–3 paragraphs), market context,
+and a closing line with a call-to-action linking to vectis.co.uk.
+Output: HTML (h1, h2, p, strong, em). 400–600 words.`,
+
+  collectors_guide: `Write a collector's guide article aimed at enthusiasts interested in collecting
+items like the lots below. Draw on the lot descriptions and prices to illustrate value and rarity.
+Structure: H1 headline (e.g. "A Collector's Guide to [category]"), introduction explaining the
+collecting area, H2 sections for key things to look for, notable recent results (using the lots below),
+tips for new collectors, and a closing paragraph mentioning Vectis auctions.
+Output: HTML (h1, h2, p, strong, em). 500–800 words.`,
+
+  market_report: `Write a market report article analysing the auction results below.
+Focus on price trends, which categories or items performed strongly, and what the results
+suggest about collector demand. Use a data-driven but accessible tone.
+Structure: H1 headline, executive summary paragraph, H2 sections covering top performers,
+category analysis, and market outlook, with a closing note about Vectis at vectis.co.uk.
+Output: HTML (h1, h2, p, strong, em). 500–700 words.`,
+
+  preview_teaser: `Write an "auction preview" article teasing UPCOMING lots before they go under the hammer.
+Build excitement — highlight what makes these lots special, why collectors should pay attention,
+and include estimates rather than realised prices. Tone: enthusiastic, anticipatory.
+Structure: H1 headline ("Lots to watch in the upcoming…"), short intro, H2/H3 for each featured lot
+with description and estimate, closing CTA to register/bid at vectis.co.uk.
+Output: HTML (h1, h2, h3, p, strong, em). 400–600 words.`,
+
+  // ── Email ─────────────────────────────────────────────────────────────────
+  email_newsletter: `Write a subscriber email newsletter for Vectis Auctions.
+Lead with a compelling subject line, then a preheader, then the email body.
+Body should feature the top lots/results in a scannable format — use h2 for section headers,
+bullet points or short paragraphs for each lot with hammer price (or estimate for upcoming lots),
+and a clear CTA button-style line at the bottom.
+Structure: <h1>SUBJECT: ...</h1><p>PREHEADER: ...</p> then the email body.
+Output: HTML (h1, h2, p, ul, li, strong, a href="https://vectis.co.uk").
+Tone: warm, direct, on-brand. 300–450 words for the body.`,
+
+  // ── Social media ──────────────────────────────────────────────────────────
+  social_instagram: `Write 5 Instagram caption variants based on these auction lots/results.
+Each caption: 100–180 words, includes 2–3 emojis used tastefully, mentions the lot and result,
+ends with relevant hashtags (8–15 hashtags, mix of broad + niche).
+Structure each as: <h2>Variant N</h2><p>caption</p><p><em>#hashtags</em></p>
+Output: HTML.`,
+
+  social_facebook: `Write 3 Facebook post variants based on these auction lots/results.
+Each post: 80–150 words, conversational tone, asks a question to drive engagement,
+includes a CTA to vectis.co.uk. Less hashtag-heavy than Instagram (3–5 hashtags max).
+Structure each as: <h2>Variant N</h2><p>caption</p>
+Output: HTML.`,
+
+  social_twitter: `Write 5 short Twitter/X post variants. Each under 280 characters including hashtags.
+Mention a specific lot result, include a link placeholder (vectis.co.uk), 2–3 hashtags.
+Structure: <h2>Variant N</h2><p>tweet text</p><p><em>character count: NN</em></p>
+Output: HTML.`,
+
+  carousel_pack: `Write a 5–10 slide Instagram carousel pack from a single sale.
+Slide 1: a strong hook headline. Slides 2–N: each a featured lot with the description trimmed
+to one short sentence and the hammer price prominent. Final slide: CTA.
+Structure each slide as: <h2>Slide N</h2><p>SLIDE TEXT</p>
+Output: HTML.`,
+
+  // ── PR ────────────────────────────────────────────────────────────────────
+  press_release: `Write a formal press release for trade press / collector magazines.
+Structure: <h1>HEADLINE (all caps)</h1><p><strong>FOR IMMEDIATE RELEASE — [date]</strong></p>
+<p>Dateline (Shanklin, Isle of Wight) — opening paragraph with the news.</p>
+Then 2–3 body paragraphs with quotes (attribute to "a Vectis spokesperson") and detail.
+Closing boilerplate paragraph about Vectis. Final line: <p><em>— ENDS —</em></p>
+followed by an "About Vectis" paragraph and contact line referencing vectis.co.uk.
+Output: HTML. 350–500 words.`,
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  headline_pack: `Generate 10 alternative headlines for an article based on these auction results.
+Mix styles: SEO-optimised, click-worthy, formal news-style, listicle-style, question-style.
+Output: <h2>Headlines</h2><ol><li>headline 1</li>...<li>headline 10</li></ol>`,
+
+  alt_text: `For each lot below, generate an SEO-friendly image alt-text (under 125 chars)
+and a meta description (under 155 chars).
+Structure: <h2>Lot description (Lot N)</h2><p><strong>Alt text:</strong> ...</p><p><strong>Meta description:</strong> ...</p>
+Output: HTML. Be specific — include manufacturer, era, and condition cues from the description.`,
+
+  catalogue_blurb: `Write short 2–3 sentence catalogue intros for each category represented in these lots,
+suitable for the printed sale catalogue. Tone: descriptive, evocative, professional.
+Structure: <h2>Category name</h2><p>blurb text</p>
+Output: HTML.`,
+
+  vendor_summary: `Write a one-page result summary suitable for sending back to the consigning vendor.
+Tone: warm, professional, congratulatory where appropriate. Avoid auction jargon.
+Structure: <h1>Sale Result Summary</h1>
+<p>Opening paragraph noting the sale, date, and overall result.</p>
+<h2>Highlights</h2><ul><li>top lots with prices</li></ul>
+<h2>Performance Summary</h2><p>total realised, % over/under estimate.</p>
+<p>Closing thanks + invitation to consign again.</p>
+Output: HTML. 250–400 words.`,
+
+  year_in_review: `Write a "year in review" retrospective article covering the lots/results below.
+Identify themes, breakout categories, record-setters, and overall trends.
+Structure: <h1>Year in Review headline</h1>
+<p>Intro paragraph.</p>
+<h2>Standout Sales</h2><h2>Record Results</h2><h2>Categories on the Rise</h2><h2>Looking Ahead</h2>
+<p>Closing CTA.</p>
+Output: HTML. 600–900 words.`,
+}
+
 function buildPrompt(lots: Lot[], articleType: string): string {
-  // Describe the lot data — include lot number, sale name, and date explicitly
   const lotLines = lots.map((l, i) => {
     const price   = l.hammerPrice ? `sold for ${fmtPrice(l.hammerPrice)}` : "unsold"
     const est     = l.lowEstimate && l.highEstimate
@@ -48,47 +160,18 @@ function buildPrompt(lots: Lot[], articleType: string): string {
   const categories  = [...new Set(lots.map(l => l.category).filter(Boolean))].join(", ")
   const totalValue  = lots.reduce((s, l) => s + (l.hammerPrice ?? 0), 0)
 
-  const typeInstructions: Record<string, string> = {
-    sale_highlight: `Write a news article for the Vectis website highlighting these top auction results.
-Lead with the most impressive result. Mention specific hammer prices to give the article credibility.
-The tone should be enthusiastic but professional — like a press release from a respected auction house.
-Structure: H1 headline, 2–3 paragraphs covering the headline lots, a paragraph on overall performance,
-and a short call-to-action encouraging collectors to register for future sales at vectis.co.uk.`,
-
-    news_story: `Write a news story article in the style of https://www.vectis.co.uk/news-stories/news.
-It should read like editorial content: engaging, informative, conversational but authoritative.
-Include specific lot descriptions and prices to bring the results to life.
-Structure: H1 headline, introduction paragraph, main body (2–3 paragraphs), market context,
-and a closing line with a call-to-action linking to vectis.co.uk.`,
-
-    collectors_guide: `Write a collector's guide article aimed at enthusiasts interested in collecting
-items like the lots below. Draw on the lot descriptions and prices to illustrate value and rarity.
-Structure: H1 headline (e.g. "A Collector's Guide to [category]"), introduction explaining the
-collecting area, H2 sections for key things to look for, notable recent results (using the lots below),
-tips for new collectors, and a closing paragraph mentioning Vectis auctions.`,
-
-    market_report: `Write a market report article analysing the auction results below.
-Focus on price trends, which categories or items performed strongly, and what the results
-suggest about collector demand. Use a data-driven but accessible tone.
-Structure: H1 headline, executive summary paragraph, H2 sections covering top performers,
-category analysis, and market outlook, with a closing note about Vectis at vectis.co.uk.`,
-  }
-
-  const instruction = typeInstructions[articleType] ?? typeInstructions.sale_highlight
+  const instruction = TYPE_INSTRUCTIONS[articleType] ?? TYPE_INSTRUCTIONS.sale_highlight
 
   return `You are a professional copywriter for Vectis Auctions, one of the UK's leading specialist toy and collectables auction houses based in Shanklin, Isle of Wight.
 
 ${instruction}
 
-IMPORTANT REQUIREMENTS:
+UNIVERSAL REQUIREMENTS:
 - British English spelling throughout (e.g. "realised", "recognised", "colour")
-- Output valid HTML only — use <h1>, <h2>, <p>, <strong>, <em> tags
-- Do NOT include <!DOCTYPE>, <html>, <head>, or <body> tags — just the article content HTML
-- Do NOT add placeholder links or made-up URLs — only reference vectis.co.uk
-- Aim for 400–600 words
-- Be specific: reference real lot numbers (e.g. "Lot 42"), the auction/sale name, and the date of each sale when mentioning individual results
-- Always name the specific sale (e.g. "Dolls & Bears — Day 1, 13th January 2026") at least once near the start of the article
-- The article should be genuinely useful for SEO — naturally include relevant keywords
+- Output valid HTML only — no <!DOCTYPE>, <html>, <head>, <body>
+- Reference vectis.co.uk only — never invent URLs
+- Be specific: reference real lot numbers, sale names, dates
+- Naturally include category-relevant keywords for SEO
 
 AUCTION DATA:
 Sales covered: ${saleNames || "Various"}
@@ -96,7 +179,7 @@ Categories: ${categories || "Various"}
 Total hammer value: ${fmtPrice(totalValue)}
 Number of lots: ${lots.length}
 
-TOP LOTS (sorted by hammer price, highest first):
+LOTS:
 ${lotLines}`
 }
 
@@ -123,18 +206,12 @@ export async function POST(req: NextRequest) {
 
     const promptBlock = response.promptFeedback?.blockReason
     if (promptBlock) {
-      return NextResponse.json(
-        { error: `Request blocked by Gemini: ${promptBlock}` },
-        { status: 422 },
-      )
+      return NextResponse.json({ error: `Request blocked by Gemini: ${promptBlock}` }, { status: 422 })
     }
 
     const finishReason = response.candidates?.[0]?.finishReason
     if (finishReason && finishReason !== "STOP" && finishReason !== "MAX_TOKENS") {
-      return NextResponse.json(
-        { error: `Gemini stopped unexpectedly: ${finishReason}` },
-        { status: 422 },
-      )
+      return NextResponse.json({ error: `Gemini stopped unexpectedly: ${finishReason}` }, { status: 422 })
     }
 
     const article = response.text().trim()
