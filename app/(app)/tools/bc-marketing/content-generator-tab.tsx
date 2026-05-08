@@ -19,6 +19,8 @@ export default function ContentGeneratorTab() {
   const [selectedSales, setSelectedSales]  = useState<string[]>([])  // array of auctionCodes
   const [salesPickerOpen, setSalesPickerOpen] = useState(false)
   const [salesSearch, setSalesSearch]      = useState("")
+  const [refreshingNames, setRefreshingNames] = useState(false)
+  const [refreshMsg,      setRefreshMsg]      = useState<string | null>(null)
   const [modelList, setModelList]   = useState<string[]>(["gemini-2.5-flash-preview-04-17"])
   const [modelId,   setModelId]     = useState("gemini-2.5-flash-preview-04-17")
 
@@ -57,6 +59,29 @@ export default function ContentGeneratorTab() {
   function clearDefault() {
     localStorage.removeItem("bc_marketing_default_model")
     setSavedDefault(null)
+  }
+
+  async function refreshSaleNames() {
+    setRefreshingNames(true)
+    setRefreshMsg(null)
+    try {
+      const res = await fetch("/api/warehouse/sync/auction-names", { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) {
+        setRefreshMsg(data.error ?? "Failed — check BC connection")
+        return
+      }
+      // Reload the sales list so we pick up the corrected names
+      const salesRes = await fetch("/api/marketing/sales")
+      const salesData = await salesRes.json()
+      if (salesData.sales) setAllSales(salesData.sales)
+      setRefreshMsg(`✓ Refreshed ${data.namesWritten ?? 0} lots across ${data.codesFound ?? 0} sales`)
+      setTimeout(() => setRefreshMsg(null), 5000)
+    } catch {
+      setRefreshMsg("Network error")
+    } finally {
+      setRefreshingNames(false)
+    }
   }
 
   // Auto-switch mode when contentType changes to preview_teaser
@@ -262,7 +287,20 @@ export default function ContentGeneratorTab() {
 
         {/* Specific sales picker */}
         <div>
-          <label className="block text-xs text-gray-400 mb-1.5">Specific sales (optional — leave empty to search across all)</label>
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <label className="block text-xs text-gray-400">Specific sales (optional — leave empty to search across all)</label>
+            <div className="flex items-center gap-2">
+              {refreshMsg && <span className={`text-[11px] ${refreshMsg.startsWith("✓") ? "text-emerald-400" : "text-amber-400"}`}>{refreshMsg}</span>}
+              <button
+                onClick={refreshSaleNames}
+                disabled={refreshingNames}
+                title="Re-fetch sale names from Business Central. Use this if a sale name looks stale."
+                className="text-[11px] text-gray-400 hover:text-pink-400 disabled:opacity-50 px-2 py-0.5 rounded transition-colors"
+              >
+                {refreshingNames ? "Refreshing…" : "↻ Refresh sale names from BC"}
+              </button>
+            </div>
+          </div>
           <div className="relative">
             <button
               onClick={() => setSalesPickerOpen(o => !o)}
