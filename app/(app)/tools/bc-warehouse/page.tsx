@@ -1374,6 +1374,43 @@ function DbExplorerTab() {
   const [refreshingNames, setRefreshingNames] = useState(false)
   const [refreshMsg,      setRefreshMsg]      = useState<string | null>(null)
 
+  // Wipe BC cache tables — admin destructive action behind a type-to-confirm dialog.
+  const [clearOpen,        setClearOpen]      = useState(false)
+  const [clearTarget,      setClearTarget]    = useState<"items" | "totes" | "both">("both")
+  const [clearConfirmText, setClearConfirmText] = useState("")
+  const [clearing,         setClearing]       = useState(false)
+  const [clearMsg,         setClearMsg]       = useState<string | null>(null)
+
+  async function clearBcData() {
+    if (clearing) return
+    setClearing(true)
+    setClearMsg(null)
+    try {
+      const res = await fetch("/api/warehouse/clear-bc-data", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ confirm: clearConfirmText, target: clearTarget }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setClearMsg(data.error ?? "Failed")
+        return
+      }
+      const parts: string[] = []
+      if (data.itemsDeleted) parts.push(`${data.itemsDeleted.toLocaleString()} items`)
+      if (data.totesDeleted) parts.push(`${data.totesDeleted.toLocaleString()} totes`)
+      setClearMsg(`✓ Cleared ${parts.join(" + ")}. Now go to Data Sync and run a fresh pull.`)
+      setRows([])
+      setCount(null)
+      setClearOpen(false)
+      setClearConfirmText("")
+    } catch {
+      setClearMsg("Network error")
+    } finally {
+      setClearing(false)
+    }
+  }
+
   async function refreshAuctionNames() {
     if (refreshingNames) return
     setRefreshingNames(true)
@@ -1427,6 +1464,11 @@ function DbExplorerTab() {
               {refreshMsg}
             </span>
           )}
+          {clearMsg && !clearOpen && (
+            <span className={`text-xs ${clearMsg.startsWith("✓") ? "text-emerald-400" : "text-red-400"}`}>
+              {clearMsg}
+            </span>
+          )}
           <button
             onClick={refreshAuctionNames}
             disabled={refreshingNames}
@@ -1435,8 +1477,81 @@ function DbExplorerTab() {
           >
             {refreshingNames ? "Refreshing…" : "↻ Refresh auction names from BC"}
           </button>
+          <button
+            onClick={() => { setClearOpen(o => !o); setClearMsg(null); setClearConfirmText("") }}
+            title="Wipe all BC-synced cache rows (Warehouse Items / Totes) so the next sync re-pulls from scratch. Admin only."
+            className="text-xs bg-red-950 hover:bg-red-900 border border-red-900 hover:border-red-800 text-red-300 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+          >
+            ⚠ Clear BC data…
+          </button>
         </div>
       </div>
+
+      {/* Clear-data confirmation panel */}
+      {clearOpen && (
+        <div className="bg-red-950/40 border border-red-900 rounded-xl p-5 space-y-4">
+          <div>
+            <h3 className="text-sm font-bold text-red-200">⚠ Clear BC-synced cache</h3>
+            <p className="text-xs text-red-300 mt-1">
+              This permanently deletes the chosen Warehouse rows from our database.
+              Other BC-dependent features (sale checklist, location heatmap,
+              BC Marketing) will appear empty until the next sync completes.
+              Catalogue lots and other non-BC data are untouched. Admin only.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs text-red-200 mb-1.5">What to clear</label>
+            <div className="inline-flex gap-1 bg-red-950/60 border border-red-900 rounded-lg p-0.5">
+              {(["items", "totes", "both"] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setClearTarget(t)}
+                  className={`px-3 py-1.5 text-xs rounded-md transition-colors capitalize ${
+                    clearTarget === t ? "bg-red-700 text-white" : "text-red-300 hover:text-white"
+                  }`}
+                >
+                  {t === "both" ? "Both items & totes" : `Warehouse ${t}`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-red-200 mb-1.5">
+              Type <code className="bg-red-950 px-1.5 py-0.5 rounded font-mono text-red-100">DELETE</code> to confirm
+            </label>
+            <input
+              type="text"
+              value={clearConfirmText}
+              onChange={e => setClearConfirmText(e.target.value)}
+              placeholder="DELETE"
+              className="w-full max-w-xs bg-gray-900 border border-red-900 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-red-500"
+              autoFocus
+            />
+          </div>
+
+          {clearMsg && (
+            <p className={`text-xs ${clearMsg.startsWith("✓") ? "text-emerald-400" : "text-red-300"}`}>{clearMsg}</p>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              onClick={clearBcData}
+              disabled={clearing || clearConfirmText !== "DELETE"}
+              className="px-4 py-2 bg-red-700 hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg transition-colors"
+            >
+              {clearing ? "Clearing…" : `Clear ${clearTarget === "both" ? "items & totes" : clearTarget}`}
+            </button>
+            <button
+              onClick={() => { setClearOpen(false); setClearConfirmText(""); setClearMsg(null) }}
+              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Controls */}
       <div className="flex gap-2 flex-wrap">
