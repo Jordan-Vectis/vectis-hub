@@ -2,14 +2,16 @@
 
 import { useState } from "react"
 import ContentGeneratorTab from "./content-generator-tab"
+import PasteGenerateTab from "./paste-generate-tab"
 import InsightsTab from "./insights-tab"
 import DraftsTab from "./drafts-tab"
 import HashtagsTab from "./hashtags-tab"
 
-type TabKey = "content" | "insights" | "drafts" | "hashtags"
+type TabKey = "content" | "paste" | "insights" | "drafts" | "hashtags"
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "content",  label: "✍ Content Generator" },
+  { key: "paste",    label: "📋 Paste & Generate" },
   { key: "insights", label: "📊 Insights" },
   { key: "drafts",   label: "💾 Saved Drafts" },
   { key: "hashtags", label: "# Hashtag Bank" },
@@ -38,6 +40,7 @@ export default function BcMarketingPage() {
       </div>
 
       {tab === "content"  && <ContentGeneratorTab />}
+      {tab === "paste"    && <PasteGenerateTab />}
       {tab === "insights" && <InsightsTab />}
       {tab === "drafts"   && <DraftsTab />}
       {tab === "hashtags" && <HashtagsTab />}
