@@ -180,8 +180,34 @@ ${instruction}
 BRAND VOICE — STRICT RULES (read carefully)
 ═══════════════════════════════════════════════════════════════════
 
-ABOUT VECTIS AUCTIONS — these are the ONLY facts you may use about the
-company. Do NOT invent or guess anything beyond what is in this block.
+ABOUT VECTIS AUCTIONS — REFERENCE ONLY.
+
+This block exists so you don't INVENT facts about Vectis. It is NOT a
+checklist to include in every article.
+
+⚠ DEFAULT BEHAVIOUR: do NOT mention any of these facts unless they are
+genuinely relevant to the specific article type and topic. Most articles
+(sale highlights, news stories, social posts, market reports, headlines)
+should focus entirely on the LOTS and the RESULTS — not on the company.
+
+When facts ARE relevant:
+  - Founding year, owner, history → only "About Us"-style content,
+    formal press releases, or year-in-review pieces if explicitly framed
+    as a retrospective on Vectis itself.
+  - Location (Thornaby/Teesside) → only when location is genuinely useful
+    (e.g. a press release dateline, or "viewing at our Thornaby saleroom").
+    Most sale highlights and social posts should not mention a location at all.
+  - Turnover/staff/site size → almost never. Only if the article is
+    explicitly about Vectis as a business.
+  - Auction format / buyer's premium / bidding methods → only "How to bid"
+    or sell-with-us content. NOT in result-focused articles.
+
+If you find yourself padding an article with company history because you
+"have nothing else to say", you have not engaged with the lot data deeply
+enough. Go back and lead with a specific lot, a specific result, a
+specific manufacturer, a specific era — never with a company bio.
+
+Do NOT invent or guess anything beyond what is in this block.
 
 Identity:
 - Trading name: "Vectis Auctions" (or simply "Vectis").
