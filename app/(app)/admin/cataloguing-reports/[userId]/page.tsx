@@ -121,6 +121,10 @@ export default async function CataloguingUserReportPage({
   const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - 7); weekStart.setHours(0,0,0,0)
   const lotsThisWeek = logs.filter(l => l.savedAt >= weekStart).length
 
+  // ── Daily average (across days the cataloguer actually worked) ──
+  const activeDays = new Set(logs.map(l => format(l.savedAt, "yyyy-MM-dd")))
+  const dailyAvg   = activeDays.size > 0 ? Math.round(logs.length / activeDays.size) : 0
+
   // ── Key points ──
   const kpLogs  = wizardLogs.filter(l => l.keyPointsMs && l.keyPointsMs > 0)
   const kpAvg   = kpLogs.length ? avg(kpLogs.map(l => l.keyPointsMs!)) : 0
@@ -194,10 +198,11 @@ export default async function CataloguingUserReportPage({
       {logs.length > 0 && (
         <>
           {/* Summary cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             {[
               { label: "Lots in Range",    value: logs.length.toLocaleString(),            sub: rangeLabel,                       colour: "text-slate-800" },
               { label: "Avg Time / Lot",   value: fmtDuration(overallAvg),                 sub: "all methods",                    colour: "text-slate-800" },
+              { label: "Daily Average",    value: dailyAvg.toLocaleString(),                sub: `${activeDays.size} active day${activeDays.size === 1 ? "" : "s"}`, colour: "text-slate-800" },
               { label: "Lots Today",       value: lotsToday.toLocaleString(),               sub: format(new Date(), "d MMM yyyy"), colour: "text-slate-800" },
               { label: "This Week",        value: lotsThisWeek.toLocaleString(),            sub: "last 7 days",                    colour: "text-slate-800" },
               { label: "Research Time",    value: totalResearchMs ? fmtDuration(totalResearchMs) : "—",
