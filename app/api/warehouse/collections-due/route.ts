@@ -35,22 +35,31 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Provide at least one aisle (e.g. ?aisles=A39,A40)" }, { status: 400 })
     }
 
-    // Build filter: items whose EVA_ArticleLocationCode starts with one of
-    // the aisle prefixes AND have a non-empty EVA_CollectionNo containing
-    // the search term (default "COL").
-    const aisleFilter = aisles
-      .map(a => `startswith(EVA_ArticleLocationCode, '${a}')`)
-      .join(" or ")
+    // Query each aisle in parallel — one BC call per aisle. A combined OR
+    // filter across many aisles times out at BC's end, especially when each
+    // aisle has thousands of locations and items. Running them concurrently
+    // keeps the per-call filter simple and the total wall time fast.
+    const escSearch = search.replace(/'/g, "''")
+    const settled = await Promise.allSettled(aisles.map(a =>
+      bcFetchAll(
+        token,
+        "Receipt_Lines_Excel",
+        `startswith(EVA_ArticleLocationCode, '${a}') and contains(EVA_CollectionNo, '${escSearch}')`,
+        undefined,
+        500,
+      )
+    ))
 
-    const filter = `(${aisleFilter}) and contains(EVA_CollectionNo, '${search.replace(/'/g, "''")}')`
-
-    const rows = await bcFetchAll(
-      token,
-      "Receipt_Lines_Excel",
-      filter,
-      undefined,
-      500,
-    )
+    const errs: string[] = []
+    const rows = settled.flatMap((r, i) => {
+      if (r.status === "fulfilled") return r.value
+      errs.push(`${aisles[i]}: ${r.reason?.message ?? r.reason}`)
+      return []
+    })
+    if (errs.length === aisles.length) {
+      // Every aisle failed — surface the first error
+      return NextResponse.json({ error: `BC query failed: ${errs[0]}` }, { status: 500 })
+    }
 
     // Project to the columns we display
     const items = rows.map(r => ({
@@ -75,6 +84,7 @@ export async function GET(req: NextRequest) {
       search,
       count: items.length,
       items,
+      partialErrors: errs.length > 0 ? errs : undefined,
     })
   } catch (e: any) {
     console.error("collections-due error:", e)

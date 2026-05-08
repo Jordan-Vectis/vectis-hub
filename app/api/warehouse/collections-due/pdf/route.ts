@@ -44,13 +44,18 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Provide at least one aisle (e.g. ?aisles=A39,A40)" }, { status: 400 })
     }
 
-    // Same query as the JSON endpoint
-    const aisleFilter = aisleList
-      .map(a => `startswith(EVA_ArticleLocationCode, '${a}')`)
-      .join(" or ")
-    const filter = `(${aisleFilter}) and contains(EVA_CollectionNo, '${search.replace(/'/g, "''")}')`
-
-    const rows = await bcFetchAll(token, "Receipt_Lines_Excel", filter, undefined, 500)
+    // Parallel per-aisle queries — combined OR filters time out in BC
+    const escSearch = search.replace(/'/g, "''")
+    const settled = await Promise.allSettled(aisleList.map(a =>
+      bcFetchAll(
+        token,
+        "Receipt_Lines_Excel",
+        `startswith(EVA_ArticleLocationCode, '${a}') and contains(EVA_CollectionNo, '${escSearch}')`,
+        undefined,
+        500,
+      )
+    ))
+    const rows = settled.flatMap(r => r.status === "fulfilled" ? r.value : [])
 
     const items: Item[] = rows.map(r => ({
       uniqueId:     String(r.EVA_UniqueID ?? ""),
