@@ -82,7 +82,7 @@ type SearchTote = {
   syncedAt: string | null
 }
 
-type Tab = "heatmap" | "sale-checklist" | "search" | "location-history" | "tote-data" | "data-sync" | "db-explorer"
+type Tab = "heatmap" | "sale-checklist" | "search" | "location-history" | "tote-data" | "collections-due" | "data-sync" | "db-explorer"
 
 const STALE_MS = 15 * 60 * 1000 // 15 minutes
 
@@ -1361,6 +1361,204 @@ const TOTE_FIELDS = [
   { value: "vendorName", label: "Vendor Name" },
 ]
 
+// ─── Collections Due Tab ─────────────────────────────────────────────────────
+// Mirrors the BC Receipt Lines workflow where staff filter by aisle prefix
+// (e.g. A39, A40) and look for items with a Collection Docket. Produces a
+// printable pick-list. Live BC query — bypasses the WarehouseItem cache so
+// dockets issued in the last few minutes still appear.
+
+type CollectionsItem = {
+  uniqueId:     string
+  receiptNo:    string
+  articleNo:    string
+  barcode:      string
+  description:  string
+  location:     string
+  collectionNo: string
+  vendorName:   string
+}
+
+function CollectionsDueTab() {
+  const [aislesText, setAislesText] = useState("A39, A40")
+  const [items,      setItems]      = useState<CollectionsItem[] | null>(null)
+  const [loading,    setLoading]    = useState(false)
+  const [error,      setError]      = useState<string | null>(null)
+  const [groupByDocket, setGroupByDocket] = useState(false)
+
+  async function search() {
+    setLoading(true)
+    setError(null)
+    setItems(null)
+    try {
+      const params = new URLSearchParams({ aisles: aislesText })
+      const res = await fetch(`/api/warehouse/collections-due?${params}`)
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error ?? "Failed")
+        return
+      }
+      setItems(data.items as CollectionsItem[])
+    } catch {
+      setError("Network error")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function openPrintView() {
+    if (!items || items.length === 0) return
+    const aisles = aislesText.trim()
+    const w = window.open(`/tools/bc-warehouse/collections-due/print?aisles=${encodeURIComponent(aisles)}&groupByDocket=${groupByDocket ? "1" : "0"}`, "_blank")
+    if (!w) {
+      alert("Pop-up blocked — allow pop-ups for this site to use the printable view.")
+    }
+  }
+
+  // Group view: collapse items by collectionNo
+  const grouped = items
+    ? Object.values(items.reduce((acc, it) => {
+        const key = it.collectionNo || "—"
+        if (!acc[key]) acc[key] = { collectionNo: key, items: [] as CollectionsItem[] }
+        acc[key].items.push(it)
+        return acc
+      }, {} as Record<string, { collectionNo: string; items: CollectionsItem[] }>))
+        .sort((a, b) => a.collectionNo.localeCompare(b.collectionNo))
+    : []
+
+  return (
+    <div className="p-4 space-y-4 h-full overflow-auto">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-lg font-semibold text-white">Collections Due</h2>
+          <p className="text-sm text-gray-400">
+            Items in the chosen aisles that have a collection docket — typically due to be shipped but not yet collected.
+          </p>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+          <div className="sm:col-span-2">
+            <label className="block text-xs text-gray-400 mb-1">Aisle prefixes</label>
+            <input
+              type="text"
+              value={aislesText}
+              onChange={e => setAislesText(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && search()}
+              placeholder="e.g. A39, A40, A41"
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+            />
+            <p className="text-[11px] text-gray-500 mt-1">
+              Comma-separated prefixes — matches anything starting with these (e.g. A39 catches A39A1, A39B5, A39C3…).
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={search}
+              disabled={loading || !aislesText.trim()}
+              className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+            >
+              {loading ? "Searching BC…" : "Search"}
+            </button>
+            <label className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={groupByDocket}
+                onChange={e => setGroupByDocket(e.target.checked)}
+                className="accent-blue-500"
+              />
+              Group by docket
+            </label>
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red-900/40 border border-red-700 rounded-xl px-4 py-3 text-red-300 text-sm">{error}</div>
+      )}
+
+      {/* Results */}
+      {items !== null && (
+        <>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-sm text-gray-400">
+              {items.length === 0 ? (
+                "No matching items found."
+              ) : (
+                <>
+                  <span className="text-white font-semibold">{items.length}</span> item{items.length === 1 ? "" : "s"} found
+                  {groupByDocket && grouped.length > 0 && (
+                    <> · <span className="text-white font-semibold">{grouped.length}</span> docket{grouped.length === 1 ? "" : "s"}</>
+                  )}
+                </>
+              )}
+            </p>
+            {items.length > 0 && (
+              <button
+                onClick={openPrintView}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+                title="Opens a print-styled view in a new tab. Use Ctrl+P / Cmd+P to print or save as PDF."
+              >
+                🖨 Open Printable View
+              </button>
+            )}
+          </div>
+
+          {items.length > 0 && !groupByDocket && (
+            <div className="overflow-auto border border-gray-800 rounded-lg">
+              <table className="text-xs w-full">
+                <thead className="bg-gray-800 sticky top-0">
+                  <tr className="text-left text-gray-400">
+                    <th className="px-3 py-2">Location</th>
+                    <th className="px-3 py-2">Barcode</th>
+                    <th className="px-3 py-2">Description</th>
+                    <th className="px-3 py-2">Collection No.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map(it => (
+                    <tr key={it.uniqueId} className="border-t border-gray-800 hover:bg-gray-900">
+                      <td className="px-3 py-2 font-mono text-gray-300">{it.location}</td>
+                      <td className="px-3 py-2 font-mono text-gray-300">{it.barcode}</td>
+                      <td className="px-3 py-2 text-gray-200">{it.description}</td>
+                      <td className="px-3 py-2 font-mono text-emerald-400">{it.collectionNo}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {items.length > 0 && groupByDocket && (
+            <div className="space-y-3">
+              {grouped.map(g => (
+                <div key={g.collectionNo} className="border border-gray-800 rounded-lg overflow-hidden">
+                  <div className="bg-gray-800 px-3 py-2 flex items-center justify-between">
+                    <span className="font-mono text-emerald-400 text-sm">{g.collectionNo}</span>
+                    <span className="text-xs text-gray-400">{g.items.length} item{g.items.length === 1 ? "" : "s"}</span>
+                  </div>
+                  <table className="text-xs w-full">
+                    <tbody>
+                      {g.items.map(it => (
+                        <tr key={it.uniqueId} className="border-t border-gray-800 hover:bg-gray-900">
+                          <td className="px-3 py-2 font-mono text-gray-300 w-24">{it.location}</td>
+                          <td className="px-3 py-2 font-mono text-gray-300 w-24">{it.barcode}</td>
+                          <td className="px-3 py-2 text-gray-200">{it.description}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 function DbExplorerTab() {
   const [table,   setTable]   = useState<"items"|"totes">("items")
   const [field,   setField]   = useState("auctionCode")
@@ -2199,6 +2397,7 @@ export default function BCWarehousePage() {
     { id: "search",           label: "Search by Location" },
     { id: "location-history", label: "Location History" },
     { id: "tote-data",        label: "Tote Data" },
+    { id: "collections-due",  label: "Collections Due" },
     { id: "data-sync",        label: "Data Sync" },
     { id: "db-explorer",     label: "DB Explorer" },
   ]
@@ -2233,6 +2432,7 @@ export default function BCWarehousePage() {
             {tab === "search"           && <SearchByLocationTab />}
             {tab === "location-history" && <LocationHistoryTab />}
             {tab === "tote-data"        && <ToteDataTab />}
+            {tab === "collections-due"  && <CollectionsDueTab />}
             {tab === "data-sync"        && <DataSyncTab status={status} onComplete={fetchStatus} />}
             {tab === "db-explorer"     && <DbExplorerTab />}
           </>
