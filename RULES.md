@@ -292,9 +292,15 @@ If this tab genuinely needs to change, discuss it first and update this rule.
 
 ### BC Field Name Reference — Auction/Sale Identifiers
 
+⚠ The auction-code field name **differs between endpoints**. Confirmed by
+querying the BC OData metadata via `/api/bc/api-viewer`. Using the wrong
+field on the wrong endpoint returns a 400 BadRequest, and because the
+auction-names sync catches errors per batch, this kind of mistake fails
+silently and leaves stale names in the DB.
+
 | Endpoint | Code field | Name field | Notes |
 |---|---|---|---|
-| `Auction_Lines_Excel` | `EVA_SalesAllocation` | `EVA_AuctionName` | Auction-level lookup — use this to resolve auction names |
+| `Auction_Lines_Excel` | **`EVA_AuctionNo`** | `EVA_AuctionName` | Auction-level lookup — use this to resolve auction names. Does NOT have `EVA_SalesAllocation`. |
 | `Receipt_Lines_Excel` | `EVA_SalesAllocation` | _(no name field)_ | Item-level — `EVA_SalesAllocation` matches `WarehouseItem.auctionCode` |
 | `Auction_Receipt_Lines_Excel` | `EVA_SalesAllocation` | _(no name field)_ | Item-level auction receipt lines |
 

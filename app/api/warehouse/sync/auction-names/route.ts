@@ -5,11 +5,19 @@ import { isAuthedOrCron } from "@/lib/auth-or-cron"
 
 // POST /api/warehouse/sync/auction-names
 // Populates WarehouseItem.auctionName for every distinct auctionCode in the DB.
-// Strategy: batch-query Auction_Lines_Excel by EVA_SalesAllocation (the auction code)
+// Strategy: batch-query Auction_Lines_Excel by EVA_AuctionNo (the auction code)
 // directly — this is reliable because we're looking up the name FOR the code, not
 // indirectly via a UniqueID which may belong to a different auction context.
 // Takes a large $top per batch so we get at least one row per code, then groups
-// by EVA_SalesAllocation on the client side to get the name for each code.
+// by EVA_AuctionNo on the client side to get the name for each code.
+//
+// ⚠ DO NOT change EVA_AuctionNo back to EVA_SalesAllocation. The latter
+// exists on Receipt_Lines_Excel and Auction_Receipt_Lines_Excel, but NOT
+// on Auction_Lines_Excel — using it here causes a BC 400 BadRequest, and
+// because errors are caught per batch the sync silently fails for every
+// code, leaving stale cached names in the DB. Confirmed via
+// /api/bc/api-viewer?endpoint=Auction_Lines_Excel: the auction code column
+// is EVA_AuctionNo (e.g. "A999", "F066").
 
 export async function POST(req: NextRequest) {
   try {
@@ -43,7 +51,7 @@ export async function POST(req: NextRequest) {
 
     for (let i = 0; i < codes.length; i += BATCH) {
       const batch  = codes.slice(i, i + BATCH)
-      const filter = batch.map(c => `EVA_SalesAllocation eq '${c}'`).join(" or ")
+      const filter = batch.map(c => `EVA_AuctionNo eq '${c}'`).join(" or ")
 
       try {
         // Large $top so we have multiple rows per code; auction codes
@@ -62,7 +70,7 @@ export async function POST(req: NextRequest) {
         const seenByCode = new Map<string, Map<string, SeenName>>()
 
         for (const r of bcRows) {
-          const code = String(r.EVA_SalesAllocation ?? "").trim().toUpperCase()
+          const code = String(r.EVA_AuctionNo ?? "").trim().toUpperCase()
           const name = String(r.EVA_AuctionName    ?? "").trim()
           if (!code || !name) continue
           const date = String(r.EVA_AuctionDate ?? "").trim() // "YYYY-MM-DD" or empty
