@@ -160,20 +160,56 @@ function buildPrompt(lots: Lot[], articleType: string): string {
   const categories  = [...new Set(lots.map(l => l.category).filter(Boolean))].join(", ")
   const totalValue  = lots.reduce((s, l) => s + (l.hammerPrice ?? 0), 0)
 
+  // Extract distinct years actually present in the auction dates
+  const years = [...new Set(
+    lots.map(l => (l.auctionDate ?? "").slice(0, 4)).filter(y => /^\d{4}$/.test(y))
+  )].sort()
+  const yearLine = years.length === 0
+    ? "Year(s) covered: unknown"
+    : years.length === 1
+      ? `Year covered: ${years[0]} — use this exact year, do not invent a range`
+      : `Years covered: ${years.join(", ")} — use these exact years, do not invent a range`
+
   const instruction = TYPE_INSTRUCTIONS[articleType] ?? TYPE_INSTRUCTIONS.sale_highlight
 
-  return `You are a professional copywriter for Vectis Auctions, one of the UK's leading specialist toy and collectables auction houses based in Shanklin, Isle of Wight.
+  return `You are a professional copywriter for Vectis Auctions — a UK specialist toy and collectables auction house, and one of the world's leading auctioneers of vintage diecast, model railways, tinplate, action figures, dolls, bears, and TV/film memorabilia.
 
 ${instruction}
 
-UNIVERSAL REQUIREMENTS:
-- British English spelling throughout (e.g. "realised", "recognised", "colour")
-- Output valid HTML only — no <!DOCTYPE>, <html>, <head>, <body>
-- Reference vectis.co.uk only — never invent URLs
-- Be specific: reference real lot numbers, sale names, dates
-- Naturally include category-relevant keywords for SEO
+═══════════════════════════════════════════════════════════════════
+BRAND VOICE — STRICT RULES (read carefully)
+═══════════════════════════════════════════════════════════════════
 
-AUCTION DATA:
+ABOUT VECTIS — only use facts from this block. Do NOT invent any others.
+- Name: "Vectis Auctions" or simply "Vectis".
+- Specialism: vintage toys, diecast (Corgi, Dinky, Matchbox), model railways
+  (Hornby, Bachmann), tinplate, action figures (Star Wars, Action Man),
+  dolls, bears, TV/film memorabilia, comics.
+- Reach: international buyer base, online & live auction format.
+- Website: vectis.co.uk — the only URL allowed in any output.
+
+DO NOT under any circumstances:
+- Mention a city, town, county, region, or "headquarters" location for Vectis.
+  AVOID phrases like "Shanklin", "Isle of Wight", "Yorkshire", "Teesside",
+  "our offices in…", "our saleroom in [place]", "based in [place]", or
+  "here at our [place] headquarters". If you need to refer to a place,
+  say "Vectis" or "the saleroom" — never name a location.
+- Invent staff names, quotes, departments, founder details, or company history.
+- Reference URLs other than vectis.co.uk.
+- Invent dates, years, or sale names not in the data below.
+- Use the word "CRM".
+
+ALWAYS:
+- British English: "realised", "colour", "specialise", "catalogue".
+- Use the EXACT sale names, lot numbers, prices, and dates from the data.
+- Use the EXACT year(s) shown in "Year(s) covered" below — never expand
+  to a range like "2024–2026" if the data only contains one year.
+- Output valid HTML only — no DOCTYPE, html, head, or body tags.
+
+═══════════════════════════════════════════════════════════════════
+AUCTION DATA
+═══════════════════════════════════════════════════════════════════
+${yearLine}
 Sales covered: ${saleNames || "Various"}
 Categories: ${categories || "Various"}
 Total hammer value: ${fmtPrice(totalValue)}
