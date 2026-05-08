@@ -16,6 +16,14 @@ type Lot = {
   auctionCode:  string | null
   auctionName:  string | null
   auctionDate:  string | null
+  // Enriched from CatalogueLot
+  catTitle?:        string | null
+  catDescription?:  string | null
+  catKeyPoints?:    string | null
+  catCondition?:    string | null
+  catSubCategory?:  string | null
+  catBrand?:        string | null
+  catExtraDetails?: string | null
 }
 
 function fmtPrice(n: number | null) {
@@ -144,17 +152,61 @@ Output: HTML. 600–900 words.`,
 }
 
 function buildPrompt(lots: Lot[], articleType: string): string {
-  const lotLines = lots.map((l, i) => {
-    const price   = l.hammerPrice ? `sold for ${fmtPrice(l.hammerPrice)}` : "unsold"
-    const est     = l.lowEstimate && l.highEstimate
-      ? ` (estimate ${fmtPrice(l.lowEstimate)}–${fmtPrice(l.highEstimate)})`
+  // Strip basic HTML tags from cataloguer descriptions (they often contain <p>, <br>, <ul> etc.)
+  const stripHtml = (s: string | null | undefined) =>
+    !s ? "" : s.replace(/<br\s*\/?>/gi, "\n").replace(/<\/?(p|ul|ol|li|strong|em|h[1-6])[^>]*>/gi, "").replace(/<[^>]+>/g, "").trim()
+
+  // Pre-compute performance vs estimate so the model can quote it directly
+  const performance = (l: Lot): string => {
+    if (!l.hammerPrice || !l.lowEstimate || !l.highEstimate) return ""
+    const mid = (l.lowEstimate + l.highEstimate) / 2
+    const pct = Math.round((l.hammerPrice / mid) * 100)
+    if (l.hammerPrice >= l.highEstimate * 1.5) return `, smashing the high estimate (${pct}% of mid)`
+    if (l.hammerPrice >  l.highEstimate)       return `, exceeding the high estimate (${pct}% of mid)`
+    if (l.hammerPrice >= l.lowEstimate)        return `, within estimate (${pct}% of mid)`
+    return `, below the low estimate (${pct}% of mid)`
+  }
+
+  const lotBlocks = lots.map((l, i) => {
+    const headline   = l.catTitle ?? l.description ?? "Unnamed lot"
+    const lotRef     = (l.currentLotNo ?? l.lotNo) ? `Lot ${l.currentLotNo ?? l.lotNo}` : ""
+    const sale       = l.auctionName ?? l.auctionCode ?? "Unknown Sale"
+    const date       = fmtDate(l.auctionDate)
+    const saleLine   = [sale, date].filter(Boolean).join(" · ")
+
+    const priceLine  = l.hammerPrice
+      ? `Hammer: ${fmtPrice(l.hammerPrice)}${performance(l)}`
+      : "Status: unsold / upcoming"
+    const estLine    = (l.lowEstimate && l.highEstimate)
+      ? `Estimate: ${fmtPrice(l.lowEstimate)}–${fmtPrice(l.highEstimate)}`
       : ""
-    const sale    = l.auctionName ?? l.auctionCode ?? "Unknown Sale"
-    const date    = fmtDate(l.auctionDate)
-    const lotRef  = (l.currentLotNo ?? l.lotNo) ? ` — Lot ${l.currentLotNo ?? l.lotNo}` : ""
-    const saleLine = date ? `${sale} (${date})` : sale
-    return `${i + 1}. ${l.description ?? "Unnamed lot"}${lotRef} — ${price}${est} — ${saleLine}`
-  }).join("\n")
+
+    // Build a richer description block from whatever cataloguer data we have
+    const descParts: string[] = []
+    const fullDesc = stripHtml(l.catDescription)
+    if (fullDesc && fullDesc.length > (l.description?.length ?? 0)) {
+      descParts.push(`Description: ${fullDesc}`)
+    } else if (l.description) {
+      descParts.push(`Description: ${l.description}`)
+    }
+    const keyPts = stripHtml(l.catKeyPoints)
+    if (keyPts) descParts.push(`Key points: ${keyPts}`)
+    if (l.catCondition)   descParts.push(`Condition: ${l.catCondition}`)
+    if (l.catBrand)       descParts.push(`Manufacturer/brand: ${l.catBrand}`)
+    if (l.catSubCategory) descParts.push(`Subcategory: ${l.catSubCategory}`)
+    if (l.category)       descParts.push(`Category: ${l.category}`)
+    const extra = stripHtml(l.catExtraDetails)
+    if (extra) descParts.push(`Extra details: ${extra}`)
+
+    const lines = [
+      `### ${i + 1}. ${headline}${lotRef ? ` (${lotRef})` : ""}`,
+      `Sale: ${saleLine}`,
+      estLine,
+      priceLine,
+      ...descParts,
+    ].filter(Boolean)
+    return lines.join("\n")
+  }).join("\n\n")
 
   const saleNames   = [...new Set(lots.map(l => l.auctionName ?? l.auctionCode).filter(Boolean))].join(", ")
   const categories  = [...new Set(lots.map(l => l.category).filter(Boolean))].join(", ")
@@ -274,8 +326,16 @@ Categories: ${categories || "Various"}
 Total hammer value: ${fmtPrice(totalValue)}
 Number of lots: ${lots.length}
 
-LOTS:
-${lotLines}`
+═══════════════════════════════════════════════════════════════════
+LOT DETAIL — use this material to write specifically and richly.
+Each lot block contains: headline, sale, estimate, hammer + performance,
+description, key points, condition, manufacturer, subcategory.
+Lift specific manufacturers, model numbers, condition grades, eras and
+distinguishing features into the article. AVOID generic phrasing —
+"a beautiful piece", "an iconic toy" — when concrete details are below.
+═══════════════════════════════════════════════════════════════════
+
+${lotBlocks}`
 }
 
 export async function POST(req: NextRequest) {

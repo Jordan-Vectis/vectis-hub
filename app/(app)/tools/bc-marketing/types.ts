@@ -2,7 +2,7 @@ export type Lot = {
   uniqueId:     string
   lotNo:        string | null
   currentLotNo: string | null
-  description:  string | null
+  description:  string | null      // BC short description (EVA_ShortDescription)
   category:     string | null
   hammerPrice:  number | null
   lowEstimate:  number | null
@@ -12,6 +12,15 @@ export type Lot = {
   auctionDate:  string | null
   vendorNo?:    string | null
   vendorName?:  string | null
+
+  // Enriched fields from CatalogueLot (when available — match by receiptUniqueId)
+  catTitle?:        string | null   // Curated lot title (max 83 chars)
+  catDescription?:  string | null   // Full cataloguer description
+  catKeyPoints?:    string | null   // Bullet-list of key facts
+  catCondition?:    string | null   // Condition note
+  catSubCategory?:  string | null
+  catBrand?:        string | null   // Manufacturer / brand
+  catExtraDetails?: string | null
 }
 
 export type Draft = {

@@ -75,7 +75,39 @@ export async function GET(req: NextRequest) {
       take: topN,
     })
 
-    return NextResponse.json({ lots: rows })
+    // Enrich with CatalogueLot data where available — gives us the cataloguer's
+    // full description, key points, condition, manufacturer/brand, etc.
+    const uniqueIds = rows.map(r => r.uniqueId).filter(Boolean)
+    const catLots = uniqueIds.length === 0 ? [] : await prisma.catalogueLot.findMany({
+      where: { receiptUniqueId: { in: uniqueIds } },
+      select: {
+        receiptUniqueId: true,
+        title:           true,
+        description:     true,
+        keyPoints:       true,
+        condition:       true,
+        subCategory:     true,
+        brand:           true,
+        extraDetails:    true,
+      },
+    })
+    const catMap = new Map(catLots.map(c => [c.receiptUniqueId, c]))
+
+    const enriched = rows.map(r => {
+      const c = catMap.get(r.uniqueId)
+      return {
+        ...r,
+        catTitle:        c?.title        ?? null,
+        catDescription:  c?.description  ?? null,
+        catKeyPoints:    c?.keyPoints    ?? null,
+        catCondition:    c?.condition    ?? null,
+        catSubCategory:  c?.subCategory  ?? null,
+        catBrand:        c?.brand        ?? null,
+        catExtraDetails: c?.extraDetails ?? null,
+      }
+    })
+
+    return NextResponse.json({ lots: enriched })
   } catch (e: any) {
     console.error("marketing/lots error:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })

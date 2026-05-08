@@ -7,6 +7,39 @@ import { prisma } from "@/lib/prisma"
 //     category, year, month (YYYY-MM)
 //   For vendor_success: vendorNo (required)
 
+// Enrich WarehouseItem rows with CatalogueLot data (full description, key points, etc.)
+async function enrichLots<T extends { uniqueId: string }>(rows: T[]) {
+  const ids = rows.map(r => r.uniqueId).filter(Boolean)
+  if (ids.length === 0) return rows
+  const catLots = await prisma.catalogueLot.findMany({
+    where: { receiptUniqueId: { in: ids } },
+    select: {
+      receiptUniqueId: true,
+      title:           true,
+      description:     true,
+      keyPoints:       true,
+      condition:       true,
+      subCategory:     true,
+      brand:           true,
+      extraDetails:    true,
+    },
+  })
+  const map = new Map(catLots.map(c => [c.receiptUniqueId, c]))
+  return rows.map(r => {
+    const c = map.get(r.uniqueId)
+    return {
+      ...r,
+      catTitle:        c?.title        ?? null,
+      catDescription:  c?.description  ?? null,
+      catKeyPoints:    c?.keyPoints    ?? null,
+      catCondition:    c?.condition    ?? null,
+      catSubCategory:  c?.subCategory  ?? null,
+      catBrand:        c?.brand        ?? null,
+      catExtraDetails: c?.extraDetails ?? null,
+    }
+  })
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await auth()
@@ -37,7 +70,7 @@ export async function GET(req: NextRequest) {
         orderBy: { hammerPrice: "desc" },
         take: 50,
       })
-      return NextResponse.json({ type, lots })
+      return NextResponse.json({ type, lots: await enrichLots(lots) })
     }
 
     if (type === "estimate_vs_hammer") {
@@ -116,6 +149,7 @@ export async function GET(req: NextRequest) {
       const totalEstMid = withEst.reduce((s, l) => s + (((l.lowEstimate ?? 0) + (l.highEstimate ?? 0)) / 2), 0)
       const overTotal   = withEst.reduce((s, l) => s + (l.hammerPrice ?? 0), 0)
 
+      const enrichedTop = await enrichLots(lots.slice(0, 20))
       return NextResponse.json({
         type,
         vendorNo,
@@ -123,7 +157,7 @@ export async function GET(req: NextRequest) {
         count:       lots.length,
         totalHammer,
         performancePct: totalEstMid > 0 ? Math.round((overTotal / totalEstMid) * 100) : 0,
-        topLots:     lots.slice(0, 20),
+        topLots:     enrichedTop,
         allLots:     lots,
       })
     }
@@ -163,7 +197,7 @@ export async function GET(req: NextRequest) {
         year,
         totalLots: lots.length,
         totalHammer,
-        topLots:   lots.slice(0, 20),
+        topLots:   await enrichLots(lots.slice(0, 20)),
         categoryStats,
       })
     }
