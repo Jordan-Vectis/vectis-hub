@@ -9,6 +9,7 @@ type Packer = {
   staffGroup: "FULL_TIME" | "AGENCY"
   active:     boolean
   sortOrder:  number
+  aliases:    string[]
   createdAt:  string
   updatedAt:  string
 }
@@ -64,8 +65,6 @@ export default function PackersPage() {
       if (res.ok) {
         const data = await res.json()
         setPackers(prev => [...prev, data.packer].sort(byOrder))
-        // Re-pull suggestions — the just-added one (and any close variants
-        // of it) will now match and drop out of the list
         loadSuggestions()
       } else {
         const data = await res.json().catch(() => ({}))
@@ -73,6 +72,49 @@ export default function PackersPage() {
       }
     } finally {
       setAddingFromSugg(null)
+    }
+  }
+
+  // Assign an unmatched raw name to an existing packer as a manual alias.
+  // The next report run will roll that variant up into the chosen packer.
+  async function assignAsAlias(raw: string, packerId: string) {
+    const target = packers.find(p => p.id === packerId)
+    if (!target) return
+    setAddingFromSugg(raw)
+    try {
+      const nextAliases = [...new Set([...(target.aliases ?? []), raw])]
+      const res = await fetch(`/api/packers/${packerId}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ aliases: nextAliases }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setPackers(prev => prev.map(p => p.id === packerId ? data.packer : p))
+        loadSuggestions()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error ?? "Failed to add alias")
+      }
+    } finally {
+      setAddingFromSugg(null)
+    }
+  }
+
+  // Remove an alias from a packer
+  async function removeAlias(packerId: string, alias: string) {
+    const target = packers.find(p => p.id === packerId)
+    if (!target) return
+    const nextAliases = (target.aliases ?? []).filter(a => a !== alias)
+    const res = await fetch(`/api/packers/${packerId}`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ aliases: nextAliases }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setPackers(prev => prev.map(p => p.id === packerId ? data.packer : p))
+      loadSuggestions()
     }
   }
 
@@ -235,11 +277,36 @@ export default function PackersPage() {
           </div>
           <ul className="divide-y divide-amber-100">
             {suggestions.map(s => (
-              <li key={s.raw} className="px-4 py-2.5 flex items-center gap-3 hover:bg-amber-100/40">
-                <code className="flex-1 bg-white border border-amber-200 rounded px-2 py-1 text-sm text-amber-900 font-mono">{s.raw}</code>
+              <li key={s.raw} className="px-4 py-2.5 flex items-center gap-3 hover:bg-amber-100/40 flex-wrap">
+                <code className="bg-white border border-amber-200 rounded px-2 py-1 text-sm text-amber-900 font-mono flex-shrink-0">{s.raw}</code>
                 <span className="text-xs text-amber-700 whitespace-nowrap">
                   {s.count} shipment{s.count === 1 ? "" : "s"}
                 </span>
+                <div className="flex-1" />
+                {/* Assign as alias to an existing packer */}
+                <select
+                  defaultValue=""
+                  onChange={e => {
+                    const v = e.target.value
+                    if (v) { assignAsAlias(s.raw, v); e.currentTarget.value = "" }
+                  }}
+                  disabled={addingFromSugg === s.raw || packers.length === 0}
+                  className="text-xs rounded border border-amber-300 bg-white px-2 py-1 text-amber-900 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-amber-400 max-w-[180px]"
+                  title="Assign this raw name as an alias of an existing packer"
+                >
+                  <option value="">→ Assign to packer…</option>
+                  <optgroup label="Full Time">
+                    {packers.filter(p => p.staffGroup === "FULL_TIME").map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Agency">
+                    {packers.filter(p => p.staffGroup === "AGENCY").map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </optgroup>
+                </select>
+                <span className="text-xs text-amber-600">or add as new:</span>
                 <button
                   onClick={() => addFromSuggestion(s.raw, "FULL_TIME")}
                   disabled={addingFromSugg === s.raw}
@@ -309,34 +376,52 @@ export default function PackersPage() {
             ) : (
               <ul className="divide-y divide-gray-100">
                 {list.map(p => (
-                  <li key={p.id} className={`px-4 py-2.5 flex items-center gap-3 ${p.active ? "" : "opacity-50"}`}>
-                    <input
-                      type="checkbox"
-                      checked={p.active}
-                      onChange={() => patchPacker(p.id, { active: !p.active })}
-                      title="Active — included on the barcode sheet"
-                      className="w-4 h-4 accent-blue-600"
-                    />
-                    <input
-                      type="text"
-                      value={p.name}
-                      onChange={e => setPackers(prev => prev.map(x => x.id === p.id ? { ...x, name: e.target.value } : x))}
-                      onBlur={e => { if (e.target.value.trim() && e.target.value !== p.name) patchPacker(p.id, { name: e.target.value.trim() }) }}
-                      className="flex-1 bg-transparent text-sm text-gray-800 focus:outline-none focus:bg-white focus:border focus:border-blue-400 rounded px-1 py-0.5"
-                    />
-                    <select
-                      value={p.staffGroup}
-                      onChange={e => patchPacker(p.id, { staffGroup: e.target.value as any })}
-                      className="text-xs rounded border border-gray-200 px-2 py-1 text-gray-600 focus:outline-none focus:border-blue-400"
-                      title="Move to other group"
-                    >
-                      <option value="FULL_TIME">Full Time</option>
-                      <option value="AGENCY">Agency</option>
-                    </select>
-                    <button
-                      onClick={() => deletePacker(p.id, p.name)}
-                      className="text-xs text-red-500 hover:text-red-700"
-                    >Delete</button>
+                  <li key={p.id} className={`px-4 py-2.5 ${p.active ? "" : "opacity-50"}`}>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={p.active}
+                        onChange={() => patchPacker(p.id, { active: !p.active })}
+                        title="Active — included on the barcode sheet"
+                        className="w-4 h-4 accent-blue-600 flex-shrink-0"
+                      />
+                      <input
+                        type="text"
+                        value={p.name}
+                        onChange={e => setPackers(prev => prev.map(x => x.id === p.id ? { ...x, name: e.target.value } : x))}
+                        onBlur={e => { if (e.target.value.trim() && e.target.value !== p.name) patchPacker(p.id, { name: e.target.value.trim() }) }}
+                        className="flex-1 bg-transparent text-sm text-gray-800 focus:outline-none focus:bg-white focus:border focus:border-blue-400 rounded px-1 py-0.5"
+                      />
+                      <select
+                        value={p.staffGroup}
+                        onChange={e => patchPacker(p.id, { staffGroup: e.target.value as any })}
+                        className="text-xs rounded border border-gray-200 px-2 py-1 text-gray-600 focus:outline-none focus:border-blue-400"
+                        title="Move to other group"
+                      >
+                        <option value="FULL_TIME">Full Time</option>
+                        <option value="AGENCY">Agency</option>
+                      </select>
+                      <button
+                        onClick={() => deletePacker(p.id, p.name)}
+                        className="text-xs text-red-500 hover:text-red-700"
+                      >Delete</button>
+                    </div>
+                    {/* Alias chips — only render if there are any */}
+                    {p.aliases && p.aliases.length > 0 && (
+                      <div className="mt-1.5 ml-7 flex flex-wrap gap-1.5">
+                        <span className="text-[10px] text-gray-500 uppercase tracking-wider font-medium self-center">also matches:</span>
+                        {p.aliases.map(a => (
+                          <span key={a} className="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-2 py-0.5 rounded">
+                            <code className="font-mono">{a}</code>
+                            <button
+                              onClick={() => removeAlias(p.id, a)}
+                              className="text-emerald-500 hover:text-emerald-800 leading-none"
+                              title="Remove this alias"
+                            >×</button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>

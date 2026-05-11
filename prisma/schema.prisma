@@ -673,6 +673,10 @@ model Packer {
   staffGroup String   @default("FULL_TIME")  // "FULL_TIME" | "AGENCY"
   active    Boolean  @default(true)
   sortOrder Int      @default(0)
+  // Manually-curated alternative spellings, nicknames, initials etc. that
+  // should roll up into this packer in reports. Used by the matcher as an
+  // exact-match overlay before the fuzzy logic runs.
+  aliases   String[] @default([])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

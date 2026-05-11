@@ -78,6 +78,7 @@ const MIGRATIONS = [
     CONSTRAINT "Packer_pkey" PRIMARY KEY ("id")
   )`,
   `CREATE INDEX IF NOT EXISTS "Packer_staffGroup_idx" ON "Packer"("staffGroup")`,
+  `ALTER TABLE "Packer" ADD COLUMN IF NOT EXISTS "aliases" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
 
   // User.role: convert from enum Role → TEXT so admins can add custom roles.
   // Existing enum values ('ADMIN', 'COLLECTIONS', 'CATALOGUER') survive

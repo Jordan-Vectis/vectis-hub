@@ -10,13 +10,13 @@
 //   4. Levenshtein within threshold (≤3 chars, or ≤25% of length for shorter)
 //   5. Otherwise → unmatched (raw string passes through)
 
-export type Packer = { id: string; name: string; staffGroup: string }
+export type Packer = { id: string; name: string; staffGroup: string; aliases?: string[] }
 
 export type MatchResult = {
   canonical: string | null     // The matched packer name, or null if no match
   packerId:  string | null
   raw:       string
-  reason:    "exact" | "token" | "fuzzy" | "unmatched"
+  reason:    "alias" | "exact" | "token" | "fuzzy" | "unmatched"
   distance?: number
 }
 
@@ -58,20 +58,22 @@ function levenshtein(a: string, b: string): number {
 // involves a few allocations per packer.
 export function buildPackerMatcher(packers: Packer[]) {
   type Entry = {
-    packer:    Packer
-    normFull:  string
-    tokens:    string[]
-    firstName: string
-    lastName:  string
+    packer:        Packer
+    normFull:      string
+    normAliases:   string[]   // normalised aliases — checked as exact matches
+    tokens:        string[]
+    firstName:     string
+    lastName:      string
   }
   const entries: Entry[] = packers.map(p => {
     const toks = tokens(p.name)
     return {
-      packer:    p,
-      normFull:  normalise(p.name),
-      tokens:    toks,
-      firstName: toks[0] ?? "",
-      lastName:  toks[toks.length - 1] ?? "",
+      packer:        p,
+      normFull:      normalise(p.name),
+      normAliases:   (p.aliases ?? []).map(a => normalise(a)).filter(Boolean),
+      tokens:        toks,
+      firstName:     toks[0] ?? "",
+      lastName:      toks[toks.length - 1] ?? "",
     }
   })
 
@@ -82,7 +84,16 @@ export function buildPackerMatcher(packers: Packer[]) {
     const rawNorm = normalise(rawTrim)
     if (!rawNorm) return r
 
-    // 1. Exact normalised match
+    // 1a. Manual alias match (admin curated — overrides everything else).
+    //     We check this BEFORE the canonical-name exact match so an
+    //     intentional alias never gets out-ranked by fuzzy coincidence.
+    for (const e of entries) {
+      if (e.normAliases.includes(rawNorm)) {
+        return { canonical: e.packer.name, packerId: e.packer.id, raw, reason: "alias" }
+      }
+    }
+
+    // 1b. Exact normalised match against the canonical name
     for (const e of entries) {
       if (e.normFull === rawNorm) {
         return { canonical: e.packer.name, packerId: e.packer.id, raw, reason: "exact" }
