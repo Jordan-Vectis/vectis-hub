@@ -28,6 +28,11 @@ type ModelKey =
   | "customerAccounts" | "departments" | "roleDefaults" | "devices" | "claudeMemory"
   | "bcCatalogueDays" | "bcCatalogueEntries" | "bcPackingDays" | "bcPackingEntries"
   | "warehouseItems" | "warehouseTotes" | "warehouseSyncLogs"
+  // Already exposed via bespoke tabs but included here for the overview
+  | "contacts" | "warehouseReceipts" | "warehouseContainers"
+  | "catalogueLots" | "commissionBids"
+  // Sensitive — only safe columns are projected
+  | "users" | "bcTokens"
 
 type WhitelistEntry = {
   label:      string
@@ -301,6 +306,76 @@ function buildWhitelist(): Record<ModelKey, WhitelistEntry> {
       searchFields: ["email", "firstName", "lastName", "phone"],
     },
 
+    // ── Already in bespoke tabs (included here for overview only) ─────
+    contacts: {
+      label: "Contacts (Customers)",
+      group: "Customers",
+      description: "Master contacts — also editable on the Customers tab",
+      delegate: prisma.contact,
+      orderBy: { name: "asc" },
+      searchFields: ["name", "email", "phone", "notes"],
+    },
+    warehouseReceipts: {
+      label: "Warehouse Receipts",
+      group: "Warehouse / Logistics",
+      description: "Vendor receipts — also editable on the Receipts tab",
+      delegate: prisma.warehouseReceipt,
+      orderBy: { createdAt: "desc" },
+      searchFields: ["status", "notes"],
+    },
+    warehouseContainers: {
+      label: "Warehouse Containers (Totes)",
+      group: "Warehouse / Logistics",
+      description: "Tote containers — also editable on the Totes tab",
+      delegate: prisma.warehouseContainer,
+      orderBy: { createdAt: "desc" },
+      searchFields: ["type", "description", "category", "subcategory"],
+    },
+    catalogueLots: {
+      label: "Catalogue Lots",
+      group: "Cataloguing",
+      description: "Catalogued lots — also editable on the Lots tab",
+      delegate: prisma.catalogueLot,
+      orderBy: { createdAt: "desc" },
+      searchFields: ["lotNumber", "title", "description", "barcode", "vendor", "category", "status"],
+    },
+    commissionBids: {
+      label: "Commission Bids",
+      group: "Cataloguing",
+      description: "Pre-auction commission bids — also viewable on the Bids tab",
+      delegate: prisma.commissionBid,
+      orderBy: { placedAt: "desc" },
+      searchFields: [],
+    },
+
+    // ── Sensitive — only safe fields projected ─────────────────────────
+    users: {
+      label: "Users (staff logins)",
+      group: "Admin",
+      description: "Staff login accounts — password fields are deliberately hidden",
+      delegate: prisma.user,
+      select: {
+        id: true, name: true, email: true, username: true,
+        role: true, departmentId: true,
+        allowedApps: true, appPermissions: true,
+        createdAt: true, updatedAt: true,
+      },
+      orderBy: { name: "asc" },
+      searchFields: ["name", "email", "username", "role"],
+    },
+    bcTokens: {
+      label: "BC OAuth Tokens",
+      group: "Admin",
+      description: "Business Central OAuth state — token bodies are deliberately hidden",
+      delegate: prisma.bCToken,
+      select: {
+        userId: true, expiresAt: true, refreshExpiresAt: true,
+        createdAt: true, updatedAt: true,
+      },
+      orderBy: { updatedAt: "desc" },
+      searchFields: [],
+    },
+
     // ── Admin-managed ────────────────────────────────────────────────
     departments: {
       label: "Departments",
@@ -358,8 +433,47 @@ export async function GET(req: NextRequest) {
 
     const whitelist = buildWhitelist()
 
+    const overview = searchParams.get("overview") === "1"
+
+    if (overview) {
+      // Return every table with its row count + a small sample (default 3 rows).
+      // Runs all the queries in parallel so the response stays snappy even with
+      // 30+ tables. Errors per-table fall through to count=null so one bad
+      // model doesn't break the whole overview.
+      const sampleSize = Math.min(Math.max(parseInt(searchParams.get("sampleSize") ?? "3", 10) || 3, 1), 10)
+      const entries = Object.entries(whitelist) as [ModelKey, WhitelistEntry][]
+      const results = await Promise.all(entries.map(async ([key, v]) => {
+        try {
+          const [count, rows] = await Promise.all([
+            v.delegate.count(),
+            v.delegate.findMany({
+              ...(v.select ? { select: v.select } : {}),
+              orderBy: v.orderBy,
+              take: sampleSize,
+            }),
+          ])
+          const columns = rows.length > 0 ? Object.keys(rows[0]) : []
+          const serialised = rows.map((r: any) => {
+            const out: any = {}
+            for (const k of Object.keys(r)) {
+              const val = r[k]
+              if (val instanceof Date)       out[k] = val.toISOString()
+              else if (typeof val === "bigint") out[k] = val.toString()
+              else if (val && typeof val === "object") out[k] = JSON.stringify(val)
+              else out[k] = val
+            }
+            return out
+          })
+          return { key, label: v.label, group: v.group, description: v.description, count, columns, samples: serialised }
+        } catch (e: any) {
+          return { key, label: v.label, group: v.group, description: v.description, count: null, error: e?.message, columns: [], samples: [] }
+        }
+      }))
+      return NextResponse.json({ overview: results })
+    }
+
     if (!tableKey) {
-      // Return the catalogue of browsable tables
+      // Return the catalogue of browsable tables (no samples, no counts)
       const items = (Object.entries(whitelist) as [ModelKey, WhitelistEntry][])
         .map(([key, v]) => ({ key, label: v.label, group: v.group, description: v.description }))
       return NextResponse.json({ tables: items })

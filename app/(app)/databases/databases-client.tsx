@@ -946,9 +946,11 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
 // auto-discovers columns, optional case-insensitive search.
 
 type TableMeta = { key: string; label: string; group: string; description: string }
+type OverviewEntry = TableMeta & { count: number | null; error?: string; columns: string[]; samples: any[] }
 
 function BrowseAnyTab() {
-  const [tables,   setTables]   = useState<TableMeta[]>([])
+  const [overview, setOverview] = useState<OverviewEntry[] | null>(null)
+  const [overviewLoading, setOverviewLoading] = useState(true)
   const [tableKey, setTableKey] = useState<string>("")
   const [search,   setSearch]   = useState("")
   const [rows,     setRows]     = useState<any[]>([])
@@ -959,12 +961,23 @@ function BrowseAnyTab() {
   const [selectedRow, setSelectedRow] = useState<any | null>(null)
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Load the table catalogue on mount
+  // Load the overview on mount — counts + small sample for every table
   useEffect(() => {
-    fetch("/api/databases/browse").then(r => r.json()).then(d => {
-      if (d.tables) setTables(d.tables)
-    }).catch(() => setError("Failed to load table list"))
+    setOverviewLoading(true)
+    fetch("/api/databases/browse?overview=1&sampleSize=3")
+      .then(r => r.json())
+      .then(d => {
+        if (d.overview) setOverview(d.overview)
+        else if (d.error) setError(d.error)
+      })
+      .catch(() => setError("Failed to load overview"))
+      .finally(() => setOverviewLoading(false))
   }, [])
+
+  const tables: TableMeta[] = useMemo(
+    () => overview ? overview.map(o => ({ key: o.key, label: o.label, group: o.group, description: o.description })) : [],
+    [overview],
+  )
 
   // Group tables by their group field for the optgroup dropdown
   const grouped = useMemo(() => {
@@ -1021,20 +1034,29 @@ function BrowseAnyTab() {
       <div className="flex items-end gap-3 flex-wrap">
         <div className="min-w-[280px]">
           <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Table</label>
-          <select
-            value={tableKey}
-            onChange={e => { setTableKey(e.target.value); setSelectedRow(null) }}
-            className="w-full rounded-lg border border-gray-700 bg-[#1C1C1E] px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
-          >
-            <option value="">— Pick a table —</option>
-            {grouped.map(([group, items]) => (
-              <optgroup key={group} label={group}>
-                {items.map(t => (
-                  <option key={t.key} value={t.key}>{t.label}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
+          <div className="flex items-center gap-2">
+            <select
+              value={tableKey}
+              onChange={e => { setTableKey(e.target.value); setSelectedRow(null) }}
+              className="flex-1 rounded-lg border border-gray-700 bg-[#1C1C1E] px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+            >
+              <option value="">— Pick a table —</option>
+              {grouped.map(([group, items]) => (
+                <optgroup key={group} label={group}>
+                  {items.map(t => (
+                    <option key={t.key} value={t.key}>{t.label}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            {tableKey && (
+              <button
+                onClick={() => { setTableKey(""); setSearch(""); setRows([]); setColumns([]); setSelectedRow(null) }}
+                className="text-xs text-gray-500 hover:text-violet-400 transition-colors px-2 whitespace-nowrap"
+                title="Back to the all-tables overview"
+              >← Overview</button>
+            )}
+          </div>
           {currentMeta && <p className="text-xs text-gray-500 mt-1">{currentMeta.description}</p>}
         </div>
 
@@ -1063,10 +1085,86 @@ function BrowseAnyTab() {
 
       {error && <div className="bg-red-900/30 border border-red-800 rounded-lg px-4 py-3 text-sm text-red-300">{error}</div>}
 
-      {!tableKey && (
-        <div className="rounded-lg border border-dashed border-gray-800 p-10 text-center">
-          <p className="text-sm text-gray-400">Pick a table from the dropdown to view its rows.</p>
-          <p className="text-xs text-gray-600 mt-1">Read-only — the existing tabs above are where you edit data.</p>
+      {/* Overview — shown when no table is picked. All tables at a glance,
+          with row counts and the first 3 sample rows compressed inline. */}
+      {!tableKey && overviewLoading && (
+        <div className="rounded-lg border border-dashed border-gray-800 p-10 text-center text-sm text-gray-500">
+          Loading overview of every table…
+        </div>
+      )}
+
+      {!tableKey && !overviewLoading && overview && (
+        <div className="space-y-6">
+          <p className="text-xs text-gray-500">
+            Every table in the database with row counts and 3 sample rows. Click any card to drill in and filter.
+            Read-only — the bespoke tabs above are where you edit data.
+          </p>
+          {(() => {
+            const groups = new Map<string, OverviewEntry[]>()
+            for (const o of overview) {
+              if (!groups.has(o.group)) groups.set(o.group, [])
+              groups.get(o.group)!.push(o)
+            }
+            const ordered = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b))
+            return ordered.map(([group, items]) => (
+              <div key={group}>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">{group}</h3>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {items.map(t => (
+                    <button
+                      key={t.key}
+                      onClick={() => setTableKey(t.key)}
+                      className="text-left bg-[#141416] border border-gray-800 rounded-lg p-4 hover:border-violet-600 hover:bg-[#1a1a1d] transition-colors"
+                    >
+                      <div className="flex items-baseline justify-between gap-3 mb-1">
+                        <h4 className="font-semibold text-gray-200 truncate">{t.label}</h4>
+                        <span className="text-xs text-gray-500 shrink-0">
+                          {t.error
+                            ? <span className="text-red-400">error</span>
+                            : t.count === null
+                              ? "—"
+                              : <><span className="text-violet-400 font-mono">{t.count.toLocaleString()}</span> row{t.count === 1 ? "" : "s"}</>}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mb-2.5 line-clamp-2">{t.description}</p>
+                      {t.samples.length > 0 ? (
+                        <div className="bg-[#0a0a0c] border border-gray-900 rounded p-2 overflow-x-auto">
+                          <table className="text-[10px] w-full">
+                            <thead>
+                              <tr>
+                                {t.columns.slice(0, 5).map(c => (
+                                  <th key={c} className="text-left px-1.5 py-1 text-gray-600 font-medium whitespace-nowrap">{c}</th>
+                                ))}
+                                {t.columns.length > 5 && <th className="text-left px-1.5 py-1 text-gray-700">…</th>}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {t.samples.map((s: any, i: number) => (
+                                <tr key={i} className="border-t border-gray-900">
+                                  {t.columns.slice(0, 5).map(c => {
+                                    const v = s[c]
+                                    const txt = v === null || v === undefined ? "" : String(v)
+                                    return (
+                                      <td key={c} className="px-1.5 py-1 text-gray-400 max-w-[140px] truncate" title={txt}>
+                                        {txt || <span className="text-gray-700">—</span>}
+                                      </td>
+                                    )
+                                  })}
+                                  {t.columns.length > 5 && <td className="px-1.5 py-1 text-gray-700">…</td>}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-gray-700 italic">Empty</p>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))
+          })()}
         </div>
       )}
 
