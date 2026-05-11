@@ -435,7 +435,11 @@ export default function PackersPage() {
                         value={p.name}
                         onChange={e => setPackers(prev => prev.map(x => x.id === p.id ? { ...x, name: e.target.value } : x))}
                         onBlur={e => { if (e.target.value.trim() && e.target.value !== p.name) patchPacker(p.id, { name: e.target.value.trim() }) }}
-                        className="flex-1 bg-transparent text-sm text-gray-800 focus:outline-none focus:bg-white focus:border focus:border-blue-400 rounded px-1 py-0.5"
+                        onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur() }}
+                        title="Click to rename"
+                        className="flex-1 bg-transparent text-sm text-gray-800 rounded px-1.5 py-0.5 cursor-text
+                                   border border-transparent hover:border-gray-300 hover:bg-white
+                                   focus:outline-none focus:border-blue-400 focus:bg-white"
                       />
                       <select
                         value={p.staffGroup}
