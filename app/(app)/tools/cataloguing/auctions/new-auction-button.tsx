@@ -89,14 +89,6 @@ export default function NewAuctionButton() {
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">Event Name</label>
-                <input
-                  name="eventName"
-                  placeholder="Optional event name"
-                  className="w-full rounded-lg border border-gray-700 bg-[#2C2C2E] px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]"
-                />
-              </div>
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"

@@ -484,10 +484,6 @@ function SettingsTab({ auction }: { auction: Auction }) {
               {AUCTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
-          <div>
-            <label className={lbl}>Event Name</label>
-            <input name="eventName" defaultValue={auction.eventName ?? ""} className={input} />
-          </div>
         </div>
 
         <div>

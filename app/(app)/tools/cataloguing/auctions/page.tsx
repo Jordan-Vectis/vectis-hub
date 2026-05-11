@@ -69,7 +69,6 @@ export default async function AuctionsPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-400">Locked</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-400">Finished</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-400">Complete</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-400">Event Name</th>
               </tr>
             </thead>
             <tbody>
@@ -115,7 +114,6 @@ export default async function AuctionsPage() {
                       <span className="text-gray-600">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-400">{auction.eventName ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
