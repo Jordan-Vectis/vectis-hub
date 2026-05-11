@@ -41,12 +41,16 @@ export default function EditUserForm({ userId, name, email, username, role, depa
     return initial
   })
 
-  // Hub card visibility — only applies to allUsers cards
+  // Hub card visibility — only applies to allUsers cards.
+  // "configured" = the HUB_CARDS key exists in appPermissions, even if its
+  // 'visible' array is empty. Empty means "deliberately no cards", so we must
+  // respect that. Earlier code treated [] as "not yet set" and silently
+  // reverted unticks back to all-on — that bug now fixed by using key presence.
   const ALL_USER_CARD_KEYS = APP_CARD_DEFS.filter(c => c.allUsers).map(c => c.key)
-  const storedHubCards = (appPermissions as any)?.HUB_CARDS?.visible as string[] | undefined
+  const hubCardsConfigured = (appPermissions as any)?.HUB_CARDS !== undefined
+  const storedHubCards     = (appPermissions as any)?.HUB_CARDS?.visible as string[] | undefined
   const [hubCards, setHubCards] = useState<string[]>(
-    // Default to all visible if never configured or empty (treats [] as "not yet set")
-    storedHubCards && storedHubCards.length > 0 ? storedHubCards : ALL_USER_CARD_KEYS
+    hubCardsConfigured ? (storedHubCards ?? []) : ALL_USER_CARD_KEYS
   )
 
   function toggleHubCard(key: string) {

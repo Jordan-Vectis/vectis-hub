@@ -47,7 +47,12 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
   users: User[]
 }) {
   const ALL_USER_CARD_KEYS = APP_CARD_DEFS.filter(c => c.allUsers).map(c => c.key)
-  const storedHubCards = initial?.appPermissions?.HUB_CARDS?.visible as string[] | undefined
+  // "configured" = the HUB_CARDS key exists in appPermissions, even if its
+  // 'visible' array is empty. Empty means "deliberately no cards", so we must
+  // respect that — earlier code treated [] as "not yet set" and silently
+  // reverted unticks back to all-on. Bug now fixed by using key presence.
+  const hubCardsConfigured = (initial?.appPermissions as any)?.HUB_CARDS !== undefined
+  const storedHubCards     = (initial?.appPermissions as any)?.HUB_CARDS?.visible as string[] | undefined
 
   const [selectedApps, setSelectedApps] = useState<string[]>(initial?.allowedApps ?? [])
   const [warehouseRole, setWarehouseRole] = useState<WarehouseRole>(
@@ -61,7 +66,7 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
     return out
   })
   const [hubCards, setHubCards] = useState<string[]>(
-    storedHubCards && storedHubCards.length > 0 ? storedHubCards : ALL_USER_CARD_KEYS
+    hubCardsConfigured ? (storedHubCards ?? []) : ALL_USER_CARD_KEYS
   )
 
   const router = useRouter()
