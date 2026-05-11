@@ -59,13 +59,13 @@ export default async function AdminOverviewPage() {
   if (!session || session.user.role !== "ADMIN") redirect("/hub")
 
   return (
-    <div className="p-8 max-w-3xl">
+    <div className="p-8 max-w-7xl">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Admin</h1>
         <p className="text-sm text-gray-500 mt-1">System-wide settings and management</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {sections.map(s => (
           <Link key={s.href} href={s.href}
             className="bg-white border border-gray-200 rounded-xl p-5 hover:border-slate-400 hover:shadow-sm transition-all group">

@@ -1,41 +1,8 @@
-"use client"
-
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-
-const links = [
-  { href: "/admin",             label: "Overview",    icon: "🏠", exact: true },
-  { href: "/admin/users",       label: "Users",       icon: "👤" },
-  { href: "/admin/departments", label: "Departments", icon: "🏢" },
-]
+// Admin sidebar removed — the /admin overview page now lists every
+// section as a card so the duplicate nav was just clutter. Left as a
+// no-op component so the import in app/(app)/layout.tsx keeps working
+// without code churn.
 
 export default function AdminSidebar() {
-  const pathname = usePathname()
-
-  if (!pathname.startsWith("/admin")) return null
-
-  return (
-    <aside className="w-48 flex-shrink-0 bg-gray-900 border-r border-gray-700 flex flex-col py-4">
-      <p className="text-xs font-semibold uppercase tracking-widest text-gray-500 px-4 mb-3">Admin</p>
-      <nav className="flex flex-col gap-0.5 px-2">
-        {links.map(({ href, label, icon, exact }) => {
-          const active = exact ? pathname === href : pathname.startsWith(href)
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                active
-                  ? "bg-slate-600 text-white"
-                  : "text-gray-400 hover:bg-gray-800 hover:text-white"
-              }`}
-            >
-              <span className="text-base leading-none">{icon}</span>
-              {label}
-            </Link>
-          )
-        })}
-      </nav>
-    </aside>
-  )
+  return null
 }
