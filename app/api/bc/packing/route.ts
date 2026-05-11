@@ -136,7 +136,7 @@ export async function GET(req: NextRequest) {
       // a new packer or correct the spelling at source.
       const packers  = await prisma.packer.findMany({
         where:  { active: true },
-        select: { id: true, name: true, staffGroup: true },
+        select: { id: true, name: true, staffGroup: true, aliases: true },
       })
       const matcher  = buildPackerMatcher(packers)
       // Cache the result per raw string — each raw appears many times

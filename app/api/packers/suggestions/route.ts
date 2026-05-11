@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
 
     // Match against the canonical Packer table — only return unmatched ones
     const packers = await prisma.packer.findMany({
-      select: { id: true, name: true, staffGroup: true },  // include inactive too
+      select: { id: true, name: true, staffGroup: true, aliases: true },  // include inactive too
     })
     const matcher = buildPackerMatcher(packers)
 
