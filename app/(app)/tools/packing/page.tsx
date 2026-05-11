@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
+import Link from "next/link"
 
 const RM_SERVICES: Record<string, string> = {
   TPNN: "Tracked 24 — No Signature",
@@ -180,6 +181,12 @@ export default function PackingPage() {
           <p className="text-sm text-gray-500 mt-0.5">Royal Mail Click &amp; Drop integration</p>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            href="/tools/packing/packers"
+            className="text-sm text-gray-600 hover:text-gray-900 border border-gray-300 hover:border-gray-400 px-3 py-2 rounded-lg transition-colors"
+          >
+            👥 Packer Barcodes
+          </Link>
           {readyCount > 0 && (
             <button
               onClick={doManifest}

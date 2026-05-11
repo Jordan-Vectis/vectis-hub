@@ -66,6 +66,19 @@ const MIGRATIONS = [
   // CatalogueLot.addedToBC — manual cataloguer tick once a lot has gone over to BC
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "addedToBC" BOOLEAN NOT NULL DEFAULT FALSE`,
 
+  // Packer — packing-floor staff list, used to generate the barcode sheet
+  `CREATE TABLE IF NOT EXISTS "Packer" (
+    "id"          TEXT NOT NULL,
+    "name"        TEXT NOT NULL,
+    "staffGroup"  TEXT NOT NULL DEFAULT 'FULL_TIME',
+    "active"      BOOLEAN NOT NULL DEFAULT TRUE,
+    "sortOrder"   INTEGER NOT NULL DEFAULT 0,
+    "createdAt"   TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt"   TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "Packer_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "Packer_staffGroup_idx" ON "Packer"("staffGroup")`,
+
   // User.role: convert from enum Role → TEXT so admins can add custom roles.
   // Existing enum values ('ADMIN', 'COLLECTIONS', 'CATALOGUER') survive
   // unchanged as their text equivalents. The old "Role" enum type stays

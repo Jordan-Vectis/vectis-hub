@@ -664,6 +664,21 @@ model Device {
   updatedAt    DateTime @updatedAt
 }
 
+// Packing-floor staff list. Used to generate a barcode sheet that gets stuck
+// up at the packing benches — each packer scans their barcode to identify
+// who's doing the packing in BC.
+model Packer {
+  id        String   @id @default(cuid())
+  name      String
+  staffGroup String   @default("FULL_TIME")  // "FULL_TIME" | "AGENCY"
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([staffGroup])
+}
+
 model ClaudeMemory {
   filename  String   @id
   content   String
