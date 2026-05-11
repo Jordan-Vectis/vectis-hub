@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { getBCToken, bcFetchAll } from "@/lib/bc"
-import { PDFDocument, StandardFonts, PDFFont, PDFPage, rgb } from "pdf-lib"
+import { PDFDocument, StandardFonts, PDFFont, PDFPage, PDFImage, rgb } from "pdf-lib"
+import { embedVectisLogo } from "@/lib/pdf-logo"
 
 export const maxDuration = 60
 export const runtime = "nodejs"
@@ -130,6 +131,7 @@ async function buildPdf(aisleGroups: { aisle: string; items: Item[] }[]): Promis
   const helv  = await doc.embedFont(StandardFonts.Helvetica)
   const helvB = await doc.embedFont(StandardFonts.HelveticaBold)
   const mono  = await doc.embedFont(StandardFonts.Courier)
+  const logo  = await embedVectisLogo(doc)
 
   const printedDate = new Date().toLocaleDateString("en-GB", {
     weekday: "short", day: "numeric", month: "long", year: "numeric",
@@ -143,14 +145,14 @@ async function buildPdf(aisleGroups: { aisle: string; items: Item[] }[]): Promis
     })
   } else {
     for (const group of aisleGroups) {
-      renderAisleReport(doc, group.aisle, group.items, printedDate, { helv, helvB, mono })
+      renderAisleReport(doc, group.aisle, group.items, printedDate, { helv, helvB, mono, logo })
     }
   }
 
   return await doc.save()
 }
 
-type Fonts = { helv: PDFFont; helvB: PDFFont; mono: PDFFont }
+type Fonts = { helv: PDFFont; helvB: PDFFont; mono: PDFFont; logo: PDFImage }
 
 function renderAisleReport(
   doc:         PDFDocument,
@@ -167,20 +169,21 @@ function renderAisleReport(
   // y starts at the top of the printable area and decreases as we draw down
   let y = PAGE_H - MARGIN
 
-  // ── Aisle report header ─────────────────────────────────
-  page.drawText("Vectis Auctions — Collections Due", {
-    x: MARGIN, y: y - 14, size: 16, font: fonts.helvB, color: black,
-  })
-  page.drawText("Items with a collection docket awaiting dispatch", {
-    x: MARGIN, y: y - 30, size: 9, font: fonts.helv, color: grey,
+  // ── Logo header (left), metadata (right) ─────────────────
+  const logoH = 48
+  const logoW = logoH * (fonts.logo.width / fonts.logo.height)
+  page.drawImage(fonts.logo, { x: MARGIN, y: y - logoH, width: logoW, height: logoH })
+
+  page.drawText("Collections Due", {
+    x: MARGIN, y: y - logoH - 14, size: 10, font: fonts.helv, color: grey,
   })
 
   // Right-aligned date / aisle / count
   drawRight(page, `Printed ${printedDate}`,                     PAGE_W - MARGIN, y - 10, 9,  fonts.helv,  grey)
-  drawRight(page, `Aisle: ${aisle}`,                            PAGE_W - MARGIN, y - 22, 11, fonts.helvB, black)
-  drawRight(page, `${items.length} item${items.length === 1 ? "" : "s"}`, PAGE_W - MARGIN, y - 36, 9, fonts.helv, grey)
+  drawRight(page, `Aisle: ${aisle}`,                            PAGE_W - MARGIN, y - 24, 12, fonts.helvB, black)
+  drawRight(page, `${items.length} item${items.length === 1 ? "" : "s"}`, PAGE_W - MARGIN, y - 40, 9, fonts.helv, grey)
 
-  y = y - 50
+  y = y - logoH - 28
   page.drawLine({
     start: { x: MARGIN,              y },
     end:   { x: PAGE_W - MARGIN,     y },

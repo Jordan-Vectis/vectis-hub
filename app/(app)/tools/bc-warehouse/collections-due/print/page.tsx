@@ -204,7 +204,8 @@ function AisleReport({
       <div className="border-b-2 border-black pb-3 mb-4">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">Vectis Auctions — Collections Due</h1>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/vectis-logo.svg" alt="Vectis Auctions" className="h-14 mb-2" />
             <p className="text-sm text-gray-700 mt-1">
               Items with a collection docket awaiting dispatch
             </p>

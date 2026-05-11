@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { PDFDocument, StandardFonts, PDFFont, PDFPage, rgb } from "pdf-lib"
 import bwipjs from "bwip-js"
+import { embedVectisLogo } from "@/lib/pdf-logo"
 
 export const maxDuration = 60
 export const runtime = "nodejs"
@@ -71,6 +72,7 @@ async function buildPdf(names: string[], staffGroup: string): Promise<Uint8Array
 
   const helv  = await doc.embedFont(StandardFonts.Helvetica)
   const helvB = await doc.embedFont(StandardFonts.HelveticaBold)
+  const logo  = await embedVectisLogo(doc)
 
   // Vectis blue from the brand sheet
   const brandBlue = rgb(0.18, 0.20, 0.45)
@@ -87,7 +89,7 @@ async function buildPdf(names: string[], staffGroup: string): Promise<Uint8Array
 
   for (const pageNames of chunks) {
     const page = doc.addPage([PAGE_W, PAGE_H])
-    drawHeader(page, helv, helvB, brandBlue)
+    drawLogoHeader(page, logo)
 
     // Slot height for THIS page — equal share of usable space.
     // Capped at MAX_SLOT so a small final page (e.g. 3 packers) doesn't render
@@ -108,50 +110,18 @@ async function buildPdf(names: string[], staffGroup: string): Promise<Uint8Array
   return await doc.save()
 }
 
-function drawHeader(page: PDFPage, helv: PDFFont, helvB: PDFFont, brandBlue: ReturnType<typeof rgb>) {
-  // Wordmark — "Vectis" in big bold + "AUCTIONS · COLLECTABLES SPECIALISTS" beneath
-  const titleSize = 42
-  const titleText = "Vectis"
-  const titleW    = helvB.widthOfTextAtSize(titleText, titleSize)
-  const titleX    = (PAGE_W - titleW) / 2
-  const titleY    = PAGE_H - MARGIN - titleSize
+// Embeds the real Vectis logo at the top of the page, centred horizontally,
+// sized so the whole header (logo + bottom padding) takes up ~110pt.
+function drawLogoHeader(page: PDFPage, logo: import("pdf-lib").PDFImage) {
+  const targetHeight = 75      // pt — the rendered logo height on the page
+  const ratio        = logo.width / logo.height
+  const renderW      = targetHeight * ratio
+  const renderH      = targetHeight
 
-  page.drawText(titleText, { x: titleX, y: titleY, size: titleSize, font: helvB, color: brandBlue })
+  const x = (PAGE_W - renderW) / 2
+  const y = PAGE_H - MARGIN - renderH
 
-  // Underline strap
-  const strapY = titleY - 6
-  page.drawLine({
-    start: { x: titleX + 6,             y: strapY },
-    end:   { x: titleX + titleW - 6,    y: strapY },
-    thickness: 1, color: rgb(0.65, 0.05, 0.07),  // brand red
-  })
-
-  // Subtitle line 1: AUCTIONS
-  const sub1 = "AUCTIONS"
-  const sub1Size = 8
-  const sub1W = helv.widthOfTextAtSize(sub1, sub1Size)
-  page.drawText(sub1, {
-    x: (PAGE_W - sub1W) / 2,
-    y: strapY - 12,
-    size: sub1Size, font: helv, color: brandBlue,
-  })
-  // Subtitle line 2: COLLECTABLES SPECIALISTS
-  const sub2 = "COLLECTABLES SPECIALISTS"
-  const sub2Size = 8
-  const sub2W = helv.widthOfTextAtSize(sub2, sub2Size)
-  page.drawText(sub2, {
-    x: (PAGE_W - sub2W) / 2,
-    y: strapY - 24,
-    size: sub2Size, font: helv, color: rgb(0.65, 0.05, 0.07),
-  })
-
-  // Full-width blue divider under the header (matches the reference)
-  const dividerY = strapY - 38
-  page.drawRectangle({
-    x: MARGIN, y: dividerY,
-    width: PAGE_W - MARGIN * 2, height: 4,
-    color: brandBlue,
-  })
+  page.drawImage(logo, { x, y, width: renderW, height: renderH })
 }
 
 async function drawBarcodeRow(
