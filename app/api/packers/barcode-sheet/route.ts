@@ -19,12 +19,13 @@ const PAGE_H   = 841.89
 const MARGIN   = 36
 
 // Horizontal row layout: name on left, barcode on right.
-// 10 rows per page is the target — gives ~66pt per row after the header,
-// which is enough for a comfortably scannable barcode + a clear name label.
-const PER_PAGE  = 10
-const MAX_SLOT  = 90   // pt — cap so small groups (3-4 packers) aren't absurdly tall
-const NAME_COL_W = 200 // pt — width of the left name column
-const COL_GAP    = 16  // pt — gap between name and barcode columns
+// 10 rows per page is the target — gives ~66pt per row after the header.
+// Slot height is FIXED at this value regardless of how many packers are
+// on the page, so a 3-packer sheet looks identical in row size to a
+// 10-packer sheet (just with the bottom of the page left empty).
+const PER_PAGE   = 10
+const NAME_COL_W = 200  // pt — width of the left name column
+const COL_GAP    = 16   // pt — gap between name and barcode columns
 
 export async function GET(req: NextRequest) {
   try {
@@ -87,22 +88,18 @@ async function buildPdf(names: string[], staffGroup: string): Promise<Uint8Array
   const chunks: string[][] = []
   for (let i = 0; i < names.length; i += PER_PAGE) chunks.push(names.slice(i, i + PER_PAGE))
 
+  // Fixed slot height — same for every page regardless of how many packers
+  // are on it. Small groups (3 packers) get the same row height as full
+  // pages (10 packers) — the only difference is empty space at the bottom.
+  const slotH = usableH / PER_PAGE
+
   for (const pageNames of chunks) {
     const page = doc.addPage([PAGE_W, PAGE_H])
     drawLogoHeader(page, logo)
 
-    // Slot height for THIS page — equal share of usable space.
-    // Capped at MAX_SLOT so a small final page (e.g. 3 packers) doesn't render
-    // each row ridiculously tall.
-    const slotH = Math.min(MAX_SLOT, usableH / pageNames.length)
-
-    // Centre the whole stack vertically if there's leftover space
-    const totalH    = slotH * pageNames.length
-    const stackTop  = usableTop - (usableH - totalH) / 2
-
     for (let i = 0; i < pageNames.length; i++) {
       const name = pageNames[i]
-      const rowTop = stackTop - slotH * i
+      const rowTop = usableTop - slotH * i
       await drawBarcodeRow(doc, page, name, rowTop, slotH, helv, helvB, brandBlue)
     }
   }
