@@ -2,6 +2,7 @@ import { NextRequest } from "next/server"
 import { auth } from "@/auth"
 import { getBCToken, bcFetchAll, bcPage } from "@/lib/bc"
 import { prisma } from "@/lib/prisma"
+import { buildPackerMatcher, type MatchResult } from "@/lib/packer-match"
 
 export const maxDuration = 300
 
@@ -125,7 +126,30 @@ export async function GET(req: NextRequest) {
         : []
 
       // ── 4. Merge and compute stats ──────────────────────────────────────────
-      const merged = [...dbEntries, ...freshEntries].sort((a, b) => b.date.localeCompare(a.date))
+      const mergedRaw = [...dbEntries, ...freshEntries].sort((a, b) => b.date.localeCompare(a.date))
+
+      // ── 4a. Fuzzy-match raw staff names to canonical packers ──────────────
+      // BC's PTE_InternalReference is free-text — packers type it in and get
+      // it wrong constantly. Map each variant to the closest Packer record
+      // so the stats roll up correctly. Unmatched variants pass through as-is
+      // and we surface them separately so the admin can either add them as
+      // a new packer or correct the spelling at source.
+      const packers  = await prisma.packer.findMany({
+        where:  { active: true },
+        select: { id: true, name: true, staffGroup: true },
+      })
+      const matcher  = buildPackerMatcher(packers)
+      // Cache the result per raw string — each raw appears many times
+      const matchCache = new Map<string, MatchResult>()
+      function resolveStaff(raw: string): { canonical: string; matched: boolean } {
+        let m = matchCache.get(raw)
+        if (!m) { m = matcher(raw); matchCache.set(raw, m) }
+        return { canonical: m.canonical ?? raw, matched: m.canonical !== null }
+      }
+      const merged = mergedRaw.map(r => {
+        const { canonical } = resolveStaff(r.staff)
+        return { ...r, staff: canonical, rawStaff: r.staff }
+      })
 
       const staffDay: Record<string, Record<string, number>> = {}
       for (const r of merged) {
@@ -163,6 +187,34 @@ export async function GET(req: NextRequest) {
 
       const staffCount = new Set(merged.map(r => r.staff)).size
 
+      // Tally unmatched raw names so admins can spot people who haven't been
+      // added to the Packer table — or variants we should add as aliases.
+      const unmatchedCounts: Record<string, number> = {}
+      for (const [raw, m] of matchCache.entries()) {
+        if (m.canonical) continue
+        unmatchedCounts[raw] = (unmatchedCounts[raw] ?? 0) + 0  // ensures key exists
+      }
+      // Count occurrences in actual entries (not just unique strings)
+      for (const r of mergedRaw) {
+        if (matchCache.get(r.staff)?.canonical) continue
+        unmatchedCounts[r.staff] = (unmatchedCounts[r.staff] ?? 0) + 1
+      }
+      const unmatched = Object.entries(unmatchedCounts)
+        .map(([raw, count]) => ({ raw, count }))
+        .sort((a, b) => b.count - a.count)
+
+      // Also surface a summary of which canonical packers had variants merged
+      // into them — useful for confidence-checking the matcher.
+      const variantsByCanonical: Record<string, Set<string>> = {}
+      for (const [raw, m] of matchCache.entries()) {
+        if (!m.canonical || m.reason === "exact") continue
+        if (!variantsByCanonical[m.canonical]) variantsByCanonical[m.canonical] = new Set()
+        variantsByCanonical[m.canonical].add(raw)
+      }
+      const merges = Object.entries(variantsByCanonical)
+        .map(([canonical, set]) => ({ canonical, variants: [...set].sort() }))
+        .sort((a, b) => b.variants.length - a.variants.length)
+
       send({
         type: "result",
         data: {
@@ -171,7 +223,7 @@ export async function GET(req: NextRequest) {
           dailyAvgLots,
           totalLots,
           raw: merged,
-          meta: { total: merged.length, staffCount },
+          meta: { total: merged.length, staffCount, unmatched, merges },
         },
       })
       controller.close()

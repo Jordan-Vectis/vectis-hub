@@ -24,8 +24,13 @@ type PackData = {
   totalCollections:    { staff: string; total: number }[]
   dailyAvgLots:        { staff: string; avg: number }[]
   totalLots:           { staff: string; total: number }[]
-  raw:                 { date: string; staff: string; docNo: string; lotCount: number }[]
-  meta:                { total: number; staffCount: number }
+  raw:                 { date: string; staff: string; docNo: string; lotCount: number; rawStaff?: string }[]
+  meta:                {
+    total:      number
+    staffCount: number
+    unmatched?: { raw: string; count: number }[]
+    merges?:    { canonical: string; variants: string[] }[]
+  }
 }
 type WhData = {
   byCategory:   { category: string; count: number }[]
@@ -782,6 +787,58 @@ function PackingTab() {
       {data && (
         <div className={loading ? "opacity-40 pointer-events-none transition-opacity" : "transition-opacity"}>
           <MetaBar text={`${from} — ${to}  ·  ${data.meta.total.toLocaleString()} shipments  ·  ${data.meta.staffCount} staff`} />
+
+          {/* Match-quality panel — surfaces typos and missing packers */}
+          {(data.meta.unmatched?.length || data.meta.merges?.length) ? (
+            <details className="mb-3 bg-[#0d0f1a] border border-gray-800 rounded-lg">
+              <summary className="px-3 py-2 cursor-pointer text-xs text-gray-400 hover:text-gray-200 select-none">
+                Name matching ·{" "}
+                {data.meta.merges?.length
+                  ? <span className="text-emerald-400">{data.meta.merges.reduce((s, m) => s + m.variants.length, 0)} variant{data.meta.merges.reduce((s, m) => s + m.variants.length, 0) === 1 ? "" : "s"} merged</span>
+                  : null}
+                {data.meta.merges?.length && data.meta.unmatched?.length ? "  ·  " : ""}
+                {data.meta.unmatched?.length
+                  ? <span className="text-amber-400">{data.meta.unmatched.length} unmatched name{data.meta.unmatched.length === 1 ? "" : "s"}</span>
+                  : null}
+              </summary>
+              <div className="border-t border-gray-800 p-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                {data.meta.merges?.length ? (
+                  <div>
+                    <p className="text-emerald-400 font-semibold mb-1.5">Variants merged into canonical packer</p>
+                    <ul className="space-y-1">
+                      {data.meta.merges.map(m => (
+                        <li key={m.canonical} className="flex flex-wrap items-baseline gap-1.5">
+                          <span className="text-gray-200 font-medium">{m.canonical}</span>
+                          <span className="text-gray-600">←</span>
+                          {m.variants.map(v => (
+                            <code key={v} className="bg-emerald-900/30 text-emerald-200 px-1.5 py-0.5 rounded">{v}</code>
+                          ))}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {data.meta.unmatched?.length ? (
+                  <div>
+                    <p className="text-amber-400 font-semibold mb-1.5">Unmatched names — add them as packers or correct at source</p>
+                    <ul className="space-y-1">
+                      {data.meta.unmatched.map(u => (
+                        <li key={u.raw} className="flex items-baseline gap-2">
+                          <code className="bg-amber-900/30 text-amber-200 px-1.5 py-0.5 rounded">{u.raw}</code>
+                          <span className="text-gray-500">{u.count} shipment{u.count === 1 ? "" : "s"}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-gray-600 mt-2">
+                      Manage the packer list at{" "}
+                      <a href="/tools/packing/packers" className="text-blue-400 hover:underline">/tools/packing/packers</a>
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </details>
+          ) : null}
+
           <PackingSubNav active={subTab} onChange={setSubTab} />
           {subTab === "Overview" && (
             <div className="space-y-5">
