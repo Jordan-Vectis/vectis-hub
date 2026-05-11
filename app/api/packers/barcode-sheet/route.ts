@@ -16,7 +16,14 @@ export const runtime = "nodejs"
 const PAGE_W   = 595.28   // A4 portrait
 const PAGE_H   = 841.89
 const MARGIN   = 36
-const ROWS     = 4        // 4 barcodes per page (matches the reference design)
+
+// Per-barcode slot bounds. The autofit algorithm picks the largest slot
+// that fits all (or N-per-page) of the barcodes — capped by MAX_SLOT so
+// 2 packers don't render absurdly tall, and floored by MIN_SLOT so the
+// barcode still scans cleanly. If N exceeds what fits at MIN_SLOT, we
+// spill onto a fresh page rather than going below the readable floor.
+const MAX_SLOT = 175  // pt — roomy 4-per-page layout when staff list is small
+const MIN_SLOT = 95   // pt — minimum slot to keep a scannable barcode + label
 
 export async function GET(req: NextRequest) {
   try {
@@ -68,24 +75,44 @@ async function buildPdf(names: string[], staffGroup: string): Promise<Uint8Array
   // Vectis blue from the brand sheet
   const brandBlue = rgb(0.18, 0.20, 0.45)
 
+  // Vertical layout constants — same for every page so the autofit math
+  // matches what we actually draw.
+  const HEADER_HEIGHT = 120
+  const usableTop     = PAGE_H - HEADER_HEIGHT - 20
+  const usableBottom  = MARGIN + 20
+  const usableH       = usableTop - usableBottom
+
+  // How many barcodes fit on a page at the maximum slot size?
+  const maxPerPageRoomy = Math.max(1, Math.floor(usableH / MIN_SLOT))
+
+  // Try to fit everyone on one page first. If they wouldn't fit even at
+  // MIN_SLOT, break into pages of maxPerPageRoomy.
+  let perPage: number
+  if (names.length <= maxPerPageRoomy) {
+    perPage = names.length
+  } else {
+    perPage = maxPerPageRoomy
+  }
+
   const chunks: string[][] = []
-  for (let i = 0; i < names.length; i += ROWS) chunks.push(names.slice(i, i + ROWS))
+  for (let i = 0; i < names.length; i += perPage) chunks.push(names.slice(i, i + perPage))
 
   for (const pageNames of chunks) {
     const page = doc.addPage([PAGE_W, PAGE_H])
     drawHeader(page, helv, helvB, brandBlue)
 
-    // Space below header to bottom of page
-    const headerHeight = 120
-    const usableTop    = PAGE_H - headerHeight - 20
-    const usableBottom = MARGIN + 20
-    const usableH      = usableTop - usableBottom
-    const slotH        = usableH / ROWS
+    // Slot height for THIS page — equal share of usable space, capped at MAX_SLOT
+    // so small groups don't get absurdly tall barcodes.
+    const slotH = Math.min(MAX_SLOT, usableH / pageNames.length)
+
+    // Centre the whole stack vertically if there's leftover space (small groups)
+    const totalH      = slotH * pageNames.length
+    const stackTop    = usableTop - (usableH - totalH) / 2
 
     for (let i = 0; i < pageNames.length; i++) {
       const name = pageNames[i]
-      const centreY = usableTop - slotH * i - slotH / 2
-      await drawBarcode(doc, page, name, centreY, helv, brandBlue)
+      const centreY = stackTop - slotH * i - slotH / 2
+      await drawBarcode(doc, page, name, centreY, slotH, helv, brandBlue)
     }
   }
 
@@ -143,33 +170,48 @@ async function drawBarcode(
   page:     PDFPage,
   name:     string,
   centreY:  number,
+  slotH:    number,
   helv:     PDFFont,
   brandBlue: ReturnType<typeof rgb>,
 ) {
-  // Generate Code 128 barcode as PNG buffer
+  // Reserve roughly 25pt of the slot for the name label + padding;
+  // the rest goes to the barcode image itself.
+  const labelReserve  = 28
+  const targetBcH     = Math.max(40, slotH - labelReserve)
+
+  // Generate at a generous size — bwip-js will render bars proportional to
+  // its own height setting. We then scale the embedded PNG to exactly the
+  // target height in pdf-lib so quality stays high regardless of slot size.
   const pngBuf = await bwipjs.toBuffer({
     bcid:        "code128",       // standard staff/asset barcode
     text:        name,
-    scale:       3,
-    height:      14,              // bar height in mm
+    scale:       4,
+    height:      20,              // bar height in mm — bwip-js source resolution
     includetext: false,           // we draw the name ourselves so we can colour-match
     backgroundcolor: "FFFFFF",
   })
 
   const png = await doc.embedPng(pngBuf)
-  const dims = png.scale(0.65)
+  // Match target height; constrain width to page so very long names don't overflow
+  const maxWidth = PAGE_W - MARGIN * 2 - 40
+  let renderH = targetBcH
+  let renderW = (png.width / png.height) * renderH
+  if (renderW > maxWidth) {
+    renderW = maxWidth
+    renderH = (png.height / png.width) * renderW
+  }
 
-  const x = (PAGE_W - dims.width) / 2
-  const y = centreY - dims.height / 2
+  const x = (PAGE_W - renderW) / 2
+  const y = centreY - renderH / 2 + 8  // nudge up so name label sits in the slot too
 
-  page.drawImage(png, { x, y, width: dims.width, height: dims.height })
+  page.drawImage(png, { x, y, width: renderW, height: renderH })
 
-  // Name underneath in Vectis blue
-  const nameSize = 11
+  // Name underneath in Vectis blue — scale font slightly with slot size
+  const nameSize = slotH < 120 ? 10 : 12
   const nameW = helv.widthOfTextAtSize(name, nameSize)
   page.drawText(name, {
     x: (PAGE_W - nameW) / 2,
-    y: y - 18,
+    y: y - 16,
     size: nameSize, font: helv, color: brandBlue,
   })
 }
