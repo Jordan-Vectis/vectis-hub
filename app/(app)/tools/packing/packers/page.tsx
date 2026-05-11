@@ -6,7 +6,7 @@ import Link from "next/link"
 type Packer = {
   id:         string
   name:       string
-  staffGroup: "FULL_TIME" | "AGENCY"
+  staffGroup: "FULL_TIME" | "AGENCY" | "EX_STAFF"
   active:     boolean
   sortOrder:  number
   aliases:    string[]
@@ -14,9 +14,10 @@ type Packer = {
   updatedAt:  string
 }
 
-const GROUPS: { key: "FULL_TIME" | "AGENCY"; label: string; description: string }[] = [
+const GROUPS: { key: "FULL_TIME" | "AGENCY" | "EX_STAFF"; label: string; description: string }[] = [
   { key: "FULL_TIME", label: "Full Time", description: "Permanent packing staff" },
   { key: "AGENCY",    label: "Agency",    description: "Agency / temporary packers" },
+  { key: "EX_STAFF",  label: "Ex-Staff",  description: "Former staff — kept for historical report matching" },
 ]
 
 export default function PackersPage() {
@@ -26,7 +27,7 @@ export default function PackersPage() {
 
   // New packer form
   const [newName,  setNewName]  = useState("")
-  const [newGroup, setNewGroup] = useState<"FULL_TIME" | "AGENCY">("FULL_TIME")
+  const [newGroup, setNewGroup] = useState<"FULL_TIME" | "AGENCY" | "EX_STAFF">("FULL_TIME")
   const [adding,   setAdding]   = useState(false)
 
   // PDF download
@@ -54,7 +55,7 @@ export default function PackersPage() {
   }
   useEffect(() => { loadSuggestions(suggDays) }, [suggDays])
 
-  async function addFromSuggestion(raw: string, group: "FULL_TIME" | "AGENCY") {
+  async function addFromSuggestion(raw: string, group: "FULL_TIME" | "AGENCY" | "EX_STAFF") {
     setAddingFromSugg(raw)
     try {
       const res = await fetch("/api/packers", {
@@ -167,7 +168,7 @@ export default function PackersPage() {
     if (res.ok) setPackers(prev => prev.filter(p => p.id !== id))
   }
 
-  async function downloadBarcodeSheet(staffGroup: "FULL_TIME" | "AGENCY" | "ALL") {
+  async function downloadBarcodeSheet(staffGroup: "FULL_TIME" | "AGENCY" | "EX_STAFF" | "ALL") {
     setDownloading(staffGroup)
     try {
       const url = `/api/packers/barcode-sheet?staffGroup=${staffGroup}`
@@ -192,8 +193,11 @@ export default function PackersPage() {
     }
   }
 
-  const byGroup: Record<"FULL_TIME" | "AGENCY", Packer[]> = { FULL_TIME: [], AGENCY: [] }
-  for (const p of packers) byGroup[p.staffGroup].push(p)
+  const byGroup: Record<"FULL_TIME" | "AGENCY" | "EX_STAFF", Packer[]> = { FULL_TIME: [], AGENCY: [], EX_STAFF: [] }
+  for (const p of packers) {
+    // Defensive: unrecognised group strings shouldn't crash — log + skip
+    if (byGroup[p.staffGroup]) byGroup[p.staffGroup].push(p)
+  }
 
   return (
     <div className="p-6 max-w-5xl" style={{ fontFamily: "Arial, sans-serif" }}>
@@ -220,11 +224,12 @@ export default function PackersPage() {
           />
           <select
             value={newGroup}
-            onChange={e => setNewGroup(e.target.value as "FULL_TIME" | "AGENCY")}
+            onChange={e => setNewGroup(e.target.value as "FULL_TIME" | "AGENCY" | "EX_STAFF")}
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="FULL_TIME">Full Time</option>
             <option value="AGENCY">Agency</option>
+            <option value="EX_STAFF">Ex-Staff</option>
           </select>
           <button
             onClick={addPacker}
@@ -300,6 +305,11 @@ export default function PackersPage() {
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </optgroup>
+                  <optgroup label="Ex-Staff">
+                    {packers.filter(p => p.staffGroup === "EX_STAFF").map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </optgroup>
                 </select>
                 <span className="text-xs text-amber-600">or add as new:</span>
                 <button
@@ -312,6 +322,11 @@ export default function PackersPage() {
                   disabled={addingFromSugg === s.raw}
                   className="text-xs px-2.5 py-1 bg-slate-600 hover:bg-slate-700 disabled:opacity-50 text-white font-semibold rounded transition-colors whitespace-nowrap"
                 >+ Agency</button>
+                <button
+                  onClick={() => addFromSuggestion(s.raw, "EX_STAFF")}
+                  disabled={addingFromSugg === s.raw}
+                  className="text-xs px-2.5 py-1 bg-gray-500 hover:bg-gray-600 disabled:opacity-50 text-white font-semibold rounded transition-colors whitespace-nowrap"
+                >+ Ex-Staff</button>
               </li>
             ))}
           </ul>
@@ -395,6 +410,7 @@ export default function PackersPage() {
                       >
                         <option value="FULL_TIME">Full Time</option>
                         <option value="AGENCY">Agency</option>
+                        <option value="EX_STAFF">Ex-Staff</option>
                       </select>
                       <button
                         onClick={() => deletePacker(p.id, p.name)}

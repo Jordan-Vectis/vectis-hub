@@ -36,7 +36,9 @@ export async function GET(req: NextRequest) {
     const staffGroup = searchParams.get("staffGroup") ?? "ALL"
 
     const where: any = { active: true }
-    if (staffGroup === "FULL_TIME" || staffGroup === "AGENCY") where.staffGroup = staffGroup
+    if (staffGroup === "FULL_TIME" || staffGroup === "AGENCY" || staffGroup === "EX_STAFF") {
+      where.staffGroup = staffGroup
+    }
 
     const packers = await prisma.packer.findMany({
       where,

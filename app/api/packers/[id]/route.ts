@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 
-const VALID_GROUPS = ["FULL_TIME", "AGENCY"] as const
+const VALID_GROUPS = ["FULL_TIME", "AGENCY", "EX_STAFF"] as const
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
