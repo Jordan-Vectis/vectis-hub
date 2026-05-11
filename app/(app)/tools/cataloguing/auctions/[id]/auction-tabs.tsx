@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, fillLotsFromTotes, togglePublished, generateTitlesFromDescriptions, assignLotNumbers, setStartingBids, toggleLotAiUpgraded, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions } from "@/lib/actions/catalogue"
+import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, fillLotsFromTotes, togglePublished, generateTitlesFromDescriptions, assignLotNumbers, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions } from "@/lib/actions/catalogue"
 import LotWizardTab, { CATEGORY_MAP, BRANDS_LIST } from "./lot-wizard-tab"
 import PhotoOnlyTab from "./photo-only-tab"
 import ImportTab from "./import-tab"
@@ -29,7 +29,7 @@ interface Lot {
   hammerPrice: number | null; condition: string | null; vendor: string | null
   tote: string | null; receipt: string | null; receiptUniqueId: string | null; category: string | null
   subCategory: string | null; brand: string | null; notes: string | null
-  status: string; aiUpgraded: boolean; createdByName: string | null; imageUrls: string[]
+  status: string; aiUpgraded: boolean; addedToBC: boolean; createdByName: string | null; imageUrls: string[]
   extraDetails: string | null
 }
 
@@ -582,6 +582,10 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
   const [titlesMsg, setTitlesMsg]   = useState<string | null>(null)
   const [titlesPending, startTitles] = useTransition()
 
+  // Mark/unmark selected as added to BC
+  const [bcMsg, setBcMsg]           = useState<string | null>(null)
+  const [bcPending, startBc]        = useTransition()
+
   // Autolotter panel
   const [showMassAdd,    setShowMassAdd]    = useState(false)
   const [massCount,      setMassCount]      = useState(10)
@@ -641,6 +645,7 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
   const [fCategory,      setFCategory]      = useState("")
   const [fPhotos,        setFPhotos]        = useState("")   // "any" | "none" | ""
   const [fAiUpgraded,    setFAiUpgraded]    = useState("")   // "yes" | "no" | ""
+  const [fAddedToBC,     setFAddedToBC]     = useState("")   // "yes" | "no" | ""
   const [fStatus,        setFStatus]        = useState("")
 
   const uniqueStatuses = useMemo(() => Array.from(new Set(lots.map(l => l.status))).sort(), [lots])
@@ -657,6 +662,7 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
       colMatch(l.category, fCategory) &&
       (fPhotos === "" || (fPhotos === "any" ? l.imageUrls.length > 0 : l.imageUrls.length === 0)) &&
       (fAiUpgraded === "" || (fAiUpgraded === "yes" ? l.aiUpgraded : !l.aiUpgraded)) &&
+      (fAddedToBC === ""  || (fAddedToBC  === "yes" ? l.addedToBC  : !l.addedToBC )) &&
       (fStatus === "" || l.status === fStatus)
     )
     return f.sort((a, b) => {
@@ -684,13 +690,13 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
       }
       return sortDir === "asc" ? cmp : -cmp
     })
-  }, [lots, fLotNo, fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAiUpgraded, fStatus, sortCol, sortDir])
+  }, [lots, fLotNo, fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAiUpgraded, fAddedToBC, fStatus, sortCol, sortDir])
 
-  const filtersActive = [fLotNo, fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAiUpgraded, fStatus].some(f => f !== "")
+  const filtersActive = [fLotNo, fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAiUpgraded, fAddedToBC, fStatus].some(f => f !== "")
 
   function clearFilters() {
     setFLotNo(""); setFBarcode(""); setFUniqueId(""); setFTitle(""); setFVendor(""); setFReceipt("")
-    setFTote(""); setFCategory(""); setFPhotos(""); setFAiUpgraded(""); setFStatus("")
+    setFTote(""); setFCategory(""); setFPhotos(""); setFAiUpgraded(""); setFAddedToBC(""); setFStatus("")
   }
 
   function exportExcel() {
@@ -841,6 +847,23 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
       setSelected(new Set())
       onDelete()
       setTimeout(() => setTitlesMsg(null), 3000)
+    })
+  }
+
+  // Bulk mark/unmark selected lots as "Added to BC". Decides direction by
+  // looking at the selected lots — if any are still un-ticked we tick them
+  // all; if all are already ticked we untick. Avoids needing two buttons.
+  async function handleToggleAddedToBC() {
+    if (selected.size === 0) return
+    const selectedLots = lots.filter(l => selected.has(l.id))
+    const anyUnticked  = selectedLots.some(l => !l.addedToBC)
+    const newValue     = anyUnticked  // true → mark; false → unmark all
+    startBc(async () => {
+      const { count } = await bulkSetLotsAddedToBC(Array.from(selected), auctionId, newValue)
+      setBcMsg(`${newValue ? "✓ Marked" : "↺ Unmarked"} ${count} lot${count === 1 ? "" : "s"} ${newValue ? "as added to BC" : ""}`)
+      setSelected(new Set())
+      onDelete()
+      setTimeout(() => setBcMsg(null), 3500)
     })
   }
 
@@ -1044,6 +1067,17 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
         <div className="flex items-center gap-2 flex-wrap">
           {selected.size > 0 && (
             <>
+              {(() => {
+                const anyUnticked = lots.some(l => selected.has(l.id) && !l.addedToBC)
+                return (
+                  <button onClick={handleToggleAddedToBC} disabled={bcPending}
+                    className="px-4 py-1.5 text-sm font-medium rounded-lg border border-emerald-700 text-emerald-400 hover:bg-emerald-900/30 transition-colors disabled:opacity-50">
+                    {bcPending ? "Updating…" : anyUnticked
+                      ? `📦 Mark ${selected.size} added to BC`
+                      : `↺ Unmark ${selected.size} as added to BC`}
+                  </button>
+                )
+              })()}
               <button onClick={handleGenerateTitles} disabled={titlesPending}
                 className="px-4 py-1.5 text-sm font-medium rounded-lg border border-blue-700 text-blue-400 hover:bg-blue-900/30 transition-colors disabled:opacity-50">
                 {titlesPending ? "Generating…" : `✏️ Generate Titles (${selected.size})`}
@@ -1054,6 +1088,7 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
               </button>
             </>
           )}
+          {bcMsg && <span className="text-xs text-emerald-400">{bcMsg}</span>}
           {filtersActive && (
             <span className="text-xs text-gray-500">
               {filtered.length} / {lots.length} lots
@@ -1368,6 +1403,7 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
                 </th>
               ))}
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">AI</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">BC</th>
               <th className="px-4 py-3" />
             </tr>
             {/* Filter row */}
@@ -1398,6 +1434,13 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
                 <select value={fAiUpgraded} onChange={e => setFAiUpgraded(e.target.value)} className={COL_SELECT}>
                   <option value="">All</option>
                   <option value="yes">✨ Upgraded</option>
+                  <option value="no">Not yet</option>
+                </select>
+              </td>
+              <td className="px-2 py-1.5">
+                <select value={fAddedToBC} onChange={e => setFAddedToBC(e.target.value)} className={COL_SELECT}>
+                  <option value="">All</option>
+                  <option value="yes">📦 Added</option>
                   <option value="no">Not yet</option>
                 </select>
               </td>
@@ -1453,6 +1496,16 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
                       : <span className="text-gray-700 text-xs">—</span>}
                   </button>
                 </td>
+                <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
+                  <button
+                    onClick={() => toggleLotAddedToBC(lot.id, auctionId, !lot.addedToBC)}
+                    title={lot.addedToBC ? "Click to mark as not yet added to BC" : "Click to mark as added to BC"}
+                    className="transition-opacity hover:opacity-60">
+                    {lot.addedToBC
+                      ? <span title="Added to Business Central">📦</span>
+                      : <span className="text-gray-700 text-xs">—</span>}
+                  </button>
+                </td>
                 <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                   <button onClick={() => handleDelete(lot)} disabled={deleting === lot.id || pending}
                     className="text-xs text-red-500 hover:text-red-400 transition-colors disabled:opacity-40">
@@ -1462,7 +1515,7 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-600 text-sm">No lots match your filters</td></tr>
+              <tr><td colSpan={13} className="px-4 py-8 text-center text-gray-600 text-sm">No lots match your filters</td></tr>
             )}
           </tbody>
         </table>

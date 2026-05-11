@@ -214,6 +214,25 @@ export async function toggleLotAiUpgraded(lotId: string, auctionId: string, valu
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
+// Manual cataloguer tick — set after a lot has gone over to Business Central.
+export async function toggleLotAddedToBC(lotId: string, auctionId: string, value: boolean) {
+  await requireCataloguer()
+  await prisma.catalogueLot.update({ where: { id: lotId }, data: { addedToBC: value } })
+  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+}
+
+// Bulk set — used by the mass-select action on Manage Lots.
+export async function bulkSetLotsAddedToBC(lotIds: string[], auctionId: string, value: boolean) {
+  await requireCataloguer()
+  if (lotIds.length === 0) return { count: 0 }
+  const r = await prisma.catalogueLot.updateMany({
+    where: { id: { in: lotIds }, auctionId },
+    data:  { addedToBC: value },
+  })
+  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+  return { count: r.count }
+}
+
 export async function saveLotExtraDetails(lotId: string, auctionId: string, extraDetails: string) {
   await requireCataloguer()
   await prisma.catalogueLot.update({ where: { id: lotId }, data: { extraDetails } })

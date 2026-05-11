@@ -319,6 +319,7 @@ model CatalogueLot {
   imageUrls    String[]         @default([])
   status        String           @default("ENTERED")
   aiUpgraded    Boolean          @default(false)
+  addedToBC     Boolean          @default(false)  // Manually ticked by cataloguers once a lot has been pushed into Business Central
   createdByName String?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
