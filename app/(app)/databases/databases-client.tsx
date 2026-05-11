@@ -28,7 +28,7 @@ type LotRow = {
   reserve: number | null; hammerPrice: number | null; imageCount: number
 }
 type AuctionOption = { id: string; code: string; name: string }
-type Tab = "customers" | "receipts" | "totes" | "lots" | "bids"
+type Tab = "customers" | "receipts" | "totes" | "lots" | "bids" | "browse"
 
 type BidRow = {
   id: string
@@ -605,6 +605,7 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
     { key: "totes",     label: "Totes",           count: containers.length, filtered: filteredContainers.length },
     { key: "lots",      label: "Lots",            count: lots.length,       filtered: filteredLots.length       },
     { key: "bids",      label: "Commission Bids", count: bids.length,       filtered: filteredBids.length       },
+    { key: "browse",    label: "Browse Any Table", count: 0,                filtered: 0                          },
   ]
 
   // ── Row classes ──────────────────────────────────────────────────────────
@@ -902,6 +903,9 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
           </div>
         )}
 
+        {/* ── Browse Any Table ── */}
+        {tab === "browse" && <BrowseAnyTab />}
+
       </div>
 
       {/* ── Drawers ── */}
@@ -932,6 +936,201 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
             onSaved={updated => { setLots(prev => prev.map(l => l.id === updated.id ? updated : l)); flash() }} />
         )}
       </Drawer>
+    </div>
+  )
+}
+
+// ─── Browse Any Table tab ────────────────────────────────────────────────────
+// Generic read-only viewer for every non-sensitive Prisma model. Picks the
+// table from a grouped dropdown, fetches up to 500 rows from /api/databases/browse,
+// auto-discovers columns, optional case-insensitive search.
+
+type TableMeta = { key: string; label: string; group: string; description: string }
+
+function BrowseAnyTab() {
+  const [tables,   setTables]   = useState<TableMeta[]>([])
+  const [tableKey, setTableKey] = useState<string>("")
+  const [search,   setSearch]   = useState("")
+  const [rows,     setRows]     = useState<any[]>([])
+  const [columns,  setColumns]  = useState<string[]>([])
+  const [total,    setTotal]    = useState<number>(0)
+  const [loading,  setLoading]  = useState(false)
+  const [error,    setError]    = useState<string | null>(null)
+  const [selectedRow, setSelectedRow] = useState<any | null>(null)
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Load the table catalogue on mount
+  useEffect(() => {
+    fetch("/api/databases/browse").then(r => r.json()).then(d => {
+      if (d.tables) setTables(d.tables)
+    }).catch(() => setError("Failed to load table list"))
+  }, [])
+
+  // Group tables by their group field for the optgroup dropdown
+  const grouped = useMemo(() => {
+    const m = new Map<string, TableMeta[]>()
+    for (const t of tables) {
+      if (!m.has(t.group)) m.set(t.group, [])
+      m.get(t.group)!.push(t)
+    }
+    return [...m.entries()].sort(([a], [b]) => a.localeCompare(b))
+  }, [tables])
+
+  const currentMeta = tables.find(t => t.key === tableKey)
+
+  async function load(key: string, searchTerm: string) {
+    if (!key) return
+    setLoading(true); setError(null)
+    try {
+      const params = new URLSearchParams({ table: key, limit: "500" })
+      if (searchTerm.trim()) params.set("search", searchTerm.trim())
+      const res = await fetch(`/api/databases/browse?${params}`)
+      const data = await res.json()
+      if (!res.ok) { setError(data.error ?? "Failed to load"); return }
+      setRows(data.rows ?? [])
+      setColumns(data.columns ?? [])
+      setTotal(data.total ?? 0)
+    } catch {
+      setError("Network error")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Reload on table change or debounced search change
+  useEffect(() => {
+    if (!tableKey) return
+    if (searchDebounce.current) clearTimeout(searchDebounce.current)
+    searchDebounce.current = setTimeout(() => load(tableKey, search), 350)
+  }, [tableKey, search])
+
+  function formatCell(v: any): string {
+    if (v === null || v === undefined) return ""
+    if (typeof v === "boolean") return v ? "yes" : "no"
+    if (typeof v === "string"  && /^\d{4}-\d{2}-\d{2}T/.test(v)) {
+      // ISO datetime — show as locale string
+      const d = new Date(v); if (!isNaN(d.getTime())) return d.toLocaleString("en-GB")
+    }
+    if (Array.isArray(v)) return v.join(", ")
+    return String(v)
+  }
+
+  return (
+    <div className="rounded-b-xl rounded-tr-xl border border-gray-800 border-t-0 p-4 space-y-4">
+      {/* Picker + search */}
+      <div className="flex items-end gap-3 flex-wrap">
+        <div className="min-w-[280px]">
+          <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Table</label>
+          <select
+            value={tableKey}
+            onChange={e => { setTableKey(e.target.value); setSelectedRow(null) }}
+            className="w-full rounded-lg border border-gray-700 bg-[#1C1C1E] px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+          >
+            <option value="">— Pick a table —</option>
+            {grouped.map(([group, items]) => (
+              <optgroup key={group} label={group}>
+                {items.map(t => (
+                  <option key={t.key} value={t.key}>{t.label}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          {currentMeta && <p className="text-xs text-gray-500 mt-1">{currentMeta.description}</p>}
+        </div>
+
+        <div className="flex-1 min-w-[200px]">
+          <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Search</label>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Case-insensitive contains across text fields"
+            disabled={!tableKey}
+            className="w-full rounded-lg border border-gray-700 bg-[#1C1C1E] px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:opacity-40"
+          />
+        </div>
+
+        {tableKey && (
+          <div className="text-xs text-gray-500 pb-2">
+            {loading ? "Loading…" : (
+              total > rows.length
+                ? <>Showing {rows.length.toLocaleString()} of {total.toLocaleString()} (max 500)</>
+                : <>{rows.length.toLocaleString()} row{rows.length === 1 ? "" : "s"}</>
+            )}
+          </div>
+        )}
+      </div>
+
+      {error && <div className="bg-red-900/30 border border-red-800 rounded-lg px-4 py-3 text-sm text-red-300">{error}</div>}
+
+      {!tableKey && (
+        <div className="rounded-lg border border-dashed border-gray-800 p-10 text-center">
+          <p className="text-sm text-gray-400">Pick a table from the dropdown to view its rows.</p>
+          <p className="text-xs text-gray-600 mt-1">Read-only — the existing tabs above are where you edit data.</p>
+        </div>
+      )}
+
+      {/* Table */}
+      {tableKey && rows.length > 0 && (
+        <div className="overflow-auto border border-gray-800 rounded-lg max-h-[70vh]">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-[#1C1C1E]">
+              <tr>
+                {columns.map(c => (
+                  <th key={c} className="text-left px-3 py-2 text-[10px] uppercase tracking-wider text-gray-500 font-medium whitespace-nowrap border-b border-gray-800">{c}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr
+                  key={r.id ?? r.uniqueId ?? i}
+                  onClick={() => setSelectedRow(r)}
+                  className={`border-b border-gray-800/50 hover:bg-violet-900/10 transition-colors cursor-pointer ${i % 2 === 0 ? "" : "bg-[#1C1C1E]/30"}`}
+                >
+                  {columns.map(c => {
+                    const v = r[c]
+                    const txt = formatCell(v)
+                    return (
+                      <td key={c} className="px-3 py-2 text-gray-300 max-w-[260px] truncate" title={txt}>
+                        {txt}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {tableKey && !loading && rows.length === 0 && (
+        <div className="rounded-lg border border-dashed border-gray-800 p-10 text-center text-sm text-gray-500">
+          No rows {search ? "match your search" : "in this table yet"}.
+        </div>
+      )}
+
+      {/* Row detail drawer */}
+      {selectedRow && (
+        <div className="fixed inset-0 z-30 bg-black/60 flex items-end sm:items-center sm:justify-end p-4 sm:p-6" onClick={() => setSelectedRow(null)}>
+          <div onClick={e => e.stopPropagation()} className="bg-[#0d0d0f] border border-gray-800 rounded-xl w-full sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+            <div className="sticky top-0 bg-[#0d0d0f] border-b border-gray-800 px-5 py-3 flex items-center justify-between">
+              <h3 className="font-semibold text-gray-200">{currentMeta?.label} — row detail</h3>
+              <button onClick={() => setSelectedRow(null)} className="text-gray-500 hover:text-gray-300 text-xl leading-none">×</button>
+            </div>
+            <div className="p-5 space-y-3">
+              {columns.map(c => (
+                <div key={c} className="grid grid-cols-3 gap-3 border-b border-gray-900 pb-2 last:border-0">
+                  <span className="text-xs text-gray-500 font-medium">{c}</span>
+                  <span className="col-span-2 text-xs text-gray-200 font-mono break-all whitespace-pre-wrap">
+                    {formatCell(selectedRow[c]) || <span className="text-gray-700">—</span>}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
