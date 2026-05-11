@@ -114,6 +114,41 @@ export default function PackersPage() {
     }
   }
 
+  // Rename an existing alias atomically (server replaces `from` with `to`).
+  async function renameAlias(packerId: string, from: string, to: string) {
+    const trimmed = to.trim()
+    if (!trimmed || trimmed === from) return
+    const res = await fetch(`/api/packers/${packerId}`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ renameAlias: { from, to: trimmed } }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setPackers(prev => prev.map(p => p.id === packerId ? data.packer : p))
+      loadSuggestions()
+    }
+  }
+
+  // Track which alias is being edited inline. Stored as a composite key so
+  // the same alias string belonging to two different packers can't conflict.
+  const [editingAlias, setEditingAlias] = useState<string | null>(null)  // "packerId|alias"
+  const [editingAliasDraft, setEditingAliasDraft] = useState("")
+  function startEditAlias(packerId: string, alias: string) {
+    setEditingAlias(`${packerId}|${alias}`)
+    setEditingAliasDraft(alias)
+  }
+  function cancelEditAlias() {
+    setEditingAlias(null)
+    setEditingAliasDraft("")
+  }
+  async function commitEditAlias(packerId: string, alias: string) {
+    if (editingAliasDraft.trim() && editingAliasDraft.trim() !== alias) {
+      await renameAlias(packerId, alias, editingAliasDraft.trim())
+    }
+    cancelEditAlias()
+  }
+
   async function load() {
     setLoading(true); setError(null)
     try {
@@ -417,20 +452,42 @@ export default function PackersPage() {
                         className="text-xs text-red-500 hover:text-red-700"
                       >Delete</button>
                     </div>
-                    {/* Alias chips — only render if there are any */}
+                    {/* Alias chips — click the text to rename, × to remove. */}
                     {p.aliases && p.aliases.length > 0 && (
                       <div className="mt-1.5 ml-7 flex flex-wrap gap-1.5">
                         <span className="text-[10px] text-gray-500 uppercase tracking-wider font-medium self-center">also matches:</span>
-                        {p.aliases.map(a => (
-                          <span key={a} className="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-2 py-0.5 rounded">
-                            <code className="font-mono">{a}</code>
-                            <button
-                              onClick={() => removeAlias(p.id, a)}
-                              className="text-emerald-500 hover:text-emerald-800 leading-none"
-                              title="Remove this alias"
-                            >×</button>
-                          </span>
-                        ))}
+                        {p.aliases.map(a => {
+                          const editKey = `${p.id}|${a}`
+                          const isEditing = editingAlias === editKey
+                          return (
+                            <span key={a} className="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-2 py-0.5 rounded">
+                              {isEditing ? (
+                                <input
+                                  value={editingAliasDraft}
+                                  onChange={e => setEditingAliasDraft(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === "Enter")  commitEditAlias(p.id, a)
+                                    if (e.key === "Escape") cancelEditAlias()
+                                  }}
+                                  onBlur={() => commitEditAlias(p.id, a)}
+                                  autoFocus
+                                  className="font-mono bg-white border border-emerald-300 rounded px-1 py-0 text-xs text-emerald-900 focus:outline-none focus:ring-1 focus:ring-emerald-400 min-w-[80px]"
+                                />
+                              ) : (
+                                <button
+                                  onClick={() => startEditAlias(p.id, a)}
+                                  title="Click to rename"
+                                  className="font-mono cursor-text hover:underline decoration-dotted"
+                                >{a}</button>
+                              )}
+                              <button
+                                onClick={() => removeAlias(p.id, a)}
+                                className="text-emerald-500 hover:text-emerald-800 leading-none"
+                                title="Remove this alias"
+                              >×</button>
+                            </span>
+                          )
+                        })}
                       </div>
                     )}
                   </li>

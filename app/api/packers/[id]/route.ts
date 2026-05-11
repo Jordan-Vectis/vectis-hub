@@ -10,23 +10,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
     const { id } = await params
     const body = await req.json()
-    const { name, staffGroup, active, sortOrder, aliases, addAlias, removeAlias } = body
+    const { name, staffGroup, active, sortOrder, aliases, addAlias, removeAlias, renameAlias } = body
 
     if (staffGroup !== undefined && !VALID_GROUPS.includes(staffGroup)) {
       return NextResponse.json({ error: "Invalid staffGroup" }, { status: 400 })
     }
 
     // `aliases` replaces the whole list (used when the user removes one inline).
-    // `addAlias` / `removeAlias` are atomic single-element ops — server reads
-    // the current list, applies the change, and writes back. Avoids
-    // client-side stale-state races when the user assigns several aliases
-    // in quick succession.
+    // `addAlias`, `removeAlias`, `renameAlias` are atomic single-element ops —
+    // server reads the current list, applies the change, and writes back.
+    // Avoids client-side stale-state races when the user mutates several
+    // aliases in quick succession.
     const cleanReplaceList = Array.isArray(aliases)
       ? [...new Set(aliases.map((a: string) => String(a).trim()).filter(Boolean))]
       : undefined
 
     let finalAliases: string[] | undefined = cleanReplaceList
-    if (addAlias !== undefined || removeAlias !== undefined) {
+    if (addAlias !== undefined || removeAlias !== undefined || renameAlias !== undefined) {
       const current = await prisma.packer.findUnique({
         where: { id },
         select: { aliases: true },
@@ -39,6 +39,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
       if (typeof removeAlias === "string") {
         next = next.filter(a => a !== removeAlias)
+      }
+      if (renameAlias && typeof renameAlias === "object") {
+        const from = String(renameAlias.from ?? "").trim()
+        const to   = String(renameAlias.to   ?? "").trim()
+        if (from && to && from !== to) {
+          next = next.map(a => a === from ? to : a)
+          // Dedupe in case `to` already existed
+          next = [...new Set(next)]
+        }
       }
       finalAliases = next
     }
