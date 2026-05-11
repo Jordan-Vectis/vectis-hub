@@ -76,17 +76,15 @@ export default function PackersPage() {
   }
 
   // Assign an unmatched raw name to an existing packer as a manual alias.
-  // The next report run will roll that variant up into the chosen packer.
+  // Uses the server-side atomic `addAlias` op so rapid consecutive clicks
+  // don't suffer from stale React state.
   async function assignAsAlias(raw: string, packerId: string) {
-    const target = packers.find(p => p.id === packerId)
-    if (!target) return
     setAddingFromSugg(raw)
     try {
-      const nextAliases = [...new Set([...(target.aliases ?? []), raw])]
       const res = await fetch(`/api/packers/${packerId}`, {
         method:  "PATCH",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ aliases: nextAliases }),
+        body:    JSON.stringify({ addAlias: raw }),
       })
       if (res.ok) {
         const data = await res.json()
@@ -101,15 +99,12 @@ export default function PackersPage() {
     }
   }
 
-  // Remove an alias from a packer
+  // Remove an alias from a packer. Same atomic pattern.
   async function removeAlias(packerId: string, alias: string) {
-    const target = packers.find(p => p.id === packerId)
-    if (!target) return
-    const nextAliases = (target.aliases ?? []).filter(a => a !== alias)
     const res = await fetch(`/api/packers/${packerId}`, {
       method:  "PATCH",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ aliases: nextAliases }),
+      body:    JSON.stringify({ removeAlias: alias }),
     })
     if (res.ok) {
       const data = await res.json()
