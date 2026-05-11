@@ -17,10 +17,15 @@ interface Props {
   allowedApps: string[]
   appPermissions: Record<string, any> | null
   departments: { id: string; name: string }[]
+  roles:       string[]
   isSelf: boolean
 }
 
-export default function EditUserForm({ userId, name, email, username, role, departmentId, allowedApps, appPermissions, departments, isSelf }: Props) {
+function roleLabel(key: string): string {
+  return key.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
+}
+
+export default function EditUserForm({ userId, name, email, username, role, departmentId, allowedApps, appPermissions, departments, roles, isSelf }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [selectedApps, setSelectedApps] = useState<string[]>(allowedApps)
@@ -181,9 +186,9 @@ export default function EditUserForm({ userId, name, email, username, role, depa
             <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
             <select name="role" defaultValue={role} disabled={isSelf}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400">
-              <option value="ADMIN">Admin</option>
-              <option value="COLLECTIONS">Collections</option>
-              <option value="CATALOGUER">Cataloguer</option>
+              {roles.map(r => (
+                <option key={r} value={r}>{roleLabel(r)}</option>
+              ))}
             </select>
             {isSelf && <p className="text-xs text-gray-400 mt-1">You cannot change your own role.</p>}
           </div>

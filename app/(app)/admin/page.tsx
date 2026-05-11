@@ -30,8 +30,8 @@ const sections = [
   },
   {
     href:        "/admin/role-defaults",
-    label:       "Role Defaults",
-    description: "Set default app access for each role — applied to new users automatically and pushable to existing ones.",
+    label:       "Roles & Defaults",
+    description: "Create custom roles, set their default app access, and push permissions to existing users.",
     icon:        "🔑",
   },
   {

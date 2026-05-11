@@ -65,6 +65,23 @@ const MIGRATIONS = [
   `ALTER TABLE "BCCatalogueEntry" ADD CONSTRAINT "BCCatalogueEntry_pkey" PRIMARY KEY ("date", "userId", "mode")`,
   // CatalogueLot.addedToBC — manual cataloguer tick once a lot has gone over to BC
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "addedToBC" BOOLEAN NOT NULL DEFAULT FALSE`,
+
+  // User.role: convert from enum Role → TEXT so admins can add custom roles.
+  // Existing enum values ('ADMIN', 'COLLECTIONS', 'CATALOGUER') survive
+  // unchanged as their text equivalents. The old "Role" enum type stays
+  // in the DB (harmless) so we don't need a DROP TYPE.
+  // The DO block makes it idempotent — repeats just check the column type.
+  `DO $$
+   BEGIN
+     IF EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_name = 'User' AND column_name = 'role' AND udt_name = 'Role'
+     ) THEN
+       ALTER TABLE "User" ALTER COLUMN "role" DROP DEFAULT;
+       ALTER TABLE "User" ALTER COLUMN "role" TYPE TEXT USING role::text;
+       ALTER TABLE "User" ALTER COLUMN "role" SET DEFAULT 'COLLECTIONS';
+     END IF;
+   END $$`,
 ]
 
 export async function POST() {

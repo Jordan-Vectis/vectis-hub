@@ -5,6 +5,11 @@ import { createUser } from "@/lib/actions/admin"
 
 interface Props {
   departments: { id: string; name: string }[]
+  roles:       string[]   // dynamic — ADMIN + every role from RoleDefault
+}
+
+function roleLabel(key: string): string {
+  return key.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 }
 
 function toUsername(name: string) {
@@ -13,7 +18,7 @@ function toUsername(name: string) {
   return `${parts[0]}.${parts[parts.length - 1]}`
 }
 
-export default function CreateUserForm({ departments }: Props) {
+export default function CreateUserForm({ departments, roles }: Props) {
   const [isPending, startTransition] = useTransition()
   const [role, setRole] = useState("COLLECTIONS")
   const [username, setUsername] = useState("")
@@ -77,9 +82,9 @@ export default function CreateUserForm({ departments }: Props) {
           onChange={(e) => setRole(e.target.value)}
           className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
-          <option value="COLLECTIONS">Collections</option>
-          <option value="CATALOGUER">Cataloguer</option>
-          <option value="ADMIN">Admin</option>
+          {roles.map(r => (
+            <option key={r} value={r}>{roleLabel(r)}</option>
+          ))}
         </select>
       </div>
       {role === "CATALOGUER" && (

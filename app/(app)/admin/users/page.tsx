@@ -14,13 +14,23 @@ export default async function UsersPage() {
   const session = await auth()
   if (!session || session.user.role !== "ADMIN") redirect("/submissions")
 
-  const [users, departments] = await Promise.all([
+  const [users, departments, roleDefaults] = await Promise.all([
     prisma.user.findMany({
       include: { department: true },
       orderBy: { name: "asc" },
     }),
     prisma.department.findMany({ orderBy: { name: "asc" } }),
+    prisma.roleDefault.findMany({ select: { role: true }, orderBy: { role: "asc" } }),
   ])
+
+  // Always include ADMIN; add every custom role from RoleDefault; and pick up
+  // any roles already in use on users but not yet in RoleDefault so they
+  // still appear in the dropdown.
+  const roles = [...new Set([
+    "ADMIN",
+    ...roleDefaults.map(r => r.role),
+    ...users.map(u => u.role),
+  ])].sort((a, b) => a === "ADMIN" ? -1 : b === "ADMIN" ? 1 : a.localeCompare(b))
 
 
   return (
@@ -69,7 +79,7 @@ export default async function UsersPage() {
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 max-w-md">
         <h2 className="font-semibold text-gray-800 mb-4">Add User</h2>
-        <CreateUserForm departments={departments} />
+        <CreateUserForm departments={departments} roles={roles} />
       </div>
     </div>
   )

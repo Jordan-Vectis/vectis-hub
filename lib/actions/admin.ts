@@ -3,12 +3,11 @@
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
-import { Role } from "@/app/generated/prisma/enums"
 import bcrypt from "bcryptjs"
 
 async function requireAdmin() {
   const session = await auth()
-  if (!session || session.user.role !== Role.ADMIN) {
+  if (!session || session.user.role !== "ADMIN") {
     throw new Error("Admin access required")
   }
   return session
@@ -21,7 +20,7 @@ export async function createUser(formData: FormData) {
   const email = formData.get("email") as string
   const username = (formData.get("username") as string | null) || null
   const password = formData.get("password") as string
-  const role = formData.get("role") as Role
+  const role = formData.get("role") as string
   const departmentId = formData.get("departmentId") as string | null
 
   const hashed = await bcrypt.hash(password, 12)
@@ -52,7 +51,7 @@ export async function updateUser(userId: string, formData: FormData) {
   const name = formData.get("name") as string
   const email = formData.get("email") as string | null
   const username = formData.get("username") as string | null
-  const role = formData.get("role") as Role
+  const role = formData.get("role") as string
   const departmentId = formData.get("departmentId") as string | null
   const newPassword = formData.get("password") as string | null
 
@@ -115,6 +114,6 @@ export async function seedInitialAdmin(
 
   const hashed = await bcrypt.hash(password, 12)
   await prisma.user.create({
-    data: { name, email, password: hashed, role: Role.ADMIN },
+    data: { name, email, password: hashed, role: "ADMIN" },
   })
 }

@@ -7,11 +7,9 @@ datasource db {
   provider = "postgresql"
 }
 
-enum Role {
-  ADMIN
-  COLLECTIONS
-  CATALOGUER
-}
+// Roles are stored as free-form strings on User.role. "ADMIN" is the only
+// hardcoded role — every other role comes from the RoleDefault table.
+// Admins manage roles via /admin/role-defaults (add, edit permissions, delete).
 
 enum SubmissionChannel {
   EMAIL
@@ -44,7 +42,7 @@ model User {
   email          String      @unique
   username       String?     @unique
   password       String
-  role           Role        @default(COLLECTIONS)
+  role           String      @default("COLLECTIONS")  // "ADMIN" or any custom role name from RoleDefault
   allowedApps    String[]    @default([])
   appPermissions Json?
   departmentId   String?

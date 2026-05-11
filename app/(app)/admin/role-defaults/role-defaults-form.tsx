@@ -6,14 +6,19 @@ import { ALL_APPS, APP_SECTIONS, WAREHOUSE_ROLES } from "@/lib/apps"
 import type { AppKey, WarehouseRole } from "@/lib/apps"
 import { APP_CARD_DEFS, SECTION_DEFS } from "@/lib/app-cards"
 
-const ROLES = [
-  { key: "COLLECTIONS", label: "Collections" },
-  { key: "CATALOGUER",  label: "Cataloguer" },
-]
+// Convert a role key (e.g. "WAREHOUSE_MANAGER") to a display label
+// ("Warehouse Manager"). Keys that are already nicely formatted pass through.
+function roleLabel(key: string): string {
+  return key
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, c => c.toUpperCase())
+}
 
 interface User { id: string; name: string; role: string }
 
 interface Props {
+  allRoles: string[]
   defaults: Record<string, { allowedApps: string[]; appPermissions: any } | undefined>
   users: User[]
 }
@@ -313,17 +318,123 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
   )
 }
 
-export default function RoleDefaultsForm({ defaults, users }: Props) {
+export default function RoleDefaultsForm({ allRoles, defaults, users }: Props) {
+  const router = useRouter()
+  const [pendingRoles, setPendingRoles] = useState<string[]>([])  // locally-added rows the user hasn't saved yet
+  const [showAddDialog, setShowAddDialog] = useState(false)
+  const [newRoleName, setNewRoleName] = useState("")
+  const [addError, setAddError] = useState<string | null>(null)
+  const [deleteMsg, setDeleteMsg] = useState<string | null>(null)
+
+  const knownRoles = new Set([...allRoles, ...pendingRoles])
+
+  function handleAdd() {
+    setAddError(null)
+    // Convert to UPPER_SNAKE_CASE — gives consistent uppercase enum-style keys
+    // ("Warehouse Manager" → "WAREHOUSE_MANAGER") to match the existing convention
+    const normalised = newRoleName.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "")
+    if (!normalised) { setAddError("Enter a role name"); return }
+    if (normalised === "ADMIN") { setAddError("ADMIN is a system role and can't be created here"); return }
+    if (knownRoles.has(normalised)) { setAddError(`Role "${normalised}" already exists`); return }
+    setPendingRoles(prev => [...prev, normalised])
+    setNewRoleName("")
+    setShowAddDialog(false)
+  }
+
+  async function handleDelete(roleKey: string) {
+    const usersOnRole = users.filter(u => u.role === roleKey)
+    if (usersOnRole.length > 0) {
+      alert(`Cannot delete — ${usersOnRole.length} user${usersOnRole.length === 1 ? "" : "s"} still assigned to this role. Reassign them first.`)
+      return
+    }
+    if (!confirm(`Delete role "${roleKey}"? This removes its default permissions. Any users you later assign to "${roleKey}" will start with no app access until you reconfigure it.`)) return
+
+    // If it's only in pendingRoles (not saved yet) just remove from state
+    if (pendingRoles.includes(roleKey) && !allRoles.includes(roleKey)) {
+      setPendingRoles(prev => prev.filter(r => r !== roleKey))
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/admin/role-defaults/${encodeURIComponent(roleKey)}`, { method: "DELETE" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { setDeleteMsg(data.error ?? "Failed to delete"); return }
+      setDeleteMsg(`Deleted "${roleKey}"`)
+      router.refresh()
+      setTimeout(() => setDeleteMsg(null), 4000)
+    } catch {
+      setDeleteMsg("Network error")
+    }
+  }
+
+  const displayRoles = [...allRoles, ...pendingRoles.filter(r => !allRoles.includes(r))]
+
   return (
-    <div className="flex flex-col gap-8">
-      {ROLES.map(r => (
-        <RolePanel
-          key={r.key}
-          roleKey={r.key}
-          roleLabel={r.label}
-          initial={defaults[r.key]}
-          users={users}
-        />
+    <div className="flex flex-col gap-6">
+      {/* Add-new toolbar */}
+      <div className="flex items-center justify-between bg-white rounded-xl border border-gray-200 p-4">
+        <div>
+          <h2 className="font-semibold text-gray-800">{displayRoles.length} role{displayRoles.length === 1 ? "" : "s"}</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Click "+ Add role" to create a new one, then configure its permissions and save.</p>
+        </div>
+        <button
+          onClick={() => { setShowAddDialog(true); setAddError(null); setNewRoleName("") }}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors"
+        >+ Add role</button>
+      </div>
+
+      {/* Add-role dialog */}
+      {showAddDialog && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
+          <h3 className="font-semibold text-gray-800 mb-2">New role</h3>
+          <p className="text-xs text-gray-600 mb-3">
+            Enter a name like <code className="bg-white px-1 py-0.5 rounded text-[11px]">Warehouse Manager</code> or <code className="bg-white px-1 py-0.5 rounded text-[11px]">Junior Cataloguer</code>.
+            It'll be stored as upper-snake-case (<code className="bg-white px-1 py-0.5 rounded text-[11px]">WAREHOUSE_MANAGER</code>) to match the existing role keys.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newRoleName}
+              onChange={e => setNewRoleName(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleAdd()}
+              placeholder="e.g. Warehouse Manager"
+              autoFocus
+              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button onClick={handleAdd}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg">Add</button>
+            <button onClick={() => setShowAddDialog(false)}
+              className="px-4 py-2 border border-gray-300 text-gray-600 text-sm rounded-lg hover:border-gray-400">Cancel</button>
+          </div>
+          {addError && <p className="text-xs text-red-600 mt-2">{addError}</p>}
+        </div>
+      )}
+
+      {deleteMsg && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-amber-800 text-sm">{deleteMsg}</div>
+      )}
+
+      {/* Role panels */}
+      {displayRoles.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500 text-sm">
+          No roles yet (besides ADMIN). Click "+ Add role" above to create one.
+        </div>
+      ) : displayRoles.map(roleKey => (
+        <div key={roleKey} className="relative">
+          <button
+            onClick={() => handleDelete(roleKey)}
+            title="Delete this role (only allowed if no users are assigned to it)"
+            className="absolute top-4 right-4 z-10 text-xs text-red-500 hover:text-red-700 hover:underline"
+          >
+            Delete role
+          </button>
+          <RolePanel
+            roleKey={roleKey}
+            roleLabel={roleLabel(roleKey)}
+            initial={defaults[roleKey]}
+            users={users}
+          />
+        </div>
       ))}
     </div>
   )

@@ -14,12 +14,22 @@ export default async function EditUserPage({
   if (!session || session.user.role !== "ADMIN") redirect("/submissions")
 
   const { id } = await params
-  const [user, departments] = await Promise.all([
+  const [user, departments, roleDefaults, allUsers] = await Promise.all([
     prisma.user.findUnique({ where: { id }, include: { department: true } }),
     prisma.department.findMany({ orderBy: { name: "asc" } }),
+    prisma.roleDefault.findMany({ select: { role: true }, orderBy: { role: "asc" } }),
+    prisma.user.findMany({ select: { role: true } }),
   ])
 
   if (!user) notFound()
+
+  // Always include ADMIN + this user's current role + every other role known
+  const roles = [...new Set([
+    "ADMIN",
+    user.role,
+    ...roleDefaults.map(r => r.role),
+    ...allUsers.map(u => u.role),
+  ])].sort((a, b) => a === "ADMIN" ? -1 : b === "ADMIN" ? 1 : a.localeCompare(b))
 
   return (
     <div className="p-6 max-w-2xl">
@@ -56,6 +66,7 @@ export default async function EditUserPage({
         allowedApps={user.allowedApps}
         appPermissions={user.appPermissions as Record<string, { role: string }> | null}
         departments={departments}
+        roles={roles}
         isSelf={session.user.id === user.id}
       />
     </div>
