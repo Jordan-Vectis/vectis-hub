@@ -31,6 +31,51 @@ export default function PackersPage() {
   // PDF download
   const [downloading,    setDownloading]    = useState<string | null>(null)
 
+  // Suggestions from BC — names showing up on shipments that aren't yet in the table
+  const [suggestions,       setSuggestions]       = useState<{ raw: string; count: number }[]>([])
+  const [suggLoading,       setSuggLoading]       = useState(true)
+  const [suggError,         setSuggError]         = useState<string | null>(null)
+  const [suggDays,          setSuggDays]          = useState(90)
+  const [addingFromSugg,    setAddingFromSugg]    = useState<string | null>(null)
+
+  async function loadSuggestions(days: number = suggDays) {
+    setSuggLoading(true); setSuggError(null)
+    try {
+      const res = await fetch(`/api/packers/suggestions?days=${days}`)
+      const data = await res.json()
+      if (!res.ok) { setSuggError(data.error ?? "Failed to load suggestions"); return }
+      setSuggestions(data.suggestions ?? [])
+    } catch {
+      setSuggError("Network error")
+    } finally {
+      setSuggLoading(false)
+    }
+  }
+  useEffect(() => { loadSuggestions(suggDays) }, [suggDays])
+
+  async function addFromSuggestion(raw: string, group: "FULL_TIME" | "AGENCY") {
+    setAddingFromSugg(raw)
+    try {
+      const res = await fetch("/api/packers", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ name: raw, staffGroup: group }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setPackers(prev => [...prev, data.packer].sort(byOrder))
+        // Re-pull suggestions — the just-added one (and any close variants
+        // of it) will now match and drop out of the list
+        loadSuggestions()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error ?? "Failed to add")
+      }
+    } finally {
+      setAddingFromSugg(null)
+    }
+  }
+
   async function load() {
     setLoading(true); setError(null)
     try {
@@ -156,6 +201,83 @@ export default function PackersPage() {
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm mb-4">{error}</div>
+      )}
+
+      {/* Suggestions from BC — names showing up on shipments that aren't yet here */}
+      {!suggLoading && suggestions.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl mb-6 overflow-hidden">
+          <div className="px-4 py-3 border-b border-amber-200 flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="text-sm font-semibold text-amber-900">
+                💡 Names showing up on BC shipments that aren't in the list yet
+              </h2>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Pulled from the last {suggDays} day{suggDays === 1 ? "" : "s"} of shipments. Click <strong>+ Full Time</strong> or <strong>+ Agency</strong> to add.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={suggDays}
+                onChange={e => setSuggDays(Number(e.target.value))}
+                className="text-xs rounded border border-amber-300 bg-white px-2 py-1 text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
+              >
+                <option value={30}>Last 30 days</option>
+                <option value={90}>Last 90 days</option>
+                <option value={180}>Last 6 months</option>
+                <option value={365}>Last year</option>
+              </select>
+              <button
+                onClick={() => loadSuggestions()}
+                disabled={suggLoading}
+                className="text-xs text-amber-700 hover:text-amber-900 px-2 py-1"
+              >Refresh</button>
+            </div>
+          </div>
+          <ul className="divide-y divide-amber-100">
+            {suggestions.map(s => (
+              <li key={s.raw} className="px-4 py-2.5 flex items-center gap-3 hover:bg-amber-100/40">
+                <code className="flex-1 bg-white border border-amber-200 rounded px-2 py-1 text-sm text-amber-900 font-mono">{s.raw}</code>
+                <span className="text-xs text-amber-700 whitespace-nowrap">
+                  {s.count} shipment{s.count === 1 ? "" : "s"}
+                </span>
+                <button
+                  onClick={() => addFromSuggestion(s.raw, "FULL_TIME")}
+                  disabled={addingFromSugg === s.raw}
+                  className="text-xs px-2.5 py-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded transition-colors whitespace-nowrap"
+                >+ Full Time</button>
+                <button
+                  onClick={() => addFromSuggestion(s.raw, "AGENCY")}
+                  disabled={addingFromSugg === s.raw}
+                  className="text-xs px-2.5 py-1 bg-slate-600 hover:bg-slate-700 disabled:opacity-50 text-white font-semibold rounded transition-colors whitespace-nowrap"
+                >+ Agency</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {!suggLoading && suggestions.length === 0 && !suggError && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl mb-6 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-sm text-emerald-800">
+            ✓ No unknown names from the last {suggDays} day{suggDays === 1 ? "" : "s"} of shipments — every packer is accounted for.
+          </p>
+          <div className="flex items-center gap-2">
+            <select
+              value={suggDays}
+              onChange={e => setSuggDays(Number(e.target.value))}
+              className="text-xs rounded border border-emerald-300 bg-white px-2 py-1 text-emerald-900 focus:outline-none"
+            >
+              <option value={30}>Last 30 days</option>
+              <option value={90}>Last 90 days</option>
+              <option value={180}>Last 6 months</option>
+              <option value={365}>Last year</option>
+            </select>
+          </div>
+        </div>
+      )}
+      {suggError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm mb-4">
+          BC suggestions: {suggError}
+        </div>
       )}
 
       {/* Group panels */}
