@@ -268,10 +268,11 @@ export default function AuctionMonitorPage() {
     setLog([])
     setLastMessageAt(null)
     setReconnects(0)
-    // Reset the alert tracker so the first state after Start always fires
-    // a transition rather than being silently swallowed.
-    lastAlertedBandRef.current = null
-    lastAlertedReasonRef.current = ""
+    // Reset all rule-engine dedupe state so the first state after Start
+    // is treated as a fresh transition rather than being silently swallowed.
+    ruleActiveRef.current     = {}
+    lastHighValueLotRef.current = null
+    lastPassedLotRef.current    = null
     setRunning(true)
   }
   function stop() {
