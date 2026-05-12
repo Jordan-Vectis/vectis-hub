@@ -300,7 +300,10 @@ export async function fillLotsFromTotes(auctionId: string) {
 
   const lots = await prisma.catalogueLot.findMany({
     where: { auctionId, tote: { not: null } },
-    select: { id: true, tote: true, vendor: true, receipt: true },
+    // ⚠ receiptUniqueId MUST be selected here — earlier versions of this
+    // function didn't and ended up overwriting existing unique IDs with
+    // null whenever a lot was missing its vendor but already had a receipt.
+    select: { id: true, tote: true, vendor: true, receipt: true, receiptUniqueId: true },
   })
 
   if (lots.length === 0) return { updated: 0 }
@@ -321,14 +324,18 @@ export async function fillLotsFromTotes(auctionId: string) {
     }
   }
 
-  // Pre-count existing sequenced lots per receipt base for fillFromTotes
+  // Pre-count existing sequenced lots per receipt base. We need an offset for
+  // any lot that's MISSING a uniqueId (not just missing a receipt) — otherwise
+  // a lot that already has a receipt set but no uniqueId would never get one.
   const receiptOffset: Record<string, number> = {}
   for (const lot of lots) {
-    if (lot.receipt) continue // already has one, skip
-    const info = toteMap.get(lot.tote!)
-    if (!info?.receipt) continue
-    if (!(info.receipt in receiptOffset)) {
-      receiptOffset[info.receipt] = await prisma.catalogueLot.count({ where: { receiptUniqueId: { startsWith: info.receipt + "-" } } })
+    if (lot.receiptUniqueId) continue // already sequenced, no offset needed
+    const targetReceipt = lot.receipt || toteMap.get(lot.tote!)?.receipt
+    if (!targetReceipt) continue
+    if (!(targetReceipt in receiptOffset)) {
+      receiptOffset[targetReceipt] = await prisma.catalogueLot.count({
+        where: { receiptUniqueId: { startsWith: targetReceipt + "-" } },
+      })
     }
   }
 
@@ -337,19 +344,29 @@ export async function fillLotsFromTotes(auctionId: string) {
     if (!lot.tote) continue
     const info = toteMap.get(lot.tote)
     if (!info) continue
-    if (!lot.vendor || !lot.receipt) {
-      const receiptBase = info.receipt || null
-      let receiptUniqueId: string | null = null
-      if (!lot.receipt && receiptBase) {
-        receiptOffset[receiptBase] = (receiptOffset[receiptBase] ?? 0) + 1
-        receiptUniqueId = `${receiptBase}-${receiptOffset[receiptBase]}`
-      }
+
+    // Work out the desired final state
+    const desiredVendor  = lot.vendor  || info.vendor
+    const desiredReceipt = lot.receipt || info.receipt || null
+    // Preserve existing uniqueId if there is one; only generate when missing
+    let desiredUniqueId = lot.receiptUniqueId ?? null
+    if (!desiredUniqueId && desiredReceipt) {
+      receiptOffset[desiredReceipt] = (receiptOffset[desiredReceipt] ?? 0) + 1
+      desiredUniqueId = `${desiredReceipt}-${receiptOffset[desiredReceipt]}`
+    }
+
+    const needsUpdate =
+      (lot.vendor          ?? null) !== (desiredVendor   ?? null) ||
+      (lot.receipt         ?? null) !== (desiredReceipt  ?? null) ||
+      (lot.receiptUniqueId ?? null) !== (desiredUniqueId ?? null)
+
+    if (needsUpdate) {
       await prisma.catalogueLot.update({
         where: { id: lot.id },
         data: {
-          vendor:          lot.vendor || info.vendor,
-          receipt:         receiptBase,
-          receiptUniqueId: receiptUniqueId,
+          vendor:          desiredVendor,
+          receipt:         desiredReceipt,
+          receiptUniqueId: desiredUniqueId,
         },
       })
       updated++
