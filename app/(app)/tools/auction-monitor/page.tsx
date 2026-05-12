@@ -296,6 +296,7 @@ export default function AuctionMonitorPage() {
               <input type="checkbox" checked={showRaw} onChange={e => setShowRaw(e.target.checked)} />
               Show raw payload
             </label>
+            <CopyAllButton log={log} />
             <button
               onClick={() => setLog([])}
               className="text-xs text-gray-500 hover:text-red-600"
@@ -327,6 +328,42 @@ export default function AuctionMonitorPage() {
         )}
       </div>
     </div>
+  )
+}
+
+// "Copy all" — dumps the entire log to the clipboard in a chat-friendly
+// markdown format (timestamp + summary + fenced JSON). Click → confirm
+// "Copied!" for two seconds, then resets.
+function CopyAllButton({ log }: { log: MsgEntry[] }) {
+  const [copied, setCopied] = useState(false)
+  async function copy() {
+    if (log.length === 0) return
+    // Oldest-first ordering for readability when pasted back
+    const ordered = [...log].reverse()
+    const text = ordered.map(m => {
+      const ts  = m.at.toLocaleTimeString("en-GB", { hour12: false })
+      const sum = m.parsed ? describeMessage(m.parsed) : "(non-JSON)"
+      const body = m.parsed ? JSON.stringify(m.parsed, null, 2) : m.raw
+      return `* ${ts} ${sum}\n\n\`\`\`json\n${body}\n\`\`\``
+    }).join("\n\n")
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Fallback for any browsers blocking clipboard API
+      alert("Couldn't copy automatically — your browser may have blocked clipboard access.")
+    }
+  }
+  return (
+    <button
+      onClick={copy}
+      disabled={log.length === 0}
+      className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-40 disabled:cursor-not-allowed"
+      title={`Copy all ${log.length} message${log.length === 1 ? "" : "s"} to clipboard`}
+    >
+      {copied ? "✓ Copied" : `📋 Copy all (${log.length})`}
+    </button>
   )
 }
 
