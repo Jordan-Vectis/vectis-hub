@@ -38,6 +38,20 @@ export default function AuctionMonitorPage() {
   const [showRaw, setShowRaw] = useState(true)
   const [now, setNow] = useState<Date>(new Date())
 
+  // Push notifications via ntfy.sh — both topic and enabled flag persist
+  const [ntfyTopic, setNtfyTopic] = useState<string>(() => {
+    if (typeof window === "undefined") return ""
+    return localStorage.getItem("auction_monitor_ntfy_topic") ?? ""
+  })
+  const [pushEnabled, setPushEnabled] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false
+    return localStorage.getItem("auction_monitor_push_enabled") === "1"
+  })
+  const [pushStatus, setPushStatus] = useState<string | null>(null)
+  // Track the last alerted band so we only fire on transitions, not every render
+  const lastAlertedBandRef = useRef<"green" | "amber" | "red" | "grey" | null>(null)
+  const lastAlertedReasonRef = useRef<string>("")
+
   // Ticking clock for the "X seconds ago" display
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000)
@@ -122,10 +136,55 @@ export default function AuctionMonitorPage() {
     setLog([])
     setLastMessageAt(null)
     setReconnects(0)
+    // Reset the alert tracker so the first state after Start always fires
+    // a transition rather than being silently swallowed.
+    lastAlertedBandRef.current = null
+    lastAlertedReasonRef.current = ""
     setRunning(true)
   }
   function stop() {
     setRunning(false)
+  }
+
+  // Push to ntfy.sh — accepts any topic, no auth needed.
+  // Title carries the headline, body the detail, priority maps to band.
+  async function sendNtfy(opts: {
+    title:    string
+    body:     string
+    priority?: 1 | 2 | 3 | 4 | 5
+    tags?:    string[]
+  }) {
+    const topic = ntfyTopic.trim()
+    if (!topic) return false
+    try {
+      const res = await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, {
+        method:  "POST",
+        body:    opts.body,
+        headers: {
+          "Title":    opts.title,
+          "Priority": String(opts.priority ?? 3),
+          ...(opts.tags?.length ? { "Tags": opts.tags.join(",") } : {}),
+        },
+      })
+      return res.ok
+    } catch {
+      return false
+    }
+  }
+
+  async function sendTestNotification() {
+    if (!ntfyTopic.trim()) {
+      setPushStatus("Set a topic first")
+      return
+    }
+    const ok = await sendNtfy({
+      title:    "Vectis Auction Monitor — test",
+      body:     `If you see this on your phone, alerts are set up correctly. Topic: ${ntfyTopic.trim()}`,
+      priority: 3,
+      tags:     ["white_check_mark"],
+    })
+    setPushStatus(ok ? "✓ Test sent — check your phone" : "Failed to send (network?)")
+    setTimeout(() => setPushStatus(null), 5000)
   }
 
   // Proper event-aware parsing now that we've seen the protocol.
@@ -171,6 +230,46 @@ export default function AuctionMonitorPage() {
       healthLabel = "Live and active"
     }
   }
+
+  // Notification dispatch — fire when the health band changes to something
+  // notable. We dedupe on the band + reason so a steady amber state doesn't
+  // re-fire every render, but a transition (green→amber or amber→red) does.
+  useEffect(() => {
+    if (!running || !pushEnabled || !ntfyTopic.trim()) return
+
+    const band      = healthBand
+    const reason    = healthLabel
+    const prevBand  = lastAlertedBandRef.current
+    const prevReason = lastAlertedReasonRef.current
+
+    // Skip if nothing meaningful changed
+    if (band === prevBand && reason === prevReason) return
+
+    // Only fire on transitions worth knowing about
+    const shouldAlert =
+      // New problem appeared (green/grey → amber/red, or amber → red)
+      (band === "red" && prevBand !== "red") ||
+      (band === "amber" && prevBand !== "amber" && prevBand !== "red") ||
+      // Recovery from a problem back to green
+      (band === "green" && (prevBand === "amber" || prevBand === "red"))
+
+    if (shouldAlert) {
+      const tag = band === "red"   ? "rotating_light"
+               :  band === "amber" ? "warning"
+               :  /* green */        "white_check_mark"
+      const priority = band === "red" ? 5 : band === "amber" ? 4 : 3
+      const title = band === "red"   ? "Auction alert — RED"
+                 :  band === "amber" ? "Auction alert — Amber"
+                 :  "Auction recovered"
+      const lotInfo = state.currentLotNumber ? ` · Lot ${state.currentLotNumber}` : ""
+      const body = `${reason}${lotInfo}\nAuction ${auctionId}`
+      sendNtfy({ title, body, priority: priority as 1|2|3|4|5, tags: [tag] }).catch(() => {})
+    }
+
+    lastAlertedBandRef.current = band
+    lastAlertedReasonRef.current = reason
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [healthBand, healthLabel, running, pushEnabled])
 
   const bandStyle: Record<typeof healthBand, string> = {
     green: "bg-emerald-500",
@@ -218,6 +317,57 @@ export default function AuctionMonitorPage() {
             className="bg-red-600 hover:bg-red-700 text-white text-sm font-semibold px-5 py-2 rounded-lg"
           >■ Stop</button>
         )}
+      </div>
+
+      {/* Phone notifications via ntfy.sh */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+        <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700">📱 Phone notifications</h3>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              Pushes via <a href="https://ntfy.sh" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">ntfy.sh</a> — install the free ntfy app on your phone, subscribe to your topic, alerts arrive instantly.
+            </p>
+          </div>
+          <label className="text-xs text-gray-600 flex items-center gap-1.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={pushEnabled}
+              onChange={e => {
+                setPushEnabled(e.target.checked)
+                localStorage.setItem("auction_monitor_push_enabled", e.target.checked ? "1" : "0")
+              }}
+              className="w-4 h-4 accent-emerald-600"
+            />
+            Enable
+          </label>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-[11px] text-gray-500 mb-1">ntfy topic</label>
+            <input
+              type="text"
+              value={ntfyTopic}
+              onChange={e => {
+                setNtfyTopic(e.target.value)
+                localStorage.setItem("auction_monitor_ntfy_topic", e.target.value)
+              }}
+              placeholder="e.g. vectis-auction-alerts_JJ"
+              className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <button
+            onClick={sendTestNotification}
+            disabled={!ntfyTopic.trim()}
+            className="self-end bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-xs font-semibold px-3 py-1.5 rounded-lg"
+          >Send test</button>
+          {pushStatus && (
+            <span className="self-end text-xs text-gray-600">{pushStatus}</span>
+          )}
+        </div>
+        <p className="text-[11px] text-gray-500 mt-2">
+          Alerts fire on state transitions: green→amber, amber/green→red, and recovery back to green.
+          No repeat spam while the state is steady.
+        </p>
       </div>
 
       {/* Status header */}
