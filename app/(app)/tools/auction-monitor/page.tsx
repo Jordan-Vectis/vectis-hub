@@ -22,7 +22,8 @@ const WS_TEMPLATE = "wss://www.vectis.co.uk/wss/{id}"
 const RECONNECT_DELAY_MS = 5000
 const STALE_AMBER_MS     = 30_000   // amber after no messages for 30s
 const STALE_RED_MS       = 120_000  // red after 2 min — definite stall
-const MAX_LOG_ROWS       = 200
+const MAX_LOG_ROWS       = 500      // rolling display log — older messages drop off
+const MAX_LOT_OUTCOMES   = 2000     // persistent lot results — survives log rotation
 
 // ── Alert rules ──────────────────────────────────────────────────────────────
 // User-toggleable notification rules. Each rule has a unique id, a sensible
@@ -123,6 +124,17 @@ export default function AuctionMonitorPage() {
   const [reconnects, setReconnects] = useState(0)
   const [showRaw, setShowRaw] = useState(true)
   const [now, setNow] = useState<Date>(new Date())
+  // Persistent lot-outcome store — captured as events arrive so it survives
+  // log rotation. On an 800-lot sale the 500-row log only holds the most
+  // recent ~30 lots; without this, session totals would silently undercount.
+  const [allLotOutcomes, setAllLotOutcomes] = useState<LotResult[]>([])
+  // Total bid count — tracked separately so it survives log rotation too
+  const [bidCounter, setBidCounter] = useState(0)
+  const [undoCounter, setUndoCounter] = useState(0)
+  // Walking trackers for resolving lot transitions as messages arrive
+  const currentLotIdRef     = useRef<number | string | null>(null)
+  const lotNumberByLotIdRef = useRef<Record<string, string>>({})
+  const hammerByLotIdRef    = useRef<Record<string, number>>({})
 
   // Push notifications via ntfy.sh — both topic and enabled flag persist
   const [ntfyTopic, setNtfyTopic] = useState<string>(() => {
@@ -227,11 +239,63 @@ export default function AuctionMonitorPage() {
           const raw = typeof ev.data === "string" ? ev.data : "[binary]"
           let parsed: any = null
           try { parsed = JSON.parse(raw) } catch {}
-          setLastMessageAt(new Date())
+          const at = new Date()
+          setLastMessageAt(at)
           setLog(prev => {
-            const next = [{ at: new Date(), raw, parsed }, ...prev]
+            const next = [{ at, raw, parsed }, ...prev]
             return next.length > MAX_LOG_ROWS ? next.slice(0, MAX_LOG_ROWS) : next
           })
+
+          // Persistent accumulators — derived from individual messages so
+          // they survive log rotation on long sales. Each branch below is
+          // idempotent enough that a duplicate event won't corrupt counts.
+          const cmd = parsed?.command
+          const c   = parsed?.content ?? {}
+
+          if (cmd === "liveBidEvent") {
+            setBidCounter(n => n + 1)
+            if (c.lot_id != null) currentLotIdRef.current = c.lot_id
+          }
+          if (cmd === "undoLiveBid") {
+            setUndoCounter(n => n + 1)
+          }
+          if (cmd === "activeLotChange") {
+            // Previous lot has finished — record its outcome.
+            const prev = currentLotIdRef.current
+            if (prev != null && c.previous_lot_type) {
+              const key = String(prev)
+              const lotResult: LotResult = {
+                lotId:       prev,
+                lotNumber:   lotNumberByLotIdRef.current[key] ?? null,
+                outcome:     String(c.previous_lot_type),
+                hammerPrice: hammerByLotIdRef.current[key] ?? null,
+                at,
+              }
+              setAllLotOutcomes(prevList => {
+                const next = [...prevList, lotResult]
+                return next.length > MAX_LOT_OUTCOMES ? next.slice(-MAX_LOT_OUTCOMES) : next
+              })
+            }
+            // Remember the human lot number for the now-current lot
+            if (c.lot_id != null && c.lot_number) {
+              lotNumberByLotIdRef.current[String(c.lot_id)] = String(c.lot_number)
+            }
+            currentLotIdRef.current = c.lot_id ?? currentLotIdRef.current
+          }
+          if (cmd === "lotInformationUpdate") {
+            if (c.lot_id != null && c.hammer_price != null) {
+              const hp = parseFloat(String(c.hammer_price))
+              if (!isNaN(hp)) {
+                hammerByLotIdRef.current[String(c.lot_id)] = hp
+                // Back-fill any already-recorded outcome that's missing a price
+                setAllLotOutcomes(prevList => prevList.map(o =>
+                  String(o.lotId) === String(c.lot_id) && o.hammerPrice == null
+                    ? { ...o, hammerPrice: hp }
+                    : o
+                ))
+              }
+            }
+          }
         }
         ws.onerror = () => setConnState("error")
         ws.onclose = () => {
@@ -268,6 +332,13 @@ export default function AuctionMonitorPage() {
     setLog([])
     setLastMessageAt(null)
     setReconnects(0)
+    // Fresh session — reset persistent accumulators too
+    setAllLotOutcomes([])
+    setBidCounter(0)
+    setUndoCounter(0)
+    currentLotIdRef.current     = null
+    lotNumberByLotIdRef.current = {}
+    hammerByLotIdRef.current    = {}
     // Reset all rule-engine dedupe state so the first state after Start
     // is treated as a fresh transition rather than being silently swallowed.
     ruleActiveRef.current     = {}
@@ -330,7 +401,7 @@ export default function AuctionMonitorPage() {
   // We track the LATEST liveBidEvent for the "current state" panel, plus the
   // time of the last bid for the stall signal (sensor pings happen constantly
   // and would mask a stall if used).
-  const state = extractAuctionState(log)
+  const state = extractAuctionState(log, allLotOutcomes)
   const msSinceLast    = lastMessageAt ? now.getTime() - lastMessageAt.getTime() : null
   const msSinceLastBid = state.lastBidAt ? now.getTime() - state.lastBidAt.getTime() : null
 
@@ -948,10 +1019,12 @@ export type LotResult = {
   at:          Date
 }
 
-// Extract structured auction state from the message log. We scan from most-
-// recent backwards because the log is newest-first; first event of each type
-// we see gives us the current state.
-function extractAuctionState(log: MsgEntry[]) {
+// Extract structured auction state from the message log + persistent
+// outcomes store. The log is rolling (capped at MAX_LOG_ROWS) — fine for
+// "what's the current bid right now". The outcomes store is unbounded
+// (up to MAX_LOT_OUTCOMES) so session totals stay accurate across an
+// 800-lot sale where older lots have already scrolled off the log.
+function extractAuctionState(log: MsgEntry[], persistentOutcomes: LotResult[]) {
   let currentLotId:     number | string | null = null
   let currentLotNumber: string | null          = null
   let currentBid:       number | null          = null
@@ -1101,13 +1174,14 @@ function extractAuctionState(log: MsgEntry[]) {
     }
   }
 
-  // Session totals
-  const soldCount = lotOutcomes.filter(o => /sold/i.test(o.outcome ?? "")).length
-  const passedCount = lotOutcomes.filter(o => /pass|unsold|withdrawn/i.test(o.outcome ?? "")).length
-  const sessionHammer = lotOutcomes.reduce((s, o) => s + (o.hammerPrice ?? 0), 0)
+  // Session totals — derived from the PERSISTENT outcomes store so they
+  // remain accurate even after older messages have rotated off the log.
+  const soldCount = persistentOutcomes.filter(o => /sold/i.test(o.outcome ?? "")).length
+  const passedCount = persistentOutcomes.filter(o => /pass|unsold|withdrawn/i.test(o.outcome ?? "")).length
+  const sessionHammer = persistentOutcomes.reduce((s, o) => s + (o.hammerPrice ?? 0), 0)
 
-  // Recent lots (newest first), limit to 10
-  const recentLots = [...lotOutcomes].reverse().slice(0, 10)
+  // Recent lots (newest first), limit to 10 — also from the persistent store
+  const recentLots = [...persistentOutcomes].reverse().slice(0, 10)
 
   return {
     currentLotId,
