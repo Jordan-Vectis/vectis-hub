@@ -128,8 +128,17 @@ export default function AuctionMonitorPage() {
     setRunning(false)
   }
 
+  // Proper event-aware parsing now that we've seen the protocol.
+  //   liveBidEvent     → lot_id, amount, asking, winner paddle, platform
+  //   sensorNetworkEvent (bidbutton) → auctioneer activity
+  // We track the LATEST liveBidEvent for the "current state" panel, plus the
+  // time of the last bid for the stall signal (sensor pings happen constantly
+  // and would mask a stall if used).
+  const state = extractAuctionState(log)
+  const msSinceLast    = lastMessageAt ? now.getTime() - lastMessageAt.getTime() : null
+  const msSinceLastBid = state.lastBidAt ? now.getTime() - state.lastBidAt.getTime() : null
+
   // Status derivation
-  const msSinceLast = lastMessageAt ? now.getTime() - lastMessageAt.getTime() : null
   let healthBand: "green" | "amber" | "red" | "grey" = "grey"
   let healthLabel = "Not started"
   if (running) {
@@ -157,16 +166,6 @@ export default function AuctionMonitorPage() {
       healthLabel = "Live and active"
     }
   }
-
-  // Proper event-aware parsing now that we've seen the protocol.
-  //   liveBidEvent     → lot_id, amount, asking, winner paddle, platform
-  //   sensorNetworkEvent (bidbutton) → auctioneer activity
-  // We track the LATEST liveBidEvent for the "current state" panel, plus the
-  // time of the latest meaningful event (bid OR lot change) for the stall signal.
-  const state = extractAuctionState(log)
-  // Override the simple time-since-last-message with time-since-last-bid for
-  // the health check — sensor pings happen constantly and would mask a stall.
-  const msSinceLastBid = state.lastBidAt ? now.getTime() - state.lastBidAt.getTime() : null
 
   const bandStyle: Record<typeof healthBand, string> = {
     green: "bg-emerald-500",
