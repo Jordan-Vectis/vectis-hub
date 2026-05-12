@@ -140,21 +140,33 @@ export default function AuctionMonitorPage() {
       healthBand = "amber"
       healthLabel = "Connected — waiting for first message"
     } else if (msSinceLast > STALE_RED_MS) {
+      // No traffic at all = definitely something wrong with the feed
       healthBand = "red"
-      healthLabel = "No messages for over 2 minutes — auction may be stuck"
-    } else if (msSinceLast > STALE_AMBER_MS) {
+      healthLabel = "No messages for over 2 minutes — feed may have dropped"
+    } else if (msSinceLastBid === null) {
       healthBand = "amber"
-      healthLabel = "No messages for 30+ seconds — keep an eye on it"
+      healthLabel = "Connected — waiting for first bid event"
+    } else if (msSinceLastBid > STALE_RED_MS) {
+      healthBand = "red"
+      healthLabel = "No bid activity for over 2 minutes — auction may be stuck"
+    } else if (msSinceLastBid > STALE_AMBER_MS) {
+      healthBand = "amber"
+      healthLabel = "No bid activity for 30+ seconds — keep an eye on it"
     } else {
       healthBand = "green"
       healthLabel = "Live and active"
     }
   }
 
-  // Heuristic parse — try to pull common fields out of recent messages.
-  // We don't know the exact protocol yet, so look at any object and grab
-  // anything that looks like a lot number, bid amount or time field.
-  const heuristics = extractHeuristics(log)
+  // Proper event-aware parsing now that we've seen the protocol.
+  //   liveBidEvent     → lot_id, amount, asking, winner paddle, platform
+  //   sensorNetworkEvent (bidbutton) → auctioneer activity
+  // We track the LATEST liveBidEvent for the "current state" panel, plus the
+  // time of the latest meaningful event (bid OR lot change) for the stall signal.
+  const state = extractAuctionState(log)
+  // Override the simple time-since-last-message with time-since-last-bid for
+  // the health check — sensor pings happen constantly and would mask a stall.
+  const msSinceLastBid = state.lastBidAt ? now.getTime() - state.lastBidAt.getTime() : null
 
   const bandStyle: Record<typeof healthBand, string> = {
     green: "bg-emerald-500",
@@ -217,12 +229,21 @@ export default function AuctionMonitorPage() {
           <Stat label="Reconnects"  value={reconnects.toLocaleString()} />
         </div>
 
-        {/* Heuristic-parsed fields */}
-        {(heuristics.currentLot || heuristics.currentBid || heuristics.timeRemaining) && (
-          <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-            <Stat label="Current lot (best guess)" value={heuristics.currentLot ?? "—"} />
-            <Stat label="Current bid (best guess)" value={heuristics.currentBid ?? "—"} />
-            <Stat label="Time remaining (best guess)" value={heuristics.timeRemaining ?? "—"} />
+        {/* Auction state from liveBidEvent */}
+        {state.currentLotId !== null && (
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
+              <Stat label="Current lot" value={String(state.currentLotId)} />
+              <Stat label="Current bid"  value={state.currentBid  != null ? `£${state.currentBid.toLocaleString()}`  : "—"} />
+              <Stat label="Asking bid"   value={state.askingBid   != null ? `£${state.askingBid.toLocaleString()}`   : "—"} />
+              <Stat label="Winning paddle" value={state.winner != null ? String(state.winner) : "—"} />
+              <Stat label="Platform"     value={state.platform ?? "—"} />
+            </div>
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+              <Stat label="Last bid" value={state.lastBidAt ? formatAgo(now.getTime() - state.lastBidAt.getTime()) : "—"} />
+              <Stat label="Bids on this lot" value={state.bidsThisLot.toLocaleString()} />
+              <Stat label="Lots advanced this session" value={state.lotsSeen.toLocaleString()} />
+            </div>
           </div>
         )}
       </div>
@@ -289,48 +310,68 @@ function formatAgo(ms: number): string {
   return `${h}h ${m % 60}m ago`
 }
 
-// Best-effort summary of an unknown message shape for the log row
+// Friendly one-liner summary for the log row. Highlights key events.
 function describeMessage(obj: any): string {
-  if (obj === null) return "null"
-  if (typeof obj !== "object") return String(obj)
-  // Look for common event-type fields
-  const evtField = ["type", "event", "action", "cmd", "command", "msg"]
-    .find(k => typeof obj[k] === "string")
-  if (evtField) return obj[evtField]
-  // Fall back to a compact key list
+  if (!obj || typeof obj !== "object") return String(obj)
+  const cmd = typeof obj.command === "string" ? obj.command : null
+  const c   = obj.content ?? {}
+
+  if (cmd === "liveBidEvent") {
+    const lot = c.lot_id, amt = c.amount, ask = c.asking
+    return `Bid · lot ${lot} · £${amt} (asking £${ask})`
+  }
+  if (cmd === "sensorNetworkEvent") {
+    return `Sensor · ${c.sensor_name ?? "?"} = ${c.sensor_value}`
+  }
+  if (cmd) return cmd
   const keys = Object.keys(obj).slice(0, 5).join(", ")
   return `{${keys}${Object.keys(obj).length > 5 ? ", …" : ""}}`
 }
 
-// Look across the last few messages for anything that could be the current
-// lot / bid / time remaining. Once we've seen the real protocol, this gets
-// replaced with proper field extraction.
-function extractHeuristics(log: MsgEntry[]) {
-  const out: { currentLot?: string; currentBid?: string; timeRemaining?: string } = {}
-  for (const m of log.slice(0, 30)) {
-    const p = m.parsed
-    if (!p || typeof p !== "object") continue
-    walk(p, (key, value) => {
-      const k = key.toLowerCase()
-      if (!out.currentLot && /(^|_)lot(no|number|num)?$/.test(k) && (typeof value === "string" || typeof value === "number")) {
-        out.currentLot = String(value)
-      }
-      if (!out.currentBid && /(^|_)(current|asking|highest)?[_ ]?bid$/.test(k) && (typeof value === "number" || (typeof value === "string" && /\d/.test(value)))) {
-        out.currentBid = typeof value === "number" ? `£${value}` : String(value)
-      }
-      if (!out.timeRemaining && /(time|countdown|remaining|seconds)/.test(k) && (typeof value === "number")) {
-        out.timeRemaining = `${value}s`
-      }
-    })
-    if (out.currentLot && out.currentBid && out.timeRemaining) break
-  }
-  return out
-}
+// Extract structured auction state from the message log. We scan from most-
+// recent backwards because the log is newest-first; first liveBidEvent we
+// see gives us the current state.
+function extractAuctionState(log: MsgEntry[]) {
+  let currentLotId: number | string | null = null
+  let currentBid:   number | null          = null
+  let askingBid:    number | null          = null
+  let winner:       number | string | null = null
+  let platform:     string | null          = null
+  let lastBidAt:    Date | null             = null
+  let bidsThisLot:  number                  = 0
+  const lotsSet = new Set<string>()
 
-function walk(obj: any, fn: (key: string, value: any) => void) {
-  if (obj === null || typeof obj !== "object") return
-  for (const [k, v] of Object.entries(obj)) {
-    fn(k, v)
-    if (v && typeof v === "object") walk(v, fn)
+  // First pass — find the most recent liveBidEvent (current state)
+  for (const m of log) {
+    if (m.parsed?.command !== "liveBidEvent") continue
+    const c = m.parsed.content ?? {}
+    currentLotId = c.lot_id ?? null
+    currentBid   = typeof c.amount  === "number" ? c.amount  : null
+    askingBid    = typeof c.asking  === "number" ? c.asking  : null
+    winner       = c.winner ?? null
+    platform     = typeof c.platform === "string" ? c.platform : null
+    lastBidAt    = m.at
+    break
+  }
+
+  // Second pass — count bids on the current lot + total distinct lots seen
+  for (const m of log) {
+    if (m.parsed?.command !== "liveBidEvent") continue
+    const lot = m.parsed.content?.lot_id
+    if (lot != null) lotsSet.add(String(lot))
+    if (lot != null && currentLotId != null && String(lot) === String(currentLotId)) {
+      bidsThisLot++
+    }
+  }
+
+  return {
+    currentLotId,
+    currentBid,
+    askingBid,
+    winner,
+    platform,
+    lastBidAt,
+    bidsThisLot,
+    lotsSeen: lotsSet.size,
   }
 }
