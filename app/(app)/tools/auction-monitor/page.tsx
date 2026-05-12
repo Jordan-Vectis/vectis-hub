@@ -152,6 +152,11 @@ export default function AuctionMonitorPage() {
       // No traffic at all = definitely something wrong with the feed
       healthBand = "red"
       healthLabel = "No messages for over 2 minutes — feed may have dropped"
+    } else if (state.paused) {
+      // Paused is a deliberate state, not an error — amber so it stands out
+      // visually but doesn't read as a problem.
+      healthBand = "amber"
+      healthLabel = "Auction paused by auctioneer"
     } else if (msSinceLastBid === null) {
       healthBand = "amber"
       healthLabel = "Connected — waiting for first bid event"
@@ -228,6 +233,30 @@ export default function AuctionMonitorPage() {
           <Stat label="Reconnects"  value={reconnects.toLocaleString()} />
         </div>
 
+        {/* Sale-state badges — flags from getFairWarningStatus + activeLotLock */}
+        {(state.saleStateAt || state.lotLockAt) && (
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {state.paused && (
+              <span className="bg-amber-100 border border-amber-300 text-amber-900 text-xs font-semibold px-2.5 py-1 rounded">⏸ PAUSED</span>
+            )}
+            {state.fairWarning && (
+              <span className="bg-red-100 border border-red-300 text-red-900 text-xs font-semibold px-2.5 py-1 rounded animate-pulse">🔨 FAIR WARNING</span>
+            )}
+            {state.bidQuicker && (
+              <span className="bg-orange-100 border border-orange-300 text-orange-900 text-xs font-semibold px-2.5 py-1 rounded">⚡ BID QUICKER</span>
+            )}
+            {state.saleMessage && (
+              <span className="bg-blue-100 border border-blue-300 text-blue-900 text-xs font-semibold px-2.5 py-1 rounded">💬 MESSAGE</span>
+            )}
+            {!state.paused && !state.fairWarning && !state.bidQuicker && !state.saleMessage && (
+              <span className="text-xs text-gray-500">Sale state: normal</span>
+            )}
+            {state.lotLockStatus !== null && state.lotLockStatus !== 0 && (
+              <span className="bg-purple-100 border border-purple-300 text-purple-900 text-xs font-semibold px-2.5 py-1 rounded">🔒 Lot lock {state.lotLockStatus}</span>
+            )}
+          </div>
+        )}
+
         {/* Auction state from liveBidEvent */}
         {state.currentLotId !== null && (
           <div className="mt-4 pt-4 border-t border-gray-100">
@@ -238,10 +267,21 @@ export default function AuctionMonitorPage() {
               <Stat label="Winning paddle" value={state.winner != null ? String(state.winner) : "—"} />
               <Stat label="Platform"     value={state.platform ?? "—"} />
             </div>
-            <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-4 gap-3 text-sm">
               <Stat label="Last bid" value={state.lastBidAt ? formatAgo(now.getTime() - state.lastBidAt.getTime()) : "—"} />
               <Stat label="Bids on this lot" value={state.bidsThisLot.toLocaleString()} />
               <Stat label="Lots advanced this session" value={state.lotsSeen.toLocaleString()} />
+              <Stat
+                label="Bids by platform"
+                value={
+                  Object.keys(state.platformCounts).length === 0
+                    ? "—"
+                    : Object.entries(state.platformCounts)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([k, v]) => `${k}:${v}`)
+                        .join(", ")
+                }
+              />
             </div>
           </div>
         )}
@@ -316,11 +356,22 @@ function describeMessage(obj: any): string {
   const c   = obj.content ?? {}
 
   if (cmd === "liveBidEvent") {
-    const lot = c.lot_id, amt = c.amount, ask = c.asking
-    return `Bid · lot ${lot} · £${amt} (asking £${ask})`
+    const lot = c.lot_id, amt = c.amount, ask = c.asking, plat = c.platform
+    return `Bid · lot ${lot} · £${amt} (asking £${ask})${plat ? ` · ${plat}` : ""}`
   }
   if (cmd === "sensorNetworkEvent") {
     return `Sensor · ${c.sensor_name ?? "?"} = ${c.sensor_value}`
+  }
+  if (cmd === "getFairWarningStatus") {
+    const flags: string[] = []
+    if (c.paused)        flags.push("PAUSED")
+    if (c.fair_warning)  flags.push("FAIR WARNING")
+    if (c.bid_quicker)   flags.push("BID QUICKER")
+    if (c.message)       flags.push("MESSAGE")
+    return `Sale state · ${flags.length ? flags.join(" + ") : "normal"}`
+  }
+  if (cmd === "activeLotLock") {
+    return `Lot lock · status ${c.status}`
   }
   if (cmd) return cmd
   const keys = Object.keys(obj).slice(0, 5).join(", ")
@@ -328,8 +379,8 @@ function describeMessage(obj: any): string {
 }
 
 // Extract structured auction state from the message log. We scan from most-
-// recent backwards because the log is newest-first; first liveBidEvent we
-// see gives us the current state.
+// recent backwards because the log is newest-first; first event of each type
+// we see gives us the current state.
 function extractAuctionState(log: MsgEntry[]) {
   let currentLotId: number | string | null = null
   let currentBid:   number | null          = null
@@ -340,7 +391,21 @@ function extractAuctionState(log: MsgEntry[]) {
   let bidsThisLot:  number                  = 0
   const lotsSet = new Set<string>()
 
-  // First pass — find the most recent liveBidEvent (current state)
+  // Sale state — flags from getFairWarningStatus
+  let paused      = false
+  let fairWarning = false
+  let bidQuicker  = false
+  let saleMessage = false
+  let saleStateAt: Date | null = null
+
+  // Lot lock — status from activeLotLock
+  let lotLockStatus: number | null = null
+  let lotLockAt:     Date | null   = null
+
+  // Platform breakdown counts (Online / BSCB / Vectis Live / etc)
+  const platformCounts: Record<string, number> = {}
+
+  // First pass — newest liveBidEvent for current state
   for (const m of log) {
     if (m.parsed?.command !== "liveBidEvent") continue
     const c = m.parsed.content ?? {}
@@ -353,13 +418,38 @@ function extractAuctionState(log: MsgEntry[]) {
     break
   }
 
-  // Second pass — count bids on the current lot + total distinct lots seen
+  // Find latest sale-state event
+  for (const m of log) {
+    if (m.parsed?.command !== "getFairWarningStatus") continue
+    const c = m.parsed.content ?? {}
+    paused      = !!c.paused
+    fairWarning = !!c.fair_warning
+    bidQuicker  = !!c.bid_quicker
+    saleMessage = !!c.message
+    saleStateAt = m.at
+    break
+  }
+
+  // Find latest lot-lock event
+  for (const m of log) {
+    if (m.parsed?.command !== "activeLotLock") continue
+    const c = m.parsed.content ?? {}
+    lotLockStatus = typeof c.status === "number" ? c.status : null
+    lotLockAt     = m.at
+    break
+  }
+
+  // Second pass — counts on the current lot, distinct lots, platform tallies
   for (const m of log) {
     if (m.parsed?.command !== "liveBidEvent") continue
     const lot = m.parsed.content?.lot_id
+    const plat = m.parsed.content?.platform
     if (lot != null) lotsSet.add(String(lot))
     if (lot != null && currentLotId != null && String(lot) === String(currentLotId)) {
       bidsThisLot++
+    }
+    if (typeof plat === "string" && plat) {
+      platformCounts[plat] = (platformCounts[plat] ?? 0) + 1
     }
   }
 
@@ -372,5 +462,13 @@ function extractAuctionState(log: MsgEntry[]) {
     lastBidAt,
     bidsThisLot,
     lotsSeen: lotsSet.size,
+    paused,
+    fairWarning,
+    bidQuicker,
+    saleMessage,
+    saleStateAt,
+    lotLockStatus,
+    lotLockAt,
+    platformCounts,
   }
 }
