@@ -14,6 +14,7 @@ export const CATEGORY_MAP: Record<string, string[]> = {
                       "GOLLIES", "HOUSES", "HOUSE_FURNITURE", "MODERN", "VINTAGE"],
   "GAMING":          ["ACCESSORIES", "CONSOLES", "VIDEO_GAMES"],
   "KITS":            ["KITS_AIRCRAFT"],
+  "MILITARY":        ["1/6 SCALE FIGURES"],
   "MATCHBOX":        ["ACCESSORIES", "COLLECTIBLES", "CONVOY", "DINKY_COLLECTION", "KING_SIZE",
                       "MIXED", "MOY", "OTHER_MATCHBOX", "REGULAR_MOKO", "SKYBUSTERS",
                       "SUPERFAST", "SUPER_& SPEED_KINGS"],
