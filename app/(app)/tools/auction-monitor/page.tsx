@@ -261,16 +261,25 @@ export default function AuctionMonitorPage() {
         {state.currentLotId !== null && (
           <div className="mt-4 pt-4 border-t border-gray-100">
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
-              <Stat label="Current lot" value={String(state.currentLotId)} />
+              <Stat
+                label="Current lot"
+                value={state.currentLotNumber ? `Lot ${state.currentLotNumber}` : `#${state.currentLotId}`}
+              />
               <Stat label="Current bid"  value={state.currentBid  != null ? `£${state.currentBid.toLocaleString()}`  : "—"} />
               <Stat label="Asking bid"   value={state.askingBid   != null ? `£${state.askingBid.toLocaleString()}`   : "—"} />
-              <Stat label="Winning paddle" value={state.winner != null ? String(state.winner) : "—"} />
+              <Stat label="Winning paddle" value={
+                state.winner === 0 ? "Saleroom" : state.winner != null ? String(state.winner) : "—"
+              } />
               <Stat label="Platform"     value={state.platform ?? "—"} />
             </div>
-            <div className="mt-3 grid grid-cols-1 sm:grid-cols-4 gap-3 text-sm">
+            <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
               <Stat label="Last bid" value={state.lastBidAt ? formatAgo(now.getTime() - state.lastBidAt.getTime()) : "—"} />
               <Stat label="Bids on this lot" value={state.bidsThisLot.toLocaleString()} />
-              <Stat label="Lots advanced this session" value={state.lotsSeen.toLocaleString()} />
+              <Stat label="Lots sold this session" value={state.soldCount.toLocaleString()} />
+              <Stat label="Lots passed" value={state.passedCount.toLocaleString()} />
+              <Stat label="Session hammer" value={`£${state.sessionHammer.toLocaleString()}`} />
+            </div>
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
               <Stat
                 label="Bids by platform"
                 value={
@@ -286,6 +295,44 @@ export default function AuctionMonitorPage() {
           </div>
         )}
       </div>
+
+      {/* Recent lots — newest-first list of finished lots in this session */}
+      {state.recentLots.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
+          <div className="px-4 py-3 border-b border-gray-100">
+            <h3 className="text-sm font-semibold text-gray-700">Recent lots ({state.recentLots.length})</h3>
+            <p className="text-[11px] text-gray-500 mt-0.5">Newest first · {state.soldCount} sold · {state.passedCount} passed · £{state.sessionHammer.toLocaleString()} total hammer</p>
+          </div>
+          <ul className="divide-y divide-gray-100">
+            {state.recentLots.map((lot, i) => {
+              const isSold     = /sold/i.test(lot.outcome ?? "")
+              const isPassed   = /pass|unsold|withdrawn/i.test(lot.outcome ?? "")
+              const badgeClass = isSold
+                ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                : isPassed
+                  ? "bg-gray-100 text-gray-700 border-gray-300"
+                  : "bg-blue-100 text-blue-700 border-blue-300"
+              return (
+                <li key={i} className="px-4 py-2.5 flex items-center gap-3 text-sm">
+                  <span className="font-mono font-semibold text-gray-700 min-w-[60px]">
+                    {lot.lotNumber ? `Lot ${lot.lotNumber}` : `#${lot.lotId}`}
+                  </span>
+                  <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded uppercase tracking-wide ${badgeClass}`}>
+                    {lot.outcome ?? "?"}
+                  </span>
+                  <span className="flex-1" />
+                  <span className="text-gray-600 font-mono">
+                    {lot.hammerPrice != null ? `£${lot.hammerPrice.toLocaleString()}` : "—"}
+                  </span>
+                  <span className="text-[11px] text-gray-400 min-w-[60px] text-right">
+                    {lot.at.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
 
       {/* Raw message log */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -410,22 +457,51 @@ function describeMessage(obj: any): string {
   if (cmd === "activeLotLock") {
     return `Lot lock · status ${c.status}`
   }
+  if (cmd === "activeLotChange") {
+    const newLot = c.lot_number ? `Lot ${c.lot_number}` : `#${c.lot_id}`
+    return `Lot advance → ${newLot}${c.previous_lot_type ? ` (previous: ${c.previous_lot_type})` : ""}`
+  }
+  if (cmd === "lotInformationUpdate") {
+    return `Lot info · ${c.lot_id} · ${c.key_name}=${c.key_value}${c.hammer_price ? ` · hammer £${c.hammer_price}` : ""}`
+  }
+  if (cmd === "liveCommissionBidEvent") {
+    return `Commission bid · lot ${c.lot_id} · max £${c.amount} (executed £${c.executed_amount}) · paddle ${c.user_id}`
+  }
+  if (cmd === "undoLiveBid") {
+    return `Bid UNDONE · lot ${c.lot_id} · was £${c.amount}`
+  }
+  if (cmd === "undoneBidChange") {
+    return `Bid-change undo · lot ${c.bid_lot_id} · paddle ${c.bid_user_id}`
+  }
+  if (cmd === "liveActiveReload") {
+    return `Server reload signal`
+  }
   if (cmd) return cmd
   const keys = Object.keys(obj).slice(0, 5).join(", ")
   return `{${keys}${Object.keys(obj).length > 5 ? ", …" : ""}}`
+}
+
+// Per-lot result tracked from activeLotChange + lotInformationUpdate
+export type LotResult = {
+  lotId:       number | string
+  lotNumber:   string | null    // human-friendly, e.g. "325"
+  outcome:     string | null    // "Sold" | "Passed" | "Withdrawn" | …
+  hammerPrice: number | null
+  at:          Date
 }
 
 // Extract structured auction state from the message log. We scan from most-
 // recent backwards because the log is newest-first; first event of each type
 // we see gives us the current state.
 function extractAuctionState(log: MsgEntry[]) {
-  let currentLotId: number | string | null = null
-  let currentBid:   number | null          = null
-  let askingBid:    number | null          = null
-  let winner:       number | string | null = null
-  let platform:     string | null          = null
-  let lastBidAt:    Date | null             = null
-  let bidsThisLot:  number                  = 0
+  let currentLotId:     number | string | null = null
+  let currentLotNumber: string | null          = null
+  let currentBid:       number | null          = null
+  let askingBid:        number | null          = null
+  let winner:           number | string | null = null
+  let platform:         string | null          = null
+  let lastBidAt:        Date | null             = null
+  let bidsThisLot:      number                  = 0
   const lotsSet = new Set<string>()
 
   // Sale state — flags from getFairWarningStatus
@@ -439,13 +515,31 @@ function extractAuctionState(log: MsgEntry[]) {
   let lotLockStatus: number | null = null
   let lotLockAt:     Date | null   = null
 
-  // Platform breakdown counts (Online / BSCB / Vectis Live / etc)
+  // Platform breakdown counts (Online / BSCB / Saleroom / …)
   const platformCounts: Record<string, number> = {}
 
-  // First pass — newest liveBidEvent for current state
+  // Lot results from activeLotChange + lotInformationUpdate
+  // activeLotChange tells us a lot has finished and what its outcome was.
+  // lotInformationUpdate carries the hammer_price for that finished lot.
+  // We match them by lot_id.
+  const lotNumberByLotId: Record<string, string>  = {}
+  const hammerByLotId:    Record<string, number>  = {}
+  const lotOutcomes:      LotResult[]             = []
+
+  // 1. Latest liveBidEvent for current state (we walk newest first and
+  //    take the first match — but we skip events that were later undone)
+  const undoneBidLots = new Set<string>()  // lot_ids of bids that have been undone
+  for (const m of log) {
+    if (m.parsed?.command !== "undoLiveBid") continue
+    const lid = m.parsed.content?.lot_id
+    if (lid != null) undoneBidLots.add(String(lid) + "-" + (m.parsed.content?.amount ?? "?"))
+  }
+
   for (const m of log) {
     if (m.parsed?.command !== "liveBidEvent") continue
     const c = m.parsed.content ?? {}
+    // Skip a bid that was subsequently undone with the same lot+amount
+    if (undoneBidLots.has(String(c.lot_id) + "-" + c.amount)) continue
     currentLotId = c.lot_id ?? null
     currentBid   = typeof c.amount  === "number" ? c.amount  : null
     askingBid    = typeof c.asking  === "number" ? c.asking  : null
@@ -455,7 +549,7 @@ function extractAuctionState(log: MsgEntry[]) {
     break
   }
 
-  // Find latest sale-state event
+  // 2. Sale state (latest)
   for (const m of log) {
     if (m.parsed?.command !== "getFairWarningStatus") continue
     const c = m.parsed.content ?? {}
@@ -467,7 +561,7 @@ function extractAuctionState(log: MsgEntry[]) {
     break
   }
 
-  // Find latest lot-lock event
+  // 3. Lot lock (latest)
   for (const m of log) {
     if (m.parsed?.command !== "activeLotLock") continue
     const c = m.parsed.content ?? {}
@@ -476,22 +570,90 @@ function extractAuctionState(log: MsgEntry[]) {
     break
   }
 
-  // Second pass — counts on the current lot, distinct lots, platform tallies
-  for (const m of log) {
-    if (m.parsed?.command !== "liveBidEvent") continue
-    const lot = m.parsed.content?.lot_id
-    const plat = m.parsed.content?.platform
-    if (lot != null) lotsSet.add(String(lot))
-    if (lot != null && currentLotId != null && String(lot) === String(currentLotId)) {
-      bidsThisLot++
+  // 4. Walk the WHOLE log oldest-first for cumulative counters
+  const logOldestFirst = [...log].reverse()
+  for (const m of logOldestFirst) {
+    const cmd = m.parsed?.command
+    const c   = m.parsed?.content ?? {}
+
+    if (cmd === "liveBidEvent") {
+      // Skip undone ones (they shouldn't count in totals)
+      if (undoneBidLots.has(String(c.lot_id) + "-" + c.amount)) continue
+      const lot = c.lot_id
+      const plat = c.platform
+      if (lot != null) lotsSet.add(String(lot))
+      if (typeof plat === "string" && plat) {
+        platformCounts[plat] = (platformCounts[plat] ?? 0) + 1
+      }
     }
-    if (typeof plat === "string" && plat) {
-      platformCounts[plat] = (platformCounts[plat] ?? 0) + 1
+
+    if (cmd === "activeLotChange") {
+      // The PREVIOUS lot has just finished. Record its outcome.
+      // c.update_previous_lot signals whether to attribute previous_lot_type.
+      // For the NEW current lot we get lot_id + lot_number.
+      if (c.update_previous_lot && c.lot_id != null && c.previous_lot_type) {
+        // The previous lot is whatever was current immediately before this event
+        // — we infer it by walking back to find the last activeLotChange or the
+        // first liveBidEvent's lot_id. Simpler: record by previous "current lot"
+        // tracker.
+        const prevLot = prevLotIdAtTimeOf(logOldestFirst, m)
+        if (prevLot != null) {
+          lotOutcomes.push({
+            lotId:       prevLot,
+            lotNumber:   lotNumberByLotId[String(prevLot)] ?? null,
+            outcome:     String(c.previous_lot_type),
+            hammerPrice: hammerByLotId[String(prevLot)] ?? null,
+            at:          m.at,
+          })
+        }
+      }
+      // Remember the human lot number for this lot_id
+      if (c.lot_id != null && c.lot_number) {
+        lotNumberByLotId[String(c.lot_id)] = String(c.lot_number)
+      }
+    }
+
+    if (cmd === "lotInformationUpdate") {
+      // Hammer price for a specific lot
+      if (c.lot_id != null && c.hammer_price != null) {
+        const hp = parseFloat(String(c.hammer_price))
+        if (!isNaN(hp)) hammerByLotId[String(c.lot_id)] = hp
+        // Update any already-recorded outcome with the hammer price
+        for (const o of lotOutcomes) {
+          if (String(o.lotId) === String(c.lot_id) && o.hammerPrice == null) {
+            o.hammerPrice = hp
+          }
+        }
+      }
     }
   }
 
+  // Fill in the human lot number for the currently active lot
+  if (currentLotId != null) {
+    currentLotNumber = lotNumberByLotId[String(currentLotId)] ?? null
+  }
+
+  // Count bids on current lot (post-undo)
+  for (const m of log) {
+    if (m.parsed?.command !== "liveBidEvent") continue
+    const c = m.parsed.content
+    if (undoneBidLots.has(String(c?.lot_id) + "-" + c?.amount)) continue
+    if (c?.lot_id != null && currentLotId != null && String(c.lot_id) === String(currentLotId)) {
+      bidsThisLot++
+    }
+  }
+
+  // Session totals
+  const soldCount = lotOutcomes.filter(o => /sold/i.test(o.outcome ?? "")).length
+  const passedCount = lotOutcomes.filter(o => /pass|unsold|withdrawn/i.test(o.outcome ?? "")).length
+  const sessionHammer = lotOutcomes.reduce((s, o) => s + (o.hammerPrice ?? 0), 0)
+
+  // Recent lots (newest first), limit to 10
+  const recentLots = [...lotOutcomes].reverse().slice(0, 10)
+
   return {
     currentLotId,
+    currentLotNumber,
     currentBid,
     askingBid,
     winner,
@@ -507,5 +669,24 @@ function extractAuctionState(log: MsgEntry[]) {
     lotLockStatus,
     lotLockAt,
     platformCounts,
+    recentLots,
+    soldCount,
+    passedCount,
+    sessionHammer,
   }
+}
+
+// Walk the log (oldest first) up to the given message; return the most recent
+// active-lot id seen before that point (from either an earlier activeLotChange
+// or a liveBidEvent's lot_id).
+function prevLotIdAtTimeOf(logOldestFirst: MsgEntry[], target: MsgEntry): string | number | null {
+  let last: string | number | null = null
+  for (const m of logOldestFirst) {
+    if (m === target) break
+    const cmd = m.parsed?.command
+    const c   = m.parsed?.content ?? {}
+    if (cmd === "activeLotChange" && c.lot_id != null) last = c.lot_id
+    else if (cmd === "liveBidEvent" && c.lot_id != null && last == null) last = c.lot_id
+  }
+  return last
 }
