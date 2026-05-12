@@ -24,6 +24,92 @@ const STALE_AMBER_MS     = 30_000   // amber after no messages for 30s
 const STALE_RED_MS       = 120_000  // red after 2 min — definite stall
 const MAX_LOG_ROWS       = 200
 
+// ── Alert rules ──────────────────────────────────────────────────────────────
+// User-toggleable notification rules. Each rule has a unique id, a sensible
+// default, and optionally a configurable threshold (e.g. stall seconds, high-
+// value price). The rules engine in the effect below dispatches a push to
+// ntfy whenever a rule's condition transitions from false→true.
+type AlertRule = {
+  id:           string
+  label:        string
+  description:  string
+  defaultOn:    boolean
+  threshold?: {
+    label:    string
+    suffix:   string
+    default:  number
+    min:      number
+    max:      number
+  }
+}
+
+const ALERT_RULES: AlertRule[] = [
+  {
+    id:          "connection_drop",
+    label:       "Connection dropped",
+    description: "WebSocket disconnected unexpectedly (urgent — feed is gone)",
+    defaultOn:   true,
+  },
+  {
+    id:          "stall_red",
+    label:       "Auction stalled — long silence",
+    description: "No bids in the last N seconds (raise urgent alert)",
+    defaultOn:   true,
+    threshold:   { label: "Seconds", suffix: "s", default: 120, min: 30, max: 600 },
+  },
+  {
+    id:          "stall_amber",
+    label:       "Auction quiet — early warning",
+    description: "No bids in the last N seconds (heads-up only)",
+    defaultOn:   false,
+    threshold:   { label: "Seconds", suffix: "s", default: 60, min: 15, max: 300 },
+  },
+  {
+    id:          "paused",
+    label:       "Auction paused",
+    description: "Auctioneer paused the sale",
+    defaultOn:   true,
+  },
+  {
+    id:          "bid_quicker",
+    label:       "Bid quicker requested",
+    description: "Auctioneer asked the room to bid faster",
+    defaultOn:   true,
+  },
+  {
+    id:          "fair_warning",
+    label:       "Fair warning called",
+    description: "Auctioneer about to hammer (fires every lot — usually off)",
+    defaultOn:   false,
+  },
+  {
+    id:          "recovery",
+    label:       "Auction recovered",
+    description: "Came back to live & active after an amber/red state",
+    defaultOn:   true,
+  },
+  {
+    id:          "high_value_sold",
+    label:       "High-value lot sold",
+    description: "Hammer price above your threshold",
+    defaultOn:   false,
+    threshold:   { label: "£", suffix: "", default: 1000, min: 100, max: 50000 },
+  },
+  {
+    id:          "lot_passed",
+    label:       "Lot passed / unsold",
+    description: "Any lot that didn't sell",
+    defaultOn:   false,
+  },
+  {
+    id:          "heartbeat",
+    label:       "Periodic heartbeat",
+    description: "Confirms the monitor is still running (every N minutes)",
+    defaultOn:   false,
+    threshold:   { label: "Minutes", suffix: "m", default: 15, min: 5, max: 240 },
+  },
+]
+
 export default function AuctionMonitorPage() {
   // Persist the last auction ID across reloads — handy for the wall-display use case
   const [auctionId, setAuctionId] = useState<string>(() => {
@@ -48,9 +134,55 @@ export default function AuctionMonitorPage() {
     return localStorage.getItem("auction_monitor_push_enabled") === "1"
   })
   const [pushStatus, setPushStatus] = useState<string | null>(null)
-  // Track the last alerted band so we only fire on transitions, not every render
-  const lastAlertedBandRef = useRef<"green" | "amber" | "red" | "grey" | null>(null)
-  const lastAlertedReasonRef = useRef<string>("")
+  // Per-rule enabled flags + thresholds, persisted to localStorage
+  const [ruleEnabled, setRuleEnabled] = useState<Record<string, boolean>>(() => {
+    if (typeof window === "undefined") return Object.fromEntries(ALERT_RULES.map(r => [r.id, r.defaultOn]))
+    try {
+      const raw = localStorage.getItem("auction_monitor_rules_enabled")
+      const parsed = raw ? JSON.parse(raw) : null
+      const out: Record<string, boolean> = {}
+      for (const r of ALERT_RULES) out[r.id] = parsed?.[r.id] ?? r.defaultOn
+      return out
+    } catch {
+      return Object.fromEntries(ALERT_RULES.map(r => [r.id, r.defaultOn]))
+    }
+  })
+  const [ruleThresholds, setRuleThresholds] = useState<Record<string, number>>(() => {
+    if (typeof window === "undefined") return Object.fromEntries(ALERT_RULES.filter(r => r.threshold).map(r => [r.id, r.threshold!.default]))
+    try {
+      const raw = localStorage.getItem("auction_monitor_rule_thresholds")
+      const parsed = raw ? JSON.parse(raw) : null
+      const out: Record<string, number> = {}
+      for (const r of ALERT_RULES) {
+        if (r.threshold) out[r.id] = parsed?.[r.id] ?? r.threshold.default
+      }
+      return out
+    } catch {
+      return Object.fromEntries(ALERT_RULES.filter(r => r.threshold).map(r => [r.id, r.threshold!.default]))
+    }
+  })
+  const [showRuleSettings, setShowRuleSettings] = useState(false)
+
+  function setRuleEnabledPersisted(id: string, enabled: boolean) {
+    setRuleEnabled(prev => {
+      const next = { ...prev, [id]: enabled }
+      try { localStorage.setItem("auction_monitor_rules_enabled", JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
+  function setRuleThresholdPersisted(id: string, value: number) {
+    setRuleThresholds(prev => {
+      const next = { ...prev, [id]: value }
+      try { localStorage.setItem("auction_monitor_rule_thresholds", JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
+
+  // Dedupe state per rule — tracks whether the rule's condition is currently
+  // "active" so we only fire ONE push per crossing, not one per render.
+  const ruleActiveRef = useRef<Record<string, boolean>>({})
+  const lastHighValueLotRef = useRef<string | null>(null)
+  const lastPassedLotRef    = useRef<string | null>(null)
 
   // Ticking clock for the "X seconds ago" display
   useEffect(() => {
@@ -235,45 +367,172 @@ export default function AuctionMonitorPage() {
     }
   }
 
-  // Notification dispatch — fire when the health band changes to something
-  // notable. We dedupe on the band + reason so a steady amber state doesn't
-  // re-fire every render, but a transition (green→amber or amber→red) does.
+  // Rule-based notification engine. Each rule has dedupe state in
+  // ruleActiveRef so we only push ONCE per crossing of the condition.
   useEffect(() => {
     if (!running || !pushEnabled || !ntfyTopic.trim()) return
+    const lotInfo = state.currentLotNumber ? ` · Lot ${state.currentLotNumber}` : ""
+    const auctionInfo = `Auction ${auctionId}`
 
-    const band      = healthBand
-    const reason    = healthLabel
-    const prevBand  = lastAlertedBandRef.current
-    const prevReason = lastAlertedReasonRef.current
-
-    // Skip if nothing meaningful changed
-    if (band === prevBand && reason === prevReason) return
-
-    // Only fire on transitions worth knowing about
-    const shouldAlert =
-      // New problem appeared (green/grey → amber/red, or amber → red)
-      (band === "red" && prevBand !== "red") ||
-      (band === "amber" && prevBand !== "amber" && prevBand !== "red") ||
-      // Recovery from a problem back to green
-      (band === "green" && (prevBand === "amber" || prevBand === "red"))
-
-    if (shouldAlert) {
-      const tag = band === "red"   ? "rotating_light"
-               :  band === "amber" ? "warning"
-               :  /* green */        "white_check_mark"
-      const priority = band === "red" ? 5 : band === "amber" ? 4 : 3
-      const title = band === "red"   ? "Auction alert — RED"
-                 :  band === "amber" ? "Auction alert — Amber"
-                 :  "Auction recovered"
-      const lotInfo = state.currentLotNumber ? ` · Lot ${state.currentLotNumber}` : ""
-      const body = `${reason}${lotInfo}\nAuction ${auctionId}`
-      sendNtfy({ title, body, priority: priority as 1|2|3|4|5, tags: [tag] }).catch(() => {})
+    // Helper — fires once on transition from inactive→active, plus an
+    // optional "all-clear" message on active→inactive.
+    function checkRule(
+      ruleId: string,
+      active: boolean,
+      onActive: () => Parameters<typeof sendNtfy>[0],
+    ) {
+      if (!ruleEnabled[ruleId]) {
+        ruleActiveRef.current[ruleId] = false
+        return
+      }
+      const wasActive = !!ruleActiveRef.current[ruleId]
+      if (active && !wasActive) {
+        sendNtfy(onActive()).catch(() => {})
+      }
+      ruleActiveRef.current[ruleId] = active
     }
 
-    lastAlertedBandRef.current = band
-    lastAlertedReasonRef.current = reason
+    // 1. Connection dropped
+    checkRule(
+      "connection_drop",
+      connState === "closed" || connState === "error",
+      () => ({
+        title:    "Auction alert · Connection dropped",
+        body:     `WebSocket ${connState}${lotInfo}\n${auctionInfo}`,
+        priority: 5, tags: ["rotating_light"],
+      }),
+    )
+
+    // 2. Stall — red (long silence)
+    const stallRedSec  = ruleThresholds["stall_red"]  ?? 120
+    const stallRedActive = connState === "open" && msSinceLastBid !== null && msSinceLastBid >= stallRedSec * 1000
+    checkRule(
+      "stall_red",
+      stallRedActive,
+      () => ({
+        title:    "Auction alert · No bids",
+        body:     `No bid activity for ${stallRedSec}+ seconds${lotInfo}\n${auctionInfo}`,
+        priority: 5, tags: ["rotating_light"],
+      }),
+    )
+
+    // 3. Stall — amber (early warning)
+    const stallAmberSec = ruleThresholds["stall_amber"] ?? 60
+    const stallAmberActive = connState === "open" && msSinceLastBid !== null && msSinceLastBid >= stallAmberSec * 1000 && !stallRedActive
+    checkRule(
+      "stall_amber",
+      stallAmberActive,
+      () => ({
+        title:    "Auction warning · Quiet",
+        body:     `No bids in last ${stallAmberSec} seconds${lotInfo}\n${auctionInfo}`,
+        priority: 4, tags: ["warning"],
+      }),
+    )
+
+    // 4. Paused
+    checkRule(
+      "paused",
+      state.paused,
+      () => ({
+        title:    "Auction paused",
+        body:     `Auctioneer paused the sale${lotInfo}\n${auctionInfo}`,
+        priority: 4, tags: ["pause_button"],
+      }),
+    )
+
+    // 5. Bid quicker
+    checkRule(
+      "bid_quicker",
+      state.bidQuicker,
+      () => ({
+        title:    "Auctioneer: bid quicker",
+        body:     `Auctioneer asking for faster bids${lotInfo}\n${auctionInfo}`,
+        priority: 4, tags: ["zap"],
+      }),
+    )
+
+    // 6. Fair warning
+    checkRule(
+      "fair_warning",
+      state.fairWarning,
+      () => ({
+        title:    "Fair warning called",
+        body:     `Auctioneer about to hammer${lotInfo}\n${auctionInfo}`,
+        priority: 3, tags: ["hammer"],
+      }),
+    )
+
+    // 7. Recovery — fires when the headline band returns to green after
+    //    being amber/red. Tracked off the overall health band, not a single rule.
+    const recoveryActive = healthBand === "green" && (
+      ruleActiveRef.current["__bad_state__"]
+    )
+    if (healthBand !== "green" && (healthBand === "amber" || healthBand === "red")) {
+      ruleActiveRef.current["__bad_state__"] = true
+    } else if (healthBand === "green") {
+      if (ruleActiveRef.current["__bad_state__"] && ruleEnabled["recovery"]) {
+        sendNtfy({
+          title:    "Auction recovered",
+          body:     `Back to live & active${lotInfo}\n${auctionInfo}`,
+          priority: 3, tags: ["white_check_mark"],
+        }).catch(() => {})
+      }
+      ruleActiveRef.current["__bad_state__"] = false
+    }
+
+    // 8. High-value lot sold — fires once per qualifying lot
+    if (ruleEnabled["high_value_sold"]) {
+      const threshold = ruleThresholds["high_value_sold"] ?? 1000
+      const recent = state.recentLots[0]   // newest finished lot
+      if (recent && recent.hammerPrice != null && recent.hammerPrice >= threshold) {
+        const key = `${recent.lotId}-${recent.hammerPrice}`
+        if (lastHighValueLotRef.current !== key) {
+          lastHighValueLotRef.current = key
+          sendNtfy({
+            title:    `High-value sold · £${recent.hammerPrice.toLocaleString()}`,
+            body:     `Lot ${recent.lotNumber ?? recent.lotId} hammered at £${recent.hammerPrice.toLocaleString()}\n${auctionInfo}`,
+            priority: 3, tags: ["moneybag"],
+          }).catch(() => {})
+        }
+      }
+    }
+
+    // 9. Lot passed
+    if (ruleEnabled["lot_passed"]) {
+      const recent = state.recentLots[0]
+      if (recent && /pass|unsold|withdrawn/i.test(recent.outcome ?? "")) {
+        const key = `${recent.lotId}-${recent.outcome}`
+        if (lastPassedLotRef.current !== key) {
+          lastPassedLotRef.current = key
+          sendNtfy({
+            title:    `Lot ${recent.outcome ?? "passed"}`,
+            body:     `Lot ${recent.lotNumber ?? recent.lotId} — ${recent.outcome}\n${auctionInfo}`,
+            priority: 2, tags: ["arrow_right"],
+          }).catch(() => {})
+        }
+      }
+    }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [healthBand, healthLabel, running, pushEnabled])
+  }, [healthBand, healthLabel, connState, msSinceLastBid, state.paused, state.fairWarning, state.bidQuicker, state.recentLots.length, running, pushEnabled])
+
+  // 10. Heartbeat — fires on a timer if enabled
+  useEffect(() => {
+    if (!running || !pushEnabled || !ntfyTopic.trim()) return
+    if (!ruleEnabled["heartbeat"]) return
+    const minutes = ruleThresholds["heartbeat"] ?? 15
+    const intervalMs = Math.max(1, minutes) * 60_000
+    const id = setInterval(() => {
+      const lotInfo = state.currentLotNumber ? ` · Lot ${state.currentLotNumber}` : ""
+      sendNtfy({
+        title:    "Auction monitor heartbeat",
+        body:     `Still running · ${state.soldCount} sold so far${lotInfo}\nAuction ${auctionId}`,
+        priority: 1, tags: ["green_heart"],
+      }).catch(() => {})
+    }, intervalMs)
+    return () => clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running, pushEnabled, ruleEnabled["heartbeat"], ruleThresholds["heartbeat"]])
 
   const bandStyle: Record<typeof healthBand, string> = {
     green: "bg-emerald-500",
@@ -368,10 +627,54 @@ export default function AuctionMonitorPage() {
             <span className="self-end text-xs text-gray-600">{pushStatus}</span>
           )}
         </div>
-        <p className="text-[11px] text-gray-500 mt-2">
-          Alerts fire on state transitions: green→amber, amber/green→red, and recovery back to green.
-          No repeat spam while the state is steady.
-        </p>
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          <button
+            onClick={() => setShowRuleSettings(s => !s)}
+            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+          >
+            {showRuleSettings ? "▼ Hide alert rules" : "▶ Configure alert rules"}
+            <span className="ml-2 text-gray-500 font-normal">
+              ({Object.values(ruleEnabled).filter(Boolean).length} of {ALERT_RULES.length} enabled)
+            </span>
+          </button>
+          {showRuleSettings && (
+            <ul className="mt-3 space-y-2">
+              {ALERT_RULES.map(rule => {
+                const enabled  = !!ruleEnabled[rule.id]
+                const threshold = ruleThresholds[rule.id]
+                return (
+                  <li key={rule.id} className={`flex items-start gap-3 p-2.5 rounded-lg border ${enabled ? "border-emerald-200 bg-emerald-50/40" : "border-gray-200 bg-gray-50/40"}`}>
+                    <input
+                      type="checkbox"
+                      checked={enabled}
+                      onChange={e => setRuleEnabledPersisted(rule.id, e.target.checked)}
+                      className="mt-1 w-4 h-4 accent-emerald-600 flex-shrink-0"
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-800">{rule.label}</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">{rule.description}</p>
+                    </div>
+                    {rule.threshold && (
+                      <div className="flex items-center gap-1.5 self-center">
+                        <span className="text-[11px] text-gray-500">{rule.threshold.label}</span>
+                        <input
+                          type="number"
+                          value={threshold ?? rule.threshold.default}
+                          min={rule.threshold.min}
+                          max={rule.threshold.max}
+                          onChange={e => setRuleThresholdPersisted(rule.id, Math.max(rule.threshold!.min, Math.min(rule.threshold!.max, Number(e.target.value) || rule.threshold!.default)))}
+                          disabled={!enabled}
+                          className="w-20 text-xs border border-gray-300 rounded px-2 py-1 text-right disabled:bg-gray-100 disabled:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                        {rule.threshold.suffix && <span className="text-[11px] text-gray-500">{rule.threshold.suffix}</span>}
+                      </div>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
       </div>
 
       {/* Status header */}
