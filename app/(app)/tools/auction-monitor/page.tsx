@@ -147,7 +147,9 @@ export default function AuctionMonitorPage() {
   }
 
   // Push to ntfy.sh — accepts any topic, no auth needed.
-  // Title carries the headline, body the detail, priority maps to band.
+  // Uses the JSON-body publish format so we don't need custom headers
+  // (which would trigger a CORS preflight that ntfy.sh's response doesn't
+  // accept). POSTing application/json to https://ntfy.sh works cross-origin.
   async function sendNtfy(opts: {
     title:    string
     body:     string
@@ -157,14 +159,16 @@ export default function AuctionMonitorPage() {
     const topic = ntfyTopic.trim()
     if (!topic) return false
     try {
-      const res = await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, {
+      const res = await fetch(`https://ntfy.sh`, {
         method:  "POST",
-        body:    opts.body,
-        headers: {
-          "Title":    opts.title,
-          "Priority": String(opts.priority ?? 3),
-          ...(opts.tags?.length ? { "Tags": opts.tags.join(",") } : {}),
-        },
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          topic,
+          title:    opts.title,
+          message:  opts.body,
+          priority: opts.priority ?? 3,
+          tags:     opts.tags ?? [],
+        }),
       })
       return res.ok
     } catch {
