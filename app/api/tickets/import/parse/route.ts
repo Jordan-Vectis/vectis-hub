@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { parseCsv, rowsToObjects } from "@/lib/csv-parse"
-import { groupThreads, trimBody } from "@/lib/ticket-import"
+import { groupThreads } from "@/lib/ticket-import"
+
+// Body trim — keep it short to avoid Gemini timeouts / partial JSON.
+function trimBody(body: string, max = 3000): string {
+  if (body.length <= max) return body
+  // Take the start (problem report) + a tail (resolution if any).
+  return body.slice(0, max - 500) + "\n…(truncated)\n" + body.slice(-500)
+}
 
 export const maxDuration = 300
 export const runtime    = "nodejs"
@@ -27,7 +34,7 @@ type ParsedTicket = {
   raisedBy:       string
 }
 
-const BATCH_SIZE = 4   // threads per Gemini call — keeps prompts tight
+const BATCH_SIZE = 2   // threads per Gemini call — keep prompts tight & reliable
 
 export async function POST(req: NextRequest) {
   try {
@@ -74,10 +81,12 @@ export async function POST(req: NextRequest) {
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
       model: "gemini-2.5-flash-preview-04-17",
-      generationConfig: { maxOutputTokens: 4096, responseMimeType: "application/json" },
+      generationConfig: { maxOutputTokens: 4096 },
     })
 
-    async function processBatch(batch: typeof batches[0]): Promise<ParsedTicket[]> {
+    const errors: string[] = []
+
+    async function processBatch(batch: typeof batches[0], attempt = 1): Promise<ParsedTicket[]> {
       const threadsBlock = batch.map(([key, mails], i) => {
         const joined = mails.map((m, j) =>
           `--- Email ${j + 1} (from: ${m.from}) ---\nSubject: ${m.subject}\n\n${trimBody(m.body)}`
@@ -101,16 +110,29 @@ Return STRICT JSON: an object with key "tickets" whose value is an array of thes
 THREADS:
 ${threadsBlock}`
 
-      const result = await model.generateContent(prompt)
-      const response = result.response
-      if (response.promptFeedback?.blockReason) {
-        console.warn("Gemini block:", response.promptFeedback.blockReason)
-        return []
-      }
-      const txt = response.text().trim()
       try {
+        const result = await model.generateContent(prompt)
+        const response = result.response
+        if (response.promptFeedback?.blockReason) {
+          errors.push(`Batch blocked: ${response.promptFeedback.blockReason}`)
+          return []
+        }
+        let txt = response.text().trim()
+        // Gemini sometimes wraps JSON in ```json ... ``` despite instructions.
+        txt = txt.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim()
+        // Find the outermost { ... } if there's any preamble.
+        const firstBrace = txt.indexOf("{")
+        const firstBrack = txt.indexOf("[")
+        let start = firstBrace
+        if (firstBrack !== -1 && (firstBrace === -1 || firstBrack < firstBrace)) start = firstBrack
+        if (start > 0) txt = txt.slice(start)
+
         const parsed = JSON.parse(txt)
         const arr   = Array.isArray(parsed?.tickets) ? parsed.tickets : Array.isArray(parsed) ? parsed : []
+        if (arr.length === 0) {
+          errors.push(`Batch returned 0 tickets (attempt ${attempt})`)
+          if (attempt < 2) return processBatch(batch, attempt + 1)
+        }
         return arr.map((t: any) => ({
           threadKey:      String(t.threadKey      ?? ""),
           title:          String(t.title          ?? "").slice(0, 200),
@@ -120,27 +142,31 @@ ${threadsBlock}`
           originalDate:   String(t.originalDate   ?? ""),
           raisedBy:       String(t.raisedBy       ?? "Jordan Orange"),
         }))
-      } catch (e) {
-        console.error("Failed to parse Gemini JSON:", e, "\n---\n", txt.slice(0, 500))
+      } catch (e: any) {
+        const msg = e?.message ?? String(e)
+        errors.push(`Batch error (attempt ${attempt}): ${msg.slice(0, 200)}`)
+        if (attempt < 2) {
+          // brief backoff then retry
+          await new Promise(res => setTimeout(res, 2000))
+          return processBatch(batch, attempt + 1)
+        }
         return []
       }
     }
 
-    // Concurrency = 3
+    // Sequential — safer than concurrent for big imports (no quota bursts).
     const results: ParsedTicket[] = []
-    for (let i = 0; i < batches.length; i += 3) {
-      const slice = batches.slice(i, i + 3)
-      const settled = await Promise.allSettled(slice.map(processBatch))
-      for (const s of settled) {
-        if (s.status === "fulfilled") results.push(...s.value)
-        else console.error("Batch failed:", s.reason)
-      }
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i]
+      const out   = await processBatch(batch)
+      results.push(...out)
     }
 
     return NextResponse.json({
       tickets:  results,
       skipped,
       threadCount: threads.size,
+      errors:   errors.length > 0 ? errors.slice(0, 20) : undefined,
     })
   } catch (e: any) {
     console.error("tickets/import/parse error:", e)

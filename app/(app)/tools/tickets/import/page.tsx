@@ -23,7 +23,7 @@ export default function TicketImportPage() {
   const [fileName, setFileName]     = useState("")
   const [stage, setStage]           = useState<"upload" | "parsing" | "review" | "committing" | "done">("upload")
   const [tickets, setTickets]       = useState<Selectable[]>([])
-  const [meta, setMeta]             = useState<{ skipped: number; threadCount: number } | null>(null)
+  const [meta, setMeta]             = useState<{ skipped: number; threadCount: number; errors?: string[] } | null>(null)
   const [error, setError]           = useState("")
   const [defaultStatus, setDefStat] = useState<"RESOLVED" | "CLOSED" | "OPEN">("RESOLVED")
   const [importedCount, setImportedCount] = useState(0)
@@ -64,7 +64,7 @@ export default function TicketImportPage() {
         return
       }
       setTickets((d.tickets ?? []).map((t: ParsedTicket) => ({ ...t, selected: true })))
-      setMeta({ skipped: d.skipped ?? 0, threadCount: d.threadCount ?? 0 })
+      setMeta({ skipped: d.skipped ?? 0, threadCount: d.threadCount ?? 0, errors: d.errors })
       setStage("review")
     } catch (e: any) {
       setError(e?.message ?? "Parse failed")
@@ -180,6 +180,16 @@ export default function TicketImportPage() {
       {/* ─── Stage: review ─── */}
       {stage === "review" && (
         <div>
+          {meta?.errors && meta.errors.length > 0 && (
+            <details className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900">
+              <summary className="cursor-pointer font-medium">
+                {meta.errors.length} batch warning{meta.errors.length === 1 ? "" : "s"} from Gemini — click to view
+              </summary>
+              <ul className="mt-2 space-y-0.5 font-mono">
+                {meta.errors.map((e, i) => <li key={i}>· {e}</li>)}
+              </ul>
+            </details>
+          )}
           <div className="mb-4 flex items-center justify-between gap-4">
             <div className="text-sm text-gray-600">
               <strong>{tickets.length}</strong> tickets parsed
