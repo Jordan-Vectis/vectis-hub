@@ -137,8 +137,6 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS "KnowledgeArticle_category_idx"  ON "KnowledgeArticle"("category")`,
   `CREATE INDEX IF NOT EXISTS "KnowledgeArticle_updatedAt_idx" ON "KnowledgeArticle"("updatedAt")`,
 
-  // TicketCategory — user-managed list. Seed the six defaults if the table is
-  // empty so existing tickets keep displaying nicely.
   `CREATE TABLE IF NOT EXISTS "TicketCategory" (
     "id"        TEXT NOT NULL,
     "key"       TEXT NOT NULL,
@@ -150,15 +148,6 @@ const MIGRATIONS = [
     CONSTRAINT "TicketCategory_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "TicketCategory_key_key" UNIQUE ("key")
   )`,
-  `INSERT INTO "TicketCategory" ("id", "key", "label", "sortOrder", "updatedAt")
-   VALUES
-     ('seed_hardware',        'HARDWARE',        'Hardware',        10, NOW()),
-     ('seed_software',        'SOFTWARE',        'Software',        20, NOW()),
-     ('seed_network',         'NETWORK',         'Network',         30, NOW()),
-     ('seed_app_bug',         'APP_BUG',         'App bug',         40, NOW()),
-     ('seed_feature_request', 'FEATURE_REQUEST', 'Feature request', 50, NOW()),
-     ('seed_other',           'OTHER',           'Other',           60, NOW())
-   ON CONFLICT ("key") DO NOTHING`,
 
   // EmailTemplate — pre-typed reply snippets for the IT Tools "Templates" tab
   `CREATE TABLE IF NOT EXISTS "EmailTemplate" (
