@@ -3,7 +3,7 @@
 import { useState } from "react"
 
 // ─── Static memory content ────────────────────────────────────────────────────
-// Updated by Claude alongside memory file changes. Last synced: 2026-05-08
+// Updated by Claude alongside memory file changes. Last synced: 2026-05-13
 
 type Entry = { filename: string; content: string }
 
@@ -339,6 +339,32 @@ Another developer works on the same staging branch. Always pull before pushing, 
 **How to apply:** Every time I'm about to push to staging, pull first. At the start of a session is ideal.`,
   },
   {
+    filename: "feedback_pdf_patterns.md",
+    content: `---
+name: PDF Generation Patterns
+purpose: Standing rules for server-side PDF generation in the Vectis Hub app.
+type: feedback
+last_updated: 2026-05-13
+---
+
+# PDF generation — standing rules
+
+## Use pdf-lib, not pdfkit
+pdfkit reads Helvetica.afm from disk at runtime — missing on Railway's serverless filesystem, so every pdfkit route fails with ENOENT. Use **pdf-lib** (pure JS, embeds standard fonts without disk reads).
+
+## Logo embedding — sharp converts SVG → PNG
+pdf-lib cannot embed SVGs directly. Use sharp to rasterise the Vectis logo SVG to PNG bytes, then \`pdfDoc.embedPng()\`. Shared helper: \`lib/pdf-logo.ts\`.
+
+## Barcodes — bwip-js
+For Code 128 barcodes use bwip-js. Outputs PNG buffers embeddable via embedPng. Types declared in \`types/bwip-js.d.ts\`.
+
+## Never use browser print-to-PDF for tabular reports
+Inconsistent across machines/browsers. Generate server-side and return as download.
+
+## Layout — lock slot height
+Divide the usable page area into a **fixed number of slots** rather than autosizing. Small groups should not produce giant rows.`,
+  },
+  {
     filename: "MEMORY.md",
     content: `---
 name: Memory Index
@@ -350,6 +376,9 @@ type: reference
 
 - [User Profile](user_profile.md) — Jordan Orange, Vectis auction house, non-technical, always uses Railway URL never local
 - [Vectis Hub Project](project_vectis_crm.md) — Full spec, stack, deployment, current admin features, planned iPad tracking
+- [Vectis Company Facts](vectis_company_facts.md) — Authoritative company facts; use in any AI-generated content prompt
+- [BC OData API Reference](bc_api_reference.md) — Endpoint field names, gotchas, cataloguing modes, bidstream WebSocket protocol + ntfy.sh push pattern
+- [PDF Generation Patterns](feedback_pdf_patterns.md) — pdf-lib (not pdfkit), sharp for SVG logos, bwip-js for barcodes, server-side over browser print
 - [General Feedback](feedback_vectis.md) — Keep responses short; don't build local-only features; don't overcomplicate simple requests; no console commands
 - [Memory Workflow](feedback_memory_workflow.md) — Always update the static memory page alongside memory files and push to staging
 - [File Saving Preference](feedback_file_saving.md) — Always ask where to save files before saving them
