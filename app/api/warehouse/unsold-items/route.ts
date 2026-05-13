@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: `BC query failed: ${errs[0]}` }, { status: 500 })
     }
 
-    const items = rows.map(r => ({
+    const rawItems = rows.map(r => ({
       uniqueId:    String(r.EVA_UniqueID ?? ""),
       receiptNo:   String(r.EVA_ReceiptNo ?? ""),
       articleNo:   r.EVA_ArticleNo != null ? String(r.EVA_ArticleNo) : "",
@@ -65,6 +65,41 @@ export async function GET(req: NextRequest) {
       vendorName:  String(r.EVA_VendorName ?? ""),
       auctionCode: String(r.EVA_SalesAllocation ?? ""),
     }))
+
+    // Look up auction dates for every auction code that appears, so we can
+    // drop items whose sale hasn't happened yet (Hammer Price = 0 on a
+    // future sale just means "not sold yet", not "unsold"). Receipt_Lines_Excel
+    // doesn't expose EVA_AuctionDate — we hit Auction_Lines_Excel per code in
+    // parallel (one-row $top=1) for speed and to dodge the BC OR-filter timeout.
+    const uniqueCodes = Array.from(new Set(rawItems.map(i => i.auctionCode).filter(Boolean)))
+    const dateMap = new Map<string, string>()
+    if (uniqueCodes.length > 0) {
+      const dateResults = await Promise.allSettled(uniqueCodes.map(code =>
+        bcFetchAll(
+          token,
+          "Auction_Lines_Excel",
+          `EVA_AuctionNo eq '${code.replace(/'/g, "''")}'`,
+          undefined,
+          1,
+        )
+      ))
+      dateResults.forEach((r, i) => {
+        if (r.status === "fulfilled" && r.value.length > 0) {
+          const d = r.value[0].EVA_AuctionDate
+          if (d) dateMap.set(uniqueCodes[i], String(d))
+        }
+      })
+    }
+
+    // "Today" in ISO yyyy-mm-dd — string compare works because EVA_AuctionDate
+    // is emitted by BC as ISO 8601.
+    const todayIso = new Date().toISOString().slice(0, 10)
+
+    const items = rawItems
+      .map(it => ({ ...it, auctionDate: dateMap.get(it.auctionCode) ?? "" }))
+      // Drop items where the auction date is in the future. Items with no
+      // resolved date are kept (would rather show a stray than silently hide).
+      .filter(it => !it.auctionDate || it.auctionDate.slice(0, 10) <= todayIso)
       .sort((a, b) => {
         const locCmp = a.location.localeCompare(b.location)
         if (locCmp !== 0) return locCmp
@@ -74,6 +109,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       aisles,
       count: items.length,
+      excludedFuture: rawItems.length - items.length,
       items,
       partialErrors: errs.length > 0 ? errs : undefined,
     })

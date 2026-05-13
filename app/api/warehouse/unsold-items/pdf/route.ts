@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
     ))
     const rows = settled.flatMap(r => r.status === "fulfilled" ? r.value : [])
 
-    const items: Item[] = rows.map(r => ({
+    const rawItems = rows.map(r => ({
       uniqueId:    String(r.EVA_UniqueID ?? ""),
       receiptNo:   String(r.EVA_ReceiptNo ?? ""),
       articleNo:   r.EVA_ArticleNo != null ? String(r.EVA_ArticleNo) : "",
@@ -68,11 +68,41 @@ export async function GET(req: NextRequest) {
       vendorNo:    String(r.EVA_VendorNo ?? ""),
       vendorName:  String(r.EVA_VendorName ?? ""),
       auctionCode: String(r.EVA_SalesAllocation ?? ""),
-    })).sort((a, b) => {
-      const locCmp = a.location.localeCompare(b.location)
-      if (locCmp !== 0) return locCmp
-      return a.barcode.localeCompare(b.barcode)
-    })
+    }))
+
+    // Resolve auction dates per auction code and drop anything dated in the
+    // future — those aren't unsold, they just haven't gone to sale yet.
+    const uniqueCodes = Array.from(new Set(rawItems.map(i => i.auctionCode).filter(Boolean)))
+    const dateMap = new Map<string, string>()
+    if (uniqueCodes.length > 0) {
+      const dateResults = await Promise.allSettled(uniqueCodes.map(code =>
+        bcFetchAll(
+          token,
+          "Auction_Lines_Excel",
+          `EVA_AuctionNo eq '${code.replace(/'/g, "''")}'`,
+          undefined,
+          1,
+        )
+      ))
+      dateResults.forEach((r, i) => {
+        if (r.status === "fulfilled" && r.value.length > 0) {
+          const d = r.value[0].EVA_AuctionDate
+          if (d) dateMap.set(uniqueCodes[i], String(d))
+        }
+      })
+    }
+    const todayIso = new Date().toISOString().slice(0, 10)
+
+    const items: Item[] = rawItems
+      .filter(it => {
+        const d = dateMap.get(it.auctionCode)
+        return !d || d.slice(0, 10) <= todayIso
+      })
+      .sort((a, b) => {
+        const locCmp = a.location.localeCompare(b.location)
+        if (locCmp !== 0) return locCmp
+        return a.barcode.localeCompare(b.barcode)
+      })
 
     // Group by aisle
     const groups = new Map<string, Item[]>()
