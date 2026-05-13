@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import ModelPingTester from "@/components/model-ping-tester"
 
 const FALLBACK_MODEL = "gemini-3-flash-preview"
 
@@ -163,6 +164,11 @@ function DraftReplyTab() {
           ) : (
             <button onClick={setAsDefault} className="text-gray-500 hover:text-cyan-700">Set as default</button>
           )}
+          <ModelPingTester
+            models={modelList}
+            current={modelId}
+            onPick={setModelId}
+          />
         </span>
       </div>
 

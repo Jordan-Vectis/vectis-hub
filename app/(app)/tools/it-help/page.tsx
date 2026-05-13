@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import ModelPingTester from "@/components/model-ping-tester"
 
 const FALLBACK_MODEL = "gemini-3-flash-preview"
 
@@ -227,6 +228,11 @@ function AskTab() {
             Set as default
           </button>
         )}
+        <ModelPingTester
+          models={modelList}
+          current={modelId}
+          onPick={setModelId}
+        />
       </div>
     </div>
   )
