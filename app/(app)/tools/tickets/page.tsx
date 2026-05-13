@@ -19,6 +19,14 @@ type Ticket = {
   updatedAt:      string
 }
 
+type TicketComment = {
+  id:         string
+  ticketId:   string
+  authorName: string
+  body:       string
+  createdAt:  string
+}
+
 type Category = {
   id:        string
   key:       string
@@ -57,6 +65,12 @@ export default function TicketsPage() {
   const [categoryFilter, setCatFilter]   = useState<string>("ALL")
   const [priorityFilter, setPriFilter]   = useState<string>("ALL")
   const [search, setSearch]              = useState("")
+
+  // Comments
+  const [comments, setComments]           = useState<Record<string, TicketComment[]>>({})
+  const [commentsLoading, setCommentsLoading] = useState<Record<string, boolean>>({})
+  const [newComment, setNewComment]       = useState<Record<string, string>>({})
+  const [commentSaving, setCommentSaving] = useState<Record<string, boolean>>({})
 
   // Create-form state
   const [newTitle, setNewTitle]             = useState("")
@@ -101,6 +115,38 @@ export default function TicketsPage() {
   }
 
   useEffect(() => { load() }, [])
+
+  async function loadComments(ticketId: string) {
+    if (comments[ticketId] || commentsLoading[ticketId]) return
+    setCommentsLoading(prev => ({ ...prev, [ticketId]: true }))
+    try {
+      const res = await fetch(`/api/tickets/${ticketId}/comments`)
+      const data = await res.json()
+      setComments(prev => ({ ...prev, [ticketId]: data.comments ?? [] }))
+    } finally {
+      setCommentsLoading(prev => ({ ...prev, [ticketId]: false }))
+    }
+  }
+
+  async function addComment(ticketId: string) {
+    const body = (newComment[ticketId] ?? "").trim()
+    if (!body) return
+    setCommentSaving(prev => ({ ...prev, [ticketId]: true }))
+    try {
+      const res = await fetch(`/api/tickets/${ticketId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body }),
+      })
+      const data = await res.json()
+      if (data.comment) {
+        setComments(prev => ({ ...prev, [ticketId]: [...(prev[ticketId] ?? []), data.comment] }))
+        setNewComment(prev => ({ ...prev, [ticketId]: "" }))
+      }
+    } finally {
+      setCommentSaving(prev => ({ ...prev, [ticketId]: false }))
+    }
+  }
 
   const visible = useMemo(() => {
     let list = tickets
@@ -383,7 +429,7 @@ export default function TicketsPage() {
                     />
                   </label>
                 <button
-                  onClick={() => setOpenId(isOpen ? null : t.id)}
+                  onClick={() => { const next = isOpen ? null : t.id; setOpenId(next); if (next) loadComments(next) }}
                   className="flex-1 flex items-start gap-4 px-5 py-4 text-left hover:bg-gray-50"
                 >
                   <div className="flex-1 min-w-0">
@@ -493,6 +539,45 @@ export default function TicketsPage() {
                         Resolved {new Date(t.resolvedAt).toLocaleString("en-GB")}
                       </p>
                     )}
+
+                    {/* Comments / updates */}
+                    <div>
+                      <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Comments / updates</div>
+                      {commentsLoading[t.id] ? (
+                        <p className="text-xs text-gray-400">Loading…</p>
+                      ) : (comments[t.id] ?? []).length === 0 ? (
+                        <p className="text-xs text-gray-400">No comments yet.</p>
+                      ) : (
+                        <div className="space-y-2 mb-3">
+                          {(comments[t.id] ?? []).map(c => (
+                            <div key={c.id} className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="text-xs font-semibold text-gray-700">{c.authorName}</span>
+                                <span className="text-xs text-gray-400">{new Date(c.createdAt).toLocaleString("en-GB")}</span>
+                              </div>
+                              <p className="text-sm text-gray-800 whitespace-pre-wrap">{c.body}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-2 mt-2">
+                        <textarea
+                          value={newComment[t.id] ?? ""}
+                          onChange={e => setNewComment(prev => ({ ...prev, [t.id]: e.target.value }))}
+                          onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) addComment(t.id) }}
+                          rows={2}
+                          placeholder="Add a comment or update… (Ctrl+Enter to submit)"
+                          className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 resize-none"
+                        />
+                        <button
+                          onClick={() => addComment(t.id)}
+                          disabled={commentSaving[t.id] || !(newComment[t.id] ?? "").trim()}
+                          className="self-end px-3 py-1.5 text-xs font-medium bg-gray-900 text-white rounded-md hover:bg-gray-700 disabled:opacity-40"
+                        >
+                          Post
+                        </button>
+                      </div>
+                    </div>
 
                     <div className="flex justify-end">
                       <button

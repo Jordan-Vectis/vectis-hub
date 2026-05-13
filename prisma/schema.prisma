@@ -742,24 +742,37 @@ model TicketCategory {
 // them. Deliberately denormalised (createdByName / assignedToName stored as
 // strings) so a deleted user doesn't orphan a ticket's history.
 model Ticket {
-  id             String   @id @default(cuid())
+  id             String          @id @default(cuid())
   title          String
   description    String
-  status         String   @default("OPEN")    // OPEN | IN_PROGRESS | RESOLVED | CLOSED
-  priority       String   @default("MEDIUM")  // LOW | MEDIUM | HIGH | URGENT
-  category       String   @default("OTHER")   // HARDWARE | SOFTWARE | NETWORK | APP_BUG | FEATURE_REQUEST | OTHER
+  status         String          @default("OPEN")    // OPEN | IN_PROGRESS | AWAITING_RESPONSE | RESOLVED | CLOSED
+  priority       String          @default("MEDIUM")  // LOW | MEDIUM | HIGH | URGENT
+  category       String          @default("OTHER")   // HARDWARE | SOFTWARE | NETWORK | APP_BUG | FEATURE_REQUEST | OTHER
   createdById    String?
   createdByName  String
   assignedToId   String?
   assignedToName String?
   resolvedAt     DateTime?
   resolutionNote String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  comments       TicketComment[]
 
   @@index([status])
   @@index([priority])
   @@index([createdAt])
+}
+
+model TicketComment {
+  id         String   @id @default(cuid())
+  ticketId   String
+  ticket     Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorName String
+  authorId   String?
+  body       String
+  createdAt  DateTime @default(now())
+
+  @@index([ticketId])
 }
 
 model WarehouseTote {

@@ -161,6 +161,19 @@ const MIGRATIONS = [
     CONSTRAINT "EmailTemplate_pkey" PRIMARY KEY ("id")
   )`,
   `CREATE INDEX IF NOT EXISTS "EmailTemplate_category_idx" ON "EmailTemplate"("category")`,
+
+  `CREATE TABLE IF NOT EXISTS "TicketComment" (
+    "id"         TEXT NOT NULL,
+    "ticketId"   TEXT NOT NULL,
+    "authorName" TEXT NOT NULL,
+    "authorId"   TEXT,
+    "body"       TEXT NOT NULL,
+    "createdAt"  TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "TicketComment_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "TicketComment_ticketId_fkey" FOREIGN KEY ("ticketId")
+      REFERENCES "Ticket"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "TicketComment_ticketId_idx" ON "TicketComment"("ticketId")`,
 ]
 
 export async function POST() {
