@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 
+const FALLBACK_MODEL = "gemini-3-flash-preview"
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Article = {
@@ -80,9 +82,35 @@ export default function ITHelpPage() {
 // ─── Ask tab ──────────────────────────────────────────────────────────────────
 
 function AskTab() {
-  const [question, setQuestion] = useState("")
-  const [turns, setTurns]       = useState<ChatTurn[]>([])
-  const [loading, setLoading]   = useState(false)
+  const [question, setQuestion]     = useState("")
+  const [turns, setTurns]           = useState<ChatTurn[]>([])
+  const [loading, setLoading]       = useState(false)
+  const [modelList, setModelList]   = useState<string[]>([FALLBACK_MODEL])
+  const [modelId, setModelId]       = useState(FALLBACK_MODEL)
+  const [savedDefault, setSavedDef] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch("/api/auction-ai/models").then(r => r.json()).then(d => {
+      if (d.models?.length) {
+        setModelList(d.models)
+        const saved = typeof window !== "undefined" ? localStorage.getItem("it_help_default_model") : null
+        setSavedDef(saved)
+        // Pick saved → fallback → first in list
+        if (saved && d.models.includes(saved))                   setModelId(saved)
+        else if (d.models.includes(FALLBACK_MODEL))              setModelId(FALLBACK_MODEL)
+        else                                                     setModelId(d.models[0])
+      }
+    }).catch(() => {})
+  }, [])
+
+  function setAsDefault() {
+    localStorage.setItem("it_help_default_model", modelId)
+    setSavedDef(modelId)
+  }
+  function clearDefault() {
+    localStorage.removeItem("it_help_default_model")
+    setSavedDef(null)
+  }
 
   async function ask() {
     const q = question.trim()
@@ -94,7 +122,7 @@ function AskTab() {
       const r = await fetch("/api/it-help/ask", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ question: q }),
+        body:    JSON.stringify({ question: q, modelId }),
       })
       const d = await r.json()
       if (!r.ok) {
@@ -169,6 +197,37 @@ function AskTab() {
           Ask
         </button>
       </form>
+
+      {/* Model picker */}
+      <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
+        <span>Model:</span>
+        <select
+          value={modelId}
+          onChange={e => setModelId(e.target.value)}
+          className="border border-gray-200 rounded px-2 py-1 text-xs bg-white"
+        >
+          {modelList.map(m => (
+            <option key={m} value={m}>{m}{savedDefault === m ? " ★" : ""}</option>
+          ))}
+        </select>
+        {savedDefault === modelId ? (
+          <button
+            onClick={clearDefault}
+            title="Clear default — will use the recommended model next time"
+            className="text-amber-600 hover:text-amber-700"
+          >
+            ★ Default · clear
+          </button>
+        ) : (
+          <button
+            onClick={setAsDefault}
+            title="Use this model whenever you open IT Help"
+            className="text-gray-500 hover:text-yellow-700"
+          >
+            Set as default
+          </button>
+        )}
+      </div>
     </div>
   )
 }

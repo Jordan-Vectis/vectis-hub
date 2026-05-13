@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     const session = await auth()
     if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
-    const { question } = await req.json() as { question?: string }
+    const { question, modelId } = await req.json() as { question?: string; modelId?: string }
     const q = String(question ?? "").trim()
     if (!q) return NextResponse.json({ error: "Question required" }, { status: 400 })
 
@@ -164,7 +164,7 @@ ANSWER:`
 
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
-      model: "gemini-2.5-flash-preview-04-17",
+      model: modelId || "gemini-3-flash-preview",
       generationConfig: { maxOutputTokens: 2048 },
     })
 
