@@ -59,8 +59,47 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No rows with both Title and Description" }, { status: 400 })
     }
 
-    const result = await prisma.ticket.createMany({ data })
-    return NextResponse.json({ ok: true, count: result.count, skipped: records.length - data.length })
+    // Strip stray invisible / problematic Unicode and clip overlong fields —
+    // protects against weird email content (zero-width joiners, BOMs, etc.)
+    // that can break Prisma's binary protocol on big batches.
+    const INVISIBLE_RE = /[­​-‏‪-‮⁠﻿]/g
+    const clean = data.map(t => ({
+      ...t,
+      title:          t.title.replace(INVISIBLE_RE, "").slice(0, 200),
+      description:    t.description.replace(INVISIBLE_RE, "").slice(0, 8000),
+      resolutionNote: t.resolutionNote == null ? null : t.resolutionNote.replace(INVISIBLE_RE, "").slice(0, 8000),
+      createdByName:  t.createdByName.replace(INVISIBLE_RE, "").slice(0, 100),
+    }))
+
+    // Insert in chunks so one bad row can't kill the whole import.
+    const CHUNK = 50
+    let success     = 0
+    const failures: string[] = []
+    for (let i = 0; i < clean.length; i += CHUNK) {
+      const slice = clean.slice(i, i + CHUNK)
+      try {
+        const res = await prisma.ticket.createMany({ data: slice })
+        success += res.count
+      } catch (e: any) {
+        // Retry one-by-one to isolate the bad row(s) and keep the rest.
+        for (const row of slice) {
+          try {
+            await prisma.ticket.create({ data: row })
+            success++
+          } catch (rowErr: any) {
+            failures.push(`"${row.title.slice(0, 60)}": ${(rowErr?.message ?? rowErr).toString().slice(0, 120)}`)
+          }
+        }
+      }
+    }
+
+    return NextResponse.json({
+      ok:       true,
+      count:    success,
+      skipped:  records.length - data.length,
+      failed:   failures.length,
+      failures: failures.slice(0, 20),
+    })
   } catch (e: any) {
     console.error("tickets/import/commit error:", e)
     return NextResponse.json({ error: e?.message ?? "Commit failed" }, { status: 500 })

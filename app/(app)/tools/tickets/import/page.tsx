@@ -7,7 +7,7 @@ export default function TicketImportPage() {
   const [csvText, setCsvText]   = useState("")
   const [fileName, setFileName] = useState("")
   const [busy, setBusy]         = useState(false)
-  const [result, setResult]     = useState<{ count: number; skipped: number } | null>(null)
+  const [result, setResult]     = useState<{ count: number; skipped: number; failed?: number; failures?: string[] } | null>(null)
   const [error, setError]       = useState("")
   const [defaultStatus, setDef] = useState<"RESOLVED" | "CLOSED" | "OPEN">("RESOLVED")
 
@@ -32,7 +32,7 @@ export default function TicketImportPage() {
       })
       const d = await r.json()
       if (!r.ok) { setError(d.error ?? "Import failed"); return }
-      setResult({ count: d.count ?? 0, skipped: d.skipped ?? 0 })
+      setResult({ count: d.count ?? 0, skipped: d.skipped ?? 0, failed: d.failed, failures: d.failures })
     } catch (e: any) {
       setError(e?.message ?? "Import failed")
     } finally {
@@ -100,6 +100,16 @@ export default function TicketImportPage() {
             <p className="text-sm text-green-800 mt-1">
               {result.skipped} row{result.skipped === 1 ? "" : "s"} skipped (missing title or description).
             </p>
+          )}
+          {result.failed && result.failed > 0 && (
+            <details className="mt-2 text-sm text-amber-800">
+              <summary className="cursor-pointer">
+                {result.failed} row{result.failed === 1 ? "" : "s"} failed — click to see why
+              </summary>
+              <ul className="mt-2 list-disc pl-5 text-xs">
+                {(result.failures ?? []).map((f, i) => <li key={i}>{f}</li>)}
+              </ul>
+            </details>
           )}
           <p className="text-sm text-green-800 mt-1">
             The IT Help chatbot will pick them up as sources immediately.
