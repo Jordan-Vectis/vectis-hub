@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 
-type Status = "testing" | { ok: boolean; ms: number; error?: string }
+type Status = "testing" | "cancelled" | { ok: boolean; ms: number; error?: string }
 
 // Reusable model ping tester popup. Drop it in next to any model dropdown.
-// Calls /api/auction-ai/model-test sequentially with a 1-second gap (the
-// established pattern — never parallel, that burns quota and triggers 429s).
+// Sequential (per RULES.md — never Promise.all, burns quota) but a short
+// 250ms gap between calls and a cancel button you can hit mid-run.
 
 export default function ModelPingTester({
   models,
@@ -22,29 +22,59 @@ export default function ModelPingTester({
   const [open, setOpen]     = useState(false)
   const [status, setStatus] = useState<Record<string, Status>>({})
   const [busy, setBusy]     = useState(false)
+  const cancelRef           = useRef(false)
+  const abortRef            = useRef<AbortController | null>(null)
 
   async function runTests() {
     if (busy) return
     setBusy(true)
+    cancelRef.current = false
     const initial: Record<string, Status> = {}
     models.forEach(m => { initial[m] = "testing" })
     setStatus(initial)
+
     for (const m of models) {
+      if (cancelRef.current) {
+        // Mark anything still "testing" as cancelled
+        setStatus(prev => {
+          const next = { ...prev }
+          for (const k of Object.keys(next)) {
+            if (next[k] === "testing") next[k] = "cancelled"
+          }
+          return next
+        })
+        break
+      }
+      const ac = new AbortController()
+      abortRef.current = ac
       try {
         const r = await fetch("/api/auction-ai/model-test", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
           body:    JSON.stringify({ model: m }),
+          signal:  ac.signal,
         })
         const d = await r.json()
         setStatus(prev => ({ ...prev, [m]: d }))
       } catch (e: any) {
-        setStatus(prev => ({ ...prev, [m]: { ok: false, ms: 0, error: e?.message ?? "Network error" } }))
+        if (ac.signal.aborted) {
+          setStatus(prev => ({ ...prev, [m]: "cancelled" }))
+        } else {
+          setStatus(prev => ({ ...prev, [m]: { ok: false, ms: 0, error: e?.message ?? "Network error" } }))
+        }
+      } finally {
+        abortRef.current = null
       }
-      // 1-second gap — see RULES.md "Model Tester" section
-      await new Promise(res => setTimeout(res, 1000))
+      if (cancelRef.current) continue   // skip the gap if we're cancelling
+      // Short gap — sequential but snappier than 1s
+      await new Promise(res => setTimeout(res, 250))
     }
     setBusy(false)
+  }
+
+  function cancel() {
+    cancelRef.current = true
+    abortRef.current?.abort()
   }
 
   function pick(m: string) {
@@ -73,13 +103,21 @@ export default function ModelPingTester({
                   Sequential test, 1-second gap between models. Click a model to pick it.
                 </p>
               </div>
-              <button
-                onClick={runTests}
-                disabled={busy}
-                className="bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-400 text-white text-xs font-semibold px-3 py-1.5 rounded-md"
-              >
-                {busy ? "Testing…" : "▶ Run test"}
-              </button>
+              {busy ? (
+                <button
+                  onClick={cancel}
+                  className="bg-red-600 hover:bg-red-500 text-white text-xs font-semibold px-3 py-1.5 rounded-md"
+                >
+                  ✕ Cancel
+                </button>
+              ) : (
+                <button
+                  onClick={runTests}
+                  className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold px-3 py-1.5 rounded-md"
+                >
+                  ▶ Run test
+                </button>
+              )}
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-1">
@@ -103,8 +141,9 @@ export default function ModelPingTester({
                     <span className="font-mono text-xs text-gray-800 flex-1 truncate">
                       {m}{isCurrent && <span className="ml-2 text-cyan-600">(selected)</span>}
                     </span>
-                    {s === "testing" && <span className="text-xs text-gray-500 animate-pulse">testing…</span>}
-                    {s && s !== "testing" && (
+                    {s === "testing"   && <span className="text-xs text-gray-500 animate-pulse">testing…</span>}
+                    {s === "cancelled" && <span className="text-xs text-gray-400">— skipped</span>}
+                    {s && s !== "testing" && s !== "cancelled" && (
                       s.ok
                         ? <span className={`text-xs font-medium ${s.ms < 5000 ? "text-green-600" : s.ms < 12000 ? "text-yellow-600" : "text-orange-600"}`}>
                             ✓ {(s.ms / 1000).toFixed(1)}s
