@@ -53,6 +53,9 @@ export default function TicketsPage() {
   const [openId, setOpenId]       = useState<string | null>(null)
   const [saving, setSaving]       = useState(false)
   const [selectedIds, setSelected] = useState<Set<string>>(new Set())
+  const [categoryFilter, setCatFilter]   = useState<string>("ALL")
+  const [priorityFilter, setPriFilter]   = useState<string>("ALL")
+  const [search, setSearch]              = useState("")
 
   // Create-form state
   const [newTitle, setNewTitle]             = useState("")
@@ -99,10 +102,28 @@ export default function TicketsPage() {
   useEffect(() => { load() }, [])
 
   const visible = useMemo(() => {
-    if (statusFilter === "ALL")    return tickets
-    if (statusFilter === "ACTIVE") return tickets.filter(t => t.status === "OPEN" || t.status === "IN_PROGRESS")
-    return tickets.filter(t => t.status === statusFilter)
-  }, [tickets, statusFilter])
+    let list = tickets
+    if (statusFilter === "ACTIVE")     list = list.filter(t => t.status === "OPEN" || t.status === "IN_PROGRESS")
+    else if (statusFilter !== "ALL")   list = list.filter(t => t.status === statusFilter)
+    if (categoryFilter !== "ALL")      list = list.filter(t => t.category === categoryFilter)
+    if (priorityFilter !== "ALL")      list = list.filter(t => t.priority === priorityFilter)
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      list = list.filter(t =>
+        t.title.toLowerCase().includes(q) ||
+        t.description.toLowerCase().includes(q) ||
+        (t.resolutionNote?.toLowerCase().includes(q) ?? false) ||
+        t.createdByName.toLowerCase().includes(q) ||
+        (t.assignedToName?.toLowerCase().includes(q) ?? false)
+      )
+    }
+    return list
+  }, [tickets, statusFilter, categoryFilter, priorityFilter, search])
+
+  function clearFilters() {
+    setStatus("ACTIVE"); setCatFilter("ALL"); setPriFilter("ALL"); setSearch("")
+  }
+  const filtersActive = statusFilter !== "ACTIVE" || categoryFilter !== "ALL" || priorityFilter !== "ALL" || search.trim() !== ""
 
   async function createTicket() {
     if (!newTitle.trim() || !newDescription.trim()) {
@@ -281,7 +302,44 @@ export default function TicketsPage() {
         </div>
       )}
 
-      {/* Filter chips */}
+      {/* Filter row: search + category + priority */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search title, description, resolution, raised-by…"
+          className="flex-1 min-w-[220px] text-sm border border-gray-200 rounded-md px-3 py-1.5"
+        />
+        <label className="text-xs text-gray-500">Category</label>
+        <select
+          value={categoryFilter}
+          onChange={e => setCatFilter(e.target.value)}
+          className="text-sm border border-gray-200 rounded-md px-2 py-1.5"
+        >
+          <option value="ALL">All</option>
+          {categories.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+        </select>
+        <label className="text-xs text-gray-500">Priority</label>
+        <select
+          value={priorityFilter}
+          onChange={e => setPriFilter(e.target.value)}
+          className="text-sm border border-gray-200 rounded-md px-2 py-1.5"
+        >
+          <option value="ALL">All</option>
+          {PRIORITY_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+        {filtersActive && (
+          <button
+            onClick={clearFilters}
+            className="text-xs text-gray-500 hover:text-gray-900 hover:underline"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      {/* Status chips */}
       <div className="flex flex-wrap gap-2 mb-5">
         {(["ACTIVE", "OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED", "ALL"] as const).map(s => (
           <button
