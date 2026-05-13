@@ -192,10 +192,17 @@ export default function TicketsPage() {
           </p>
         </div>
         <div className="shrink-0 flex items-center gap-2">
+          <a
+            href="/api/tickets/export"
+            className="text-sm text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-300 px-3 py-2 rounded-lg"
+            title="Download every ticket as a CSV"
+          >
+            📤 Export
+          </a>
           <Link
             href="/tools/tickets/import"
             className="text-sm text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-300 px-3 py-2 rounded-lg"
-            title="Bulk import tickets from an Outlook CSV export (admin)"
+            title="Bulk import tickets from a structured CSV (admin)"
           >
             📥 Import
           </Link>
