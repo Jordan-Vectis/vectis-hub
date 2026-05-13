@@ -82,7 +82,7 @@ type SearchTote = {
   syncedAt: string | null
 }
 
-type Tab = "heatmap" | "sale-checklist" | "search" | "location-history" | "tote-data" | "collections-due" | "data-sync" | "db-explorer"
+type Tab = "heatmap" | "sale-checklist" | "search" | "location-history" | "tote-data" | "collections-due" | "unsold-items" | "data-sync" | "db-explorer"
 
 const STALE_MS = 15 * 60 * 1000 // 15 minutes
 
@@ -1579,6 +1579,230 @@ function CollectionsDueTab() {
   )
 }
 
+// ─── Unsold Items Tab ────────────────────────────────────────────────────────
+// Mirrors Collections Due but the filter is "Hammer Price = 0" — i.e. items
+// in the chosen aisles that haven't been sold (either passed at auction or
+// not yet allocated). Surfaces vendor instead of collection-docket so the
+// picker can chase the consignor.
+
+type UnsoldItem = {
+  uniqueId:    string
+  receiptNo:   string
+  articleNo:   string
+  barcode:     string
+  description: string
+  location:    string
+  vendorNo:    string
+  vendorName:  string
+  auctionCode: string
+}
+
+function UnsoldItemsTab() {
+  const [aislesText, setAislesText] = useState("A50, A51")
+  const [items,      setItems]      = useState<UnsoldItem[] | null>(null)
+  const [loading,    setLoading]    = useState(false)
+  const [error,      setError]      = useState<string | null>(null)
+  const [groupByVendor, setGroupByVendor] = useState(false)
+
+  async function search() {
+    setLoading(true)
+    setError(null)
+    setItems(null)
+    try {
+      const params = new URLSearchParams({ aisles: aislesText })
+      const res = await fetch(`/api/warehouse/unsold-items?${params}`)
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error ?? "Failed")
+        return
+      }
+      setItems(data.items as UnsoldItem[])
+    } catch {
+      setError("Network error")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
+  async function downloadPdf() {
+    if (!items || items.length === 0) return
+    setDownloadingPdf(true)
+    try {
+      const aisles = aislesText.trim()
+      const url = `/api/warehouse/unsold-items/pdf?aisles=${encodeURIComponent(aisles)}`
+      const res = await fetch(url)
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error ?? "PDF generation failed")
+        return
+      }
+      const blob = await res.blob()
+      const link = document.createElement("a")
+      link.href = URL.createObjectURL(blob)
+      link.download = `unsold-items-${aisles.replace(/[^A-Za-z0-9]+/g, "-")}-${new Date().toISOString().slice(0, 10)}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(link.href)
+    } catch {
+      alert("Network error while downloading PDF")
+    } finally {
+      setDownloadingPdf(false)
+    }
+  }
+
+  // Group view: collapse items by vendor (most useful for unsold stock so the
+  // picker can pull everything for a single consignor in one go).
+  const grouped = items
+    ? Object.values(items.reduce((acc, it) => {
+        const key = it.vendorName || it.vendorNo || "—"
+        if (!acc[key]) acc[key] = { vendor: key, items: [] as UnsoldItem[] }
+        acc[key].items.push(it)
+        return acc
+      }, {} as Record<string, { vendor: string; items: UnsoldItem[] }>))
+        .sort((a, b) => a.vendor.localeCompare(b.vendor))
+    : []
+
+  return (
+    <div className="p-4 space-y-4 h-full overflow-auto">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-lg font-semibold text-white">Unsold Items</h2>
+          <p className="text-sm text-gray-400">
+            Items in the chosen aisles where <span className="font-mono text-gray-200">Hammer Price = 0</span> —
+            i.e. passed at auction or not yet sold. Same workflow as Collections Due.
+          </p>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+          <div className="sm:col-span-2">
+            <label className="block text-xs text-gray-400 mb-1">Aisle prefixes</label>
+            <input
+              type="text"
+              value={aislesText}
+              onChange={e => setAislesText(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && search()}
+              placeholder="e.g. A50, A51, A52"
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+            />
+            <p className="text-[11px] text-gray-500 mt-1">
+              Comma-separated prefixes — matches anything starting with these (e.g. A50 catches A50A1, A50B5, A50C3…).
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={search}
+              disabled={loading || !aislesText.trim()}
+              className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+            >
+              {loading ? "Searching BC…" : "Search"}
+            </button>
+            <label className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={groupByVendor}
+                onChange={e => setGroupByVendor(e.target.checked)}
+                className="accent-blue-500"
+              />
+              Group by vendor
+            </label>
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red-900/40 border border-red-700 rounded-xl px-4 py-3 text-red-300 text-sm">{error}</div>
+      )}
+
+      {/* Results */}
+      {items !== null && (
+        <>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-sm text-gray-400">
+              {items.length === 0 ? (
+                "No matching items found."
+              ) : (
+                <>
+                  <span className="text-white font-semibold">{items.length}</span> item{items.length === 1 ? "" : "s"} found
+                  {groupByVendor && grouped.length > 0 && (
+                    <> · <span className="text-white font-semibold">{grouped.length}</span> vendor{grouped.length === 1 ? "" : "s"}</>
+                  )}
+                </>
+              )}
+            </p>
+            {items.length > 0 && (
+              <button
+                onClick={downloadPdf}
+                disabled={downloadingPdf}
+                className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+                title="Download a PDF with each aisle on its own report."
+              >
+                {downloadingPdf ? "Generating PDF…" : "📄 Download PDF"}
+              </button>
+            )}
+          </div>
+
+          {items.length > 0 && !groupByVendor && (
+            <div className="overflow-auto border border-gray-800 rounded-lg">
+              <table className="text-xs w-full">
+                <thead className="bg-gray-800 sticky top-0">
+                  <tr className="text-left text-gray-400">
+                    <th className="px-3 py-2">Location</th>
+                    <th className="px-3 py-2">Barcode</th>
+                    <th className="px-3 py-2">Description</th>
+                    <th className="px-3 py-2">Vendor</th>
+                    <th className="px-3 py-2">Auction</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map(it => (
+                    <tr key={it.uniqueId} className="border-t border-gray-800 hover:bg-gray-900">
+                      <td className="px-3 py-2 font-mono text-gray-300">{it.location}</td>
+                      <td className="px-3 py-2 font-mono text-gray-300">{it.barcode}</td>
+                      <td className="px-3 py-2 text-gray-200">{it.description}</td>
+                      <td className="px-3 py-2 text-gray-300">{it.vendorName || it.vendorNo || "—"}</td>
+                      <td className="px-3 py-2 font-mono text-gray-500">{it.auctionCode || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {items.length > 0 && groupByVendor && (
+            <div className="space-y-3">
+              {grouped.map(g => (
+                <div key={g.vendor} className="border border-gray-800 rounded-lg overflow-hidden">
+                  <div className="bg-gray-800 px-3 py-2 flex items-center justify-between">
+                    <span className="text-emerald-400 text-sm">{g.vendor}</span>
+                    <span className="text-xs text-gray-400">{g.items.length} item{g.items.length === 1 ? "" : "s"}</span>
+                  </div>
+                  <table className="text-xs w-full">
+                    <tbody>
+                      {g.items.map(it => (
+                        <tr key={it.uniqueId} className="border-t border-gray-800 hover:bg-gray-900">
+                          <td className="px-3 py-2 font-mono text-gray-300 w-24">{it.location}</td>
+                          <td className="px-3 py-2 font-mono text-gray-300 w-24">{it.barcode}</td>
+                          <td className="px-3 py-2 text-gray-200">{it.description}</td>
+                          <td className="px-3 py-2 font-mono text-gray-500 w-20">{it.auctionCode || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 function DbExplorerTab() {
   const [table,   setTable]   = useState<"items"|"totes">("items")
   const [field,   setField]   = useState("auctionCode")
@@ -2418,6 +2642,7 @@ export default function BCWarehousePage() {
     { id: "location-history", label: "Location History" },
     { id: "tote-data",        label: "Tote Data" },
     { id: "collections-due",  label: "Collections Due" },
+    { id: "unsold-items",     label: "Unsold Items" },
     { id: "data-sync",        label: "Data Sync" },
     { id: "db-explorer",     label: "DB Explorer" },
   ]
@@ -2453,6 +2678,7 @@ export default function BCWarehousePage() {
             {tab === "location-history" && <LocationHistoryTab />}
             {tab === "tote-data"        && <ToteDataTab />}
             {tab === "collections-due"  && <CollectionsDueTab />}
+            {tab === "unsold-items"     && <UnsoldItemsTab />}
             {tab === "data-sync"        && <DataSyncTab status={status} onComplete={fetchStatus} />}
             {tab === "db-explorer"     && <DbExplorerTab />}
           </>
