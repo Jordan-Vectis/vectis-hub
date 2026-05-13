@@ -52,6 +52,7 @@ export default function TicketsPage() {
   const [showManageCats, setShowManageCats] = useState(false)
   const [openId, setOpenId]       = useState<string | null>(null)
   const [saving, setSaving]       = useState(false)
+  const [selectedIds, setSelected] = useState<Set<string>>(new Set())
 
   // Create-form state
   const [newTitle, setNewTitle]             = useState("")
@@ -155,6 +156,44 @@ export default function TicketsPage() {
     }
   }
 
+  function toggleSelect(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  function selectAllVisible() {
+    setSelected(new Set(visible.map(t => t.id)))
+  }
+
+  function clearSelection() {
+    setSelected(new Set())
+  }
+
+  async function bulkDelete() {
+    if (selectedIds.size === 0) return
+    if (!confirm(`Permanently delete ${selectedIds.size} ticket${selectedIds.size === 1 ? "" : "s"}? This cannot be undone.`)) return
+    setSaving(true)
+    try {
+      const r = await fetch("/api/tickets/bulk-delete", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ ids: Array.from(selectedIds) }),
+      })
+      const d = await r.json()
+      if (!r.ok) {
+        alert(d.error ?? "Bulk delete failed (admin only)")
+        return
+      }
+      setSelected(new Set())
+      await load()
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function deleteTicket(id: string) {
     if (!confirm("Delete this ticket permanently?")) return
     setSaving(true)
@@ -222,6 +261,26 @@ export default function TicketsPage() {
         </div>
       </div>
 
+      {/* Bulk-action bar — shows when anything's selected */}
+      {selectedIds.size > 0 && (
+        <div className="mb-4 bg-rose-50 border border-rose-200 rounded-lg px-4 py-2.5 flex items-center justify-between">
+          <div className="text-sm text-rose-900">
+            <strong>{selectedIds.size}</strong> selected
+          </div>
+          <div className="flex items-center gap-3">
+            <button onClick={selectAllVisible} className="text-xs text-rose-700 hover:underline">Select all visible</button>
+            <button onClick={clearSelection}   className="text-xs text-rose-700 hover:underline">Clear</button>
+            <button
+              onClick={bulkDelete}
+              disabled={saving}
+              className="bg-red-600 hover:bg-red-500 disabled:bg-red-400 text-white text-xs font-semibold px-3 py-1.5 rounded-md"
+            >
+              🗑 Delete {selectedIds.size}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Filter chips */}
       <div className="flex flex-wrap gap-2 mb-5">
         {(["ACTIVE", "OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED", "ALL"] as const).map(s => (
@@ -251,10 +310,21 @@ export default function TicketsPage() {
           {visible.map(t => {
             const isOpen = openId === t.id
             return (
-              <div key={t.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+              <div key={t.id} className={`bg-white border ${selectedIds.has(t.id) ? "border-rose-300 ring-1 ring-rose-200" : "border-gray-200"} rounded-xl overflow-hidden`}>
+                <div className="flex items-start">
+                  <label
+                    className="pl-4 pt-5 cursor-pointer select-none"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(t.id)}
+                      onChange={() => toggleSelect(t.id)}
+                    />
+                  </label>
                 <button
                   onClick={() => setOpenId(isOpen ? null : t.id)}
-                  className="w-full flex items-start gap-4 px-5 py-4 text-left hover:bg-gray-50"
+                  className="flex-1 flex items-start gap-4 px-5 py-4 text-left hover:bg-gray-50"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -279,6 +349,7 @@ export default function TicketsPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
+                </div>
 
                 {isOpen && (
                   <div className="border-t border-gray-100 px-5 py-4 space-y-4">
