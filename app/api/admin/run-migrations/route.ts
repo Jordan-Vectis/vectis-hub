@@ -118,6 +118,24 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS "Ticket_status_idx"    ON "Ticket"("status")`,
   `CREATE INDEX IF NOT EXISTS "Ticket_priority_idx"  ON "Ticket"("priority")`,
   `CREATE INDEX IF NOT EXISTS "Ticket_createdAt_idx" ON "Ticket"("createdAt")`,
+
+  // KnowledgeArticle — IT solutions & how-tos for the IT Help chatbot
+  `CREATE TABLE IF NOT EXISTS "KnowledgeArticle" (
+    "id"            TEXT NOT NULL,
+    "title"         TEXT NOT NULL,
+    "body"          TEXT NOT NULL,
+    "tags"          TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "category"      TEXT NOT NULL DEFAULT 'GENERAL',
+    "createdById"   TEXT,
+    "createdByName" TEXT NOT NULL,
+    "updatedById"   TEXT,
+    "updatedByName" TEXT,
+    "createdAt"     TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt"     TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "KnowledgeArticle_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "KnowledgeArticle_category_idx"  ON "KnowledgeArticle"("category")`,
+  `CREATE INDEX IF NOT EXISTS "KnowledgeArticle_updatedAt_idx" ON "KnowledgeArticle"("updatedAt")`,
 ]
 
 export async function POST() {

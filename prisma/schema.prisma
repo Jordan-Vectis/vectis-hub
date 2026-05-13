@@ -689,6 +689,26 @@ model ClaudeMemory {
   updatedAt DateTime @updatedAt
 }
 
+// Knowledge base — staff-written solutions and how-tos that the IT Help
+// chatbot searches alongside resolved tickets. Plain markdown body keeps
+// editing easy; tags + category drive simple keyword matching.
+model KnowledgeArticle {
+  id            String   @id @default(cuid())
+  title         String
+  body          String                          // markdown
+  tags          String[] @default([])
+  category      String   @default("GENERAL")    // GENERAL | HARDWARE | SOFTWARE | NETWORK | APP | HOW_TO
+  createdById   String?
+  createdByName String
+  updatedById   String?
+  updatedByName String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([category])
+  @@index([updatedAt])
+}
+
 // IT ticket system — staff log problems / feature requests, IT works through
 // them. Deliberately denormalised (createdByName / assignedToName stored as
 // strings) so a deleted user doesn't orphan a ticket's history.
