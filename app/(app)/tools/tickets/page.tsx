@@ -19,9 +19,16 @@ type Ticket = {
   updatedAt:      string
 }
 
+type Category = {
+  id:        string
+  key:       string
+  label:     string
+  sortOrder: number
+  active:    boolean
+}
+
 const STATUS_OPTIONS  = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"] as const
 const PRIORITY_OPTIONS = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const
-const CATEGORY_OPTIONS = ["HARDWARE", "SOFTWARE", "NETWORK", "APP_BUG", "FEATURE_REQUEST", "OTHER"] as const
 
 const STATUS_COLOUR: Record<string, string> = {
   OPEN:        "bg-blue-100 text-blue-700",
@@ -35,20 +42,14 @@ const PRIORITY_COLOUR: Record<string, string> = {
   HIGH:   "bg-orange-100 text-orange-700",
   URGENT: "bg-red-100 text-red-700",
 }
-const CATEGORY_LABEL: Record<string, string> = {
-  HARDWARE:        "Hardware",
-  SOFTWARE:        "Software",
-  NETWORK:         "Network",
-  APP_BUG:         "App bug",
-  FEATURE_REQUEST: "Feature request",
-  OTHER:           "Other",
-}
 
 export default function TicketsPage() {
   const [tickets, setTickets]     = useState<Ticket[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading]     = useState(true)
   const [statusFilter, setStatus] = useState<string>("ACTIVE")  // ACTIVE = OPEN + IN_PROGRESS
   const [showCreate, setShow]     = useState(false)
+  const [showManageCats, setShowManageCats] = useState(false)
   const [openId, setOpenId]       = useState<string | null>(null)
   const [saving, setSaving]       = useState(false)
 
@@ -58,12 +59,35 @@ export default function TicketsPage() {
   const [newPriority, setNewPriority]       = useState<string>("MEDIUM")
   const [newCategory, setNewCategory]       = useState<string>("OTHER")
 
+  // Look up label by key — handles deactivated / renamed categories gracefully.
+  const categoryLabel = (key: string) =>
+    categories.find(c => c.key === key)?.label ??
+    key.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, m => m.toUpperCase())
+
+  const activeCategories = useMemo(
+    () => categories.filter(c => c.active),
+    [categories],
+  )
+
   async function load() {
     setLoading(true)
     try {
-      const r = await fetch("/api/tickets")
-      const d = await r.json()
-      setTickets(d.tickets ?? [])
+      const [tr, cr] = await Promise.all([
+        fetch("/api/tickets"),
+        fetch("/api/ticket-categories"),
+      ])
+      const td = await tr.json()
+      const cd = await cr.json()
+      setTickets(td.tickets ?? [])
+      const cats: Category[] = cd.categories ?? []
+      setCategories(cats)
+      // Seed the create-form default with the first active category if "OTHER"
+      // doesn't exist any more.
+      const active = cats.filter(c => c.active)
+      if (active.length > 0 && !active.find(c => c.key === newCategory)) {
+        const fallback = active.find(c => c.key === "OTHER") ?? active[active.length - 1]
+        setNewCategory(fallback.key)
+      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -167,12 +191,21 @@ export default function TicketsPage() {
             Log IT problems, app bugs and feature requests. Anyone can raise a ticket; the IT team works through them.
           </p>
         </div>
-        <button
-          onClick={() => setShow(true)}
-          className="shrink-0 bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold px-4 py-2 rounded-lg"
-        >
-          + New ticket
-        </button>
+        <div className="shrink-0 flex items-center gap-2">
+          <button
+            onClick={() => setShowManageCats(true)}
+            className="text-sm text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-300 px-3 py-2 rounded-lg"
+            title="Add, rename or deactivate ticket categories (admin)"
+          >
+            ⚙ Categories
+          </button>
+          <button
+            onClick={() => setShow(true)}
+            className="bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold px-4 py-2 rounded-lg"
+          >
+            + New ticket
+          </button>
+        </div>
       </div>
 
       {/* Filter chips */}
@@ -218,7 +251,7 @@ export default function TicketsPage() {
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${PRIORITY_COLOUR[t.priority] ?? ""}`}>
                         {t.priority}
                       </span>
-                      <span className="text-xs text-gray-500">{CATEGORY_LABEL[t.category] ?? t.category}</span>
+                      <span className="text-xs text-gray-500">{categoryLabel(t.category)}</span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
                       Raised by {t.createdByName} · {new Date(t.createdAt).toLocaleString("en-GB")}
@@ -272,8 +305,14 @@ export default function TicketsPage() {
                           disabled={saving}
                           className="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5"
                         >
-                          {CATEGORY_OPTIONS.map(c => (
-                            <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>
+                          {/* Keep the ticket's current value selectable even if it's been
+                              deactivated or renamed since — otherwise the dropdown lies
+                              about the active value. */}
+                          {!activeCategories.find(c => c.key === t.category) && (
+                            <option value={t.category}>{categoryLabel(t.category)} (inactive)</option>
+                          )}
+                          {activeCategories.map(c => (
+                            <option key={c.key} value={c.key}>{c.label}</option>
                           ))}
                         </select>
                       </Field>
@@ -370,7 +409,7 @@ export default function TicketsPage() {
                     onChange={e => setNewCategory(e.target.value)}
                     className="w-full text-sm border border-gray-200 rounded-md px-2 py-2"
                   >
-                    {CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
+                    {activeCategories.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
                   </select>
                 </Field>
               </div>
@@ -394,6 +433,167 @@ export default function TicketsPage() {
           </div>
         </div>
       )}
+
+      {/* Manage categories modal */}
+      {showManageCats && (
+        <ManageCategoriesModal
+          categories={categories}
+          onClose={() => setShowManageCats(false)}
+          onChanged={load}
+        />
+      )}
+    </div>
+  )
+}
+
+function ManageCategoriesModal({
+  categories,
+  onClose,
+  onChanged,
+}: {
+  categories: Category[]
+  onClose: () => void
+  onChanged: () => void | Promise<void>
+}) {
+  const [newLabel, setNewLabel] = useState("")
+  const [saving, setSaving]     = useState(false)
+
+  async function add() {
+    const label = newLabel.trim()
+    if (!label) return
+    setSaving(true)
+    try {
+      const r = await fetch("/api/ticket-categories", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ label }),
+      })
+      const d = await r.json()
+      if (!r.ok) {
+        alert(d.error ?? "Failed to add (admin only)")
+        return
+      }
+      setNewLabel("")
+      await onChanged()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function patch(id: string, body: any) {
+    setSaving(true)
+    try {
+      const r = await fetch(`/api/ticket-categories/${id}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(body),
+      })
+      const d = await r.json()
+      if (!r.ok) {
+        alert(d.error ?? "Failed to update (admin only)")
+        return
+      }
+      await onChanged()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function remove(id: string, label: string) {
+    if (!confirm(`Delete category "${label}"? Tickets that use it must be re-categorised first.`)) return
+    setSaving(true)
+    try {
+      const r = await fetch(`/api/ticket-categories/${id}`, { method: "DELETE" })
+      const d = await r.json()
+      if (!r.ok) {
+        alert(d.error ?? "Failed to delete")
+        return
+      }
+      await onChanged()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h2 className="text-lg font-bold text-gray-900">Manage ticket categories</h2>
+          <p className="text-xs text-gray-500 mt-1">
+            Admin only. Renaming is safe — the underlying key stays the same. Deactivate a category
+            to hide it from new tickets without breaking existing ones. Delete is only allowed
+            when no tickets reference it.
+          </p>
+        </div>
+
+        <div className="px-6 py-4 flex-1 overflow-y-auto space-y-2">
+          {categories.length === 0 ? (
+            <p className="text-sm text-gray-500 italic">No categories yet — add one below.</p>
+          ) : (
+            categories.map(c => (
+              <div key={c.id} className={`flex items-center gap-2 border rounded-lg px-3 py-2 ${c.active ? "border-gray-200 bg-white" : "border-gray-200 bg-gray-50 opacity-70"}`}>
+                <input
+                  type="text"
+                  defaultValue={c.label}
+                  onBlur={e => {
+                    const v = e.target.value.trim()
+                    if (v && v !== c.label) patch(c.id, { label: v })
+                  }}
+                  className="flex-1 text-sm border border-transparent hover:border-gray-200 focus:border-gray-300 rounded px-2 py-1 outline-none bg-transparent"
+                  title="Click to rename"
+                />
+                <span className="text-xs text-gray-400 font-mono">{c.key}</span>
+                <button
+                  onClick={() => patch(c.id, { active: !c.active })}
+                  disabled={saving}
+                  className={`text-xs font-medium px-2 py-1 rounded-md ${
+                    c.active
+                      ? "bg-green-100 text-green-700 hover:bg-green-200"
+                      : "bg-gray-200 text-gray-600 hover:bg-gray-300"
+                  }`}
+                >
+                  {c.active ? "Active" : "Inactive"}
+                </button>
+                <button
+                  onClick={() => remove(c.id, c.label)}
+                  disabled={saving}
+                  className="text-xs text-red-600 hover:text-red-700 hover:underline px-1"
+                >
+                  Delete
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-gray-100">
+          <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Add a category</div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newLabel}
+              onChange={e => setNewLabel(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") add() }}
+              placeholder="e.g. Printer, Email, Phone"
+              className="flex-1 text-sm border border-gray-200 rounded-md px-3 py-2"
+            />
+            <button
+              onClick={add}
+              disabled={saving || !newLabel.trim()}
+              className="bg-rose-600 hover:bg-rose-500 disabled:bg-rose-400 text-white text-sm font-semibold px-4 py-2 rounded-lg"
+            >
+              Add
+            </button>
+          </div>
+        </div>
+
+        <div className="px-6 py-3 border-t border-gray-100 flex justify-end">
+          <button onClick={onClose} className="text-sm text-gray-600 hover:text-gray-900 px-4 py-2 rounded-lg">
+            Done
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

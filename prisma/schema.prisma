@@ -709,6 +709,21 @@ model KnowledgeArticle {
   @@index([updatedAt])
 }
 
+// User-editable ticket categories. Pre-seeded with the original hardcoded set
+// (HARDWARE, SOFTWARE, NETWORK, APP_BUG, FEATURE_REQUEST, OTHER) but admins
+// can add / rename / deactivate via the Manage Categories modal on the
+// tickets page. `key` is the stable identifier stored on Ticket.category;
+// `label` is what staff see.
+model TicketCategory {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  label     String
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // IT ticket system — staff log problems / feature requests, IT works through
 // them. Deliberately denormalised (createdByName / assignedToName stored as
 // strings) so a deleted user doesn't orphan a ticket's history.
