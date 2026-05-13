@@ -27,14 +27,15 @@ type Category = {
   active:    boolean
 }
 
-const STATUS_OPTIONS  = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"] as const
+const STATUS_OPTIONS  = ["OPEN", "IN_PROGRESS", "AWAITING_RESPONSE", "RESOLVED", "CLOSED"] as const
 const PRIORITY_OPTIONS = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const
 
 const STATUS_COLOUR: Record<string, string> = {
-  OPEN:        "bg-blue-100 text-blue-700",
-  IN_PROGRESS: "bg-amber-100 text-amber-700",
-  RESOLVED:    "bg-green-100 text-green-700",
-  CLOSED:      "bg-gray-100 text-gray-600",
+  OPEN:               "bg-blue-100 text-blue-700",
+  IN_PROGRESS:        "bg-amber-100 text-amber-700",
+  AWAITING_RESPONSE:  "bg-purple-100 text-purple-700",
+  RESOLVED:           "bg-green-100 text-green-700",
+  CLOSED:             "bg-gray-100 text-gray-600",
 }
 const PRIORITY_COLOUR: Record<string, string> = {
   LOW:    "bg-gray-100 text-gray-600",
@@ -233,12 +234,13 @@ export default function TicketsPage() {
   }
 
   const counts = useMemo(() => ({
-    ACTIVE:      tickets.filter(t => t.status === "OPEN" || t.status === "IN_PROGRESS").length,
-    OPEN:        tickets.filter(t => t.status === "OPEN").length,
-    IN_PROGRESS: tickets.filter(t => t.status === "IN_PROGRESS").length,
-    RESOLVED:    tickets.filter(t => t.status === "RESOLVED").length,
-    CLOSED:      tickets.filter(t => t.status === "CLOSED").length,
-    ALL:         tickets.length,
+    ACTIVE:             tickets.filter(t => t.status === "OPEN" || t.status === "IN_PROGRESS").length,
+    OPEN:               tickets.filter(t => t.status === "OPEN").length,
+    IN_PROGRESS:        tickets.filter(t => t.status === "IN_PROGRESS").length,
+    AWAITING_RESPONSE:  tickets.filter(t => t.status === "AWAITING_RESPONSE").length,
+    RESOLVED:           tickets.filter(t => t.status === "RESOLVED").length,
+    CLOSED:             tickets.filter(t => t.status === "CLOSED").length,
+    ALL:                tickets.length,
   }), [tickets])
 
   return (
@@ -341,7 +343,7 @@ export default function TicketsPage() {
 
       {/* Status chips */}
       <div className="flex flex-wrap gap-2 mb-5">
-        {(["ACTIVE", "OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED", "ALL"] as const).map(s => (
+        {(["ACTIVE", "OPEN", "IN_PROGRESS", "AWAITING_RESPONSE", "RESOLVED", "CLOSED", "ALL"] as const).map(s => (
           <button
             key={s}
             onClick={() => setStatus(s)}
