@@ -96,6 +96,28 @@ const MIGRATIONS = [
        ALTER TABLE "User" ALTER COLUMN "role" SET DEFAULT 'COLLECTIONS';
      END IF;
    END $$`,
+
+  // Ticket — IT problem / feature request log
+  `CREATE TABLE IF NOT EXISTS "Ticket" (
+    "id"             TEXT NOT NULL,
+    "title"          TEXT NOT NULL,
+    "description"    TEXT NOT NULL,
+    "status"         TEXT NOT NULL DEFAULT 'OPEN',
+    "priority"       TEXT NOT NULL DEFAULT 'MEDIUM',
+    "category"       TEXT NOT NULL DEFAULT 'OTHER',
+    "createdById"    TEXT,
+    "createdByName"  TEXT NOT NULL,
+    "assignedToId"   TEXT,
+    "assignedToName" TEXT,
+    "resolvedAt"     TIMESTAMP(3),
+    "resolutionNote" TEXT,
+    "createdAt"      TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt"      TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "Ticket_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "Ticket_status_idx"    ON "Ticket"("status")`,
+  `CREATE INDEX IF NOT EXISTS "Ticket_priority_idx"  ON "Ticket"("priority")`,
+  `CREATE INDEX IF NOT EXISTS "Ticket_createdAt_idx" ON "Ticket"("createdAt")`,
 ]
 
 export async function POST() {

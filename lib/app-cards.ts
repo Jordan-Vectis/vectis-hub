@@ -5,6 +5,7 @@ export const SECTION_DEFS = [
   { key: "BUSINESS_CENTRAL", label: "Business Central" },
   { key: "OPERATIONS",       label: "Operations" },
   { key: "AUCTION",          label: "Auction" },
+  { key: "IT_ADMIN",         label: "IT & Admin" },
 ] as const
 
 export type SectionKey = typeof SECTION_DEFS[number]["key"]
@@ -140,8 +141,21 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-slate-400",
     btnBg:              "bg-slate-600 hover:bg-slate-500",
     glow:               "hover:shadow-slate-900/40",
-    // no group — standalone card rendered outside any section
+    group:              "IT_ADMIN",
     // no appKey — admin-only
+  },
+  {
+    key:                "TICKETS",
+    href:               "/tools/tickets",
+    defaultLabel:       "Ticket System",
+    defaultDescription: "Log IT problems and feature requests — track issues from open through to resolved.",
+    icon:               "🎫",
+    border:             "border-rose-500",
+    iconBg:             "text-rose-400",
+    btnBg:              "bg-rose-600 hover:bg-rose-500",
+    glow:               "hover:shadow-rose-900/40",
+    group:              "IT_ADMIN",
+    allUsers:           true,
   },
   {
     key:                "DATABASES",
