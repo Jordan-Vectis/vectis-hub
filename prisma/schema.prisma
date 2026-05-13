@@ -689,6 +689,20 @@ model ClaudeMemory {
   updatedAt DateTime @updatedAt
 }
 
+// Pre-typed email reply snippets staff can copy into customer responses.
+// Lives behind the IT Tools "Templates" tab.
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  category  String   @default("GENERAL")
+  body      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+}
+
 // Knowledge base — staff-written solutions and how-tos that the IT Help
 // chatbot searches alongside resolved tickets. Plain markdown body keeps
 // editing easy; tags + category drive simple keyword matching.

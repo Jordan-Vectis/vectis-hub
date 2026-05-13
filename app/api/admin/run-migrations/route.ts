@@ -159,6 +159,19 @@ const MIGRATIONS = [
      ('seed_feature_request', 'FEATURE_REQUEST', 'Feature request', 50, NOW()),
      ('seed_other',           'OTHER',           'Other',           60, NOW())
    ON CONFLICT ("key") DO NOTHING`,
+
+  // EmailTemplate — pre-typed reply snippets for the IT Tools "Templates" tab
+  `CREATE TABLE IF NOT EXISTS "EmailTemplate" (
+    "id"        TEXT NOT NULL,
+    "name"      TEXT NOT NULL,
+    "category"  TEXT NOT NULL DEFAULT 'GENERAL',
+    "body"      TEXT NOT NULL,
+    "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "EmailTemplate_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "EmailTemplate_category_idx" ON "EmailTemplate"("category")`,
 ]
 
 export async function POST() {
