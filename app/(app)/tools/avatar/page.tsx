@@ -18,6 +18,29 @@ type LotReading = {
   askingBid:  string | null
 }
 
+// ── Live Feed ─────────────────────────────────────────────────────────────────
+
+type FeedEventConfig = { enabled: boolean; template: string }
+
+const FEED_EVENTS = [
+  { id: "new_lot",      label: "New lot",        defaultOn: true,  defaultTemplate: "Now, lot {lot}.",                    hints: "{lot}" },
+  { id: "bid",          label: "Bid placed",     defaultOn: false, defaultTemplate: "At {amount}. Can I get {asking}?",  hints: "{lot} {amount} {asking} {platform}" },
+  { id: "fair_warning", label: "Fair warning",   defaultOn: true,  defaultTemplate: "Fair warning on lot {lot}.",         hints: "{lot}" },
+  { id: "lot_sold",     label: "Lot sold",       defaultOn: true,  defaultTemplate: "Sold at {hammer}.",                 hints: "{lot} {hammer}" },
+  { id: "lot_passed",   label: "Lot passed",     defaultOn: false, defaultTemplate: "Lot {lot} is passed.",              hints: "{lot}" },
+  { id: "paused",       label: "Auction paused", defaultOn: false, defaultTemplate: "The auction is briefly paused.",    hints: "" },
+] as const
+
+function buildDefaultFeedCfg(): Record<string, FeedEventConfig> {
+  const out: Record<string, FeedEventConfig> = {}
+  for (const e of FEED_EVENTS) out[e.id] = { enabled: e.defaultOn, template: e.defaultTemplate }
+  return out
+}
+
+function fillFeedTemplate(template: string, vars: Record<string, string>): string {
+  return template.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "")
+}
+
 const STATUS_LABEL: Record<Status, string> = {
   idle: "Offline", connecting: "Connecting…", connected: "Live", speaking: "Speaking…", error: "Error",
 }
@@ -65,9 +88,45 @@ export default function AvatarPage() {
   const [lastSpoke,     setLastSpoke]     = useState<string | null>(null)
   const [readError,     setReadError]     = useState<string | null>(null)
 
+  // Live Feed state
+  const [feedRunning,    setFeedRunning]   = useState(false)
+  const [feedConnState,  setFeedConnState] = useState<"idle" | "connecting" | "open" | "error" | "closed">("idle")
+  const [feedAuctionId,  setFeedAuctionId] = useState<string>(() => {
+    if (typeof window === "undefined") return ""
+    return localStorage.getItem("auction_monitor_id") ?? ""
+  })
+  const [feedEventCfg, setFeedEventCfg] = useState<Record<string, FeedEventConfig>>(() => {
+    if (typeof window === "undefined") return buildDefaultFeedCfg()
+    try {
+      const raw    = localStorage.getItem("avatar_feed_config")
+      const parsed = raw ? JSON.parse(raw) : null
+      const out: Record<string, FeedEventConfig> = {}
+      for (const e of FEED_EVENTS) {
+        out[e.id] = {
+          enabled:  parsed?.[e.id]?.enabled  ?? e.defaultOn,
+          template: parsed?.[e.id]?.template ?? e.defaultTemplate,
+        }
+      }
+      return out
+    } catch { return buildDefaultFeedCfg() }
+  })
+  const [feedShowCfg,    setFeedShowCfg]   = useState(false)
+  const [feedCurrentLot, setFeedCurrentLot] = useState<string | null>(null)
+
+  // Live Feed refs
+  const feedWsRef            = useRef<WebSocket | null>(null)
+  const feedShouldReconnRef  = useRef(false)
+  const feedReconnTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const feedCurrentLotNumRef = useRef<string | null>(null)
+  const feedCurrentHammerRef = useRef<number | null>(null)
+  const feedFairWarningRef   = useRef(false)
+  const feedPausedRef        = useRef(false)
+  const feedEventCfgRef      = useRef(feedEventCfg)
+
   // Keep refs in sync with state
   useEffect(() => { statusRef.current = status }, [status])
   useEffect(() => { streamDataRef.current = streamRef.current }, [status])
+  useEffect(() => { feedEventCfgRef.current = feedEventCfg }, [feedEventCfg])
 
   // Load presenters
   useEffect(() => {
@@ -367,6 +426,157 @@ export default function AvatarPage() {
     }
   }, [stopWatching])
 
+  // ── Live Feed helpers ───────────────────────────────────────────────────────
+
+  function updateFeedCfg(id: string, patch: Partial<FeedEventConfig>) {
+    setFeedEventCfg(prev => {
+      const next = { ...prev, [id]: { ...prev[id], ...patch } }
+      try { localStorage.setItem("avatar_feed_config", JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
+
+  // ── Live Feed WebSocket ──────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!feedRunning) {
+      feedShouldReconnRef.current = false
+      try { feedWsRef.current?.close() } catch {}
+      feedWsRef.current = null
+      if (feedReconnTimerRef.current) clearTimeout(feedReconnTimerRef.current)
+      setFeedConnState("idle")
+      setFeedCurrentLot(null)
+      feedCurrentLotNumRef.current = null
+      feedCurrentHammerRef.current = null
+      feedFairWarningRef.current   = false
+      feedPausedRef.current        = false
+      return
+    }
+
+    const id = feedAuctionId.trim()
+    if (!id) { setFeedRunning(false); return }
+
+    feedShouldReconnRef.current  = true
+    localStorage.setItem("auction_monitor_id", id)
+    feedCurrentLotNumRef.current = null
+    feedCurrentHammerRef.current = null
+    feedFairWarningRef.current   = false
+    feedPausedRef.current        = false
+
+    const url = `wss://www.vectis.co.uk/wss/${id}`
+
+    function openFeed() {
+      if (!feedShouldReconnRef.current) return
+      setFeedConnState("connecting")
+      try {
+        const ws = new WebSocket(url)
+        feedWsRef.current = ws
+
+        ws.onopen  = () => setFeedConnState("open")
+        ws.onerror = () => setFeedConnState("error")
+        ws.onclose = () => {
+          feedWsRef.current = null
+          setFeedConnState("closed")
+          if (feedShouldReconnRef.current)
+            feedReconnTimerRef.current = setTimeout(openFeed, 5_000)
+        }
+
+        ws.onmessage = (ev) => {
+          let parsed: any = null
+          try { parsed = JSON.parse(ev.data) } catch { return }
+          const cmd = parsed?.command
+          const c   = parsed?.content ?? {}
+          const cfg = feedEventCfgRef.current
+
+          function trySpeak(text: string) {
+            const t = text.trim()
+            if (t && statusRef.current === "connected") speakTextDirect(t)
+          }
+
+          // ── activeLotChange: announce previous lot outcome then new lot ──────
+          if (cmd === "activeLotChange") {
+            const prevNum    = feedCurrentLotNumRef.current
+            const prevHammer = feedCurrentHammerRef.current
+
+            if (prevNum && c.previous_lot_type) {
+              if (/sold/i.test(String(c.previous_lot_type))) {
+                if (cfg.lot_sold?.enabled)
+                  trySpeak(fillFeedTemplate(cfg.lot_sold.template, {
+                    lot:    prevNum,
+                    hammer: prevHammer != null ? `£${prevHammer.toLocaleString()}` : "",
+                  }))
+              } else if (/pass|unsold|withdrawn/i.test(String(c.previous_lot_type))) {
+                if (cfg.lot_passed?.enabled)
+                  trySpeak(fillFeedTemplate(cfg.lot_passed.template, { lot: prevNum }))
+              }
+            }
+
+            if (c.lot_number) {
+              const newLot = String(c.lot_number)
+              feedCurrentLotNumRef.current = newLot
+              feedCurrentHammerRef.current = null
+              feedFairWarningRef.current   = false
+              setFeedCurrentLot(newLot)
+              if (cfg.new_lot?.enabled)
+                trySpeak(fillFeedTemplate(cfg.new_lot.template, { lot: newLot }))
+            }
+          }
+
+          // ── lotInformationUpdate: track hammer price ──────────────────────────
+          if (cmd === "lotInformationUpdate" && c.hammer_price != null) {
+            const hp = parseFloat(String(c.hammer_price))
+            if (!isNaN(hp)) feedCurrentHammerRef.current = hp
+          }
+
+          // ── liveBidEvent ──────────────────────────────────────────────────────
+          if (cmd === "liveBidEvent" && cfg.bid?.enabled) {
+            trySpeak(fillFeedTemplate(cfg.bid.template, {
+              lot:      feedCurrentLotNumRef.current ?? String(c.lot_id ?? ""),
+              amount:   c.amount  != null ? `£${Number(c.amount).toLocaleString()}`  : "",
+              asking:   c.asking  != null ? `£${Number(c.asking).toLocaleString()}`  : "",
+              platform: String(c.platform ?? ""),
+            }))
+          }
+
+          // ── getFairWarningStatus: fair warning + paused ───────────────────────
+          if (cmd === "getFairWarningStatus") {
+            if (c.fair_warning && !feedFairWarningRef.current) {
+              feedFairWarningRef.current = true
+              if (cfg.fair_warning?.enabled)
+                trySpeak(fillFeedTemplate(cfg.fair_warning.template, {
+                  lot: feedCurrentLotNumRef.current ?? "",
+                }))
+            } else if (!c.fair_warning) {
+              feedFairWarningRef.current = false
+            }
+
+            if (c.paused && !feedPausedRef.current) {
+              feedPausedRef.current = true
+              if (cfg.paused?.enabled)
+                trySpeak(fillFeedTemplate(cfg.paused.template, {}))
+            } else if (!c.paused) {
+              feedPausedRef.current = false
+            }
+          }
+        }
+      } catch {
+        setFeedConnState("error")
+        if (feedShouldReconnRef.current)
+          feedReconnTimerRef.current = setTimeout(openFeed, 5_000)
+      }
+    }
+
+    openFeed()
+
+    return () => {
+      feedShouldReconnRef.current = false
+      try { feedWsRef.current?.close() } catch {}
+      feedWsRef.current = null
+      if (feedReconnTimerRef.current) clearTimeout(feedReconnTimerRef.current)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedRunning, feedAuctionId, speakTextDirect])
+
   const isLive = status === "connected" || status === "speaking"
 
   return (
@@ -565,6 +775,114 @@ export default function AvatarPage() {
                 )}
               </div>
             )}
+          </div>
+
+          {/* Live Feed */}
+          <div className="bg-[#2C2C2E] rounded-xl p-4 border border-gray-800">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-gray-400 text-xs font-semibold uppercase tracking-widest">Live Feed</h2>
+              <span className={`text-xs flex items-center gap-1 ${
+                feedConnState === "open"       ? "text-[#2AB4A6]"  :
+                feedConnState === "connecting" ? "text-yellow-400" :
+                feedConnState === "error" || feedConnState === "closed" ? "text-red-400" : "text-gray-600"
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  feedConnState === "open"       ? "bg-[#2AB4A6] animate-pulse"  :
+                  feedConnState === "connecting" ? "bg-yellow-400 animate-pulse" :
+                  feedConnState === "error" || feedConnState === "closed" ? "bg-red-400" : "bg-gray-600"
+                }`} />
+                {feedConnState === "open"       ? "Live"           :
+                 feedConnState === "connecting" ? "Connecting…"    :
+                 feedConnState === "error"      ? "Error"          :
+                 feedConnState === "closed"     ? "Reconnecting…"  : "Offline"}
+              </span>
+            </div>
+            <p className="text-gray-600 text-xs mb-3 leading-relaxed">
+              Connect directly to the auction WebSocket — avatar speaks each event automatically.
+            </p>
+
+            <input
+              type="text"
+              value={feedAuctionId}
+              onChange={e => setFeedAuctionId(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !feedRunning && feedAuctionId.trim()) setFeedRunning(true) }}
+              placeholder="Auction ID e.g. 1386"
+              disabled={feedRunning}
+              className="w-full mb-2 text-xs bg-[#111113] text-white border border-gray-700 rounded-md px-2 py-1.5 font-mono focus:border-[#2AB4A6] focus:outline-none disabled:opacity-50"
+            />
+
+            {!feedRunning ? (
+              <button
+                onClick={() => { if (feedAuctionId.trim()) setFeedRunning(true) }}
+                disabled={!feedAuctionId.trim() || !isLive}
+                className="w-full py-2 bg-[#2AB4A6] hover:bg-[#22a090] text-black font-semibold rounded-lg text-xs transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >🔴 Connect to Feed</button>
+            ) : (
+              <button
+                onClick={() => setFeedRunning(false)}
+                className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg text-xs transition-colors"
+              >Disconnect Feed</button>
+            )}
+
+            {!isLive && !feedRunning && (
+              <p className="text-gray-600 text-xs text-center mt-2">Connect avatar first</p>
+            )}
+            {feedRunning && feedCurrentLot && (
+              <p className="text-[#2AB4A6] text-xs text-center mt-2 font-medium font-mono">Lot {feedCurrentLot}</p>
+            )}
+
+            {/* Event configuration */}
+            <div className="mt-3 pt-3 border-t border-gray-700">
+              <button
+                onClick={() => setFeedShowCfg(s => !s)}
+                className="text-xs text-gray-500 hover:text-gray-300 w-full text-left flex items-center justify-between"
+              >
+                <span>{feedShowCfg ? "▼" : "▶"} Configure events</span>
+                <span className="text-gray-600">
+                  {FEED_EVENTS.filter(e => feedEventCfg[e.id]?.enabled ?? e.defaultOn).length}/{FEED_EVENTS.length} on
+                </span>
+              </button>
+
+              {feedShowCfg && (
+                <div className="mt-3 space-y-3">
+                  {FEED_EVENTS.map(e => {
+                    const cfg = feedEventCfg[e.id]
+                    const enabled = cfg?.enabled ?? e.defaultOn
+                    return (
+                      <div key={e.id} className={`rounded-lg p-2.5 border ${enabled ? "border-gray-600 bg-[#111113]" : "border-gray-700 bg-[#0D0D0F] opacity-60"}`}>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <input
+                            type="checkbox"
+                            checked={enabled}
+                            onChange={ev => updateFeedCfg(e.id, { enabled: ev.target.checked })}
+                            className="w-3.5 h-3.5 accent-[#2AB4A6] flex-shrink-0"
+                          />
+                          <span className="text-xs text-gray-200 font-medium flex-1">{e.label}</span>
+                          {e.hints && (
+                            <span className="text-[10px] text-gray-600 font-mono">{e.hints}</span>
+                          )}
+                        </div>
+                        <input
+                          type="text"
+                          value={cfg?.template ?? e.defaultTemplate}
+                          onChange={ev => updateFeedCfg(e.id, { template: ev.target.value })}
+                          disabled={!enabled}
+                          className="w-full text-[11px] bg-[#1C1C1E] text-gray-300 border border-gray-700 rounded px-2 py-1 font-mono disabled:opacity-40 focus:border-[#2AB4A6] focus:outline-none"
+                        />
+                      </div>
+                    )
+                  })}
+                  <button
+                    onClick={() => {
+                      const d = buildDefaultFeedCfg()
+                      setFeedEventCfg(d)
+                      try { localStorage.setItem("avatar_feed_config", JSON.stringify(d)) } catch {}
+                    }}
+                    className="text-[10px] text-gray-600 hover:text-gray-400 w-full text-right pt-1"
+                  >Reset to defaults</button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Manual Script */}
