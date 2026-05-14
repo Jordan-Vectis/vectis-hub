@@ -450,12 +450,12 @@ export default function LotWizardTab({
   const [barcode,     setBarcode]     = useState("")
 
   useEffect(() => {
-    if (!timerActive) return
+    if (!timerActive || !showScanTimer) return
     const id = setInterval(() => {
       setTimerSecs(barcodeStartedAt.current ? Math.floor((Date.now() - barcodeStartedAt.current) / 1000) : 0)
     }, 1000)
     return () => clearInterval(id)
-  }, [timerActive])
+  }, [timerActive, showScanTimer])
 
   // Idle detection — check every 30 s; trigger popup after 5 min with no lot in progress
   useEffect(() => {
@@ -613,7 +613,7 @@ export default function LotWizardTab({
     if (!src) return
     const m = src.match(/(\d+)$/)
     if (!m) return
-    if (!barcodeStartedAt.current) { barcodeStartedAt.current = Date.now(); setTimerActive(true) }
+    if (!barcodeStartedAt.current) { barcodeStartedAt.current = Date.now(); if (showScanTimer) setTimerActive(true) }
     setBarcode(src.slice(0, m.index) + String(parseInt(m[1]) + 1).padStart(m[1].length, "0"))
   }
 
@@ -915,7 +915,7 @@ export default function LotWizardTab({
               <label className={`${lbl} block mb-1`}>Internal Barcode <span className="text-red-500">*</span></label>
               <input value={barcode} onChange={e => {
                 const v = e.target.value
-                if (v && !barcode && !barcodeStartedAt.current) { barcodeStartedAt.current = Date.now(); setTimerActive(true) }
+                if (v && !barcode && !barcodeStartedAt.current) { barcodeStartedAt.current = Date.now(); if (showScanTimer) setTimerActive(true) }
                 setBarcode(v)
               }} className={inpFocus} placeholder="Scan or type barcode…" autoFocus />
             </div>
