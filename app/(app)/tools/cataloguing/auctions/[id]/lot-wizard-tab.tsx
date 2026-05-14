@@ -479,7 +479,7 @@ export default function LotWizardTab({
   const [saveStatus,  setSaveStatus]  = useState("")
   const [lotCount,    setLotCount]    = useState(0)
   const [validErr,    setValidErr]    = useState("")
-  const [toteInfo,      setToteInfo]      = useState<{ customer_id: string; customer_name: string; receipt_id: string } | null>(null)
+  const [toteInfo,      setToteInfo]      = useState<{ vendorNo: string; vendorName: string; receiptNo: string; location: string } | null>(null)
   const [toteResults,   setToteResults]   = useState<any[]>([])
   const [toteOpen,      setToteOpen]      = useState(false)
   const [toteIgnored,   setToteIgnored]   = useState(false)
@@ -489,38 +489,20 @@ export default function LotWizardTab({
     setToteInfo(null)
     setToteIgnored(false)
     if (!q.trim()) { setToteResults([]); setToteOpen(false); return }
-    const res = await fetch(`/api/warehouse/containers?search=${encodeURIComponent(q)}`)
+    const res = await fetch(`/api/warehouse/tote-search?q=${encodeURIComponent(q)}`)
     if (!res.ok) return
     const data = await res.json()
-    if (data.length > 0) {
-      setToteResults(data)
-      setToteOpen(true)
-    } else {
-      // Fall back to WarehouseTote (BC-synced totes not in the container system)
-      setToteResults([])
-      setToteOpen(false)
-      const lookup = await fetch(`/api/warehouse/vendor-lookup?tote=${encodeURIComponent(q)}`)
-      if (lookup.ok) {
-        const ld = await lookup.json()
-        if (ld.vendorNo) {
-          // Treat it as a valid tote — auto-fill and suppress "not found"
-          setToteIgnored(true)
-          if (!vendor) setVendor(ld.vendorNo)
-          setVendorHint(ld.vendorName ?? null)
-          if (!receipt && ld.receiptNo) setReceipt(ld.receiptNo)
-          setToteInfo({ customer_id: ld.vendorNo, customer_name: ld.vendorName ?? "", receipt_id: ld.receiptNo ?? "" })
-        }
-      }
-    }
+    setToteResults(data)
+    setToteOpen(data.length > 0)
   }
 
   function selectTote(item: any) {
-    setTote(item.id)
+    setTote(item.toteNo)
     setToteInfo(item)
     setToteResults([])
     setToteOpen(false)
-    if (!vendor) { setVendor(item.customer_id); setVendorHint(item.customer_name ?? null) }
-    if (!receipt) setReceipt(item.receipt_id)
+    if (!vendor) { setVendor(item.vendorNo ?? ""); setVendorHint(item.vendorName ?? null) }
+    if (!receipt && item.receiptNo) setReceipt(item.receiptNo)
   }
 
   async function lookupVendorFromBC(params: { receipt?: string; tote?: string }) {
@@ -722,17 +704,6 @@ export default function LotWizardTab({
             <p className="text-xs text-gray-500">These values are remembered between lots.</p>
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className={lbl}>Vendor Number <span className="text-red-500">*</span></label>
-                <PinBtn pinned={pinnedVendor === vendor && !!vendor} onPin={() => setPinnedVendor(v => v === vendor ? "" : vendor)} tablet={tablet} />
-              </div>
-              <div className="flex gap-2">
-                <input value={vendor} onChange={e => { setVendor(e.target.value); setVendorHint(null) }} className={`flex-1 ${inpFocus}`} placeholder="e.g. V12345" autoFocus />
-                {vendor && <button type="button" onClick={() => { setVendor(""); setVendorHint(null) }} className="px-3 py-2 bg-[#2C2C2E] border border-gray-700 text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
-              </div>
-              {vendorHint && <p className="text-xs text-[#2AB4A6] mt-1">{vendorHint}</p>}
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
                 <label className={lbl}>Tote Number <span className="text-red-500">*</span></label>
                 <PinBtn pinned={pinnedTote === tote && !!tote} onPin={() => setPinnedTote(v => v === tote ? "" : tote)} tablet={tablet} />
               </div>
@@ -744,23 +715,23 @@ export default function LotWizardTab({
                     onFocus={e => { if (e.target.value) searchTotes(e.target.value) }}
                     onBlur={e => {
                       setTimeout(() => setToteOpen(false), 150)
-                      // If tote was typed manually (no dropdown pick), try BC lookup
                       if (e.target.value.trim() && !toteInfo) lookupVendorFromBC({ tote: e.target.value.trim() })
                     }}
                     className={`flex-1 ${inpFocus}`}
-                    placeholder="Search tote ID or description…"
+                    placeholder="Search BC tote ID…"
                     autoComplete="off"
+                    autoFocus
                   />
-                  {tote && <button type="button" onClick={() => { setTote(""); setToteInfo(null); setToteResults([]); setToteOpen(false); setToteIgnored(false) }} className="px-3 py-2 bg-[#2C2C2E] border border-gray-700 text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
+                  {tote && <button type="button" onClick={() => { setTote(""); setToteInfo(null); setToteResults([]); setToteOpen(false); setToteIgnored(false); setVendorHint(null) }} className="px-3 py-2 bg-[#2C2C2E] border border-gray-700 text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
                 </div>
                 {toteOpen && toteResults.length > 0 && (
                   <div className="absolute z-50 w-full mt-1 bg-[#1C1C1E] border border-gray-700 rounded shadow-xl max-h-52 overflow-y-auto">
-                    {toteResults.map(item => (
-                      <button key={item.id} type="button" onMouseDown={() => selectTote(item)}
+                    {toteResults.map((item: any) => (
+                      <button key={item.toteNo} type="button" onMouseDown={() => selectTote(item)}
                         className="w-full text-left px-3 py-2 hover:bg-[#2C2C2E] transition-colors border-b border-gray-800 last:border-0">
-                        <span className="font-mono text-sm text-[#2AB4A6]">{item.id}</span>
-                        <span className="text-gray-400 text-xs ml-2">{item.description}</span>
-                        <span className="text-gray-500 text-xs ml-2">· {item.customer_name}</span>
+                        <span className="font-mono text-sm text-[#2AB4A6]">{item.toteNo}</span>
+                        {item.vendorName && <span className="text-gray-400 text-xs ml-2">· {item.vendorName}</span>}
+                        {item.location   && <span className="text-gray-500 text-xs ml-2">· {item.location}</span>}
                       </button>
                     ))}
                   </div>
@@ -768,15 +739,27 @@ export default function LotWizardTab({
               </div>
               {toteInfo && (
                 <p className="text-xs text-[#2AB4A6] mt-1">
-                  {toteInfo.customer_name} <span className="text-gray-500">({toteInfo.customer_id})</span> · {toteInfo.receipt_id}
+                  {toteInfo.vendorName} <span className="text-gray-500">({toteInfo.vendorNo})</span>
+                  {toteInfo.receiptNo && <> · {toteInfo.receiptNo}</>}
                 </p>
               )}
               {tote && !toteInfo && !toteIgnored && toteResults.length === 0 && (
                 <div className="flex items-center gap-2 mt-1">
-                  <p className="text-xs text-yellow-400">Tote not found in warehouse</p>
+                  <p className="text-xs text-yellow-400">Tote not found in BC warehouse</p>
                   <button type="button" onClick={() => setToteIgnored(true)} className="text-xs text-gray-400 underline hover:text-white">Use anyway</button>
                 </div>
               )}
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className={lbl}>Vendor Number <span className="text-red-500">*</span></label>
+                <PinBtn pinned={pinnedVendor === vendor && !!vendor} onPin={() => setPinnedVendor(v => v === vendor ? "" : vendor)} tablet={tablet} />
+              </div>
+              <div className="flex gap-2">
+                <input value={vendor} onChange={e => { setVendor(e.target.value); setVendorHint(null) }} className={`flex-1 ${inpFocus}`} placeholder="e.g. C224521" />
+                {vendor && <button type="button" onClick={() => { setVendor(""); setVendorHint(null) }} className="px-3 py-2 bg-[#2C2C2E] border border-gray-700 text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
+              </div>
+              {vendorHint && <p className="text-xs text-[#2AB4A6] mt-1">{vendorHint}</p>}
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
