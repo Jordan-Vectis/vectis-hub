@@ -31,6 +31,7 @@ export default async function TabletAuctionDetailPage({
 
   return (
     <TabletTabs
+      isAdmin={session.user.role === "ADMIN"}
       auction={{
         id: auction.id,
         code: auction.code,

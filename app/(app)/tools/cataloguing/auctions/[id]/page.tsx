@@ -71,6 +71,7 @@ export default async function AuctionDetailPage({
       <AuctionTabs
         userId={session.user.id}
         userName={session.user.name ?? session.user.email ?? "Unknown"}
+        isAdmin={session.user.role === "ADMIN"}
         auction={{
           id: auction.id,
           code: auction.code,

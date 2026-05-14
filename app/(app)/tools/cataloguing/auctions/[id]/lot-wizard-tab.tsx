@@ -411,6 +411,7 @@ export default function LotWizardTab({
   userName,
   onCreated,
   tablet,
+  isAdmin,
 }: {
   auctionId: string
   auction: { code: string; name: string }
@@ -418,6 +419,7 @@ export default function LotWizardTab({
   userName?: string
   onCreated: () => void
   tablet?: boolean
+  isAdmin?: boolean
 }) {
   const [pending, start] = useTransition()
 
@@ -751,9 +753,9 @@ export default function LotWizardTab({
         <span className={`font-mono font-bold text-[#2AB4A6] ${tablet ? "text-base" : "text-sm"}`}>{auction.code}</span>
         <span className={`text-gray-300 ${tablet ? "text-base" : "text-sm"}`}>{auction.name}</span>
         <div className="ml-auto flex items-center gap-4">
-          {timerActive && (
+          {timerActive && !isAdmin && (
             <span className={`flex items-center gap-1.5 font-mono font-bold tabular-nums ${tablet ? "text-base" : "text-sm"}`}
-              style={{ color: timerSecs > 300 ? "#ef4444" : timerSecs > 120 ? "#f59e0b" : "#2AB4A6" }}>
+              style={{ color: timerSecs > 600 ? "#ef4444" : timerSecs > 240 ? "#f59e0b" : "#2AB4A6" }}>
               <svg className="w-3.5 h-3.5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="10" strokeWidth="2"/>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6l4 2"/>
