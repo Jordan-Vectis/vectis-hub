@@ -348,8 +348,8 @@ export default function EditUserForm({ userId, name, email, username, role, depa
               )}
             </div>
             <div>
-              <span className="text-sm text-gray-700 font-medium">Show scan timer in lot wizard</span>
-              <p className="text-xs text-gray-400 mt-0.5">Displays a live clock while the user is on the barcode step. Turns yellow at 4 minutes, red at 10 minutes.</p>
+              <span className="text-sm text-gray-700 font-medium">Lot wizard scan timer</span>
+              <p className="text-xs text-gray-400 mt-0.5">When enabled, times how long this user spends on the barcode step. Turns yellow at 4 minutes, red at 10 minutes.</p>
             </div>
           </label>
           <div className="flex items-center gap-3">
