@@ -16,27 +16,33 @@ export default async function AuctionDetailPage({
 
   const { id } = await params
 
-  const auction = await prisma.catalogueAuction.findUnique({
-    where: { id },
-    include: {
-      lots: { orderBy: { lotNumber: "asc" } },
-      bidderRegistrations: {
-        include: {
-          customerAccount: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-              phone: true,
-              contactId: true,
+  const [auction, currentUser] = await Promise.all([
+    prisma.catalogueAuction.findUnique({
+      where: { id },
+      include: {
+        lots: { orderBy: { lotNumber: "asc" } },
+        bidderRegistrations: {
+          include: {
+            customerAccount: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+                contactId: true,
+              },
             },
           },
+          orderBy: { registeredAt: "asc" },
         },
-        orderBy: { registeredAt: "asc" },
       },
-    },
-  })
+    }),
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { showScanTimer: true },
+    }),
+  ])
 
   if (!auction) notFound()
 
@@ -71,7 +77,7 @@ export default async function AuctionDetailPage({
       <AuctionTabs
         userId={session.user.id}
         userName={session.user.name ?? session.user.email ?? "Unknown"}
-        isAdmin={session.user.role === "ADMIN"}
+        showScanTimer={currentUser?.showScanTimer ?? true}
         auction={{
           id: auction.id,
           code: auction.code,

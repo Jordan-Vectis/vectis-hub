@@ -411,7 +411,7 @@ export default function LotWizardTab({
   userName,
   onCreated,
   tablet,
-  isAdmin,
+  showScanTimer = true,
 }: {
   auctionId: string
   auction: { code: string; name: string }
@@ -419,7 +419,7 @@ export default function LotWizardTab({
   userName?: string
   onCreated: () => void
   tablet?: boolean
-  isAdmin?: boolean
+  showScanTimer?: boolean
 }) {
   const [pending, start] = useTransition()
 
@@ -753,7 +753,7 @@ export default function LotWizardTab({
         <span className={`font-mono font-bold text-[#2AB4A6] ${tablet ? "text-base" : "text-sm"}`}>{auction.code}</span>
         <span className={`text-gray-300 ${tablet ? "text-base" : "text-sm"}`}>{auction.name}</span>
         <div className="ml-auto flex items-center gap-4">
-          {timerActive && !isAdmin && (
+          {timerActive && showScanTimer && (
             <span className={`flex items-center gap-1.5 font-mono font-bold tabular-nums ${tablet ? "text-base" : "text-sm"}`}
               style={{ color: timerSecs > 600 ? "#ef4444" : timerSecs > 240 ? "#f59e0b" : "#2AB4A6" }}>
               <svg className="w-3.5 h-3.5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">

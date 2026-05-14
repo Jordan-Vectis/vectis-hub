@@ -15,12 +15,18 @@ export default async function TabletAuctionDetailPage({
 
   const { id } = await params
 
-  const auction = await prisma.catalogueAuction.findUnique({
-    where: { id },
-    include: {
-      lots: { orderBy: { lotNumber: "asc" } },
-    },
-  })
+  const [auction, currentUser] = await Promise.all([
+    prisma.catalogueAuction.findUnique({
+      where: { id },
+      include: {
+        lots: { orderBy: { lotNumber: "asc" } },
+      },
+    }),
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { showScanTimer: true },
+    }),
+  ])
 
   if (!auction) notFound()
 
@@ -31,7 +37,7 @@ export default async function TabletAuctionDetailPage({
 
   return (
     <TabletTabs
-      isAdmin={session.user.role === "ADMIN"}
+      showScanTimer={currentUser?.showScanTimer ?? true}
       auction={{
         id: auction.id,
         code: auction.code,

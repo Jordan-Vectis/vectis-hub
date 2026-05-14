@@ -45,6 +45,7 @@ model User {
   role           String      @default("COLLECTIONS")  // "ADMIN" or any custom role name from RoleDefault
   allowedApps    String[]    @default([])
   appPermissions Json?
+  showScanTimer  Boolean     @default(true)
   departmentId   String?
   department     Department? @relation(fields: [departmentId], references: [id])
   createdAt      DateTime    @default(now())

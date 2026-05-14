@@ -16,6 +16,7 @@ interface Props {
   departmentId: string | null
   allowedApps: string[]
   appPermissions: Record<string, any> | null
+  showScanTimer: boolean
   departments: { id: string; name: string }[]
   roles:       string[]
   isSelf: boolean
@@ -25,7 +26,7 @@ function roleLabel(key: string): string {
   return key.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 }
 
-export default function EditUserForm({ userId, name, email, username, role, departmentId, allowedApps, appPermissions, departments, roles, isSelf }: Props) {
+export default function EditUserForm({ userId, name, email, username, role, departmentId, allowedApps, appPermissions, showScanTimer: initialShowScanTimer, departments, roles, isSelf }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [selectedApps, setSelectedApps] = useState<string[]>(allowedApps)
@@ -70,6 +71,12 @@ export default function EditUserForm({ userId, name, email, username, role, depa
   }
   const [appsPending, startAppsTransition] = useTransition()
   const [appsMsg, setAppsMsg] = useState<string | null>(null)
+
+  // Cataloguing settings
+  const [showScanTimer, setShowScanTimer] = useState(initialShowScanTimer)
+  const [catPending, startCatTransition]  = useTransition()
+  const [catMsg, setCatMsg]               = useState<string | null>(null)
+
   const [pwdOpen, setPwdOpen] = useState(false)
   const [password, setPassword] = useState("")
   const [confirm, setConfirm]   = useState("")
@@ -160,6 +167,19 @@ export default function EditUserForm({ userId, name, email, username, role, depa
       setPassword("")
       setConfirm("")
       setShowPwd(false)
+    })
+  }
+
+  function saveCataloguing() {
+    setCatMsg(null)
+    startCatTransition(async () => {
+      const res = await fetch(`/api/admin/users/${userId}/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showScanTimer }),
+      })
+      setCatMsg(res.ok ? "Saved" : "Failed to save")
+      if (res.ok) setTimeout(() => setCatMsg(null), 2000)
     })
   }
 
@@ -307,6 +327,39 @@ export default function EditUserForm({ userId, name, email, username, role, depa
             </div>
           </>
         )}
+      </section>
+
+      {/* ── Cataloguing settings ── */}
+      <section className="bg-white rounded-xl border border-gray-200 p-6">
+        <h2 className="font-semibold text-gray-800 mb-1">Cataloguing Settings</h2>
+        <p className="text-sm text-gray-500 mb-5">Controls for the lot wizard and cataloguing tools.</p>
+        <div className="flex flex-col gap-4">
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <div
+              onClick={() => setShowScanTimer(v => !v)}
+              className={`w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
+                showScanTimer ? "bg-blue-600 border-blue-600" : "border-gray-300 group-hover:border-blue-400"
+              }`}
+            >
+              {showScanTimer && (
+                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 12 12">
+                  <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+            </div>
+            <div>
+              <span className="text-sm text-gray-700 font-medium">Show scan timer in lot wizard</span>
+              <p className="text-xs text-gray-400 mt-0.5">Displays a live clock while the user is on the barcode step. Turns yellow at 4 minutes, red at 10 minutes.</p>
+            </div>
+          </label>
+          <div className="flex items-center gap-3">
+            <button onClick={saveCataloguing} disabled={catPending}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50">
+              {catPending ? "Saving…" : "Save Cataloguing Settings"}
+            </button>
+            {catMsg && <span className={`text-sm ${catMsg === "Saved" ? "text-green-600" : "text-red-500"}`}>{catMsg}</span>}
+          </div>
+        </div>
       </section>
 
       {/* ── Password ── */}

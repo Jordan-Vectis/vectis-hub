@@ -64,7 +64,7 @@ const lbl = "block text-sm font-semibold uppercase tracking-wider text-gray-400 
 
 // ─── Root component ───────────────────────────────────────────────────────────
 
-export default function TabletTabs({ auction, lots, isAdmin }: { auction: Auction; lots: Lot[]; isAdmin?: boolean }) {
+export default function TabletTabs({ auction, lots, showScanTimer }: { auction: Auction; lots: Lot[]; showScanTimer?: boolean }) {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>("manage")
   const [editingLotId, setEditingLotId] = useState<string | null>(null)
@@ -150,7 +150,7 @@ export default function TabletTabs({ auction, lots, isAdmin }: { auction: Auctio
               auction={auction}
               onCreated={() => router.refresh()}
               tablet
-              isAdmin={isAdmin}
+              showScanTimer={showScanTimer}
             />
           </div>
         </div>
