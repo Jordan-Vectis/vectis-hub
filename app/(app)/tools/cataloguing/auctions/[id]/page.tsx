@@ -69,6 +69,8 @@ export default async function AuctionDetailPage({
 
       <div className="flex-1 min-h-0">
       <AuctionTabs
+        userId={session.user.id}
+        userName={session.user.name ?? session.user.email ?? "Unknown"}
         auction={{
           id: auction.id,
           code: auction.code,

@@ -223,7 +223,7 @@ function DupeCheckerModal({ lots, auctionId, onClose, onDeleted }: {
   )
 }
 
-export default function AuctionTabs({ auction, lots }: { auction: Auction; lots: Lot[] }) {
+export default function AuctionTabs({ auction, lots, userId, userName }: { auction: Auction; lots: Lot[]; userId: string; userName: string }) {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const [tab, setTab]             = useState<Tab>("manage-lots")
@@ -359,6 +359,7 @@ export default function AuctionTabs({ auction, lots }: { auction: Auction; lots:
 
         <div className={tab === "add-lot" ? "" : "hidden"}>
           <LotWizardTab auctionId={auction.id} auction={auction}
+            userId={userId} userName={userName}
             onCreated={() => router.refresh()} />
         </div>
 

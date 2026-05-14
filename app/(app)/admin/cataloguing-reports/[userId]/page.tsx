@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { redirect, notFound } from "next/navigation"
 import { format, subDays, subMonths, startOfDay } from "date-fns"
 import Link from "next/link"
+import { CollapsibleLotsTable, CollapsibleIdleTable } from "./collapsible-sections"
 
 export const dynamic = "force-dynamic"
 
@@ -77,7 +78,7 @@ export default async function CataloguingUserReportPage({
   const activeRange: RangeKey = (RANGES.find(r => r.key === range)?.key) ?? "30d"
   const since = rangeStart(activeRange)
 
-  const [logs, researchLogs] = await Promise.all([
+  const [logs, researchLogs, idleLogs] = await Promise.all([
     prisma.catalogueTimingLog.findMany({
       where:   {
         userId,
@@ -92,6 +93,11 @@ export default async function CataloguingUserReportPage({
         ...(since ? { savedAt: { gte: since } } : {}),
       },
       orderBy: { savedAt: "desc" },
+    }),
+    prisma.idleLog.findMany({
+      where:   { userId },
+      orderBy: { idleStartedAt: "desc" },
+      include: { auction: { select: { name: true, code: true } } },
     }),
   ])
 
@@ -320,52 +326,32 @@ export default async function CataloguingUserReportPage({
             </div>
           )}
 
-          {/* All lots log */}
-          <div>
-            <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-3">
-              All Lots in Period ({logs.length})
-            </h2>
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50 text-xs text-gray-400 uppercase tracking-wider">
-                    <th className="text-left px-5 py-3">Date / Time</th>
-                    <th className="text-left px-5 py-3">Auction</th>
-                    <th className="text-left px-5 py-3">Lot Barcode</th>
-                    <th className="text-left px-5 py-3">Method</th>
-                    <th className="text-right px-5 py-3">Key Points</th>
-                    <th className="text-right px-5 py-3">Total Time</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {logs.map(log => (
-                    <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap font-mono">
-                        {format(log.savedAt, "dd/MM/yyyy HH:mm:ss")}
-                      </td>
-                      <td className="px-5 py-3 font-mono text-slate-600 text-xs">{log.auction.code}</td>
-                      <td className="px-5 py-3 font-mono text-gray-500 text-xs">{log.lotNumber || "—"}</td>
-                      <td className="px-5 py-3">
-                        <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
-                          log.method === "WIZARD"
-                            ? "bg-blue-50 text-blue-600 border border-blue-100"
-                            : "bg-purple-50 text-purple-600 border border-purple-100"
-                        }`}>
-                          {log.method === "WIZARD" ? "Wizard" : "Photo Only"}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-right font-mono text-gray-500 text-xs">
-                        {log.method === "WIZARD" ? fmtDuration(log.keyPointsMs) : "—"}
-                      </td>
-                      <td className="px-5 py-3 text-right font-mono font-bold text-gray-700">
-                        {fmtDuration(log.durationMs)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          {/* All lots log — collapsible + date-filterable */}
+          <CollapsibleLotsTable
+            logs={logs.map(l => ({
+              id:          l.id,
+              savedAt:     l.savedAt.toISOString(),
+              auctionCode: l.auction.code,
+              lotNumber:   l.lotNumber,
+              method:      l.method,
+              keyPointsMs: l.keyPointsMs,
+              durationMs:  l.durationMs,
+            }))}
+          />
+
+          {/* Idle time log — collapsible + date-filterable */}
+          <CollapsibleIdleTable
+            logs={idleLogs.map(l => ({
+              id:            l.id,
+              idleStartedAt: l.idleStartedAt.toISOString(),
+              idleDurationMs: l.idleDurationMs,
+              reason:        l.reason,
+              toteNumbers:   l.toteNumbers,
+              notes:         l.notes,
+              auctionCode:   l.auction.code,
+              auctionName:   l.auction.name,
+            }))}
+          />
         </>
       )}
     </div>

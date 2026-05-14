@@ -264,6 +264,7 @@ model CatalogueAuction {
   lots        CatalogueLot[]
   photoSessions CataloguePhotoSession[]
   timingLogs  CatalogueTimingLog[]
+  idleLogs    IdleLog[]
   liveAuction LiveAuction?
   bidderRegistrations BidderRegistration[]
 }
@@ -341,6 +342,20 @@ model CommissionBid {
   updatedAt         DateTime        @updatedAt
 
   @@unique([lotId, customerAccountId])
+}
+
+model IdleLog {
+  id             String           @id @default(cuid())
+  userId         String
+  userName       String
+  auctionId      String
+  auction        CatalogueAuction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  idleStartedAt  DateTime
+  idleDurationMs Int
+  reason         String           // LUNCH_BREAK | LOTTING_UP | OTHER
+  toteNumbers    String?
+  notes          String?
+  createdAt      DateTime         @default(now())
 }
 
 model CatalogueTimingLog {

@@ -407,11 +407,15 @@ function PinBtn({ pinned, onPin, tablet }: { pinned: boolean; onPin: () => void;
 export default function LotWizardTab({
   auctionId,
   auction,
+  userId,
+  userName,
   onCreated,
   tablet,
 }: {
   auctionId: string
   auction: { code: string; name: string }
+  userId?: string
+  userName?: string
   onCreated: () => void
   tablet?: boolean
 }) {
@@ -420,6 +424,16 @@ export default function LotWizardTab({
   const barcodeStartedAt   = useRef<number | null>(null)
   const keyPointsEnteredAt = useRef<number | null>(null)
   const keyPointsAccumMs   = useRef<number>(0)
+
+  // Idle detection
+  const lastActivityRef    = useRef<number>(Date.now())
+  const idleStartedAtRef   = useRef<number>(0)
+  const [idlePopup,        setIdlePopup]      = useState(false)
+  const [idleSecs,         setIdleSecs]       = useState(0)
+  const [idleReason,       setIdleReason]     = useState<"LUNCH_BREAK"|"LOTTING_UP"|"OTHER"|null>(null)
+  const [idleTotes,        setIdleTotes]      = useState("")
+  const [idleNotes,        setIdleNotes]      = useState("")
+  const [idleSubmitting,   setIdleSubmitting] = useState(false)
 
   // Live timer display
   const [timerActive, setTimerActive] = useState(false)
@@ -440,6 +454,46 @@ export default function LotWizardTab({
     }, 1000)
     return () => clearInterval(id)
   }, [timerActive])
+
+  // Idle detection — check every 30 s; trigger popup after 5 min with no lot in progress
+  useEffect(() => {
+    const IDLE_THRESHOLD = 5 * 60 * 1000 // 5 minutes
+    const id = setInterval(() => {
+      if (barcodeStartedAt.current) return            // actively working on a lot
+      if (idlePopup) return                           // popup already showing
+      const idle = Date.now() - lastActivityRef.current
+      if (idle >= IDLE_THRESHOLD) {
+        idleStartedAtRef.current = lastActivityRef.current
+        setIdleSecs(Math.floor(idle / 1000))
+        setIdleReason(null)
+        setIdleTotes("")
+        setIdleNotes("")
+        setIdlePopup(true)
+      }
+    }, 30_000)
+    return () => clearInterval(id)
+  }, [idlePopup])
+
+  async function submitIdleLog() {
+    if (!idleReason) return
+    setIdleSubmitting(true)
+    try {
+      await fetch("/api/catalogue/idle-log", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          auctionId,
+          idleStartedAt: new Date(idleStartedAtRef.current).toISOString(),
+          idleDurationMs: idleSecs * 1000,
+          reason: idleReason,
+          toteNumbers: idleTotes || null,
+          notes: idleNotes || null,
+        }),
+      })
+    } catch { /* non-critical */ }
+    lastActivityRef.current = Date.now()
+    setIdlePopup(false)
+    setIdleSubmitting(false)
+  }
 
   // Track time spent on Key Points (step 3)
   useEffect(() => {
@@ -601,6 +655,7 @@ export default function LotWizardTab({
       barcodeStartedAt.current = null
       keyPointsAccumMs.current = 0
       keyPointsEnteredAt.current = null
+      lastActivityRef.current = Date.now()
       setTimerActive(false)
       setTimerSecs(0)
       const n = lotCount + 1
@@ -622,8 +677,74 @@ export default function LotWizardTab({
     })
   }
 
+  function fmtIdleDuration(secs: number) {
+    const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60
+    if (h > 0) return `${h}h ${m}m ${s}s`
+    if (m > 0) return `${m}m ${s}s`
+    return `${s}s`
+  }
+
   return (
     <div className="flex flex-col h-full">
+
+      {/* ── Idle popup ──────────────────────────────────────────────────────── */}
+      {idlePopup && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div className="text-center mb-5">
+              <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">Idle Timer</p>
+              <p className="text-5xl font-mono font-bold text-gray-900">{fmtIdleDuration(idleSecs)}</p>
+              <p className="text-sm text-gray-500 mt-2">You haven't catalogued a lot for a while.<br/>What were you doing?</p>
+            </div>
+
+            {/* Reason buttons */}
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              {([
+                { key: "LUNCH_BREAK", label: "🍽️ Lunch Break" },
+                { key: "LOTTING_UP",  label: "📦 Lotting Up" },
+                { key: "OTHER",       label: "✏️ Other" },
+              ] as const).map(opt => (
+                <button key={opt.key} onClick={() => setIdleReason(opt.key)}
+                  className={`py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                    idleReason === opt.key
+                      ? "border-[#2AB4A6] bg-[#2AB4A6]/10 text-[#1a8a80]"
+                      : "border-gray-200 text-gray-600 hover:border-gray-300"
+                  }`}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Lotting Up extra fields */}
+            {idleReason === "LOTTING_UP" && (
+              <div className="space-y-2 mb-4">
+                <input value={idleTotes} onChange={e => setIdleTotes(e.target.value)}
+                  placeholder="Tote numbers (e.g. F001, F002)"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2AB4A6]" />
+                <textarea value={idleNotes} onChange={e => setIdleNotes(e.target.value)}
+                  placeholder="What were you doing? (optional)"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2AB4A6] resize-none" rows={2} />
+              </div>
+            )}
+
+            {/* Other extra field */}
+            {idleReason === "OTHER" && (
+              <div className="mb-4">
+                <textarea value={idleNotes} onChange={e => setIdleNotes(e.target.value)}
+                  placeholder="What were you doing?"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2AB4A6] resize-none" rows={3} />
+              </div>
+            )}
+
+            <button onClick={submitIdleLog}
+              disabled={!idleReason || idleSubmitting}
+              className="w-full py-3 bg-[#2AB4A6] hover:bg-[#22a090] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors">
+              {idleSubmitting ? "Saving…" : "Log & Continue"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Auction context banner */}
       <div className="flex items-center gap-3 mb-4 px-1">
         <span className={`${tablet ? "text-sm" : "text-xs"} text-gray-500 uppercase tracking-wider`}>Adding to:</span>
