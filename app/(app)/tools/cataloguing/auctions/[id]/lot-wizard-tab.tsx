@@ -492,8 +492,26 @@ export default function LotWizardTab({
     const res = await fetch(`/api/warehouse/containers?search=${encodeURIComponent(q)}`)
     if (!res.ok) return
     const data = await res.json()
-    setToteResults(data)
-    setToteOpen(data.length > 0)
+    if (data.length > 0) {
+      setToteResults(data)
+      setToteOpen(true)
+    } else {
+      // Fall back to WarehouseTote (BC-synced totes not in the container system)
+      setToteResults([])
+      setToteOpen(false)
+      const lookup = await fetch(`/api/warehouse/vendor-lookup?tote=${encodeURIComponent(q)}`)
+      if (lookup.ok) {
+        const ld = await lookup.json()
+        if (ld.vendorNo) {
+          // Treat it as a valid tote — auto-fill and suppress "not found"
+          setToteIgnored(true)
+          if (!vendor) setVendor(ld.vendorNo)
+          setVendorHint(ld.vendorName ?? null)
+          if (!receipt && ld.receiptNo) setReceipt(ld.receiptNo)
+          setToteInfo({ customer_id: ld.vendorNo, customer_name: ld.vendorName ?? "", receipt_id: ld.receiptNo ?? "" })
+        }
+      }
+    }
   }
 
   function selectTote(item: any) {
@@ -515,6 +533,7 @@ export default function LotWizardTab({
       if (data.vendorNo) {
         if (!vendor) setVendor(data.vendorNo)
         setVendorHint(data.vendorName ?? null)
+        if (!receipt && data.receiptNo) setReceipt(data.receiptNo)
       }
     } catch { /* silent — lookup is best-effort */ }
   }
