@@ -483,6 +483,7 @@ export default function LotWizardTab({
   const [toteResults,   setToteResults]   = useState<any[]>([])
   const [toteOpen,      setToteOpen]      = useState(false)
   const [toteIgnored,   setToteIgnored]   = useState(false)
+  const [vendorHint,    setVendorHint]    = useState<string | null>(null)   // name hint from BC lookup
 
   async function searchTotes(q: string) {
     setToteInfo(null)
@@ -500,8 +501,22 @@ export default function LotWizardTab({
     setToteInfo(item)
     setToteResults([])
     setToteOpen(false)
-    if (!vendor) setVendor(item.customer_id)
+    if (!vendor) { setVendor(item.customer_id); setVendorHint(item.customer_name ?? null) }
     if (!receipt) setReceipt(item.receipt_id)
+  }
+
+  async function lookupVendorFromBC(params: { receipt?: string; tote?: string }) {
+    const q = params.receipt
+      ? `receipt=${encodeURIComponent(params.receipt)}`
+      : `tote=${encodeURIComponent(params.tote ?? "")}`
+    try {
+      const res  = await fetch(`/api/warehouse/vendor-lookup?${q}`)
+      const data = await res.json()
+      if (data.vendorNo) {
+        if (!vendor) setVendor(data.vendorNo)
+        setVendorHint(data.vendorName ?? null)
+      }
+    } catch { /* silent — lookup is best-effort */ }
   }
 
   const subCats     = mainCat ? (CATEGORY_MAP[mainCat] ?? []) : []
@@ -595,6 +610,7 @@ export default function LotWizardTab({
       setVendor(pinnedVendor || vendor)
       setTote(pinnedTote || tote)
       setReceipt(pinnedReceipt || receipt)
+      setVendorHint(null)
       setBarcode(""); setKeyPoints("")
       setMainCat(pinnedMain); setSubCat(pinnedSub); setBrand("")
       setEstLow(""); setEstHigh(""); setCond1(""); setCond2(""); setParcel("")
@@ -691,9 +707,10 @@ export default function LotWizardTab({
                 <PinBtn pinned={pinnedVendor === vendor && !!vendor} onPin={() => setPinnedVendor(v => v === vendor ? "" : vendor)} tablet={tablet} />
               </div>
               <div className="flex gap-2">
-                <input value={vendor} onChange={e => setVendor(e.target.value)} className={`flex-1 ${inpFocus}`} placeholder="e.g. V12345" autoFocus />
-                {vendor && <button type="button" onClick={() => setVendor("")} className="px-3 py-2 bg-[#2C2C2E] border border-gray-700 text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
+                <input value={vendor} onChange={e => { setVendor(e.target.value); setVendorHint(null) }} className={`flex-1 ${inpFocus}`} placeholder="e.g. V12345" autoFocus />
+                {vendor && <button type="button" onClick={() => { setVendor(""); setVendorHint(null) }} className="px-3 py-2 bg-[#2C2C2E] border border-gray-700 text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
               </div>
+              {vendorHint && <p className="text-xs text-[#2AB4A6] mt-1">{vendorHint}</p>}
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -706,7 +723,11 @@ export default function LotWizardTab({
                     value={tote}
                     onChange={e => { setTote(e.target.value); searchTotes(e.target.value) }}
                     onFocus={e => { if (e.target.value) searchTotes(e.target.value) }}
-                    onBlur={() => setTimeout(() => setToteOpen(false), 150)}
+                    onBlur={e => {
+                      setTimeout(() => setToteOpen(false), 150)
+                      // If tote was typed manually (no dropdown pick), try BC lookup
+                      if (e.target.value.trim() && !toteInfo) lookupVendorFromBC({ tote: e.target.value.trim() })
+                    }}
                     className={`flex-1 ${inpFocus}`}
                     placeholder="Search tote ID or description…"
                     autoComplete="off"
@@ -744,7 +765,13 @@ export default function LotWizardTab({
                 <PinBtn pinned={pinnedReceipt === receipt && !!receipt} onPin={() => setPinnedReceipt(v => v === receipt ? "" : receipt)} tablet={tablet} />
               </div>
               <div className="flex gap-2">
-                <input value={receipt} onChange={e => setReceipt(e.target.value)} className={`flex-1 ${inpFocus}`} placeholder="e.g. R007523" />
+                <input
+                  value={receipt}
+                  onChange={e => setReceipt(e.target.value)}
+                  onBlur={e => { if (e.target.value.trim()) lookupVendorFromBC({ receipt: e.target.value.trim() }) }}
+                  className={`flex-1 ${inpFocus}`}
+                  placeholder="e.g. R007523"
+                />
                 {receipt && <button type="button" onClick={() => setReceipt("")} className="px-3 py-2 bg-[#2C2C2E] border border-gray-700 text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
               </div>
               {receipt && (
