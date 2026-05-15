@@ -79,6 +79,8 @@ export default function BackupPage() {
   const [restoring, setRestoring] = useState(false)
   const [restoreResult, setRestoreResult] = useState<string | null>(null)
   const [restoreError, setRestoreError] = useState<string | null>(null)
+  const [restorePct, setRestorePct] = useState(0)
+  const [restoreMessage, setRestoreMessage] = useState("")
 
   // ── Record lookup state ─────────────────────────────────────────────────────
   const [lookupKey, setLookupKey] = useState("")
@@ -134,16 +136,42 @@ export default function BackupPage() {
     setRestoring(true)
     setRestoreResult(null)
     setRestoreError(null)
+    setRestorePct(0)
+    setRestoreMessage("Starting restore…")
     try {
-      const res = await fetch("/api/admin/restore", {
+      const res = await fetch("/api/admin/restore/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: restoreKey, mode: "full" }),
+        body: JSON.stringify({ key: restoreKey }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? "Restore failed")
-      setRestoreResult(`Restore complete. ${data.totalRows} record(s) upserted across ${Object.keys(data.counts).length} table(s).`)
-      setRestoreConfirm("")
+      if (!res.ok || !res.body) throw new Error("Failed to start restore stream")
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n")
+        buffer = lines.pop() ?? ""
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue
+          try {
+            const event = JSON.parse(line.slice(6))
+            setRestorePct(event.pct ?? 0)
+            setRestoreMessage(event.message ?? "")
+            if (event.stage === "complete") {
+              setRestoreResult(event.message)
+              setRestoreConfirm("")
+            }
+            if (event.stage === "error") {
+              setRestoreError(event.message)
+            }
+          } catch {}
+        }
+      }
     } catch (e: any) {
       setRestoreError(e.message)
     } finally {
@@ -358,6 +386,22 @@ export default function BackupPage() {
         >
           {restoring ? "Restoring…" : "Restore from backup"}
         </button>
+
+        {/* Progress bar */}
+        {restoring && (
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs text-gray-500">
+              <span>{restoreMessage}</span>
+              <span className="font-mono font-semibold">{restorePct}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+              <div
+                className="h-3 rounded-full bg-blue-500 transition-all duration-300"
+                style={{ width: `${restorePct}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         {restoreResult && (
           <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-700">
