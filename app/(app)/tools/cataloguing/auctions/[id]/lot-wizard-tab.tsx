@@ -412,6 +412,8 @@ export default function LotWizardTab({
   onCreated,
   tablet,
   showScanTimer = true,
+  timerYellowMins = 4,
+  timerRedMins = 10,
 }: {
   auctionId: string
   auction: { code: string; name: string }
@@ -420,6 +422,8 @@ export default function LotWizardTab({
   onCreated: () => void
   tablet?: boolean
   showScanTimer?: boolean
+  timerYellowMins?: number
+  timerRedMins?: number
 }) {
   const [pending, start] = useTransition()
 
@@ -440,6 +444,8 @@ export default function LotWizardTab({
   // Live timer display
   const [timerActive, setTimerActive] = useState(false)
   const [timerSecs,   setTimerSecs]   = useState(0)
+  const timerYellowSecs = timerYellowMins * 60
+  const timerRedSecs    = timerRedMins    * 60
 
   // Step must be declared before the useEffect that depends on it
   const [step,        setStep]        = useState(1)
@@ -674,7 +680,7 @@ export default function LotWizardTab({
       setEstLow(""); setEstHigh(""); setCond1(""); setCond2(""); setParcel("")
       photoFiles.forEach(p => URL.revokeObjectURL(p.preview))
       setPhotoFiles([])
-      setStep(1)
+      setStep(2)
       onCreated()
     })
   }
@@ -755,7 +761,7 @@ export default function LotWizardTab({
         <div className="ml-auto flex items-center gap-4">
           {timerActive && showScanTimer && (
             <span className={`flex items-center gap-1.5 font-mono font-bold tabular-nums ${tablet ? "text-base" : "text-sm"}`}
-              style={{ color: timerSecs > 600 ? "#ef4444" : timerSecs > 240 ? "#f59e0b" : "#2AB4A6" }}>
+              style={{ color: timerSecs > timerRedSecs ? "#ef4444" : timerSecs > timerYellowSecs ? "#f59e0b" : "#2AB4A6" }}>
               <svg className="w-3.5 h-3.5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="10" strokeWidth="2"/>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6l4 2"/>
@@ -911,6 +917,20 @@ export default function LotWizardTab({
         {step === 2 && (
           <div className="max-w-lg space-y-4">
             <p className="text-xs text-gray-500">Scan the internal barcode or type it manually.</p>
+            {(vendor || tote) && (
+              <div className="flex items-center justify-between bg-[#2C2C2E] border border-gray-700 rounded-lg px-3 py-2">
+                <span className="text-xs text-gray-400 flex flex-wrap gap-x-3 gap-y-0.5">
+                  {tote    && <span><span className="text-gray-500">Tote </span><span className="text-gray-200 font-mono">{tote}</span></span>}
+                  {vendor  && <span><span className="text-gray-500">Vendor </span><span className="text-gray-200 font-mono">{vendor}</span>{vendorHint && <span className="text-gray-500"> · {vendorHint}</span>}</span>}
+                  {receipt && <span><span className="text-gray-500">Receipt </span><span className="text-gray-200 font-mono">{receipt}</span></span>}
+                </span>
+                <button type="button" onClick={() => setStep(1)}
+                  className="text-xs font-semibold px-3 py-1 rounded transition-colors"
+                  style={{ color: CAT_ACCENT, border: `1px solid ${CAT_ACCENT}66` }}>
+                  Change Tote / Vendor
+                </button>
+              </div>
+            )}
             <div>
               <label className={`${lbl} block mb-1`}>Internal Barcode <span className="text-red-500">*</span></label>
               <input value={barcode} onChange={e => {

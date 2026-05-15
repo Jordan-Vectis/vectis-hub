@@ -15,6 +15,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const data: Record<string, unknown> = {}
     if (typeof body.showScanTimer === "boolean") data.showScanTimer = body.showScanTimer
+    if (typeof body.timerYellowMins === "number") data.timerYellowMins = Math.max(1, body.timerYellowMins)
+    if (typeof body.timerRedMins    === "number") data.timerRedMins    = Math.max(1, body.timerRedMins)
 
     if (Object.keys(data).length === 0) {
       return NextResponse.json({ error: "No valid fields provided" }, { status: 400 })

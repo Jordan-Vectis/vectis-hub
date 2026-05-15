@@ -17,6 +17,8 @@ interface Props {
   allowedApps: string[]
   appPermissions: Record<string, any> | null
   showScanTimer: boolean
+  timerYellowMins: number
+  timerRedMins: number
   departments: { id: string; name: string }[]
   roles:       string[]
   isSelf: boolean
@@ -26,7 +28,7 @@ function roleLabel(key: string): string {
   return key.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 }
 
-export default function EditUserForm({ userId, name, email, username, role, departmentId, allowedApps, appPermissions, showScanTimer: initialShowScanTimer, departments, roles, isSelf }: Props) {
+export default function EditUserForm({ userId, name, email, username, role, departmentId, allowedApps, appPermissions, showScanTimer: initialShowScanTimer, timerYellowMins: initialYellow, timerRedMins: initialRed, departments, roles, isSelf }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [selectedApps, setSelectedApps] = useState<string[]>(allowedApps)
@@ -73,9 +75,11 @@ export default function EditUserForm({ userId, name, email, username, role, depa
   const [appsMsg, setAppsMsg] = useState<string | null>(null)
 
   // Cataloguing settings
-  const [showScanTimer, setShowScanTimer] = useState(initialShowScanTimer)
-  const [catPending, startCatTransition]  = useTransition()
-  const [catMsg, setCatMsg]               = useState<string | null>(null)
+  const [showScanTimer,    setShowScanTimer]    = useState(initialShowScanTimer)
+  const [timerYellowMins,  setTimerYellowMins]  = useState(initialYellow)
+  const [timerRedMins,     setTimerRedMins]     = useState(initialRed)
+  const [catPending, startCatTransition]        = useTransition()
+  const [catMsg, setCatMsg]                     = useState<string | null>(null)
 
   const [pwdOpen, setPwdOpen] = useState(false)
   const [password, setPassword] = useState("")
@@ -176,7 +180,7 @@ export default function EditUserForm({ userId, name, email, username, role, depa
       const res = await fetch(`/api/admin/users/${userId}/settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ showScanTimer }),
+        body: JSON.stringify({ showScanTimer, timerYellowMins, timerRedMins }),
       })
       setCatMsg(res.ok ? "Saved" : "Failed to save")
       if (res.ok) setTimeout(() => setCatMsg(null), 2000)
@@ -349,9 +353,31 @@ export default function EditUserForm({ userId, name, email, username, role, depa
             </div>
             <div>
               <span className="text-sm text-gray-700 font-medium">Lot wizard scan timer</span>
-              <p className="text-xs text-gray-400 mt-0.5">When enabled, times how long this user spends on the barcode step. Turns yellow at 4 minutes, red at 10 minutes.</p>
+              <p className="text-xs text-gray-400 mt-0.5">Times how long this user spends on the barcode step.</p>
             </div>
           </label>
+          {showScanTimer && (
+            <div className="ml-8 grid grid-cols-2 gap-4 max-w-xs">
+              <div>
+                <label className="block text-xs font-medium text-yellow-600 mb-1">🟡 Yellow after (mins)</label>
+                <input
+                  type="number" min={1} max={59}
+                  value={timerYellowMins}
+                  onChange={e => setTimerYellowMins(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-red-500 mb-1">🔴 Red after (mins)</label>
+                <input
+                  type="number" min={1} max={120}
+                  value={timerRedMins}
+                  onChange={e => setTimerRedMins(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                />
+              </div>
+            </div>
+          )}
           <div className="flex items-center gap-3">
             <button onClick={saveCataloguing} disabled={catPending}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50">

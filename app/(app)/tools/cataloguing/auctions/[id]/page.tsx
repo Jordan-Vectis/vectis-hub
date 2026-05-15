@@ -40,7 +40,7 @@ export default async function AuctionDetailPage({
     }),
     prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { showScanTimer: true },
+      select: { showScanTimer: true, timerYellowMins: true, timerRedMins: true },
     }),
   ])
 
@@ -78,6 +78,8 @@ export default async function AuctionDetailPage({
         userId={session.user.id}
         userName={session.user.name ?? session.user.email ?? "Unknown"}
         showScanTimer={currentUser?.showScanTimer ?? true}
+        timerYellowMins={currentUser?.timerYellowMins ?? 4}
+        timerRedMins={currentUser?.timerRedMins ?? 10}
         auction={{
           id: auction.id,
           code: auction.code,

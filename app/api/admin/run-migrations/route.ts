@@ -176,6 +176,8 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS "TicketComment_ticketId_idx" ON "TicketComment"("ticketId")`,
 
   `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "showScanTimer" BOOLEAN NOT NULL DEFAULT true`,
+  `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "timerYellowMins" INTEGER NOT NULL DEFAULT 4`,
+  `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "timerRedMins" INTEGER NOT NULL DEFAULT 10`,
 ]
 
 export async function POST() {

@@ -46,6 +46,8 @@ model User {
   allowedApps    String[]    @default([])
   appPermissions Json?
   showScanTimer  Boolean     @default(true)
+  timerYellowMins Int       @default(4)
+  timerRedMins    Int       @default(10)
   departmentId   String?
   department     Department? @relation(fields: [departmentId], references: [id])
   createdAt      DateTime    @default(now())
