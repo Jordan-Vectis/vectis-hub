@@ -78,7 +78,7 @@ export default async function ReportsOverviewPage({
     }),
   ])
 
-  // Monthly buckets — last 12 calendar months (unfiltered by range)
+  // Monthly buckets — last 12 calendar months (always unfiltered)
   const allTimeLogs = since
     ? await prisma.catalogueTimingLog.findMany({
         where: { savedAt: { gte: startOfDay(subMonths(new Date(), 12)) } },
@@ -92,7 +92,6 @@ export default async function ReportsOverviewPage({
     bucketMap.set(key, (bucketMap.get(key) ?? 0) + 1)
   }
 
-  // Build last-12-months ordered list
   const monthlyBuckets: MonthBucket[] = []
   for (let i = 11; i >= 0; i--) {
     const d = subMonths(new Date(), i)
@@ -111,13 +110,12 @@ export default async function ReportsOverviewPage({
     e.sessions += 1
   }
 
-  // ── Overall summary stats ──
+  // ── Overall stats ──
   const allDurations = logs.map(l => l.durationMs)
   const overallAvg   = avg(allDurations)
   const overallMin   = allDurations.length ? Math.min(...allDurations) : 0
-
-  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
-  const lotsToday  = logs.filter(l => l.savedAt >= todayStart).length
+  const todayStart   = new Date(); todayStart.setHours(0, 0, 0, 0)
+  const lotsToday    = logs.filter(l => l.savedAt >= todayStart).length
 
   // ── Per-user stats ──
   const userMap = new Map<string, {
@@ -135,16 +133,16 @@ export default async function ReportsOverviewPage({
     else entry.photoOnlyLogs.push(log)
   }
 
-  const todayStr = format(new Date(), "yyyy-MM-dd")
+  const todayStr  = format(new Date(), "yyyy-MM-dd")
   const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - 7); weekStart.setHours(0, 0, 0, 0)
 
   const userStats = [...userMap.entries()].map(([userId, data]) => {
-    const allUserLogs    = [...data.wizardLogs, ...data.photoOnlyLogs]
-    const durations      = allUserLogs.map(l => l.durationMs)
-    const research       = researchByUser.get(userId)
-    const completedLogs  = allUserLogs.filter(l => format(l.savedAt, "yyyy-MM-dd") !== todayStr)
-    const completedDays  = new Set(completedLogs.map(l => format(l.savedAt, "yyyy-MM-dd")))
-    const dailyAvg       = completedDays.size > 0
+    const allUserLogs   = [...data.wizardLogs, ...data.photoOnlyLogs]
+    const durations     = allUserLogs.map(l => l.durationMs)
+    const research      = researchByUser.get(userId)
+    const completedLogs = allUserLogs.filter(l => format(l.savedAt, "yyyy-MM-dd") !== todayStr)
+    const completedDays = new Set(completedLogs.map(l => format(l.savedAt, "yyyy-MM-dd")))
+    const dailyAvg      = completedDays.size > 0
       ? Math.round(completedLogs.length / completedDays.size)
       : allUserLogs.filter(l => l.savedAt >= todayStart).length
 
@@ -166,7 +164,6 @@ export default async function ReportsOverviewPage({
     }
   }).sort((a, b) => b.totalLots - a.totalLots)
 
-  // Chart data shape
   const chartUsers: UserChartData[] = userStats.map(u => ({
     userId:        u.userId,
     name:          u.name,
@@ -180,118 +177,158 @@ export default async function ReportsOverviewPage({
     lotsToday:     u.lotsToday,
   }))
 
+  const activeLabel = RANGES.find(r => r.key === activeRange)?.label ?? "All time"
+
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-8">
+    <div className="min-h-full flex flex-col">
 
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Reports</h1>
-          <p className="text-sm text-gray-400 mt-1">
-            Cataloguing performance — lots per day, speed comparisons and team leaderboards.
-          </p>
-        </div>
-
-        {/* Range filter */}
-        <div className="flex flex-wrap gap-1.5">
-          {RANGES.map(r => (
-            <Link
-              key={r.key}
-              href={`/tools/reports?range=${r.key}`}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border ${
-                activeRange === r.key
-                  ? "bg-[#2AB4A6] text-white border-[#2AB4A6]"
-                  : "bg-[#1C1C1E] text-gray-400 border-gray-700 hover:border-gray-500 hover:text-white"
-              }`}
-            >
-              {r.label}
-            </Link>
-          ))}
+      {/* ── Page header ── */}
+      <div className="border-b border-gray-800 bg-[#1C1C1E] px-6 py-5">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
+            <Link href="/hub" className="hover:text-gray-300 transition-colors">Hub</Link>
+            <span>/</span>
+            <span className="text-gray-300">Reports</span>
+          </div>
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-bold text-white">Reports</h1>
+              <p className="text-sm text-gray-400 mt-0.5">Cataloguing performance — speed, output and team comparisons.</p>
+            </div>
+            {/* Range pills */}
+            <div className="flex items-center gap-1 bg-[#141416] border border-gray-800 rounded-lg p-1">
+              {RANGES.map(r => (
+                <Link
+                  key={r.key}
+                  href={`/tools/reports?range=${r.key}`}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap ${
+                    activeRange === r.key
+                      ? "bg-[#2AB4A6] text-white"
+                      : "text-gray-400 hover:text-white"
+                  }`}
+                >
+                  {r.label}
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Summary cards */}
-      {logs.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {[
-            { label: "Total Lots",      value: logs.length.toLocaleString(),  sub: RANGES.find(r => r.key === activeRange)?.label ?? "All time" },
-            { label: "Avg Time / Lot",  value: fmtDuration(overallAvg),       sub: "all cataloguers" },
-            { label: "Fastest Lot",     value: fmtDuration(overallMin),       sub: "record in range" },
-            { label: "Lots Today",      value: lotsToday.toLocaleString(),    sub: format(new Date(), "d MMM yyyy") },
-          ].map(card => (
-            <div key={card.label} className="bg-[#1C1C1E] border border-gray-800 rounded-xl p-5">
-              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{card.label}</p>
-              <p className="text-3xl font-bold text-white">{card.value}</p>
-              <p className="text-xs text-gray-500 mt-1">{card.sub}</p>
+      {/* ── Body ── */}
+      <div className="flex-1 px-6 py-8">
+        <div className="max-w-7xl mx-auto space-y-8">
+
+          {/* No data */}
+          {logs.length === 0 && (
+            <div className="bg-[#1C1C1E] border border-gray-800 rounded-xl p-16 text-center">
+              <p className="text-lg font-semibold text-gray-300 mb-1">No data for this period</p>
+              <p className="text-sm text-gray-500">Try selecting a wider time range above.</p>
             </div>
-          ))}
-        </div>
-      )}
+          )}
 
-      {/* No data */}
-      {logs.length === 0 && (
-        <div className="bg-[#1C1C1E] border border-gray-800 rounded-xl p-12 text-center">
-          <p className="text-lg font-semibold text-gray-300 mb-1">No data in this period</p>
-          <p className="text-sm text-gray-500">Try selecting a wider time range.</p>
-        </div>
-      )}
-
-      {/* Charts */}
-      {logs.length > 0 && (
-        <CataloguingReportsCharts users={chartUsers} monthlyBuckets={monthlyBuckets} />
-      )}
-
-      {/* Per-cataloguer table */}
-      {userStats.length > 0 && (
-        <div>
-          <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Per Cataloguer</h2>
-          <div className="bg-[#1C1C1E] border border-gray-800 rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-800 text-xs text-gray-500 uppercase tracking-wider">
-                  <th className="text-left px-5 py-3">Cataloguer</th>
-                  <th className="text-right px-5 py-3">Total</th>
-                  <th className="text-right px-5 py-3">Daily Avg</th>
-                  <th className="text-right px-5 py-3">Today</th>
-                  <th className="text-right px-5 py-3">This Week</th>
-                  <th className="text-right px-5 py-3">Avg Time</th>
-                  <th className="text-right px-5 py-3">Fastest</th>
-                  <th className="text-right px-5 py-3">Slowest</th>
-                  <th className="text-right px-5 py-3">Research</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-800">
-                {userStats.map(u => (
-                  <tr key={u.userId} className="hover:bg-gray-900 transition-colors">
-                    <td className="px-5 py-3">
-                      <Link
-                        href={`/tools/reports/${encodeURIComponent(u.userId)}`}
-                        className="font-semibold text-white hover:text-[#2AB4A6] transition-colors"
-                      >
-                        {u.name}
-                      </Link>
-                    </td>
-                    <td className="px-5 py-3 text-right font-bold text-white">{u.totalLots}</td>
-                    <td className="px-5 py-3 text-right text-gray-300">{u.dailyAvg}</td>
-                    <td className="px-5 py-3 text-right text-gray-300">{u.lotsToday}</td>
-                    <td className="px-5 py-3 text-right text-gray-300">{u.lotsThisWeek}</td>
-                    <td className="px-5 py-3 text-right font-mono text-gray-300">{fmtDuration(u.avgMs)}</td>
-                    <td className="px-5 py-3 text-right font-mono text-green-400">{fmtDuration(u.fastestMs)}</td>
-                    <td className="px-5 py-3 text-right font-mono text-red-400">{fmtDuration(u.slowestMs)}</td>
-                    <td className="px-5 py-3 text-right font-mono text-amber-400">
-                      {u.researchMs ? fmtDuration(u.researchMs) : "—"}
-                      {u.researchSessions > 0 && (
-                        <span className="text-gray-600 text-xs ml-1">({u.researchSessions})</span>
-                      )}
-                    </td>
-                  </tr>
+          {logs.length > 0 && (
+            <>
+              {/* ── Stat cards ── */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  {
+                    label: "Total Lots",
+                    value: logs.length.toLocaleString(),
+                    sub:   activeLabel,
+                    accent: "border-l-[#2AB4A6]",
+                  },
+                  {
+                    label: "Avg Time / Lot",
+                    value: fmtDuration(overallAvg),
+                    sub:   "across all cataloguers",
+                    accent: "border-l-blue-500",
+                  },
+                  {
+                    label: "Fastest Lot",
+                    value: fmtDuration(overallMin),
+                    sub:   "record in range",
+                    accent: "border-l-green-500",
+                  },
+                  {
+                    label: "Lots Today",
+                    value: lotsToday.toLocaleString(),
+                    sub:   format(new Date(), "d MMM yyyy"),
+                    accent: "border-l-amber-500",
+                  },
+                ].map(card => (
+                  <div
+                    key={card.label}
+                    className={`bg-[#1C1C1E] border border-gray-800 border-l-2 ${card.accent} rounded-xl px-5 py-4`}
+                  >
+                    <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">{card.label}</p>
+                    <p className="text-3xl font-bold text-white tabular-nums">{card.value}</p>
+                    <p className="text-xs text-gray-500 mt-1.5">{card.sub}</p>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+              </div>
 
+              {/* ── Charts ── */}
+              <CataloguingReportsCharts users={chartUsers} monthlyBuckets={monthlyBuckets} />
+
+              {/* ── Per-cataloguer table ── */}
+              {userStats.length > 0 && (
+                <div>
+                  <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Per Cataloguer</h2>
+                  <div className="bg-[#1C1C1E] border border-gray-800 rounded-xl overflow-x-auto">
+                    <table className="w-full text-sm whitespace-nowrap">
+                      <thead>
+                        <tr className="border-b border-gray-800 text-xs text-gray-500 uppercase tracking-wider">
+                          <th className="text-left px-5 py-3">Cataloguer</th>
+                          <th className="text-right px-5 py-3">Total</th>
+                          <th className="text-right px-5 py-3">Daily Avg</th>
+                          <th className="text-right px-5 py-3">Today</th>
+                          <th className="text-right px-5 py-3">This Week</th>
+                          <th className="text-right px-5 py-3">Avg Time</th>
+                          <th className="text-right px-5 py-3">Fastest</th>
+                          <th className="text-right px-5 py-3">Slowest</th>
+                          <th className="text-right px-5 py-3">Research</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-800/60">
+                        {userStats.map((u, i) => (
+                          <tr key={u.userId} className="hover:bg-white/[0.03] transition-colors group">
+                            <td className="px-5 py-3.5">
+                              <div className="flex items-center gap-2.5">
+                                <span className="text-xs text-gray-600 w-4 text-right tabular-nums">{i + 1}</span>
+                                <Link
+                                  href={`/tools/reports/${encodeURIComponent(u.userId)}`}
+                                  className="font-semibold text-white group-hover:text-[#2AB4A6] transition-colors"
+                                >
+                                  {u.name}
+                                </Link>
+                              </div>
+                            </td>
+                            <td className="px-5 py-3.5 text-right font-bold text-white tabular-nums">{u.totalLots}</td>
+                            <td className="px-5 py-3.5 text-right text-gray-300 tabular-nums">{u.dailyAvg}</td>
+                            <td className="px-5 py-3.5 text-right text-gray-300 tabular-nums">{u.lotsToday}</td>
+                            <td className="px-5 py-3.5 text-right text-gray-300 tabular-nums">{u.lotsThisWeek}</td>
+                            <td className="px-5 py-3.5 text-right font-mono text-gray-300">{fmtDuration(u.avgMs)}</td>
+                            <td className="px-5 py-3.5 text-right font-mono text-green-400">{fmtDuration(u.fastestMs)}</td>
+                            <td className="px-5 py-3.5 text-right font-mono text-red-400">{fmtDuration(u.slowestMs)}</td>
+                            <td className="px-5 py-3.5 text-right font-mono text-amber-400">
+                              {u.researchMs ? fmtDuration(u.researchMs) : <span className="text-gray-700">—</span>}
+                              {u.researchSessions > 0 && (
+                                <span className="text-gray-600 text-xs ml-1">({u.researchSessions})</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+        </div>
+      </div>
     </div>
   )
 }
