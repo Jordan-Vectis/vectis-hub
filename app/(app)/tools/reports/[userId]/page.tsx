@@ -3,7 +3,7 @@ import { auth } from "@/auth"
 import { redirect, notFound } from "next/navigation"
 import { format, subDays, subMonths, startOfDay } from "date-fns"
 import Link from "next/link"
-import { CollapsibleLotsTable, CollapsibleIdleTable } from "../../../../admin/cataloguing-reports/[userId]/collapsible-sections"
+import { CollapsibleLotsTable, CollapsibleIdleTable } from "../../../admin/cataloguing-reports/[userId]/collapsible-sections"
 
 export const dynamic = "force-dynamic"
 
@@ -63,7 +63,7 @@ function rangeStart(key: RangeKey): Date | null {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default async function CataloguingUserReportPage({
+export default async function ReportsUserPage({
   params,
   searchParams,
 }: {
@@ -162,7 +162,7 @@ export default async function CataloguingUserReportPage({
       {/* Back + header */}
       <div>
         <Link
-          href="/tools/cataloguing/reports"
+          href="/tools/reports"
           className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1 mb-4 transition-colors"
         >
           ← Back to All Cataloguers
@@ -185,7 +185,7 @@ export default async function CataloguingUserReportPage({
             {RANGES.map(r => (
               <Link
                 key={r.key}
-                href={`/tools/cataloguing/reports/${encodeURIComponent(userId)}?range=${r.key}`}
+                href={`/tools/reports/${encodeURIComponent(userId)}?range=${r.key}`}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border ${
                   activeRange === r.key
                     ? "bg-[#2AB4A6] text-white border-[#2AB4A6]"

@@ -7,7 +7,7 @@ import CataloguingReportsCharts, { type UserChartData, type MonthBucket } from "
 
 export const dynamic = "force-dynamic"
 
-export const metadata = { title: "Cataloguing Reports" }
+export const metadata = { title: "Reports" }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -54,7 +54,7 @@ function rangeStart(key: RangeKey): Date | null {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default async function CataloguingReportsOverviewPage({
+export default async function ReportsOverviewPage({
   searchParams,
 }: {
   searchParams: Promise<{ range?: string }>
@@ -186,9 +186,9 @@ export default async function CataloguingReportsOverviewPage({
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Cataloguing Reports</h1>
+          <h1 className="text-2xl font-bold text-white">Reports</h1>
           <p className="text-sm text-gray-400 mt-1">
-            Performance reports — lots per day, speed comparisons and team leaderboards.
+            Cataloguing performance — lots per day, speed comparisons and team leaderboards.
           </p>
         </div>
 
@@ -197,7 +197,7 @@ export default async function CataloguingReportsOverviewPage({
           {RANGES.map(r => (
             <Link
               key={r.key}
-              href={`/tools/cataloguing/reports?range=${r.key}`}
+              href={`/tools/reports?range=${r.key}`}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border ${
                 activeRange === r.key
                   ? "bg-[#2AB4A6] text-white border-[#2AB4A6]"
@@ -265,7 +265,7 @@ export default async function CataloguingReportsOverviewPage({
                   <tr key={u.userId} className="hover:bg-gray-900 transition-colors">
                     <td className="px-5 py-3">
                       <Link
-                        href={`/tools/cataloguing/reports/${encodeURIComponent(u.userId)}`}
+                        href={`/tools/reports/${encodeURIComponent(u.userId)}`}
                         className="font-semibold text-white hover:text-[#2AB4A6] transition-colors"
                       >
                         {u.name}
