@@ -48,7 +48,6 @@ export const APP_SECTIONS: Partial<Record<AppKey, { key: string; label: string }
     { key: "TABLET_CATALOGUING", label: "Tablet Cataloguing" },
     { key: "LOTTING_UP",         label: "Lotting Up" },
     { key: "RESEARCH",           label: "Research" },
-    { key: "REPORTS",            label: "Reports" },
   ],
   AUCTION_AI: [
     { key: "chat",         label: "Chat Window" },
