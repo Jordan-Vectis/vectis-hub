@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
+import { BACKUP_SECTIONS, ALL_SECTION_KEYS } from "@/lib/backup-sections"
 
 export const dynamic = "force-dynamic"
 
@@ -8,6 +9,7 @@ interface BackupFile {
   key: string
   sizeBytes: number
   lastModified: string | null
+  partial: boolean
 }
 
 interface SearchResult {
@@ -70,6 +72,12 @@ export default function BackupPage() {
   const [files, setFiles] = useState<BackupFile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // ── Delete state ────────────────────────────────────────────────────────────
+  const [deletingKey, setDeletingKey] = useState<string | null>(null)
+
+  // ── Create backup state ──────────────────────────────────────────────────────
+  const [selectedSections, setSelectedSections] = useState<string[]>(ALL_SECTION_KEYS)
   const [running, setRunning] = useState(false)
   const [runResult, setRunResult] = useState<string | null>(null)
 
@@ -88,7 +96,7 @@ export default function BackupPage() {
   const [searching, setSearching] = useState(false)
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null)
   const [searchError, setSearchError] = useState<string | null>(null)
-  const [restoringRecord, setRestoringRecord] = useState<string | null>(null) // record id being restored
+  const [restoringRecord, setRestoringRecord] = useState<string | null>(null)
   const [recordRestoreMsg, setRecordRestoreMsg] = useState<Record<string, string>>({})
 
   const fetchFiles = useCallback(async () => {
@@ -110,12 +118,24 @@ export default function BackupPage() {
     fetchFiles()
   }, [fetchFiles])
 
+  function toggleSection(key: string) {
+    setSelectedSections(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    )
+  }
+
   async function handleRunBackup() {
+    if (selectedSections.length === 0) return
     setRunning(true)
     setRunResult(null)
     setError(null)
     try {
-      const res = await fetch("/api/admin/backup", { method: "POST" })
+      const isAll = selectedSections.length === ALL_SECTION_KEYS.length
+      const res = await fetch("/api/admin/backup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(isAll ? {} : { sections: selectedSections }),
+      })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? "Backup failed")
       setRunResult(
@@ -179,6 +199,25 @@ export default function BackupPage() {
     }
   }
 
+  async function handleDelete(key: string) {
+    if (!window.confirm(`Delete this backup?\n\n${key}`)) return
+    setDeletingKey(key)
+    try {
+      const res = await fetch("/api/admin/backup", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? "Delete failed")
+      await fetchFiles()
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setDeletingKey(null)
+    }
+  }
+
   async function handleSearch() {
     if (!lookupKey || !lookupSearch.trim()) return
     setSearching(true)
@@ -221,26 +260,19 @@ export default function BackupPage() {
   }
 
   const latest = files[0] ?? null
+  const allSelected = selectedSections.length === ALL_SECTION_KEYS.length
+  const noneSelected = selectedSections.length === 0
 
   return (
     <div className="p-8 max-w-4xl space-y-8">
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Database Backup</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Daily JSON exports of the entire database, stored in Cloudflare R2.
-            The last 30 backups are retained automatically.
-          </p>
-        </div>
-        <button
-          onClick={handleRunBackup}
-          disabled={running}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors"
-        >
-          {running ? "Running backup…" : "Run backup now"}
-        </button>
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Database Backup</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          Daily JSON exports of the entire database, stored in Cloudflare R2.
+          The last 30 backups are retained automatically.
+        </p>
       </div>
 
       {/* ── Status banners ──────────────────────────────────────────────────── */}
@@ -273,8 +305,84 @@ export default function BackupPage() {
       <div className="bg-white border border-gray-200 rounded-xl px-5 py-4 text-sm text-gray-500">
         <span className="text-gray-700 font-semibold">Scheduled:</span> daily at midnight UTC via{" "}
         <code className="text-xs bg-gray-100 px-1 py-0.5 rounded font-mono">/api/cron/db-backup</code>
-        {" "}— authenticated with{" "}
-        <code className="text-xs bg-gray-100 px-1 py-0.5 rounded font-mono">CRON_SECRET</code>.
+        {" "}— always backs up all sections.
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          Create Backup
+      ════════════════════════════════════════════════════════════════════════ */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-5">
+        <div>
+          <h2 className="text-base font-bold text-gray-900">Create Backup</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Choose which sections to include, then run the backup. The scheduled midnight backup always includes everything.
+          </p>
+        </div>
+
+        {/* Section checkboxes */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Sections to include</span>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setSelectedSections(ALL_SECTION_KEYS)}
+                disabled={allSelected}
+                className="text-xs text-blue-600 hover:underline disabled:opacity-40 disabled:no-underline disabled:cursor-default"
+              >
+                Select all
+              </button>
+              <button
+                onClick={() => setSelectedSections([])}
+                disabled={noneSelected}
+                className="text-xs text-gray-500 hover:underline disabled:opacity-40 disabled:no-underline disabled:cursor-default"
+              >
+                Deselect all
+              </button>
+            </div>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-2">
+            {ALL_SECTION_KEYS.map(key => {
+              const section = BACKUP_SECTIONS[key]
+              const checked = selectedSections.includes(key)
+              return (
+                <label
+                  key={key}
+                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                    checked
+                      ? "bg-blue-50 border-blue-200"
+                      : "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleSection(key)}
+                    className="mt-0.5 accent-blue-600 shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-800">{section.label}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{section.description}</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">{section.tables.length} table{section.tables.length !== 1 ? "s" : ""}</p>
+                  </div>
+                </label>
+              )
+            })}
+          </div>
+        </div>
+
+        <button
+          onClick={handleRunBackup}
+          disabled={running || noneSelected}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors"
+        >
+          {running
+            ? "Running backup…"
+            : allSelected
+              ? "Run full backup"
+              : `Run backup (${selectedSections.length} section${selectedSections.length !== 1 ? "s" : ""})`
+          }
+        </button>
       </div>
 
       {/* ── File list ───────────────────────────────────────────────────────── */}
@@ -290,7 +398,7 @@ export default function BackupPage() {
         {!loading && files.length === 0 && (
           <div className="bg-white border border-gray-200 rounded-xl p-16 text-center">
             <p className="text-lg font-semibold text-gray-500 mb-1">No backups yet</p>
-            <p className="text-sm text-gray-400">Click &ldquo;Run backup now&rdquo; to create the first one.</p>
+            <p className="text-sm text-gray-400">Click &ldquo;Run full backup&rdquo; to create the first one.</p>
           </div>
         )}
 
@@ -302,6 +410,7 @@ export default function BackupPage() {
                   <th className="text-left px-5 py-3">Filename</th>
                   <th className="text-right px-5 py-3">Size</th>
                   <th className="text-right px-5 py-3">Date</th>
+                  <th className="px-5 py-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -313,10 +422,24 @@ export default function BackupPage() {
                           Latest
                         </span>
                       )}
+                      {f.partial && (
+                        <span className="inline-block mr-2 px-1.5 py-0.5 bg-amber-50 text-amber-600 text-[10px] rounded font-sans font-semibold uppercase tracking-wide border border-amber-100">
+                          Partial
+                        </span>
+                      )}
                       {f.key}
                     </td>
                     <td className="px-5 py-3.5 text-right text-gray-500 tabular-nums">{formatBytes(f.sizeBytes)}</td>
                     <td className="px-5 py-3.5 text-right text-gray-500 tabular-nums">{formatDate(f.lastModified)}</td>
+                    <td className="px-5 py-3.5 text-right">
+                      <button
+                        onClick={() => handleDelete(f.key)}
+                        disabled={deletingKey === f.key}
+                        className="text-xs text-red-500 hover:text-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {deletingKey === f.key ? "Deleting…" : "Delete"}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -350,7 +473,7 @@ export default function BackupPage() {
             <option value="">— Select a backup —</option>
             {files.map(f => (
               <option key={f.key} value={f.key}>
-                {keyToDate(f.key)} — {formatBytes(f.sizeBytes)}
+                {keyToDate(f.key)}{f.partial ? " (partial)" : ""} — {formatBytes(f.sizeBytes)}
               </option>
             ))}
           </select>
@@ -440,7 +563,7 @@ export default function BackupPage() {
               <option value="">— Select a backup —</option>
               {files.map(f => (
                 <option key={f.key} value={f.key}>
-                  {keyToDate(f.key)} — {formatBytes(f.sizeBytes)}
+                  {keyToDate(f.key)}{f.partial ? " (partial)" : ""} — {formatBytes(f.sizeBytes)}
                 </option>
               ))}
             </select>

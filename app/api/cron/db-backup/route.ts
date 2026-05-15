@@ -6,6 +6,7 @@ import {
   ListObjectsV2Command,
   DeleteObjectsCommand,
 } from "@aws-sdk/client-s3"
+import { ALL_SECTION_KEYS, getTablesForSections } from "@/lib/backup-sections"
 
 export const maxDuration = 300
 
@@ -27,71 +28,84 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function runBackup(): Promise<{
+// ── Fetch a single table by name ──────────────────────────────────────────────
+// Returns null if the table doesn't exist or the query fails.
+async function fetchTable(tableName: string): Promise<any[] | null> {
+  try {
+    switch (tableName) {
+      case "departments":            return await prisma.department.findMany()
+      case "users":                  return await prisma.user.findMany()
+      case "bcTokens":               return await prisma.bCToken.findMany()
+      case "contacts":               return await prisma.contact.findMany()
+      case "customerAccounts":       return await prisma.customerAccount.findMany()
+      case "submissions":            return await prisma.submission.findMany()
+      case "items":                  return await prisma.item.findMany()
+      case "valuations":             return await prisma.valuation.findMany()
+      case "contactLogs":            return await prisma.contactLog.findMany()
+      case "logistics":              return await prisma.logistics.findMany()
+      case "auctionRuns":            return await prisma.auctionRun.findMany()
+      case "auctionLots":            return await prisma.auctionLot.findMany()
+      case "aiPresets":              return await prisma.aiPreset.findMany()
+      case "catalogueAuctions":      return await prisma.catalogueAuction.findMany()
+      case "liveAuctions":           return await prisma.liveAuction.findMany()
+      case "catalogueLots":          return await prisma.catalogueLot.findMany()
+      case "bidderRegistrations":    return await prisma.bidderRegistration.findMany()
+      case "commissionBids":         return await prisma.commissionBid.findMany()
+      case "idleLogs":               return await prisma.idleLog.findMany()
+      case "catalogueTimingLogs":    return await prisma.catalogueTimingLog.findMany()
+      case "cataloguePhotoSessions": return await prisma.cataloguePhotoSession.findMany()
+      case "appCards":               return await prisma.appCard.findMany()
+      case "roleDefaults":           return await prisma.roleDefault.findMany()
+      case "marketingDrafts":        return await prisma.marketingDraft.findMany()
+      case "marketingHashtags":      return await prisma.marketingHashtag.findMany()
+      case "parcels":                return await prisma.parcel.findMany()
+      case "parcelLots":             return await prisma.parcelLot.findMany()
+      case "macroFiles":             return await prisma.macroFile.findMany()
+      case "heroSlides":             return await prisma.heroSlide.findMany()
+      case "researchLogs":           return await prisma.researchLog.findMany()
+      case "devices":                return await prisma.device.findMany()
+      case "packers":                return await prisma.packer.findMany()
+      case "claudeMemory":           return await prisma.claudeMemory.findMany()
+      case "emailTemplates":         return await prisma.emailTemplate.findMany()
+      case "knowledgeArticles":      return await prisma.knowledgeArticle.findMany()
+      case "ticketCategories":       return await prisma.ticketCategory.findMany()
+      case "tickets":                return await prisma.ticket.findMany()
+      case "ticketComments":         return await prisma.ticketComment.findMany()
+      default:
+        console.warn(`[db-backup] Unknown table requested: ${tableName}`)
+        return null
+    }
+  } catch {
+    return null
+  }
+}
+
+// ── Main backup function ──────────────────────────────────────────────────────
+// sectionKeys: which sections to include. Defaults to all sections (full backup).
+export async function runBackup(sectionKeys?: string[]): Promise<{
   ok: boolean
   filename: string
   sizeBytes: number
   deleted: number
+  sections: string[]
 }> {
-  // ── 1. Dump all tables via Prisma ──────────────────────────────────────────
-  // Each table is fetched individually so a missing table doesn't abort the whole backup
-  async function safe<T>(fn: () => Promise<T[]>): Promise<T[] | null> {
-    try { return await fn() } catch { return null }
-  }
+  const selectedSections = sectionKeys ?? ALL_SECTION_KEYS
+  const isFullBackup = selectedSections.length === ALL_SECTION_KEYS.length
+  const tablesToFetch = getTablesForSections(selectedSections)
 
-  const tables = {
-    users:                  await safe(() => prisma.user.findMany()),
-    bcTokens:               await safe(() => prisma.bCToken.findMany()),
-    departments:            await safe(() => prisma.department.findMany()),
-    contacts:               await safe(() => prisma.contact.findMany()),
-    customerAccounts:       await safe(() => prisma.customerAccount.findMany()),
-    submissions:            await safe(() => prisma.submission.findMany()),
-    items:                  await safe(() => prisma.item.findMany()),
-    valuations:             await safe(() => prisma.valuation.findMany()),
-    contactLogs:            await safe(() => prisma.contactLog.findMany()),
-    auctionRuns:            await safe(() => prisma.auctionRun.findMany()),
-    auctionLots:            await safe(() => prisma.auctionLot.findMany()),
-    aiPresets:              await safe(() => prisma.aiPreset.findMany()),
-    logistics:              await safe(() => prisma.logistics.findMany()),
-    catalogueAuctions:      await safe(() => prisma.catalogueAuction.findMany()),
-    bidderRegistrations:    await safe(() => prisma.bidderRegistration.findMany()),
-    liveAuctions:           await safe(() => prisma.liveAuction.findMany()),
-    catalogueLots:          await safe(() => prisma.catalogueLot.findMany()),
-    commissionBids:         await safe(() => prisma.commissionBid.findMany()),
-    idleLogs:               await safe(() => prisma.idleLog.findMany()),
-    catalogueTimingLogs:    await safe(() => prisma.catalogueTimingLog.findMany()),
-    cataloguePhotoSessions: await safe(() => prisma.cataloguePhotoSession.findMany()),
-    appCards:               await safe(() => prisma.appCard.findMany()),
-    roleDefaults:           await safe(() => prisma.roleDefault.findMany()),
-    marketingDrafts:        await safe(() => prisma.marketingDraft.findMany()),
-    marketingHashtags:      await safe(() => prisma.marketingHashtag.findMany()),
-    // BC cache tables intentionally excluded — data can be resynced from Business Central
-    warehouseReceipts:      await safe(() => prisma.warehouseReceipt.findMany()),
-    warehouseContainers:    await safe(() => prisma.warehouseContainer.findMany()),
-    warehouseLocations:     await safe(() => prisma.warehouseLocation.findMany()),
-    warehouseMovements:     await safe(() => prisma.warehouseMovement.findMany()),
-    parcels:                await safe(() => prisma.parcel.findMany()),
-    parcelLots:             await safe(() => prisma.parcelLot.findMany()),
-    macroFiles:             await safe(() => prisma.macroFile.findMany()),
-    heroSlides:             await safe(() => prisma.heroSlide.findMany()),
-    researchLogs:           await safe(() => prisma.researchLog.findMany()),
-    devices:                await safe(() => prisma.device.findMany()),
-    packers:                await safe(() => prisma.packer.findMany()),
-    claudeMemory:           await safe(() => prisma.claudeMemory.findMany()),
-    emailTemplates:         await safe(() => prisma.emailTemplate.findMany()),
-    knowledgeArticles:      await safe(() => prisma.knowledgeArticle.findMany()),
-    ticketCategories:       await safe(() => prisma.ticketCategory.findMany()),
-    tickets:                await safe(() => prisma.ticket.findMany()),
-    ticketComments:         await safe(() => prisma.ticketComment.findMany()),
-    warehouseTotes:         await safe(() => prisma.warehouseTote.findMany()),
+  // Fetch each table individually so a missing table doesn't abort the whole backup
+  const tables: Record<string, any[] | null> = {}
+  for (const name of tablesToFetch) {
+    tables[name] = await fetchTable(name)
   }
 
   const dump = {
     exportedAt: new Date().toISOString(),
+    sections: selectedSections,
     tables,
   }
 
-  // ── 2. Serialise — handle BigInt and Buffer safely ──────────────────────────
+  // ── Serialise — handle BigInt and Buffer safely ──────────────────────────────
   const json = JSON.stringify(dump, (_key, value) => {
     if (typeof value === "bigint") return value.toString()
     if (value instanceof Buffer) return value.toString("base64")
@@ -100,12 +114,13 @@ export async function runBackup(): Promise<{
 
   const buffer = Buffer.from(json, "utf-8")
 
-  // ── 3. Build filename and upload to R2 ─────────────────────────────────────
+  // ── Build filename and upload to R2 ─────────────────────────────────────────
   const env = process.env.RAILWAY_ENVIRONMENT_NAME ?? "unknown"
   const now = new Date()
   const pad = (n: number) => String(n).padStart(2, "0")
   const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-  const filename = `${env}/backup-${timestamp}.json`
+  const suffix = isFullBackup ? "" : "-partial"
+  const filename = `${env}/backup-${timestamp}${suffix}.json`
 
   await r2.send(
     new PutObjectCommand({
@@ -116,9 +131,9 @@ export async function runBackup(): Promise<{
     })
   )
 
-  console.log(`[cron/db-backup] Uploaded ${filename} (${buffer.length} bytes)`)
+  console.log(`[cron/db-backup] Uploaded ${filename} (${buffer.length} bytes) — sections: ${selectedSections.join(", ")}`)
 
-  // ── 4. Prune old backups — keep only the last MAX_BACKUPS per environment ──
+  // ── Prune old backups — keep only the last MAX_BACKUPS per environment ───────
   let deleted = 0
   const listRes = await r2.send(
     new ListObjectsV2Command({ Bucket: BACKUP_BUCKET, Prefix: `${env}/` })
@@ -143,5 +158,5 @@ export async function runBackup(): Promise<{
     console.log(`[cron/db-backup] Pruned ${deleted} old backup(s)`)
   }
 
-  return { ok: true, filename, sizeBytes: buffer.length, deleted }
+  return { ok: true, filename, sizeBytes: buffer.length, deleted, sections: selectedSections }
 }
