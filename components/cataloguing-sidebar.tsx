@@ -7,6 +7,7 @@ const links = [
   { key: "TABLET_CATALOGUING", href: "/tools/cataloguing/tablet/auctions", label: "Tablet Cataloguing", icon: "📱" },
   { key: "LOTTING_UP",         href: "/tools/cataloguing/lotting-up",      label: "Lotting Up",         icon: "🔢" },
   { key: "RESEARCH",           href: "/tools/cataloguing/research",         label: "Research",           icon: "🔍" },
+  { key: "REPORTS",            href: "/tools/cataloguing/reports",          label: "Reports",            icon: "📊" },
 ]
 
 interface Props {
