@@ -463,9 +463,11 @@ export default function LotWizardTab({
     return () => clearInterval(id)
   }, [timerActive, showScanTimer])
 
-  // Idle detection — check every 30 s; trigger popup after 5 min with no lot in progress
+  // Idle detection — check every 30 s; trigger popup after timerRedMins with no lot in progress.
+  // Only runs when showScanTimer is enabled.
   useEffect(() => {
-    const IDLE_THRESHOLD = 5 * 60 * 1000 // 5 minutes
+    if (!showScanTimer) return
+    const IDLE_THRESHOLD = timerRedSecs * 1000
     const id = setInterval(() => {
       if (barcodeStartedAt.current) return            // actively working on a lot
       if (idlePopup) return                           // popup already showing
@@ -480,7 +482,7 @@ export default function LotWizardTab({
       }
     }, 30_000)
     return () => clearInterval(id)
-  }, [idlePopup])
+  }, [idlePopup, showScanTimer, timerRedSecs])
 
   async function submitIdleLog() {
     if (!idleReason) return
