@@ -127,7 +127,7 @@ export default function BackupPage() {
 
       {/* Schedule info */}
       <div className="bg-white border border-gray-200 rounded-xl px-5 py-4 text-sm text-gray-500">
-        <span className="text-gray-700 font-semibold">Scheduled:</span> daily at 02:00 UTC via{" "}
+        <span className="text-gray-700 font-semibold">Scheduled:</span> daily at midnight UTC via{" "}
         <code className="text-xs bg-gray-100 px-1 py-0.5 rounded font-mono">/api/cron/db-backup</code>
         {" "}— authenticated with{" "}
         <code className="text-xs bg-gray-100 px-1 py-0.5 rounded font-mono">CRON_SECRET</code>.

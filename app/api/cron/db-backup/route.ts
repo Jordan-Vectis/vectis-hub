@@ -201,9 +201,11 @@ export async function runBackup(): Promise<{
   const buffer = Buffer.from(json, "utf-8")
 
   // ── 3. Build filename and upload to R2 ─────────────────────────────────────
+  const env = process.env.RAILWAY_ENVIRONMENT_NAME ?? "unknown"
   const now = new Date()
   const pad = (n: number) => String(n).padStart(2, "0")
-  const filename = `backup-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.json`
+  const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+  const filename = `${env}/backup-${timestamp}.json`
 
   await r2.send(
     new PutObjectCommand({
@@ -216,14 +218,14 @@ export async function runBackup(): Promise<{
 
   console.log(`[cron/db-backup] Uploaded ${filename} (${buffer.length} bytes)`)
 
-  // ── 4. Prune old backups — keep only the last MAX_BACKUPS ──────────────────
+  // ── 4. Prune old backups — keep only the last MAX_BACKUPS per environment ──
   let deleted = 0
   const listRes = await r2.send(
-    new ListObjectsV2Command({ Bucket: BACKUP_BUCKET })
+    new ListObjectsV2Command({ Bucket: BACKUP_BUCKET, Prefix: `${env}/` })
   )
 
   const objects = (listRes.Contents ?? [])
-    .filter(o => o.Key?.startsWith("backup-") && o.Key.endsWith(".json"))
+    .filter(o => o.Key?.endsWith(".json"))
     .sort((a, b) => (a.Key! < b.Key! ? -1 : 1)) // ascending by name = ascending by date
 
   if (objects.length > MAX_BACKUPS) {

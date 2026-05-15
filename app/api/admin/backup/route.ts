@@ -14,12 +14,13 @@ export async function GET(_req: NextRequest) {
       return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
     }
 
+    const env = process.env.RAILWAY_ENVIRONMENT_NAME ?? "unknown"
     const listRes = await r2.send(
-      new ListObjectsV2Command({ Bucket: BACKUP_BUCKET })
+      new ListObjectsV2Command({ Bucket: BACKUP_BUCKET, Prefix: `${env}/` })
     )
 
     const files = (listRes.Contents ?? [])
-      .filter(o => o.Key?.startsWith("backup-") && o.Key.endsWith(".json"))
+      .filter(o => o.Key?.endsWith(".json"))
       .sort((a, b) => (a.Key! > b.Key! ? -1 : 1)) // descending — newest first
       .map(o => ({
         key: o.Key!,
