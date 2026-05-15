@@ -99,7 +99,7 @@ function HorizontalBars({
             tickLine={false}
           />
           <Tooltip
-            formatter={(v: number) => [formatter(v), valueKey]}
+            formatter={(v) => [formatter(v as number ?? 0), valueKey]}
             contentStyle={{
               background: "#2C2C2E",
               border: "1px solid #374151",
@@ -236,7 +236,7 @@ export default function CataloguingReportsCharts({
                   width={36}
                 />
                 <Tooltip
-                  formatter={(v: number) => [`${v} lots`, "Total"]}
+                  formatter={(v) => [`${v as number ?? 0} lots`, "Total"]}
                   contentStyle={{
                     background: "#2C2C2E",
                     border: "1px solid #374151",
