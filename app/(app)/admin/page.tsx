@@ -47,6 +47,12 @@ const sections = [
     icon:        "📱",
   },
   {
+    href:        "/admin/backup",
+    label:       "Database Backup",
+    description: "View stored database backups, check when the last backup ran, and trigger a manual backup.",
+    icon:        "💾",
+  },
+  {
     href:        "/admin/memory",
     label:       "Claude Memory",
     description: "Browse what Claude remembers about you, this project, and how to work with you.",
