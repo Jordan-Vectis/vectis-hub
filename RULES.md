@@ -23,6 +23,14 @@ The app is hosted on **Railway**, not Vercel. Never reference a `.vercel.app` UR
 - Auto-deploys: push to `main` → production, push to `staging` → staging environment on Railway
 - Never tell the user to open a `vercel.app` URL for any reason
 
+## Database — Neon (PostgreSQL)
+
+The database is hosted on **Neon** (console.neon.tech), not Railway. Never suggest looking for a Postgres service inside Railway — it isn't there.
+
+- Neon provides point-in-time restore via branching
+- The `DATABASE_URL` env var in Railway points to the Neon connection string
+- No pg_dump backup is currently configured — this is a known gap to address
+
 ## ⚠ Branch / Deploy Rules — MUST follow every time
 
 **Never push to `main` unless the user explicitly says to.** Phrases like "push it", "deploy it", or "merge it" are NOT enough — the user must specifically say "push to main" or "merge to production".
