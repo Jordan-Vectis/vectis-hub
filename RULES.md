@@ -2,6 +2,15 @@
 
 Read this before making any change. These are deliberate decisions, not defaults.
 
+## How to work with Jordan
+
+- **Never guess.** If you don't know a file path, credential, how an external service works, or where something should go — look it up or ask. There is no situation where guessing is the right call.
+- **Ask before building.** If a task involves creating a new page, moving files, adding a new section, or connecting to an external service — confirm where Jordan wants it first.
+- **Common sense on confirmation.** Small things (bug fix, TS error, styling tweak within an existing file) — just do it. Anything involving WHERE something lives, WHAT it connects to, or structural changes to the app — ask first.
+- **One clear question at a time.** Don't send Jordan round in circles. If you need to know something, ask it directly and wait for the answer.
+
+---
+
 ## ⚠ Conflict Protocol
 
 If a requested change conflicts with any rule in this file, **stop and discuss it before writing

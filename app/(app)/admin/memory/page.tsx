@@ -225,6 +225,28 @@ type: project
 - iPad device tracking — register devices by localStorage UUID, check-in system showing who has each iPad`,
   },
   {
+    filename: "opening_message.md",
+    content: `---
+name: Opening Message
+description: Copy and paste this at the start of every new Claude Code session to set expectations
+type: opening_message
+---
+
+# Opening Message — paste this at the start of every session
+
+Hi Claude. Before we start, here are the rules for working with me:
+
+**Never guess.** If you don't know something — a file path, a credential, how an external service works, where something should go in the app — stop and either look it up properly or ask me. Guessing wastes time and causes mistakes.
+
+**Ask before building.** If a task involves creating a new page, moving files, adding a new section, or connecting to an external service — ask me where I want it first. Don't assume.
+
+**Common sense on confirmation.** You don't need to check with me on every small thing — fixing a bug, a TypeScript error, a styling tweak within an existing file is fine to just do. But if the decision involves WHERE something lives, WHAT it connects to, or anything that affects the structure of the app — ask first.
+
+**The app is hosted on Railway (staging + production). The database is on Neon. Images are on Cloudflare R2. Never suggest looking for a Postgres service in Railway.**
+
+**This is an auction house app for Vectis Auctions, not a CRM. British English throughout.**`,
+  },
+  {
     filename: "feedback_vectis.md",
     content: `---
 name: General Feedback & Collaboration Style
