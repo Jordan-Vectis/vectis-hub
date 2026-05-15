@@ -165,7 +165,7 @@ export async function POST(req: NextRequest) {
         "idleLogs", "catalogueTimingLogs", "cataloguePhotoSessions",
         "appCards", "roleDefaults",
         "marketingDrafts", "marketingHashtags",
-        "bcCatalogueDays", "bcCatalogueEntries", "bcPackingDays", "bcPackingEntries",
+        // BC cache tables excluded — resync from Business Central after restore if needed
         "warehouseReceipts", "warehouseContainers", "warehouseLocations", "warehouseMovements",
         "parcels", "parcelLots",
         "macroFiles", "heroSlides", "researchLogs",

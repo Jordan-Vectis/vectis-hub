@@ -86,7 +86,7 @@ const TABLE_ORDER = [
   "idleLogs", "catalogueTimingLogs", "cataloguePhotoSessions",
   "appCards", "roleDefaults",
   "marketingDrafts", "marketingHashtags",
-  "bcCatalogueDays", "bcCatalogueEntries", "bcPackingDays", "bcPackingEntries",
+  // BC cache tables excluded — resync from Business Central after restore if needed
   "warehouseReceipts", "warehouseContainers", "warehouseLocations", "warehouseMovements",
   "parcels", "parcelLots",
   "macroFiles", "heroSlides", "researchLogs",
