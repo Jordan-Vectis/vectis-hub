@@ -127,9 +127,13 @@ export default async function CataloguingUserReportPage({
   const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - 7); weekStart.setHours(0,0,0,0)
   const lotsThisWeek = logs.filter(l => l.savedAt >= weekStart).length
 
-  // ── Daily average (across days the cataloguer actually worked) ──
-  const activeDays = new Set(logs.map(l => format(l.savedAt, "yyyy-MM-dd")))
-  const dailyAvg   = activeDays.size > 0 ? Math.round(logs.length / activeDays.size) : 0
+  // ── Daily average (completed days only — today excluded as it's partial) ──
+  const todayStr         = format(new Date(), "yyyy-MM-dd")
+  const completedDayLogs = logs.filter(l => format(l.savedAt, "yyyy-MM-dd") !== todayStr)
+  const completedDays    = new Set(completedDayLogs.map(l => format(l.savedAt, "yyyy-MM-dd")))
+  const dailyAvg         = completedDays.size > 0
+    ? Math.round(completedDayLogs.length / completedDays.size)
+    : lotsToday // fallback: only data is from today, show today's count
 
   // ── Key points ──
   const kpLogs  = wizardLogs.filter(l => l.keyPointsMs && l.keyPointsMs > 0)
@@ -208,7 +212,7 @@ export default async function CataloguingUserReportPage({
             {[
               { label: "Lots in Range",    value: logs.length.toLocaleString(),            sub: rangeLabel,                       colour: "text-slate-800" },
               { label: "Avg Time / Lot",   value: fmtDuration(overallAvg),                 sub: "all methods",                    colour: "text-slate-800" },
-              { label: "Daily Average",    value: dailyAvg.toLocaleString(),                sub: `${activeDays.size} active day${activeDays.size === 1 ? "" : "s"}`, colour: "text-slate-800" },
+              { label: "Daily Average",    value: dailyAvg.toLocaleString(),                sub: completedDays.size > 0 ? `${completedDays.size} full day${completedDays.size === 1 ? "" : "s"}` : "today only", colour: "text-slate-800" },
               { label: "Lots Today",       value: lotsToday.toLocaleString(),               sub: format(new Date(), "d MMM yyyy"), colour: "text-slate-800" },
               { label: "This Week",        value: lotsThisWeek.toLocaleString(),            sub: "last 7 days",                    colour: "text-slate-800" },
               { label: "Research Time",    value: totalResearchMs ? fmtDuration(totalResearchMs) : "—",
