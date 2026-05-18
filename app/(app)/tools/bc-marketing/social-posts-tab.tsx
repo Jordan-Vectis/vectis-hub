@@ -343,7 +343,14 @@ const STATUS_COLOURS: Record<string, string> = {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function SocialPostsTab() {
-  const upcoming = getUpcomingDates(90)
+  // Recalculate every minute so past dates disappear automatically
+  const [upcoming, setUpcoming] = useState(() => getUpcomingDates(90))
+
+  useEffect(() => {
+    const tick = () => setUpcoming(getUpcomingDates(90))
+    const interval = setInterval(tick, 60_000) // refresh every minute
+    return () => clearInterval(interval)
+  }, [])
 
   // ── Compose state ──
   const [platforms,      setPlatforms]      = useState<string[]>(["FACEBOOK"])
