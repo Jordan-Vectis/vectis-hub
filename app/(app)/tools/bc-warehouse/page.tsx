@@ -2594,6 +2594,7 @@ function LocationBarcodesTab() {
   const [error,          setError]          = useState<string | null>(null)
   const [arrow,          setArrow]          = useState<"none" | "left" | "right">("none")
   const [fillCount,      setFillCount]      = useState(5)
+  const [fillDir,        setFillDir]        = useState<"up" | "down">("up")
 
   const locations = locationText.split("\n").map(l => l.trim()).filter(l => l.length > 0)
   const seq       = parseSequence(locationText)
@@ -2602,7 +2603,9 @@ function LocationBarcodesTab() {
     if (!seq) return
     const newLines: string[] = []
     for (let i = 1; i <= fillCount; i++) {
-      const n = (seq.num + i).toString().padStart(seq.padLen, "0")
+      const next = fillDir === "up" ? seq.num + i : seq.num - i
+      if (next < 0) break   // don't go negative
+      const n = next.toString().padStart(seq.padLen, "0")
       newLines.push(`${seq.prefix}${n}`)
     }
     setLocationText(prev => {
@@ -2665,6 +2668,18 @@ function LocationBarcodesTab() {
             <span className="text-xs text-gray-400 flex-1">
               Continue from <span className="text-white font-mono">{seq.prefix}{seq.num}</span>
             </span>
+            {/* Up / Down toggle */}
+            <div className="flex rounded overflow-hidden border border-gray-600 text-xs">
+              {(["up", "down"] as const).map(d => (
+                <button
+                  key={d}
+                  onClick={() => setFillDir(d)}
+                  className={`px-2 py-1 transition-colors ${fillDir === d ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-400 hover:text-white"}`}
+                >
+                  {d === "up" ? "↑" : "↓"}
+                </button>
+              ))}
+            </div>
             <span className="text-xs text-gray-500">Add</span>
             <input
               type="number"
