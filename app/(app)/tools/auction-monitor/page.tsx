@@ -759,9 +759,12 @@ export default function AuctionMonitorPage() {
           </div>
           <button onClick={sendTestNotification} disabled={!ntfyTopic.trim()} className="self-end bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-xs font-semibold px-3 py-1.5 rounded-lg">Send test</button>
           {pushStatus && <span className="self-end text-xs text-gray-600">{pushStatus}</span>}
-          <span className={`self-end text-xs font-mono px-2 py-1 rounded border ${ntfySentCount >= 200 ? "bg-red-50 border-red-200 text-red-700" : ntfySentCount >= 150 ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-gray-50 border-gray-200 text-gray-500"}`}
-            title="ntfy.sh free tier limit is 250 messages/day">
-            {ntfySentCount}/250 sent
+        </div>
+        <div className="mt-2 flex items-center justify-between">
+          <span className="text-[11px] text-gray-400">ntfy.sh free tier: 250 messages/day</span>
+          <span className={`text-xs font-mono font-semibold px-2 py-0.5 rounded border ${ntfySentCount >= 200 ? "bg-red-50 border-red-200 text-red-700" : ntfySentCount >= 150 ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-gray-100 border-gray-200 text-gray-600"}`}
+            title="Resets on page reload — ntfy.sh daily limit is 250 per IP">
+            {ntfySentCount} / 250 sent this session
           </span>
         </div>
       </div>
