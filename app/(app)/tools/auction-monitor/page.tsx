@@ -348,12 +348,18 @@ export default function AuctionMonitorPage() {
   const msSinceLast    = lastMessageAt ? now.getTime() - lastMessageAt.getTime() : null
   const msSinceLastBid = state.lastBidAt ? now.getTime() - state.lastBidAt.getTime() : null
 
-  // Countdown helpers for live alert rules
+  // Countdown helpers for live alert rules.
+  // After the first fire, counts down to the next repeat using lastFiredRef
+  // so the display resets rather than staying permanently "● Active".
   function liveRuleCountdownMs(ruleId: string): number | null {
     if (!running || connState !== "open") return null
-    if (ruleId === "stall_red")   return msSinceLastBid !== null ? (ruleThresholds["stall_red"]   ?? 120) * 1000 - msSinceLastBid : null
-    if (ruleId === "stall_amber") return msSinceLastBid !== null ? (ruleThresholds["stall_amber"] ??  60) * 1000 - msSinceLastBid : null
-    return null
+    const thresholdMs = ruleId === "stall_red"   ? (ruleThresholds["stall_red"]   ?? 120) * 1000
+                      : ruleId === "stall_amber" ? (ruleThresholds["stall_amber"] ??  60) * 1000
+                      : null
+    if (thresholdMs === null) return null
+    const lastFired = ruleLastFiredRef.current[ruleId]
+    if (lastFired) return lastFired + thresholdMs - now.getTime()
+    return msSinceLastBid !== null ? thresholdMs - msSinceLastBid : null
   }
 
   let healthBand: "green" | "amber" | "red" | "grey" = "grey"
@@ -604,12 +610,18 @@ export default function AuctionMonitorPage() {
     ? timedMsSinceLast
     : timedSessionStartRef.current ? now.getTime() - timedSessionStartRef.current.getTime() : null
 
-  // Countdown helpers for timed alert rules
+  // Countdown helpers for timed alert rules.
+  // After the first fire, counts down to the next repeat using lastFiredRef
+  // so the display resets rather than staying permanently "● Active".
   function timedRuleCountdownMs(ruleId: string): number | null {
     if (!timedRunning || timedConnState !== "open") return null
-    if (ruleId === "stall_red")   return timedMsSinceActivity !== null ? (timedRuleThresholds["stall_red"]   ?? 120) * 1000 - timedMsSinceActivity : null
-    if (ruleId === "stall_amber") return timedMsSinceActivity !== null ? (timedRuleThresholds["stall_amber"] ??  60) * 1000 - timedMsSinceActivity : null
-    return null
+    const thresholdMs = ruleId === "stall_red"   ? (timedRuleThresholds["stall_red"]   ?? 120) * 1000
+                      : ruleId === "stall_amber" ? (timedRuleThresholds["stall_amber"] ??  60) * 1000
+                      : null
+    if (thresholdMs === null) return null
+    const lastFired = timedRuleLastFiredRef.current[ruleId]
+    if (lastFired) return lastFired + thresholdMs - now.getTime()
+    return timedMsSinceActivity !== null ? thresholdMs - timedMsSinceActivity : null
   }
 
   let timedHealthBand: "green" | "amber" | "red" | "grey" = "grey"
