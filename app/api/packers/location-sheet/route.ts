@@ -18,8 +18,8 @@ const PAGE_H = 841.89
 const MARGIN = 36
 
 const PER_PAGE      = 6
-const COL_GAP       = 20   // pt — gap between barcode and text columns
-const TEXT_COL_W    = 190  // pt — width of the right-side text column
+const COL_GAP       = 24   // pt — gap between barcode and text columns
+const TEXT_COL_W    = 240  // pt — width of the right-side text column
 
 export async function POST(req: NextRequest) {
   try {
@@ -104,7 +104,7 @@ async function drawLocationRow(
   brandBlue: ReturnType<typeof rgb>,
 ) {
   const innerPad    = 8
-  const targetBcH   = Math.max(40, slotH - innerPad * 2)
+  const targetBcH   = Math.min(55, slotH - innerPad * 2)  // cap at ~packer-sheet size
 
   // Barcode column fills the left portion of the usable width
   const barcodeColX = MARGIN
@@ -135,11 +135,10 @@ async function drawLocationRow(
 
   page.drawImage(png, { x: barcodeColX, y: bcY, width: renderW, height: renderH })
 
-  // Text on the RIGHT — bold, Vectis blue. Auto-shrinks to fit the column.
+  // Text on the RIGHT — bold, Vectis blue. Large base size, shrinks only if code is very long.
   const textColX  = PAGE_W - MARGIN - TEXT_COL_W
-  const baseSize  = slotH < 60 ? 14 : slotH < 90 ? 18 : 22
-  let   textSize  = baseSize
-  while (textSize > 8 && helvB.widthOfTextAtSize(location, textSize) > TEXT_COL_W) textSize--
+  let   textSize  = 42
+  while (textSize > 10 && helvB.widthOfTextAtSize(location, textSize) > TEXT_COL_W) textSize -= 2
 
   const textY = centreY - textSize * 0.35
   page.drawText(location, {
