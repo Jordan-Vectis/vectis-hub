@@ -82,7 +82,7 @@ type SearchTote = {
   syncedAt: string | null
 }
 
-type Tab = "heatmap" | "sale-checklist" | "search" | "location-history" | "tote-data" | "collections-due" | "unsold-items" | "data-sync" | "db-explorer"
+type Tab = "heatmap" | "sale-checklist" | "search" | "location-history" | "tote-data" | "collections-due" | "unsold-items" | "data-sync" | "db-explorer" | "location-barcodes"
 
 const STALE_MS = 15 * 60 * 1000 // 15 minutes
 
@@ -2574,6 +2574,84 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
   )
 }
 
+// ─── LocationBarcodesTab ──────────────────────────────────────────────────────
+
+function LocationBarcodesTab() {
+  const [locationText,   setLocationText]   = useState("")
+  const [downloading,    setDownloading]    = useState(false)
+  const [error,          setError]          = useState<string | null>(null)
+
+  const locations = locationText.split("\n").map(l => l.trim()).filter(l => l.length > 0)
+
+  async function download() {
+    if (locations.length === 0) return
+    setDownloading(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/packers/location-sheet", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ locations }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setError(data.error ?? "PDF generation failed")
+        return
+      }
+      const blob = await res.blob()
+      const link = document.createElement("a")
+      link.href     = URL.createObjectURL(blob)
+      link.download = `vectis-locations-${new Date().toISOString().slice(0, 10)}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(link.href)
+    } catch {
+      setError("Network error — please try again.")
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  return (
+    <div className="p-6 overflow-y-auto h-full">
+      <div className="max-w-xl">
+        <h2 className="text-lg font-semibold text-white mb-1">Location Barcode Sheet</h2>
+        <p className="text-sm text-gray-400 mb-5">
+          Type one location code per line. Downloads a PDF with 6 rows per A4 page —
+          barcode on the left, location code on the right.
+        </p>
+
+        <textarea
+          value={locationText}
+          onChange={e => setLocationText(e.target.value)}
+          placeholder={"SHELF-A1\nSHELF-A2\nSHELF-B1"}
+          rows={10}
+          className="w-full rounded-lg bg-gray-800 border border-gray-700 text-white px-3 py-2 text-sm font-mono
+                     focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y placeholder:text-gray-600"
+        />
+
+        <div className="flex items-center justify-between mt-3">
+          <span className="text-xs text-gray-500">
+            {locations.length} location{locations.length === 1 ? "" : "s"}
+          </span>
+          <button
+            onClick={download}
+            disabled={downloading || locations.length === 0}
+            className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+          >
+            {downloading ? "Generating…" : "📄 Download PDF"}
+          </button>
+        </div>
+
+        {error && (
+          <p className="mt-3 text-sm text-red-400">{error}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function BCWarehousePage() {
@@ -2643,8 +2721,9 @@ export default function BCWarehousePage() {
     { id: "tote-data",        label: "Tote Data" },
     { id: "collections-due",  label: "Collections Due" },
     { id: "unsold-items",     label: "Unsold Items" },
-    { id: "data-sync",        label: "Data Sync" },
-    { id: "db-explorer",     label: "DB Explorer" },
+    { id: "data-sync",          label: "Data Sync" },
+    { id: "db-explorer",        label: "DB Explorer" },
+    { id: "location-barcodes",  label: "Location Barcodes" },
   ]
 
   return (
@@ -2680,7 +2759,8 @@ export default function BCWarehousePage() {
             {tab === "collections-due"  && <CollectionsDueTab />}
             {tab === "unsold-items"     && <UnsoldItemsTab />}
             {tab === "data-sync"        && <DataSyncTab status={status} onComplete={fetchStatus} />}
-            {tab === "db-explorer"     && <DbExplorerTab />}
+            {tab === "db-explorer"        && <DbExplorerTab />}
+            {tab === "location-barcodes"  && <LocationBarcodesTab />}
           </>
         )}
       </div>
