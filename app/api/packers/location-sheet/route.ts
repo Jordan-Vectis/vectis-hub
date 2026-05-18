@@ -88,8 +88,11 @@ async function buildPdf(locations: string[], arrow: ArrowDir): Promise<Uint8Arra
     for (let i = 0; i < pageLocations.length; i++) {
       const loc    = pageLocations[i]
       const rowTop = usableTop - slotH * i
-      await drawLocationRow(doc, page, loc, rowTop, slotH, helv, helvB, arrow)
+      await drawLocationRow(doc, page, loc, rowTop, slotH, helv, helvB)
     }
+
+    // Single arrow at the bottom of the page
+    if (arrow !== "none") drawPageArrow(page, arrow)
   }
 
   return await doc.save()
@@ -103,7 +106,6 @@ async function drawLocationRow(
   slotH:    number,
   helv:     PDFFont,
   helvB:    PDFFont,
-  arrow:    ArrowDir,
 ) {
   const innerPad  = 8
   const targetBcH = Math.min(55, slotH - innerPad * 2)  // cap at ~packer-sheet size
@@ -151,30 +153,6 @@ async function drawLocationRow(
     color: rgb(0, 0, 0),
   })
 
-  // Arrow — drawn near the bottom of the slot, inside the separator
-  if (arrow !== "none") {
-    const arrowY       = rowTop - slotH + 18   // 18pt above the separator line
-    const shaftLen     = 60
-    const headLen      = 14
-    const headSpread   = 8
-    const arrowThick   = 2.5
-    const arrowColour  = rgb(0, 0, 0)
-
-    if (arrow === "left") {
-      const tipX  = MARGIN
-      const tailX = MARGIN + shaftLen
-      page.drawLine({ start: { x: tailX, y: arrowY }, end: { x: tipX, y: arrowY }, thickness: arrowThick, color: arrowColour })
-      page.drawLine({ start: { x: tipX, y: arrowY }, end: { x: tipX + headLen, y: arrowY + headSpread }, thickness: arrowThick, color: arrowColour })
-      page.drawLine({ start: { x: tipX, y: arrowY }, end: { x: tipX + headLen, y: arrowY - headSpread }, thickness: arrowThick, color: arrowColour })
-    } else {
-      const tipX  = PAGE_W - MARGIN
-      const tailX = PAGE_W - MARGIN - shaftLen
-      page.drawLine({ start: { x: tailX, y: arrowY }, end: { x: tipX, y: arrowY }, thickness: arrowThick, color: arrowColour })
-      page.drawLine({ start: { x: tipX, y: arrowY }, end: { x: tipX - headLen, y: arrowY + headSpread }, thickness: arrowThick, color: arrowColour })
-      page.drawLine({ start: { x: tipX, y: arrowY }, end: { x: tipX - headLen, y: arrowY - headSpread }, thickness: arrowThick, color: arrowColour })
-    }
-  }
-
   // Separator line between rows
   page.drawLine({
     start:     { x: MARGIN,          y: rowTop - slotH },
@@ -182,4 +160,28 @@ async function drawLocationRow(
     thickness: 0.4,
     color:     rgb(0.85, 0.85, 0.88),
   })
+}
+
+// Single arrow drawn once at the very bottom of the page
+function drawPageArrow(page: PDFPage, direction: "left" | "right") {
+  const arrowY      = MARGIN / 2        // centred in the bottom margin
+  const shaftLen    = 80
+  const headLen     = 16
+  const headSpread  = 10
+  const thickness   = 3
+  const colour      = rgb(0, 0, 0)
+
+  if (direction === "left") {
+    const tipX  = MARGIN
+    const tailX = MARGIN + shaftLen
+    page.drawLine({ start: { x: tailX, y: arrowY }, end: { x: tipX, y: arrowY }, thickness, color: colour })
+    page.drawLine({ start: { x: tipX, y: arrowY }, end: { x: tipX + headLen, y: arrowY + headSpread }, thickness, color: colour })
+    page.drawLine({ start: { x: tipX, y: arrowY }, end: { x: tipX + headLen, y: arrowY - headSpread }, thickness, color: colour })
+  } else {
+    const tipX  = PAGE_W - MARGIN
+    const tailX = PAGE_W - MARGIN - shaftLen
+    page.drawLine({ start: { x: tailX, y: arrowY }, end: { x: tipX, y: arrowY }, thickness, color: colour })
+    page.drawLine({ start: { x: tipX, y: arrowY }, end: { x: tipX - headLen, y: arrowY + headSpread }, thickness, color: colour })
+    page.drawLine({ start: { x: tipX, y: arrowY }, end: { x: tipX - headLen, y: arrowY - headSpread }, thickness, color: colour })
+  }
 }
