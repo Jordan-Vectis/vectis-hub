@@ -820,7 +820,8 @@ export default function AuctionMonitorPage() {
                           <input
                             type="number" value={threshold ?? rule.threshold.default}
                             min={rule.threshold.min} max={rule.threshold.max}
-                            onChange={e => setRuleThresholdPersisted(rule.id, Math.max(rule.threshold!.min, Math.min(rule.threshold!.max, Number(e.target.value) || rule.threshold!.default)))}
+                            onChange={e => setRuleThresholdPersisted(rule.id, Number(e.target.value))}
+                            onBlur={e => setRuleThresholdPersisted(rule.id, Math.max(rule.threshold!.min, Math.min(rule.threshold!.max, Number(e.target.value) || rule.threshold!.default)))}
                             disabled={!enabled}
                             className="w-20 text-xs border border-gray-300 rounded px-2 py-1 text-right disabled:bg-gray-100 disabled:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                           />
@@ -1052,7 +1053,8 @@ export default function AuctionMonitorPage() {
                           <input
                             type="number" value={threshold ?? rule.threshold.default}
                             min={rule.threshold.min} max={rule.threshold.max}
-                            onChange={e => setTimedRuleThresholdPersisted(rule.id, Math.max(rule.threshold!.min, Math.min(rule.threshold!.max, Number(e.target.value) || rule.threshold!.default)))}
+                            onChange={e => setTimedRuleThresholdPersisted(rule.id, Number(e.target.value))}
+                            onBlur={e => setTimedRuleThresholdPersisted(rule.id, Math.max(rule.threshold!.min, Math.min(rule.threshold!.max, Number(e.target.value) || rule.threshold!.default)))}
                             disabled={!enabled}
                             className="w-20 text-xs border border-gray-300 rounded px-2 py-1 text-right disabled:bg-gray-100 disabled:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                           />
