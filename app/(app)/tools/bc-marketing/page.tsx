@@ -6,8 +6,9 @@ import PasteGenerateTab from "./paste-generate-tab"
 import InsightsTab from "./insights-tab"
 import DraftsTab from "./drafts-tab"
 import HashtagsTab from "./hashtags-tab"
+import WebDescriptionsTab from "./web-descriptions-tab"
 
-type TabKey = "content" | "paste" | "insights" | "drafts" | "hashtags"
+type TabKey = "content" | "paste" | "insights" | "drafts" | "hashtags" | "webdesc"
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "content",  label: "✍ Content Generator" },
@@ -15,6 +16,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "insights", label: "📊 Insights" },
   { key: "drafts",   label: "💾 Saved Drafts" },
   { key: "hashtags", label: "# Hashtag Bank" },
+  { key: "webdesc",  label: "🌐 Web Descriptions" },
 ]
 
 export default function BcMarketingPage() {
@@ -44,6 +46,7 @@ export default function BcMarketingPage() {
       {tab === "insights" && <InsightsTab />}
       {tab === "drafts"   && <DraftsTab />}
       {tab === "hashtags" && <HashtagsTab />}
+      {tab === "webdesc"  && <WebDescriptionsTab />}
     </div>
   )
 }

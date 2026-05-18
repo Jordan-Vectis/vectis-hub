@@ -270,6 +270,7 @@ model CatalogueAuction {
   idleLogs    IdleLog[]
   liveAuction LiveAuction?
   bidderRegistrations BidderRegistration[]
+  webDescriptions WebDescription[]
 }
 
 model BidderRegistration {
@@ -807,4 +808,17 @@ model WarehouseTote {
   @@index([location])
   @@index([toteNo])
   @@index([catalogued])
+}
+
+model WebDescription {
+  id          String           @id @default(cuid())
+  auctionId   String
+  auction     CatalogueAuction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  auctionCode String
+  auctionName String
+  description String           @db.Text
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([auctionId])
 }
