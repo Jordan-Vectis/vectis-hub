@@ -1059,12 +1059,13 @@ function LocationHistoryTab() {
 
   async function checkSimilar() {
     if (!result || result.entries.length === 0) return
-    const timestamps = result.entries.map(e => e.changedAt).filter(Boolean)
-    if (timestamps.length === 0) return
-    const minMs = Math.min(...timestamps.map(t => new Date(t).getTime()))
-    const maxMs = Math.max(...timestamps.map(t => new Date(t).getTime()))
-    const fromDt = new Date(minMs - 5 * 60 * 1000).toISOString()
-    const toDt   = new Date(maxMs + 5 * 60 * 1000).toISOString()
+    // Use the most recent entry (index 0, sorted newest-first) as the centre of the window.
+    // Using min/max across all entries would span weeks if the item has an old history.
+    const mostRecentTs = result.entries[0]?.changedAt
+    if (!mostRecentTs) return
+    const centreMs = new Date(mostRecentTs).getTime()
+    const fromDt = new Date(centreMs - 5 * 60 * 1000).toISOString()
+    const toDt   = new Date(centreMs + 5 * 60 * 1000).toISOString()
     setSimilarWindow({ from: fromDt, to: toDt })
     setSimilarLoading(true); setSimilarError(null); setSimilarResult(null); setSimilarElapsed(0)
 
