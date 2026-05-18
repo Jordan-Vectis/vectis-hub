@@ -460,6 +460,8 @@ export default function AuctionMonitorPage() {
   const timedWsRef             = useRef<WebSocket | null>(null)
   const timedReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const timedShouldReconnect   = useRef(false)
+  // Track session start so stall alerts fire even if zero messages ever arrive
+  const timedSessionStartRef   = useRef<Date | null>(null)
 
   const [timedRuleEnabled, setTimedRuleEnabled] = useState<Record<string, boolean>>(() => {
     if (typeof window === "undefined") return Object.fromEntries(TIMED_ALERT_RULES.map(r => [r.id, r.defaultOn]))
@@ -570,6 +572,7 @@ export default function AuctionMonitorPage() {
     localStorage.setItem("auction_monitor_timed_url", timedUrl.trim())
     setTimedLog([]); setTimedLastMsgAt(null); setTimedReconnects(0); setTimedCmdsSeen([])
     timedRuleActiveRef.current = {}
+    timedSessionStartRef.current = new Date()
     setTimedRunning(true)
   }
   function timedStop() { setTimedRunning(false) }
@@ -600,13 +603,19 @@ export default function AuctionMonitorPage() {
     checkRule("connection_drop", timedConnState === "closed" || timedConnState === "error",
       () => ({ title: "Timed auction · Connection dropped", body: `WebSocket ${timedConnState}\n${auctionInfo}`, priority: 5, tags: ["rotating_light"] }))
 
+    // Fall back to time-since-session-start if no message has ever arrived,
+    // so stall alerts fire even on a completely silent connection.
+    const msSinceActivity = timedMsSinceLast !== null
+      ? timedMsSinceLast
+      : timedSessionStartRef.current ? now.getTime() - timedSessionStartRef.current.getTime() : null
+
     const stallRedSec = timedRuleThresholds["stall_red"] ?? 120
-    const tStallRed = timedConnState === "open" && timedMsSinceLast !== null && timedMsSinceLast >= stallRedSec * 1000
+    const tStallRed = timedConnState === "open" && msSinceActivity !== null && msSinceActivity >= stallRedSec * 1000
     checkRule("stall_red", tStallRed,
       () => ({ title: "Timed auction · No activity", body: `No messages for ${stallRedSec}+ seconds\n${auctionInfo}`, priority: 5, tags: ["rotating_light"] }))
 
     const stallAmberSec = timedRuleThresholds["stall_amber"] ?? 60
-    checkRule("stall_amber", timedConnState === "open" && timedMsSinceLast !== null && timedMsSinceLast >= stallAmberSec * 1000 && !tStallRed,
+    checkRule("stall_amber", timedConnState === "open" && msSinceActivity !== null && msSinceActivity >= stallAmberSec * 1000 && !tStallRed,
       () => ({ title: "Timed auction · Quiet", body: `No messages in last ${stallAmberSec} seconds\n${auctionInfo}`, priority: 4, tags: ["warning"] }))
 
     if (timedHealthBand !== "green" && (timedHealthBand === "amber" || timedHealthBand === "red")) {
@@ -618,7 +627,7 @@ export default function AuctionMonitorPage() {
       timedRuleActiveRef.current["__bad_state__"] = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timedHealthBand, timedConnState, timedMsSinceLast, timedRunning, pushEnabled])
+  }, [timedHealthBand, timedConnState, timedMsSinceLast, timedRunning, pushEnabled, now])
 
   useEffect(() => {
     if (!timedRunning || !pushEnabled || !ntfyTopic.trim()) return
