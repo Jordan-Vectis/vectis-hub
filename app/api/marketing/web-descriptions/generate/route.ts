@@ -68,6 +68,7 @@ Notice:
 - Short, direct sentences — no flowery language, no adjectives like "impressive" or "stunning"
 - Mentions formats and scales where known (e.g. "3.75-inch", "carded", "boxed and unboxed", "1:43")
 - Groups by TYPE not by brand name — brands are secondary
+- SEO: the specific series names, scales, formats and condition terms (boxed, carded, unboxed, mint) are the SEO keywords — use exact collector terminology from the lot data naturally throughout
 - British English spelling
 - Do NOT mention prices, estimates, or lot counts
 - Output only the description — no headings, no bullet points
