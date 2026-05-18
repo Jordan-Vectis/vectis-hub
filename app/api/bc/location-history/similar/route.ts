@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { getBCToken, bcFetchAll } from "@/lib/bc"
+import { prisma } from "@/lib/prisma"
 
 export const maxDuration = 60
 
@@ -50,17 +51,47 @@ export async function GET(req: NextRequest) {
     const all = [...toteRows, ...itemRows]
     all.sort((a, b) => (a.Date_and_Time ?? "").localeCompare(b.Date_and_Time ?? ""))
 
+    // Build unique IDs for item-type rows: field1 + "-" + field2 = receiptUniqueId (e.g. R006649-9)
+    const uniqueIds = [...new Set(
+      itemRows
+        .map(r => {
+          const f1 = r.Primary_Key_Field_1_Value
+          const f2 = r.Primary_Key_Field_2_Value
+          return f1 && f2 ? `${f1}-${f2}` : null
+        })
+        .filter(Boolean) as string[]
+    )]
+
+    // Look up barcodes from the local warehouse DB — fast, no extra BC queries
+    const barcodeMap = new Map<string, string>()
+    if (uniqueIds.length > 0) {
+      const items = await prisma.warehouseItem.findMany({
+        where: { uniqueId: { in: uniqueIds } },
+        select: { uniqueId: true, barcode: true },
+      })
+      for (const item of items) {
+        if (item.barcode) barcodeMap.set(item.uniqueId, item.barcode)
+      }
+    }
+
     return NextResponse.json({
       warning: partialWarning,
-      entries: all.map(r => ({
-        itemKey:   r.Primary_Key_Field_1_Value ?? "",
-        itemKey2:  r.Primary_Key_Field_2_Value ?? null,
-        from:      r.Old_Value    ?? "",
-        to:        r.New_Value    ?? "",
-        changedBy: r.User_ID      ?? "",
-        changedAt: r.Date_and_Time ?? "",
-        type:      r.Field_Caption === "Location" ? "tote" : "item" as "tote" | "item",
-      })),
+      entries: all.map(r => {
+        const f1   = r.Primary_Key_Field_1_Value ?? ""
+        const f2   = r.Primary_Key_Field_2_Value ?? null
+        const uid  = f1 && f2 ? `${f1}-${f2}` : null
+        const type = r.Field_Caption === "Location" ? "tote" : "item"
+        return {
+          itemKey:   f1,
+          itemKey2:  f2,
+          barcode:   type === "item" && uid ? (barcodeMap.get(uid) ?? null) : null,
+          from:      r.Old_Value    ?? "",
+          to:        r.New_Value    ?? "",
+          changedBy: r.User_ID      ?? "",
+          changedAt: r.Date_and_Time ?? "",
+          type,
+        }
+      }),
     })
   } catch (e: any) {
     console.error("[location-history/similar]", e)

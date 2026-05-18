@@ -1023,6 +1023,7 @@ function formatDateTime(iso: string) {
 type SimilarEntry = {
   itemKey:   string
   itemKey2:  string | null
+  barcode:   string | null
   from:      string
   to:        string
   changedBy: string
@@ -1108,6 +1109,7 @@ function LocationHistoryTab() {
     const rows = similarResult.map(e => `
       <tr>
         <td>${e.itemKey}${e.itemKey2 ? ` · ${e.itemKey2}` : ""}</td>
+        <td>${e.barcode ?? "—"}</td>
         <td>${e.type === "tote" ? "Tote" : "Item"}</td>
         <td>${e.from || "—"}</td>
         <td>${e.to || "—"}</td>
@@ -1131,7 +1133,7 @@ function LocationHistoryTab() {
       <h2>Similar Location Changes</h2>
       <p>Window: ${windowLabel} &nbsp;|&nbsp; ${similarResult.length} change${similarResult.length !== 1 ? "s" : ""}</p>
       <table>
-        <thead><tr><th>Item Key</th><th>Type</th><th>From</th><th>To</th><th>Changed By</th><th>Date / Time</th></tr></thead>
+        <thead><tr><th>Item Key</th><th>Barcode</th><th>Type</th><th>From</th><th>To</th><th>Changed By</th><th>Date / Time</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
       <script>window.onload = () => { window.print() }<\/script>
@@ -1268,6 +1270,7 @@ function LocationHistoryTab() {
                         <thead className="bg-purple-950/30 text-gray-500 text-xs uppercase">
                           <tr>
                             <th className="px-4 py-2.5 text-left">Item Key</th>
+                            <th className="px-4 py-2.5 text-left">Barcode</th>
                             <th className="px-4 py-2.5 text-left">Type</th>
                             <th className="px-4 py-2.5 text-left">From</th>
                             <th className="px-4 py-2.5 text-left">To</th>
@@ -1279,6 +1282,7 @@ function LocationHistoryTab() {
                           {similarResult.map((e, i) => (
                             <tr key={i} className="hover:bg-[#0d0f1a]">
                               <td className="px-4 py-2 text-white font-mono text-xs">{e.itemKey}{e.itemKey2 ? ` · ${e.itemKey2}` : ""}</td>
+                              <td className="px-4 py-2 text-gray-300 font-mono text-xs">{e.barcode ?? <span className="text-gray-600">—</span>}</td>
                               <td className="px-4 py-2">
                                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${e.type === "tote" ? "bg-blue-900/50 text-blue-300" : "bg-emerald-900/50 text-emerald-300"}`}>
                                   {e.type === "tote" ? "Tote" : "Item"}
