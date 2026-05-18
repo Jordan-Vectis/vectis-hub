@@ -1020,6 +1020,16 @@ function formatDateTime(iso: string) {
   } catch { return iso }
 }
 
+type SimilarEntry = {
+  itemKey:   string
+  itemKey2:  string | null
+  from:      string
+  to:        string
+  changedBy: string
+  changedAt: string
+  type:      "tote" | "item"
+}
+
 function LocationHistoryTab() {
   const [input, setInput]   = useState("")
   const [mode, setMode]     = useState<"tote" | "barcode">("tote")
@@ -1027,10 +1037,16 @@ function LocationHistoryTab() {
   const [error, setError]   = useState<string | null>(null)
   const [result, setResult] = useState<{ field1: string; field2: string | null; entries: LocationEntry[] } | null>(null)
 
+  const [similarLoading, setSimilarLoading] = useState(false)
+  const [similarError, setSimilarError]     = useState<string | null>(null)
+  const [similarResult, setSimilarResult]   = useState<SimilarEntry[] | null>(null)
+  const [similarWindow, setSimilarWindow]   = useState<{ from: string; to: string } | null>(null)
+
   async function lookup() {
     const q = input.trim()
     if (!q) return
     setLoading(true); setError(null); setResult(null)
+    setSimilarResult(null); setSimilarError(null); setSimilarWindow(null)
     try {
       const res  = await fetch(`/api/bc/location-history?q=${encodeURIComponent(q)}&mode=${mode}`)
       const data = await res.json()
@@ -1038,6 +1054,62 @@ function LocationHistoryTab() {
       setResult(data)
     } catch { setError("Network error") }
     finally { setLoading(false) }
+  }
+
+  async function checkSimilar() {
+    if (!result || result.entries.length === 0) return
+    const timestamps = result.entries.map(e => e.changedAt).filter(Boolean)
+    if (timestamps.length === 0) return
+    const minMs = Math.min(...timestamps.map(t => new Date(t).getTime()))
+    const maxMs = Math.max(...timestamps.map(t => new Date(t).getTime()))
+    const fromDt = new Date(minMs - 5 * 60 * 1000).toISOString()
+    const toDt   = new Date(maxMs + 5 * 60 * 1000).toISOString()
+    setSimilarWindow({ from: fromDt, to: toDt })
+    setSimilarLoading(true); setSimilarError(null); setSimilarResult(null)
+    try {
+      const res  = await fetch(`/api/bc/location-history/similar?from=${encodeURIComponent(fromDt)}&to=${encodeURIComponent(toDt)}`)
+      const data = await res.json()
+      if (!res.ok) { setSimilarError(data.error ?? "Query failed"); return }
+      setSimilarResult(data.entries ?? [])
+    } catch { setSimilarError("Network error") }
+    finally { setSimilarLoading(false) }
+  }
+
+  function printSimilar() {
+    if (!similarResult) return
+    const rows = similarResult.map(e => `
+      <tr>
+        <td>${e.itemKey}${e.itemKey2 ? ` · ${e.itemKey2}` : ""}</td>
+        <td>${e.type === "tote" ? "Tote" : "Item"}</td>
+        <td>${e.from || "—"}</td>
+        <td>${e.to || "—"}</td>
+        <td>${SALESPERSON_NAMES[e.changedBy] ?? e.changedBy}</td>
+        <td>${formatDateTime(e.changedAt)}</td>
+      </tr>`).join("")
+    const windowLabel = similarWindow
+      ? `${formatDateTime(similarWindow.from)} – ${formatDateTime(similarWindow.to)}`
+      : ""
+    const html = `<!DOCTYPE html><html><head><title>Similar Location Changes</title>
+      <style>
+        body { font-family: Arial, sans-serif; font-size: 12px; margin: 20px; }
+        h2 { font-size: 16px; margin-bottom: 4px; }
+        p  { font-size: 11px; color: #666; margin-bottom: 12px; }
+        table { border-collapse: collapse; width: 100%; }
+        th { background: #f0f0f0; text-align: left; padding: 6px 10px; border-bottom: 2px solid #ccc; font-size: 11px; text-transform: uppercase; }
+        td { padding: 5px 10px; border-bottom: 1px solid #e0e0e0; }
+        tr:nth-child(even) { background: #fafafa; }
+        @media print { body { margin: 10px; } }
+      </style></head><body>
+      <h2>Similar Location Changes</h2>
+      <p>Window: ${windowLabel} &nbsp;|&nbsp; ${similarResult.length} change${similarResult.length !== 1 ? "s" : ""}</p>
+      <table>
+        <thead><tr><th>Item Key</th><th>Type</th><th>From</th><th>To</th><th>Changed By</th><th>Date / Time</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <script>window.onload = () => { window.print() }<\/script>
+      </body></html>`
+    const w = window.open("", "_blank")
+    if (w) { w.document.write(html); w.document.close() }
   }
 
   return (
@@ -1089,28 +1161,93 @@ function LocationHistoryTab() {
               <p className="text-gray-600 text-xs mt-1">The item may not have been moved, or the change log wasn't active when it was.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-gray-700">
-              <table className="w-full text-sm">
-                <thead className="bg-[#0d0f1a] text-gray-500 text-xs uppercase">
-                  <tr>
-                    <th className="px-4 py-2.5 text-left">From</th>
-                    <th className="px-4 py-2.5 text-left">To</th>
-                    <th className="px-4 py-2.5 text-left">Changed by</th>
-                    <th className="px-4 py-2.5 text-left">Date / Time</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-800">
-                  {result.entries.map((e, i) => (
-                    <tr key={i} className={`hover:bg-[#0d0f1a] ${i === 0 ? "bg-blue-950/30" : ""}`}>
-                      <td className="px-4 py-2 text-gray-400 font-mono text-xs">{e.from || <span className="text-gray-600 italic">empty</span>}</td>
-                      <td className="px-4 py-2 text-white font-mono text-xs font-semibold">{e.to || <span className="text-gray-600 italic">empty</span>}</td>
-                      <td className="px-4 py-2 text-gray-300">{SALESPERSON_NAMES[e.changedBy] ?? e.changedBy}</td>
-                      <td className="px-4 py-2 text-gray-400 text-xs">{formatDateTime(e.changedAt)}</td>
+            <>
+              <div className="overflow-x-auto rounded-xl border border-gray-700">
+                <table className="w-full text-sm">
+                  <thead className="bg-[#0d0f1a] text-gray-500 text-xs uppercase">
+                    <tr>
+                      <th className="px-4 py-2.5 text-left">From</th>
+                      <th className="px-4 py-2.5 text-left">To</th>
+                      <th className="px-4 py-2.5 text-left">Changed by</th>
+                      <th className="px-4 py-2.5 text-left">Date / Time</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-gray-800">
+                    {result.entries.map((e, i) => (
+                      <tr key={i} className={`hover:bg-[#0d0f1a] ${i === 0 ? "bg-blue-950/30" : ""}`}>
+                        <td className="px-4 py-2 text-gray-400 font-mono text-xs">{e.from || <span className="text-gray-600 italic">empty</span>}</td>
+                        <td className="px-4 py-2 text-white font-mono text-xs font-semibold">{e.to || <span className="text-gray-600 italic">empty</span>}</td>
+                        <td className="px-4 py-2 text-gray-300">{SALESPERSON_NAMES[e.changedBy] ?? e.changedBy}</td>
+                        <td className="px-4 py-2 text-gray-400 text-xs">{formatDateTime(e.changedAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Similar Changes */}
+              <div className="pt-2">
+                <button onClick={checkSimilar} disabled={similarLoading}
+                  className="px-4 py-2 bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors">
+                  {similarLoading ? "Searching…" : "🔍 Check Similar Changes"}
+                </button>
+                {similarWindow && !similarLoading && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Showing all location changes from {formatDateTime(similarWindow.from)} to {formatDateTime(similarWindow.to)} (±5 min)
+                  </p>
+                )}
+              </div>
+
+              {similarError && <p className="text-red-400 text-sm">{similarError}</p>}
+
+              {similarResult && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-400">
+                      <span className="text-white font-semibold">{similarResult.length}</span> change{similarResult.length !== 1 ? "s" : ""} found in that window
+                    </p>
+                    <button onClick={printSimilar}
+                      className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold rounded-lg transition-colors">
+                      🖨 Print Report
+                    </button>
+                  </div>
+                  {similarResult.length === 0 ? (
+                    <p className="text-gray-500 text-sm">No other location changes found in that time window.</p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-purple-900/50">
+                      <table className="w-full text-sm">
+                        <thead className="bg-purple-950/30 text-gray-500 text-xs uppercase">
+                          <tr>
+                            <th className="px-4 py-2.5 text-left">Item Key</th>
+                            <th className="px-4 py-2.5 text-left">Type</th>
+                            <th className="px-4 py-2.5 text-left">From</th>
+                            <th className="px-4 py-2.5 text-left">To</th>
+                            <th className="px-4 py-2.5 text-left">Changed by</th>
+                            <th className="px-4 py-2.5 text-left">Date / Time</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-800">
+                          {similarResult.map((e, i) => (
+                            <tr key={i} className="hover:bg-[#0d0f1a]">
+                              <td className="px-4 py-2 text-white font-mono text-xs">{e.itemKey}{e.itemKey2 ? ` · ${e.itemKey2}` : ""}</td>
+                              <td className="px-4 py-2">
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${e.type === "tote" ? "bg-blue-900/50 text-blue-300" : "bg-emerald-900/50 text-emerald-300"}`}>
+                                  {e.type === "tote" ? "Tote" : "Item"}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2 text-gray-400 font-mono text-xs">{e.from || <span className="text-gray-600 italic">empty</span>}</td>
+                              <td className="px-4 py-2 text-white font-mono text-xs font-semibold">{e.to || <span className="text-gray-600 italic">empty</span>}</td>
+                              <td className="px-4 py-2 text-gray-300 text-xs">{SALESPERSON_NAMES[e.changedBy] ?? e.changedBy}</td>
+                              <td className="px-4 py-2 text-gray-400 text-xs">{formatDateTime(e.changedAt)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
