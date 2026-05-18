@@ -82,7 +82,7 @@ type SearchTote = {
   syncedAt: string | null
 }
 
-type Tab = "heatmap" | "sale-checklist" | "search" | "location-history" | "tote-data" | "collections-due" | "unsold-items" | "data-sync" | "db-explorer" | "location-barcodes"
+type Tab = "home" | "heatmap" | "sale-checklist" | "search" | "location-history" | "tote-data" | "collections-due" | "unsold-items" | "data-sync" | "db-explorer" | "location-barcodes"
 
 const STALE_MS = 15 * 60 * 1000 // 15 minutes
 
@@ -2574,6 +2574,129 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
   )
 }
 
+// ─── WarehouseHomeTab ─────────────────────────────────────────────────────────
+
+const HOME_CARDS: {
+  id:          Tab
+  icon:        string
+  label:       string
+  description: string
+  colour:      string   // Tailwind border + glow classes
+  btn:         string   // button bg classes
+}[] = [
+  {
+    id:          "heatmap",
+    icon:        "🗺️",
+    label:       "Location Heatmap",
+    description: "Visual overview of all warehouse locations — see which areas are busy, empty, or holding totes at a glance.",
+    colour:      "border-blue-800/60 hover:shadow-blue-900/40",
+    btn:         "bg-blue-700 hover:bg-blue-600",
+  },
+  {
+    id:          "sale-checklist",
+    icon:        "📋",
+    label:       "Sale Checklist",
+    description: "Review items assigned to upcoming auctions. Check warehouse locations, lot numbers and withdrawal flags before sale day.",
+    colour:      "border-violet-800/60 hover:shadow-violet-900/40",
+    btn:         "bg-violet-700 hover:bg-violet-600",
+  },
+  {
+    id:          "search",
+    icon:        "🔍",
+    label:       "Search by Location",
+    description: "Find everything stored in a specific bin, tote or warehouse location. Search by barcode or location code.",
+    colour:      "border-sky-800/60 hover:shadow-sky-900/40",
+    btn:         "bg-sky-700 hover:bg-sky-600",
+  },
+  {
+    id:          "location-history",
+    icon:        "📍",
+    label:       "Location History",
+    description: "Track the movement history of any tote or barcode — see every location change and who made it.",
+    colour:      "border-teal-800/60 hover:shadow-teal-900/40",
+    btn:         "bg-teal-700 hover:bg-teal-600",
+  },
+  {
+    id:          "tote-data",
+    icon:        "📦",
+    label:       "Tote Data",
+    description: "Browse and search all active totes in the warehouse. View contents, receipts, vendors and current locations.",
+    colour:      "border-amber-800/60 hover:shadow-amber-900/40",
+    btn:         "bg-amber-700 hover:bg-amber-600",
+  },
+  {
+    id:          "collections-due",
+    icon:        "🚚",
+    label:       "Collections Due",
+    description: "View lots ready for customer collection, grouped by auction. Print collection sheets and track what's been picked up.",
+    colour:      "border-orange-800/60 hover:shadow-orange-900/40",
+    btn:         "bg-orange-700 hover:bg-orange-600",
+  },
+  {
+    id:          "unsold-items",
+    icon:        "🏷️",
+    label:       "Unsold Items",
+    description: "Manage items that didn't sell at auction. Review, export or action unsold stock across all recent sales.",
+    colour:      "border-red-800/60 hover:shadow-red-900/40",
+    btn:         "bg-red-700 hover:bg-red-600",
+  },
+  {
+    id:          "location-barcodes",
+    icon:        "📄",
+    label:       "Location Barcodes",
+    description: "Generate printable barcode sheets for warehouse shelf labels. Type location codes, pick an arrow direction and download.",
+    colour:      "border-emerald-800/60 hover:shadow-emerald-900/40",
+    btn:         "bg-emerald-700 hover:bg-emerald-600",
+  },
+  {
+    id:          "data-sync",
+    icon:        "🔄",
+    label:       "Data Sync",
+    description: "Sync the latest stock, auction and tote data from Business Central. Check sync status and trigger manual refreshes.",
+    colour:      "border-gray-700/60 hover:shadow-gray-800/40",
+    btn:         "bg-gray-600 hover:bg-gray-500",
+  },
+  {
+    id:          "db-explorer",
+    icon:        "🔎",
+    label:       "DB Explorer",
+    description: "Query the raw warehouse database tables directly. For admin use — search items and totes by any field.",
+    colour:      "border-gray-700/60 hover:shadow-gray-800/40",
+    btn:         "bg-gray-600 hover:bg-gray-500",
+  },
+]
+
+function WarehouseHomeTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
+  return (
+    <div className="overflow-y-auto h-full px-8 py-10">
+      <div className="max-w-6xl mx-auto">
+        <h1 className="text-2xl font-bold text-white mb-1">BC Warehouse</h1>
+        <p className="text-sm text-gray-400 mb-10">Select a section to get started.</p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          {HOME_CARDS.map(card => (
+            <div
+              key={card.id}
+              className={`relative bg-gray-900 border ${card.colour} rounded-xl p-6 flex flex-col
+                transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5`}
+            >
+              <div className="text-4xl mb-4">{card.icon}</div>
+              <h2 className="text-base font-bold text-white mb-2">{card.label}</h2>
+              <p className="text-gray-400 text-sm leading-relaxed mb-5 flex-1">{card.description}</p>
+              <button
+                onClick={() => onNavigate(card.id)}
+                className={`w-full text-center text-sm font-semibold text-white py-2 px-4 rounded-lg transition-colors ${card.btn}`}
+              >
+                Open {card.label} →
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── LocationBarcodesTab ──────────────────────────────────────────────────────
 
 // Detect a trailing number in the last non-empty line so we can offer to continue the sequence.
@@ -2743,7 +2866,7 @@ function LocationBarcodesTab() {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function BCWarehousePage() {
-  const [tab, setTab] = useState<Tab>("heatmap")
+  const [tab, setTab] = useState<Tab>("home")
   const [status, setStatus] = useState<SyncStatus | null>(null)
   const [showFirstSync, setShowFirstSync] = useState(false)
   const syncingRef = useRef(false)
@@ -2816,22 +2939,32 @@ export default function BCWarehousePage() {
 
   return (
     <div className="flex flex-col h-full bg-gray-950 text-white">
-      {/* Tab bar */}
-      <div className="flex gap-1 px-4 pt-3 border-b border-gray-800 shrink-0">
-        {tabs.map(t => (
+      {/* Tab bar — hidden on home screen */}
+      {tab !== "home" && (
+        <div className="flex gap-1 px-4 pt-3 border-b border-gray-800 shrink-0 overflow-x-auto">
           <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-4 py-2 text-sm rounded-t transition-colors ${
-              tab === t.id
-                ? "bg-gray-800 text-white border-b-2 border-blue-500"
-                : "text-gray-400 hover:text-gray-200"
-            }`}
+            onClick={() => setTab("home")}
+            className="px-3 py-2 text-sm text-gray-400 hover:text-white transition-colors shrink-0"
+            title="Back to overview"
           >
-            {t.label}
+            ⌂
           </button>
-        ))}
-      </div>
+          <div className="w-px bg-gray-700 my-1.5 shrink-0" />
+          {tabs.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`px-4 py-2 text-sm rounded-t transition-colors shrink-0 ${
+                tab === t.id
+                  ? "bg-gray-800 text-white border-b-2 border-blue-500"
+                  : "text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-hidden">
@@ -2839,6 +2972,7 @@ export default function BCWarehousePage() {
           <FirstSyncPanel onComplete={() => { setShowFirstSync(false); fetchStatus() }} />
         ) : (
           <>
+            {tab === "home"             && <WarehouseHomeTab onNavigate={setTab} />}
             {tab === "heatmap"          && <WarehouseHeatmapTab />}
             {tab === "sale-checklist"   && <SaleChecklistTab />}
             {tab === "search"           && <SearchByLocationTab />}
