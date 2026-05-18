@@ -155,6 +155,7 @@ export default function AuctionMonitorPage() {
     return localStorage.getItem("auction_monitor_push_enabled") === "1"
   })
   const [pushStatus, setPushStatus] = useState<string | null>(null)
+  const [ntfySentCount, setNtfySentCount] = useState(0)
 
   async function sendNtfy(opts: {
     title: string; body: string; priority?: 1|2|3|4|5; tags?: string[]
@@ -167,6 +168,7 @@ export default function AuctionMonitorPage() {
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ topic, title: opts.title, message: opts.body, priority: opts.priority ?? 3, tags: opts.tags ?? [] }),
       })
+      if (res.ok) setNtfySentCount(n => n + 1)
       return res.ok
     } catch { return false }
   }
@@ -745,6 +747,10 @@ export default function AuctionMonitorPage() {
           </div>
           <button onClick={sendTestNotification} disabled={!ntfyTopic.trim()} className="self-end bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-xs font-semibold px-3 py-1.5 rounded-lg">Send test</button>
           {pushStatus && <span className="self-end text-xs text-gray-600">{pushStatus}</span>}
+          <span className={`self-end text-xs font-mono px-2 py-1 rounded border ${ntfySentCount >= 200 ? "bg-red-50 border-red-200 text-red-700" : ntfySentCount >= 150 ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-gray-50 border-gray-200 text-gray-500"}`}
+            title="ntfy.sh free tier limit is 250 messages/day">
+            {ntfySentCount}/250 sent
+          </span>
         </div>
       </div>
 
