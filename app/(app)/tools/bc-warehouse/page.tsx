@@ -2580,6 +2580,7 @@ function LocationBarcodesTab() {
   const [locationText,   setLocationText]   = useState("")
   const [downloading,    setDownloading]    = useState(false)
   const [error,          setError]          = useState<string | null>(null)
+  const [arrow,          setArrow]          = useState<"none" | "left" | "right">("none")
 
   const locations = locationText.split("\n").map(l => l.trim()).filter(l => l.length > 0)
 
@@ -2591,7 +2592,7 @@ function LocationBarcodesTab() {
       const res = await fetch("/api/packers/location-sheet", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ locations }),
+        body:    JSON.stringify({ locations, arrow }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
@@ -2630,6 +2631,26 @@ function LocationBarcodesTab() {
           className="w-full rounded-lg bg-gray-800 border border-gray-700 text-white px-3 py-2 text-sm font-mono
                      focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y placeholder:text-gray-600"
         />
+
+        {/* Arrow picker */}
+        <div className="mt-3 mb-3">
+          <p className="text-xs text-gray-400 mb-2">Direction arrow on each row</p>
+          <div className="flex gap-2">
+            {(["none", "left", "right"] as const).map(opt => (
+              <button
+                key={opt}
+                onClick={() => setArrow(opt)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+                  arrow === opt
+                    ? "bg-blue-600 border-blue-500 text-white"
+                    : "bg-gray-800 border-gray-700 text-gray-400 hover:text-white"
+                }`}
+              >
+                {opt === "none" ? "No arrow" : opt === "left" ? "← Left" : "→ Right"}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="flex items-center justify-between mt-3">
           <span className="text-xs text-gray-500">
