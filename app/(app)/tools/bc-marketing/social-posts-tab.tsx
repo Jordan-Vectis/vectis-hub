@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { format, addDays, isSameDay, isAfter, startOfDay } from "date-fns"
 
 // ─── Special dates calendar ───────────────────────────────────────────────────
@@ -122,7 +122,11 @@ export default function SocialPostsTab() {
   const [platform,       setPlatform]       = useState("FACEBOOK")
   const [copy,           setCopy]           = useState("")
   const [hashtags,       setHashtags]       = useState("")
-  const [imageUrl,       setImageUrl]       = useState("")
+  const [imageKey,       setImageKey]       = useState("")   // R2 key
+  const [imageUrl,       setImageUrl]       = useState("")   // preview URL
+  const [uploading,      setUploading]      = useState(false)
+  const [uploadError,    setUploadError]    = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [scheduledAt,    setScheduledAt]    = useState("")
   const [scheduledTime,  setScheduledTime]  = useState("10:00")
   const [specialDateTag, setSpecialDateTag] = useState("")
@@ -176,6 +180,28 @@ export default function SocialPostsTab() {
     setContext(sd.anniversary ? `${sd.label} — ${sd.anniversary}th anniversary` : sd.label)
   }
 
+  // Upload image
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    setUploadError(null)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch("/api/marketing/social-posts/upload", { method: "POST", body: fd })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? "Upload failed")
+      setImageKey(data.key)
+      setImageUrl(`/api/catalogue/photo-proxy?key=${encodeURIComponent(data.key)}`)
+    } catch (e: any) {
+      setUploadError(e.message)
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+  }
+
   // Generate copy
   async function generate() {
     if (!copy && !context && !specialDateTag) return
@@ -213,7 +239,7 @@ export default function SocialPostsTab() {
         body: JSON.stringify({
           platform, copy,
           hashtags:       hashtags || null,
-          imageUrl:       imageUrl || null,
+          imageUrl:       imageKey || null,
           scheduledAt:    dt,
           specialDateTag: specialDateTag || null,
           auctionCode:    auctionCode || null,
@@ -223,7 +249,7 @@ export default function SocialPostsTab() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? "Failed")
       // Reset compose
-      setCopy(""); setHashtags(""); setImageUrl(""); setScheduledAt("")
+      setCopy(""); setHashtags(""); setImageUrl(""); setImageKey(""); setScheduledAt("")
       setScheduledTime("10:00"); setSpecialDateTag(""); setContext(""); setAuctionCode("")
       setQueueTab(status)
       loadPosts()
@@ -395,26 +421,50 @@ export default function SocialPostsTab() {
 
             {/* Right — image + schedule */}
             <div className="space-y-3">
-              {/* Image URL */}
+              {/* Image upload */}
               <div>
-                <label className="block text-xs text-gray-400 mb-1 font-medium">Image URL</label>
+                <label className="block text-xs text-gray-400 mb-1 font-medium">Image</label>
                 <input
-                  type="url"
-                  placeholder="https://… (paste image link)"
-                  value={imageUrl}
-                  onChange={e => setImageUrl(e.target.value)}
-                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                  onChange={handleFileChange}
+                  className="hidden"
                 />
-                {imageUrl && (
-                  <div className="mt-2 rounded-lg overflow-hidden border border-gray-700 h-28 bg-gray-900 flex items-center justify-center">
-                    <img src={imageUrl} alt="preview" className="h-full w-full object-cover" onError={e => (e.currentTarget.style.display = "none")} />
+
+                {/* Upload area / preview */}
+                {imageUrl ? (
+                  <div className="relative rounded-lg overflow-hidden border border-gray-700 h-36 bg-gray-900">
+                    <img src={imageUrl} alt="preview" className="h-full w-full object-cover" />
+                    <button
+                      onClick={() => { setImageUrl(""); setImageKey("") }}
+                      className="absolute top-2 right-2 bg-black/70 hover:bg-black text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold transition-colors"
+                      title="Remove image"
+                    >
+                      ✕
+                    </button>
                   </div>
+                ) : (
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="w-full h-36 rounded-lg border-2 border-dashed border-gray-700 hover:border-pink-600 flex flex-col items-center justify-center gap-2 transition-colors group disabled:opacity-50"
+                  >
+                    {uploading ? (
+                      <>
+                        <span className="text-2xl animate-spin">⟳</span>
+                        <span className="text-xs text-gray-400">Uploading…</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-2xl text-gray-600 group-hover:text-pink-500 transition-colors">📷</span>
+                        <span className="text-xs text-gray-500 group-hover:text-gray-300 transition-colors">Click to upload image</span>
+                        <span className="text-xs text-gray-700">JPG, PNG, WEBP, GIF · max 20MB</span>
+                      </>
+                    )}
+                  </button>
                 )}
-                {!imageUrl && (
-                  <div className="mt-2 rounded-lg border border-dashed border-gray-700 h-28 flex items-center justify-center">
-                    <p className="text-xs text-gray-600">Image preview</p>
-                  </div>
-                )}
+                {uploadError && <p className="text-xs text-red-400 mt-1">{uploadError}</p>}
               </div>
 
               {/* Schedule date + time */}
@@ -568,7 +618,11 @@ export default function SocialPostsTab() {
                           <p className="text-xs text-pink-400 font-mono">{post.hashtags}</p>
                         )}
                         {post.imageUrl && (
-                          <img src={post.imageUrl} alt="" className="rounded-lg max-h-48 object-cover mt-2" />
+                          <img
+                            src={post.imageUrl.startsWith("http") ? post.imageUrl : `/api/catalogue/photo-proxy?key=${encodeURIComponent(post.imageUrl)}`}
+                            alt=""
+                            className="rounded-lg max-h-48 object-cover mt-2"
+                          />
                         )}
                         {post.auctionCode && (
                           <p className="text-xs text-gray-500">Auction: <span className="font-mono text-gray-400">{post.auctionCode}</span></p>
