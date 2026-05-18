@@ -241,6 +241,7 @@ export default function AuctionMonitorPage() {
   }
 
   const ruleActiveRef         = useRef<Record<string, boolean>>({})
+  const ruleLastFiredRef      = useRef<Record<string, number>>({})
   const lastHighValueLotRef   = useRef<string | null>(null)
   const lastPassedLotRef      = useRef<string | null>(null)
   const wsRef                 = useRef<WebSocket | null>(null)
@@ -336,7 +337,7 @@ export default function AuctionMonitorPage() {
     setLog([]); setLastMessageAt(null); setReconnects(0)
     setAllLotOutcomes([]); setBidCounter(0); setUndoCounter(0)
     currentLotIdRef.current = null; lotNumberByLotIdRef.current = {}; hammerByLotIdRef.current = {}
-    ruleActiveRef.current = {}; lastHighValueLotRef.current = null; lastPassedLotRef.current = null
+    ruleActiveRef.current = {}; ruleLastFiredRef.current = {}; lastHighValueLotRef.current = null; lastPassedLotRef.current = null
     setRunning(true)
   }
   function stop() { setRunning(false) }
@@ -371,10 +372,16 @@ export default function AuctionMonitorPage() {
     const lotInfo    = state.currentLotNumber ? ` · Lot ${state.currentLotNumber}` : ""
     const auctionInfo = `Auction ${auctionId}`
 
-    function checkRule(ruleId: string, active: boolean, onActive: () => Parameters<typeof sendNtfy>[0]) {
+    // repeatMs: if set, re-fires every repeatMs while condition stays true
+    function checkRule(ruleId: string, active: boolean, onActive: () => Parameters<typeof sendNtfy>[0], repeatMs?: number) {
       if (!ruleEnabled[ruleId]) { ruleActiveRef.current[ruleId] = false; return }
       const wasActive = !!ruleActiveRef.current[ruleId]
-      if (active && !wasActive) sendNtfy(onActive()).catch(() => {})
+      const lastFired = ruleLastFiredRef.current[ruleId] ?? 0
+      const shouldFire = active && (!wasActive || (!!repeatMs && Date.now() - lastFired >= repeatMs))
+      if (shouldFire) {
+        sendNtfy(onActive()).catch(() => {})
+        ruleLastFiredRef.current[ruleId] = Date.now()
+      }
       ruleActiveRef.current[ruleId] = active
     }
 
@@ -384,11 +391,13 @@ export default function AuctionMonitorPage() {
     const stallRedSec = ruleThresholds["stall_red"] ?? 120
     const stallRedActive = connState === "open" && msSinceLastBid !== null && msSinceLastBid >= stallRedSec * 1000
     checkRule("stall_red", stallRedActive,
-      () => ({ title: "Auction alert · No bids", body: `No bid activity for ${stallRedSec}+ seconds${lotInfo}\n${auctionInfo}`, priority: 5, tags: ["rotating_light"] }))
+      () => ({ title: "Auction alert · No bids", body: `No bid activity for ${stallRedSec}+ seconds${lotInfo}\n${auctionInfo}`, priority: 5, tags: ["rotating_light"] }),
+      stallRedSec * 1000)
 
     const stallAmberSec = ruleThresholds["stall_amber"] ?? 60
     checkRule("stall_amber", connState === "open" && msSinceLastBid !== null && msSinceLastBid >= stallAmberSec * 1000 && !stallRedActive,
-      () => ({ title: "Auction warning · Quiet", body: `No bids in last ${stallAmberSec} seconds${lotInfo}\n${auctionInfo}`, priority: 4, tags: ["warning"] }))
+      () => ({ title: "Auction warning · Quiet", body: `No bids in last ${stallAmberSec} seconds${lotInfo}\n${auctionInfo}`, priority: 4, tags: ["warning"] }),
+      stallAmberSec * 1000)
 
     checkRule("paused", state.paused,
       () => ({ title: "Auction paused", body: `Auctioneer paused the sale${lotInfo}\n${auctionInfo}`, priority: 4, tags: ["pause_button"] }))
@@ -492,7 +501,8 @@ export default function AuctionMonitorPage() {
     } catch { return Object.fromEntries(TIMED_ALERT_RULES.filter(r => r.threshold).map(r => [r.id, r.threshold!.default])) }
   })
   const [timedShowRuleSettings, setTimedShowRuleSettings] = useState(false)
-  const timedRuleActiveRef = useRef<Record<string, boolean>>({})
+  const timedRuleActiveRef    = useRef<Record<string, boolean>>({})
+  const timedRuleLastFiredRef = useRef<Record<string, number>>({})
 
   function setTimedRuleEnabledPersisted(id: string, enabled: boolean) {
     setTimedRuleEnabled(prev => {
@@ -580,6 +590,7 @@ export default function AuctionMonitorPage() {
     localStorage.setItem("auction_monitor_timed_url", timedUrl.trim())
     setTimedLog([]); setTimedLastMsgAt(null); setTimedReconnects(0); setTimedCmdsSeen([])
     timedRuleActiveRef.current = {}
+    timedRuleLastFiredRef.current = {}
     timedSessionStartRef.current = new Date()
     setTimedRunning(true)
   }
@@ -613,10 +624,16 @@ export default function AuctionMonitorPage() {
     if (!timedRunning || !pushEnabled || !ntfyTopic.trim()) return
     const auctionInfo = `Timed auction ${timedId}`
 
-    function checkRule(ruleId: string, active: boolean, onActive: () => Parameters<typeof sendNtfy>[0]) {
+    // repeatMs: if set, re-fires every repeatMs while condition stays true
+    function checkRule(ruleId: string, active: boolean, onActive: () => Parameters<typeof sendNtfy>[0], repeatMs?: number) {
       if (!timedRuleEnabled[ruleId]) { timedRuleActiveRef.current[ruleId] = false; return }
       const wasActive = !!timedRuleActiveRef.current[ruleId]
-      if (active && !wasActive) sendNtfy(onActive()).catch(() => {})
+      const lastFired = timedRuleLastFiredRef.current[ruleId] ?? 0
+      const shouldFire = active && (!wasActive || (!!repeatMs && Date.now() - lastFired >= repeatMs))
+      if (shouldFire) {
+        sendNtfy(onActive()).catch(() => {})
+        timedRuleLastFiredRef.current[ruleId] = Date.now()
+      }
       timedRuleActiveRef.current[ruleId] = active
     }
 
@@ -632,11 +649,13 @@ export default function AuctionMonitorPage() {
     const stallRedSec = timedRuleThresholds["stall_red"] ?? 120
     const tStallRed = timedConnState === "open" && msSinceActivity !== null && msSinceActivity >= stallRedSec * 1000
     checkRule("stall_red", tStallRed,
-      () => ({ title: "Timed auction · No activity", body: `No messages for ${stallRedSec}+ seconds\n${auctionInfo}`, priority: 5, tags: ["rotating_light"] }))
+      () => ({ title: "Timed auction · No activity", body: `No messages for ${stallRedSec}+ seconds\n${auctionInfo}`, priority: 5, tags: ["rotating_light"] }),
+      stallRedSec * 1000)
 
     const stallAmberSec = timedRuleThresholds["stall_amber"] ?? 60
     checkRule("stall_amber", timedConnState === "open" && msSinceActivity !== null && msSinceActivity >= stallAmberSec * 1000 && !tStallRed,
-      () => ({ title: "Timed auction · Quiet", body: `No messages in last ${stallAmberSec} seconds\n${auctionInfo}`, priority: 4, tags: ["warning"] }))
+      () => ({ title: "Timed auction · Quiet", body: `No messages in last ${stallAmberSec} seconds\n${auctionInfo}`, priority: 4, tags: ["warning"] }),
+      stallAmberSec * 1000)
 
     if (timedHealthBand !== "green" && (timedHealthBand === "amber" || timedHealthBand === "red")) {
       timedRuleActiveRef.current["__bad_state__"] = true
