@@ -308,7 +308,7 @@ function ProgressBar({ done, total, label, unit }: { done: number; total: number
 function CataloguingTab() {
   const [from, setFrom] = useState(daysAgo(29))
   const [to, setTo]     = useState(today())
-  const [mode, setMode] = useState<"barcode" | "uniqueid" | "compare">("barcode")
+  const [mode, setMode] = useState<"barcode" | "uniqueid" | "compare">("uniqueid")
   const [data, setData] = useState<CatData | null>(null)
   const [compareData, setCompareData] = useState<{ barcode: CatData; uniqueid: CatData } | null>(null)
   const [loading, setLoading]   = useState(false)
@@ -390,6 +390,12 @@ function CataloguingTab() {
     <div>
       <h2 className="text-lg font-semibold text-white mb-4">Cataloguing Report</h2>
       <DateRange from={from} to={to} onChange={handleManualChange} onPreset={handlePreset} />
+
+      {/* Counting-method explanation */}
+      <div className="mb-4 bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 text-sm text-gray-400 leading-relaxed">
+        <span className="text-white font-medium">Auction Line UniqueID</span> is the accurate measure — it counts only new lot insertions as recorded in BC, matching what BC itself reports.{" "}
+        <span className="text-white font-medium">Internal Barcode</span> counts every change to the barcode field, which inflates figures due to double-scanning, corrections and re-entries. Use Auction Line for performance tracking and Internal Barcode only if you need to investigate scanning activity.
+      </div>
 
       {/* Counting-method toggle */}
       <div className="mb-4">
