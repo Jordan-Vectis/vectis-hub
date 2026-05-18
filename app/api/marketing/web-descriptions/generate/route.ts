@@ -53,22 +53,24 @@ export async function POST(req: NextRequest) {
       .slice(0, 20)
       .join("\n")
 
-    const prompt = `You are writing a web description for the Vectis auction house website sale page.
-Your task: write a single flowing paragraph (2–4 sentences) that broadly describes what collectors will find in this auction.
+    const prompt = `You are writing a short web description for a Vectis auction house sale page.
 
-Rules:
-- Give a general overview of the main themes and types of items — do NOT list every brand or product
-- Mention the most prominent formats and scales where relevant (e.g. "3.75-inch action figures", "1:43 diecast", "carded figures")
-- You may name 2–3 of the most prominent or interesting lots as examples, but keep it concise
-- Vary sentence structure naturally — avoid comma-separated lists of brand names
-- SEO-friendly: weave in key collector search terms naturally
+Follow this EXACT style — short, factual, catalogue-like sentences that group items by type:
+
+EXAMPLE (Matchbox auction):
+"This auction includes group and single lots of boxed and unboxed Matchbox models. Including Regular Wheels, Speed Kings, Super Kings, King Size, major and accessory packs, plus collectors cases and a Regular Wheels G10 Fire Station gift set. Superfast models include blister carded models and packs, gift sets, twin packs, Convoy and MB series. Further items include books, Matchbox Collectibles series and Yesteryear models."
+
+Notice:
+- Starts with "This auction includes group and single lots of [main theme]."
+- Second sentence starts with "Including" and lists the key sub-types/series/formats separated by commas
+- Further sentences group remaining types: "[Type] include/s [list]."
+- Ends with "Further items include [remaining types]."
+- Short, direct sentences — no flowery language, no adjectives like "impressive" or "stunning"
+- Mentions formats and scales where known (e.g. "3.75-inch", "carded", "boxed and unboxed", "1:43")
+- Groups by TYPE not by brand name — brands are secondary
 - British English spelling
 - Do NOT mention prices, estimates, or lot counts
-- Do NOT start with "This auction offers" — use "This auction includes" or "Featuring" or similar
-- Output only the description paragraph — no headings, no bullet points, no extra text
-
-Style to aim for (concise, general, readable):
-"This auction includes group and single lots of boxed and unboxed Matchbox models. Including Regular Wheels, Speed Kings, Super Kings, King Size, major and accessory packs, plus collectors cases and a Regular Wheels G10 Fire Station gift set. Superfast models include blister carded models and packs, gift sets, twin packs, Convoy and MB series. Further items include books, Matchbox Collectibles series and Yesteryear models."
+- Output only the description — no headings, no bullet points
 
 Auction: ${auction.name} (${auction.code})
 Type: ${auction.auctionType}
