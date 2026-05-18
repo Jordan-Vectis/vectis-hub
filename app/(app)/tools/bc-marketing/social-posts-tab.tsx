@@ -140,9 +140,6 @@ const SPECIAL_DATES: SpecialDate[] = [
   { tag: "MARKLIN_FOUNDED",     label: "Märklin Founded Anniversary",               month: 1,  day: 1,  category: "collector",  since: 1859, emoji: "🏭" },
   { tag: "BRITAINS_FOUNDED",    label: "Britains Toy Soldiers Founded Anniversary", month: 1,  day: 1,  category: "collector",  since: 1893, emoji: "🪖" },
 
-  // ── HISTORICAL (shared across departments) ───────────────────────────────
-  { tag: "WATERLOO",            label: "Battle of Waterloo Anniversary",            month: 6,  day: 18, category: "historical", since: 1815, emoji: "⚔️" },
-
   // ── SEASONAL / GENERAL ───────────────────────────────────────────────────
   { tag: "NEW_YEAR",            label: "New Year's Day",                            month: 1,  day: 1,  category: "seasonal",               emoji: "🎆" },
   { tag: "VALENTINES",          label: "Valentine's Day",                           month: 2,  day: 14, category: "seasonal",               emoji: "❤️" },
@@ -150,7 +147,7 @@ const SPECIAL_DATES: SpecialDate[] = [
   { tag: "EASTER",              label: "Easter Weekend (approx. late March/April)", month: 3,  day: 30, category: "seasonal",               emoji: "🐣" },
   { tag: "MOTHERS_DAY",         label: "Mother's Day UK (approx. late March)",      month: 3,  day: 22, category: "seasonal",               emoji: "💐" },
   { tag: "APRIL_FOOLS",         label: "April Fool's Day",                          month: 4,  day: 1,  category: "seasonal",               emoji: "🤡" },
-  { tag: "FATHERS_DAY",         label: "Father's Day (3rd Sunday June)",            month: 6,  day: 15, category: "seasonal",               emoji: "👨‍👦" },
+  { tag: "FATHERS_DAY",         label: "Father's Day (3rd Sunday June)",            month: 6,  day: 21, category: "seasonal",               emoji: "👨‍👦" },
   { tag: "HALLOWEEN",           label: "Halloween",                                 month: 10, day: 31, category: "seasonal",               emoji: "🎃" },
   { tag: "BONFIRE_NIGHT",       label: "Bonfire Night",                             month: 11, day: 5,  category: "seasonal",               emoji: "🎇" },
   { tag: "BLACK_FRIDAY",        label: "Black Friday",                              month: 11, day: 29, category: "seasonal",               emoji: "🛍️" },
@@ -216,7 +213,7 @@ export default function SocialPostsTab() {
   const upcoming = getUpcomingDates(90)
 
   // ── Compose state ──
-  const [platform,       setPlatform]       = useState("FACEBOOK")
+  const [platforms,      setPlatforms]      = useState<string[]>(["FACEBOOK"])
   const [copy,           setCopy]           = useState("")
   const [hashtags,       setHashtags]       = useState("")
   const [imageKey,       setImageKey]       = useState("")   // R2 key
@@ -309,7 +306,7 @@ export default function SocialPostsTab() {
       const res = await fetch("/api/marketing/social-posts/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ specialDate: label || context, context, platform, modelId }),
+        body: JSON.stringify({ specialDate: label || context, context, platform: platforms.join(","), modelId }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? "Failed")
@@ -334,7 +331,7 @@ export default function SocialPostsTab() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          platform, copy,
+          platform: platforms.join(","), copy,
           hashtags:       hashtags || null,
           imageUrl:       imageKey || null,
           scheduledAt:    dt,
@@ -443,19 +440,35 @@ export default function SocialPostsTab() {
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-white">✍️ Compose Post</h2>
 
-            {/* Platform toggle */}
-            <div className="flex gap-1 bg-gray-900 rounded-lg p-0.5">
-              {["FACEBOOK", "INSTAGRAM"].map(p => (
-                <button
-                  key={p}
-                  onClick={() => setPlatform(p)}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
-                    platform === p ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"
-                  }`}
-                >
-                  {p === "FACEBOOK" ? "f Facebook" : "◎ Instagram"}
-                </button>
-              ))}
+            {/* Platform multi-select */}
+            <div className="flex gap-1.5 items-center">
+              <span className="text-xs text-gray-500 mr-1">Post to:</span>
+              {[
+                { key: "FACEBOOK",  label: "f Facebook",   active: "bg-blue-600" },
+                { key: "INSTAGRAM", label: "◎ Instagram",  active: "bg-gradient-to-r from-purple-600 to-pink-600" },
+              ].map(p => {
+                const selected = platforms.includes(p.key)
+                return (
+                  <button
+                    key={p.key}
+                    onClick={() => {
+                      if (selected) {
+                        // Don't allow deselecting both
+                        if (platforms.length > 1) setPlatforms(prev => prev.filter(x => x !== p.key))
+                      } else {
+                        setPlatforms(prev => [...prev, p.key])
+                      }
+                    }}
+                    className={`px-3 py-1 rounded-md text-xs font-semibold transition-all border ${
+                      selected
+                        ? `${p.active} text-white border-transparent`
+                        : "border-gray-700 text-gray-400 hover:text-white hover:border-gray-500"
+                    }`}
+                  >
+                    {selected && <span className="mr-1">✓</span>}{p.label}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
@@ -655,10 +668,14 @@ export default function SocialPostsTab() {
                   <div key={post.id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
                     {/* Header row */}
                     <div className="flex items-center gap-3 px-4 py-3">
-                      {/* Platform badge */}
-                      <span className={`text-xs font-bold text-white px-2 py-0.5 rounded ${PLATFORM_COLOURS[post.platform] ?? "bg-gray-700"}`}>
-                        {post.platform === "FACEBOOK" ? "f" : "◎"}
-                      </span>
+                      {/* Platform badges (may be multiple) */}
+                      <div className="flex gap-1 shrink-0">
+                        {post.platform.split(",").map(p => (
+                          <span key={p} className={`text-xs font-bold text-white px-2 py-0.5 rounded ${PLATFORM_COLOURS[p.trim()] ?? "bg-gray-700"}`}>
+                            {p.trim() === "FACEBOOK" ? "f" : "◎"}
+                          </span>
+                        ))}
+                      </div>
 
                       {/* Special date tag */}
                       {sd && (
