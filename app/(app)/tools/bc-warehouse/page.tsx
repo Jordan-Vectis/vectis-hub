@@ -2667,31 +2667,99 @@ const HOME_CARDS: {
 ]
 
 function WarehouseHomeTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
+  const [editOrder,  setEditOrder]  = useState(false)
+  const [cardOrder,  setCardOrder]  = useState<Tab[]>(HOME_CARDS.map(c => c.id))
+  const dragItem = useRef<number | null>(null)
+  const dragOver = useRef<number | null>(null)
+
+  // Load saved order from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("warehouse_home_order")
+      if (stored) {
+        const parsed = JSON.parse(stored) as Tab[]
+        const allIds = HOME_CARDS.map(c => c.id)
+        const valid   = parsed.filter(id => allIds.includes(id))
+        const missing = allIds.filter(id => !valid.includes(id))
+        setCardOrder([...valid, ...missing])
+      }
+    } catch {}
+  }, [])
+
+  // Persist order whenever it changes
+  useEffect(() => {
+    localStorage.setItem("warehouse_home_order", JSON.stringify(cardOrder))
+  }, [cardOrder])
+
+  function handleDragStart(i: number) { dragItem.current = i }
+  function handleDragEnter(i: number) { dragOver.current = i }
+  function handleDragEnd() {
+    if (dragItem.current === null || dragOver.current === null || dragItem.current === dragOver.current) {
+      dragItem.current = null; dragOver.current = null; return
+    }
+    const next = [...cardOrder]
+    const [moved] = next.splice(dragItem.current, 1)
+    next.splice(dragOver.current, 0, moved)
+    setCardOrder(next)
+    dragItem.current = null; dragOver.current = null
+  }
+
+  const orderedCards = cardOrder.map(id => HOME_CARDS.find(c => c.id === id)!).filter(Boolean)
+
   return (
     <div className="overflow-y-auto h-full px-8 py-10">
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold text-white mb-1">BC Warehouse</h1>
-        <p className="text-sm text-gray-400 mb-10">Select a section to get started.</p>
+        <div className="flex items-end justify-between mb-10">
+          <div>
+            <h1 className="text-2xl font-bold text-white mb-1">BC Warehouse</h1>
+            <p className="text-sm text-gray-400">Select a section to get started.</p>
+          </div>
+          <button
+            onClick={() => setEditOrder(v => !v)}
+            className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+              editOrder
+                ? "bg-blue-600 border-blue-500 text-white"
+                : "bg-gray-800 border-gray-700 text-gray-400 hover:text-white"
+            }`}
+          >
+            {editOrder ? "✓ Done" : "⠿ Reorder"}
+          </button>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {HOME_CARDS.map(card => (
+          {orderedCards.map((card, i) => (
             <div
               key={card.id}
+              draggable={editOrder}
+              onDragStart={() => handleDragStart(i)}
+              onDragEnter={() => handleDragEnter(i)}
+              onDragEnd={handleDragEnd}
+              onDragOver={e => e.preventDefault()}
               className={`relative bg-gray-900 border ${card.colour} rounded-xl p-6 flex flex-col
-                transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5`}
+                transition-all duration-200
+                ${editOrder ? "cursor-grab active:cursor-grabbing hover:border-blue-500/60 select-none" : "hover:shadow-xl hover:-translate-y-0.5"}`}
             >
+              {editOrder && (
+                <div className="absolute top-3 right-3 text-gray-500 text-lg leading-none">⠿</div>
+              )}
               <div className="text-4xl mb-4">{card.icon}</div>
               <h2 className="text-base font-bold text-white mb-2">{card.label}</h2>
               <p className="text-gray-400 text-sm leading-relaxed mb-5 flex-1">{card.description}</p>
               <button
-                onClick={() => onNavigate(card.id)}
-                className={`w-full text-center text-sm font-semibold text-white py-2 px-4 rounded-lg transition-colors ${card.btn}`}
+                onClick={() => !editOrder && onNavigate(card.id)}
+                disabled={editOrder}
+                className={`w-full text-center text-sm font-semibold text-white py-2 px-4 rounded-lg transition-colors
+                  ${editOrder ? "opacity-40 cursor-not-allowed bg-gray-700" : card.btn}`}
               >
                 Open {card.label} →
               </button>
             </div>
           ))}
         </div>
+
+        {editOrder && (
+          <p className="text-center text-xs text-gray-500 mt-6">Drag cards to rearrange — order is saved automatically</p>
+        )}
       </div>
     </div>
   )
