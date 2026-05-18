@@ -14,9 +14,10 @@ export const runtime = "nodejs"
 // No logo. Barcode on the LEFT, location code text on the RIGHT.
 // Optional arrow drawn at the bottom of each row pointing left or right.
 
-const PAGE_W = 595.28   // A4 portrait
-const PAGE_H = 841.89
-const MARGIN = 36
+const PAGE_W        = 595.28   // A4 portrait
+const PAGE_H        = 841.89
+const MARGIN        = 36       // top & sides
+const MARGIN_BOTTOM = 64       // extra space at the bottom for the arrow + printer safe zone
 
 const PER_PAGE   = 6
 const COL_GAP    = 24   // pt — gap between barcode and text columns
@@ -70,9 +71,9 @@ async function buildPdf(locations: string[], arrow: ArrowDir): Promise<Uint8Arra
   const helv  = await doc.embedFont(StandardFonts.Helvetica)
   const helvB = await doc.embedFont(StandardFonts.HelveticaBold)
 
-  // Usable vertical area — full page height minus top/bottom margins
+  // Usable vertical area — top margin at top, larger bottom margin for arrow
   const usableTop = PAGE_H - MARGIN
-  const usableH   = usableTop - MARGIN
+  const usableH   = usableTop - MARGIN_BOTTOM
 
   // Fixed slot height — same for every page regardless of how many locations
   const slotH = usableH / PER_PAGE
@@ -164,7 +165,7 @@ async function drawLocationRow(
 
 // Single arrow drawn once at the very bottom of the page
 function drawPageArrow(page: PDFPage, direction: "left" | "right") {
-  const arrowY      = MARGIN / 2        // centred in the bottom margin
+  const arrowY      = MARGIN_BOTTOM / 2  // centred in the bottom margin (well inside printable area)
   const shaftLen    = 80
   const headLen     = 16
   const headSpread  = 10
