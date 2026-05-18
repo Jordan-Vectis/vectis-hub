@@ -2576,13 +2576,40 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
 
 // ─── LocationBarcodesTab ──────────────────────────────────────────────────────
 
+// Detect a trailing number in the last non-empty line so we can offer to continue the sequence.
+// e.g. "SHELF-A1" → { prefix: "SHELF-A", num: 1, padLen: 1 }
+// e.g. "LOC-003"  → { prefix: "LOC-",    num: 3, padLen: 3 }
+function parseSequence(text: string): { prefix: string; num: number; padLen: number } | null {
+  const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0)
+  if (lines.length === 0) return null
+  const last  = lines[lines.length - 1]
+  const match = /^(.*?)(\d+)$/.exec(last)
+  if (!match) return null
+  return { prefix: match[1], num: parseInt(match[2], 10), padLen: match[2].length }
+}
+
 function LocationBarcodesTab() {
   const [locationText,   setLocationText]   = useState("")
   const [downloading,    setDownloading]    = useState(false)
   const [error,          setError]          = useState<string | null>(null)
   const [arrow,          setArrow]          = useState<"none" | "left" | "right">("none")
+  const [fillCount,      setFillCount]      = useState(5)
 
   const locations = locationText.split("\n").map(l => l.trim()).filter(l => l.length > 0)
+  const seq       = parseSequence(locationText)
+
+  function addSequence() {
+    if (!seq) return
+    const newLines: string[] = []
+    for (let i = 1; i <= fillCount; i++) {
+      const n = (seq.num + i).toString().padStart(seq.padLen, "0")
+      newLines.push(`${seq.prefix}${n}`)
+    }
+    setLocationText(prev => {
+      const trimmed = prev.trimEnd()
+      return trimmed + (trimmed ? "\n" : "") + newLines.join("\n")
+    })
+  }
 
   async function download() {
     if (locations.length === 0) return
@@ -2631,6 +2658,31 @@ function LocationBarcodesTab() {
           className="w-full rounded-lg bg-gray-800 border border-gray-700 text-white px-3 py-2 text-sm font-mono
                      focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y placeholder:text-gray-600"
         />
+
+        {/* Sequence autofill */}
+        {seq && (
+          <div className="mt-2 flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2">
+            <span className="text-xs text-gray-400 flex-1">
+              Continue from <span className="text-white font-mono">{seq.prefix}{seq.num}</span>
+            </span>
+            <span className="text-xs text-gray-500">Add</span>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={fillCount}
+              onChange={e => setFillCount(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+              className="w-14 rounded bg-gray-700 border border-gray-600 text-white text-xs text-center px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            <span className="text-xs text-gray-500">more</span>
+            <button
+              onClick={addSequence}
+              className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded transition-colors"
+            >
+              + Fill
+            </button>
+          </div>
+        )}
 
         {/* Arrow picker */}
         <div className="mt-3 mb-3">
