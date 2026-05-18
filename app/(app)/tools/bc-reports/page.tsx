@@ -316,7 +316,6 @@ function CataloguingTab() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [error, setError]       = useState<string | null>(null)
   const [subTab, setSubTab]     = useState("Daily Average")
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Load a single mode's data — returns the parsed result or throws.
   async function loadOne(f: string, t: string, m: "barcode" | "uniqueid", onProgress?: (p: { done: number; total: number }) => void): Promise<CatData> {
@@ -365,32 +364,18 @@ function CataloguingTab() {
     finally { setLoading(false); setProgress(null) }
   }, [])
 
-  // Auto-load on first render
-  useEffect(() => { load(from, to, mode) }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Re-load when the mode changes
+  // Auto-reload whenever any filter changes (debounced so manual date typing doesn't spam)
   useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    load(from, to, mode)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode])
+    const t = setTimeout(() => load(from, to, mode), 300)
+    return () => clearTimeout(t)
+  }, [from, to, mode]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleManualChange(f: string, t: string) {
-    setFrom(f); setTo(t)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => load(f, t, mode), 700)
-  }
-
-  function handlePreset(f: string, t: string) {
-    setFrom(f); setTo(t)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    load(f, t, mode)
-  }
+  function handleDateChange(f: string, t: string) { setFrom(f); setTo(t) }
 
   return (
     <div>
       <h2 className="text-lg font-semibold text-white mb-4">Cataloguing Report</h2>
-      <DateRange from={from} to={to} onChange={handleManualChange} onPreset={handlePreset} />
+      <DateRange from={from} to={to} onChange={handleDateChange} onPreset={handleDateChange} />
 
       {/* Counting-method explanation */}
       <div className="mb-4 bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 text-sm text-gray-400 leading-relaxed">
@@ -586,7 +571,6 @@ function PackingTab() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [error, setError]       = useState<string | null>(null)
   const [subTab, setSubTab]     = useState("Overview")
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const load = useCallback(async (f: string, t: string) => {
     if (!f || !t) return
@@ -621,19 +605,12 @@ function PackingTab() {
     finally { setLoading(false); setProgress(null) }
   }, [])
 
-  useEffect(() => { load(from, to) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const t = setTimeout(() => load(from, to), 300)
+    return () => clearTimeout(t)
+  }, [from, to]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleManualChange(f: string, t: string) {
-    setFrom(f); setTo(t)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => load(f, t), 700)
-  }
-
-  function handlePreset(f: string, t: string) {
-    setFrom(f); setTo(t)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    load(f, t)
-  }
+  function handleDateChange(f: string, t: string) { setFrom(f); setTo(t) }
 
   // Derive daily totals from raw for stats + chart
   const lotsPerDay = data
@@ -786,7 +763,7 @@ function PackingTab() {
   return (
     <div>
       <h2 className="text-lg font-semibold text-white mb-4">Packing Report</h2>
-      <DateRange from={from} to={to} onChange={handleManualChange} onPreset={handlePreset} />
+      <DateRange from={from} to={to} onChange={handleDateChange} onPreset={handleDateChange} />
       {loading && progress && <ProgressBar done={progress.done} total={progress.total} unit="chunks" />}
       {loading && !progress && <p className="text-xs text-gray-500 mb-4">Connecting…</p>}
       {!loading && <LoadBtn loading={loading} onClick={() => load(from, to)} />}
@@ -1192,7 +1169,7 @@ function WarehouseTab() {
   const [error, setError]     = useState<string | null>(null)
   const [subTab, setSubTab]   = useState("By Category")
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
       const res  = await window.fetch("/api/bc/warehouse")
@@ -1201,7 +1178,9 @@ function WarehouseTab() {
       setData(json)
     } catch (e: any) { setError(e.message) }
     finally { setLoading(false) }
-  }
+  }, [])
+
+  useEffect(() => { load() }, [load])
 
   return (
     <div>
@@ -1210,7 +1189,7 @@ function WarehouseTab() {
         onClick={load} disabled={loading}
         className="mb-5 px-5 py-2 bg-[#0078D4] hover:bg-blue-500 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
       >
-        {loading ? "Loading…" : "Load Snapshot"}
+        {loading ? "Loading…" : "↺ Refresh Snapshot"}
       </button>
       {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
       {data && (
@@ -1582,7 +1561,6 @@ function ShippingTab() {
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const [subTab, setSubTab]   = useState("By Country")
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const load = useCallback(async (f: string, t: string) => {
     if (!f || !t) return
@@ -1596,24 +1574,17 @@ function ShippingTab() {
     finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { load(from, to) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const t = setTimeout(() => load(from, to), 300)
+    return () => clearTimeout(t)
+  }, [from, to]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleManualChange(f: string, t: string) {
-    setFrom(f); setTo(t)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => load(f, t), 700)
-  }
-
-  function handlePreset(f: string, t: string) {
-    setFrom(f); setTo(t)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    load(f, t)
-  }
+  function handleDateChange(f: string, t: string) { setFrom(f); setTo(t) }
 
   return (
     <div>
       <h2 className="text-lg font-semibold text-white mb-4">Shipping Report</h2>
-      <DateRange from={from} to={to} onChange={handleManualChange} onPreset={handlePreset} />
+      <DateRange from={from} to={to} onChange={handleDateChange} onPreset={handleDateChange} />
       {!loading && <LoadBtn loading={loading} onClick={() => load(from, to)} />}
       {loading && <p className="text-xs text-gray-500 mb-5">Loading…</p>}
       {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
