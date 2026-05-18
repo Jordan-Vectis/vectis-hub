@@ -54,17 +54,21 @@ export async function POST(req: NextRequest) {
       .join("\n")
 
     const prompt = `You are writing a web description for the Vectis auction house website sale page.
-Your task: write a single flowing paragraph (2–5 sentences) that describes what is in this auction.
+Your task: write a single flowing paragraph (2–4 sentences) that broadly describes what collectors will find in this auction.
 
 Rules:
-- Be specific — mention actual model names, series, formats, and types you can see in the data
-- Vary the sentence structure; do not repeat the same pattern every sentence
-- SEO-friendly: naturally include key collector search terms from the lot data
+- Give a general overview of the main themes and types of items — do NOT list every brand or product
+- Mention the most prominent formats and scales where relevant (e.g. "3.75-inch action figures", "1:43 diecast", "carded figures")
+- You may name 2–3 of the most prominent or interesting lots as examples, but keep it concise
+- Vary sentence structure naturally — avoid comma-separated lists of brand names
+- SEO-friendly: weave in key collector search terms naturally
 - British English spelling
 - Do NOT mention prices, estimates, or lot counts
-- Do NOT use phrases like "a wide range of" or "variety of" — be specific instead
-- Start with "This auction includes..." or similar
+- Do NOT start with "This auction offers" — use "This auction includes" or "Featuring" or similar
 - Output only the description paragraph — no headings, no bullet points, no extra text
+
+Style to aim for (concise, general, readable):
+"This auction includes group and single lots of boxed and unboxed Matchbox models. Including Regular Wheels, Speed Kings, Super Kings, King Size, major and accessory packs, plus collectors cases and a Regular Wheels G10 Fire Station gift set. Superfast models include blister carded models and packs, gift sets, twin packs, Convoy and MB series. Further items include books, Matchbox Collectibles series and Yesteryear models."
 
 Auction: ${auction.name} (${auction.code})
 Type: ${auction.auctionType}
