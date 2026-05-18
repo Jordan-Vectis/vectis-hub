@@ -137,7 +137,7 @@ async function drawLocationRow(
 
   // Text on the RIGHT — bold, Vectis blue. Large base size, shrinks only if code is very long.
   const textColX  = PAGE_W - MARGIN - TEXT_COL_W
-  let   textSize  = 42
+  let   textSize  = 54
   while (textSize > 10 && helvB.widthOfTextAtSize(location, textSize) > TEXT_COL_W) textSize -= 2
 
   const textY = centreY - textSize * 0.35
@@ -146,7 +146,7 @@ async function drawLocationRow(
     y:     textY,
     size:  textSize,
     font:  helvB,
-    color: brandBlue,
+    color: rgb(0, 0, 0),
   })
 
   // Separator line between rows
