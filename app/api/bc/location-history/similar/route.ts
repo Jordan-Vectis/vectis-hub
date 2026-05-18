@@ -26,23 +26,32 @@ export async function GET(req: NextRequest) {
     if (!from || !to) return NextResponse.json({ error: "from and to required" }, { status: 400 })
 
     // Two queries in parallel — BC OData doesn't support OR on field values
-    const [toteRows, itemRows] = await Promise.all([
-      bcFetchAll(
-        token, "ChangeLogEntries",
-        `Date_and_Time ge ${from} and Date_and_Time le ${to} and Field_Caption eq 'Location'`,
-        SELECT, 500
-      ),
-      bcFetchAll(
-        token, "ChangeLogEntries",
-        `Date_and_Time ge ${from} and Date_and_Time le ${to} and Field_Caption eq 'Article Location Code'`,
-        SELECT, 500
-      ),
+    const toteFilter = `Date_and_Time ge ${from} and Date_and_Time le ${to} and Field_Caption eq 'Location'`
+    const itemFilter = `Date_and_Time ge ${from} and Date_and_Time le ${to} and Field_Caption eq 'Article Location Code'`
+
+    const [toteResult, itemResult] = await Promise.allSettled([
+      bcFetchAll(token, "ChangeLogEntries", toteFilter, SELECT, 500),
+      bcFetchAll(token, "ChangeLogEntries", itemFilter, SELECT, 500),
     ])
+
+    if (toteResult.status === "rejected" && itemResult.status === "rejected") {
+      const msg = toteResult.reason?.message ?? "BC query failed"
+      throw new Error(`Both BC queries failed. ${msg}`)
+    }
+
+    const toteRows = toteResult.status === "fulfilled" ? toteResult.value : []
+    const itemRows = itemResult.status === "fulfilled" ? itemResult.value : []
+
+    const partialWarning =
+      toteResult.status === "rejected" ? "Tote query failed — only item results shown." :
+      itemResult.status === "rejected" ? "Item query failed — only tote results shown." :
+      null
 
     const all = [...toteRows, ...itemRows]
     all.sort((a, b) => (a.Date_and_Time ?? "").localeCompare(b.Date_and_Time ?? ""))
 
     return NextResponse.json({
+      warning: partialWarning,
       entries: all.map(r => ({
         itemKey:   r.Primary_Key_Field_1_Value ?? "",
         itemKey2:  r.Primary_Key_Field_2_Value ?? null,

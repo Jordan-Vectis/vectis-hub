@@ -1041,6 +1041,7 @@ function LocationHistoryTab() {
   const [similarError, setSimilarError]     = useState<string | null>(null)
   const [similarResult, setSimilarResult]   = useState<SimilarEntry[] | null>(null)
   const [similarWindow, setSimilarWindow]   = useState<{ from: string; to: string } | null>(null)
+  const [similarElapsed, setSimilarElapsed] = useState(0)
 
   async function lookup() {
     const q = input.trim()
@@ -1065,14 +1066,40 @@ function LocationHistoryTab() {
     const fromDt = new Date(minMs - 5 * 60 * 1000).toISOString()
     const toDt   = new Date(maxMs + 5 * 60 * 1000).toISOString()
     setSimilarWindow({ from: fromDt, to: toDt })
-    setSimilarLoading(true); setSimilarError(null); setSimilarResult(null)
+    setSimilarLoading(true); setSimilarError(null); setSimilarResult(null); setSimilarElapsed(0)
+
+    // Elapsed-time counter
+    let elapsed = 0
+    const timer = setInterval(() => { elapsed++; setSimilarElapsed(elapsed) }, 1000)
+
     try {
-      const res  = await fetch(`/api/bc/location-history/similar?from=${encodeURIComponent(fromDt)}&to=${encodeURIComponent(toDt)}`)
-      const data = await res.json()
-      if (!res.ok) { setSimilarError(data.error ?? "Query failed"); return }
+      const res = await fetch(
+        `/api/bc/location-history/similar?from=${encodeURIComponent(fromDt)}&to=${encodeURIComponent(toDt)}`,
+        { signal: AbortSignal.timeout(55_000) }
+      )
+      // Handle non-JSON responses (e.g. Railway 504 HTML page)
+      const text = await res.text()
+      let data: any
+      try { data = JSON.parse(text) } catch {
+        setSimilarError(`Server returned an unexpected response (HTTP ${res.status}). BC may be timing out — try again in a moment.`)
+        return
+      }
+      if (!res.ok) {
+        setSimilarError(`BC error (${res.status}): ${data?.error ?? "Query failed"}`)
+        return
+      }
+      if (data?.warning) setSimilarError(data.warning)
       setSimilarResult(data.entries ?? [])
-    } catch { setSimilarError("Network error") }
-    finally { setSimilarLoading(false) }
+    } catch (e: any) {
+      if (e?.name === "TimeoutError" || e?.name === "AbortError") {
+        setSimilarError("Request timed out after 55 seconds. BC is taking too long — try a narrower date range or try again shortly.")
+      } else {
+        setSimilarError(`Network error: ${e?.message ?? "Unknown error"}`)
+      }
+    } finally {
+      clearInterval(timer)
+      setSimilarLoading(false)
+    }
   }
 
   function printSimilar() {
@@ -1186,19 +1213,40 @@ function LocationHistoryTab() {
               </div>
 
               {/* Similar Changes */}
-              <div className="pt-2">
+              <div className="pt-2 space-y-3">
                 <button onClick={checkSimilar} disabled={similarLoading}
                   className="px-4 py-2 bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors">
                   {similarLoading ? "Searching…" : "🔍 Check Similar Changes"}
                 </button>
-                {similarWindow && !similarLoading && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Showing all location changes from {formatDateTime(similarWindow.from)} to {formatDateTime(similarWindow.to)} (±5 min)
+
+                {similarLoading && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="h-full bg-purple-500 rounded-full transition-all duration-1000 ease-out"
+                          style={{ width: `${Math.min(similarElapsed * 1.8, 90)}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-gray-500 tabular-nums w-8 text-right">{similarElapsed}s</span>
+                    </div>
+                    <p className="text-xs text-gray-500">Querying BC change logs for tote moves and item location changes…</p>
+                  </div>
+                )}
+
+                {similarWindow && !similarLoading && !similarError && (
+                  <p className="text-xs text-gray-500">
+                    Searched {formatDateTime(similarWindow.from)} → {formatDateTime(similarWindow.to)} (±5 min)
                   </p>
                 )}
-              </div>
 
-              {similarError && <p className="text-red-400 text-sm">{similarError}</p>}
+                {similarError && (
+                  <div className="bg-red-950/40 border border-red-800/50 rounded-lg px-4 py-3">
+                    <p className="text-red-400 text-sm font-medium">Query failed</p>
+                    <p className="text-red-300/70 text-xs mt-1">{similarError}</p>
+                  </div>
+                )}
+              </div>
 
               {similarResult && (
                 <div className="space-y-3">
