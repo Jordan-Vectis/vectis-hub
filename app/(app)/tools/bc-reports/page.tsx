@@ -114,12 +114,13 @@ function DateRange({ from, to, onChange, onPreset }: {
   onPreset: (f: string, t: string) => void
 }) {
   const presets = [
-    { label: "Last 7 days",  from: daysAgo(6),         to: today() },
-    { label: "Last 30 days", from: daysAgo(29),         to: today() },
-    { label: "This month",   from: startOfMonth(),       to: today() },
-    { label: "Last month",   from: lastMonthRange()[0],  to: lastMonthRange()[1] },
-    { label: "Last 12 months", from: last12Months(),        to: today() },
-    { label: "This year",      from: startOfYear(),         to: today() },
+    { label: "Today",          from: today(),            to: today() },
+    { label: "Last 7 days",    from: daysAgo(6),         to: today() },
+    { label: "Last 30 days",   from: daysAgo(29),        to: today() },
+    { label: "This month",     from: startOfMonth(),      to: today() },
+    { label: "Last month",     from: lastMonthRange()[0], to: lastMonthRange()[1] },
+    { label: "Last 12 months", from: last12Months(),      to: today() },
+    { label: "This year",      from: startOfYear(),       to: today() },
   ]
   return (
     <div className="space-y-3 mb-4">
@@ -402,19 +403,19 @@ function CataloguingTab() {
         <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Counting method</p>
         <div className="inline-flex gap-1 bg-gray-900 border border-gray-800 rounded-lg p-0.5 flex-wrap">
           <button
-            onClick={() => setMode("barcode")}
-            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-              mode === "barcode" ? "bg-blue-600 text-white font-semibold" : "text-gray-400 hover:text-white"
-            }`}
-            title="Counts every change to the Internal Barcode field — the original report"
-          >Internal Barcode (any change)</button>
-          <button
             onClick={() => setMode("uniqueid")}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
               mode === "uniqueid" ? "bg-blue-600 text-white font-semibold" : "text-gray-400 hover:text-white"
             }`}
             title="Counts only Auction Line UniqueID Insertions — matches BC's Insertion-filtered view"
           >Auction Line UniqueID (insertions only)</button>
+          <button
+            onClick={() => setMode("barcode")}
+            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+              mode === "barcode" ? "bg-blue-600 text-white font-semibold" : "text-gray-400 hover:text-white"
+            }`}
+            title="Counts every change to the Internal Barcode field — the original report"
+          >Internal Barcode (any change)</button>
           <button
             onClick={() => setMode("compare")}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
