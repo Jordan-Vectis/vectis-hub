@@ -8,17 +8,19 @@ import DraftsTab from "./drafts-tab"
 import HashtagsTab from "./hashtags-tab"
 import WebDescriptionsTab from "./web-descriptions-tab"
 import SocialPostsTab from "./social-posts-tab"
+import SocialImagesTab from "./social-images-tab"
 
-type TabKey = "content" | "paste" | "insights" | "drafts" | "hashtags" | "webdesc" | "social"
+type TabKey = "content" | "paste" | "insights" | "drafts" | "hashtags" | "webdesc" | "social" | "socialmedia"
 
 const TABS: { key: TabKey; label: string }[] = [
-  { key: "content",  label: "✍ Content Generator" },
-  { key: "paste",    label: "📋 Paste & Generate" },
-  { key: "insights", label: "📊 Insights" },
-  { key: "drafts",   label: "💾 Saved Drafts" },
-  { key: "hashtags", label: "# Hashtag Bank" },
-  { key: "webdesc",  label: "🌐 Web Descriptions" },
-  { key: "social",   label: "📲 Social Auto Posts" },
+  { key: "content",     label: "✍ Content Generator" },
+  { key: "paste",       label: "📋 Paste & Generate" },
+  { key: "insights",    label: "📊 Insights" },
+  { key: "drafts",      label: "💾 Saved Drafts" },
+  { key: "hashtags",    label: "# Hashtag Bank" },
+  { key: "webdesc",     label: "🌐 Web Descriptions" },
+  { key: "social",      label: "📲 Social Auto Posts" },
+  { key: "socialmedia", label: "📸 Social Media Images" },
 ]
 
 export default function BcMarketingPage() {
@@ -49,7 +51,8 @@ export default function BcMarketingPage() {
       {tab === "drafts"   && <DraftsTab />}
       {tab === "hashtags" && <HashtagsTab />}
       {tab === "webdesc"  && <WebDescriptionsTab />}
-      {tab === "social"   && <SocialPostsTab />}
+      {tab === "social"      && <SocialPostsTab />}
+      {tab === "socialmedia" && <SocialImagesTab />}
     </div>
   )
 }

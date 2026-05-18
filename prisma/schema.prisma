@@ -841,3 +841,15 @@ model SocialPost {
   @@index([status])
   @@index([scheduledAt])
 }
+
+model SocialImage {
+  id           String   @id @default(cuid())
+  key          String   @unique   // R2 object key
+  filename     String
+  label        String?            // user-friendly name/caption
+  tags         String?            // comma-separated tags
+  uploadedBy   String?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+}
