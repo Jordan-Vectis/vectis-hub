@@ -16,49 +16,146 @@ type SpecialDate = {
 }
 
 const SPECIAL_DATES: SpecialDate[] = [
-  // ── Collector / toy anniversaries ──
-  { tag: "STAR_WARS_DAY",       label: "Star Wars Day (May the 4th)",               month: 5,  day: 4,  category: "collector",  emoji: "⭐" },
-  { tag: "STAR_WARS_RELEASE",   label: "Star Wars Film Release Anniversary",         month: 5,  day: 25, category: "collector",  since: 1977, emoji: "🚀" },
-  { tag: "DOCTOR_WHO",          label: "Doctor Who Anniversary",                     month: 11, day: 23, category: "collector",  since: 1963, emoji: "🎭" },
-  { tag: "BARBIE_BIRTHDAY",     label: "Barbie's Birthday",                          month: 3,  day: 9,  category: "collector",  since: 1959, emoji: "🎀" },
-  { tag: "TRANSFORMERS",        label: "Transformers TV Debut Anniversary",          month: 9,  day: 17, category: "collector",  since: 1984, emoji: "🤖" },
-  { tag: "WINNIE_POOH",         label: "Winnie the Pooh Book Anniversary",           month: 10, day: 14, category: "collector",  since: 1926, emoji: "🐻" },
-  { tag: "HOT_WHEELS",          label: "Hot Wheels Launch Anniversary",              month: 9,  day: 9,  category: "collector",  since: 1968, emoji: "🏎️" },
-  { tag: "THUNDERBIRDS",        label: "Thunderbirds First Aired Anniversary",       month: 9,  day: 30, category: "collector",  since: 1965, emoji: "🚀" },
-  { tag: "LEGO_PATENT",         label: "LEGO Brick Patent Anniversary",              month: 1,  day: 28, category: "collector",  since: 1958, emoji: "🧱" },
-  { tag: "MATCHBOX",            label: "Matchbox Toys Founded Anniversary",          month: 6,  day: 19, category: "collector",  since: 1953, emoji: "🚗" },
-  { tag: "ACTION_MAN",          label: "Action Man UK Launch Anniversary",           month: 3,  day: 1,  category: "collector",  since: 1966, emoji: "🪖" },
+
+  // ── ACTION FIGURES / ACTION MAN ──────────────────────────────────────────
+  { tag: "ACTION_MAN",          label: "Action Man UK Launch Anniversary",           month: 2,  day: 1,  category: "collector",  since: 1966, emoji: "🪖" },
+  { tag: "GI_JOE",              label: "G.I. Joe Launch Anniversary",                month: 2,  day: 1,  category: "collector",  since: 1964, emoji: "🪖" },
   { tag: "MOTU",                label: "Masters of the Universe Launch Anniversary", month: 5,  day: 1,  category: "collector",  since: 1982, emoji: "⚔️" },
-  { tag: "MY_LITTLE_PONY",      label: "My Little Pony Launch Anniversary",          month: 10, day: 1,  category: "collector",  since: 1983, emoji: "🦄" },
   { tag: "TMNT",                label: "Teenage Mutant Ninja Turtles Anniversary",   month: 5,  day: 5,  category: "collector",  since: 1984, emoji: "🐢" },
+  { tag: "MY_LITTLE_PONY",      label: "My Little Pony Launch Anniversary",          month: 10, day: 1,  category: "collector",  since: 1983, emoji: "🦄" },
+
+  // ── AIRFIX & MODEL KITS ──────────────────────────────────────────────────
+  { tag: "AIRFIX_FOUNDED",      label: "Airfix Founded Anniversary",                 month: 6,  day: 1,  category: "collector",  since: 1939, emoji: "✈️" },
+  { tag: "AIRFIX_FIRST_KIT",    label: "Airfix First Plastic Kit Anniversary",       month: 6,  day: 1,  category: "collector",  since: 1952, emoji: "✈️" },
+  { tag: "BATTLE_OF_BRITAIN",   label: "Battle of Britain Anniversary",              month: 7,  day: 10, category: "historical", since: 1940, emoji: "✈️" },
+  { tag: "RAF_FOUNDED",         label: "RAF Founded Anniversary",                    month: 4,  day: 1,  category: "historical", since: 1918, emoji: "✈️" },
+
+  // ── BARBIE / DOLLS ───────────────────────────────────────────────────────
+  { tag: "BARBIE_BIRTHDAY",     label: "Barbie's Birthday",                          month: 3,  day: 9,  category: "collector",  since: 1959, emoji: "🎀" },
+  { tag: "SINDY",               label: "Sindy Doll UK Launch Anniversary",           month: 1,  day: 25, category: "collector",  since: 1963, emoji: "👗" },
+  { tag: "CABBAGE_PATCH",       label: "Cabbage Patch Kids Launch Anniversary",      month: 10, day: 1,  category: "collector",  since: 1982, emoji: "🌱" },
+
+  // ── COMICS ───────────────────────────────────────────────────────────────
+  { tag: "SUPERMAN",            label: "Superman First Appearance Anniversary",      month: 4,  day: 18, category: "collector",  since: 1938, emoji: "🦸" },
   { tag: "BATMAN",              label: "Batman First Appearance Anniversary",        month: 5,  day: 27, category: "collector",  since: 1939, emoji: "🦇" },
-  { tag: "SUPERMAN",            label: "Superman First Appearance Anniversary",      month: 6,  day: 1,  category: "collector",  since: 1938, emoji: "🦸" },
+  { tag: "CAPTAIN_AMERICA",     label: "Captain America First Appearance",           month: 3,  day: 1,  category: "collector",  since: 1941, emoji: "🛡️" },
+  { tag: "WONDER_WOMAN",        label: "Wonder Woman First Appearance",              month: 12, day: 1,  category: "collector",  since: 1941, emoji: "⚔️" },
   { tag: "SPIDERMAN",           label: "Spider-Man First Appearance Anniversary",    month: 8,  day: 10, category: "collector",  since: 1962, emoji: "🕷️" },
+  { tag: "XMEN",                label: "X-Men First Appearance Anniversary",         month: 9,  day: 10, category: "collector",  since: 1963, emoji: "🧬" },
+  { tag: "FREE_COMIC_DAY",      label: "Free Comic Book Day (1st Sat May)",          month: 5,  day: 3,  category: "collector",              emoji: "📚" },
+  { tag: "STAN_LEE",            label: "Stan Lee's Birthday",                        month: 12, day: 28, category: "collector",  since: 1922, emoji: "✏️" },
+
+  // ── CORGI / DINKY / VINTAGE DIECAST ─────────────────────────────────────
   { tag: "CORGI",               label: "Corgi Toys Founded Anniversary",             month: 7,  day: 9,  category: "collector",  since: 1956, emoji: "🚙" },
   { tag: "DINKY",               label: "Dinky Toys Founded Anniversary",             month: 4,  day: 1,  category: "collector",  since: 1934, emoji: "🚕" },
-  { tag: "GI_JOE",              label: "G.I. Joe Launch Anniversary",                month: 2,  day: 1,  category: "collector",  since: 1964, emoji: "🪖" },
-  { tag: "SPACE_INVADERS",      label: "Space Invaders Release Anniversary",         month: 6,  day: 1,  category: "collector",  since: 1978, emoji: "👾" },
-  { tag: "STAR_TREK",           label: "Star Trek TV Debut Anniversary",             month: 9,  day: 8,  category: "collector",  since: 1966, emoji: "🖖" },
-  { tag: "JAMES_BOND",          label: "James Bond Film Anniversary (Dr No)",        month: 10, day: 5,  category: "collector",  since: 1962, emoji: "🔫" },
+  { tag: "HOT_WHEELS",          label: "Hot Wheels Launch Anniversary",              month: 9,  day: 9,  category: "collector",  since: 1968, emoji: "🏎️" },
+  { tag: "MATCHBOX",            label: "Matchbox Toys Founded Anniversary",          month: 6,  day: 19, category: "collector",  since: 1953, emoji: "🚗" },
 
-  // ── Historical ──
-  { tag: "ARMISTICE",           label: "Remembrance Day / Armistice Day (WWI End)",  month: 11, day: 11, category: "historical", emoji: "🌹" },
-  { tag: "VE_DAY",              label: "VE Day Anniversary",                         month: 5,  day: 8,  category: "historical", emoji: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
-  { tag: "D_DAY",               label: "D-Day Anniversary",                          month: 6,  day: 6,  category: "historical", emoji: "⚓" },
-  { tag: "FALKLANDS",           label: "Falklands War Anniversary",                  month: 4,  day: 2,  category: "historical", emoji: "🎖️" },
+  // ── LEGO ─────────────────────────────────────────────────────────────────
+  { tag: "LEGO_FOUNDED",        label: "LEGO Company Founded Anniversary",           month: 8,  day: 10, category: "collector",  since: 1932, emoji: "🧱" },
+  { tag: "LEGO_PATENT",         label: "LEGO Brick Patent Anniversary",              month: 1,  day: 28, category: "collector",  since: 1958, emoji: "🧱" },
+  { tag: "LEGO_STAR_WARS",      label: "LEGO Star Wars Theme Launch Anniversary",   month: 1,  day: 1,  category: "collector",  since: 1999, emoji: "🧱" },
 
-  // ── General / seasonal ──
-  { tag: "NEW_YEAR",            label: "New Year's Day",                             month: 1,  day: 1,  category: "seasonal",   emoji: "🎆" },
-  { tag: "VALENTINES",          label: "Valentine's Day",                            month: 2,  day: 14, category: "seasonal",   emoji: "❤️" },
-  { tag: "ST_PATRICKS",         label: "St Patrick's Day",                           month: 3,  day: 17, category: "seasonal",   emoji: "☘️" },
-  { tag: "APRIL_FOOLS",         label: "April Fool's Day",                           month: 4,  day: 1,  category: "seasonal",   emoji: "🤡" },
-  { tag: "HALLOWEEN",           label: "Halloween",                                  month: 10, day: 31, category: "seasonal",   emoji: "🎃" },
-  { tag: "BONFIRE_NIGHT",       label: "Bonfire Night",                              month: 11, day: 5,  category: "seasonal",   emoji: "🎇" },
-  { tag: "CHRISTMAS",           label: "Christmas Day",                              month: 12, day: 25, category: "seasonal",   emoji: "🎄" },
-  { tag: "BLACK_FRIDAY",        label: "Black Friday",                               month: 11, day: 29, category: "seasonal",   emoji: "🛍️" },
-  { tag: "BOXING_DAY",          label: "Boxing Day",                                 month: 12, day: 26, category: "seasonal",   emoji: "🎁" },
-  { tag: "FATHERS_DAY",         label: "Father's Day (3rd Sunday June)",             month: 6,  day: 15, category: "seasonal",   emoji: "👨‍👦" },
-  { tag: "MOTHERS_DAY",         label: "Mother's Day UK (4th Sunday Lent ≈ Mar)",    month: 3,  day: 22, category: "seasonal",   emoji: "💐" },
+  // ── MILITARIA ────────────────────────────────────────────────────────────
+  { tag: "WWI_START",           label: "WWI Outbreak Anniversary",                  month: 7,  day: 28, category: "historical", since: 1914, emoji: "🌹" },
+  { tag: "ARMISTICE",           label: "Remembrance Day / Armistice Day (WWI End)", month: 11, day: 11, category: "historical",              emoji: "🌹" },
+  { tag: "WWII_START",          label: "WWII Outbreak Anniversary",                 month: 9,  day: 1,  category: "historical", since: 1939, emoji: "🎖️" },
+  { tag: "D_DAY",               label: "D-Day Anniversary",                         month: 6,  day: 6,  category: "historical", since: 1944, emoji: "⚓" },
+  { tag: "VE_DAY",              label: "VE Day Anniversary",                        month: 5,  day: 8,  category: "historical", since: 1945, emoji: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
+  { tag: "VJ_DAY",              label: "VJ Day (End of WWII in Pacific)",           month: 8,  day: 15, category: "historical", since: 1945, emoji: "🎖️" },
+  { tag: "FALKLANDS",           label: "Falklands War Anniversary",                 month: 4,  day: 2,  category: "historical", since: 1982, emoji: "🎖️" },
+  { tag: "WATERLOO",            label: "Battle of Waterloo Anniversary",            month: 6,  day: 18, category: "historical", since: 1815, emoji: "⚔️" },
+
+  // ── MUSIC & MEMORABILIA ──────────────────────────────────────────────────
+  { tag: "RECORD_STORE_DAY",    label: "Record Store Day (3rd Saturday April)",     month: 4,  day: 19, category: "seasonal",               emoji: "🎵" },
+  { tag: "ELVIS_BIRTHDAY",      label: "Elvis Presley's Birthday",                  month: 1,  day: 8,  category: "collector",  since: 1935, emoji: "🎸" },
+  { tag: "DAVID_BOWIE",         label: "David Bowie's Birthday",                    month: 1,  day: 8,  category: "collector",  since: 1947, emoji: "⭐" },
+  { tag: "JOHN_LENNON",         label: "John Lennon's Birthday",                    month: 10, day: 9,  category: "collector",  since: 1940, emoji: "🎸" },
+  { tag: "FREDDIE_MERCURY",     label: "Freddie Mercury's Birthday",                month: 9,  day: 5,  category: "collector",  since: 1946, emoji: "🎤" },
+  { tag: "BEATLES_DEBUT",       label: "Beatles First UK Album Anniversary",        month: 3,  day: 22, category: "collector",  since: 1963, emoji: "🎸" },
+  { tag: "ROLLING_STONES",      label: "Rolling Stones First Gig Anniversary",      month: 7,  day: 12, category: "collector",  since: 1962, emoji: "🎸" },
+
+  // ── RETRO GAMING ─────────────────────────────────────────────────────────
+  { tag: "SPACE_INVADERS",      label: "Space Invaders Launch Anniversary",         month: 6,  day: 1,  category: "collector",  since: 1978, emoji: "👾" },
+  { tag: "PACMAN",              label: "Pac-Man Launch Anniversary",                month: 5,  day: 22, category: "collector",  since: 1980, emoji: "👾" },
+  { tag: "ATARI_FOUNDED",       label: "Atari Founded Anniversary",                 month: 6,  day: 27, category: "collector",  since: 1972, emoji: "🕹️" },
+  { tag: "GAMEBOY",             label: "Nintendo Game Boy Launch Anniversary",      month: 4,  day: 21, category: "collector",  since: 1989, emoji: "🎮" },
+  { tag: "SUPER_MARIO",         label: "Super Mario Bros Launch Anniversary",       month: 9,  day: 13, category: "collector",  since: 1985, emoji: "🍄" },
+  { tag: "SONIC",               label: "Sonic the Hedgehog Launch Anniversary",     month: 6,  day: 23, category: "collector",  since: 1991, emoji: "💨" },
+  { tag: "TETRIS",              label: "Tetris Launch Anniversary",                 month: 6,  day: 6,  category: "collector",  since: 1984, emoji: "🟦" },
+  { tag: "DONKEY_KONG",         label: "Donkey Kong Arcade Anniversary",            month: 7,  day: 9,  category: "collector",  since: 1981, emoji: "🦍" },
+
+  // ── RETRO TOYS ───────────────────────────────────────────────────────────
+  { tag: "WINNIE_POOH",         label: "Winnie the Pooh Book Anniversary",          month: 10, day: 14, category: "collector",  since: 1926, emoji: "🐻" },
+  { tag: "PADDINGTON",          label: "Paddington Bear First Book Anniversary",    month: 10, day: 13, category: "collector",  since: 1958, emoji: "🐻" },
+  { tag: "MECCANO",             label: "Meccano Founded Anniversary",               month: 9,  day: 13, category: "collector",  since: 1901, emoji: "🔧" },
+
+  // ── SPORTS MEMORABILIA ───────────────────────────────────────────────────
+  { tag: "ENGLAND_WORLD_CUP",   label: "England 1966 World Cup Win Anniversary",    month: 7,  day: 30, category: "historical", since: 1966, emoji: "⚽" },
+  { tag: "FA_CUP_FINAL",        label: "FA Cup Final (approx. late May)",           month: 5,  day: 25, category: "seasonal",               emoji: "🏆" },
+  { tag: "WIMBLEDON",           label: "Wimbledon Championships Begin",             month: 6,  day: 30, category: "seasonal",               emoji: "🎾" },
+  { tag: "GRAND_NATIONAL",      label: "Grand National (approx. early April)",      month: 4,  day: 5,  category: "seasonal",               emoji: "🐎" },
+
+  // ── STAR WARS ────────────────────────────────────────────────────────────
+  { tag: "STAR_WARS_DAY",       label: "Star Wars Day (May the 4th)",               month: 5,  day: 4,  category: "collector",               emoji: "⭐" },
+  { tag: "STAR_WARS_RELEASE",   label: "Star Wars Film Release Anniversary",        month: 5,  day: 25, category: "collector",  since: 1977, emoji: "🚀" },
+  { tag: "EMPIRE_STRIKES_BACK", label: "The Empire Strikes Back Release Anniversary", month: 5, day: 21, category: "collector", since: 1980, emoji: "🚀" },
+  { tag: "RETURN_JEDI",         label: "Return of the Jedi Release Anniversary",    month: 5,  day: 25, category: "collector",  since: 1983, emoji: "🚀" },
+
+  // ── TEDDY BEARS ──────────────────────────────────────────────────────────
+  { tag: "NATL_TEDDY_DAY",      label: "National Teddy Bear Day",                   month: 9,  day: 9,  category: "collector",               emoji: "🧸" },
+  { tag: "INTL_TEDDY_DAY",      label: "International Teddy Bear Day",              month: 10, day: 27, category: "collector",               emoji: "🧸" },
+  { tag: "STEIFF_FOUNDED",      label: "Steiff Company Founded Anniversary",        month: 1,  day: 1,  category: "collector",  since: 1880, emoji: "🧸" },
+  { tag: "FIRST_TEDDY",         label: "First Teddy Bear Created Anniversary",      month: 11, day: 18, category: "collector",  since: 1902, emoji: "🧸" },
+
+  // ── TRADING CARDS ────────────────────────────────────────────────────────
+  { tag: "POKEMON_DAY",         label: "Pokémon Day (Red/Blue Japan Release)",      month: 2,  day: 27, category: "collector",  since: 1996, emoji: "⚡" },
+  { tag: "POKEMON_CARDS",       label: "Pokémon TCG Launch Anniversary (Japan)",    month: 10, day: 20, category: "collector",  since: 1996, emoji: "⚡" },
+  { tag: "POKEMON_CARDS_UK",    label: "Pokémon TCG UK/US Launch Anniversary",     month: 1,  day: 9,  category: "collector",  since: 1999, emoji: "⚡" },
+
+  // ── TRAINS & MODEL RAILWAY ───────────────────────────────────────────────
+  { tag: "FIRST_RAILWAY",       label: "First Public Steam Railway Anniversary (Stockton & Darlington)", month: 9, day: 27, category: "historical", since: 1825, emoji: "🚂" },
+  { tag: "LIVPOOL_MANCH_RLY",   label: "Liverpool & Manchester Railway Anniversary", month: 9, day: 15, category: "historical", since: 1830, emoji: "🚂" },
+  { tag: "HORNBY_TRAINS",       label: "Hornby Model Trains Founded Anniversary",   month: 1,  day: 1,  category: "collector",  since: 1920, emoji: "🚂" },
+  { tag: "FLYING_SCOTSMAN",     label: "Flying Scotsman First Run Anniversary",     month: 4,  day: 11, category: "historical", since: 1923, emoji: "🚂" },
+  { tag: "UNDERGROUND",         label: "London Underground Founded Anniversary",    month: 1,  day: 10, category: "historical", since: 1863, emoji: "🚇" },
+
+  // ── TRANSFORMERS ─────────────────────────────────────────────────────────
+  { tag: "TRANSFORMERS",        label: "Transformers TV Debut Anniversary",         month: 9,  day: 17, category: "collector",  since: 1984, emoji: "🤖" },
+
+  // ── TV & FILM / PROPS ────────────────────────────────────────────────────
+  { tag: "DOCTOR_WHO",          label: "Doctor Who Anniversary",                    month: 11, day: 23, category: "collector",  since: 1963, emoji: "🎭" },
+  { tag: "THUNDERBIRDS",        label: "Thunderbirds First Aired Anniversary",      month: 9,  day: 30, category: "collector",  since: 1965, emoji: "🚀" },
+  { tag: "STAR_TREK",           label: "Star Trek TV Debut Anniversary",            month: 9,  day: 8,  category: "collector",  since: 1966, emoji: "🖖" },
+  { tag: "JAMES_BOND",          label: "James Bond (Dr. No) Film Anniversary",     month: 10, day: 5,  category: "collector",  since: 1962, emoji: "🔫" },
+  { tag: "INDIANA_JONES",       label: "Raiders of the Lost Ark Release Anniversary", month: 6, day: 12, category: "collector", since: 1981, emoji: "🎩" },
+  { tag: "BACK_TO_FUTURE",      label: "Back to the Future Release Anniversary",   month: 7,  day: 3,  category: "collector",  since: 1985, emoji: "⚡" },
+  { tag: "GHOSTBUSTERS",        label: "Ghostbusters Release Anniversary",          month: 6,  day: 8,  category: "collector",  since: 1984, emoji: "👻" },
+  { tag: "HARRY_POTTER",        label: "Harry Potter First Book Anniversary",       month: 6,  day: 26, category: "collector",  since: 1997, emoji: "⚡" },
+  { tag: "JURASSIC_PARK",       label: "Jurassic Park Release Anniversary",         month: 6,  day: 11, category: "collector",  since: 1993, emoji: "🦕" },
+  { tag: "ET_FILM",             label: "E.T. the Extra-Terrestrial Release",        month: 6,  day: 11, category: "collector",  since: 1982, emoji: "👽" },
+  { tag: "BATMAN_FILM",         label: "Batman (1989 Film) Release Anniversary",   month: 6,  day: 23, category: "collector",  since: 1989, emoji: "🦇" },
+
+  // ── TINPLATE ─────────────────────────────────────────────────────────────
+  { tag: "MARKLIN_FOUNDED",     label: "Märklin Founded Anniversary",               month: 1,  day: 1,  category: "collector",  since: 1859, emoji: "🏭" },
+  { tag: "BRITAINS_FOUNDED",    label: "Britains Toy Soldiers Founded Anniversary", month: 1,  day: 1,  category: "collector",  since: 1893, emoji: "🪖" },
+
+  // ── HISTORICAL (shared across departments) ───────────────────────────────
+  { tag: "WATERLOO",            label: "Battle of Waterloo Anniversary",            month: 6,  day: 18, category: "historical", since: 1815, emoji: "⚔️" },
+
+  // ── SEASONAL / GENERAL ───────────────────────────────────────────────────
+  { tag: "NEW_YEAR",            label: "New Year's Day",                            month: 1,  day: 1,  category: "seasonal",               emoji: "🎆" },
+  { tag: "VALENTINES",          label: "Valentine's Day",                           month: 2,  day: 14, category: "seasonal",               emoji: "❤️" },
+  { tag: "ST_PATRICKS",         label: "St Patrick's Day",                          month: 3,  day: 17, category: "seasonal",               emoji: "☘️" },
+  { tag: "EASTER",              label: "Easter Weekend (approx. late March/April)", month: 3,  day: 30, category: "seasonal",               emoji: "🐣" },
+  { tag: "MOTHERS_DAY",         label: "Mother's Day UK (approx. late March)",      month: 3,  day: 22, category: "seasonal",               emoji: "💐" },
+  { tag: "APRIL_FOOLS",         label: "April Fool's Day",                          month: 4,  day: 1,  category: "seasonal",               emoji: "🤡" },
+  { tag: "FATHERS_DAY",         label: "Father's Day (3rd Sunday June)",            month: 6,  day: 15, category: "seasonal",               emoji: "👨‍👦" },
+  { tag: "HALLOWEEN",           label: "Halloween",                                 month: 10, day: 31, category: "seasonal",               emoji: "🎃" },
+  { tag: "BONFIRE_NIGHT",       label: "Bonfire Night",                             month: 11, day: 5,  category: "seasonal",               emoji: "🎇" },
+  { tag: "BLACK_FRIDAY",        label: "Black Friday",                              month: 11, day: 29, category: "seasonal",               emoji: "🛍️" },
+  { tag: "CHRISTMAS",           label: "Christmas Day",                             month: 12, day: 25, category: "seasonal",               emoji: "🎄" },
+  { tag: "BOXING_DAY",          label: "Boxing Day",                                month: 12, day: 26, category: "seasonal",               emoji: "🎁" },
 ]
 
 function getUpcomingDates(days = 90): (SpecialDate & { date: Date; daysAway: number; anniversary?: number })[] {
