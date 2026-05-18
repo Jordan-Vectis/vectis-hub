@@ -345,6 +345,14 @@ export default function AuctionMonitorPage() {
   const msSinceLast    = lastMessageAt ? now.getTime() - lastMessageAt.getTime() : null
   const msSinceLastBid = state.lastBidAt ? now.getTime() - state.lastBidAt.getTime() : null
 
+  // Countdown helpers for live alert rules
+  function liveRuleCountdownMs(ruleId: string): number | null {
+    if (!running || connState !== "open") return null
+    if (ruleId === "stall_red")   return msSinceLastBid !== null ? (ruleThresholds["stall_red"]   ?? 120) * 1000 - msSinceLastBid : null
+    if (ruleId === "stall_amber") return msSinceLastBid !== null ? (ruleThresholds["stall_amber"] ??  60) * 1000 - msSinceLastBid : null
+    return null
+  }
+
   let healthBand: "green" | "amber" | "red" | "grey" = "grey"
   let healthLabel = "Not started"
   if (running) {
@@ -578,6 +586,18 @@ export default function AuctionMonitorPage() {
   function timedStop() { setTimedRunning(false) }
 
   const timedMsSinceLast = timedLastMsgAt ? now.getTime() - timedLastMsgAt.getTime() : null
+  // Same fallback used in the alert effect — measures from session start if no message yet
+  const timedMsSinceActivity = timedMsSinceLast !== null
+    ? timedMsSinceLast
+    : timedSessionStartRef.current ? now.getTime() - timedSessionStartRef.current.getTime() : null
+
+  // Countdown helpers for timed alert rules
+  function timedRuleCountdownMs(ruleId: string): number | null {
+    if (!timedRunning || timedConnState !== "open") return null
+    if (ruleId === "stall_red")   return timedMsSinceActivity !== null ? (timedRuleThresholds["stall_red"]   ?? 120) * 1000 - timedMsSinceActivity : null
+    if (ruleId === "stall_amber") return timedMsSinceActivity !== null ? (timedRuleThresholds["stall_amber"] ??  60) * 1000 - timedMsSinceActivity : null
+    return null
+  }
 
   let timedHealthBand: "green" | "amber" | "red" | "grey" = "grey"
   let timedHealthLabel = "Not started"
@@ -754,7 +774,8 @@ export default function AuctionMonitorPage() {
                         <p className="text-[11px] text-gray-500 mt-0.5">{rule.description}</p>
                       </div>
                       {rule.threshold && (
-                        <div className="flex items-center gap-1.5 self-center">
+                        <div className="flex items-center gap-2 self-center">
+                          <RuleCountdown msRemaining={liveRuleCountdownMs(rule.id)} />
                           <span className="text-[11px] text-gray-500">{rule.threshold.label}</span>
                           <input
                             type="number" value={threshold ?? rule.threshold.default}
@@ -985,7 +1006,8 @@ export default function AuctionMonitorPage() {
                         <p className="text-[11px] text-gray-500 mt-0.5">{rule.description}</p>
                       </div>
                       {rule.threshold && (
-                        <div className="flex items-center gap-1.5 self-center">
+                        <div className="flex items-center gap-2 self-center">
+                          <RuleCountdown msRemaining={timedRuleCountdownMs(rule.id)} />
                           <span className="text-[11px] text-gray-500">{rule.threshold.label}</span>
                           <input
                             type="number" value={threshold ?? rule.threshold.default}
@@ -1073,6 +1095,29 @@ function CopyAllButton({ log }: { log: MsgEntry[] }) {
     >
       {copied ? "✓ Copied" : `📋 Copy all (${log.length})`}
     </button>
+  )
+}
+
+// Countdown badge shown next to stall alert rules.
+// msRemaining: null = not running / no data, <=0 = currently firing, >0 = time left
+function RuleCountdown({ msRemaining }: { msRemaining: number | null }) {
+  if (msRemaining === null) return null
+  if (msRemaining <= 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 animate-pulse min-w-[56px]">
+        ● Active
+      </span>
+    )
+  }
+  const totalSecs = Math.ceil(msRemaining / 1000)
+  const m = Math.floor(totalSecs / 60)
+  const s = totalSecs % 60
+  const display = m > 0 ? `${m}m ${s}s` : `${s}s`
+  const colour = totalSecs <= 15 ? "text-red-500" : totalSecs <= 45 ? "text-amber-500" : "text-gray-400"
+  return (
+    <span className={`text-[11px] font-mono min-w-[56px] text-right ${colour}`}>
+      {display}
+    </span>
   )
 }
 
