@@ -3,7 +3,7 @@
 import { useState } from "react"
 
 // ─── Static memory content ────────────────────────────────────────────────────
-// Updated by Claude alongside memory file changes. Last synced: 2026-05-13
+// Updated by Claude alongside memory file changes. Last synced: 2026-05-19
 
 type Entry = { filename: string; content: string }
 
@@ -161,6 +161,7 @@ type: user
 name: Vectis Hub Project
 description: Full spec, tech stack, deployment details, and current feature state for the Vectis Hub app
 type: project
+last_updated: 2026-05-19
 ---
 
 # Vectis Hub
@@ -171,8 +172,8 @@ type: project
 **Local path:** C:\\Dev apps\\vectis-hub
 
 ## Stack
-- Next.js (App Router), TypeScript, Tailwind CSS
-- Prisma 7 with \`@prisma/adapter-pg\` (requires adapter — no direct URL in client)
+- Next.js 16.2 (App Router), TypeScript, Tailwind CSS v4 (CSS-first, no tailwind.config.ts)
+- Prisma 7.7 with \`@prisma/adapter-pg\` (requires adapter — no direct URL in client)
 - PostgreSQL on Neon
 - NextAuth v5 beta (JWT sessions, Credentials provider)
 - Hosted on Railway (auto-deploys: push to \`main\` → production, push to \`staging\` → staging)
@@ -182,6 +183,7 @@ type: project
 - Business Central OData API (BC Reports, BC Warehouse, BC Marketing)
 - Cloudflare R2 for lot photo storage
 - D-ID API for AI Presenter avatar
+- pdf-lib + sharp + bwip-js for server-side PDF generation (NOT pdfkit)
 
 ## Key config notes
 - \`prisma generate\` runs as part of \`npm run build\`
@@ -190,39 +192,50 @@ type: project
 - Auth split: \`auth.config.ts\` (Edge-safe) + \`auth.ts\` (full, uses Prisma)
 - Prisma client generated at \`app/generated/prisma/\`
 - \`DATABASE_URL\`, \`AUTH_SECRET\`, \`NEXTAUTH_URL\` set in Railway Variables
-- \`prisma migrate deploy\` runs on startup via server.js (DATABASE_URL not available at build time)
 - Jordan never runs the app locally — always uses the Railway staging URL
 
-## Roles
-- **ADMIN** — full access, hardcoded for it@vectis.co.uk
-- **COLLECTIONS** — CRM, submissions, follow-ups
-- **CATALOGUER** — cataloguing tools
+## Roles — custom-creatable
+- **ADMIN** — full access, hardcoded for it@vectis.co.uk, can't be deleted via UI
+- All other roles are free-form strings on User.role. Defaults come from RoleDefault table.
+- Pre-seeded defaults: COLLECTIONS, CATALOGUER
 
 ## Git discipline
 - Default branch for all work: \`staging\`
 - Never push to \`main\` unless Jordan explicitly says "push to main"
 - Always pull from remote staging before pushing (another developer works on the same branch)
-- Merge to production: \`git fetch origin main && git checkout main && git merge origin/staging --no-edit && git push origin main && git checkout staging\`
 
-## Admin section — current features
-- **About** (\`/admin/about\`) — comprehensive documentation for every app, all sub-tabs, DB models, rules, dependencies, and hardcoded constants. Updated 2026-05-07.
-- **Users & Permissions** — grouped by section matching hub page layout
-- **Role Defaults** — default allowedApps + appPermissions per role, auto-applied on user creation
-- **Home Page** — drag-to-reorder hub cards
-- **Departments** — cataloguer department management
-- **Cataloguing Reports** — time-per-lot stats
-- **Run Migrations** — emergency SQL button (all migrations must also be added here)
-- **Claude Memory** (\`/admin/memory\`) — static page with memory content hardcoded in ENTRIES array. Jordan can also upload .md files manually. Updated alongside memory files on each session.
+## Current feature surface
 
-## Hub page sections
-- Cataloguing & AI: Auction AI, Cataloguing, BC Marketing
-- Business Central: BC Reports, BC Warehouse, BC API Viewer
-- Operations: Warehouse, Submissions, Customers, Databases, Packing/Dispatch
-- Auction: Website, Auction Controller, Saleroom Trainer, AI Presenter
-- Admin: standalone card
+### Cataloguing (/tools/cataloguing)
+- Per-auction tabs: Manage Lots, Add Lot, Photo Only Cataloguing, Import Lots, Upload Photos, AI Upgrade, Statistics, Lot History, Auction Settings
+- Lots have addedToBC boolean, aliases for Unique ID matcher
+- Mass actions: delete, generate titles, mark added to BC
 
-## Planned features
-- iPad device tracking — register devices by localStorage UUID, check-in system showing who has each iPad`,
+### Auction AI (/tools/auction-ai)
+- Batch AI run with Gemini — up to 24 images per lot, 12s inter-lot delay, infinite retry loop
+- Presets in lib/auction-ai-presets.ts: Vinyl & Memorabilia, TV & Film, Modern Diecast, Comics & Toys, Model Railway (strict + free), Teddy Bears, General Toys, Military Figures, Matchbox
+- Chat mode (up to 6 images), Model Tester, Description Copier, Duplicate Checker
+
+### BC Marketing (/tools/bc-marketing) — 5 tabs
+Content Generator, Paste & Generate, Insights, Saved Drafts, Hashtag Bank
+
+### BC Warehouse (/tools/bc-warehouse) — 8 tabs
+Location Heatmap, Sale Checklist, Search by Location, Location History (DO NOT redesign), Tote Data, Collections Due, Unsold Items, Data Sync, DB Explorer
+
+### BC Reports (/tools/bc-reports)
+Cataloguing report (barcode/uniqueid/compare modes), Packing report
+
+### Packing (/tools/packing)
+Royal Mail dispatch, Packers sub-page with Full Time/Agency/Ex-Staff groups, aliases, barcode sheet PDF
+
+### Auction Monitor (/tools/auction-monitor)
+Live WebSocket monitor, ntfy.sh push notifications, 10 alert rules
+
+### Admin (/admin)
+About, Users & Permissions, Roles & Defaults, Home Page (drag-to-reorder), Departments, Cataloguing Reports, Devices, Claude Memory, Run Migrations
+
+### Databases (/databases)
+Customers, Receipts, Totes, Lots, Bids editors + Browse Any Table (30 models)`,
   },
   {
     filename: "opening_message.md",
@@ -244,7 +257,27 @@ Hi Claude. Before we start, here are the rules for working with me:
 
 **The app is hosted on Railway (staging + production). The database is on Neon. Images are on Cloudflare R2. Never suggest looking for a Postgres service in Railway.**
 
-**This is an auction house app for Vectis Auctions, not a CRM. British English throughout.**`,
+**This is an auction house app for Vectis Auctions, not a CRM. British English throughout.**
+
+---
+
+## Recent work (as of 2026-05-19)
+
+### Auction AI presets (lib/auction-ai-presets.ts)
+- **Vectis Strict: Military Figures** — fully rewritten examples-first. Set 2055 Confederate Cavalry entry expanded with uniform details (grey tunics, blue trousers with yellow striping and kepis), correct weapons (rifles not swords), and a WRONG OUTPUT example showing exactly what not to write.
+- **Vectis Strict: Matchbox** — new preset added. Full 1-75 model reference table (all slots, names, years, standard colours, COLLECTOR flags), 6 correct-output examples, 10 strict rules covering brand prefix, colour variants, wheel type, casting features (wipers/mirror/tow hook), box type, and grading.
+
+### Idle log cleanup
+- Built delete functionality for idle logs with a 10-hour exclusion rule (logs under 10 hours old are protected).
+
+### AI preset "Edited" badge
+- Fixed a bug where the Edited badge wasn't showing correctly on preset changes.
+
+### Dark mode — NEXT TASK
+- Agreed to implement app-wide dark mode with **dark as the default**.
+- The app currently has a mixed state: the hub is already dark (hardcoded dark colours), admin/tool pages are light.
+- **Tailwind v4 is used (CSS-first, no tailwind.config.ts)** — dark mode config goes in the CSS file, not a config file.
+- Plan: configure dark variant in CSS → add theme toggle to top bar (saves to localStorage, applies dark class to html) → update all admin/tool pages and shared components with dark: variants. The hub page flips the other way (it's already dark).`,
   },
   {
     filename: "feedback_vectis.md",
