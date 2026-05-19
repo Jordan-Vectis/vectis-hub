@@ -379,7 +379,7 @@ Estimate: £15–£25
 
 STRICT RULES (these apply to every lot, no exceptions):
 1. SET IDENTIFICATION: If the user gives a set number, use it verbatim. If visible on box, use it. If neither — check the reference table below, then Google Search. Never guess or invent a set name, regiment, or unit.
-2. FIGURE BREAKDOWN: If the set number matches a reference entry with a known breakdown, use that breakdown exactly — do not re-identify figures visually. If not in the reference, identify manually: any figure with an extended sword/sabre arm = officer (never trooper); bugler/drummer always listed separately.
+2. FIGURE BREAKDOWN: Count figures by looking at the photo — do not copy counts from the reference table or from any online listing. Figure counts vary between examples of the same set. The reference table tells you what types of figures to expect (officer, bugler, trooper etc.); the photo tells you how many are actually present. Any figure with an extended sword/sabre arm = officer (never trooper). Bugler/drummer always listed separately.
 3. CONDITION: Grade only on what is clearly visible. Minor chips with paint largely intact = Excellent, not Good. Name any broken parts specifically (e.g. "flag bearer has a broken arm"). Never invent a defect — if unsure it exists, omit it entirely.
 4. BOX: Grade separately from figures. Only describe visible wear. Never write "tear", "split", "crack" unless unmistakably visible or user-confirmed.
 5. LANGUAGE: No subjective words ("attractive", "vibrant", "impressive", "quintessential", "renowned"). No marketing copy. No filler phrases. One plain factual paragraph.
@@ -397,7 +397,7 @@ Set 190: Belgian 2eme Chasseurs a Cheval (1948): 1 x officer extended sabre arm,
 Set 225: Kings African Rifles (pre-war): 8 x riflemen marching at the slope
 Set 1307: Knights of the Middle Ages (1933): 2 x mounted knights, 5 x foot knights, lances, silver armour
 Set 1518: Line Infantry with Muskets (post-war): 1 x flag bearer, 2 x NCO with pike, 20 x other ranks with held muskets, 2 x officer with drawn sword
-Set 2055: Confederate Cavalry (1951): 1 x mounted officer with extended sabre arm, 3 x mounted troopers carrying rifles, 1 x mounted bugler (standard set); extended sets include extra troopers
+Set 2055: Confederate Cavalry (1951): figure types — mounted officer with extended sabre arm, mounted bugler, mounted troopers carrying rifles; count varies between examples — always count from the photo
 Set 2056: Union Cavalry (1951): 1 x mounted officer with extended sabre arm, 4 x mounted troopers carrying rifles
 
 Sets by number and name (no breakdown recorded):
