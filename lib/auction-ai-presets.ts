@@ -300,12 +300,19 @@ VERIFICATION (mandatory; accuracy over speed):
 Verify in this order: reputable retailer archives (e.g., corfebears.co.uk) → Vectis Auctions → thesaleroom.com → official maker sites → wider web. Use retailer sites for identity/spec only, not pricing. If a model name or code cannot be verified, do not guess.
 
 ESTIMATING VALUES:
-Search thoroughly before estimating — artist bears and limited editions often sell for significantly more than generic bears. Do not default to low estimates.
-Use published Vectis/thesaleroom estimates if available. Otherwise use verified realised prices only — never asking prices or unsold listings.
-Search order: Vectis → thesaleroom → eBay sold listings → other reputable auction houses.
-Formula: realised price × 0.60, rounded down to nearest increment. Never exceed highest verified realised price.
+You must check ALL of the following sources before settling on an estimate — never base a price on a single source alone:
+1. Vectis Auctions (vectis.co.uk) — search for the exact lot as a combination, not individual bears
+2. thesaleroom.com
+3. eBay sold listings
+4. Other reputable auction houses (Special Auction Services, Bonhams, etc.)
+
+If sources disagree significantly, note the range and use a conservative middle ground.
+Never aggregate individual bear estimates to form a lot price — always search for the specific combination or lot type as a whole. If the exact lot is found on Vectis or thesaleroom, that published estimate takes absolute priority over any calculated figure.
+Use published estimates if available. Otherwise use verified realised prices only — never asking prices or unsold listings.
+Formula: realised price × 0.60, rounded down to nearest increment.
 For rare bears with wide price variance: use the median realised price, not the lowest.
-If no realised prices found: compare with directly comparable models of similar quality and edition type.
+If no realised prices found after checking all sources: state that no comparable sold listings were found and provide a clearly flagged conservative estimate based on comparable models.
+Artist bears and limited editions often sell for significantly more than generic bears — do not default to low estimates.
 If still available new from retailers: use 60% of lowest in-stock retail price as the ceiling.
 
 STYLE:
@@ -444,12 +451,19 @@ VERIFICATION (mandatory; accuracy over speed):
 Verify in this order: reputable retailer archives (e.g., corfebears.co.uk) → Vectis Auctions → thesaleroom.com → official maker sites → wider web. Use retailer sites for identity/spec only, not pricing. If a model name or code cannot be verified, do not guess.
 
 ESTIMATING VALUES:
-Search thoroughly before estimating — artist bears and limited editions often sell for significantly more than generic bears. Do not default to low estimates.
-Use published Vectis/thesaleroom estimates if available. Otherwise use verified realised prices only — never asking prices or unsold listings.
-Search order: Vectis → thesaleroom → eBay sold listings → other reputable auction houses.
-Formula: realised price × 0.60, rounded down to nearest increment. Never exceed highest verified realised price.
+You must check ALL of the following sources before settling on an estimate — never base a price on a single source alone:
+1. Vectis Auctions (vectis.co.uk) — search for the exact lot as a combination, not individual bears
+2. thesaleroom.com
+3. eBay sold listings
+4. Other reputable auction houses (Special Auction Services, Bonhams, etc.)
+
+If sources disagree significantly, note the range and use a conservative middle ground.
+Never aggregate individual bear estimates to form a lot price — always search for the specific combination or lot type as a whole. If the exact lot is found on Vectis or thesaleroom, that published estimate takes absolute priority over any calculated figure.
+Use published estimates if available. Otherwise use verified realised prices only — never asking prices or unsold listings.
+Formula: realised price × 0.60, rounded down to nearest increment.
 For rare bears with wide price variance: use the median realised price, not the lowest.
-If no realised prices found: compare with directly comparable models of similar quality and edition type.
+If no realised prices found after checking all sources: state that no comparable sold listings were found and provide a clearly flagged conservative estimate based on comparable models.
+Artist bears and limited editions often sell for significantly more than generic bears — do not default to low estimates.
 If still available new from retailers: use 60% of lowest in-stock retail price as the ceiling.
 
 STYLE:

@@ -391,7 +391,7 @@ function ChatTab({ model }: { model: string }) {
                     {copied ? "✓ Copied" : "Copy"}
                   </button>
                   {i === history.length - 1 && (
-                    <button onClick={() => { setMessage("Please justify your estimate — show which comparable sold listings or sources you used to arrive at that price, with specific examples and prices where possible."); setTimeout(() => document.querySelector<HTMLTextAreaElement>("textarea")?.focus(), 50) }}
+                    <button onClick={() => { setMessage("Please justify your estimate — list each source you used with a direct link, the specific lot or listing you found, the price or estimate shown, and how you used it to arrive at your figure."); setTimeout(() => document.querySelector<HTMLTextAreaElement>("textarea")?.focus(), 50) }}
                       className="text-xs text-purple-400 hover:underline">
                       £ Justify price
                     </button>
