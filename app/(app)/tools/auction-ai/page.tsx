@@ -320,7 +320,7 @@ function ChatTab({ model }: { model: string }) {
   const [copied, setCopied]      = useState(false)
   const [overrides, setOverrides] = useState<Record<string, string>>({})
   const [editOpen, setEditOpen]   = useState(false)
-  const [grounded, setGrounded]   = useState(false)
+  const [grounded, setGrounded]   = useState(true)
   const [lastSearchQueries, setLastSearchQueries] = useState<string[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
 
