@@ -2,13 +2,11 @@ import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { hasAppAccess } from "@/lib/apps"
 import { APP_CARD_DEFS, SECTION_DEFS } from "@/lib/app-cards"
-import UserMenu from "./user-menu"
 import { getEffectiveSession } from "@/lib/impersonation"
 
 export default async function HubPage() {
   const effective = await getEffectiveSession()
   const name     = effective?.user?.name?.split(" ")[0] ?? "there"
-  const fullName = effective?.user?.name ?? name
 
   const dbUser = effective?.user?.id
     ? await prisma.user.findUnique({ where: { id: effective.user.id }, select: { allowedApps: true, role: true, appPermissions: true } })
@@ -96,7 +94,6 @@ export default async function HubPage() {
 
   return (
     <div className="relative min-h-screen bg-[#111318] flex flex-col items-center px-6 py-16">
-      <UserMenu name={fullName} />
 
       <div className="w-full max-w-6xl space-y-10">
         {grouped.map(section => (
