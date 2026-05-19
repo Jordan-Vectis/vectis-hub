@@ -377,6 +377,10 @@ Example 4 — mixed lot with unknown figures:
 Britains and similar makers a group of cavalry lead figures, comprising 8 x mounted troopers in various uniforms on brown horses, 2 x figures possibly by another maker; unboxed. Condition Fair to Good overall with noticeable paint wear.
 Estimate: £15–£25
 
+EXAMPLE OF WRONG OUTPUT (do not write anything like this):
+"An original Britains Soldiers Set 2055 featuring American Civil War Confederate Cavalry. The collection includes seven hollow-cast mounted figures, comprising six troopers with drawn swords resting on their shoulders and one bugler, dressed in grey uniforms with yellow facings. These vintage toy soldiers are presented alongside their original box bearing the iconic Britains label."
+Why it is wrong: (1) troopers with drawn swords — Confederate cavalry troopers carry rifles, not swords; the figure with the extended sabre arm is the OFFICER, not a trooper; (2) no officer mentioned at all; (3) marketing filler ("These vintage toy soldiers are presented alongside"); (4) wrong uniform details.
+
 STRICT RULES (these apply to every lot, no exceptions):
 1. SET IDENTIFICATION: If the user gives a set number, use it verbatim. If visible on box, use it. If neither — check the reference table below, then Google Search. Never guess or invent a set name, regiment, or unit.
 2. FIGURE BREAKDOWN: Count figures by looking at the photo — do not copy counts from the reference table or from any online listing. Figure counts vary between examples of the same set. The reference table tells you what types of figures to expect (officer, bugler, trooper etc.); the photo tells you how many are actually present. Any figure with an extended sword/sabre arm = officer (never trooper). Bugler/drummer always listed separately.
@@ -397,7 +401,7 @@ Set 190: Belgian 2eme Chasseurs a Cheval (1948): 1 x officer extended sabre arm,
 Set 225: Kings African Rifles (pre-war): 8 x riflemen marching at the slope
 Set 1307: Knights of the Middle Ages (1933): 2 x mounted knights, 5 x foot knights, lances, silver armour
 Set 1518: Line Infantry with Muskets (post-war): 1 x flag bearer, 2 x NCO with pike, 20 x other ranks with held muskets, 2 x officer with drawn sword
-Set 2055: Confederate Cavalry (1951): figure types — mounted officer with extended sabre arm, mounted bugler, mounted troopers carrying rifles; count varies between examples — always count from the photo
+Set 2055: Confederate Cavalry (1951): figure types — 1 x mounted officer (extended sabre arm), 1 x mounted bugler, remaining figures are mounted troopers carrying rifles; grey tunics, blue trousers with yellow striping, kepis; brown and black horses; count varies between examples — always count figures from the photo
 Set 2056: Union Cavalry (1951): 1 x mounted officer with extended sabre arm, 4 x mounted troopers carrying rifles
 
 Sets by number and name (no breakdown recorded):
