@@ -1143,7 +1143,7 @@ function LocationHistoryTab() {
   }
 
   return (
-    <div>
+    <div className="max-w-5xl mx-auto px-2">
       <h2 className="text-lg font-semibold text-white mb-1">Location History</h2>
       <p className="text-gray-500 text-sm mb-5">Look up every location a tote or lot has ever been moved to via BC change logs.</p>
 
@@ -1173,7 +1173,7 @@ function LocationHistoryTab() {
       {error && <div className="mt-4 max-w-lg"><p className="text-red-400 text-sm">{error}</p></div>}
 
       {result && (
-        <div className="mt-5 max-w-2xl space-y-4">
+        <div className="mt-5 w-full space-y-4">
           <div className="flex items-center gap-8">
             <div>
               <p className="text-xs text-gray-500 uppercase tracking-wide">BC Item Key</p>
