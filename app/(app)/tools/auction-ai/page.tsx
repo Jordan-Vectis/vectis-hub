@@ -174,6 +174,37 @@ function PresetEditorModal({ presetKey, initialText, onSave, onClose }: {
   )
 }
 
+// ─── Chat message renderer (markdown links + bold) ───────────────────────────
+
+function renderInline(text: string): React.ReactNode[] {
+  const regex = /(\*\*([^*]+)\*\*|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))/g
+  const result: React.ReactNode[] = []
+  let lastIndex = 0
+  for (const match of text.matchAll(regex)) {
+    if (match.index! > lastIndex) result.push(text.slice(lastIndex, match.index))
+    if (match[0].startsWith("**")) {
+      result.push(<strong key={match.index}>{match[2]}</strong>)
+    } else {
+      result.push(
+        <a key={match.index} href={match[4]} target="_blank" rel="noopener noreferrer"
+          className="text-blue-400 underline hover:text-blue-300 break-all">
+          {match[3]}
+        </a>
+      )
+    }
+    lastIndex = match.index! + match[0].length
+  }
+  if (lastIndex < text.length) result.push(text.slice(lastIndex))
+  return result
+}
+
+function renderMessageText(text: string) {
+  return text.split("\n").flatMap((line, i, arr) => {
+    const parts = renderInline(line)
+    return i < arr.length - 1 ? [...parts, <br key={`br-${i}`} />] : parts
+  })
+}
+
 // ─── Image drop zone ─────────────────────────────────────────────────────────
 
 function ImageZone({ images, onAdd, onRemove, max = 6 }: {
@@ -383,7 +414,7 @@ function ChatTab({ model }: { model: string }) {
                   {msg.images.map((src, j) => <img key={j} src={src} className="w-14 h-14 object-cover rounded" />)}
                 </div>
               ) : null}
-              <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+              <p className="text-sm leading-relaxed">{renderMessageText(msg.text)}</p>
               {msg.role === "model" && (
                 <div className="mt-2 flex gap-3">
                   <button onClick={() => { navigator.clipboard.writeText(msg.text); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
