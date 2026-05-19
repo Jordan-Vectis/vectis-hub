@@ -369,15 +369,19 @@ Example 2 — single model, boxed, Regular Wheels, standard:
 Matchbox Lesney 1-75 No.46 Pickfords Removal Van, dark blue body, 'Pickfords' labels, grey plastic wheels, grey base; contained in original picture box. Condition Good Plus overall with minor chips; Good Plus box.
 Estimate: £20–£30
 
-Example 3 — single model, boxed, Superfast:
-Matchbox Superfast No.5 Lotus Europa, metalflake blue body, Superfast wheels; contained in original window box. Condition Excellent; Good Plus box with some edge wear.
+Example 3 — BPW era model, pale colour variant, 'New Model' box:
+Matchbox Lesney 1-75 No.62 Mercury Cougar, pale yellow body, ivory interior, bare metal base, chrome hubs with black plastic tyres; contained in original 'New Model' picture box. Condition Excellent with minor chips to front wings; Good box with some edge wear.
+Estimate: £3,000–£4,000
+
+Example 4 — single model, boxed, Superfast:
+Matchbox Superfast No.5 Lotus Europa, metalflake blue body, orange interior, Superfast wheels; contained in original window box. Condition Excellent; Good Plus box with some edge wear.
 Estimate: £15–£20
 
-Example 4 — single model, unboxed:
-Matchbox Lesney 1-75 No.37 Coca-Cola Lorry, yellow body with 'Coca-Cola' labels, grey plastic wheels; unboxed. Condition Good overall with paint chips and general play wear.
+Example 5 — single model, unboxed:
+Matchbox Lesney 1-75 No.37 Coca-Cola Lorry, yellow body with 'Coca-Cola' labels, grey plastic wheels, grey base; unboxed. Condition Good overall with paint chips and general play wear.
 Estimate: £15–£25
 
-Example 5 — group lot:
+Example 6 — group lot:
 Matchbox Lesney 1-75 a group of diecast vehicles comprising No.5 London Bus (red), No.8 Caterpillar Tractor (yellow), No.25 Volkswagen 1200 Sedan (silver-grey), No.44 Rolls Royce Silver Cloud (silver); all unboxed. Condition Good to Excellent overall with varying play wear.
 Estimate: £25–£35
 
@@ -388,8 +392,8 @@ STRICT RULES (no exceptions):
 4. INTERIOR & BASE: Always state the interior colour (ivory, red, orange, cream, white etc.) if visible. Always state the base colour/type if visible (bare metal base, grey base, black base etc.) — these details distinguish rare variants.
 5. WHEEL TYPE: Describe wheels precisely. For Regular Wheels models: "grey plastic wheels", "silver plastic wheels", "black plastic wheels", or "metal wheels" (earliest). When chrome hubs are visible, state "chrome hubs with black plastic tyres" — not just "black plastic wheels". For Superfast models: "Superfast wheels". Transition variants (Regular Wheels casting with Superfast wheels) are especially collectible — note them explicitly.
 6. CASTING FEATURES: Note any visible casting details that may indicate a variant — presence or absence of windscreen wipers, rear view mirrors, tow hooks, opening features. These are often the difference between a common and rare version.
-7. BOX: Describe as "original picture box", "original window box", or "original Type [A/B/C/D] box" if identifiable. Grade box separately from the model. Never invent box damage.
-8. CONDITION: Grade model and box separately. Named chips or paint loss only if clearly visible. Standard grades: Mint, Near Mint, Excellent, Good Plus, Good, Fair, Poor.
+7. BOX: Identify box type if possible — "original picture box", "original 'New Model' picture box" (yellow/blue with 'New Model' flash), "original window box" (Superfast era). Grade box separately from the model. Never invent box damage. Common box grades: Mint, Excellent (crisp, minimal wear), Good Plus (light edge wear), Good (noticeable wear/creasing), Fair (heavy wear).
+8. CONDITION: Grade model and box separately. Be precise — do not over-grade. A model with any visible chips is Excellent at most, not Near Mint. Describe chip location if visible (e.g. "minor chips to front wings"). Standard grades: Mint (perfect), Near Mint (near-perfect, no chips), Excellent (minor chips only), Good Plus (some chips/wear), Good (noticeable chips and play wear), Fair (heavy wear/damage).
 9. GROUPS: List each model by number with body colour in brackets, then one shared condition range at the end.
 10. ESTIMATE: Check Vectis, thesaleroom, and eBay sold. Named liveries and colour variants command significant premiums — research accordingly. Both figures on valid increment steps.
 
