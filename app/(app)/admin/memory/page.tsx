@@ -255,29 +255,191 @@ Hi Claude. Before we start, here are the rules for working with me:
 
 **Common sense on confirmation.** You don't need to check with me on every small thing — fixing a bug, a TypeScript error, a styling tweak within an existing file is fine to just do. But if the decision involves WHERE something lives, WHAT it connects to, or anything that affects the structure of the app — ask first.
 
-**The app is hosted on Railway (staging + production). The database is on Neon. Images are on Cloudflare R2. Never suggest looking for a Postgres service in Railway.**
+**Keep responses short.** One paragraph max unless explaining something technical. Lead with the action or answer, skip preamble. No summaries at the end, no "here's what I did" recaps.
 
-**This is an auction house app for Vectis Auctions, not a CRM. British English throughout.**
+**Don't suggest console commands.** Any admin operation that needs to be triggered manually must have a proper UI button.
+
+**Match the complexity of the solution to the simplicity of the request.** If I say "put a copy on the site", embed it statically — don't build a syncing system.
+
+---
+
+## The app
+
+This is the **Vectis Hub** — an internal tool for Vectis Auctions. It is NOT a CRM. Never call it a CRM. British English throughout (colour, unauthorised, etc.).
+
+**Production:** https://vectis-crm-production.up.railway.app
+**Staging:** https://vectis-staging.up.railway.app
+**Reports-only:** Separate Railway environment, deploys from reports-only branch (DIVERGED — has its own server.js and Logo handling)
+**GitHub:** https://github.com/Jordan-Vectis/vectis-hub
+**Local path:** C:\\Dev apps\\vectis-hub
+
+I (Jordan) never run the app locally. I always use the Railway staging URL. Any feature that only works locally is useless.
+
+---
+
+## Tech stack
+
+- Next.js 16.2 (App Router), TypeScript, Tailwind CSS v4 (CSS-first — NO tailwind.config.ts, config goes in the CSS file)
+- Prisma 7.7 with @prisma/adapter-pg (requires adapter — no direct URL in client)
+- PostgreSQL on Neon (NOT Railway — never look for a Postgres service in Railway)
+- NextAuth v5 beta (JWT sessions, Credentials provider)
+- Socket.IO for live auction real-time events
+- Google Gemini API (lot descriptions, BC Marketing articles)
+- Royal Mail Click & Drop API (packing/dispatch)
+- Business Central OData API (BC Reports, BC Warehouse, BC Marketing)
+- Cloudflare R2 for lot photo storage
+- D-ID API for AI Presenter avatar
+- pdf-lib + sharp + bwip-js for server-side PDF generation (NEVER pdfkit — fails on Railway with missing Helvetica.afm)
+
+Key config notes:
+- prisma generate runs as part of npm run build
+- trustHost: true in auth.config.ts — required for Railway domain
+- proxy.ts (not middleware.ts) — Next.js renamed middleware
+- Auth split: auth.config.ts (Edge-safe) + auth.ts (full, uses Prisma)
+- Prisma client generated at app/generated/prisma/
+- DATABASE_URL, AUTH_SECRET, NEXTAUTH_URL set in Railway Variables
+
+---
+
+## Git workflow
+
+- Default branch for ALL work: staging — never push to main unless I explicitly say "push to main" or "merge to production"
+- "Push it" or "deploy it" are NOT permission to push to main
+- Always git pull origin staging before pushing — another developer also pushes to this branch
+- Merge to production: git push origin staging:main
+
+---
+
+## Database migrations
+
+Whenever a new Prisma migration is added, ALSO add the equivalent SQL to the MIGRATIONS array in app/api/admin/run-migrations/route.ts. The Run Migrations button on /admin is the one-click fix — prisma migrate deploy is unreliable on Railway.
+
+---
+
+## Memory workflow
+
+The Claude Memory viewer at /admin/memory is a static page — content is hardcoded in the ENTRIES array in app/(app)/admin/memory/page.tsx. Whenever memory files are updated, ALSO update the corresponding entry in the ENTRIES array and push to staging in the same commit.
+
+---
+
+## Lot identifier rules — CRITICAL
+
+Three separate fields. Never interchange them.
+- receiptUniqueId: format R000016-413 — for AI runs and receipt matching
+- barcode: format F066001 — physical label on item
+- lotNumber: integer string "42" — catalogue sequence
+
+Unique IDs (R000016-413 format) always go in receiptUniqueId, NEVER in lotNumber. Lots created via Apply to Auction have empty lotNumber — this is correct. Folder in Description Copier must always be receiptUniqueId || lotNumber, never just lotNumber.
+
+Detection regex:
+- Unique ID: /^[A-Za-z]\\d{4,7}-\\d{1,6}$/
+- Barcode: /^[A-Za-z]\\d{6,7}$/ or unique ID pattern
+- Strip non-ASCII before testing: .replace(/[^\\x20-\\x7E]/g, "")
+
+---
+
+## Lot titles
+
+Max 83 characters. Extracted from first sentence of description (split on . or newline). Fallback: "Untitled".
+
+## Lot status values
+
+ENTERED | REVIEWED | PUBLISHED | SOLD | UNSOLD | WITHDRAWN — default on creation: ENTERED
+
+## Auction types
+
+GENERAL | DIECAST | TRAINS | VINYL | TV_FILM | MATCHBOX | COMICS | BEARS | DOLLS
+
+---
+
+## Estimate parsing
+
+Regex: /£([\\d,]+)\\s*[–\\-]\\s*£?([\\d,]+)/
+Accepts en-dash and hyphen, optional £ on second value. Strip commas from numbers.
+
+Bidding increments: £0–50: £5 | £50–200: £10 | £200–700: £20 | £700–1000: £50 | £1000–3000: £100 | £3000–7000: £200 | £7000–10000: £500 | £10000+: £1000
+
+---
+
+## Batch AI run rules
+
+- maxDuration: 300s. Up to 24 images per lot. 12-second delay between lots.
+- Retry loop is infinite — never silently fail a lot. Only abort on Gemini content block.
+- Rate limit backoff: exponential — Math.min(60000 * 2^(attempt-1), 1800000)
+- Other error backoff: Math.min(attempt * 12000, 30000)
+- On retry, alternate between primary and fallback model
+- Returns HTTP 200 even when lots fail — always check results[0].status, not res.ok
+- Join description lines with \\n, never space — collapsing to space destroys formatting
+
+Always check before calling .text(): (1) response.promptFeedback?.blockReason and (2) response.candidates?.[0]?.finishReason — only "STOP" and "MAX_TOKENS" are acceptable. 503 from Gemini = transient, retry. Use 422 (not 500) for content blocks.
+
+---
+
+## BC OData API — critical field differences
+
+- Auction_Lines_Excel: auction code = EVA_AuctionNo
+- Receipt_Lines_Excel: auction code = EVA_SalesAllocation
+- These are NOT interchangeable — wrong field = silent failure or 400 error
+
+Always use /api/bc/api-viewer?endpoint=<Name>&limit=1 to confirm field names before writing new BC queries. Complex OR filters time out — run per-key in parallel with Promise.allSettled. Use @odata.nextLink for pagination, NOT $skip (BC has ~38k row $skip limit). $apply=groupby is NOT supported.
+
+---
+
+## PDF generation
+
+Always use pdf-lib (pure JS). Logo: sharp rasterises SVG → PNG, then pdfDoc.embedPng(). Helper: lib/pdf-logo.ts. Barcodes: bwip-js for Code 128. Always generate server-side. Use fixed slot heights.
+
+---
+
+## BC Warehouse — Location History tab
+
+DO NOT change the design or behaviour of the Location History tab in /tools/bc-warehouse. It was accidentally replaced once already. Two modes: Tote and Barcode. API route: /api/bc/location-history. Most recent row highlighted with bg-blue-950/30.
+
+---
+
+## Common gotchas
+
+- fillLotsFromTotes must SELECT receiptUniqueId and preserve existing IDs — earlier bug wiped them
+- Hub cards / app permissions: distinguish "key not configured" (default all-on) from "key present but empty" (respect empty). Don't use array length as the configured signal
+- Mass-select async: use server-side atomic ops, not client-side list arithmetic — React state is async
+- CORS preflight blocks custom headers on ntfy.sh — use JSON body POST format
+- Auction codes get reused across years — sort by date DESC and pick most recent
+- WarehouseItem.auctionName is a cache — use "Refresh auction names from BC" button to re-pull
+
+---
+
+## Current feature surface (as of 2026-05-19)
+
+Cataloguing (/tools/cataloguing): Auction list → per-auction tabs: Manage Lots (filters, inline edit, mass actions inc. mark-added-to-BC), Add Lot, Photo Only Cataloguing, Import Lots, Upload Photos, AI Upgrade, Statistics, Lot History, Auction Settings. Lots have addedToBC boolean and aliases for Unique ID matcher.
+
+Auction AI (/tools/auction-ai): Batch run with Gemini (24 images/lot, 12s delay, infinite retry). Presets in lib/auction-ai-presets.ts (Vinyl, TV/Film, Modern Diecast, Comics, Model Railway strict+free, Teddy Bears, General Toys, Military Figures, Matchbox). Chat mode (6 images), Model Tester, Description Copier, Duplicate Checker.
+
+BC Marketing (/tools/bc-marketing): 5 tabs — Content Generator (16 content types, DB-sourced), Paste & Generate, Insights, Saved Drafts (DRAFT/APPROVED/PUBLISHED), Hashtag Bank. BC internal codes (F025, DM0126 etc.) must NEVER appear in AI output.
+
+BC Warehouse (/tools/bc-warehouse): 8 tabs — Location Heatmap, Sale Checklist, Search by Location, Location History (DO NOT redesign), Tote Data, Collections Due (per-aisle PDFs), Unsold Items, Data Sync, DB Explorer.
+
+BC Reports (/tools/bc-reports): Cataloguing report (barcode/uniqueid/compare modes), Packing report (fuzzy matcher + aliases).
+
+Packing (/tools/packing + /tools/packing/packers): Royal Mail dispatch. Packers: Full Time / Agency / Ex-Staff groups, aliases, barcode sheet PDF (10 rows/page, Code 128, Vectis logo).
+
+Auction Monitor (/tools/auction-monitor): Live WebSocket monitor (wss://www.vectis.co.uk/wss/{auctionId}). Tracks bids, session totals, sale-state flags. ntfy.sh push notifications (10 alert rules, JSON body POST). Persistent lot-outcomes store (~2000 lots).
+
+Admin (/admin): About, Users & Permissions, Roles & Defaults, Home Page (drag-to-reorder), Departments, Cataloguing Reports, Devices (serial/user tracking), Claude Memory, Run Migrations.
+
+Databases (/databases): Customers, Receipts, Totes, Lots, Bids editors + Browse Any Table (read-only, ~30 models, row counts + 3 sample rows).
 
 ---
 
 ## Recent work (as of 2026-05-19)
 
-### Auction AI presets (lib/auction-ai-presets.ts)
-- **Vectis Strict: Military Figures** — fully rewritten examples-first. Set 2055 Confederate Cavalry entry expanded with uniform details (grey tunics, blue trousers with yellow striping and kepis), correct weapons (rifles not swords), and a WRONG OUTPUT example showing exactly what not to write.
-- **Vectis Strict: Matchbox** — new preset added. Full 1-75 model reference table (all slots, names, years, standard colours, COLLECTOR flags), 6 correct-output examples, 10 strict rules covering brand prefix, colour variants, wheel type, casting features (wipers/mirror/tow hook), box type, and grading.
+- Idle log cleanup — delete with 10-hour exclusion rule (logs under 10h old protected)
+- AI preset Edited badge — fixed bug where badge wasn't showing on preset changes
+- Military Figures preset — fully rewritten examples-first; Set 2055 Confederate Cavalry expanded; WRONG OUTPUT example added
+- Matchbox preset — new preset from scratch; full 1-75 reference table (417 model variants, 75 slots, 1953–1982); 6 correct-output examples; 10 strict rules
 
-### Idle log cleanup
-- Built delete functionality for idle logs with a 10-hour exclusion rule (logs under 10 hours old are protected).
+## Next task: Dark mode
 
-### AI preset "Edited" badge
-- Fixed a bug where the Edited badge wasn't showing correctly on preset changes.
-
-### Dark mode — NEXT TASK
-- Agreed to implement app-wide dark mode with **dark as the default**.
-- The app currently has a mixed state: the hub is already dark (hardcoded dark colours), admin/tool pages are light.
-- **Tailwind v4 is used (CSS-first, no tailwind.config.ts)** — dark mode config goes in the CSS file, not a config file.
-- Plan: configure dark variant in CSS → add theme toggle to top bar (saves to localStorage, applies dark class to html) → update all admin/tool pages and shared components with dark: variants. The hub page flips the other way (it's already dark).`,
+Agreed to implement app-wide dark mode with dark as the default. Current state: hub is already dark (hardcoded), admin/tool pages are light. Tailwind v4 — dark mode config goes in the CSS file. Plan: configure dark variant in CSS → add theme toggle to top bar (localStorage + dark class on html) → update all pages/components with dark: variants. Hub page flips the other way (already dark, needs light mode variants).`,
   },
   {
     filename: "feedback_vectis.md",
