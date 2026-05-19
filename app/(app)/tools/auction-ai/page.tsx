@@ -182,11 +182,19 @@ function ImageZone({ images, onAdd, onRemove, max = 6 }: {
   const ref = useRef<HTMLInputElement>(null)
   const [previews, setPreviews] = useState<string[]>([])
 
+  // Keep previews in sync with images prop — handles paste, drop, and click
+  useEffect(() => {
+    let cancelled = false
+    if (images.length === 0) { setPreviews([]); return }
+    Promise.all(images.map(toDataURL)).then(urls => {
+      if (!cancelled) setPreviews(urls)
+    })
+    return () => { cancelled = true }
+  }, [images])
+
   const add = useCallback(async (files: FileList | File[]) => {
     const arr = Array.from(files).filter(f => f.type.startsWith("image/")).slice(0, max - images.length)
     if (!arr.length) return
-    const urls = await Promise.all(arr.map(toDataURL))
-    setPreviews(p => [...p, ...urls])
     onAdd(arr)
   }, [images.length, max, onAdd])
 
