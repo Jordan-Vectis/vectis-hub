@@ -1143,9 +1143,11 @@ function LocationHistoryTab() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-2">
-      <h2 className="text-lg font-semibold text-white mb-1">Location History</h2>
-      <p className="text-gray-500 text-sm mb-5">Look up every location a tote or lot has ever been moved to via BC change logs.</p>
+    <div className="h-full flex flex-col p-6 space-y-5 overflow-y-auto">
+      <div>
+        <h2 className="text-lg font-semibold text-white mb-1">Location History</h2>
+        <p className="text-gray-500 text-sm">Look up every location a tote or lot has ever been moved to via BC change logs.</p>
+      </div>
 
       <div className="bg-[#0d0f1a] border border-gray-700 rounded-xl p-5 max-w-lg space-y-4">
         <div className="flex gap-2">
@@ -1170,10 +1172,10 @@ function LocationHistoryTab() {
         {mode === "barcode" && <p className="text-xs text-gray-600">Barcode lookup does two BC queries: first finds the item key from the barcode, then fetches all location changes for that item.</p>}
       </div>
 
-      {error && <div className="mt-4 max-w-lg"><p className="text-red-400 text-sm">{error}</p></div>}
+      {error && <p className="text-red-400 text-sm">{error}</p>}
 
       {result && (
-        <div className="mt-5 w-full space-y-4">
+        <div className="w-full space-y-4">
           <div className="flex items-center gap-8">
             <div>
               <p className="text-xs text-gray-500 uppercase tracking-wide">BC Item Key</p>
