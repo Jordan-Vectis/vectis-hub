@@ -193,12 +193,17 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
   const [logs, setLogs]         = useState<SerialIdleLog[]>(initialLogs)
   const [deleting, setDeleting] = useState<string | null>(null)
 
+  const MAX_IDLE_MS = 10 * 60 * 60 * 1000 // 10 hours — anything longer is likely a forgotten open device
+
   const filtered = useMemo(
     () => logs.filter(l => inDateRange(l.idleStartedAt, fromDate, toDate)),
     [logs, fromDate, toDate],
   )
 
-  const totalIdleMs = filtered.reduce((s, l) => s + l.idleDurationMs, 0)
+  const skipped  = filtered.filter(l => l.idleDurationMs > MAX_IDLE_MS)
+  const counted  = filtered.filter(l => l.idleDurationMs <= MAX_IDLE_MS)
+
+  const totalIdleMs = counted.reduce((s, l) => s + l.idleDurationMs, 0)
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this idle time entry? This cannot be undone.")) return
@@ -243,16 +248,21 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
           />
 
           {/* Summary strip */}
-          {filtered.length > 0 && (
-            <div className="px-5 py-2 bg-orange-50 border-t border-orange-100 flex gap-6 text-xs">
+          {counted.length > 0 && (
+            <div className="px-5 py-2 bg-orange-50 border-t border-orange-100 flex flex-wrap gap-x-6 gap-y-1 text-xs">
               <span className="text-orange-700 font-semibold">
                 Total idle: <span className="font-bold">{fmtDuration(totalIdleMs)}</span>
               </span>
               <span className="text-orange-500">
-                {filtered.filter(l => l.reason === "LUNCH_BREAK").length} lunch ·{" "}
-                {filtered.filter(l => l.reason === "LOTTING_UP").length} lotting up ·{" "}
-                {filtered.filter(l => l.reason === "OTHER").length} other
+                {counted.filter(l => l.reason === "LUNCH_BREAK").length} lunch ·{" "}
+                {counted.filter(l => l.reason === "LOTTING_UP").length} lotting up ·{" "}
+                {counted.filter(l => l.reason === "OTHER").length} other
               </span>
+              {skipped.length > 0 && (
+                <span className="text-gray-400 italic ml-auto">
+                  {skipped.length} entr{skipped.length === 1 ? "y" : "ies"} over 10 hours excluded (likely device left open)
+                </span>
+              )}
             </div>
           )}
 
@@ -277,9 +287,10 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
                     </td>
                   </tr>
                 ) : filtered.map(log => {
-                  const r = REASON_LABEL[log.reason] ?? { label: log.reason, colour: "bg-gray-100 text-gray-500 border-gray-200" }
+                  const r        = REASON_LABEL[log.reason] ?? { label: log.reason, colour: "bg-gray-100 text-gray-500 border-gray-200" }
+                  const excluded = log.idleDurationMs > MAX_IDLE_MS
                   return (
-                    <tr key={log.id} className="hover:bg-gray-50 transition-colors">
+                    <tr key={log.id} className={`transition-colors ${excluded ? "opacity-40 bg-gray-50" : "hover:bg-gray-50"}`}>
                       <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap font-mono">
                         {format(new Date(log.idleStartedAt), "dd/MM/yyyy HH:mm:ss")}
                       </td>
@@ -298,7 +309,7 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
                         {log.toteNumbers || "—"}
                       </td>
                       <td className="px-5 py-3 text-xs text-gray-500 max-w-[200px] truncate" title={log.notes ?? ""}>
-                        {log.notes || "—"}
+                        {excluded ? <span className="italic">Excluded — over 10 hours</span> : (log.notes || "—")}
                       </td>
                       <td className="px-5 py-3 text-right font-mono font-bold text-orange-600">
                         {fmtDuration(log.idleDurationMs)}
