@@ -394,7 +394,17 @@ function ChatTab({ model }: { model: string }) {
       <div className="flex gap-2">
         <textarea value={message} onChange={(e) => setMessage(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send() } }}
-          placeholder="Describe the lot or ask a question… (Enter to send)"
+          onPaste={(e) => {
+            const imageFiles = Array.from(e.clipboardData.items)
+              .filter(item => item.type.startsWith("image/"))
+              .map(item => item.getAsFile())
+              .filter((f): f is File => f !== null)
+            if (imageFiles.length > 0) {
+              e.preventDefault()
+              setImages(prev => [...prev, ...imageFiles].slice(0, 6))
+            }
+          }}
+          placeholder="Describe the lot or ask a question… (Enter to send, paste images with Ctrl+V)"
           rows={2}
           className="flex-1 bg-[#2C2C2E] border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#C8A96E] resize-none" />
         <div className="flex flex-col gap-1.5">
