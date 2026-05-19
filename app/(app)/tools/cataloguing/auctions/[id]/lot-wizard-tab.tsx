@@ -353,7 +353,7 @@ function Autocomplete({ value, onChange, options, placeholder, tablet }: {
           className={`flex-1 bg-gray-100 dark:bg-[#2C2C2E] border border-r-0 border-gray-300 dark:border-gray-700 rounded-l text-gray-700 dark:text-gray-200 focus:outline-none ${tablet ? "px-4 py-3.5 text-base" : "px-3 py-2 text-sm"}`}
           style={{ borderColor: value ? CAT_ACCENT + "66" : undefined }} />
         <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(o => !o) }}
-          className={`bg-gray-100 dark:bg-[#2C2C2E] border border-l-0 border-gray-300 dark:border-gray-700 rounded-r text-gray-500 ${tablet ? "px-3 text-sm" : "px-2 text-xs"}`}>▼</button>
+          className={`bg-gray-100 dark:bg-[#2C2C2E] border border-l-0 border-gray-300 dark:border-gray-700 rounded-r text-gray-600 dark:text-gray-500 ${tablet ? "px-3 text-sm" : "px-2 text-xs"}`}>▼</button>
       </div>
       {open && filtered.length > 0 && (
         <div className="absolute z-50 w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded mt-0.5 max-h-48 overflow-y-auto shadow-xl">
@@ -590,8 +590,8 @@ export default function LotWizardTab({
     ? "w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3.5 text-base text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#2AB4A6]"
     : "w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#2AB4A6]"
   const lbl = tablet
-    ? "text-sm text-gray-400 uppercase tracking-wider"
-    : "text-xs text-gray-500 uppercase tracking-wider"
+    ? "text-sm text-gray-600 dark:text-gray-400 uppercase tracking-wider"
+    : "text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider"
 
   function validateStep(s: number): string {
     if (s === 1) {
@@ -702,9 +702,9 @@ export default function LotWizardTab({
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
             <div className="text-center mb-5">
-              <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">Idle Timer</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-gray-600 dark:text-gray-400 mb-1">Idle Timer</p>
               <p className="text-5xl font-mono font-bold text-gray-900">{fmtIdleDuration(idleSecs)}</p>
-              <p className="text-sm text-gray-500 mt-2">You haven't catalogued a lot for a while.<br/>What were you doing?</p>
+              <p className="text-sm text-gray-600 dark:text-gray-500 mt-2">You haven't catalogued a lot for a while.<br/>What were you doing?</p>
             </div>
 
             {/* Reason buttons */}
@@ -757,7 +757,7 @@ export default function LotWizardTab({
 
       {/* Auction context banner */}
       <div className="flex items-center gap-3 mb-4 px-1">
-        <span className={`${tablet ? "text-sm" : "text-xs"} text-gray-500 uppercase tracking-wider`}>Adding to:</span>
+        <span className={`${tablet ? "text-sm" : "text-xs"} text-gray-600 dark:text-gray-500 uppercase tracking-wider`}>Adding to:</span>
         <span className={`font-mono font-bold text-[#2AB4A6] ${tablet ? "text-base" : "text-sm"}`}>{auction.code}</span>
         <span className={`text-gray-600 dark:text-gray-300 ${tablet ? "text-base" : "text-sm"}`}>{auction.name}</span>
         <div className="ml-auto flex items-center gap-4">
@@ -832,7 +832,7 @@ export default function LotWizardTab({
 
         {step === 1 && (
           <div className="max-w-lg space-y-4">
-            <p className="text-xs text-gray-500">These values are remembered between lots.</p>
+            <p className="text-xs text-gray-600 dark:text-gray-500">These values are remembered between lots.</p>
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className={lbl}>Tote Number <span className="text-red-500">*</span></label>
@@ -853,7 +853,7 @@ export default function LotWizardTab({
                     autoComplete="off"
                     autoFocus
                   />
-                  {tote && <button type="button" onClick={() => { setTote(""); setToteInfo(null); setToteResults([]); setToteOpen(false); setToteIgnored(false); setVendorHint(null) }} className="px-3 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
+                  {tote && <button type="button" onClick={() => { setTote(""); setToteInfo(null); setToteResults([]); setToteOpen(false); setToteIgnored(false); setVendorHint(null) }} className="px-3 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
                 </div>
                 {toteOpen && toteResults.length > 0 && (
                   <div className="absolute z-50 w-full mt-1 bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-700 rounded shadow-xl max-h-52 overflow-y-auto">
@@ -861,8 +861,8 @@ export default function LotWizardTab({
                       <button key={item.toteNo} type="button" onMouseDown={() => selectTote(item)}
                         className="w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-[#2C2C2E] transition-colors border-b border-gray-200 dark:border-gray-800 last:border-0">
                         <span className="font-mono text-sm text-[#2AB4A6]">{item.toteNo}</span>
-                        {item.vendorName && <span className="text-gray-400 text-xs ml-2">· {item.vendorName}</span>}
-                        {item.location   && <span className="text-gray-500 text-xs ml-2">· {item.location}</span>}
+                        {item.vendorName && <span className="text-gray-600 dark:text-gray-400 text-xs ml-2">· {item.vendorName}</span>}
+                        {item.location   && <span className="text-gray-600 dark:text-gray-500 text-xs ml-2">· {item.location}</span>}
                       </button>
                     ))}
                   </div>
@@ -870,14 +870,14 @@ export default function LotWizardTab({
               </div>
               {toteInfo && (
                 <p className="text-xs text-[#2AB4A6] mt-1">
-                  {toteInfo.vendorName} <span className="text-gray-500">({toteInfo.vendorNo})</span>
+                  {toteInfo.vendorName} <span className="text-gray-600 dark:text-gray-500">({toteInfo.vendorNo})</span>
                   {toteInfo.receiptNo && <> · {toteInfo.receiptNo}</>}
                 </p>
               )}
               {tote && !toteInfo && !toteIgnored && toteResults.length === 0 && (
                 <div className="flex items-center gap-2 mt-1">
                   <p className="text-xs text-yellow-400">Tote not found in BC warehouse</p>
-                  <button type="button" onClick={() => setToteIgnored(true)} className="text-xs text-gray-400 underline hover:text-white">Use anyway</button>
+                  <button type="button" onClick={() => setToteIgnored(true)} className="text-xs text-gray-600 dark:text-gray-400 underline hover:text-white">Use anyway</button>
                 </div>
               )}
             </div>
@@ -888,7 +888,7 @@ export default function LotWizardTab({
               </div>
               <div className="flex gap-2">
                 <input value={vendor} onChange={e => { setVendor(e.target.value); setVendorHint(null) }} className={`flex-1 ${inpFocus}`} placeholder="e.g. C224521" />
-                {vendor && <button type="button" onClick={() => { setVendor(""); setVendorHint(null) }} className="px-3 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
+                {vendor && <button type="button" onClick={() => { setVendor(""); setVendorHint(null) }} className="px-3 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
               </div>
               {vendorHint && <p className="text-xs text-[#2AB4A6] mt-1">{vendorHint}</p>}
             </div>
@@ -905,11 +905,11 @@ export default function LotWizardTab({
                   className={`flex-1 ${inpFocus}`}
                   placeholder="e.g. R007523"
                 />
-                {receipt && <button type="button" onClick={() => setReceipt("")} className="px-3 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
+                {receipt && <button type="button" onClick={() => setReceipt("")} className="px-3 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
               </div>
               {receipt && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Unique ID will be auto-assigned (e.g. <span className="text-gray-400">{receipt.toUpperCase()}-N</span>)
+                <p className="text-xs text-gray-600 dark:text-gray-500 mt-1">
+                  Unique ID will be auto-assigned (e.g. <span className="text-gray-600 dark:text-gray-400">{receipt.toUpperCase()}-N</span>)
                 </p>
               )}
             </div>
@@ -918,13 +918,13 @@ export default function LotWizardTab({
 
         {step === 2 && (
           <div className="max-w-lg space-y-4">
-            <p className="text-xs text-gray-500">Scan the internal barcode or type it manually.</p>
+            <p className="text-xs text-gray-600 dark:text-gray-500">Scan the internal barcode or type it manually.</p>
             {(vendor || tote) && (
               <div className="flex items-center justify-between bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2">
-                <span className="text-xs text-gray-400 flex flex-wrap gap-x-3 gap-y-0.5">
-                  {tote    && <span><span className="text-gray-500">Tote </span><span className="text-gray-700 dark:text-gray-200 font-mono">{tote}</span></span>}
-                  {vendor  && <span><span className="text-gray-500">Vendor </span><span className="text-gray-700 dark:text-gray-200 font-mono">{vendor}</span>{vendorHint && <span className="text-gray-500"> · {vendorHint}</span>}</span>}
-                  {receipt && <span><span className="text-gray-500">Receipt </span><span className="text-gray-700 dark:text-gray-200 font-mono">{receipt}</span></span>}
+                <span className="text-xs text-gray-600 dark:text-gray-400 flex flex-wrap gap-x-3 gap-y-0.5">
+                  {tote    && <span><span className="text-gray-600 dark:text-gray-500">Tote </span><span className="text-gray-700 dark:text-gray-200 font-mono">{tote}</span></span>}
+                  {vendor  && <span><span className="text-gray-600 dark:text-gray-500">Vendor </span><span className="text-gray-700 dark:text-gray-200 font-mono">{vendor}</span>{vendorHint && <span className="text-gray-600 dark:text-gray-500"> · {vendorHint}</span>}</span>}
+                  {receipt && <span><span className="text-gray-600 dark:text-gray-500">Receipt </span><span className="text-gray-700 dark:text-gray-200 font-mono">{receipt}</span></span>}
                 </span>
                 <button type="button" onClick={() => setStep(1)}
                   className="text-xs font-semibold px-3 py-1 rounded transition-colors"
@@ -1064,7 +1064,7 @@ export default function LotWizardTab({
               </div>
             </div>
             {/* Summary */}
-            <div className="bg-gray-50 dark:bg-[#141416] border border-gray-200 dark:border-gray-800 rounded-lg p-4 text-xs text-gray-400 space-y-1">
+            <div className="bg-gray-50 dark:bg-[#141416] border border-gray-200 dark:border-gray-800 rounded-lg p-4 text-xs text-gray-600 dark:text-gray-400 space-y-1">
               <p><span className="text-gray-600">Auction:</span> {auction.code} {auction.name}</p>
               <p><span className="text-gray-600">Vendor:</span> {vendor} &nbsp;|&nbsp; <span className="text-gray-600">Tote:</span> {tote}{receipt && ` | Receipt: ${receipt}`}</p>
               <p><span className="text-gray-600">Barcode:</span> {barcode || "—"}</p>
@@ -1079,7 +1079,7 @@ export default function LotWizardTab({
 
         {step === 8 && (
           <div className="max-w-lg space-y-4">
-            <p className="text-xs text-gray-500">Add photos to this lot. You can skip this and add them later.</p>
+            <p className="text-xs text-gray-600 dark:text-gray-500">Add photos to this lot. You can skip this and add them later.</p>
             <input
               ref={photoInputRef}
               type="file"
@@ -1095,7 +1095,7 @@ export default function LotWizardTab({
             <button
               type="button"
               onClick={() => photoInputRef.current?.click()}
-              className="w-full py-4 rounded-xl border-2 border-dashed border-gray-600 hover:border-[#2AB4A6] text-gray-400 hover:text-[#2AB4A6] transition-colors flex flex-col items-center gap-1"
+              className="w-full py-4 rounded-xl border-2 border-dashed border-gray-600 hover:border-[#2AB4A6] text-gray-600 dark:text-gray-400 hover:text-[#2AB4A6] transition-colors flex flex-col items-center gap-1"
             >
               <span className="text-2xl">📷</span>
               <span className="text-sm font-medium">Take photo</span>

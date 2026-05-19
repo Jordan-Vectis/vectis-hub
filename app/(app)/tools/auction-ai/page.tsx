@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useRef, useCallback, useEffect } from "react"
 import * as XLSX from "xlsx"
@@ -98,7 +98,7 @@ function PresetSelector({ value, onChange, overrides, onEdit }: {
 
   return (
     <div className="mb-3">
-      <label className="block text-xs text-gray-500 mb-1 uppercase tracking-wider">System Instruction Preset</label>
+      <label className="block text-xs text-gray-600 dark:text-gray-500 mb-1 uppercase tracking-wider">System Instruction Preset</label>
       <div className="flex gap-2">
         <select value={value} onChange={(e) => onChange(e.target.value)}
           className="flex-1 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E]">
@@ -113,7 +113,7 @@ function PresetSelector({ value, onChange, overrides, onEdit }: {
         </select>
         {value !== "Custom (paste my own)" && !isCustom && (
           <button onClick={onEdit}
-            className={`px-3 py-1.5 text-xs rounded border transition-colors flex-shrink-0 ${isEdited ? "border-[#C8A96E] text-[#C8A96E] bg-gray-100 dark:bg-[#2C2C2E] hover:bg-[#3a3a2e]" : "border-gray-300 dark:border-gray-700 text-gray-400 bg-gray-100 dark:bg-[#2C2C2E] hover:border-gray-500"}`}>
+            className={`px-3 py-1.5 text-xs rounded border transition-colors flex-shrink-0 ${isEdited ? "border-[#C8A96E] text-[#C8A96E] bg-gray-100 dark:bg-[#2C2C2E] hover:bg-[#3a3a2e]" : "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-[#2C2C2E] hover:border-gray-500"}`}>
             {isEdited ? "✎ Edited" : "✎ Edit"}
           </button>
         )}
@@ -146,7 +146,7 @@ function PresetEditorModal({ presetKey, initialText, onSave, onClose }: {
         onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">{presetKey}</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-lg leading-none ml-4">✕</button>
+          <button onClick={onClose} className="text-gray-600 dark:text-gray-500 hover:text-gray-300 text-lg leading-none ml-4">✕</button>
         </div>
         {isBuiltIn && (
           <p className="text-xs text-amber-500/80 bg-amber-500/10 border border-amber-500/20 rounded px-3 py-2">
@@ -161,12 +161,12 @@ function PresetEditorModal({ presetKey, initialText, onSave, onClose }: {
         />
         <div className="flex gap-2 justify-between">
           <button onClick={() => setDraft(PRESETS[presetKey] ?? "")}
-            className="text-xs px-3 py-1.5 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-400 rounded hover:border-gray-500 hover:text-gray-300 transition-colors">
+            className="text-xs px-3 py-1.5 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded hover:border-gray-500 hover:text-gray-300 transition-colors">
             Reset to default
           </button>
           <div className="flex gap-2">
             <button onClick={onClose}
-              className="text-sm px-4 py-1.5 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-400 rounded hover:border-gray-500 transition-colors">
+              className="text-sm px-4 py-1.5 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded hover:border-gray-500 transition-colors">
               Cancel
             </button>
             <button onClick={handleSave} disabled={saving}
@@ -241,7 +241,7 @@ function ImageZone({ images, onAdd, onRemove, max = 6 }: {
         onDragOver={(e) => e.preventDefault()}
         onClick={() => ref.current?.click()}
         className="border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-[#C8A96E] rounded-lg p-4 text-center cursor-pointer transition-colors">
-        <p className="text-gray-500 text-sm">Drop images here or click to select ({images.length}/{max})</p>
+        <p className="text-gray-600 dark:text-gray-500 text-sm">Drop images here or click to select ({images.length}/{max})</p>
         <input ref={ref} type="file" multiple accept="image/*" className="hidden"
           onChange={(e) => e.target.files && add(e.target.files)} />
       </div>
@@ -296,7 +296,7 @@ function Autocomplete({ value, onChange, options, placeholder, accentColor = "#C
           style={{ borderColor: query ? accentColor + "66" : "" }}
         />
         <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(o => !o) }}
-          className="px-2 bg-gray-100 dark:bg-[#2C2C2E] border border-l-0 border-gray-300 dark:border-gray-700 rounded-r text-gray-500 text-xs">▼</button>
+          className="px-2 bg-gray-100 dark:bg-[#2C2C2E] border border-l-0 border-gray-300 dark:border-gray-700 rounded-r text-gray-600 dark:text-gray-500 text-xs">▼</button>
       </div>
       {open && filtered.length > 0 && (
         <div className="absolute z-50 w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded mt-0.5 max-h-48 overflow-y-auto shadow-xl">
@@ -386,7 +386,7 @@ function ChatTab({ model }: { model: string }) {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Chat Window</h2>
-        <label className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-colors ${grounded ? "bg-blue-950/50 border-blue-600/60 text-blue-300" : "bg-gray-100 dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-400 hover:border-gray-500"}`}>
+        <label className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-colors ${grounded ? "bg-blue-950/50 border-blue-600/60 text-blue-300" : "bg-gray-100 dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
           <input type="checkbox" checked={grounded} onChange={e => { setGrounded(e.target.checked); setLastSearchQueries([]) }}
             className="w-3.5 h-3.5 accent-blue-500" />
           <span className="text-xs font-medium">🔍 Google Search</span>
@@ -441,7 +441,7 @@ function ChatTab({ model }: { model: string }) {
         {loading && (
           <div className="flex justify-start">
             <div className="bg-gray-50 dark:bg-[#1a1a1e] border border-[#C8A96E]/25 rounded-lg px-4 py-3 flex items-center gap-2">
-              <span className="text-xs text-gray-500">Gemini is thinking</span>
+              <span className="text-xs text-gray-600 dark:text-gray-500">Gemini is thinking</span>
               <span className="flex gap-1">
                 {[0, 1, 2].map(i => (
                   <span key={i} className="w-1.5 h-1.5 rounded-full bg-[#C8A96E] animate-bounce"
@@ -484,7 +484,7 @@ function ChatTab({ model }: { model: string }) {
             {loading ? "…" : "Send"}
           </button>
           <button onClick={() => { setHistory([]); setApiHist([]) }}
-            className="px-5 py-1.5 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-400 text-xs rounded hover:border-gray-500">
+            className="px-5 py-1.5 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 text-xs rounded hover:border-gray-500">
             Clear
           </button>
         </div>
@@ -849,7 +849,7 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
       )}
 
       {/* ── Google Search grounding ── */}
-      <label className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-colors ${grounded ? "bg-blue-950/50 border-blue-600/60 text-blue-300" : "bg-gray-100 dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-400 hover:border-gray-500"}`}>
+      <label className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-colors ${grounded ? "bg-blue-950/50 border-blue-600/60 text-blue-300" : "bg-gray-100 dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
         <input type="checkbox" checked={grounded} onChange={e => setGrounded(e.target.checked)}
           className="w-3.5 h-3.5 rounded accent-blue-500" />
         <span className="text-xs font-medium">🔍 Google Search</span>
@@ -858,7 +858,7 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
 
       {/* ── Auction Code ── */}
       <div>
-        <label className="block text-xs text-gray-500 mb-1 uppercase tracking-wider">
+        <label className="block text-xs text-gray-600 dark:text-gray-500 mb-1 uppercase tracking-wider">
           Auction Code <span className="normal-case text-gray-600">(optional — saves results for later retrieval)</span>
         </label>
         <Autocomplete
@@ -895,7 +895,7 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
 
       {/* ── Step 1: Sort (optional) ── */}
       <div className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg p-3">
-        <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Step 1 — Sort flat folder by filename (optional)</p>
+        <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-2">Step 1 — Sort flat folder by filename (optional)</p>
         <div onClick={() => sortRef.current?.click()}
           className="border border-dashed border-gray-300 dark:border-gray-600 hover:border-green-500 rounded-lg px-4 py-3 text-center cursor-pointer transition-colors">
           <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">▦ Sort images by filename (e.g. R00001_1.jpg)</p>
@@ -906,7 +906,7 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
 
       {/* ── Step 2: Load subfolders ── */}
       <div className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg p-3">
-        <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Step 2 — Load lot subfolders</p>
+        <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-2">Step 2 — Load lot subfolders</p>
         <div onClick={() => folderRef.current?.click()}
           className="border border-dashed border-gray-300 dark:border-gray-600 hover:border-[#C8A96E] rounded-lg px-4 py-3 text-center cursor-pointer transition-colors">
           <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">📂 {lotNames.length > 0 ? `${lotNames.length} lots loaded — click to reload` : "Select folder"}</p>
@@ -919,16 +919,16 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
       {lotNames.length > 0 && (
         <div className="flex flex-col min-h-0" style={{ maxHeight: "220px" }}>
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-gray-600 dark:text-gray-400">
               <span className="text-[#C8A96E] font-semibold">{selected.size}</span>
               {" / "}{lotNames.length} lots selected
               {" · "}{Object.values(lots).reduce((s,f)=>s+f.length,0)} images
             </span>
             <div className="flex gap-1.5">
-              <button onClick={selectAll}  className="text-xs px-2 py-0.5 bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 text-gray-400 rounded hover:border-gray-500">All</button>
-              <button onClick={selectNone} className="text-xs px-2 py-0.5 bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 text-gray-400 rounded hover:border-gray-500">None</button>
+              <button onClick={selectAll}  className="text-xs px-2 py-0.5 bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded hover:border-gray-500">All</button>
+              <button onClick={selectNone} className="text-xs px-2 py-0.5 bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded hover:border-gray-500">None</button>
               <button onClick={() => setSelected(s => { const n = new Set(s); results.filter(r => r.status === "OK").forEach(r => n.delete(r.lot)); return n })}
-                className="text-xs px-2 py-0.5 bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 text-gray-400 rounded hover:border-gray-500" title="Deselect lots that already have an OK result">Skip Done</button>
+                className="text-xs px-2 py-0.5 bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded hover:border-gray-500" title="Deselect lots that already have an OK result">Skip Done</button>
             </div>
           </div>
           <div className="overflow-y-auto rounded border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#141416] flex-1">
@@ -966,7 +966,7 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
         <div className="flex-shrink-0">
           <div className="flex items-center justify-between mb-1">
             <span className="text-sm font-semibold text-[#C8A96E]">{done} / {total} lots complete</span>
-            <span className="text-xs text-gray-500">{pct}%</span>
+            <span className="text-xs text-gray-600 dark:text-gray-500">{pct}%</span>
           </div>
           <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-2">
             <div className="bg-[#C8A96E] h-2 rounded-full transition-all" style={{ width: `${pct}%` }} />
@@ -1000,7 +1000,7 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
               {saveErrors.map((e, i) => (
                 <div key={i} className="flex items-start gap-2 text-xs text-red-300 bg-red-950/60 border border-red-800 rounded px-3 py-1.5">
                   <span className="font-mono text-red-500 flex-shrink-0">[{e.code}]</span>
-                  <span className="flex-shrink-0 text-gray-500">{e.lot}</span>
+                  <span className="flex-shrink-0 text-gray-600 dark:text-gray-500">{e.lot}</span>
                   <span>{e.message}</span>
                 </div>
               ))}
@@ -1101,7 +1101,7 @@ function BarcodeTab() {
   return (
     <div>
       <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Barcode Sorter</h2>
-      <p className="text-gray-500 text-sm mb-4">Upload barcode header images — decodes each barcode and sorts files into customer or lot folders for download.</p>
+      <p className="text-gray-600 dark:text-gray-500 text-sm mb-4">Upload barcode header images — decodes each barcode and sorts files into customer or lot folders for download.</p>
 
       <div onClick={() => document.getElementById("bc-input")?.click()}
         className="border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-[#C8A96E] rounded-lg p-6 text-center cursor-pointer transition-colors mb-4">
@@ -1122,7 +1122,7 @@ function BarcodeTab() {
         <>
           <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 dark:bg-[#141416] text-gray-500 text-xs uppercase">
+              <thead className="bg-gray-50 dark:bg-[#141416] text-gray-600 dark:text-gray-500 text-xs uppercase">
                 <tr>
                   <th className="px-4 py-2 text-left">File</th>
                   <th className="px-4 py-2 text-left">Barcode</th>
@@ -1133,10 +1133,10 @@ function BarcodeTab() {
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                 {results.map((r, i) => (
                   <tr key={i} className="hover:bg-gray-50 dark:hover:bg-[#141416]">
-                    <td className="px-4 py-2 text-gray-400 text-xs truncate max-w-[160px]">{r.name}</td>
+                    <td className="px-4 py-2 text-gray-600 dark:text-gray-400 text-xs truncate max-w-[160px]">{r.name}</td>
                     <td className="px-4 py-2 text-[#C8A96E] font-mono text-xs">{r.barcode}</td>
                     <td className="px-4 py-2 text-gray-600 dark:text-gray-300 text-xs">{r.type}</td>
-                    <td className="px-4 py-2 text-gray-500 text-xs">{r.folder}</td>
+                    <td className="px-4 py-2 text-gray-600 dark:text-gray-500 text-xs">{r.folder}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1288,9 +1288,9 @@ function CopierTab() {
     <div>
       <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Description Copier</h2>
       <label className="block mb-4">
-        <span className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Load Excel results file</span>
+        <span className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1 block">Load Excel results file</span>
         <input type="file" accept=".xlsx,.xls" onChange={loadFile}
-          className="text-sm text-gray-400 file:mr-3 file:py-1.5 file:px-4 file:rounded file:border-0 file:bg-[#C8A96E] file:text-black file:text-sm file:font-bold hover:file:bg-[#d4b87a] cursor-pointer" />
+          className="text-sm text-gray-600 dark:text-gray-400 file:mr-3 file:py-1.5 file:px-4 file:rounded file:border-0 file:bg-[#C8A96E] file:text-black file:text-sm file:font-bold hover:file:bg-[#d4b87a] cursor-pointer" />
       </label>
 
       {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
@@ -1299,13 +1299,13 @@ function CopierTab() {
         <>
           {/* Sort selector */}
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-xs text-gray-500 uppercase tracking-wider">Sort by:</span>
+            <span className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider">Sort by:</span>
             {(["uniqueId", "barcode", "lotNumber"] as SortBy[]).map(s => (
               <button key={s} onClick={() => { setSortBy(s); setIdx(0) }}
                 className={`px-3 py-1 rounded text-xs font-medium border transition-colors ${
                   sortBy === s
                     ? "bg-[#C8A96E] border-[#C8A96E] text-black"
-                    : "bg-gray-100 dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-400 hover:border-gray-500"
+                    : "bg-gray-100 dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"
                 }`}>
                 {s === "uniqueId" ? "Unique ID" : s === "barcode" ? "Barcode" : "Lot Number"}
               </button>
@@ -1319,14 +1319,14 @@ function CopierTab() {
             <div className="flex items-center gap-3 flex-wrap shrink-0">
               <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0}
                 className="px-6 py-3 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-lg text-base font-semibold disabled:opacity-40 hover:border-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">← Prev</button>
-              <span className="text-sm text-gray-400 tabular-nums">{idx + 1} / {sortedRows.length}</span>
+              <span className="text-sm text-gray-600 dark:text-gray-400 tabular-nums">{idx + 1} / {sortedRows.length}</span>
               <button onClick={() => setIdx(i => Math.min(sortedRows.length - 1, i + 1))} disabled={idx === sortedRows.length - 1}
                 className="px-6 py-3 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-lg text-base font-semibold disabled:opacity-40 hover:border-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">Next →</button>
 
               {/* Jump to lot */}
               <div className="relative ml-auto">
                 <div className="flex items-center">
-                  <span className="text-xs text-gray-500 mr-2 whitespace-nowrap">Jump to lot:</span>
+                  <span className="text-xs text-gray-600 dark:text-gray-500 mr-2 whitespace-nowrap">Jump to lot:</span>
                   <input
                     value={jumpQuery}
                     onChange={e => { setJumpQuery(e.target.value); setJumpOpen(true) }}
@@ -1369,7 +1369,7 @@ function CopierTab() {
                       <div className="min-w-0 flex-1">
                         {value && (
                           <p className="text-xs font-mono text-[#C8A96E] font-semibold mb-2">
-                            <span className="text-gray-500 font-sans font-normal">{label}: </span>{value}
+                            <span className="text-gray-600 dark:text-gray-500 font-sans font-normal">{label}: </span>{value}
                           </p>
                         )}
                         <p className="text-gray-700 dark:text-gray-200 text-sm leading-relaxed whitespace-pre-wrap">{row.description}</p>
@@ -1494,13 +1494,13 @@ function SavedRunsTab() {
     <div className="flex flex-col h-full gap-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Saved Runs</h2>
-        <button onClick={loadRuns} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">↻ Refresh</button>
+        <button onClick={loadRuns} className="text-xs text-gray-600 dark:text-gray-500 hover:text-gray-300 transition-colors">↻ Refresh</button>
       </div>
 
       <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search auction code…"
         className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E] placeholder:text-gray-600" />
 
-      {loading && <p className="text-gray-500 text-sm">Loading…</p>}
+      {loading && <p className="text-gray-600 dark:text-gray-500 text-sm">Loading…</p>}
 
       {!loading && filtered.length === 0 && (
         <p className="text-gray-600 text-sm">No saved runs yet. Enter an auction code on the Batch Run tab before running.</p>
@@ -1511,7 +1511,7 @@ function SavedRunsTab() {
           <div key={run.id} className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
             <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-200 dark:hover:bg-[#3A3A3C] transition-colors" onClick={() => expand(run)}>
               <span className="text-[#C8A96E] font-bold font-mono text-sm flex-1">{run.code}</span>
-              <span className="text-xs text-gray-500">{run._count.lots} lots</span>
+              <span className="text-xs text-gray-600 dark:text-gray-500">{run._count.lots} lots</span>
               <span className="text-xs text-gray-600">{new Date(run.updatedAt).toLocaleDateString("en-GB")}</span>
               <span className="text-xs text-gray-600 truncate max-w-[120px]">{run.preset}</span>
               <button onClick={e => { e.stopPropagation(); deleteRun(run.id) }} disabled={deleting === run.id}
@@ -1524,7 +1524,7 @@ function SavedRunsTab() {
             {expanded === run.id && (
               <div className="border-t border-gray-300 dark:border-gray-700">
                 {loadingDetail && (
-                  <div className="px-4 py-4 text-xs text-gray-500 flex items-center gap-2">
+                  <div className="px-4 py-4 text-xs text-gray-600 dark:text-gray-500 flex items-center gap-2">
                     <span className="animate-spin inline-block w-3 h-3 border border-gray-500 border-t-transparent rounded-full" />
                     Loading lots…
                   </div>
@@ -1533,7 +1533,7 @@ function SavedRunsTab() {
                 {!loadingDetail && detail?.id === run.id && (
                   <>
                     <div className="flex items-center justify-between gap-2 px-4 py-2 bg-white dark:bg-[#1C1C1E] flex-wrap">
-                      <span className="text-xs text-gray-500">{detail.lots.length} lots</span>
+                      <span className="text-xs text-gray-600 dark:text-gray-500">{detail.lots.length} lots</span>
                       <div className="flex items-center gap-2">
                         <button onClick={() => exportRun(detail)}
                           className="text-xs px-3 py-1 bg-gray-100 dark:bg-[#2C2C2E] hover:bg-gray-200 dark:hover:bg-[#3A3A3C] border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded transition-colors">
@@ -1570,7 +1570,7 @@ function SavedRunsTab() {
                         <div key={l.id} className="flex items-start gap-3 px-4 py-2.5 border-t border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-[#2C2C2E] group">
                           <span className="text-xs font-mono text-[#C8A96E] flex-shrink-0 w-20">{l.lot}</span>
                           <span className="text-xs text-gray-600 dark:text-gray-300 flex-1 line-clamp-2">{l.description}</span>
-                          <span className="text-xs text-gray-500 flex-shrink-0 w-20 text-right">{l.estimate}</span>
+                          <span className="text-xs text-gray-600 dark:text-gray-500 flex-shrink-0 w-20 text-right">{l.estimate}</span>
                           <button onClick={() => deleteLot(l.id)}
                             className="text-xs text-red-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">✕</button>
                         </div>
@@ -1693,13 +1693,13 @@ function KPRunsTab() {
     <div className="flex flex-col h-full gap-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">KP Check Runs</h2>
-        <button onClick={loadRuns} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">↻ Refresh</button>
+        <button onClick={loadRuns} className="text-xs text-gray-600 dark:text-gray-500 hover:text-gray-300 transition-colors">↻ Refresh</button>
       </div>
 
       <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search auction code…"
         className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E] placeholder:text-gray-600" />
 
-      {loading && <p className="text-gray-500 text-sm">Loading…</p>}
+      {loading && <p className="text-gray-600 dark:text-gray-500 text-sm">Loading…</p>}
       {!loading && filtered.length === 0 && (
         <p className="text-gray-600 text-sm">No KP Check runs saved yet. Run a Key Points Check and click Save run.</p>
       )}
@@ -1712,7 +1712,7 @@ function KPRunsTab() {
               {/* header */}
               <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-200 dark:hover:bg-[#3A3A3C] transition-colors" onClick={() => expand(run)}>
                 <span className="text-[#C8A96E] font-bold font-mono text-sm flex-1">{run.code.replace(/_KP$/i, "")}</span>
-                <span className="text-xs text-gray-500">{run._count.lots} lots</span>
+                <span className="text-xs text-gray-600 dark:text-gray-500">{run._count.lots} lots</span>
                 <span className="text-xs text-gray-600">{new Date(run.updatedAt).toLocaleDateString("en-GB")}</span>
                 <button onClick={e => { e.stopPropagation(); deleteRun(run.id) }} disabled={deleting === run.id}
                   className="text-xs text-red-500 hover:text-red-400 transition-colors ml-1 flex-shrink-0">
@@ -1758,7 +1758,7 @@ function KPRunsTab() {
                               {applying === l.id ? "Saving…" : "Apply"}
                             </button>
                             <button onClick={() => navigator.clipboard.writeText(revised[l.id] ?? l.description)}
-                              className="text-[10px] text-gray-500 hover:text-gray-900 dark:hover:text-white border border-gray-300 dark:border-gray-700 hover:border-gray-500 px-2 py-0.5 rounded transition-colors">
+                              className="text-[10px] text-gray-600 dark:text-gray-500 hover:text-gray-900 dark:hover:text-white border border-gray-300 dark:border-gray-700 hover:border-gray-500 px-2 py-0.5 rounded transition-colors">
                               Copy
                             </button>
                             <button onClick={() => deleteLot(l.id)}
@@ -1787,11 +1787,11 @@ function KPRunsTab() {
                         {/* three columns: key points | before | after */}
                         <div className="grid grid-cols-3 divide-x divide-gray-300 dark:divide-gray-700">
                           <div className="px-3 py-2">
-                            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Key Points</p>
+                            <p className="text-[10px] text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1.5">Key Points</p>
                             <pre className="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">{l.keyPoints ?? "—"}</pre>
                           </div>
                           <div className="px-3 py-2">
-                            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Before</p>
+                            <p className="text-[10px] text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1.5">Before</p>
                             <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-wrap">{l.originalDescription ?? "—"}</p>
                           </div>
                           <div className="px-3 py-2">
@@ -1931,7 +1931,7 @@ function InstructionsTab() {
         </button>
 
         {loading ? (
-          <p className="text-gray-500 text-xs px-1 mt-2">Loading…</p>
+          <p className="text-gray-600 dark:text-gray-500 text-xs px-1 mt-2">Loading…</p>
         ) : (
           <div className="space-y-0.5 mt-1">
             {presets.map(p => (
@@ -1970,7 +1970,7 @@ function InstructionsTab() {
             {error && <p className="text-red-400 text-xs">{error}</p>}
             <div className="flex gap-2 justify-end">
               <button onClick={() => { setMode("view"); setSelected(null); setError(null) }}
-                className="px-4 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-400 text-sm rounded hover:border-gray-500 transition-colors">
+                className="px-4 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 text-sm rounded hover:border-gray-500 transition-colors">
                 Cancel
               </button>
               <button onClick={saveNew} disabled={saving || !newName.trim()}
@@ -1993,7 +1993,7 @@ function InstructionsTab() {
             {error && <p className="text-red-400 text-xs">{error}</p>}
             <div className="flex gap-2 justify-end">
               <button onClick={() => setMode("view")}
-                className="px-4 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-400 text-sm rounded hover:border-gray-500 transition-colors">
+                className="px-4 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 text-sm rounded hover:border-gray-500 transition-colors">
                 Cancel
               </button>
               <button onClick={saveEdit} disabled={saving}
@@ -2020,7 +2020,7 @@ function InstructionsTab() {
                 </button>
               </div>
             </div>
-            <pre className="flex-1 px-5 py-4 text-xs text-gray-400 font-mono whitespace-pre-wrap overflow-auto">
+            <pre className="flex-1 px-5 py-4 text-xs text-gray-600 dark:text-gray-400 font-mono whitespace-pre-wrap overflow-auto">
               {selectedPreset?.instruction ?? ""}
             </pre>
           </div>
@@ -2070,7 +2070,7 @@ function HowItWorksPanel() {
 
       {open && (
         <div className="px-4 pb-4 space-y-3 border-t border-gray-300 dark:border-gray-700">
-          <ol className="mt-3 space-y-2 text-sm text-gray-400 list-decimal list-inside">
+          <ol className="mt-3 space-y-2 text-sm text-gray-600 dark:text-gray-400 list-decimal list-inside">
             <li>You enter an auction code and click <span className="text-gray-900 dark:text-white font-medium">Load</span> — it pulls every lot that has both a cataloguer key points entry and a saved AI description from a previous Batch Run.</li>
             <li>You click <span className="text-gray-900 dark:text-white font-medium">Run Key Points Check</span> — each lot is sent to Gemini one at a time with its key points and AI description.</li>
             <li>Gemini reads both and checks whether every key point is mentioned in the description. If they're all there, it returns the description unchanged. If anything is missing or wrong, it rewrites just enough to include it.</li>
@@ -2080,11 +2080,11 @@ function HowItWorksPanel() {
 
           <div>
             <button onClick={() => setShowPrompt(p => !p)}
-              className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+              className="text-xs text-gray-600 dark:text-gray-500 hover:text-gray-300 transition-colors">
               {showPrompt ? "▲ Hide system prompt" : "▼ Show exact instructions sent to Gemini"}
             </button>
             {showPrompt && (
-              <pre className="mt-2 text-xs text-gray-400 bg-white dark:bg-[#1C1C1E] rounded-lg p-3 whitespace-pre-wrap leading-relaxed font-mono">
+              <pre className="mt-2 text-xs text-gray-600 dark:text-gray-400 bg-white dark:bg-[#1C1C1E] rounded-lg p-3 whitespace-pre-wrap leading-relaxed font-mono">
                 {KP_SYSTEM_PROMPT}
               </pre>
             )}
@@ -2456,7 +2456,7 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
     <div className="space-y-5 max-w-5xl">
       <div>
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-1">Key Points Checker</h2>
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-gray-600 dark:text-gray-400">
           Loads your cataloguer key points alongside the AI-generated descriptions and runs a second AI pass to
           verify every key point is included — fixing any that are missing.
         </p>
@@ -2468,7 +2468,7 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
       {/* Model selector */}
       <div className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl p-4 space-y-2">
         <div className="flex items-center justify-between">
-          <p className="text-xs text-gray-500 uppercase tracking-wider">Model</p>
+          <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider">Model</p>
           <button onClick={testAllModels} disabled={testingAll}
             className="text-xs text-[#C8A96E] hover:text-[#b8944f] disabled:opacity-50 transition-colors">
             {testingAll ? "Testing…" : "⚡ Test all models"}
@@ -2482,8 +2482,8 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
               <button key={m} onClick={() => setLocalModel(m)}
                 className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors border-b border-gray-200 dark:border-gray-800 last:border-0 ${isSelected ? "bg-[#C8A96E]/10" : "hover:bg-gray-50 dark:hover:bg-[#1a1a1e]"}`}>
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isSelected ? "bg-[#C8A96E]" : "bg-gray-700"}`} />
-                <span className={`text-sm flex-1 font-mono ${isSelected ? "text-[#C8A96E]" : "text-gray-400"}`}>{m}</span>
-                {status === "testing" && <span className="text-xs text-gray-500 animate-pulse">testing…</span>}
+                <span className={`text-sm flex-1 font-mono ${isSelected ? "text-[#C8A96E]" : "text-gray-600 dark:text-gray-400"}`}>{m}</span>
+                {status === "testing" && <span className="text-xs text-gray-600 dark:text-gray-500 animate-pulse">testing…</span>}
                 {status && status !== "testing" && (
                   status.ok
                     ? <span className={`text-xs font-medium ${status.ms < 5000 ? "text-green-400" : status.ms < 12000 ? "text-yellow-400" : "text-orange-400"}`}>✓ {(status.ms / 1000).toFixed(1)}s</span>
@@ -2497,7 +2497,7 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
 
       {/* Load */}
       <div className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl p-4 space-y-3">
-        <p className="text-xs text-gray-500 uppercase tracking-wider">Auction</p>
+        <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider">Auction</p>
         <div className="flex gap-2">
           <div ref={codeInputRef} className="relative flex-1">
             <input
@@ -2550,7 +2550,7 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
 
       {/* Log panel — visible while checking */}
       {log.length > 0 && (
-        <div ref={logRef} className="bg-gray-100 dark:bg-[#0d0d0f] border border-gray-200 dark:border-gray-800 rounded-xl p-4 h-52 overflow-y-auto font-mono text-xs text-gray-400 space-y-0.5">
+        <div ref={logRef} className="bg-gray-100 dark:bg-[#0d0d0f] border border-gray-200 dark:border-gray-800 rounded-xl p-4 h-52 overflow-y-auto font-mono text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
           {log.map((l, i) => <div key={i}>{l}</div>)}
         </div>
       )}
@@ -2563,7 +2563,7 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
             <div className="flex items-center gap-3">
               <p className="text-sm font-medium text-gray-900 dark:text-white">{lots.length} lots</p>
               {checkedCount > 0 && (
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-gray-600 dark:text-gray-400">
                   {checkedCount}/{lots.length} checked · <span className={fixedCount > 0 ? "text-[#C8A96E]" : "text-green-400"}>{fixedCount} fixed</span>
                 </span>
               )}
@@ -2590,7 +2590,7 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
                     ? <button onClick={handleResume} className="text-xs text-green-400 hover:text-green-300 font-medium transition-colors">▶ Resume</button>
                     : <button onClick={handlePause}  className="text-xs text-yellow-500 hover:text-yellow-400 font-medium transition-colors">⏸ Pause</button>
                   }
-                  <button onClick={handleStop} className="text-xs text-gray-500 hover:text-red-400 transition-colors">Stop & results</button>
+                  <button onClick={handleStop} className="text-xs text-gray-600 dark:text-gray-500 hover:text-red-400 transition-colors">Stop & results</button>
                 </>
               )}
               <button onClick={runCheck} disabled={checking}
@@ -2608,20 +2608,20 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
               <div className="flex gap-4">
                 <div className="text-center">
                   <p className="text-lg font-bold text-gray-900 dark:text-white">{checkedCount}</p>
-                  <p className="text-xs text-gray-500">Checked</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-500">Checked</p>
                 </div>
                 <div className="text-center">
                   <p className="text-lg font-bold text-green-400">{checkedCount - fixedCount - lots.filter(l => l.status === "error").length}</p>
-                  <p className="text-xs text-gray-500">All good</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-500">All good</p>
                 </div>
                 <div className="text-center">
                   <p className={`text-lg font-bold ${fixedCount > 0 ? "text-[#C8A96E]" : "text-gray-600"}`}>{fixedCount}</p>
-                  <p className="text-xs text-gray-500">Fixed</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-500">Fixed</p>
                 </div>
                 {lots.filter(l => l.status === "error").length > 0 && (
                   <div className="text-center">
                     <p className="text-lg font-bold text-red-400">{lots.filter(l => l.status === "error").length}</p>
-                    <p className="text-xs text-gray-500">Errors</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-500">Errors</p>
                   </div>
                 )}
               </div>
@@ -2634,7 +2634,7 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
                     <div className="flex items-center gap-3">
                       <input type="checkbox" checked={allSelected} onChange={toggleSelectAll}
                         className="w-3.5 h-3.5 rounded accent-[#C8A96E]" />
-                      <p className="text-xs text-gray-500 uppercase tracking-wider flex-1">
+                      <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider flex-1">
                         {pendingFixed.length} fixed · {selectedCount} selected
                       </p>
                       <button onClick={acceptAll} disabled={accepting || selectedCount === 0}
@@ -2665,7 +2665,7 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
                                 </button>
                             }
                             <button onClick={() => navigator.clipboard.writeText(l.revised ?? "")}
-                              className="text-[10px] text-gray-500 hover:text-gray-900 dark:hover:text-white border border-gray-300 dark:border-gray-700 hover:border-gray-500 px-2 py-0.5 rounded transition-colors">
+                              className="text-[10px] text-gray-600 dark:text-gray-500 hover:text-gray-900 dark:hover:text-white border border-gray-300 dark:border-gray-700 hover:border-gray-500 px-2 py-0.5 rounded transition-colors">
                               Copy
                             </button>
                           </div>
@@ -2692,11 +2692,11 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
                         {/* Three columns: key points | before | editable after */}
                         <div className="grid grid-cols-3 divide-x divide-gray-300 dark:divide-gray-700">
                           <div className="px-3 py-2">
-                            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Key Points</p>
+                            <p className="text-[10px] text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1.5">Key Points</p>
                             <pre className="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">{l.keyPoints}</pre>
                           </div>
                           <div className="px-3 py-2">
-                            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Before</p>
+                            <p className="text-[10px] text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1.5">Before</p>
                             <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-wrap">{l.description}</p>
                           </div>
                           <div className="px-3 py-2">
@@ -2734,9 +2734,9 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
                     className="w-full flex items-center gap-3 text-left"
                   >
                     <span className="text-sm font-medium text-gray-900 dark:text-white w-14 shrink-0">Lot {lot.label}</span>
-                    <span className="flex-1 text-xs text-gray-500 truncate">{lot.keyPoints.split("\n")[0]}</span>
+                    <span className="flex-1 text-xs text-gray-600 dark:text-gray-500 truncate">{lot.keyPoints.split("\n")[0]}</span>
                     {lot.status === "idle"     && <span className="text-xs text-gray-600">Not checked</span>}
-                    {lot.status === "checking" && <span className="text-xs text-gray-500 animate-pulse">Checking…</span>}
+                    {lot.status === "checking" && <span className="text-xs text-gray-600 dark:text-gray-500 animate-pulse">Checking…</span>}
                     {lot.status === "ok"       && <span className="text-xs text-green-400">✓ All included</span>}
                     {lot.status === "fixed"    && <span className="text-xs text-[#C8A96E]">⚑ Fixed</span>}
                     {lot.status === "error"    && <span className="text-xs text-red-400">Error</span>}
@@ -2747,11 +2747,11 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
                   {isExpanded && (
                     <div className="mt-3 grid grid-cols-2 gap-3">
                       <div>
-                        <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Key Points</p>
+                        <p className="text-[10px] text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1.5">Key Points</p>
                         <pre className="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap bg-white dark:bg-[#1C1C1E] rounded-lg p-3 font-sans leading-relaxed">{lot.keyPoints}</pre>
                       </div>
                       <div>
-                        <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">
+                        <p className="text-[10px] text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1.5">
                           {lot.status === "fixed" ? "Fixed Description" : "AI Description"}
                         </p>
                         <pre className={`text-xs whitespace-pre-wrap rounded-lg p-3 font-sans leading-relaxed ${
@@ -2761,7 +2761,7 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
                         }`}>{lot.revised ?? lot.description}</pre>
                         {lot.status === "fixed" && (
                           <button onClick={() => navigator.clipboard.writeText(lot.revised ?? "")}
-                            className="mt-1.5 text-[10px] text-gray-500 hover:text-gray-300 transition-colors">
+                            className="mt-1.5 text-[10px] text-gray-600 dark:text-gray-500 hover:text-gray-300 transition-colors">
                             Copy description
                           </button>
                         )}
@@ -2981,7 +2981,7 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
     <div className="space-y-5 max-w-5xl">
       <div>
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-1">Double Check</h2>
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-gray-600 dark:text-gray-400">
           Loads descriptions and photos from the catalogue and runs a second AI pass to spot factual errors,
           inconsistencies, or claims that look guessed — especially where photos are blurry or details aren't clearly visible.
         </p>
@@ -2990,7 +2990,7 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
       {/* Model selector */}
       <div className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl p-4 space-y-2">
         <div className="flex items-center justify-between">
-          <p className="text-xs text-gray-500 uppercase tracking-wider">Model</p>
+          <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider">Model</p>
           <button onClick={testAllModels} disabled={testingAll}
             className="text-xs text-indigo-400 hover:text-indigo-300 disabled:opacity-50 transition-colors">
             {testingAll ? "Testing…" : "⚡ Test all models"}
@@ -3004,8 +3004,8 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
               <button key={m} onClick={() => setLocalModel(m)}
                 className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors border-b border-gray-200 dark:border-gray-800 last:border-0 ${isSelected ? "bg-indigo-950/40" : "hover:bg-gray-50 dark:hover:bg-[#1a1a1e]"}`}>
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isSelected ? "bg-indigo-400" : "bg-gray-700"}`} />
-                <span className={`text-sm flex-1 font-mono ${isSelected ? "text-indigo-300" : "text-gray-400"}`}>{m}</span>
-                {status === "testing" && <span className="text-xs text-gray-500 animate-pulse">testing…</span>}
+                <span className={`text-sm flex-1 font-mono ${isSelected ? "text-indigo-300" : "text-gray-600 dark:text-gray-400"}`}>{m}</span>
+                {status === "testing" && <span className="text-xs text-gray-600 dark:text-gray-500 animate-pulse">testing…</span>}
                 {status && status !== "testing" && (
                   status.ok
                     ? <span className={`text-xs font-medium ${status.ms < 5000 ? "text-green-400" : status.ms < 12000 ? "text-yellow-400" : "text-orange-400"}`}>✓ {(status.ms / 1000).toFixed(1)}s</span>
@@ -3019,7 +3019,7 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
 
       {/* Load from catalogue */}
       <div className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl p-4 space-y-3">
-        <p className="text-xs text-gray-500 uppercase tracking-wider">Auction</p>
+        <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider">Auction</p>
         <div className="flex gap-2">
           <Autocomplete
             value={code}
@@ -3034,7 +3034,7 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
         </div>
         {error && <p className="text-xs text-red-400 bg-red-950/30 rounded-lg px-3 py-2">{error}</p>}
         {lots.length > 0 && !checking && (
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-gray-600 dark:text-gray-400">
             <span className="text-indigo-300 font-semibold">{lots.length}</span> lot{lots.length !== 1 ? "s" : ""} loaded
             {(() => { const n = lots.filter(l => (l.imageUrls?.length ?? 0) > 0).length; return n > 0 ? <> · <span className="text-indigo-300 font-semibold">{n}</span> with photos</> : <> · <span className="text-yellow-500">no photos</span></> })()}
           </p>
@@ -3061,7 +3061,7 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
                 <div className="bg-indigo-500 h-2 rounded-full transition-all duration-300"
                   style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }} />
               </div>
-              <span className="text-xs text-gray-400 whitespace-nowrap">{progress.done} / {progress.total}</span>
+              <span className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{progress.done} / {progress.total}</span>
             </div>
           )}
         </div>
@@ -3069,7 +3069,7 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
 
       {/* Log */}
       {log.length > 0 && (
-        <div ref={logRef} className="bg-gray-100 dark:bg-[#0d0d0f] border border-gray-200 dark:border-gray-800 rounded-xl p-3 max-h-40 overflow-y-auto font-mono text-xs text-gray-400 space-y-0.5">
+        <div ref={logRef} className="bg-gray-100 dark:bg-[#0d0d0f] border border-gray-200 dark:border-gray-800 rounded-xl p-3 max-h-40 overflow-y-auto font-mono text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
           {log.map((l, i) => <div key={i}>{l}</div>)}
         </div>
       )}
@@ -3080,7 +3080,7 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
           <div className="flex items-center gap-4 flex-wrap">
             {okCount > 0    && <span className="text-xs font-semibold text-green-400 bg-green-950/40 border border-green-800/50 rounded-full px-3 py-1">✓ {okCount} clean</span>}
             {issueCount > 0 && <span className="text-xs font-semibold text-red-400   bg-red-950/40   border border-red-800/50   rounded-full px-3 py-1">⚑ {issueCount} with issues</span>}
-            {errCount > 0   && <span className="text-xs font-semibold text-gray-400  bg-gray-800/40  border border-gray-300 dark:border-gray-700     rounded-full px-3 py-1">✗ {errCount} errors</span>}
+            {errCount > 0   && <span className="text-xs font-semibold text-gray-600 dark:text-gray-400  bg-gray-800/40  border border-gray-300 dark:border-gray-700     rounded-full px-3 py-1">✗ {errCount} errors</span>}
           </div>
 
           {[...lots]
@@ -3099,7 +3099,7 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
                   }`}>
                   <button onClick={() => setExpandedLot(isExpanded ? null : lot.label)}
                     className="w-full flex items-center gap-3 px-4 py-3 text-left">
-                    <span className={`text-base flex-shrink-0 ${hasIssues ? "text-red-400" : lot.status === "error" ? "text-gray-500" : "text-green-400"}`}>
+                    <span className={`text-base flex-shrink-0 ${hasIssues ? "text-red-400" : lot.status === "error" ? "text-gray-600 dark:text-gray-500" : "text-green-400"}`}>
                       {hasIssues ? "⚑" : lot.status === "error" ? "✗" : "✓"}
                     </span>
                     <span className="font-mono text-sm text-gray-700 dark:text-gray-200 flex-1">{lot.label}</span>
@@ -3123,10 +3123,10 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
                           <p className="text-sm text-yellow-200">{lot.unsupported}</p>
                         </div>
                       )}
-                      {lot.status === "error" && <p className="text-xs text-gray-500">Check failed — try running again</p>}
+                      {lot.status === "error" && <p className="text-xs text-gray-600 dark:text-gray-500">Check failed — try running again</p>}
                       <div className="pt-2 border-t border-gray-200 dark:border-gray-800">
-                        <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Description</p>
-                        <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap">{lot.description}</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Description</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-wrap">{lot.description}</p>
                       </div>
                     </div>
                   )}
@@ -3254,3 +3254,4 @@ export default function AuctionAIPage() {
     </div>
   )
 }
+

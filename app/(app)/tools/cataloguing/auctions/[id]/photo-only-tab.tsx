@@ -129,7 +129,7 @@ export default function PhotoOnlyTab({ auctionId, auctionCode, onCreated, tablet
       <div className="flex items-center justify-between mb-5">
         <div>
           <h2 className={`font-semibold text-gray-700 dark:text-gray-200 ${tablet ? "text-base" : "text-sm"}`}>Photo Only Cataloguing</h2>
-          <p className={`text-gray-500 mt-0.5 ${tablet ? "text-sm" : "text-xs"}`}>{auctionCode} — scan barcode, take photos, save</p>
+          <p className={`text-gray-600 dark:text-gray-500 mt-0.5 ${tablet ? "text-sm" : "text-xs"}`}>{auctionCode} — scan barcode, take photos, save</p>
         </div>
         {savedCount > 0 && (
           <span className={`font-bold text-[#2AB4A6] ${tablet ? "text-base" : "text-sm"}`}>{savedCount} saved</span>
@@ -164,14 +164,14 @@ export default function PhotoOnlyTab({ auctionId, auctionCode, onCreated, tablet
                 </button>
               </div>
             </div>
-            <p className="text-xs text-gray-500 text-center mt-1 animate-pulse">Scanning for {scanTarget === "lot" ? "lot barcode" : "tote number"}…</p>
+            <p className="text-xs text-gray-600 dark:text-gray-500 text-center mt-1 animate-pulse">Scanning for {scanTarget === "lot" ? "lot barcode" : "tote number"}…</p>
           </div>
 
           {/* Lot barcode */}
           {!scanning && (
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className={`font-medium text-gray-400 ${tablet ? "text-sm" : "text-xs"}`}>Lot Barcode *</label>
+                <label className={`font-medium text-gray-600 dark:text-gray-400 ${tablet ? "text-sm" : "text-xs"}`}>Lot Barcode *</label>
                 <button onClick={() => startScan("lot")}
                   className={`flex items-center gap-1 text-[#2AB4A6] hover:text-[#24a090] transition-colors ${tablet ? "text-sm" : "text-xs"}`}>
                   📷 {lotBarcode ? "Re-scan" : "Scan"}
@@ -197,11 +197,11 @@ export default function PhotoOnlyTab({ auctionId, auctionCode, onCreated, tablet
           {!scanning && (
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className={`font-medium text-gray-400 ${tablet ? "text-sm" : "text-xs"}`}>Tote Number <span className="text-gray-600">(optional)</span></label>
+                <label className={`font-medium text-gray-600 dark:text-gray-400 ${tablet ? "text-sm" : "text-xs"}`}>Tote Number <span className="text-gray-600">(optional)</span></label>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setTotePinned(p => !p)}
-                    className={`rounded border transition-colors ${tablet ? "text-sm px-3 py-1.5" : "text-xs px-2 py-0.5"} ${totePinned ? "border-[#2AB4A6] text-[#2AB4A6]" : "border-gray-300 dark:border-gray-700 text-gray-500 hover:border-gray-500"}`}
+                    className={`rounded border transition-colors ${tablet ? "text-sm px-3 py-1.5" : "text-xs px-2 py-0.5"} ${totePinned ? "border-[#2AB4A6] text-[#2AB4A6]" : "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-500 hover:border-gray-500"}`}
                   >
                     {totePinned ? "📌 Pinned" : "Pin"}
                   </button>
@@ -242,15 +242,15 @@ export default function PhotoOnlyTab({ auctionId, auctionCode, onCreated, tablet
       {phase === "photos" && (
         <div className="space-y-4">
           <div className="bg-white dark:bg-[#1C1C1E] rounded-lg border border-gray-200 dark:border-gray-800 px-4 py-3 text-sm">
-            <span className="text-gray-500">Lot: </span>
+            <span className="text-gray-600 dark:text-gray-500">Lot: </span>
             <span className="text-gray-700 dark:text-gray-200 font-mono">{lotBarcode}</span>
-            {toteNumber && <><span className="text-gray-600 mx-2">·</span><span className="text-gray-500">Tote: </span><span className="text-gray-400 font-mono">{toteNumber}</span></>}
+            {toteNumber && <><span className="text-gray-600 mx-2">·</span><span className="text-gray-600 dark:text-gray-500">Tote: </span><span className="text-gray-600 dark:text-gray-400 font-mono">{toteNumber}</span></>}
           </div>
 
           <input ref={photoRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleItemPhoto} />
 
           <button onClick={() => photoRef.current?.click()}
-            className="w-full py-5 rounded-xl border-2 border-dashed border-gray-600 hover:border-[#2AB4A6] text-gray-400 hover:text-[#2AB4A6] transition-colors flex flex-col items-center gap-1">
+            className="w-full py-5 rounded-xl border-2 border-dashed border-gray-600 hover:border-[#2AB4A6] text-gray-600 dark:text-gray-400 hover:text-[#2AB4A6] transition-colors flex flex-col items-center gap-1">
             <span className="text-3xl">📷</span>
             <span className="text-sm font-medium">Take item photo</span>
             <span className="text-xs text-gray-600">Tap to open camera</span>
@@ -273,7 +273,7 @@ export default function PhotoOnlyTab({ auctionId, auctionCode, onCreated, tablet
           <p className={`text-gray-600 ${tablet ? "text-sm" : "text-xs"}`}>{itemPhotos.length} photo{itemPhotos.length !== 1 ? "s" : ""} taken</p>
 
           <div>
-            <label className={`font-medium text-gray-400 block mb-1 ${tablet ? "text-sm" : "text-xs"}`}>Notes <span className="text-gray-600">(optional)</span></label>
+            <label className={`font-medium text-gray-600 dark:text-gray-400 block mb-1 ${tablet ? "text-sm" : "text-xs"}`}>Notes <span className="text-gray-600">(optional)</span></label>
             <textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
@@ -288,7 +288,7 @@ export default function PhotoOnlyTab({ auctionId, auctionCode, onCreated, tablet
           <div className="flex gap-3">
             <button onClick={() => { setError(null); setPhase("scan") }}
               style={{ touchAction: tablet ? "manipulation" : undefined }}
-              className={`rounded-lg border border-gray-300 dark:border-gray-700 text-gray-400 font-medium hover:border-gray-500 transition-colors ${tablet ? "py-4 px-5 text-base" : "py-3 px-4 text-sm"}`}>
+              className={`rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 font-medium hover:border-gray-500 transition-colors ${tablet ? "py-4 px-5 text-base" : "py-3 px-4 text-sm"}`}>
               ← Back
             </button>
             <button onClick={() => handleSave(false)} disabled={pending}

@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState } from "react"
 import CataloguingSidebar from "@/components/cataloguing-sidebar"
@@ -32,7 +32,7 @@ export default function CataloguingShell({ children, allowedSidebarItems }: { ch
         <div className="md:hidden sticky top-0 z-30 flex items-center gap-3 bg-white dark:bg-[#1C1C1E] border-b border-gray-200 dark:border-gray-800 px-4 py-3">
           <button
             onClick={() => setOpen(true)}
-            className="text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+            className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
             aria-label="Open navigation"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -46,3 +46,4 @@ export default function CataloguingShell({ children, allowedSidebarItems }: { ch
     </div>
   )
 }
+

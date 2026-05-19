@@ -270,7 +270,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
         <>
           <div className="mb-5">
             <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Upload Photos</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">
               Choose how to match photos to lots.
             </p>
           </div>
@@ -291,21 +291,21 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             {/* Option A — filename */}
             <button
               onClick={() => { setMode("filename"); filenameInputRef.current?.click() }}
-              className="group flex flex-col items-center gap-3 py-10 rounded-xl border-2 border-dashed border-gray-600 hover:border-[#2AB4A6] text-gray-400 hover:text-[#2AB4A6] transition-colors px-6"
+              className="group flex flex-col items-center gap-3 py-10 rounded-xl border-2 border-dashed border-gray-600 hover:border-[#2AB4A6] text-gray-600 dark:text-gray-400 hover:text-[#2AB4A6] transition-colors px-6"
             >
               <span className="text-4xl">📂</span>
               <span className="text-sm font-semibold text-center">Match by filename</span>
               <span className="text-xs text-gray-600 text-center leading-relaxed">
                 Filenames must include the barcode or receipt ID.<br />
-                e.g. <span className="font-mono text-gray-500">F066001.jpg</span>,{" "}
-                <span className="font-mono text-gray-500">F066001_2.jpg</span>
+                e.g. <span className="font-mono text-gray-600 dark:text-gray-500">F066001.jpg</span>,{" "}
+                <span className="font-mono text-gray-600 dark:text-gray-500">F066001_2.jpg</span>
               </span>
             </button>
 
             {/* Option B — scan */}
             <button
               onClick={() => { setMode("scan"); scanInputRef.current?.click() }}
-              className="group flex flex-col items-center gap-3 py-10 rounded-xl border-2 border-dashed border-gray-600 hover:border-purple-500 text-gray-400 hover:text-purple-400 transition-colors px-6"
+              className="group flex flex-col items-center gap-3 py-10 rounded-xl border-2 border-dashed border-gray-600 hover:border-purple-500 text-gray-600 dark:text-gray-400 hover:text-purple-400 transition-colors px-6"
             >
               <span className="text-4xl">📷</span>
               <span className="text-sm font-semibold text-center">Smart scan folder</span>
@@ -329,7 +329,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             <div className="bg-[#2AB4A6] h-2 rounded-full transition-all duration-200"
               style={{ width: `${scanProgress.total > 0 ? (scanProgress.done / scanProgress.total) * 100 : 0}%` }} />
           </div>
-          <p className="text-xs text-gray-500">{scanProgress.done} / {scanProgress.total} images scanned</p>
+          <p className="text-xs text-gray-600 dark:text-gray-500">{scanProgress.done} / {scanProgress.total} images scanned</p>
         </div>
       )}
 
@@ -341,7 +341,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
               {mode === "filename" ? "Filename match preview" : "Scan results preview"}
             </h2>
             {mode === "filename" && (
-              <p className="text-xs text-gray-500 mt-0.5">
+              <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">
                 IDs extracted from filenames — suffixes like <span className="font-mono">_1</span>, <span className="font-mono">_2</span> are stripped automatically.
               </p>
             )}
@@ -350,17 +350,17 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 text-center">
               <p className="text-2xl font-bold text-[#2AB4A6]">{matchedGroups.length}</p>
-              <p className="text-xs text-gray-500 mt-0.5">Lots matched</p>
+              <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">Lots matched</p>
             </div>
             <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 text-center">
               <p className="text-2xl font-bold text-gray-700 dark:text-gray-200">{totalPhotos}</p>
-              <p className="text-xs text-gray-500 mt-0.5">Photos to upload</p>
+              <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">Photos to upload</p>
             </div>
             <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 text-center">
               <p className={`text-2xl font-bold ${unmatchedGroups.length > 0 ? "text-yellow-400" : "text-gray-600"}`}>
                 {unmatchedGroups.length}
               </p>
-              <p className="text-xs text-gray-500 mt-0.5">Unmatched</p>
+              <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">Unmatched</p>
             </div>
           </div>
 
@@ -376,7 +376,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
           )}
           {emptyGroups.length > 0 && (
             <div className="bg-gray-900/50 border border-gray-700 rounded-lg px-3 py-2">
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-600 dark:text-gray-500">
                 Lots matched but no photos found: <span className="font-mono">{emptyGroups.map(g => g.lotNumber).join(", ")}</span>
               </p>
             </div>
@@ -387,9 +387,9 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
               <table className="w-full text-xs">
                 <thead className="bg-gray-50 dark:bg-[#141416] border-b border-gray-300 dark:border-gray-700 sticky top-0">
                   <tr>
-                    <th className="text-left px-4 py-2 text-gray-500 font-medium">Barcode / ID</th>
-                    <th className="text-left px-4 py-2 text-gray-500 font-medium">Photos</th>
-                    <th className="text-left px-4 py-2 text-gray-500 font-medium">Files</th>
+                    <th className="text-left px-4 py-2 text-gray-600 dark:text-gray-500 font-medium">Barcode / ID</th>
+                    <th className="text-left px-4 py-2 text-gray-600 dark:text-gray-500 font-medium">Photos</th>
+                    <th className="text-left px-4 py-2 text-gray-600 dark:text-gray-500 font-medium">Files</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -409,7 +409,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
 
           <div className="flex gap-3">
             <button onClick={reset}
-              className="px-5 py-2.5 rounded-lg border border-gray-700 text-gray-400 text-sm hover:border-gray-500 transition-colors">
+              className="px-5 py-2.5 rounded-lg border border-gray-700 text-gray-600 dark:text-gray-400 text-sm hover:border-gray-500 transition-colors">
               ← Back
             </button>
             <button onClick={handleUpload} disabled={matchedGroups.length === 0}
@@ -428,7 +428,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             <div className="bg-[#2AB4A6] h-3 rounded-full transition-all duration-300"
               style={{ width: `${uploadProgress.total > 0 ? (uploadProgress.done / uploadProgress.total) * 100 : 0}%` }} />
           </div>
-          <p className="text-xs text-gray-500">{uploadProgress.done} / {uploadProgress.total} photos</p>
+          <p className="text-xs text-gray-600 dark:text-gray-500">{uploadProgress.done} / {uploadProgress.total} photos</p>
         </div>
       )}
 
@@ -438,7 +438,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
           <div className="bg-[#2AB4A6]/10 border border-[#2AB4A6]/30 rounded-xl px-6 py-8 flex flex-col items-center gap-2">
             <span className="text-4xl">✓</span>
             <p className="text-sm font-semibold text-[#2AB4A6]">Upload complete</p>
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-gray-600 dark:text-gray-400">
               {uploadProgress.done} photo{uploadProgress.done !== 1 ? "s" : ""} uploaded to {matchedGroups.length} lot{matchedGroups.length !== 1 ? "s" : ""}
             </p>
           </div>
@@ -448,7 +448,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             </div>
           )}
           <button onClick={reset}
-            className="w-full py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-400 text-sm hover:border-gray-500 transition-colors">
+            className="w-full py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 text-sm hover:border-gray-500 transition-colors">
             Upload more photos
           </button>
         </div>
