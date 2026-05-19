@@ -385,9 +385,27 @@ function ChatTab({ model }: { model: string }) {
             </div>
           </div>
         ))}
+        {loading && (
+          <div className="flex justify-start">
+            <div className="bg-[#1a1a1e] border border-[#C8A96E]/25 rounded-lg px-4 py-3 flex items-center gap-2">
+              <span className="text-xs text-gray-500">Gemini is thinking</span>
+              <span className="flex gap-1">
+                {[0, 1, 2].map(i => (
+                  <span key={i} className="w-1.5 h-1.5 rounded-full bg-[#C8A96E] animate-bounce"
+                    style={{ animationDelay: `${i * 0.15}s` }} />
+                ))}
+              </span>
+            </div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
+      {loading && (
+        <div className="h-0.5 w-full bg-gray-800 rounded-full overflow-hidden mb-2">
+          <div className="h-full bg-[#C8A96E] rounded-full animate-pulse" style={{ width: "100%", opacity: 0.7 }} />
+        </div>
+      )}
       {error && <p className="text-red-400 text-sm mb-2">{error}</p>}
       <ImageZone images={images} onAdd={f => setImages(i => [...i, ...f])} onRemove={idx => setImages(i => i.filter((_, j) => j !== idx))} max={6} />
 
