@@ -93,7 +93,7 @@ function PresetSelector({ value, onChange, overrides, onEdit }: {
 }) {
   const builtInKeys = Object.keys(PRESETS)
   const customKeys  = Object.keys(overrides).filter(k => !PRESETS[k])
-  const isEdited    = value !== "Custom (paste my own)" && builtInKeys.includes(value) && overrides[value] !== undefined
+  const isEdited    = value !== "Custom (paste my own)" && builtInKeys.includes(value) && overrides[value] !== undefined && overrides[value] !== PRESETS[value]
   const isCustom    = customKeys.includes(value)
 
   return (
