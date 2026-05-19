@@ -370,12 +370,12 @@ STEP 1 — IDENTIFY THE SET
 STEP 2 — COUNT AND CATEGORISE EVERY FIGURE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 □ Count every figure visible. Write the total down before continuing.
-□ For each figure, determine its type. Check carefully for:
+□ CHECK THE REFERENCE TABLE FIRST: if the set number matches an entry in the reference table that has a known figure breakdown, AND your total count matches the reference total, use the reference breakdown verbatim. Do not attempt to re-identify figure types visually when the reference already tells you the answer.
+□ If the set is not in the reference, or the count does not match, identify each figure manually:
    — Extended sword/sabre arm, baton, or command pose → OFFICER (never call this a trooper)
    — Instrument (bugle, drum, fife) → BUGLER / DRUMMER (always listed separately)
    — Flag or colour → STANDARD BEARER (always listed separately, state what they carry)
    — All others → trooper / infantryman
-□ Record the breakdown: e.g. 1 officer, 1 bugler, 5 troopers = 7 total.
 □ Missing an officer or command figure is a serious cataloguing error.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
