@@ -297,7 +297,7 @@ export default function AuctionTabs({ auction, lots, userId, userName, showScanT
 
         <div className="ml-auto flex items-center gap-2">
           <button onClick={() => setShowDupeChecker(true)}
-            className="relative text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors bg-yellow-900/20 border border-yellow-700/40 text-yellow-300 hover:bg-yellow-900/40">
+            className="relative text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-400 dark:border-yellow-700/40 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900/40">
             🔍 Check Duplicates
             {dupeCount > 0 && (
               <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center leading-none">
@@ -318,11 +318,11 @@ export default function AuctionTabs({ auction, lots, userId, userName, showScanT
             localStorage.setItem("copier_preload", JSON.stringify(data))
             window.open("/tools/auction-ai?tab=copier", "_blank")
           }}
-            className="text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors bg-[#C8A96E]/10 border border-[#C8A96E]/40 text-[#C8A96E] hover:bg-[#C8A96E]/20">
+            className="text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors bg-amber-50 dark:bg-[#C8A96E]/10 border border-amber-400 dark:border-[#C8A96E]/40 text-amber-700 dark:text-[#C8A96E] hover:bg-amber-100 dark:hover:bg-[#C8A96E]/20">
             📋 Description Copier
           </button>
           <button onClick={() => switchTab("ai-upgrade")}
-            className="text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors bg-purple-900/20 border border-purple-700/40 text-purple-300 hover:bg-purple-900/40">
+            className="text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors bg-purple-50 dark:bg-purple-900/20 border border-purple-400 dark:border-purple-700/40 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/40">
             ✨ Upgrade descriptions with AI
           </button>
           <button
@@ -330,8 +330,8 @@ export default function AuctionTabs({ auction, lots, userId, userName, showScanT
             disabled={pubPending}
             className={`text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50 ${
               published
-                ? "bg-red-900/30 border border-red-700 text-red-300 hover:bg-red-900/50"
-                : "bg-emerald-900/30 border border-emerald-700 text-emerald-300 hover:bg-emerald-900/50"
+                ? "bg-red-50 dark:bg-red-900/30 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50"
+                : "bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-500 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50"
             }`}
           >
             {pubPending ? "…" : published ? "Unpublish from Site" : "Publish to Site"}
