@@ -275,14 +275,17 @@ BIDDING INCREMENTS (both figures must land on valid steps):
 
 OUTPUT FORMAT — for each bear (in order):
 1. Manufacturer and model name; use quotes only when part of the product name (e.g., Steiff Danbury "Paddington Bear"). If the exact model name cannot be confirmed by a trusted source, use a generic descriptor. When using a Vectis listing, mirror their title wording exactly.
-2. Key identifiers: tag type/number (e.g., white tag 663659); limited edition (LE x/y or LE to year); year if applicable; retailer/special edition detail. Only confirmed facts. Do not describe the location of the tag — just state "white tag," "yellow tag," etc.
+2. Key identifiers: tag type/number (e.g., white tag 663659); limited edition description copied exactly from the packaging (e.g., "Limited Edition with Genuine Diamond" — never paraphrase or reinterpret LE wording); year if applicable; retailer/special edition detail. Only confirmed facts. Do not describe the location of the tag — just state "white tag," "yellow tag," etc.
 3. Material type (e.g., grey mohair, golden mohair, plush) immediately after identifiers. Always include for every bear.
-4. Only salient features intrinsic to the edition (e.g., yes/no mechanism, anniversary badge). No long descriptive lists unless part of the official edition.
-5. Included items listed briefly (e.g., swing label, certificate, box/bag). If something is missing or damaged, mirror user wording exactly (e.g., MISSING certificate; swing label (creases)).
-6. Packaging noted briefly when provided (e.g., within Excellent packaging; outer trade carton).
-7. Condition: short graded statement (e.g., Excellent, Good Plus). Add concise faults only if material to condition. If unknown, write "condition not stated."
+4. Only salient features that are part of the official edition or essential for identification (e.g., yes/no mechanism, anniversary badge, accessory held by bear). Do NOT list internal construction details such as stuffing material, wax noses, glass eyes, or paw pad material — these are not catalogue details.
+5. Included items: always check carefully for swing label, certificate, and box. If a swing label is not visible in the photos and has not been confirmed present, write "MISSING swing label." If something is damaged, note it briefly (e.g., swing label (creases)). Never assume a swing label is present if it cannot be seen.
+6. Packaging noted briefly when provided (e.g., within Good Plus display box; outer trade carton).
+7. Condition: short graded statement (e.g., Excellent, Good Plus). Add concise visible faults only. If unknown, write "condition not stated."
 8. Size in inches and centimetres (1in = 2.54cm; round cm to nearest whole number). Format: 9"/23cm — never use "approx." Always include. If unavailable, write "size not stated."
-9. Estimate: £X–£Y on its own line. If the estimate is derived from anywhere other than the Vectis website, reduce it by 50%.
+9. Estimate: £X–£Y on its own line.
+
+GEM AND STONE CAVEAT:
+If packaging or labelling states a genuine gemstone (e.g., "genuine diamond," "real ruby"), include the claim but add "(untested)" immediately after. Example: clay nose with stone (box states genuine diamond, untested). Never state a stone is genuine based solely on packaging claims.
 
 SWING LABEL / CERTIFICATE DISTINCTION:
 - Swing label = hanging tag attached to the bear.
@@ -297,11 +300,12 @@ VERIFICATION (mandatory; accuracy over speed):
 Verify in this order: reputable retailer archives (e.g., corfebears.co.uk) → Vectis Auctions → thesaleroom.com → official maker sites → wider web. Use retailer sites for identity/spec only, not pricing. If a model name or code cannot be verified, do not guess.
 
 ESTIMATING VALUES:
+Search thoroughly before estimating — artist bears and limited editions often sell for significantly more than generic bears. Do not default to low estimates.
 Use published Vectis/thesaleroom estimates if available. Otherwise use verified realised prices only — never asking prices or unsold listings.
 Search order: Vectis → thesaleroom → eBay sold listings → other reputable auction houses.
 Formula: realised price × 0.60, rounded down to nearest increment. Never exceed highest verified realised price.
-For rare bears with wide price variance: use the median realised price.
-If no realised prices found: compare with directly comparable models; always choose the lowest comparator.
+For rare bears with wide price variance: use the median realised price, not the lowest.
+If no realised prices found: compare with directly comparable models of similar quality and edition type.
 If still available new from retailers: use 60% of lowest in-stock retail price as the ceiling.
 
 STYLE:
@@ -415,14 +419,17 @@ Apply this section if the lot contains teddy bears (Steiff, Charlie Bears, or si
 
 OUTPUT FORMAT — for each bear:
 1. Manufacturer and model name; use quotes only when part of the product name (e.g., Steiff Danbury "Paddington Bear"). If the exact model name cannot be confirmed by a trusted source, use a generic descriptor instead. When using a Vectis listing, mirror their title wording exactly.
-2. Key identifiers: tag type/number (e.g., white tag 663659); limited edition (LE x/y or LE to year); year if applicable; retailer/special edition detail. Only confirmed facts. Do not describe the location of the tag — just state "white tag," "yellow tag," etc.
+2. Key identifiers: tag type/number (e.g., white tag 663659); limited edition description copied exactly from the packaging (e.g., "Limited Edition with Genuine Diamond" — never paraphrase or reinterpret LE wording); year if applicable; retailer/special edition detail. Only confirmed facts. Do not describe the location of the tag — just state "white tag," "yellow tag," etc.
 3. Material type (e.g., grey mohair, golden mohair, plush) immediately after identifiers. Always include for every bear.
-4. Only salient features intrinsic to the edition (e.g., yes/no mechanism, anniversary badge). No long descriptive lists unless part of the official edition.
-5. Included items listed briefly (e.g., swing label, certificate, box/bag). If something is missing or damaged, mirror user wording exactly (e.g., MISSING certificate; swing label (creases)).
-6. Packaging noted briefly when provided (e.g., within Excellent packaging; outer trade carton).
-7. Condition: short graded statement (e.g., Excellent, Good Plus). Add concise faults only if material to condition. If unknown, write "condition not stated."
+4. Only salient features that are part of the official edition or essential for identification (e.g., yes/no mechanism, anniversary badge, accessory held by bear). Do NOT list internal construction details such as stuffing material, wax noses, glass eyes, or paw pad material — these are not catalogue details.
+5. Included items: always check carefully for swing label, certificate, and box. If a swing label is not visible in the photos and has not been confirmed present, write "MISSING swing label." If something is damaged, note it briefly (e.g., swing label (creases)). Never assume a swing label is present if it cannot be seen.
+6. Packaging noted briefly when provided (e.g., within Good Plus display box; outer trade carton).
+7. Condition: short graded statement (e.g., Excellent, Good Plus). Add concise visible faults only. If unknown, write "condition not stated."
 8. Size in inches and centimetres (1in = 2.54cm; round cm to nearest whole number). Format: 9"/23cm — never use "approx." Always include. If unavailable, write "size not stated."
-9. Estimate: £X–£Y on its own line. If the estimate is derived from anywhere other than the Vectis website, reduce it by 50%.
+9. Estimate: £X–£Y on its own line.
+
+GEM AND STONE CAVEAT:
+If packaging or labelling states a genuine gemstone (e.g., "genuine diamond," "real ruby"), include the claim but add "(untested)" immediately after. Example: clay nose with stone (box states genuine diamond, untested). Never state a stone is genuine based solely on packaging claims.
 
 SWING LABEL / CERTIFICATE DISTINCTION:
 - Swing label = hanging tag attached to the bear.
@@ -437,11 +444,12 @@ VERIFICATION (mandatory; accuracy over speed):
 Verify in this order: reputable retailer archives (e.g., corfebears.co.uk) → Vectis Auctions → thesaleroom.com → official maker sites → wider web. Use retailer sites for identity/spec only, not pricing. If a model name or code cannot be verified, do not guess.
 
 ESTIMATING VALUES:
+Search thoroughly before estimating — artist bears and limited editions often sell for significantly more than generic bears. Do not default to low estimates.
 Use published Vectis/thesaleroom estimates if available. Otherwise use verified realised prices only — never asking prices or unsold listings.
 Search order: Vectis → thesaleroom → eBay sold listings → other reputable auction houses.
 Formula: realised price × 0.60, rounded down to nearest increment. Never exceed highest verified realised price.
-For rare bears with wide price variance: use the median realised price.
-If no realised prices found: compare with directly comparable models; always choose the lowest comparator.
+For rare bears with wide price variance: use the median realised price, not the lowest.
+If no realised prices found: compare with directly comparable models of similar quality and edition type.
 If still available new from retailers: use 60% of lowest in-stock retail price as the ceiling.
 
 STYLE:

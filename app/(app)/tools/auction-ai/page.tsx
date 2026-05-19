@@ -385,10 +385,18 @@ function ChatTab({ model }: { model: string }) {
               ) : null}
               <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.text}</p>
               {msg.role === "model" && (
-                <button onClick={() => { navigator.clipboard.writeText(msg.text); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
-                  className="mt-2 text-xs text-[#C8A96E] hover:underline">
-                  {copied ? "✓ Copied" : "Copy"}
-                </button>
+                <div className="mt-2 flex gap-3">
+                  <button onClick={() => { navigator.clipboard.writeText(msg.text); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
+                    className="text-xs text-[#C8A96E] hover:underline">
+                    {copied ? "✓ Copied" : "Copy"}
+                  </button>
+                  {i === history.length - 1 && (
+                    <button onClick={() => { setMessage("Please justify your estimate — show which comparable sold listings or sources you used to arrive at that price, with specific examples and prices where possible."); setTimeout(() => document.querySelector<HTMLTextAreaElement>("textarea")?.focus(), 50) }}
+                      className="text-xs text-purple-400 hover:underline">
+                      £ Justify price
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>
