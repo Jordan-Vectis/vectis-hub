@@ -130,6 +130,7 @@ function PresetEditorModal({ presetKey, initialText, onSave, onClose }: {
   onSave: (text: string) => void
   onClose: () => void
 }) {
+  const isBuiltIn = PRESETS[presetKey] !== undefined
   const [draft, setDraft] = useState(initialText)
   const [saving, setSaving] = useState(false)
 
@@ -147,6 +148,11 @@ function PresetEditorModal({ presetKey, initialText, onSave, onClose }: {
           <h3 className="text-sm font-semibold text-white truncate">{presetKey}</h3>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-lg leading-none ml-4">✕</button>
         </div>
+        {isBuiltIn && (
+          <p className="text-xs text-amber-500/80 bg-amber-500/10 border border-amber-500/20 rounded px-3 py-2">
+            This is a built-in preset. Changes apply to this session only — they reset on page reload. To make permanent changes, ask your developer.
+          </p>
+        )}
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -154,7 +160,7 @@ function PresetEditorModal({ presetKey, initialText, onSave, onClose }: {
           className="w-full bg-[#141416] border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#C8A96E] resize-none font-mono flex-1"
         />
         <div className="flex gap-2 justify-between">
-          <button onClick={() => setDraft(PRESETS[presetKey])}
+          <button onClick={() => setDraft(PRESETS[presetKey] ?? "")}
             className="text-xs px-3 py-1.5 bg-[#2C2C2E] border border-gray-700 text-gray-500 rounded hover:border-gray-500 hover:text-gray-300 transition-colors">
             Reset to default
           </button>
@@ -165,7 +171,7 @@ function PresetEditorModal({ presetKey, initialText, onSave, onClose }: {
             </button>
             <button onClick={handleSave} disabled={saving}
               className="text-sm px-5 py-1.5 bg-[#C8A96E] hover:bg-[#d4b87a] text-black font-bold rounded transition-colors disabled:opacity-40">
-              {saving ? "Saving…" : "Save"}
+              {saving ? "Saving…" : isBuiltIn ? "Apply to session" : "Save"}
             </button>
           </div>
         </div>
