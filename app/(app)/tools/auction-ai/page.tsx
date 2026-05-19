@@ -3107,8 +3107,8 @@ const DEFAULT_MODEL = "gemini-3-flash-preview"
 
 export default function AuctionAIPage() {
   const [tab,           setTab]           = useState<Tab>("chat")
-  const [model,         setModel]         = useState(DEFAULT_MODEL)
-  const [fallbackModel, setFallbackModel] = useState("")
+  const [model,         setModel]         = useState(() => (typeof window !== "undefined" ? localStorage.getItem("ai_model") ?? DEFAULT_MODEL : DEFAULT_MODEL))
+  const [fallbackModel, setFallbackModel] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("ai_fallback_model") ?? "" : ""))
   const [modelList,     setModelList]     = useState<string[]>([DEFAULT_MODEL])
   const [allowedSections, setAllowedSections] = useState<string[] | null>(null)
   const [sectionsLoaded,  setSectionsLoaded]  = useState(false)
@@ -3170,14 +3170,14 @@ export default function AuctionAIPage() {
         <div className="px-4 py-3 border-t border-gray-800 space-y-2.5">
           <div className="space-y-1">
             <p className="text-gray-600 text-xs uppercase tracking-wider">Model</p>
-            <select value={model} onChange={e => setModel(e.target.value)}
+            <select value={model} onChange={e => { setModel(e.target.value); localStorage.setItem("ai_model", e.target.value) }}
               className="w-full bg-[#2C2C2E] border border-gray-700 rounded px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-[#C8A96E]">
               {modelList.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
           <div className="space-y-1">
             <p className="text-gray-600 text-xs uppercase tracking-wider">Fallback Model <span className="normal-case text-gray-700">(rate limit)</span></p>
-            <select value={fallbackModel} onChange={e => setFallbackModel(e.target.value)}
+            <select value={fallbackModel} onChange={e => { setFallbackModel(e.target.value); localStorage.setItem("ai_fallback_model", e.target.value) }}
               className="w-full bg-[#2C2C2E] border border-gray-700 rounded px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-[#C8A96E]">
               <option value="">— none —</option>
               {modelList.filter(m => m !== model).map(m => <option key={m} value={m}>{m}</option>)}
