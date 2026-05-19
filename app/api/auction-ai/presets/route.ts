@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { PRESETS } from "@/lib/auction-ai-presets"
 
 export async function GET() {
   const session = await auth()
@@ -8,7 +9,12 @@ export async function GET() {
 
   const rows = await prisma.aiPreset.findMany()
   const map: Record<string, string> = {}
-  for (const r of rows) map[r.key] = r.instruction
+  for (const r of rows) {
+    // Skip DB entries that match the current code version — they're stale seeds,
+    // not genuine user edits. This means code updates take effect automatically.
+    if (PRESETS[r.key] !== undefined && r.instruction === PRESETS[r.key]) continue
+    map[r.key] = r.instruction
+  }
   return NextResponse.json(map)
 }
 
