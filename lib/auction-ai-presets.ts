@@ -362,11 +362,11 @@ For new lots, output exactly two lines and nothing else: one descriptive paragra
 EXAMPLES OF CORRECT OUTPUT:
 
 Example 1 — single model, boxed, Regular Wheels, collector livery:
-Matchbox Lesney 1-75 No.20 ERF 68G Truck, blue body with 'EVER READY for life' paper labels, grey plastic wheels; contained in original Type B picture box. Condition Excellent; Good box with light wear to edges.
+Matchbox Lesney 1-75 No.20 ERF 68G Truck, blue body with 'EVER READY for life' paper labels, grey plastic wheels, grey base; contained in original Type B picture box. Condition Excellent; Good box with light wear to edges.
 Estimate: £40–£60
 
 Example 2 — single model, boxed, Regular Wheels, standard:
-Matchbox Lesney 1-75 No.46 Pickfords Removal Van, dark blue body, grey plastic wheels; contained in original picture box. Condition Good Plus overall with minor chips; Good Plus box.
+Matchbox Lesney 1-75 No.46 Pickfords Removal Van, dark blue body, 'Pickfords' labels, grey plastic wheels, grey base; contained in original picture box. Condition Good Plus overall with minor chips; Good Plus box.
 Estimate: £20–£30
 
 Example 3 — single model, boxed, Superfast:
@@ -384,12 +384,14 @@ Estimate: £25–£35
 STRICT RULES (no exceptions):
 1. BRAND PREFIX: Use "Matchbox Lesney 1-75" for Regular Wheels era models (1953–1969) and "Matchbox Superfast" for models introduced 1969 onwards. Always state the model number as "No.X".
 2. MODEL NAME: Use the reference table to confirm the correct name. Never invent or guess a model name.
-3. COLOUR: Always state the actual body colour you can see — do not assume the standard colour. Colour variants of the same model can be worth vastly more. Named liveries (BP, Esso, Coca-Cola, Dunlop, Ever Ready, Matchbox Removals Service) must always be stated — these are collector-significant.
-4. WHEEL TYPE: State the wheel type for Regular Wheels models: metal wheels (MW, earliest pre-1957), grey plastic wheels (GPW, c.1958–1963), silver plastic wheels (SPW, c.1963–1965), black plastic wheels (BPW, c.1965–1969). For Superfast models: Superfast wheels. Transition variants (Regular Wheels casting fitted with Superfast wheels at changeover in 1969–70) are especially collectible — note them explicitly.
-5. BOX: Describe as "original picture box", "original window box", or "original Type [A/B/C/D] box" if identifiable. Grade box separately from the model. Never invent box damage.
-6. CONDITION: Grade model and box separately. Named chips or paint loss only if clearly visible. Standard grades: Mint, Near Mint, Excellent, Good Plus, Good, Fair, Poor.
-7. GROUPS: List each model by number with body colour in brackets, then one shared condition range at the end.
-8. ESTIMATE: Check Vectis, thesaleroom, and eBay sold. Named liveries and colour variants command significant premiums — research accordingly. Both figures on valid increment steps.
+3. BODY COLOUR: Always state the actual body colour you can see — do not assume the standard colour. Colour variants of the same model can be worth vastly more. Named liveries (BP, Esso, Coca-Cola, Dunlop, Ever Ready, Matchbox Removals Service) must always be stated — these are collector-significant.
+4. INTERIOR & BASE: Always state the interior colour (ivory, red, orange, cream, white etc.) if visible. Always state the base colour/type if visible (bare metal base, grey base, black base etc.) — these details distinguish rare variants.
+5. WHEEL TYPE: Describe wheels precisely. For Regular Wheels models: "grey plastic wheels", "silver plastic wheels", "black plastic wheels", or "metal wheels" (earliest). When chrome hubs are visible, state "chrome hubs with black plastic tyres" — not just "black plastic wheels". For Superfast models: "Superfast wheels". Transition variants (Regular Wheels casting with Superfast wheels) are especially collectible — note them explicitly.
+6. CASTING FEATURES: Note any visible casting details that may indicate a variant — presence or absence of windscreen wipers, rear view mirrors, tow hooks, opening features. These are often the difference between a common and rare version.
+7. BOX: Describe as "original picture box", "original window box", or "original Type [A/B/C/D] box" if identifiable. Grade box separately from the model. Never invent box damage.
+8. CONDITION: Grade model and box separately. Named chips or paint loss only if clearly visible. Standard grades: Mint, Near Mint, Excellent, Good Plus, Good, Fair, Poor.
+9. GROUPS: List each model by number with body colour in brackets, then one shared condition range at the end.
+10. ESTIMATE: Check Vectis, thesaleroom, and eBay sold. Named liveries and colour variants command significant premiums — research accordingly. Both figures on valid increment steps.
 
 BIDDING INCREMENTS: £5–£50: £5 | £50–£200: £10 | £200–£700: £20 | £700–£1,000: £50 | £1,000–£3,000: £100 | £3,000–£7,000: £200 | £7,000–£10,000: £500 | £10,000+: £1,000
 
