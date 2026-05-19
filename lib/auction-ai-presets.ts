@@ -369,8 +369,8 @@ Example 2 — single model, boxed, Regular Wheels, standard:
 Matchbox Lesney 1-75 No.46 Pickfords Removal Van, dark blue body, 'Pickfords' labels, grey plastic wheels, grey base; contained in original picture box. Condition Good Plus overall with minor chips; Good Plus box.
 Estimate: £20–£30
 
-Example 3 — BPW era model, pale colour variant, 'New Model' box:
-Matchbox Lesney 1-75 No.62 Mercury Cougar, pale yellow body, ivory interior, bare metal base, chrome hubs with black plastic tyres; contained in original 'New Model' picture box. Condition Excellent with minor chips to front wings; Good box with some edge wear.
+Example 3 — BPW era model, pale colour variant, casting details noted, 'New Model' box:
+Matchbox Lesney 1-75 No.62 Mercury Cougar, pale yellow body, ivory interior, bare metal base, without windscreen wipers cast, without rear view mirror cast, chrome hubs with black plastic tyres; contained in original 'New Model' picture box. Condition Excellent with minor chips to front wings; Good box with some edge wear.
 Estimate: £3,000–£4,000
 
 Example 4 — single model, boxed, Superfast:
@@ -391,9 +391,14 @@ STRICT RULES (no exceptions):
 3. BODY COLOUR: Always state the actual body colour you can see — do not assume the standard colour. Colour variants of the same model can be worth vastly more. Named liveries (BP, Esso, Coca-Cola, Dunlop, Ever Ready, Matchbox Removals Service) must always be stated — these are collector-significant.
 4. INTERIOR & BASE: Always state the interior colour (ivory, red, orange, cream, white etc.) if visible. Always state the base colour/type if visible (bare metal base, grey base, black base etc.) — these details distinguish rare variants.
 5. WHEEL TYPE: Describe wheels precisely. For Regular Wheels models: "grey plastic wheels", "silver plastic wheels", "black plastic wheels", or "metal wheels" (earliest). When chrome hubs are visible, state "chrome hubs with black plastic tyres" — not just "black plastic wheels". For Superfast models: "Superfast wheels". Transition variants (Regular Wheels casting with Superfast wheels) are especially collectible — note them explicitly.
-6. CASTING FEATURES: Note any visible casting details that may indicate a variant — presence or absence of windscreen wipers, rear view mirrors, tow hooks, opening features. These are often the difference between a common and rare version.
-7. BOX: Identify box type if possible — "original picture box", "original 'New Model' picture box" (yellow/blue with 'New Model' flash), "original window box" (Superfast era). Grade box separately from the model. Never invent box damage. Common box grades: Mint, Excellent (crisp, minimal wear), Good Plus (light edge wear), Good (noticeable wear/creasing), Fair (heavy wear).
-8. CONDITION: Grade model and box separately. Be precise — do not over-grade. A model with any visible chips is Excellent at most, not Near Mint. Describe chip location if visible (e.g. "minor chips to front wings"). Standard grades: Mint (perfect), Near Mint (near-perfect, no chips), Excellent (minor chips only), Good Plus (some chips/wear), Good (noticeable chips and play wear), Fair (heavy wear/damage).
+6. CASTING FEATURES — examine every photo carefully for these specific details:
+   WINDSCREEN WIPERS: Study the windscreen glass area in top-down or front-facing photos. If you see raised moulded lines or blade shapes cast into the glass = state "with windscreen wipers cast". If the glass area is completely plain and smooth with no raised castings at all = state "without windscreen wipers cast". Always state one or the other — never omit this.
+   REAR VIEW MIRROR: Check the top of the windscreen frame or the dashboard area. If a small raised mirror casting protrudes = state "with rear view mirror cast". If that area is plain = state "without rear view mirror cast". Always state one or the other.
+   TOW HOOK: Check the rear of the base in underside photos. If a tow hook protrudes = state "with tow hook". If absent = state "without tow hook".
+   OPENING FEATURES: Note if doors, bonnet, boot, or tailgate open.
+   The absence of wipers, mirrors, or hooks is often the defining feature of a rare high-value variant — never skip this check.
+7. BOX: Identify box type if possible — "original picture box", "original 'New Model' picture box" (yellow/blue box with 'New Model' flash on end flap), "original window box" (Superfast era). Grade box separately. Box grading: any visible edge wear or creasing = Good Plus at most; noticeable wear = Good; heavy wear = Fair. Only grade Excellent if the box looks crisp with minimal wear. Never invent box damage.
+8. CONDITION: Grade model and box separately. Do not over-grade — any visible chips = Excellent at most, never Near Mint. Near Mint means absolutely no chips. Name chip locations only where clearly visible (e.g. "minor chips to front wings"). Do not mention chip locations you cannot actually see. Standard grades: Mint (perfect), Near Mint (no chips), Excellent (minor chips only), Good Plus (some chips/wear), Good (noticeable chips and play wear), Fair (heavy wear/damage).
 9. GROUPS: List each model by number with body colour in brackets, then one shared condition range at the end.
 10. ESTIMATE: Check Vectis, thesaleroom, and eBay sold. Named liveries and colour variants command significant premiums — research accordingly. Both figures on valid increment steps.
 
