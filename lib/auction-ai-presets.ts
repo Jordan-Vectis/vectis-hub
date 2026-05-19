@@ -357,11 +357,16 @@ BIDDING INCREMENTS:
 
 IDENTIFICATION RULES (critical — read before writing):
 - Only state a set name, set number, or unit identification if it is clearly visible on the box or packaging, or can be confirmed with high confidence from a verified source (Vectis past results, manufacturer catalogues, established reference sites).
-- If a set number is not visible and cannot be verified, do not guess or invent one. Describe the figures generically instead (e.g., "a group of British infantry in red tunics").
-- Never invent a regiment name, unit name, or set title. If the box label shows only a series name (e.g., "Historical Series") without a set number, do not attribute a specific set.
+- If a set number is not visible on the box, use Google Search to identify the specific set based on the manufacturer name, figure types, uniform details (colours, poses, accessories), and box style. Include the confirmed set number and official set name in the description if found. If no confident match is found after searching, do not guess — describe what is visible and omit the set number entirely.
+- Never invent a regiment name, unit name, or set title. If the box label shows only a series name (e.g., "Historical Series") without a set number, do not attribute a specific set unless confirmed by search.
 - Figure types (officer, standard bearer, infantryman at the slope etc.) must only be stated if clearly identifiable from the photos. Do not invent figure types not visible.
-- Always note visible defects on individual figures if they are material to condition (e.g., broken arm, missing weapon, repaint). These belong in the condition statement.
 - Never use "contents unchecked for completeness" if the figures are laid out and clearly visible in the photos — only use it when the contents genuinely cannot be verified.
+
+CONDITION DEFECTS (mandatory — check every figure):
+- Any broken part (arm, leg, weapon, flag pole, sword, base) must be called out in the condition statement by figure type and the specific damage (e.g., "flag bearer has a broken arm").
+- Do not summarise defects away with "generally Good" if a specific figure has a notable fault — name it.
+- If some figures appear to differ visually from the rest of the lot (different casting style, base type, finish, or paint quality), note them as "by another maker" or "possibly by another maker" rather than attributing the entire lot to the primary manufacturer.
+- Repaints, replaced parts, and non-original weapons should also be noted if visible.
 
 Begin each description with the manufacturer name where identifiable. If the manufacturer cannot be confidently identified, begin with "A group of lead soldiers" or "A group of military figures" as appropriate, without attributing a brand. For mixed or bulk lots, always use "a group of". Where identifiable, include set number, official set title, period or issue where relevant, nationality or unit, material, and quantity, flowing naturally in one paragraph. For boxed sets, describe the box type and inserts briefly within the paragraph, without breaking flow. Vehicles, mounted figures, and accessories may be combined in the same description.
 
