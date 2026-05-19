@@ -156,7 +156,7 @@ type: user
 - Another developer (unnamed) also works on the same staging branch and pushes changes independently`,
   },
   {
-    filename: "project_vectis_crm.md",
+    filename: "project_vectis_hub.md",
     content: `---
 name: Vectis Hub Project
 description: Full spec, tech stack, deployment details, and current feature state for the Vectis Hub app
@@ -430,7 +430,7 @@ type: reference
 # Memory Index
 
 - [User Profile](user_profile.md) — Jordan Orange, Vectis auction house, non-technical, always uses Railway URL never local
-- [Vectis Hub Project](project_vectis_crm.md) — Full spec, stack, deployment, current admin features, planned iPad tracking
+- [Vectis Hub Project](project_vectis_hub.md) — Full spec, stack, deployment, current admin features, planned iPad tracking
 - [Vectis Company Facts](vectis_company_facts.md) — Authoritative company facts; use in any AI-generated content prompt
 - [BC OData API Reference](bc_api_reference.md) — Endpoint field names, gotchas, cataloguing modes, bidstream WebSocket protocol + ntfy.sh push pattern
 - [PDF Generation Patterns](feedback_pdf_patterns.md) — pdf-lib (not pdfkit), sharp for SVG logos, bwip-js for barcodes, server-side over browser print
