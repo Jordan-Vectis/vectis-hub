@@ -32,11 +32,11 @@ function top<T extends string>(arr: (T | null | undefined)[], limit = 8): { key:
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function BigStat({ label, value, sub, colour = "text-white" }: {
+function BigStat({ label, value, sub, colour = "text-gray-900 dark:text-white" }: {
   label: string; value: string | number; sub?: string; colour?: string
 }) {
   return (
-    <div className="bg-[#1C1C1E] border border-gray-800 rounded-xl px-5 py-4">
+    <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl px-5 py-4">
       <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{label}</p>
       <p className={`text-2xl font-bold ${colour}`}>{value}</p>
       {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
@@ -52,7 +52,7 @@ function ProgressBar({ label, count, total, colour = "#2AB4A6" }: {
     <div className="space-y-1">
       <div className="flex justify-between text-xs">
         <span className="text-gray-400">{label}</span>
-        <span className="text-gray-300 font-medium">{count} <span className="text-gray-600">/ {total}</span> <span className="text-gray-500">({p}%)</span></span>
+        <span className="text-gray-600 dark:text-gray-300 font-medium">{count} <span className="text-gray-600">/ {total}</span> <span className="text-gray-500">({p}%)</span></span>
       </div>
       <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
         <div className="h-full rounded-full transition-all duration-500"
@@ -74,7 +74,7 @@ function BreakdownBar({ items, total }: { items: { key: string; count: number; c
             <div className="h-full rounded-full"
               style={{ width: `${(count / max) * 100}%`, backgroundColor: colour ?? "#2AB4A6" }} />
           </div>
-          <span className="text-xs text-gray-300 w-8 text-right flex-shrink-0">{count}</span>
+          <span className="text-xs text-gray-600 dark:text-gray-300 w-8 text-right flex-shrink-0">{count}</span>
           <span className="text-xs text-gray-600 w-10 text-right flex-shrink-0">{pct(count, total)}%</span>
         </div>
       ))}
@@ -84,8 +84,8 @@ function BreakdownBar({ items, total }: { items: { key: string; count: number; c
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-[#1C1C1E] border border-gray-800 rounded-xl p-5 space-y-4">
-      <h3 className="text-sm font-semibold text-white">{title}</h3>
+    <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl p-5 space-y-4">
+      <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h3>
       {children}
     </div>
   )
@@ -219,16 +219,16 @@ export default function StatsTab({ lots, auction }: { lots: Lot[]; auction: Auct
       {(stats.highestLot || stats.lowestLot) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {stats.highestLot && (
-            <div className="bg-[#1C1C1E] border border-gray-800 rounded-xl px-5 py-4">
+            <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl px-5 py-4">
               <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Highest Estimate Lot</p>
-              <p className="text-sm font-medium text-white truncate">{stats.highestLot.title || "Uncatalogued"}</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{stats.highestLot.title || "Uncatalogued"}</p>
               <p className="text-xs text-gray-500 mt-0.5">Lot {stats.highestLot.lotNumber} · <span className="text-[#2AB4A6] font-semibold">£{fmt(stats.highestLot.estimateLow ?? 0)}–£{fmt(stats.highestLot.estimateHigh ?? 0)}</span></p>
             </div>
           )}
           {stats.lowestLot && (
-            <div className="bg-[#1C1C1E] border border-gray-800 rounded-xl px-5 py-4">
+            <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl px-5 py-4">
               <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Lowest Estimate Lot</p>
-              <p className="text-sm font-medium text-white truncate">{stats.lowestLot.title || "Uncatalogued"}</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{stats.lowestLot.title || "Uncatalogued"}</p>
               <p className="text-xs text-gray-500 mt-0.5">Lot {stats.lowestLot.lotNumber} · <span className="text-yellow-400 font-semibold">£{fmt(stats.lowestLot.estimateLow ?? 0)}–£{fmt(stats.lowestLot.estimateHigh ?? 0)}</span></p>
             </div>
           )}
@@ -285,7 +285,7 @@ export default function StatsTab({ lots, auction }: { lots: Lot[]; auction: Auct
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-gray-500 border-b border-gray-800">
+                <tr className="text-gray-500 border-b border-gray-200 dark:border-gray-800">
                   <th className="text-left py-2 pr-4">Category</th>
                   <th className="text-right py-2 pr-4">Lots</th>
                   <th className="text-right py-2 pr-4">Est. Low</th>
@@ -295,8 +295,8 @@ export default function StatsTab({ lots, auction }: { lots: Lot[]; auction: Auct
               </thead>
               <tbody>
                 {stats.catEstimates.map(c => (
-                  <tr key={c.key} className="border-b border-gray-800/50 hover:bg-gray-800/20">
-                    <td className="py-2 pr-4 text-gray-300 font-medium">{c.key}</td>
+                  <tr key={c.key} className="border-b border-gray-200/50 dark:border-gray-800/50 hover:bg-gray-100/50 dark:hover:bg-gray-800/20">
+                    <td className="py-2 pr-4 text-gray-600 dark:text-gray-300 font-medium">{c.key}</td>
                     <td className="py-2 pr-4 text-gray-400 text-right">{c.count}</td>
                     <td className="py-2 pr-4 text-gray-400 text-right">£{fmt(c.low)}</td>
                     <td className="py-2 pr-4 text-[#2AB4A6] text-right font-semibold">£{fmt(c.high)}</td>

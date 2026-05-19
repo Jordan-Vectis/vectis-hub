@@ -269,7 +269,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       {phase === "idle" && (
         <>
           <div className="mb-5">
-            <h2 className="text-sm font-semibold text-gray-200">Upload Photos</h2>
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Upload Photos</h2>
             <p className="text-xs text-gray-500 mt-0.5">
               Choose how to match photos to lots.
             </p>
@@ -322,9 +322,9 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
 
       {/* ── Scanning (scan mode only) ── */}
       {phase === "scanning" && (
-        <div className="bg-[#1C1C1E] border border-gray-700 rounded-xl px-6 py-10 flex flex-col items-center gap-4">
+        <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl px-6 py-10 flex flex-col items-center gap-4">
           <div className="w-8 h-8 border-2 border-[#2AB4A6] border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-gray-300 font-medium">Scanning for barcodes…</p>
+          <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">Scanning for barcodes…</p>
           <div className="w-full bg-gray-800 rounded-full h-2">
             <div className="bg-[#2AB4A6] h-2 rounded-full transition-all duration-200"
               style={{ width: `${scanProgress.total > 0 ? (scanProgress.done / scanProgress.total) * 100 : 0}%` }} />
@@ -337,7 +337,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       {phase === "preview" && (
         <div className="space-y-4">
           <div className="mb-2">
-            <h2 className="text-sm font-semibold text-gray-200">
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
               {mode === "filename" ? "Filename match preview" : "Scan results preview"}
             </h2>
             {mode === "filename" && (
@@ -348,15 +348,15 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
           </div>
 
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-[#1C1C1E] border border-gray-700 rounded-xl px-4 py-3 text-center">
+            <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 text-center">
               <p className="text-2xl font-bold text-[#2AB4A6]">{matchedGroups.length}</p>
               <p className="text-xs text-gray-500 mt-0.5">Lots matched</p>
             </div>
-            <div className="bg-[#1C1C1E] border border-gray-700 rounded-xl px-4 py-3 text-center">
-              <p className="text-2xl font-bold text-gray-200">{totalPhotos}</p>
+            <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 text-center">
+              <p className="text-2xl font-bold text-gray-700 dark:text-gray-200">{totalPhotos}</p>
               <p className="text-xs text-gray-500 mt-0.5">Photos to upload</p>
             </div>
-            <div className="bg-[#1C1C1E] border border-gray-700 rounded-xl px-4 py-3 text-center">
+            <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 text-center">
               <p className={`text-2xl font-bold ${unmatchedGroups.length > 0 ? "text-yellow-400" : "text-gray-600"}`}>
                 {unmatchedGroups.length}
               </p>
@@ -383,9 +383,9 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
           )}
 
           {matchedGroups.length > 0 && (
-            <div className="bg-[#1C1C1E] border border-gray-700 rounded-xl overflow-hidden max-h-80 overflow-y-auto">
+            <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl overflow-hidden max-h-80 overflow-y-auto">
               <table className="w-full text-xs">
-                <thead className="bg-[#141416] border-b border-gray-700 sticky top-0">
+                <thead className="bg-gray-50 dark:bg-[#141416] border-b border-gray-300 dark:border-gray-700 sticky top-0">
                   <tr>
                     <th className="text-left px-4 py-2 text-gray-500 font-medium">Barcode / ID</th>
                     <th className="text-left px-4 py-2 text-gray-500 font-medium">Photos</th>
@@ -394,9 +394,9 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
                 </thead>
                 <tbody>
                   {matchedGroups.map(g => (
-                    <tr key={g.lotNumber} className="border-b border-gray-800 last:border-0">
+                    <tr key={g.lotNumber} className="border-b border-gray-200 dark:border-gray-800 last:border-0">
                       <td className="px-4 py-2 font-mono text-[#2AB4A6]">{g.lotNumber}</td>
-                      <td className="px-4 py-2 text-gray-300">{g.photos.length}</td>
+                      <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{g.photos.length}</td>
                       <td className="px-4 py-2 text-gray-600 truncate max-w-[200px]">{g.photos.map(p => p.name).join(", ")}</td>
                     </tr>
                   ))}
@@ -422,8 +422,8 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
 
       {/* ── Uploading ── */}
       {phase === "uploading" && (
-        <div className="bg-[#1C1C1E] border border-gray-700 rounded-xl px-6 py-10 flex flex-col items-center gap-4">
-          <p className="text-sm text-gray-300 font-medium">Uploading photos…</p>
+        <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl px-6 py-10 flex flex-col items-center gap-4">
+          <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">Uploading photos…</p>
           <div className="w-full bg-gray-800 rounded-full h-3">
             <div className="bg-[#2AB4A6] h-3 rounded-full transition-all duration-300"
               style={{ width: `${uploadProgress.total > 0 ? (uploadProgress.done / uploadProgress.total) * 100 : 0}%` }} />
@@ -448,7 +448,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             </div>
           )}
           <button onClick={reset}
-            className="w-full py-2.5 rounded-lg border border-gray-700 text-gray-400 text-sm hover:border-gray-500 transition-colors">
+            className="w-full py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-400 text-sm hover:border-gray-500 transition-colors">
             Upload more photos
           </button>
         </div>

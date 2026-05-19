@@ -350,16 +350,16 @@ function Autocomplete({ value, onChange, options, placeholder, tablet }: {
         <input value={value} onChange={e => { onChange(e.target.value); setOpen(true) }}
           onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
           placeholder={placeholder}
-          className={`flex-1 bg-[#2C2C2E] border border-r-0 border-gray-700 rounded-l text-gray-200 focus:outline-none ${tablet ? "px-4 py-3.5 text-base" : "px-3 py-2 text-sm"}`}
+          className={`flex-1 bg-gray-100 dark:bg-[#2C2C2E] border border-r-0 border-gray-300 dark:border-gray-700 rounded-l text-gray-700 dark:text-gray-200 focus:outline-none ${tablet ? "px-4 py-3.5 text-base" : "px-3 py-2 text-sm"}`}
           style={{ borderColor: value ? CAT_ACCENT + "66" : undefined }} />
         <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(o => !o) }}
-          className={`bg-[#2C2C2E] border border-l-0 border-gray-700 rounded-r text-gray-500 ${tablet ? "px-3 text-sm" : "px-2 text-xs"}`}>▼</button>
+          className={`bg-gray-100 dark:bg-[#2C2C2E] border border-l-0 border-gray-300 dark:border-gray-700 rounded-r text-gray-500 ${tablet ? "px-3 text-sm" : "px-2 text-xs"}`}>▼</button>
       </div>
       {open && filtered.length > 0 && (
-        <div className="absolute z-50 w-full bg-[#2C2C2E] border border-gray-700 rounded mt-0.5 max-h-48 overflow-y-auto shadow-xl">
+        <div className="absolute z-50 w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded mt-0.5 max-h-48 overflow-y-auto shadow-xl">
           {filtered.map(opt => (
             <button key={opt} type="button" onMouseDown={() => { onChange(opt); setOpen(false) }}
-              className={`w-full text-left px-3 text-gray-200 hover:bg-[#3A3A3C] transition-colors ${tablet ? "py-3 text-base" : "py-1.5 text-sm"}`}>
+              className={`w-full text-left px-3 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-[#3A3A3C] transition-colors ${tablet ? "py-3 text-base" : "py-1.5 text-sm"}`}>
               {opt}
             </button>
           ))}
@@ -587,8 +587,8 @@ export default function LotWizardTab({
   const subCats     = mainCat ? (CATEGORY_MAP[mainCat] ?? []) : []
   const mainCatList = Object.keys(CATEGORY_MAP).sort()
   const inpFocus    = tablet
-    ? "w-full bg-[#2C2C2E] border border-gray-700 rounded-xl px-4 py-3.5 text-base text-gray-200 focus:outline-none focus:border-[#2AB4A6]"
-    : "w-full bg-[#2C2C2E] border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#2AB4A6]"
+    ? "w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3.5 text-base text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#2AB4A6]"
+    : "w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#2AB4A6]"
   const lbl = tablet
     ? "text-sm text-gray-400 uppercase tracking-wider"
     : "text-xs text-gray-500 uppercase tracking-wider"
@@ -759,7 +759,7 @@ export default function LotWizardTab({
       <div className="flex items-center gap-3 mb-4 px-1">
         <span className={`${tablet ? "text-sm" : "text-xs"} text-gray-500 uppercase tracking-wider`}>Adding to:</span>
         <span className={`font-mono font-bold text-[#2AB4A6] ${tablet ? "text-base" : "text-sm"}`}>{auction.code}</span>
-        <span className={`text-gray-300 ${tablet ? "text-base" : "text-sm"}`}>{auction.name}</span>
+        <span className={`text-gray-600 dark:text-gray-300 ${tablet ? "text-base" : "text-sm"}`}>{auction.name}</span>
         <div className="ml-auto flex items-center gap-4">
           {timerActive && showScanTimer && (
             <span className={`flex items-center gap-1.5 font-mono font-bold tabular-nums ${tablet ? "text-base" : "text-sm"}`}
@@ -778,7 +778,7 @@ export default function LotWizardTab({
       </div>
 
       {/* Step indicator */}
-      <div className="flex mb-5 border-b border-gray-800">
+      <div className="flex mb-5 border-b border-gray-200 dark:border-gray-800">
         {STEP_LABELS.map((label, i) => (
           <div key={i} className="flex-1 min-w-0 pb-2 text-center border-b-2 transition-colors"
             style={{ borderColor: i + 1 === step ? CAT_ACCENT : i + 1 < step ? "#22c55e" : "#374151" }}>
@@ -805,10 +805,10 @@ export default function LotWizardTab({
       {validErr && <p className="text-red-400 text-sm mb-3">{validErr}</p>}
 
       {/* Top nav */}
-      <div className={`flex items-center justify-between mb-3 sticky top-0 z-10 bg-[#141416] -mx-1 px-1 border-b border-gray-800/50 ${tablet ? "py-3" : "py-2"}`}>
+      <div className={`flex items-center justify-between mb-3 sticky top-0 z-10 bg-gray-50 dark:bg-[#141416] -mx-1 px-1 border-b border-gray-200/50 dark:border-gray-800/50 ${tablet ? "py-3" : "py-2"}`}>
         <button onClick={goBack} disabled={step === 1}
           style={{ touchAction: tablet ? "manipulation" : undefined }}
-          className={`bg-[#2C2C2E] border border-gray-700 text-gray-300 rounded transition-colors disabled:opacity-30 hover:border-gray-500 ${tablet ? "px-6 py-3 text-base font-medium" : "px-4 py-1.5 text-sm"}`}>
+          className={`bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded transition-colors disabled:opacity-30 hover:border-gray-400 dark:hover:border-gray-500 ${tablet ? "px-6 py-3 text-base font-medium" : "px-4 py-1.5 text-sm"}`}>
           ← Back
         </button>
         <span className={`text-gray-600 ${tablet ? "text-base" : "text-xs"}`}>{step} / 8</span>
@@ -853,13 +853,13 @@ export default function LotWizardTab({
                     autoComplete="off"
                     autoFocus
                   />
-                  {tote && <button type="button" onClick={() => { setTote(""); setToteInfo(null); setToteResults([]); setToteOpen(false); setToteIgnored(false); setVendorHint(null) }} className="px-3 py-2 bg-[#2C2C2E] border border-gray-700 text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
+                  {tote && <button type="button" onClick={() => { setTote(""); setToteInfo(null); setToteResults([]); setToteOpen(false); setToteIgnored(false); setVendorHint(null) }} className="px-3 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
                 </div>
                 {toteOpen && toteResults.length > 0 && (
-                  <div className="absolute z-50 w-full mt-1 bg-[#1C1C1E] border border-gray-700 rounded shadow-xl max-h-52 overflow-y-auto">
+                  <div className="absolute z-50 w-full mt-1 bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-700 rounded shadow-xl max-h-52 overflow-y-auto">
                     {toteResults.map((item: any) => (
                       <button key={item.toteNo} type="button" onMouseDown={() => selectTote(item)}
-                        className="w-full text-left px-3 py-2 hover:bg-[#2C2C2E] transition-colors border-b border-gray-800 last:border-0">
+                        className="w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-[#2C2C2E] transition-colors border-b border-gray-200 dark:border-gray-800 last:border-0">
                         <span className="font-mono text-sm text-[#2AB4A6]">{item.toteNo}</span>
                         {item.vendorName && <span className="text-gray-400 text-xs ml-2">· {item.vendorName}</span>}
                         {item.location   && <span className="text-gray-500 text-xs ml-2">· {item.location}</span>}
@@ -888,7 +888,7 @@ export default function LotWizardTab({
               </div>
               <div className="flex gap-2">
                 <input value={vendor} onChange={e => { setVendor(e.target.value); setVendorHint(null) }} className={`flex-1 ${inpFocus}`} placeholder="e.g. C224521" />
-                {vendor && <button type="button" onClick={() => { setVendor(""); setVendorHint(null) }} className="px-3 py-2 bg-[#2C2C2E] border border-gray-700 text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
+                {vendor && <button type="button" onClick={() => { setVendor(""); setVendorHint(null) }} className="px-3 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
               </div>
               {vendorHint && <p className="text-xs text-[#2AB4A6] mt-1">{vendorHint}</p>}
             </div>
@@ -905,7 +905,7 @@ export default function LotWizardTab({
                   className={`flex-1 ${inpFocus}`}
                   placeholder="e.g. R007523"
                 />
-                {receipt && <button type="button" onClick={() => setReceipt("")} className="px-3 py-2 bg-[#2C2C2E] border border-gray-700 text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
+                {receipt && <button type="button" onClick={() => setReceipt("")} className="px-3 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
               </div>
               {receipt && (
                 <p className="text-xs text-gray-500 mt-1">
@@ -920,11 +920,11 @@ export default function LotWizardTab({
           <div className="max-w-lg space-y-4">
             <p className="text-xs text-gray-500">Scan the internal barcode or type it manually.</p>
             {(vendor || tote) && (
-              <div className="flex items-center justify-between bg-[#2C2C2E] border border-gray-700 rounded-lg px-3 py-2">
+              <div className="flex items-center justify-between bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2">
                 <span className="text-xs text-gray-400 flex flex-wrap gap-x-3 gap-y-0.5">
-                  {tote    && <span><span className="text-gray-500">Tote </span><span className="text-gray-200 font-mono">{tote}</span></span>}
-                  {vendor  && <span><span className="text-gray-500">Vendor </span><span className="text-gray-200 font-mono">{vendor}</span>{vendorHint && <span className="text-gray-500"> · {vendorHint}</span>}</span>}
-                  {receipt && <span><span className="text-gray-500">Receipt </span><span className="text-gray-200 font-mono">{receipt}</span></span>}
+                  {tote    && <span><span className="text-gray-500">Tote </span><span className="text-gray-700 dark:text-gray-200 font-mono">{tote}</span></span>}
+                  {vendor  && <span><span className="text-gray-500">Vendor </span><span className="text-gray-700 dark:text-gray-200 font-mono">{vendor}</span>{vendorHint && <span className="text-gray-500"> · {vendorHint}</span>}</span>}
+                  {receipt && <span><span className="text-gray-500">Receipt </span><span className="text-gray-700 dark:text-gray-200 font-mono">{receipt}</span></span>}
                 </span>
                 <button type="button" onClick={() => setStep(1)}
                   className="text-xs font-semibold px-3 py-1 rounded transition-colors"
@@ -1006,7 +1006,7 @@ export default function LotWizardTab({
               </div>
               <div className="space-y-2">
                 {([["Low", estLow, setEstLow], ["High", estHigh, setEstHigh]] as const).map(([label, val, setter]) => (
-                  <div key={label} className="bg-[#2C2C2E] rounded-lg p-3 border border-gray-700">
+                  <div key={label} className="bg-gray-100 dark:bg-[#2C2C2E] rounded-lg p-3 border border-gray-300 dark:border-gray-700">
                     <p className={`${lbl} mb-2`}>{label}</p>
                     <div className="flex flex-wrap gap-1">
                       {ESTIMATE_VALUES.map(v => (
@@ -1064,7 +1064,7 @@ export default function LotWizardTab({
               </div>
             </div>
             {/* Summary */}
-            <div className="bg-[#141416] border border-gray-800 rounded-lg p-4 text-xs text-gray-400 space-y-1">
+            <div className="bg-gray-50 dark:bg-[#141416] border border-gray-200 dark:border-gray-800 rounded-lg p-4 text-xs text-gray-400 space-y-1">
               <p><span className="text-gray-600">Auction:</span> {auction.code} {auction.name}</p>
               <p><span className="text-gray-600">Vendor:</span> {vendor} &nbsp;|&nbsp; <span className="text-gray-600">Tote:</span> {tote}{receipt && ` | Receipt: ${receipt}`}</p>
               <p><span className="text-gray-600">Barcode:</span> {barcode || "—"}</p>

@@ -139,7 +139,7 @@ export default function ImportTab({ auctionId, auctionCode, onImported }: Props)
   return (
     <div className="p-4 md:p-6 max-w-4xl">
       <div className="mb-5">
-        <h2 className="text-sm font-semibold text-gray-200">Import Lots</h2>
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Import Lots</h2>
         <p className="text-xs text-gray-500 mt-0.5">{auctionCode} — upload an Excel file exported from this app</p>
       </div>
 
@@ -170,10 +170,10 @@ export default function ImportTab({ auctionId, auctionCode, onImported }: Props)
               {pending ? "Importing…" : `Import ${rows.length} Lots`}
             </button>
           </div>
-          <div className="bg-[#1C1C1E] border border-gray-700 rounded-xl overflow-x-auto">
+          <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl overflow-x-auto">
             <table className="w-full text-xs min-w-[600px]">
               <thead>
-                <tr className="border-b border-gray-700 bg-[#141416]">
+                <tr className="border-b border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#141416]">
                   {format === "catalogue"
                     ? ["Lot No.", "Key Points", "Barcode", "Vendor", "Category", "Est. Low/High"].map(h => (
                         <th key={h} className="text-left px-3 py-2 text-gray-500 font-medium uppercase tracking-wide">{h}</th>
@@ -186,16 +186,16 @@ export default function ImportTab({ auctionId, auctionCode, onImported }: Props)
               </thead>
               <tbody>
                 {rows.map((r, i) => (
-                  <tr key={i} className="border-b border-gray-800 hover:bg-[#2C2C2E]">
+                  <tr key={i} className="border-b border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-[#2C2C2E]">
                     <td className="px-3 py-2 font-mono text-[#2AB4A6]">{r.lotNumber}</td>
                     {format === "catalogue" ? <>
-                      <td className="px-3 py-2 text-gray-300 max-w-[220px] truncate">{r.keyPoints || "—"}</td>
+                      <td className="px-3 py-2 text-gray-600 dark:text-gray-300 max-w-[220px] truncate">{r.keyPoints || "—"}</td>
                       <td className="px-3 py-2 text-gray-400 font-mono">{r.barcode || "—"}</td>
                       <td className="px-3 py-2 text-gray-400">{r.vendor || "—"}</td>
                       <td className="px-3 py-2 text-gray-400">{r.category || "—"}</td>
                       <td className="px-3 py-2 text-gray-400">{r.estimateLow || "—"} / {r.estimateHigh || "—"}</td>
                     </> : <>
-                      <td className="px-3 py-2 text-gray-300 max-w-[200px] truncate">{r.title || "—"}</td>
+                      <td className="px-3 py-2 text-gray-600 dark:text-gray-300 max-w-[200px] truncate">{r.title || "—"}</td>
                       <td className="px-3 py-2 text-gray-400">{r.vendor || "—"}</td>
                       <td className="px-3 py-2 text-gray-400 font-mono">{r.tote || "—"}</td>
                       <td className="px-3 py-2 text-gray-400">{r.category || "—"}</td>

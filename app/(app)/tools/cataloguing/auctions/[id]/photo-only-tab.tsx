@@ -128,7 +128,7 @@ export default function PhotoOnlyTab({ auctionId, auctionCode, onCreated, tablet
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h2 className={`font-semibold text-gray-200 ${tablet ? "text-base" : "text-sm"}`}>Photo Only Cataloguing</h2>
+          <h2 className={`font-semibold text-gray-700 dark:text-gray-200 ${tablet ? "text-base" : "text-sm"}`}>Photo Only Cataloguing</h2>
           <p className={`text-gray-500 mt-0.5 ${tablet ? "text-sm" : "text-xs"}`}>{auctionCode} — scan barcode, take photos, save</p>
         </div>
         {savedCount > 0 && (
@@ -152,7 +152,7 @@ export default function PhotoOnlyTab({ auctionId, auctionCode, onCreated, tablet
 
           {/* Camera viewfinder — always rendered so ref is available */}
           <div className={scanning ? "block" : "hidden"}>
-            <div className="relative rounded-xl overflow-hidden border border-gray-700 bg-black">
+            <div className="relative rounded-xl overflow-hidden border border-gray-300 dark:border-gray-700 bg-black">
               <video ref={videoRef} className="w-full aspect-video object-cover" autoPlay muted playsInline />
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="w-48 h-24 border-2 border-[#2AB4A6] rounded-lg opacity-70" />
@@ -185,7 +185,7 @@ export default function PhotoOnlyTab({ auctionId, auctionCode, onCreated, tablet
                   setLotBarcode(v)
                 }}
                 placeholder="Scan or type barcode…"
-                className={`w-full rounded-lg border border-gray-700 bg-[#2C2C2E] text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6] font-mono ${tablet ? "px-4 py-3.5 text-base" : "px-3 py-3 text-sm"}`}
+                className={`w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#2C2C2E] text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6] font-mono ${tablet ? "px-4 py-3.5 text-base" : "px-3 py-3 text-sm"}`}
               />
               {lotBarcode && (
                 <p className={`text-[#2AB4A6] mt-1 ${tablet ? "text-sm" : "text-xs"}`}>✓ {lotBarcode}</p>
@@ -201,7 +201,7 @@ export default function PhotoOnlyTab({ auctionId, auctionCode, onCreated, tablet
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setTotePinned(p => !p)}
-                    className={`rounded border transition-colors ${tablet ? "text-sm px-3 py-1.5" : "text-xs px-2 py-0.5"} ${totePinned ? "border-[#2AB4A6] text-[#2AB4A6]" : "border-gray-700 text-gray-500 hover:border-gray-500"}`}
+                    className={`rounded border transition-colors ${tablet ? "text-sm px-3 py-1.5" : "text-xs px-2 py-0.5"} ${totePinned ? "border-[#2AB4A6] text-[#2AB4A6]" : "border-gray-300 dark:border-gray-700 text-gray-500 hover:border-gray-500"}`}
                   >
                     {totePinned ? "📌 Pinned" : "Pin"}
                   </button>
@@ -215,7 +215,7 @@ export default function PhotoOnlyTab({ auctionId, auctionCode, onCreated, tablet
                 value={toteNumber}
                 onChange={e => setToteNumber(e.target.value)}
                 placeholder="e.g. T-1234"
-                className={`w-full rounded-lg border border-gray-700 bg-[#2C2C2E] text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6] font-mono ${tablet ? "px-4 py-3.5 text-base" : "px-3 py-3 text-sm"}`}
+                className={`w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#2C2C2E] text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6] font-mono ${tablet ? "px-4 py-3.5 text-base" : "px-3 py-3 text-sm"}`}
               />
               {toteNumber && (
                 <p className={`mt-1 ${tablet ? "text-sm" : "text-xs"}`} style={{ color: "#2AB4A6" }}>
@@ -241,9 +241,9 @@ export default function PhotoOnlyTab({ auctionId, auctionCode, onCreated, tablet
       {/* ── Phase 2: Photos ── */}
       {phase === "photos" && (
         <div className="space-y-4">
-          <div className="bg-[#1C1C1E] rounded-lg border border-gray-800 px-4 py-3 text-sm">
+          <div className="bg-white dark:bg-[#1C1C1E] rounded-lg border border-gray-200 dark:border-gray-800 px-4 py-3 text-sm">
             <span className="text-gray-500">Lot: </span>
-            <span className="text-gray-200 font-mono">{lotBarcode}</span>
+            <span className="text-gray-700 dark:text-gray-200 font-mono">{lotBarcode}</span>
             {toteNumber && <><span className="text-gray-600 mx-2">·</span><span className="text-gray-500">Tote: </span><span className="text-gray-400 font-mono">{toteNumber}</span></>}
           </div>
 
@@ -260,7 +260,7 @@ export default function PhotoOnlyTab({ auctionId, auctionCode, onCreated, tablet
             <div className={`grid gap-3 ${tablet ? "grid-cols-2" : "grid-cols-3"}`}>
               {itemPhotos.map((p, i) => (
                 <div key={i} className="relative aspect-square">
-                  <img src={p.preview} alt={`Item ${i + 1}`} className="w-full h-full object-cover rounded-lg border border-gray-700" />
+                  <img src={p.preview} alt={`Item ${i + 1}`} className="w-full h-full object-cover rounded-lg border border-gray-300 dark:border-gray-700" />
                   <button onClick={() => removePhoto(i)}
                     className={`absolute bg-red-600 rounded-full text-white flex items-center justify-center ${tablet ? "-top-2 -right-2 w-8 h-8 text-sm" : "-top-1.5 -right-1.5 w-5 h-5 text-xs"}`}>
                     ✕
@@ -279,7 +279,7 @@ export default function PhotoOnlyTab({ auctionId, auctionCode, onCreated, tablet
               onChange={e => setNotes(e.target.value)}
               placeholder="Any notes about this lot…"
               rows={2}
-              className={`w-full rounded-lg border border-gray-700 bg-[#2C2C2E] text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6] resize-none ${tablet ? "px-4 py-3 text-base" : "px-3 py-2 text-sm"}`}
+              className={`w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#2C2C2E] text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6] resize-none ${tablet ? "px-4 py-3 text-base" : "px-3 py-2 text-sm"}`}
             />
           </div>
 
@@ -288,7 +288,7 @@ export default function PhotoOnlyTab({ auctionId, auctionCode, onCreated, tablet
           <div className="flex gap-3">
             <button onClick={() => { setError(null); setPhase("scan") }}
               style={{ touchAction: tablet ? "manipulation" : undefined }}
-              className={`rounded-lg border border-gray-700 text-gray-400 font-medium hover:border-gray-500 transition-colors ${tablet ? "py-4 px-5 text-base" : "py-3 px-4 text-sm"}`}>
+              className={`rounded-lg border border-gray-300 dark:border-gray-700 text-gray-400 font-medium hover:border-gray-500 transition-colors ${tablet ? "py-4 px-5 text-base" : "py-3 px-4 text-sm"}`}>
               ← Back
             </button>
             <button onClick={() => handleSave(false)} disabled={pending}

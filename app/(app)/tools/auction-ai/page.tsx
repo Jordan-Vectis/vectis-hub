@@ -101,7 +101,7 @@ function PresetSelector({ value, onChange, overrides, onEdit }: {
       <label className="block text-xs text-gray-500 mb-1 uppercase tracking-wider">System Instruction Preset</label>
       <div className="flex gap-2">
         <select value={value} onChange={(e) => onChange(e.target.value)}
-          className="flex-1 bg-[#2C2C2E] border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-[#C8A96E]">
+          className="flex-1 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E]">
           <optgroup label="Built-in">
             {builtInKeys.map((k) => <option key={k}>{k}</option>)}
           </optgroup>
@@ -113,7 +113,7 @@ function PresetSelector({ value, onChange, overrides, onEdit }: {
         </select>
         {value !== "Custom (paste my own)" && !isCustom && (
           <button onClick={onEdit}
-            className={`px-3 py-1.5 text-xs rounded border transition-colors flex-shrink-0 ${isEdited ? "border-[#C8A96E] text-[#C8A96E] bg-[#2C2C2E] hover:bg-[#3a3a2e]" : "border-gray-700 text-gray-400 bg-[#2C2C2E] hover:border-gray-500"}`}>
+            className={`px-3 py-1.5 text-xs rounded border transition-colors flex-shrink-0 ${isEdited ? "border-[#C8A96E] text-[#C8A96E] bg-gray-100 dark:bg-[#2C2C2E] hover:bg-[#3a3a2e]" : "border-gray-300 dark:border-gray-700 text-gray-400 bg-gray-100 dark:bg-[#2C2C2E] hover:border-gray-500"}`}>
             {isEdited ? "✎ Edited" : "✎ Edit"}
           </button>
         )}
@@ -142,10 +142,10 @@ function PresetEditorModal({ presetKey, initialText, onSave, onClose }: {
 
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-[#1C1C1E] border border-gray-700 rounded-xl p-5 w-full max-w-2xl max-h-[85vh] flex flex-col gap-3"
+      <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl p-5 w-full max-w-2xl max-h-[85vh] flex flex-col gap-3"
         onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-white truncate">{presetKey}</h3>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">{presetKey}</h3>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-lg leading-none ml-4">✕</button>
         </div>
         {isBuiltIn && (
@@ -157,16 +157,16 @@ function PresetEditorModal({ presetKey, initialText, onSave, onClose }: {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           rows={18}
-          className="w-full bg-[#141416] border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#C8A96E] resize-none font-mono flex-1"
+          className="w-full bg-gray-50 dark:bg-[#141416] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E] resize-none font-mono flex-1"
         />
         <div className="flex gap-2 justify-between">
           <button onClick={() => setDraft(PRESETS[presetKey] ?? "")}
-            className="text-xs px-3 py-1.5 bg-[#2C2C2E] border border-gray-700 text-gray-500 rounded hover:border-gray-500 hover:text-gray-300 transition-colors">
+            className="text-xs px-3 py-1.5 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-400 rounded hover:border-gray-500 hover:text-gray-300 transition-colors">
             Reset to default
           </button>
           <div className="flex gap-2">
             <button onClick={onClose}
-              className="text-sm px-4 py-1.5 bg-[#2C2C2E] border border-gray-700 text-gray-400 rounded hover:border-gray-500 transition-colors">
+              className="text-sm px-4 py-1.5 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-400 rounded hover:border-gray-500 transition-colors">
               Cancel
             </button>
             <button onClick={handleSave} disabled={saving}
@@ -240,7 +240,7 @@ function ImageZone({ images, onAdd, onRemove, max = 6 }: {
       <div onDrop={(e) => { e.preventDefault(); add(e.dataTransfer.files) }}
         onDragOver={(e) => e.preventDefault()}
         onClick={() => ref.current?.click()}
-        className="border-2 border-dashed border-gray-700 hover:border-[#C8A96E] rounded-lg p-4 text-center cursor-pointer transition-colors">
+        className="border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-[#C8A96E] rounded-lg p-4 text-center cursor-pointer transition-colors">
         <p className="text-gray-500 text-sm">Drop images here or click to select ({images.length}/{max})</p>
         <input ref={ref} type="file" multiple accept="image/*" className="hidden"
           onChange={(e) => e.target.files && add(e.target.files)} />
@@ -249,7 +249,7 @@ function ImageZone({ images, onAdd, onRemove, max = 6 }: {
         <div className="flex flex-wrap gap-2 mt-2">
           {previews.map((src, i) => (
             <div key={i} className="relative group">
-              <img src={src} className="w-16 h-16 object-cover rounded border border-gray-700" />
+              <img src={src} className="w-16 h-16 object-cover rounded border border-gray-300 dark:border-gray-700" />
               <button onClick={() => { setPreviews(p => p.filter((_, j) => j !== i)); onRemove(i) }}
                 className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full w-4 h-4 text-xs items-center justify-center hidden group-hover:flex">×</button>
             </div>
@@ -292,17 +292,17 @@ function Autocomplete({ value, onChange, options, placeholder, accentColor = "#C
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
           placeholder={placeholder}
-          className="flex-1 bg-[#2C2C2E] border border-gray-700 rounded-l px-3 py-2 text-sm text-gray-200 focus:outline-none"
+          className="flex-1 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-l px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none"
           style={{ borderColor: query ? accentColor + "66" : "" }}
         />
         <button type="button" onMouseDown={e => { e.preventDefault(); setOpen(o => !o) }}
-          className="px-2 bg-[#2C2C2E] border border-l-0 border-gray-700 rounded-r text-gray-500 text-xs">▼</button>
+          className="px-2 bg-gray-100 dark:bg-[#2C2C2E] border border-l-0 border-gray-300 dark:border-gray-700 rounded-r text-gray-500 text-xs">▼</button>
       </div>
       {open && filtered.length > 0 && (
-        <div className="absolute z-50 w-full bg-[#2C2C2E] border border-gray-700 rounded mt-0.5 max-h-48 overflow-y-auto shadow-xl">
+        <div className="absolute z-50 w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded mt-0.5 max-h-48 overflow-y-auto shadow-xl">
           {filtered.map(opt => (
             <button key={opt} type="button" onMouseDown={() => select(opt)}
-              className="w-full text-left px-3 py-1.5 text-sm text-gray-200 hover:bg-[#3A3A3C] transition-colors">
+              className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-[#3A3A3C] transition-colors">
               {opt}
             </button>
           ))}
@@ -385,8 +385,8 @@ function ChatTab({ model }: { model: string }) {
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-semibold text-white">Chat Window</h2>
-        <label className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-colors ${grounded ? "bg-blue-950/50 border-blue-600/60 text-blue-300" : "bg-[#2C2C2E] border-gray-700 text-gray-400 hover:border-gray-500"}`}>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Chat Window</h2>
+        <label className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-colors ${grounded ? "bg-blue-950/50 border-blue-600/60 text-blue-300" : "bg-gray-100 dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-400 hover:border-gray-500"}`}>
           <input type="checkbox" checked={grounded} onChange={e => { setGrounded(e.target.checked); setLastSearchQueries([]) }}
             className="w-3.5 h-3.5 accent-blue-500" />
           <span className="text-xs font-medium">🔍 Google Search</span>
@@ -405,16 +405,16 @@ function ChatTab({ model }: { model: string }) {
       {preset === "Custom (paste my own)" && (
         <textarea value={custom} onChange={(e) => setCustom(e.target.value)}
           placeholder="Paste your system instruction here…" rows={3}
-          className="w-full bg-[#2C2C2E] border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#C8A96E] mb-3 resize-none" />
+          className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E] mb-3 resize-none" />
       )}
 
-      <div className="flex-1 min-h-0 overflow-y-auto bg-[#141416] rounded-lg border border-gray-800 p-4 mb-3 space-y-3">
+      <div className="flex-1 min-h-0 overflow-y-auto bg-gray-50 dark:bg-[#141416] rounded-lg border border-gray-200 dark:border-gray-800 p-4 mb-3 space-y-3">
         {history.length === 0 && (
           <p className="text-gray-600 text-sm text-center py-10">Upload lot images and describe what you need — Gemini will generate a professional catalogue entry.</p>
         )}
         {history.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div className={`max-w-[82%] rounded-lg px-4 py-3 ${msg.role === "user" ? "bg-[#2C2C2E] text-gray-200" : "bg-[#1a1a1e] border border-[#C8A96E]/25 text-gray-100"}`}>
+            <div className={`max-w-[82%] rounded-lg px-4 py-3 ${msg.role === "user" ? "bg-gray-100 dark:bg-[#2C2C2E] text-gray-700 dark:text-gray-200" : "bg-gray-50 dark:bg-[#1a1a1e] border border-[#C8A96E]/25 text-gray-800 dark:text-gray-100"}`}>
               {msg.images?.length ? (
                 <div className="flex flex-wrap gap-1 mb-2">
                   {msg.images.map((src, j) => <img key={j} src={src} className="w-14 h-14 object-cover rounded" />)}
@@ -440,7 +440,7 @@ function ChatTab({ model }: { model: string }) {
         ))}
         {loading && (
           <div className="flex justify-start">
-            <div className="bg-[#1a1a1e] border border-[#C8A96E]/25 rounded-lg px-4 py-3 flex items-center gap-2">
+            <div className="bg-gray-50 dark:bg-[#1a1a1e] border border-[#C8A96E]/25 rounded-lg px-4 py-3 flex items-center gap-2">
               <span className="text-xs text-gray-500">Gemini is thinking</span>
               <span className="flex gap-1">
                 {[0, 1, 2].map(i => (
@@ -455,7 +455,7 @@ function ChatTab({ model }: { model: string }) {
       </div>
 
       {loading && (
-        <div className="h-0.5 w-full bg-gray-800 rounded-full overflow-hidden mb-2">
+        <div className="h-0.5 w-full bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden mb-2">
           <div className="h-full bg-[#C8A96E] rounded-full animate-pulse" style={{ width: "100%", opacity: 0.7 }} />
         </div>
       )}
@@ -477,14 +477,14 @@ function ChatTab({ model }: { model: string }) {
           }}
           placeholder="Describe the lot or ask a question… (Enter to send, paste images with Ctrl+V)"
           rows={2}
-          className="flex-1 bg-[#2C2C2E] border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#C8A96E] resize-none" />
+          className="flex-1 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E] resize-none" />
         <div className="flex flex-col gap-1.5">
           <button onClick={send} disabled={loading || (!message.trim() && !images.length)}
             className="px-5 py-2 bg-[#C8A96E] hover:bg-[#d4b87a] text-black text-sm font-bold rounded transition-colors disabled:opacity-40">
             {loading ? "…" : "Send"}
           </button>
           <button onClick={() => { setHistory([]); setApiHist([]) }}
-            className="px-5 py-1.5 bg-[#2C2C2E] border border-gray-700 text-gray-400 text-xs rounded hover:border-gray-500">
+            className="px-5 py-1.5 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-400 text-xs rounded hover:border-gray-500">
             Clear
           </button>
         </div>
@@ -838,18 +838,18 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
 
   return (
     <div className="flex flex-col h-full gap-3">
-      <h2 className="text-lg font-semibold text-white">Batch Run</h2>
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Batch Run</h2>
 
       <PresetSelector value={preset} onChange={setPreset} overrides={overrides} onEdit={() => setEditOpen(true)} />
       {editOpen && <PresetEditorModal presetKey={preset} initialText={overrides[preset] ?? PRESETS[preset]} onSave={savePreset} onClose={() => setEditOpen(false)} />}
       {preset === "Custom (paste my own)" && (
         <textarea value={custom} onChange={(e) => setCustom(e.target.value)}
           placeholder="Paste your system instruction here…" rows={3}
-          className="w-full bg-[#2C2C2E] border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#C8A96E] resize-none" />
+          className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E] resize-none" />
       )}
 
       {/* ── Google Search grounding ── */}
-      <label className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-colors ${grounded ? "bg-blue-950/50 border-blue-600/60 text-blue-300" : "bg-[#2C2C2E] border-gray-700 text-gray-400 hover:border-gray-500"}`}>
+      <label className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-colors ${grounded ? "bg-blue-950/50 border-blue-600/60 text-blue-300" : "bg-gray-100 dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-400 hover:border-gray-500"}`}>
         <input type="checkbox" checked={grounded} onChange={e => setGrounded(e.target.checked)}
           className="w-3.5 h-3.5 rounded accent-blue-500" />
         <span className="text-xs font-medium">🔍 Google Search</span>
@@ -886,7 +886,7 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
                   setSelected(s => new Set([...s, ...savedLots].filter(l => lotNames.includes(l))))
                 }
               }}
-              className="text-xs px-2.5 py-1 bg-[#2C2C2E] border border-amber-600 text-amber-400 rounded hover:bg-amber-900/30 transition-colors whitespace-nowrap flex-shrink-0">
+              className="text-xs px-2.5 py-1 bg-gray-100 dark:bg-[#2C2C2E] border border-amber-600 text-amber-400 rounded hover:bg-amber-900/30 transition-colors whitespace-nowrap flex-shrink-0">
               ⏭ Skip Saved
             </button>
           </div>
@@ -894,22 +894,22 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
       </div>
 
       {/* ── Step 1: Sort (optional) ── */}
-      <div className="bg-[#2C2C2E] border border-gray-700 rounded-lg p-3">
+      <div className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg p-3">
         <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Step 1 — Sort flat folder by filename (optional)</p>
         <div onClick={() => sortRef.current?.click()}
-          className="border border-dashed border-gray-600 hover:border-green-500 rounded-lg px-4 py-3 text-center cursor-pointer transition-colors">
-          <p className="text-gray-300 text-sm font-medium">▦ Sort images by filename (e.g. R00001_1.jpg)</p>
+          className="border border-dashed border-gray-300 dark:border-gray-600 hover:border-green-500 rounded-lg px-4 py-3 text-center cursor-pointer transition-colors">
+          <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">▦ Sort images by filename (e.g. R00001_1.jpg)</p>
           <p className="text-gray-600 text-xs mt-0.5">Groups by the part before the first underscore — R00001_1.jpg → lot R00001</p>
           <input ref={sortRef} type="file" multiple accept="image/*" className="hidden" onChange={onSortFiles} />
         </div>
       </div>
 
       {/* ── Step 2: Load subfolders ── */}
-      <div className="bg-[#2C2C2E] border border-gray-700 rounded-lg p-3">
+      <div className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg p-3">
         <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Step 2 — Load lot subfolders</p>
         <div onClick={() => folderRef.current?.click()}
-          className="border border-dashed border-gray-600 hover:border-[#C8A96E] rounded-lg px-4 py-3 text-center cursor-pointer transition-colors">
-          <p className="text-gray-300 text-sm font-medium">📂 {lotNames.length > 0 ? `${lotNames.length} lots loaded — click to reload` : "Select folder"}</p>
+          className="border border-dashed border-gray-300 dark:border-gray-600 hover:border-[#C8A96E] rounded-lg px-4 py-3 text-center cursor-pointer transition-colors">
+          <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">📂 {lotNames.length > 0 ? `${lotNames.length} lots loaded — click to reload` : "Select folder"}</p>
           <p className="text-gray-600 text-xs mt-0.5">Each sub-folder = one lot (up to 24 images each)</p>
           <input ref={folderRef} type="file" multiple className="hidden" {...({ webkitdirectory: "" } as any)} onChange={onFolderFiles} />
         </div>
@@ -925,24 +925,24 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
               {" · "}{Object.values(lots).reduce((s,f)=>s+f.length,0)} images
             </span>
             <div className="flex gap-1.5">
-              <button onClick={selectAll}  className="text-xs px-2 py-0.5 bg-[#1C1C1E] border border-gray-700 text-gray-400 rounded hover:border-gray-500">All</button>
-              <button onClick={selectNone} className="text-xs px-2 py-0.5 bg-[#1C1C1E] border border-gray-700 text-gray-400 rounded hover:border-gray-500">None</button>
+              <button onClick={selectAll}  className="text-xs px-2 py-0.5 bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 text-gray-400 rounded hover:border-gray-500">All</button>
+              <button onClick={selectNone} className="text-xs px-2 py-0.5 bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 text-gray-400 rounded hover:border-gray-500">None</button>
               <button onClick={() => setSelected(s => { const n = new Set(s); results.filter(r => r.status === "OK").forEach(r => n.delete(r.lot)); return n })}
-                className="text-xs px-2 py-0.5 bg-[#1C1C1E] border border-gray-700 text-gray-400 rounded hover:border-gray-500" title="Deselect lots that already have an OK result">Skip Done</button>
+                className="text-xs px-2 py-0.5 bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 text-gray-400 rounded hover:border-gray-500" title="Deselect lots that already have an OK result">Skip Done</button>
             </div>
           </div>
-          <div className="overflow-y-auto rounded border border-gray-800 bg-[#141416] flex-1">
+          <div className="overflow-y-auto rounded border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#141416] flex-1">
             {lotNames.map(name => {
               const checked  = selected.has(name)
               const imgCount = lots[name].length
               const result   = results.find(r => r.lot === name)
               return (
                 <div key={name} onClick={() => !loading && toggleLot(name)}
-                  className={`flex items-center gap-3 px-3 py-2 border-b border-gray-800 last:border-0 cursor-pointer transition-colors ${checked ? "hover:bg-[#2C2C2E]" : "opacity-40 hover:opacity-60"}`}>
+                  className={`flex items-center gap-3 px-3 py-2 border-b border-gray-200 dark:border-gray-800 last:border-0 cursor-pointer transition-colors ${checked ? "hover:bg-gray-100 dark:hover:bg-[#2C2C2E]" : "opacity-40 hover:opacity-60"}`}>
                   <div className={`w-3.5 h-3.5 rounded flex-shrink-0 flex items-center justify-center border ${checked ? "bg-[#C8A96E] border-[#C8A96E]" : "border-gray-600"}`}>
                     {checked && <span className="text-black text-xs font-bold leading-none">✓</span>}
                   </div>
-                  <span className="flex-1 text-xs text-gray-200 font-mono truncate">{name}</span>
+                  <span className="flex-1 text-xs text-gray-700 dark:text-gray-200 font-mono truncate">{name}</span>
                   <span className="text-xs text-gray-600 flex-shrink-0">{imgCount}img</span>
                   {result && <span className={`text-xs font-bold flex-shrink-0 ${result.status === "OK" ? "text-green-400" : "text-red-400"}`}>{result.status}</span>}
                 </div>
@@ -954,7 +954,7 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
 
       {/* ── Run log ── */}
       {log.length > 0 && (
-        <div ref={logRef} className="overflow-y-auto rounded border border-gray-800 bg-[#0d0d0f] px-3 py-2 font-mono text-xs text-[#C8C8D0] flex-shrink-0" style={{ maxHeight: "160px" }}>
+        <div ref={logRef} className="overflow-y-auto rounded border border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-[#0d0d0f] px-3 py-2 font-mono text-xs text-[#C8C8D0] flex-shrink-0" style={{ maxHeight: "160px" }}>
           {log.map((line, i) => (
             <p key={i} className={line.includes("✓") ? "text-green-400" : line.includes("✗") || line.includes("ERROR") ? "text-red-400" : line.includes("complete") || line.includes("complete") ? "text-[#C8A96E]" : ""}>{line}</p>
           ))}
@@ -968,7 +968,7 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
             <span className="text-sm font-semibold text-[#C8A96E]">{done} / {total} lots complete</span>
             <span className="text-xs text-gray-500">{pct}%</span>
           </div>
-          <div className="w-full bg-gray-800 rounded-full h-2">
+          <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-2">
             <div className="bg-[#C8A96E] h-2 rounded-full transition-all" style={{ width: `${pct}%` }} />
           </div>
         </div>
@@ -976,7 +976,7 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
 
       {/* ── Save to Run panel ── */}
       {unsavedOkResults.length > 0 && !loading && (
-        <div className="flex-shrink-0 bg-[#1a1a2e] border border-[#C8A96E]/40 rounded-lg p-4 space-y-3">
+        <div className="flex-shrink-0 bg-blue-50 dark:bg-[#1a1a2e] border border-[#C8A96E]/40 rounded-lg p-4 space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-[#C8A96E]">💾 Save {unsavedOkResults.length} lot{unsavedOkResults.length !== 1 ? "s" : ""} to a Run</p>
             {savedCount !== null && saveErrors.length === 0 && (
@@ -988,7 +988,7 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
               value={saveCode}
               onChange={e => setSaveCode(e.target.value.toUpperCase())}
               placeholder="Auction code e.g. F051"
-              className="flex-1 bg-[#2C2C2E] border border-gray-600 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-[#C8A96E] placeholder:text-gray-600 font-mono"
+              className="flex-1 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E] placeholder:text-gray-600 font-mono"
             />
             <button onClick={saveToRun} disabled={saving}
               className="px-4 py-1.5 bg-[#C8A96E] hover:bg-[#d4b87a] disabled:opacity-50 text-black text-sm font-bold rounded transition-colors whitespace-nowrap">
@@ -1035,7 +1035,7 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
         )}
         {results.length > 0 && !loading && (
           <button onClick={exportXlsx}
-            className="px-4 py-2 bg-[#2C2C2E] border border-gray-700 hover:border-[#C8A96E] text-gray-300 text-sm rounded transition-colors">
+            className="px-4 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 hover:border-[#C8A96E] text-gray-600 dark:text-gray-300 text-sm rounded transition-colors">
             ⬇ Export to Excel
           </button>
         )}
@@ -1100,12 +1100,12 @@ function BarcodeTab() {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-white mb-1">Barcode Sorter</h2>
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Barcode Sorter</h2>
       <p className="text-gray-500 text-sm mb-4">Upload barcode header images — decodes each barcode and sorts files into customer or lot folders for download.</p>
 
       <div onClick={() => document.getElementById("bc-input")?.click()}
-        className="border-2 border-dashed border-gray-700 hover:border-[#C8A96E] rounded-lg p-6 text-center cursor-pointer transition-colors mb-4">
-        <p className="text-gray-400 text-sm">Click or drop barcode images here</p>
+        className="border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-[#C8A96E] rounded-lg p-6 text-center cursor-pointer transition-colors mb-4">
+        <p className="text-gray-600 dark:text-gray-400 text-sm">Click or drop barcode images here</p>
         <p className="text-gray-600 text-xs mt-1">{files.length} file{files.length !== 1 ? "s" : ""} selected</p>
         <input id="bc-input" type="file" multiple accept="image/*" className="hidden"
           onChange={(e) => { if (e.target.files) { setFiles(Array.from(e.target.files)); setResults([]) } }} />
@@ -1120,9 +1120,9 @@ function BarcodeTab() {
 
       {results.length > 0 && (
         <>
-          <div className="overflow-x-auto rounded border border-gray-800 mb-3">
+          <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3">
             <table className="w-full text-sm">
-              <thead className="bg-[#141416] text-gray-500 text-xs uppercase">
+              <thead className="bg-gray-50 dark:bg-[#141416] text-gray-500 text-xs uppercase">
                 <tr>
                   <th className="px-4 py-2 text-left">File</th>
                   <th className="px-4 py-2 text-left">Barcode</th>
@@ -1130,12 +1130,12 @@ function BarcodeTab() {
                   <th className="px-4 py-2 text-left">Folder</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800">
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                 {results.map((r, i) => (
-                  <tr key={i} className="hover:bg-[#141416]">
+                  <tr key={i} className="hover:bg-gray-50 dark:hover:bg-[#141416]">
                     <td className="px-4 py-2 text-gray-400 text-xs truncate max-w-[160px]">{r.name}</td>
                     <td className="px-4 py-2 text-[#C8A96E] font-mono text-xs">{r.barcode}</td>
-                    <td className="px-4 py-2 text-gray-300 text-xs">{r.type}</td>
+                    <td className="px-4 py-2 text-gray-600 dark:text-gray-300 text-xs">{r.type}</td>
                     <td className="px-4 py-2 text-gray-500 text-xs">{r.folder}</td>
                   </tr>
                 ))}
@@ -1143,7 +1143,7 @@ function BarcodeTab() {
             </table>
           </div>
           <button onClick={downloadZip}
-            className="px-4 py-2 bg-[#2C2C2E] border border-gray-700 hover:border-[#C8A96E] text-gray-300 text-sm rounded transition-colors">
+            className="px-4 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 hover:border-[#C8A96E] text-gray-600 dark:text-gray-300 text-sm rounded transition-colors">
             ⬇ Download Sorted ZIP
           </button>
         </>
@@ -1286,7 +1286,7 @@ function CopierTab() {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-white mb-4">Description Copier</h2>
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Description Copier</h2>
       <label className="block mb-4">
         <span className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Load Excel results file</span>
         <input type="file" accept=".xlsx,.xls" onChange={loadFile}
@@ -1305,7 +1305,7 @@ function CopierTab() {
                 className={`px-3 py-1 rounded text-xs font-medium border transition-colors ${
                   sortBy === s
                     ? "bg-[#C8A96E] border-[#C8A96E] text-black"
-                    : "bg-[#2C2C2E] border-gray-700 text-gray-400 hover:border-gray-500"
+                    : "bg-gray-100 dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-400 hover:border-gray-500"
                 }`}>
                 {s === "uniqueId" ? "Unique ID" : s === "barcode" ? "Barcode" : "Lot Number"}
               </button>
@@ -1318,10 +1318,10 @@ function CopierTab() {
             {/* Navigation row — pinned top */}
             <div className="flex items-center gap-3 flex-wrap shrink-0">
               <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0}
-                className="px-6 py-3 bg-[#2C2C2E] border border-gray-700 text-gray-200 rounded-lg text-base font-semibold disabled:opacity-40 hover:border-gray-400 hover:text-white transition-colors">← Prev</button>
+                className="px-6 py-3 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-lg text-base font-semibold disabled:opacity-40 hover:border-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">← Prev</button>
               <span className="text-sm text-gray-400 tabular-nums">{idx + 1} / {sortedRows.length}</span>
               <button onClick={() => setIdx(i => Math.min(sortedRows.length - 1, i + 1))} disabled={idx === sortedRows.length - 1}
-                className="px-6 py-3 bg-[#2C2C2E] border border-gray-700 text-gray-200 rounded-lg text-base font-semibold disabled:opacity-40 hover:border-gray-400 hover:text-white transition-colors">Next →</button>
+                className="px-6 py-3 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-lg text-base font-semibold disabled:opacity-40 hover:border-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">Next →</button>
 
               {/* Jump to lot */}
               <div className="relative ml-auto">
@@ -1333,14 +1333,14 @@ function CopierTab() {
                     onFocus={() => setJumpOpen(true)}
                     onBlur={() => setTimeout(() => setJumpOpen(false), 150)}
                     placeholder="Search lot…"
-                    className="w-36 bg-[#2C2C2E] border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-[#C8A96E]"
+                    className="w-36 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E]"
                   />
                 </div>
                 {jumpOpen && filteredJump.length > 0 && (
-                  <div className="absolute right-0 z-50 w-56 bg-[#2C2C2E] border border-gray-700 rounded mt-0.5 max-h-56 overflow-y-auto shadow-xl">
+                  <div className="absolute right-0 z-50 w-56 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded mt-0.5 max-h-56 overflow-y-auto shadow-xl">
                     {filteredJump.map(r => (
                       <button key={r.i} onMouseDown={() => jumpTo(r.i)}
-                        className={`w-full text-left px-3 py-2 text-sm transition-colors hover:bg-[#3A3A3C] ${r.i === idx ? "text-[#C8A96E] font-semibold" : "text-gray-200"}`}>
+                        className={`w-full text-left px-3 py-2 text-sm transition-colors hover:bg-gray-200 dark:hover:bg-[#3A3A3C] ${r.i === idx ? "text-[#C8A96E] font-semibold" : "text-gray-700 dark:text-gray-200"}`}>
                         {rowLabel(r) || `Row ${r.i + 1}`}
                       </button>
                     ))}
@@ -1350,7 +1350,7 @@ function CopierTab() {
             </div>
 
             {/* Card — scrolls internally, never changes the outer height */}
-            <div className="flex-1 overflow-y-auto bg-[#141416] border border-gray-800 rounded-lg p-5">
+            <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-[#141416] border border-gray-200 dark:border-gray-800 rounded-lg p-5">
               {row && (() => {
                 const label = sortBy === "uniqueId" ? "Unique ID"
                             : sortBy === "barcode"   ? "Barcode"
@@ -1362,7 +1362,7 @@ function CopierTab() {
                       {/* Thumbnail */}
                       {thumbUrl && (
                         <a href={thumbUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
-                          <img src={thumbUrl} alt="Lot" className="w-28 h-28 object-cover rounded-lg border border-gray-700 hover:opacity-90 transition-opacity" />
+                          <img src={thumbUrl} alt="Lot" className="w-28 h-28 object-cover rounded-lg border border-gray-300 dark:border-gray-700 hover:opacity-90 transition-opacity" />
                         </a>
                       )}
                       {/* Text */}
@@ -1372,7 +1372,7 @@ function CopierTab() {
                             <span className="text-gray-500 font-sans font-normal">{label}: </span>{value}
                           </p>
                         )}
-                        <p className="text-gray-200 text-sm leading-relaxed whitespace-pre-wrap">{row.description}</p>
+                        <p className="text-gray-700 dark:text-gray-200 text-sm leading-relaxed whitespace-pre-wrap">{row.description}</p>
                         {row.estimate && <p className="text-[#C8A96E] text-sm font-semibold mt-2">{row.estimate}</p>}
                       </div>
                     </div>
@@ -1384,7 +1384,7 @@ function CopierTab() {
             {/* Copy buttons — pinned bottom */}
             <div className="flex gap-4 shrink-0">
               <button onClick={copyDesc}
-                className="flex-1 px-6 py-5 bg-[#2C2C2E] border-2 border-[#C8A96E] hover:bg-[#C8A96E] hover:text-black text-[#C8A96E] text-lg font-bold rounded-xl transition-colors">
+                className="flex-1 px-6 py-5 bg-gray-100 dark:bg-[#2C2C2E] border-2 border-[#C8A96E] hover:bg-[#C8A96E] hover:text-black text-[#C8A96E] text-lg font-bold rounded-xl transition-colors">
                 {copiedType === "desc" ? "✓ Copied!" : "Copy Description"}
               </button>
               <button onClick={copyBoth}
@@ -1493,12 +1493,12 @@ function SavedRunsTab() {
   return (
     <div className="flex flex-col h-full gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-white">Saved Runs</h2>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Saved Runs</h2>
         <button onClick={loadRuns} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">↻ Refresh</button>
       </div>
 
       <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search auction code…"
-        className="w-full bg-[#2C2C2E] border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-[#C8A96E] placeholder:text-gray-600" />
+        className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E] placeholder:text-gray-600" />
 
       {loading && <p className="text-gray-500 text-sm">Loading…</p>}
 
@@ -1508,8 +1508,8 @@ function SavedRunsTab() {
 
       <div className="flex flex-col gap-2 overflow-y-auto flex-1">
         {filtered.map(run => (
-          <div key={run.id} className="bg-[#2C2C2E] border border-gray-700 rounded-lg overflow-hidden">
-            <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[#3A3A3C] transition-colors" onClick={() => expand(run)}>
+          <div key={run.id} className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
+            <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-200 dark:hover:bg-[#3A3A3C] transition-colors" onClick={() => expand(run)}>
               <span className="text-[#C8A96E] font-bold font-mono text-sm flex-1">{run.code}</span>
               <span className="text-xs text-gray-500">{run._count.lots} lots</span>
               <span className="text-xs text-gray-600">{new Date(run.updatedAt).toLocaleDateString("en-GB")}</span>
@@ -1522,7 +1522,7 @@ function SavedRunsTab() {
             </div>
 
             {expanded === run.id && (
-              <div className="border-t border-gray-700">
+              <div className="border-t border-gray-300 dark:border-gray-700">
                 {loadingDetail && (
                   <div className="px-4 py-4 text-xs text-gray-500 flex items-center gap-2">
                     <span className="animate-spin inline-block w-3 h-3 border border-gray-500 border-t-transparent rounded-full" />
@@ -1532,11 +1532,11 @@ function SavedRunsTab() {
 
                 {!loadingDetail && detail?.id === run.id && (
                   <>
-                    <div className="flex items-center justify-between gap-2 px-4 py-2 bg-[#1C1C1E] flex-wrap">
+                    <div className="flex items-center justify-between gap-2 px-4 py-2 bg-white dark:bg-[#1C1C1E] flex-wrap">
                       <span className="text-xs text-gray-500">{detail.lots.length} lots</span>
                       <div className="flex items-center gap-2">
                         <button onClick={() => exportRun(detail)}
-                          className="text-xs px-3 py-1 bg-[#2C2C2E] hover:bg-[#3A3A3C] border border-gray-600 text-gray-300 rounded transition-colors">
+                          className="text-xs px-3 py-1 bg-gray-100 dark:bg-[#2C2C2E] hover:bg-gray-200 dark:hover:bg-[#3A3A3C] border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded transition-colors">
                           ⬇ Export Excel
                         </button>
                         <button onClick={() => applyToAuction(run.id)} disabled={applying}
@@ -1567,9 +1567,9 @@ function SavedRunsTab() {
 
                     <div className="max-h-96 overflow-y-auto">
                       {detail.lots.map(l => (
-                        <div key={l.id} className="flex items-start gap-3 px-4 py-2.5 border-t border-gray-800 hover:bg-[#2C2C2E] group">
+                        <div key={l.id} className="flex items-start gap-3 px-4 py-2.5 border-t border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-[#2C2C2E] group">
                           <span className="text-xs font-mono text-[#C8A96E] flex-shrink-0 w-20">{l.lot}</span>
-                          <span className="text-xs text-gray-300 flex-1 line-clamp-2">{l.description}</span>
+                          <span className="text-xs text-gray-600 dark:text-gray-300 flex-1 line-clamp-2">{l.description}</span>
                           <span className="text-xs text-gray-500 flex-shrink-0 w-20 text-right">{l.estimate}</span>
                           <button onClick={() => deleteLot(l.id)}
                             className="text-xs text-red-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">✕</button>
@@ -1692,12 +1692,12 @@ function KPRunsTab() {
   return (
     <div className="flex flex-col h-full gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-white">KP Check Runs</h2>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">KP Check Runs</h2>
         <button onClick={loadRuns} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">↻ Refresh</button>
       </div>
 
       <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search auction code…"
-        className="w-full bg-[#2C2C2E] border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-[#C8A96E] placeholder:text-gray-600" />
+        className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E] placeholder:text-gray-600" />
 
       {loading && <p className="text-gray-500 text-sm">Loading…</p>}
       {!loading && filtered.length === 0 && (
@@ -1708,9 +1708,9 @@ function KPRunsTab() {
         {filtered.map(run => {
           const isOpen = expanded === run.id && detail?.id === run.id
           return (
-            <div key={run.id} className="bg-[#2C2C2E] border border-gray-700 rounded-lg overflow-hidden">
+            <div key={run.id} className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
               {/* header */}
-              <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[#3A3A3C] transition-colors" onClick={() => expand(run)}>
+              <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-200 dark:hover:bg-[#3A3A3C] transition-colors" onClick={() => expand(run)}>
                 <span className="text-[#C8A96E] font-bold font-mono text-sm flex-1">{run.code.replace(/_KP$/i, "")}</span>
                 <span className="text-xs text-gray-500">{run._count.lots} lots</span>
                 <span className="text-xs text-gray-600">{new Date(run.updatedAt).toLocaleDateString("en-GB")}</span>
@@ -1723,14 +1723,14 @@ function KPRunsTab() {
 
               {/* expanded */}
               {isOpen && (
-                <div className="border-t border-gray-700">
+                <div className="border-t border-gray-300 dark:border-gray-700">
                   {/* toolbar */}
-                  <div className="flex items-center gap-3 px-4 py-2 bg-[#1C1C1E] flex-wrap">
+                  <div className="flex items-center gap-3 px-4 py-2 bg-white dark:bg-[#1C1C1E] flex-wrap">
                     <label className="flex items-center gap-1.5 cursor-pointer select-none">
                       <input type="checkbox" checked={allSelected}
                         onChange={() => setSelected(Object.fromEntries(detail.lots.map(l => [l.id, !allSelected])))}
                         className="w-3.5 h-3.5 accent-[#C8A96E]" />
-                      <span className="text-xs text-gray-400">Select all</span>
+                      <span className="text-xs text-gray-600 dark:text-gray-400">Select all</span>
                     </label>
                     <span className="text-xs text-gray-600">{detail.lots.length} lots</span>
                     <div className="flex-1" />
@@ -1744,9 +1744,9 @@ function KPRunsTab() {
                   {/* lot cards */}
                   <div className="flex flex-col gap-3 p-4">
                     {detail.lots.map(l => (
-                      <div key={l.id} className="rounded-lg overflow-hidden border border-gray-700 bg-[#2C2C2E]">
+                      <div key={l.id} className="rounded-lg overflow-hidden border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#2C2C2E]">
                         {/* header */}
-                        <div className="flex items-center gap-3 px-3 py-2 border-b border-gray-700">
+                        <div className="flex items-center gap-3 px-3 py-2 border-b border-gray-300 dark:border-gray-700">
                           <input type="checkbox" checked={!!selected[l.id]}
                             onChange={e => setSelected(s => ({ ...s, [l.id]: e.target.checked }))}
                             className="w-3.5 h-3.5 rounded accent-[#C8A96E] flex-shrink-0" />
@@ -1758,7 +1758,7 @@ function KPRunsTab() {
                               {applying === l.id ? "Saving…" : "Apply"}
                             </button>
                             <button onClick={() => navigator.clipboard.writeText(revised[l.id] ?? l.description)}
-                              className="text-[10px] text-gray-500 hover:text-white border border-gray-700 hover:border-gray-500 px-2 py-0.5 rounded transition-colors">
+                              className="text-[10px] text-gray-500 hover:text-gray-900 dark:hover:text-white border border-gray-300 dark:border-gray-700 hover:border-gray-500 px-2 py-0.5 rounded transition-colors">
                               Copy
                             </button>
                             <button onClick={() => deleteLot(l.id)}
@@ -1768,7 +1768,7 @@ function KPRunsTab() {
 
                         {/* missing / added summary */}
                         {(l.missing || l.added) && (
-                          <div className="flex gap-4 px-3 py-2 border-b border-gray-700 bg-[#1C1C1E]">
+                          <div className="flex gap-4 px-3 py-2 border-b border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1C1C1E]">
                             {l.missing && (
                               <div className="flex-1">
                                 <p className="text-[10px] text-red-400 uppercase tracking-wider mb-0.5">Was missing</p>
@@ -1785,14 +1785,14 @@ function KPRunsTab() {
                         )}
 
                         {/* three columns: key points | before | after */}
-                        <div className="grid grid-cols-3 divide-x divide-gray-700">
+                        <div className="grid grid-cols-3 divide-x divide-gray-300 dark:divide-gray-700">
                           <div className="px-3 py-2">
                             <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Key Points</p>
-                            <pre className="text-xs text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">{l.keyPoints ?? "—"}</pre>
+                            <pre className="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">{l.keyPoints ?? "—"}</pre>
                           </div>
                           <div className="px-3 py-2">
                             <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Before</p>
-                            <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap">{l.originalDescription ?? "—"}</p>
+                            <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-wrap">{l.originalDescription ?? "—"}</p>
                           </div>
                           <div className="px-3 py-2">
                             <p className="text-[10px] text-[#C8A96E] uppercase tracking-wider mb-1.5">
@@ -1802,7 +1802,7 @@ function KPRunsTab() {
                               value={revised[l.id] ?? l.description}
                               onChange={e => setRevised(s => ({ ...s, [l.id]: e.target.value }))}
                               rows={8}
-                              className="w-full text-xs text-gray-200 bg-[#1C1C1E] border border-gray-700 rounded p-2 leading-relaxed resize-y focus:outline-none focus:border-[#C8A96E]"
+                              className="w-full text-xs text-gray-700 dark:text-gray-200 bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded p-2 leading-relaxed resize-y focus:outline-none focus:border-[#C8A96E]"
                             />
                           </div>
                         </div>
@@ -1939,7 +1939,7 @@ function InstructionsTab() {
                 className={`w-full text-left px-3 py-2 rounded text-sm transition-colors truncate ${
                   selected === p.key
                     ? "bg-[#C8A96E]/15 text-[#C8A96E] border border-[#C8A96E]/30"
-                    : "text-gray-300 hover:bg-[#2C2C2E]"
+                    : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#2C2C2E]"
                 }`}>
                 {p.key}
               </button>
@@ -1949,7 +1949,7 @@ function InstructionsTab() {
       </div>
 
       {/* ── Right panel ── */}
-      <div className="flex-1 bg-[#141416] border border-gray-800 rounded-xl flex flex-col overflow-hidden">
+      <div className="flex-1 bg-gray-50 dark:bg-[#141416] border border-gray-200 dark:border-gray-800 rounded-xl flex flex-col overflow-hidden">
 
         {/* New form */}
         {mode === "new" && (
@@ -1959,18 +1959,18 @@ function InstructionsTab() {
               value={newName}
               onChange={e => setNewName(e.target.value)}
               placeholder="Name (e.g. My Custom Preset)"
-              className="bg-[#2C2C2E] border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#C8A96E]"
+              className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E]"
             />
             <textarea
               value={draftText}
               onChange={e => setDraftText(e.target.value)}
               placeholder="Paste your system instruction here…"
-              className="flex-1 bg-[#2C2C2E] border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#C8A96E] resize-none font-mono"
+              className="flex-1 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E] resize-none font-mono"
             />
             {error && <p className="text-red-400 text-xs">{error}</p>}
             <div className="flex gap-2 justify-end">
               <button onClick={() => { setMode("view"); setSelected(null); setError(null) }}
-                className="px-4 py-2 bg-[#2C2C2E] border border-gray-700 text-gray-400 text-sm rounded hover:border-gray-500 transition-colors">
+                className="px-4 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-400 text-sm rounded hover:border-gray-500 transition-colors">
                 Cancel
               </button>
               <button onClick={saveNew} disabled={saving || !newName.trim()}
@@ -1984,16 +1984,16 @@ function InstructionsTab() {
         {/* Edit form */}
         {mode === "edit" && selected && (
           <div className="flex flex-col h-full p-5 gap-4">
-            <h3 className="text-sm font-bold text-white truncate">{selected}</h3>
+            <h3 className="text-sm font-bold text-gray-900 dark:text-white truncate">{selected}</h3>
             <textarea
               value={draftText}
               onChange={e => setDraftText(e.target.value)}
-              className="flex-1 bg-[#2C2C2E] border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#C8A96E] resize-none font-mono"
+              className="flex-1 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E] resize-none font-mono"
             />
             {error && <p className="text-red-400 text-xs">{error}</p>}
             <div className="flex gap-2 justify-end">
               <button onClick={() => setMode("view")}
-                className="px-4 py-2 bg-[#2C2C2E] border border-gray-700 text-gray-400 text-sm rounded hover:border-gray-500 transition-colors">
+                className="px-4 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-400 text-sm rounded hover:border-gray-500 transition-colors">
                 Cancel
               </button>
               <button onClick={saveEdit} disabled={saving}
@@ -2007,11 +2007,11 @@ function InstructionsTab() {
         {/* View */}
         {mode === "view" && selected && (
           <div className="flex flex-col h-full">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 flex-shrink-0">
-              <h3 className="text-sm font-bold text-white truncate">{selected}</h3>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex-shrink-0">
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white truncate">{selected}</h3>
               <div className="flex gap-2 flex-shrink-0 ml-3">
                 <button onClick={() => { setDraftText(selectedPreset?.instruction ?? ""); setMode("edit"); setError(null) }}
-                  className="px-4 py-1.5 text-sm border border-gray-700 text-gray-300 rounded hover:border-[#C8A96E] hover:text-[#C8A96E] transition-colors">
+                  className="px-4 py-1.5 text-sm border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded hover:border-[#C8A96E] hover:text-[#C8A96E] transition-colors">
                   ✎ Edit
                 </button>
                 <button onClick={() => deletePreset(selected)} disabled={saving}
@@ -2061,21 +2061,21 @@ function HowItWorksPanel() {
   const [showPrompt,  setShowPrompt]  = useState(false)
 
   return (
-    <div className="bg-[#2C2C2E] border border-gray-700 rounded-xl overflow-hidden">
+    <div className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl overflow-hidden">
       <button onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[#1a1a1e] transition-colors">
-        <span className="text-sm font-medium text-gray-300">ℹ How does this work?</span>
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-[#1a1a1e] transition-colors">
+        <span className="text-sm font-medium text-gray-600 dark:text-gray-300">ℹ How does this work?</span>
         <span className="text-gray-600 text-xs">{open ? "▲ Hide" : "▼ Show"}</span>
       </button>
 
       {open && (
-        <div className="px-4 pb-4 space-y-3 border-t border-gray-700">
+        <div className="px-4 pb-4 space-y-3 border-t border-gray-300 dark:border-gray-700">
           <ol className="mt-3 space-y-2 text-sm text-gray-400 list-decimal list-inside">
-            <li>You enter an auction code and click <span className="text-white font-medium">Load</span> — it pulls every lot that has both a cataloguer key points entry and a saved AI description from a previous Batch Run.</li>
-            <li>You click <span className="text-white font-medium">Run Key Points Check</span> — each lot is sent to Gemini one at a time with its key points and AI description.</li>
+            <li>You enter an auction code and click <span className="text-gray-900 dark:text-white font-medium">Load</span> — it pulls every lot that has both a cataloguer key points entry and a saved AI description from a previous Batch Run.</li>
+            <li>You click <span className="text-gray-900 dark:text-white font-medium">Run Key Points Check</span> — each lot is sent to Gemini one at a time with its key points and AI description.</li>
             <li>Gemini reads both and checks whether every key point is mentioned in the description. If they're all there, it returns the description unchanged. If anything is missing or wrong, it rewrites just enough to include it.</li>
             <li>Lots marked <span className="text-[#C8A96E] font-medium">⚑ Fixed</span> had something missing — expand them to see what changed. Lots marked <span className="text-green-400 font-medium">✓ All included</span> were fine.</li>
-            <li>Use <span className="text-white font-medium">Copy all descriptions</span> to copy everything out at once.</li>
+            <li>Use <span className="text-gray-900 dark:text-white font-medium">Copy all descriptions</span> to copy everything out at once.</li>
           </ol>
 
           <div>
@@ -2084,7 +2084,7 @@ function HowItWorksPanel() {
               {showPrompt ? "▲ Hide system prompt" : "▼ Show exact instructions sent to Gemini"}
             </button>
             {showPrompt && (
-              <pre className="mt-2 text-xs text-gray-400 bg-[#1C1C1E] rounded-lg p-3 whitespace-pre-wrap leading-relaxed font-mono">
+              <pre className="mt-2 text-xs text-gray-400 bg-white dark:bg-[#1C1C1E] rounded-lg p-3 whitespace-pre-wrap leading-relaxed font-mono">
                 {KP_SYSTEM_PROMPT}
               </pre>
             )}
@@ -2450,12 +2450,12 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
 
   const checkedCount = lots.filter(l => l.status === "ok" || l.status === "fixed").length
   const fixedCount   = lots.filter(l => l.status === "fixed").length
-  const inp = "w-full bg-[#1C1C1E] border border-gray-700 rounded px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#C8A96E]"
+  const inp = "w-full bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-600 focus:outline-none focus:border-[#C8A96E]"
 
   return (
     <div className="space-y-5 max-w-5xl">
       <div>
-        <h2 className="text-xl font-semibold text-white mb-1">Key Points Checker</h2>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-1">Key Points Checker</h2>
         <p className="text-sm text-gray-400">
           Loads your cataloguer key points alongside the AI-generated descriptions and runs a second AI pass to
           verify every key point is included — fixing any that are missing.
@@ -2466,7 +2466,7 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
       <HowItWorksPanel />
 
       {/* Model selector */}
-      <div className="bg-[#2C2C2E] border border-gray-700 rounded-xl p-4 space-y-2">
+      <div className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl p-4 space-y-2">
         <div className="flex items-center justify-between">
           <p className="text-xs text-gray-500 uppercase tracking-wider">Model</p>
           <button onClick={testAllModels} disabled={testingAll}
@@ -2474,13 +2474,13 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
             {testingAll ? "Testing…" : "⚡ Test all models"}
           </button>
         </div>
-        <div className="border border-gray-700 rounded-lg overflow-hidden">
+        <div className="border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
           {modelList.map(m => {
             const status = modelStatus[m]
             const isSelected = localModel === m
             return (
               <button key={m} onClick={() => setLocalModel(m)}
-                className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors border-b border-gray-800 last:border-0 ${isSelected ? "bg-[#C8A96E]/10" : "hover:bg-[#1a1a1e]"}`}>
+                className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors border-b border-gray-200 dark:border-gray-800 last:border-0 ${isSelected ? "bg-[#C8A96E]/10" : "hover:bg-gray-50 dark:hover:bg-[#1a1a1e]"}`}>
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isSelected ? "bg-[#C8A96E]" : "bg-gray-700"}`} />
                 <span className={`text-sm flex-1 font-mono ${isSelected ? "text-[#C8A96E]" : "text-gray-400"}`}>{m}</span>
                 {status === "testing" && <span className="text-xs text-gray-500 animate-pulse">testing…</span>}
@@ -2496,7 +2496,7 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
       </div>
 
       {/* Load */}
-      <div className="bg-[#2C2C2E] border border-gray-700 rounded-xl p-4 space-y-3">
+      <div className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl p-4 space-y-3">
         <p className="text-xs text-gray-500 uppercase tracking-wider">Auction</p>
         <div className="flex gap-2">
           <div ref={codeInputRef} className="relative flex-1">
@@ -2517,13 +2517,13 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
                 !code.trim() || a.code.includes(code.trim()) || a.name?.toLowerCase().includes(code.toLowerCase())
               )
               return filtered.length > 0 ? (
-                <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-[#1C1C1E] border border-gray-700 rounded-lg shadow-xl max-h-56 overflow-y-auto">
+                <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-lg shadow-xl max-h-56 overflow-y-auto">
                   {filtered.map(a => (
                     <button key={a.code}
                       onMouseDown={e => { e.preventDefault(); setCode(a.code); setDropdownOpen(false) }}
-                      className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-[#2C2C2E] transition-colors border-b border-gray-800 last:border-0">
+                      className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-[#2C2C2E] transition-colors border-b border-gray-200 dark:border-gray-800 last:border-0">
                       <span className="font-mono text-sm text-[#C8A96E] w-14 flex-shrink-0">{a.code}</span>
-                      <span className="text-sm text-gray-300 truncate">{a.name}</span>
+                      <span className="text-sm text-gray-600 dark:text-gray-300 truncate">{a.name}</span>
                       {a.auctionDate && (
                         <span className="text-xs text-gray-600 flex-shrink-0 ml-auto">
                           {new Date(a.auctionDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
@@ -2550,18 +2550,18 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
 
       {/* Log panel — visible while checking */}
       {log.length > 0 && (
-        <div ref={logRef} className="bg-[#0d0d0f] border border-gray-800 rounded-xl p-4 h-52 overflow-y-auto font-mono text-xs text-gray-400 space-y-0.5">
+        <div ref={logRef} className="bg-gray-100 dark:bg-[#0d0d0f] border border-gray-200 dark:border-gray-800 rounded-xl p-4 h-52 overflow-y-auto font-mono text-xs text-gray-400 space-y-0.5">
           {log.map((l, i) => <div key={i}>{l}</div>)}
         </div>
       )}
 
       {/* Results table */}
       {lots.length > 0 && (
-        <div className="bg-[#2C2C2E] border border-gray-700 rounded-xl overflow-hidden">
+        <div className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl overflow-hidden">
           {/* Table header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700 gap-3">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-300 dark:border-gray-700 gap-3">
             <div className="flex items-center gap-3">
-              <p className="text-sm font-medium text-white">{lots.length} lots</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-white">{lots.length} lots</p>
               {checkedCount > 0 && (
                 <span className="text-xs text-gray-400">
                   {checkedCount}/{lots.length} checked · <span className={fixedCount > 0 ? "text-[#C8A96E]" : "text-green-400"}>{fixedCount} fixed</span>
@@ -2572,13 +2572,13 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
               {checkedCount > 0 && !checking && (
                 <>
                   <button onClick={copyAll}
-                    className="text-xs border border-gray-600 text-gray-300 hover:text-white px-3 py-1.5 rounded transition-colors">
+                    className="text-xs border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white px-3 py-1.5 rounded transition-colors">
                     Copy all
                   </button>
                   {savedMsg
                     ? <span className="text-xs text-green-400">{savedMsg}</span>
                     : <button onClick={saveRun} disabled={saving}
-                        className="text-xs border border-gray-600 text-gray-300 hover:text-white px-3 py-1.5 rounded transition-colors disabled:opacity-40">
+                        className="text-xs border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white px-3 py-1.5 rounded transition-colors disabled:opacity-40">
                         {saving ? "Saving…" : "💾 Save run"}
                       </button>
                   }
@@ -2604,10 +2604,10 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
 
           {/* Results summary */}
           {showResults && checkedCount > 0 && (
-            <div className="border-b border-gray-700 px-4 py-3 bg-[#1C1C1E] space-y-3">
+            <div className="border-b border-gray-300 dark:border-gray-700 px-4 py-3 bg-white dark:bg-[#1C1C1E] space-y-3">
               <div className="flex gap-4">
                 <div className="text-center">
-                  <p className="text-lg font-bold text-white">{checkedCount}</p>
+                  <p className="text-lg font-bold text-gray-900 dark:text-white">{checkedCount}</p>
                   <p className="text-xs text-gray-500">Checked</p>
                 </div>
                 <div className="text-center">
@@ -2646,11 +2646,11 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
                     {lots.filter(l => l.status === "fixed").map(l => (
                       <div key={l.label} className={`rounded-lg overflow-hidden border transition-colors ${
                         l.accepted ? "border-green-700/50 bg-green-900/10"
-                        : l.selected ? "border-[#C8A96E]/50 bg-[#2C2C2E]"
-                        : "border-gray-700 bg-[#2C2C2E] opacity-60"
+                        : l.selected ? "border-[#C8A96E]/50 bg-gray-100 dark:bg-[#2C2C2E]"
+                        : "border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#2C2C2E] opacity-60"
                       }`}>
                         {/* Lot header */}
-                        <div className="flex items-center gap-3 px-3 py-2 border-b border-gray-700">
+                        <div className="flex items-center gap-3 px-3 py-2 border-b border-gray-300 dark:border-gray-700">
                           {!l.accepted && (
                             <input type="checkbox" checked={!!l.selected} onChange={() => toggleSelected(l.id)}
                               className="w-3.5 h-3.5 rounded accent-[#C8A96E] flex-shrink-0" />
@@ -2665,7 +2665,7 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
                                 </button>
                             }
                             <button onClick={() => navigator.clipboard.writeText(l.revised ?? "")}
-                              className="text-[10px] text-gray-500 hover:text-white border border-gray-700 hover:border-gray-500 px-2 py-0.5 rounded transition-colors">
+                              className="text-[10px] text-gray-500 hover:text-gray-900 dark:hover:text-white border border-gray-300 dark:border-gray-700 hover:border-gray-500 px-2 py-0.5 rounded transition-colors">
                               Copy
                             </button>
                           </div>
@@ -2673,7 +2673,7 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
 
                         {/* Missing / added summary */}
                         {(l.missing || l.added) && (
-                          <div className="flex gap-4 px-3 py-2 border-b border-gray-700 bg-[#1C1C1E]">
+                          <div className="flex gap-4 px-3 py-2 border-b border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1C1C1E]">
                             {l.missing && (
                               <div className="flex-1">
                                 <p className="text-[10px] text-red-400 uppercase tracking-wider mb-0.5">Was missing</p>
@@ -2690,26 +2690,26 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
                         )}
 
                         {/* Three columns: key points | before | editable after */}
-                        <div className="grid grid-cols-3 divide-x divide-gray-700">
+                        <div className="grid grid-cols-3 divide-x divide-gray-300 dark:divide-gray-700">
                           <div className="px-3 py-2">
                             <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Key Points</p>
-                            <pre className="text-xs text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">{l.keyPoints}</pre>
+                            <pre className="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">{l.keyPoints}</pre>
                           </div>
                           <div className="px-3 py-2">
                             <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Before</p>
-                            <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap">{l.description}</p>
+                            <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-wrap">{l.description}</p>
                           </div>
                           <div className="px-3 py-2">
                             <p className="text-[10px] text-[#C8A96E] uppercase tracking-wider mb-1.5">
                               After (fixed){!l.accepted && <span className="text-gray-600 normal-case ml-1">· editable</span>}
                             </p>
                             {l.accepted
-                              ? <p className="text-xs text-gray-200 leading-relaxed whitespace-pre-wrap">{l.revised}</p>
+                              ? <p className="text-xs text-gray-700 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">{l.revised}</p>
                               : <textarea
                                   value={l.revised ?? ""}
                                   onChange={e => updateRevised(l.id, e.target.value)}
                                   rows={8}
-                                  className="w-full text-xs text-gray-200 bg-[#1C1C1E] border border-gray-700 rounded p-2 leading-relaxed resize-y focus:outline-none focus:border-[#C8A96E]"
+                                  className="w-full text-xs text-gray-700 dark:text-gray-200 bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded p-2 leading-relaxed resize-y focus:outline-none focus:border-[#C8A96E]"
                                 />
                             }
                           </div>
@@ -2723,7 +2723,7 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
           )}
 
           {/* Lot rows */}
-          <div className="divide-y divide-gray-800 max-h-[65vh] overflow-y-auto">
+          <div className="divide-y divide-gray-200 dark:divide-gray-800 max-h-[65vh] overflow-y-auto">
             {lots.map(lot => {
               const isExpanded = expandedLot === lot.label
               return (
@@ -2733,7 +2733,7 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
                     onClick={() => setExpandedLot(isExpanded ? null : lot.label)}
                     className="w-full flex items-center gap-3 text-left"
                   >
-                    <span className="text-sm font-medium text-white w-14 shrink-0">Lot {lot.label}</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-white w-14 shrink-0">Lot {lot.label}</span>
                     <span className="flex-1 text-xs text-gray-500 truncate">{lot.keyPoints.split("\n")[0]}</span>
                     {lot.status === "idle"     && <span className="text-xs text-gray-600">Not checked</span>}
                     {lot.status === "checking" && <span className="text-xs text-gray-500 animate-pulse">Checking…</span>}
@@ -2748,7 +2748,7 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
                     <div className="mt-3 grid grid-cols-2 gap-3">
                       <div>
                         <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Key Points</p>
-                        <pre className="text-xs text-gray-300 whitespace-pre-wrap bg-[#1C1C1E] rounded-lg p-3 font-sans leading-relaxed">{lot.keyPoints}</pre>
+                        <pre className="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap bg-white dark:bg-[#1C1C1E] rounded-lg p-3 font-sans leading-relaxed">{lot.keyPoints}</pre>
                       </div>
                       <div>
                         <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">
@@ -2756,8 +2756,8 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
                         </p>
                         <pre className={`text-xs whitespace-pre-wrap rounded-lg p-3 font-sans leading-relaxed ${
                           lot.status === "fixed"
-                            ? "text-[#C8A96E] bg-[#1C1C1E] border border-[#C8A96E]/25"
-                            : "text-gray-300 bg-[#1C1C1E]"
+                            ? "text-[#C8A96E] bg-white dark:bg-[#1C1C1E] border border-[#C8A96E]/25"
+                            : "text-gray-600 dark:text-gray-300 bg-white dark:bg-[#1C1C1E]"
                         }`}>{lot.revised ?? lot.description}</pre>
                         {lot.status === "fixed" && (
                           <button onClick={() => navigator.clipboard.writeText(lot.revised ?? "")}
@@ -2980,7 +2980,7 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
   return (
     <div className="space-y-5 max-w-5xl">
       <div>
-        <h2 className="text-xl font-semibold text-white mb-1">Double Check</h2>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-1">Double Check</h2>
         <p className="text-sm text-gray-400">
           Loads descriptions and photos from the catalogue and runs a second AI pass to spot factual errors,
           inconsistencies, or claims that look guessed — especially where photos are blurry or details aren't clearly visible.
@@ -2988,7 +2988,7 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
       </div>
 
       {/* Model selector */}
-      <div className="bg-[#2C2C2E] border border-gray-700 rounded-xl p-4 space-y-2">
+      <div className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl p-4 space-y-2">
         <div className="flex items-center justify-between">
           <p className="text-xs text-gray-500 uppercase tracking-wider">Model</p>
           <button onClick={testAllModels} disabled={testingAll}
@@ -2996,13 +2996,13 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
             {testingAll ? "Testing…" : "⚡ Test all models"}
           </button>
         </div>
-        <div className="border border-gray-700 rounded-lg overflow-hidden">
+        <div className="border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
           {modelList.map(m => {
             const status     = modelStatus[m]
             const isSelected = localModel === m
             return (
               <button key={m} onClick={() => setLocalModel(m)}
-                className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors border-b border-gray-800 last:border-0 ${isSelected ? "bg-indigo-950/40" : "hover:bg-[#1a1a1e]"}`}>
+                className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors border-b border-gray-200 dark:border-gray-800 last:border-0 ${isSelected ? "bg-indigo-950/40" : "hover:bg-gray-50 dark:hover:bg-[#1a1a1e]"}`}>
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isSelected ? "bg-indigo-400" : "bg-gray-700"}`} />
                 <span className={`text-sm flex-1 font-mono ${isSelected ? "text-indigo-300" : "text-gray-400"}`}>{m}</span>
                 {status === "testing" && <span className="text-xs text-gray-500 animate-pulse">testing…</span>}
@@ -3018,7 +3018,7 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
       </div>
 
       {/* Load from catalogue */}
-      <div className="bg-[#2C2C2E] border border-gray-700 rounded-xl p-4 space-y-3">
+      <div className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl p-4 space-y-3">
         <p className="text-xs text-gray-500 uppercase tracking-wider">Auction</p>
         <div className="flex gap-2">
           <Autocomplete
@@ -3069,7 +3069,7 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
 
       {/* Log */}
       {log.length > 0 && (
-        <div ref={logRef} className="bg-[#0d0d0f] border border-gray-800 rounded-xl p-3 max-h-40 overflow-y-auto font-mono text-xs text-gray-400 space-y-0.5">
+        <div ref={logRef} className="bg-gray-100 dark:bg-[#0d0d0f] border border-gray-200 dark:border-gray-800 rounded-xl p-3 max-h-40 overflow-y-auto font-mono text-xs text-gray-400 space-y-0.5">
           {log.map((l, i) => <div key={i}>{l}</div>)}
         </div>
       )}
@@ -3080,7 +3080,7 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
           <div className="flex items-center gap-4 flex-wrap">
             {okCount > 0    && <span className="text-xs font-semibold text-green-400 bg-green-950/40 border border-green-800/50 rounded-full px-3 py-1">✓ {okCount} clean</span>}
             {issueCount > 0 && <span className="text-xs font-semibold text-red-400   bg-red-950/40   border border-red-800/50   rounded-full px-3 py-1">⚑ {issueCount} with issues</span>}
-            {errCount > 0   && <span className="text-xs font-semibold text-gray-400  bg-gray-800/40  border border-gray-700     rounded-full px-3 py-1">✗ {errCount} errors</span>}
+            {errCount > 0   && <span className="text-xs font-semibold text-gray-400  bg-gray-800/40  border border-gray-300 dark:border-gray-700     rounded-full px-3 py-1">✗ {errCount} errors</span>}
           </div>
 
           {[...lots]
@@ -3102,7 +3102,7 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
                     <span className={`text-base flex-shrink-0 ${hasIssues ? "text-red-400" : lot.status === "error" ? "text-gray-500" : "text-green-400"}`}>
                       {hasIssues ? "⚑" : lot.status === "error" ? "✗" : "✓"}
                     </span>
-                    <span className="font-mono text-sm text-gray-200 flex-1">{lot.label}</span>
+                    <span className="font-mono text-sm text-gray-700 dark:text-gray-200 flex-1">{lot.label}</span>
                     {hasIssues && lot.contradictions && (
                       <span className="text-xs text-red-400 truncate max-w-sm opacity-80">{lot.contradictions.slice(0, 80)}{lot.contradictions.length > 80 ? "…" : ""}</span>
                     )}
@@ -3110,7 +3110,7 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
                   </button>
 
                   {isExpanded && (
-                    <div className="border-t border-gray-800 px-4 py-4 space-y-4">
+                    <div className="border-t border-gray-200 dark:border-gray-800 px-4 py-4 space-y-4">
                       {lot.contradictions && (
                         <div>
                           <p className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-1">Issues found</p>
@@ -3124,7 +3124,7 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
                         </div>
                       )}
                       {lot.status === "error" && <p className="text-xs text-gray-500">Check failed — try running again</p>}
-                      <div className="pt-2 border-t border-gray-800">
+                      <div className="pt-2 border-t border-gray-200 dark:border-gray-800">
                         <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Description</p>
                         <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap">{lot.description}</p>
                       </div>
@@ -3195,12 +3195,12 @@ export default function AuctionAIPage() {
   }, [])
 
   return (
-    <div className="flex h-[calc(100vh-48px)] bg-[#1C1C1E] text-white overflow-hidden">
+    <div className="flex h-[calc(100vh-48px)] bg-white dark:bg-[#1C1C1E] text-gray-900 dark:text-white overflow-hidden">
       <ToastContainer />
 
-      <aside className="w-52 bg-[#141416] border-r border-gray-800 flex flex-col flex-shrink-0">
-        <div className="px-4 py-5 border-b border-gray-800">
-          <p className="text-white font-bold text-base tracking-wide">AUCTION AI</p>
+      <aside className="w-52 bg-gray-50 dark:bg-[#141416] border-r border-gray-200 dark:border-gray-800 flex flex-col flex-shrink-0">
+        <div className="px-4 py-5 border-b border-gray-200 dark:border-gray-800">
+          <p className="text-gray-900 dark:text-white font-bold text-base tracking-wide">AUCTION AI</p>
           <p className="text-[#C8A96E] text-xs mt-0.5 tracking-widest uppercase">Vectis</p>
         </div>
         <div className="flex-1 px-3 py-4 space-y-0.5">
@@ -3220,18 +3220,18 @@ export default function AuctionAIPage() {
             )
           })}
         </div>
-        <div className="px-4 py-3 border-t border-gray-800 space-y-2.5">
+        <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-800 space-y-2.5">
           <div className="space-y-1">
             <p className="text-gray-600 text-xs uppercase tracking-wider">Model</p>
             <select value={model} onChange={e => { setModel(e.target.value); localStorage.setItem("ai_model", e.target.value) }}
-              className="w-full bg-[#2C2C2E] border border-gray-700 rounded px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-[#C8A96E]">
+              className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-2 py-1.5 text-xs text-gray-600 dark:text-gray-300 focus:outline-none focus:border-[#C8A96E]">
               {modelList.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
           <div className="space-y-1">
             <p className="text-gray-600 text-xs uppercase tracking-wider">Fallback Model <span className="normal-case text-gray-700">(rate limit)</span></p>
             <select value={fallbackModel} onChange={e => { setFallbackModel(e.target.value); localStorage.setItem("ai_fallback_model", e.target.value) }}
-              className="w-full bg-[#2C2C2E] border border-gray-700 rounded px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-[#C8A96E]">
+              className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-2 py-1.5 text-xs text-gray-600 dark:text-gray-300 focus:outline-none focus:border-[#C8A96E]">
               <option value="">— none —</option>
               {modelList.filter(m => m !== model).map(m => <option key={m} value={m}>{m}</option>)}
             </select>
