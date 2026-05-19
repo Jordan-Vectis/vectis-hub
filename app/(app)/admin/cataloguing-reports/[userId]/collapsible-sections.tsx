@@ -186,10 +186,12 @@ const REASON_LABEL: Record<string, { label: string; colour: string }> = {
   OTHER:       { label: "Other",       colour: "bg-gray-100 text-gray-500 border-gray-200"    },
 }
 
-export function CollapsibleIdleTable({ logs }: { logs: SerialIdleLog[] }) {
+export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLog[] }) {
   const [open, setOpen]         = useState(false)
   const [fromDate, setFromDate] = useState("")
   const [toDate, setToDate]     = useState("")
+  const [logs, setLogs]         = useState<SerialIdleLog[]>(initialLogs)
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   const filtered = useMemo(
     () => logs.filter(l => inDateRange(l.idleStartedAt, fromDate, toDate)),
@@ -197,6 +199,24 @@ export function CollapsibleIdleTable({ logs }: { logs: SerialIdleLog[] }) {
   )
 
   const totalIdleMs = filtered.reduce((s, l) => s + l.idleDurationMs, 0)
+
+  async function handleDelete(id: string) {
+    if (!confirm("Delete this idle time entry? This cannot be undone.")) return
+    setDeleting(id)
+    try {
+      const res = await fetch(`/api/catalogue/idle-log/${id}`, { method: "DELETE" })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        alert(body.error ?? "Failed to delete entry.")
+        return
+      }
+      setLogs(prev => prev.filter(l => l.id !== id))
+    } catch {
+      alert("Network error — please try again.")
+    } finally {
+      setDeleting(null)
+    }
+  }
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
@@ -246,12 +266,13 @@ export function CollapsibleIdleTable({ logs }: { logs: SerialIdleLog[] }) {
                   <th className="text-left px-5 py-3">Tote Numbers</th>
                   <th className="text-left px-5 py-3">Notes</th>
                   <th className="text-right px-5 py-3">Duration</th>
+                  <th className="px-5 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-10 text-center text-gray-400 text-xs">
+                    <td colSpan={7} className="px-5 py-10 text-center text-gray-400 text-xs">
                       No idle sessions match the selected date range.
                     </td>
                   </tr>
@@ -281,6 +302,16 @@ export function CollapsibleIdleTable({ logs }: { logs: SerialIdleLog[] }) {
                       </td>
                       <td className="px-5 py-3 text-right font-mono font-bold text-orange-600">
                         {fmtDuration(log.idleDurationMs)}
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <button
+                          onClick={() => handleDelete(log.id)}
+                          disabled={deleting === log.id}
+                          className="text-gray-300 hover:text-red-500 transition-colors disabled:opacity-50"
+                          title="Delete entry"
+                        >
+                          {deleting === log.id ? "…" : "✕"}
+                        </button>
                       </td>
                     </tr>
                   )
