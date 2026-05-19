@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import EnvSelector from "@/components/env-selector"
 import Logo from "@/components/logo"
+import ThemeToggle from "@/components/theme-toggle"
 import { signOutAction } from "@/lib/actions/auth"
 
 interface TopBarProps {
@@ -37,6 +38,7 @@ export default function TopBar({ userName }: TopBarProps) {
 
       <div className="flex items-center gap-4">
         <EnvSelector />
+        <ThemeToggle />
         <span className="text-gray-400 text-xs hidden sm:block">{userName}</span>
         <form action={signOutAction}>
           <button type="submit" className="text-gray-400 hover:text-white text-sm transition-colors">

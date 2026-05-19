@@ -61,23 +61,23 @@ export default async function HubPage() {
     return (
       <div
         key={app.key}
-        className={`relative bg-[#1c1f27] border ${app.border} rounded-xl p-7 flex flex-col items-center text-center h-[320px]
+        className={`relative bg-white dark:bg-[#1c1f27] border ${app.border} rounded-xl p-7 flex flex-col items-center text-center h-[320px]
           transition-all duration-200 hover:shadow-xl ${app.glow} hover:-translate-y-0.5`}
       >
         {app.pinned && (
-          <span className="absolute top-3 right-3 text-xs font-medium bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded-full">
+          <span className="absolute top-3 right-3 text-xs font-medium bg-yellow-500/20 text-yellow-600 dark:text-yellow-300 px-2 py-0.5 rounded-full">
             ★ Featured
           </span>
         )}
 
         <div className={`text-5xl mb-4 ${app.iconBg}`}>{app.icon}</div>
 
-        <h2 className="text-lg font-bold mb-2 text-white">{app.label}</h2>
+        <h2 className="text-lg font-bold mb-2 text-gray-900 dark:text-white">{app.label}</h2>
 
-        <p className="text-gray-400 text-sm leading-relaxed mb-6 flex-1">{app.description}</p>
+        <p className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed mb-6 flex-1">{app.description}</p>
 
         {app.comingSoon ? (
-          <span className="w-full text-center text-sm font-semibold text-gray-500 bg-gray-800 py-2 px-4 rounded-lg cursor-not-allowed">
+          <span className="w-full text-center text-sm font-semibold text-gray-500 bg-gray-200 dark:bg-gray-800 py-2 px-4 rounded-lg cursor-not-allowed">
             Coming Soon
           </span>
         ) : (
@@ -93,14 +93,14 @@ export default async function HubPage() {
   }
 
   return (
-    <div className="relative min-h-screen bg-[#111318] flex flex-col items-center px-6 py-16">
+    <div className="relative min-h-screen bg-gray-100 dark:bg-[#111318] flex flex-col items-center px-6 py-16">
 
       <div className="w-full max-w-6xl space-y-10">
         {grouped.map(section => (
           <div key={section.key}>
             <div className="flex items-center gap-4 mb-5">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-widest">{section.label}</span>
-              <div className="flex-1 h-px bg-white/5" />
+              <span className="text-xs font-semibold text-gray-500 dark:text-gray-500 uppercase tracking-widest">{section.label}</span>
+              <div className="flex-1 h-px bg-gray-300 dark:bg-white/5" />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
               {section.cards.map(renderCard)}
