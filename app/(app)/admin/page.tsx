@@ -58,6 +58,12 @@ const sections = [
     description: "Browse what Claude remembers about you, this project, and how to work with you.",
     icon:        "🧠",
   },
+  {
+    href:        "/admin/documents",
+    label:       "Document Storage",
+    description: "Upload and organise documents and images into folders. Accessible by all staff.",
+    icon:        "🗂️",
+  },
 ]
 
 export default async function AdminOverviewPage() {
