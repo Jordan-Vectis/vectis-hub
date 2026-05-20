@@ -19,7 +19,7 @@ const sections = [
   {
     href:        "/admin/departments",
     label:       "Departments",
-    description: "Manage cataloguer departments used across the CRM.",
+    description: "Manage cataloguer departments used across the app.",
     icon:        "🏢",
   },
   {
@@ -33,12 +33,6 @@ const sections = [
     label:       "Roles & Defaults",
     description: "Create custom roles, set their default app access, and push permissions to existing users.",
     icon:        "🔑",
-  },
-  {
-    href:        "/admin/cataloguing-reports",
-    label:       "Cataloguing Reports",
-    description: "View time-per-lot reports across all cataloguers — average speed, method breakdown and recent activity.",
-    icon:        "📊",
   },
   {
     href:        "/admin/devices",
