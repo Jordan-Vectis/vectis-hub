@@ -22,7 +22,7 @@ export default async function WarehouseDashboard() {
   return (
     <div className="p-6 space-y-6" style={{ fontFamily: "Arial, sans-serif" }}>
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Warehouse Dashboard</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Warehouse Dashboard</h1>
         <p className="text-gray-500 text-sm mt-1">Overview of warehouse operations</p>
       </div>
 
@@ -43,7 +43,7 @@ export default async function WarehouseDashboard() {
 
       {/* Quick actions */}
       <div className="wh-card">
-        <p className="font-semibold text-gray-800 mb-3">Quick Actions</p>
+        <p className="font-semibold text-gray-800 dark:text-gray-100 mb-3">Quick Actions</p>
         <div className="flex flex-wrap gap-3">
           <Link href="/tools/warehouse/inbound" className="wh-btn-primary">📥 New Inbound</Link>
           <Link href="/tools/warehouse/locate" className="wh-btn-secondary">📍 Locate Container</Link>
@@ -54,7 +54,7 @@ export default async function WarehouseDashboard() {
       {/* Recent movements */}
       {recentMovements.length > 0 && (
         <div>
-          <p className="font-semibold text-gray-800 mb-3">Recent Movements</p>
+          <p className="font-semibold text-gray-800 dark:text-gray-100 mb-3">Recent Movements</p>
           <div className="wh-card p-0 overflow-hidden">
             <table className="w-full">
               <thead>

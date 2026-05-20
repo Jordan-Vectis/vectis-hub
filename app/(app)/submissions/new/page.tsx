@@ -45,38 +45,38 @@ export default function NewSubmissionPage() {
         <Link href="/submissions" className="text-sm text-gray-400 hover:text-gray-600 mb-1 block">
           &larr; Back to submissions
         </Link>
-        <h1 className="text-2xl font-bold text-gray-900">New Submission</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">New Submission</h1>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
 
         {/* Customer details */}
-        <section className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="font-semibold text-gray-800 mb-4">Customer Details</h2>
+        <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+          <h2 className="font-semibold text-gray-800 dark:text-gray-100 mb-4">Customer Details</h2>
           <div className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Full name *</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full name *</label>
               <input
                 name="customerName"
                 required
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
                 <input
                   name="customerEmail"
                   type="email"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone</label>
                 <input
                   name="customerPhone"
                   type="tel"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
@@ -84,15 +84,15 @@ export default function NewSubmissionPage() {
         </section>
 
         {/* Submission details */}
-        <section className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="font-semibold text-gray-800 mb-4">Submission Details</h2>
+        <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+          <h2 className="font-semibold text-gray-800 dark:text-gray-100 mb-4">Submission Details</h2>
           <div className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">How did they contact us? *</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">How did they contact us? *</label>
               <select
                 name="channel"
                 required
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Select channel...</option>
                 <option value="EMAIL">Email</option>
@@ -102,20 +102,20 @@ export default function NewSubmissionPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</label>
               <textarea
                 name="notes"
                 rows={3}
                 placeholder="Any general notes about this submission..."
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
               />
             </div>
           </div>
         </section>
 
         {/* Items */}
-        <section className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="font-semibold text-gray-800 mb-4">Items</h2>
+        <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+          <h2 className="font-semibold text-gray-800 dark:text-gray-100 mb-4">Items</h2>
           <div className="space-y-3">
             {items.map((item, index) => (
               <div key={index} className="border border-gray-100 rounded-lg p-3">
@@ -137,14 +137,14 @@ export default function NewSubmissionPage() {
                     value={item.name}
                     onChange={(e) => updateItem(index, "name", e.target.value)}
                     required
-                    className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <textarea
                     placeholder="Description (condition, any markings, box present, etc.)"
                     value={item.description}
                     onChange={(e) => updateItem(index, "description", e.target.value)}
                     rows={2}
-                    className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    className="w-full rounded border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   />
                 </div>
               </div>

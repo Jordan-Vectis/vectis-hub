@@ -670,11 +670,11 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                 {filteredContacts.map((c, i) => (
                   <tr key={c.id} onClick={() => setEditContact(c)} className={TR(i)}>
                     {visCust.has("name")   && <td className="px-3 py-2.5 text-gray-200 font-medium">{c.name}</td>}
-                    {visCust.has("email")  && <td className="px-3 py-2.5 text-gray-400">{c.email ?? <span className="text-gray-700">—</span>}</td>}
-                    {visCust.has("phone")  && <td className="px-3 py-2.5 text-gray-400">{c.phone ?? <span className="text-gray-700">—</span>}</td>}
+                    {visCust.has("email")  && <td className="px-3 py-2.5 text-gray-400">{c.email ?? <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
+                    {visCust.has("phone")  && <td className="px-3 py-2.5 text-gray-400">{c.phone ?? <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
                     {visCust.has("notes")  && <td className="px-3 py-2.5 text-gray-600 max-w-[200px] truncate text-xs">{c.notes ?? "—"}</td>}
-                    {visCust.has("buyer")  && <td className="px-3 py-2.5">{c.isBuyer  ? <Badge color="green">Yes</Badge> : <span className="text-gray-700 text-xs">—</span>}</td>}
-                    {visCust.has("seller") && <td className="px-3 py-2.5">{c.isSeller ? <Badge color="blue">Yes</Badge>  : <span className="text-gray-700 text-xs">—</span>}</td>}
+                    {visCust.has("buyer")  && <td className="px-3 py-2.5">{c.isBuyer  ? <Badge color="green">Yes</Badge> : <span className="text-gray-700 dark:text-gray-300 text-xs">—</span>}</td>}
+                    {visCust.has("seller") && <td className="px-3 py-2.5">{c.isSeller ? <Badge color="blue">Yes</Badge>  : <span className="text-gray-700 dark:text-gray-300 text-xs">—</span>}</td>}
                   </tr>
                 ))}
                 {filteredContacts.length === 0 && <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-600 text-sm">No customers match your filters</td></tr>}
@@ -751,8 +751,8 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                     {visTote.has("type")        && <td className="px-3 py-2.5 text-gray-400">{c.type}</td>}
                     {visTote.has("description") && <td className="px-3 py-2.5 text-gray-200 max-w-[200px] truncate">{c.description}</td>}
                     {visTote.has("contact")     && <td className="px-3 py-2.5 text-gray-400">{c.contactName}</td>}
-                    {visTote.has("category")    && <td className="px-3 py-2.5 text-gray-400">{c.category ? `${c.category}${c.subcategory ? ` / ${c.subcategory}` : ""}` : <span className="text-gray-700">—</span>}</td>}
-                    {visTote.has("location")    && <td className="px-3 py-2.5">{c.lastLocation ? <Badge color="violet">{c.lastLocation}</Badge> : <span className="text-gray-700">—</span>}</td>}
+                    {visTote.has("category")    && <td className="px-3 py-2.5 text-gray-400">{c.category ? `${c.category}${c.subcategory ? ` / ${c.subcategory}` : ""}` : <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
+                    {visTote.has("location")    && <td className="px-3 py-2.5">{c.lastLocation ? <Badge color="violet">{c.lastLocation}</Badge> : <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
                   </tr>
                 ))}
                 {filteredContainers.length === 0 && <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-600 text-sm">No totes match your filters</td></tr>}
@@ -799,13 +799,13 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                     {visLot.has("lotNumber") && <td className="px-3 py-2.5 text-gray-300 font-mono">{l.lotNumber}</td>}
                     {visLot.has("title")     && <td className="px-3 py-2.5 text-gray-200 max-w-[180px] truncate">{l.title || <span className="text-gray-600">Untitled</span>}</td>}
                     {visLot.has("auction")   && <td className="px-3 py-2.5 text-gray-400">{l.auctionCode}</td>}
-                    {visLot.has("vendor")    && <td className="px-3 py-2.5 text-gray-400">{l.vendor ?? <span className="text-gray-700">—</span>}</td>}
-                    {visLot.has("receipt")   && <td className="px-3 py-2.5 text-gray-400">{l.receipt ?? <span className="text-gray-700">—</span>}</td>}
-                    {visLot.has("tote")      && <td className="px-3 py-2.5 text-gray-400 font-mono">{l.tote ?? <span className="text-gray-700">—</span>}</td>}
-                    {visLot.has("category")  && <td className="px-3 py-2.5 text-gray-400">{l.category ? `${l.category}${l.subCategory ? ` / ${l.subCategory}` : ""}` : <span className="text-gray-700">—</span>}</td>}
-                    {visLot.has("condition") && <td className="px-3 py-2.5 text-gray-400">{l.condition ?? <span className="text-gray-700">—</span>}</td>}
-                    {visLot.has("estimate")  && <td className="px-3 py-2.5 text-gray-400">{l.estimateLow || l.estimateHigh ? `£${l.estimateLow ?? "?"}–${l.estimateHigh ?? "?"}` : <span className="text-gray-700">—</span>}</td>}
-                    {visLot.has("photos")    && <td className="px-3 py-2.5">{l.imageCount > 0 ? <Badge color="violet">{l.imageCount}</Badge> : <span className="text-gray-700">—</span>}</td>}
+                    {visLot.has("vendor")    && <td className="px-3 py-2.5 text-gray-400">{l.vendor ?? <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
+                    {visLot.has("receipt")   && <td className="px-3 py-2.5 text-gray-400">{l.receipt ?? <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
+                    {visLot.has("tote")      && <td className="px-3 py-2.5 text-gray-400 font-mono">{l.tote ?? <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
+                    {visLot.has("category")  && <td className="px-3 py-2.5 text-gray-400">{l.category ? `${l.category}${l.subCategory ? ` / ${l.subCategory}` : ""}` : <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
+                    {visLot.has("condition") && <td className="px-3 py-2.5 text-gray-400">{l.condition ?? <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
+                    {visLot.has("estimate")  && <td className="px-3 py-2.5 text-gray-400">{l.estimateLow || l.estimateHigh ? `£${l.estimateLow ?? "?"}–${l.estimateHigh ?? "?"}` : <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
+                    {visLot.has("photos")    && <td className="px-3 py-2.5">{l.imageCount > 0 ? <Badge color="violet">{l.imageCount}</Badge> : <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
                     {visLot.has("status")    && <td className="px-3 py-2.5">{statusBadge(l.status)}</td>}
                   </tr>
                 ))}
@@ -872,17 +872,17 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                         <p className="text-gray-200 text-xs">{b.customerName}</p>
                         <p className="text-gray-600 text-[10px]">{b.customerEmail}</p>
                       </td>
-                      <td className="px-3 py-2.5 text-gray-400 font-mono text-xs">{b.contactId ?? <span className="text-gray-700">—</span>}</td>
+                      <td className="px-3 py-2.5 text-gray-400 font-mono text-xs">{b.contactId ?? <span className="text-gray-700 dark:text-gray-300">—</span>}</td>
                       <td className="px-3 py-2.5 text-gray-400 text-xs whitespace-nowrap">
                         {b.estimateLow || b.estimateHigh
                           ? `£${b.estimateLow ?? "?"}–£${b.estimateHigh ?? "?"}`
-                          : <span className="text-gray-700">—</span>}
+                          : <span className="text-gray-700 dark:text-gray-300">—</span>}
                       </td>
                       <td className="px-3 py-2.5 text-violet-400 font-bold whitespace-nowrap">£{b.maxBid.toLocaleString("en-GB")}</td>
                       <td className="px-3 py-2.5 text-gray-400 text-xs whitespace-nowrap">
                         {b.hammerPrice != null
                           ? <span className={won ? "text-green-400 font-bold" : "text-gray-400"}>£{b.hammerPrice.toLocaleString("en-GB")}</span>
-                          : <span className="text-gray-700">—</span>}
+                          : <span className="text-gray-700 dark:text-gray-300">—</span>}
                       </td>
                       <td className="px-3 py-2.5">
                         {won     ? <Badge color="green">WON</Badge>
@@ -1135,7 +1135,7 @@ function BrowseAnyTab() {
                                 {t.columns.slice(0, 5).map(c => (
                                   <th key={c} className="text-left px-1.5 py-1 text-gray-600 font-medium whitespace-nowrap">{c}</th>
                                 ))}
-                                {t.columns.length > 5 && <th className="text-left px-1.5 py-1 text-gray-700">…</th>}
+                                {t.columns.length > 5 && <th className="text-left px-1.5 py-1 text-gray-700 dark:text-gray-300">…</th>}
                               </tr>
                             </thead>
                             <tbody>
@@ -1146,18 +1146,18 @@ function BrowseAnyTab() {
                                     const txt = v === null || v === undefined ? "" : String(v)
                                     return (
                                       <td key={c} className="px-1.5 py-1 text-gray-400 max-w-[140px] truncate" title={txt}>
-                                        {txt || <span className="text-gray-700">—</span>}
+                                        {txt || <span className="text-gray-700 dark:text-gray-300">—</span>}
                                       </td>
                                     )
                                   })}
-                                  {t.columns.length > 5 && <td className="px-1.5 py-1 text-gray-700">…</td>}
+                                  {t.columns.length > 5 && <td className="px-1.5 py-1 text-gray-700 dark:text-gray-300">…</td>}
                                 </tr>
                               ))}
                             </tbody>
                           </table>
                         </div>
                       ) : (
-                        <p className="text-[10px] text-gray-700 italic">Empty</p>
+                        <p className="text-[10px] text-gray-700 dark:text-gray-300 italic">Empty</p>
                       )}
                     </button>
                   ))}
@@ -1221,7 +1221,7 @@ function BrowseAnyTab() {
                 <div key={c} className="grid grid-cols-3 gap-3 border-b border-gray-900 pb-2 last:border-0">
                   <span className="text-xs text-gray-500 font-medium">{c}</span>
                   <span className="col-span-2 text-xs text-gray-200 font-mono break-all whitespace-pre-wrap">
-                    {formatCell(selectedRow[c]) || <span className="text-gray-700">—</span>}
+                    {formatCell(selectedRow[c]) || <span className="text-gray-700 dark:text-gray-300">—</span>}
                   </span>
                 </div>
               ))}

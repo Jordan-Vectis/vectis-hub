@@ -10,7 +10,7 @@ import ValuationSection from "./valuation-section"
 import PhotoViewer from "./photo-viewer"
 
 const statusLabels: Record<SubmissionStatus, { label: string; color: string }> = {
-  PENDING_ASSIGNMENT: { label: "Pending Assignment", color: "bg-gray-100 text-gray-700" },
+  PENDING_ASSIGNMENT: { label: "Pending Assignment", color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300" },
   PENDING_VALUATION: { label: "Pending Valuation", color: "bg-yellow-100 text-yellow-700" },
   VALUATION_COMPLETE: { label: "Valuation Complete", color: "bg-blue-100 text-blue-700" },
   PENDING_CUSTOMER_DECISION: { label: "Awaiting Decision", color: "bg-purple-100 text-purple-700" },
@@ -68,7 +68,7 @@ export default async function SubmissionDetailPage({
           <Link href="/submissions" className="text-sm text-gray-400 hover:text-gray-600 mb-1 block">
             &larr; Back to submissions
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
             {submission.contact.name}
           </h1>
           <p className="text-xs font-mono text-gray-400 mt-0.5">
@@ -84,44 +84,44 @@ export default async function SubmissionDetailPage({
         <div className="col-span-2 space-y-6">
 
           {/* Customer info */}
-          <section className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="font-semibold text-gray-800 mb-3">Customer Details</h2>
+          <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+            <h2 className="font-semibold text-gray-800 dark:text-gray-100 mb-3">Customer Details</h2>
             <dl className="grid grid-cols-2 gap-3 text-sm">
               <div>
                 <dt className="text-gray-400">Name</dt>
-                <dd className="text-gray-800 font-medium">{submission.contact.name}</dd>
+                <dd className="text-gray-800 dark:text-gray-100 font-medium">{submission.contact.name}</dd>
               </div>
               {submission.contact.email && (
                 <div>
                   <dt className="text-gray-400">Email</dt>
-                  <dd className="text-gray-800">{submission.contact.email}</dd>
+                  <dd className="text-gray-800 dark:text-gray-100">{submission.contact.email}</dd>
                 </div>
               )}
               {submission.contact.phone && (
                 <div>
                   <dt className="text-gray-400">Phone</dt>
-                  <dd className="text-gray-800">{submission.contact.phone}</dd>
+                  <dd className="text-gray-800 dark:text-gray-100">{submission.contact.phone}</dd>
                 </div>
               )}
               <div>
                 <dt className="text-gray-400">Channel</dt>
-                <dd className="text-gray-800">{submission.channel.replace("_", " ")}</dd>
+                <dd className="text-gray-800 dark:text-gray-100">{submission.channel.replace("_", " ")}</dd>
               </div>
             </dl>
             {submission.notes && (
               <div className="mt-3 pt-3 border-t border-gray-100">
                 <p className="text-xs text-gray-400 mb-1">Notes</p>
-                <p className="text-sm text-gray-700">{submission.notes}</p>
+                <p className="text-sm text-gray-700 dark:text-gray-300">{submission.notes}</p>
               </div>
             )}
           </section>
 
           {/* Items + Valuations */}
-          <section className="bg-white rounded-xl border border-gray-200 p-5">
+          <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold text-gray-800">Items ({submission.items.length})</h2>
+              <h2 className="font-semibold text-gray-800 dark:text-gray-100">Items ({submission.items.length})</h2>
               {submission.items.some((i) => i.valuation) && (
-                <span className="text-sm font-medium text-gray-700">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   Total estimate: <span className="text-green-700">&pound;{totalEstimate.toLocaleString("en-GB", { minimumFractionDigits: 2 })}</span>
                 </span>
               )}
@@ -131,7 +131,7 @@ export default async function SubmissionDetailPage({
                 <div key={item.id} className="border border-gray-100 rounded-lg p-3">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="font-medium text-gray-800 text-sm">{item.name}</p>
+                      <p className="font-medium text-gray-800 dark:text-gray-100 text-sm">{item.name}</p>
                       {item.description && (
                         <p className="text-xs text-gray-500 mt-0.5">{item.description}</p>
                       )}
@@ -161,17 +161,17 @@ export default async function SubmissionDetailPage({
 
           {/* Assignment - collections/admin only */}
           {isCollectionsOrAdmin && submission.status === "PENDING_ASSIGNMENT" && (
-            <section className="bg-white rounded-xl border border-gray-200 p-5">
-              <h2 className="font-semibold text-gray-800 mb-3">Assign to Department & Cataloguer</h2>
+            <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+              <h2 className="font-semibold text-gray-800 dark:text-gray-100 mb-3">Assign to Department & Cataloguer</h2>
               <AssignForm
                 submissionId={submission.id}
                 departments={departments}
                 cataloguers={cataloguers}
               />
               <div className="flex items-center gap-3 my-4">
-                <div className="flex-1 border-t border-gray-200" />
+                <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
                 <span className="text-xs text-gray-400">or</span>
-                <div className="flex-1 border-t border-gray-200" />
+                <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
               </div>
               <form action={async () => {
                 "use server"
@@ -196,25 +196,25 @@ export default async function SubmissionDetailPage({
             submission.status === "APPROVED" ||
             submission.status === "DECLINED"
           ) && (
-            <section className="bg-white rounded-xl border border-gray-200 p-5">
-              <h2 className="font-semibold text-gray-800 mb-3">Log Customer Contact</h2>
+            <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+              <h2 className="font-semibold text-gray-800 dark:text-gray-100 mb-3">Log Customer Contact</h2>
               <ContactForm submissionId={submission.id} />
             </section>
           )}
 
           {/* Logistics - after approval */}
           {isCollectionsOrAdmin && submission.status === "APPROVED" && !submission.logistics && (
-            <section className="bg-white rounded-xl border border-gray-200 p-5">
-              <h2 className="font-semibold text-gray-800 mb-3">Arrange Collection / Delivery</h2>
+            <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+              <h2 className="font-semibold text-gray-800 dark:text-gray-100 mb-3">Arrange Collection / Delivery</h2>
               <LogisticsForm submissionId={submission.id} />
             </section>
           )}
 
           {/* Logistics details if set */}
           {submission.logistics && (
-            <section className="bg-white rounded-xl border border-gray-200 p-5">
+            <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="font-semibold text-gray-800">Logistics</h2>
+                <h2 className="font-semibold text-gray-800 dark:text-gray-100">Logistics</h2>
                 {!submission.logistics.arrived && isCollectionsOrAdmin && (
                   <form action={async () => {
                     "use server"
@@ -240,7 +240,7 @@ export default async function SubmissionDetailPage({
               <dl className="grid grid-cols-2 gap-3 text-sm">
                 <div>
                   <dt className="text-gray-400">Type</dt>
-                  <dd className="text-gray-800 font-medium">
+                  <dd className="text-gray-800 dark:text-gray-100 font-medium">
                     {submission.logistics.type === "SENT_IN" ? "Sending items in" : "Collection arranged"}
                   </dd>
                 </div>
@@ -248,28 +248,28 @@ export default async function SubmissionDetailPage({
                   <>
                     <div>
                       <dt className="text-gray-400">Contact name</dt>
-                      <dd className="text-gray-800">{submission.logistics.collectionName}</dd>
+                      <dd className="text-gray-800 dark:text-gray-100">{submission.logistics.collectionName}</dd>
                     </div>
                     <div className="col-span-2">
                       <dt className="text-gray-400">Address</dt>
-                      <dd className="text-gray-800">{submission.logistics.collectionAddress}</dd>
+                      <dd className="text-gray-800 dark:text-gray-100">{submission.logistics.collectionAddress}</dd>
                     </div>
                     {submission.logistics.collectionPhone && (
                       <div>
                         <dt className="text-gray-400">Phone</dt>
-                        <dd className="text-gray-800">{submission.logistics.collectionPhone}</dd>
+                        <dd className="text-gray-800 dark:text-gray-100">{submission.logistics.collectionPhone}</dd>
                       </div>
                     )}
                     {submission.logistics.collectionEmail && (
                       <div>
                         <dt className="text-gray-400">Email</dt>
-                        <dd className="text-gray-800">{submission.logistics.collectionEmail}</dd>
+                        <dd className="text-gray-800 dark:text-gray-100">{submission.logistics.collectionEmail}</dd>
                       </div>
                     )}
                     {submission.logistics.collectionNotes && (
                       <div className="col-span-2">
                         <dt className="text-gray-400">Notes</dt>
-                        <dd className="text-gray-800">{submission.logistics.collectionNotes}</dd>
+                        <dd className="text-gray-800 dark:text-gray-100">{submission.logistics.collectionNotes}</dd>
                       </div>
                     )}
                   </>
@@ -280,11 +280,11 @@ export default async function SubmissionDetailPage({
 
           {/* Contact history */}
           {submission.contactLogs.length > 0 && (
-            <section className="bg-white rounded-xl border border-gray-200 p-5">
-              <h2 className="font-semibold text-gray-800 mb-3">Contact History</h2>
+            <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+              <h2 className="font-semibold text-gray-800 dark:text-gray-100 mb-3">Contact History</h2>
               <div className="space-y-3">
                 {submission.contactLogs.map((log) => (
-                  <div key={log.id} className="border-l-2 border-gray-200 pl-3">
+                  <div key={log.id} className="border-l-2 border-gray-200 dark:border-gray-700 pl-3">
                     <div className="flex items-center gap-2 text-xs text-gray-400">
                       <span className="font-medium text-gray-600 capitalize">{log.method}</span>
                       <span>&middot;</span>
@@ -296,7 +296,7 @@ export default async function SubmissionDetailPage({
                       )}
                     </div>
                     {log.outcome && (
-                      <p className="text-sm text-gray-700 mt-0.5 capitalize">{log.outcome.replace("_", " ")}</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300 mt-0.5 capitalize">{log.outcome.replace("_", " ")}</p>
                     )}
                     {log.notes && <p className="text-sm text-gray-600 mt-0.5">{log.notes}</p>}
                   </div>
@@ -309,24 +309,24 @@ export default async function SubmissionDetailPage({
 
         {/* Sidebar */}
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Assignment</h3>
             <dl className="space-y-2 text-sm">
               <div>
                 <dt className="text-gray-400 text-xs">Department</dt>
-                <dd className="text-gray-800">{submission.department?.name ?? "—"}</dd>
+                <dd className="text-gray-800 dark:text-gray-100">{submission.department?.name ?? "—"}</dd>
               </div>
               <div>
                 <dt className="text-gray-400 text-xs">Cataloguer</dt>
-                <dd className="text-gray-800">{submission.cataloguer?.name ?? "—"}</dd>
+                <dd className="text-gray-800 dark:text-gray-100">{submission.cataloguer?.name ?? "—"}</dd>
               </div>
               <div>
                 <dt className="text-gray-400 text-xs">Created by</dt>
-                <dd className="text-gray-800">{submission.createdBy.name}</dd>
+                <dd className="text-gray-800 dark:text-gray-100">{submission.createdBy.name}</dd>
               </div>
               <div>
                 <dt className="text-gray-400 text-xs">Created</dt>
-                <dd className="text-gray-800">{new Date(submission.createdAt).toLocaleDateString("en-GB")}</dd>
+                <dd className="text-gray-800 dark:text-gray-100">{new Date(submission.createdAt).toLocaleDateString("en-GB")}</dd>
               </div>
             </dl>
           </div>

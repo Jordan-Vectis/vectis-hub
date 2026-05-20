@@ -79,7 +79,7 @@ export default function CustomersPage() {
   return (
     <div className="p-6 space-y-4" style={{ fontFamily: "Arial, sans-serif" }}>
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Customers</h1>
         <button className="wh-btn-primary" onClick={() => setShowCreate(true)}>+ New Customer</button>
       </div>
 
@@ -156,7 +156,7 @@ export default function CustomersPage() {
             {/* Details */}
             <div className="wh-card space-y-3">
               <div className="flex items-center justify-between">
-                <p className="font-semibold text-gray-900">{selected.name}</p>
+                <p className="font-semibold text-gray-900 dark:text-white">{selected.name}</p>
                 <span className="wh-badge wh-badge-blue font-mono">{selected.id}</span>
               </div>
               <div className="space-y-2">
@@ -180,7 +180,7 @@ export default function CustomersPage() {
             {/* Receipts */}
             {receipts.length > 0 && (
               <div className="wh-card p-0 overflow-hidden">
-                <p className="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-50">Receipts ({receipts.length})</p>
+                <p className="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-50 dark:bg-[#141416]">Receipts ({receipts.length})</p>
                 <div className="divide-y divide-gray-100 max-h-48 overflow-y-auto">
                   {receipts.map((r: any) => (
                     <div key={r.id} className="px-4 py-2 flex items-center justify-between">
@@ -197,7 +197,7 @@ export default function CustomersPage() {
 
             {/* Documents */}
             <div className="wh-card space-y-3">
-              <p className="font-semibold text-gray-700 text-sm">📄 Documents</p>
+              <p className="font-semibold text-gray-700 dark:text-gray-300 text-sm">📄 Documents</p>
 
               {/* Receipt documents — one per receipt */}
               {receipts.length > 0 && (
@@ -205,7 +205,7 @@ export default function CustomersPage() {
                   <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Receipts</p>
                   <div className="space-y-1">
                     {receipts.map((r: any) => (
-                      <div key={r.id} className="flex items-center justify-between py-1 px-2 rounded bg-gray-50">
+                      <div key={r.id} className="flex items-center justify-between py-1 px-2 rounded bg-gray-50 dark:bg-[#141416]">
                         <span className="font-mono text-xs text-gray-600">{r.id}</span>
                         <button
                           className="wh-btn-secondary wh-btn-sm"

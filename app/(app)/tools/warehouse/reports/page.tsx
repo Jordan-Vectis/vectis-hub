@@ -8,7 +8,7 @@ function ReportCard({ title, description, href, icon }: { title: string; descrip
       <div className="flex items-start gap-3">
         <span className="text-2xl">{icon}</span>
         <div>
-          <p className="font-semibold text-gray-900">{title}</p>
+          <p className="font-semibold text-gray-900 dark:text-white">{title}</p>
           <p className="text-sm text-gray-500">{description}</p>
         </div>
       </div>
@@ -29,7 +29,7 @@ export default function ReportsPage() {
 
   return (
     <div className="p-6 max-w-3xl space-y-6" style={{ fontFamily: "Arial, sans-serif" }}>
-      <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Reports</h1>
 
       <ReportCard
         title="Full Stock Report"
@@ -42,7 +42,7 @@ export default function ReportsPage() {
         <div className="flex items-start gap-3">
           <span className="text-2xl">📋</span>
           <div>
-            <p className="font-semibold text-gray-900">Receipts Report</p>
+            <p className="font-semibold text-gray-900 dark:text-white">Receipts Report</p>
             <p className="text-sm text-gray-500">All receipts with commission rates and container counts.</p>
           </div>
         </div>
@@ -72,7 +72,7 @@ export default function ReportsPage() {
         <div className="flex items-start gap-3">
           <span className="text-2xl">📅</span>
           <div>
-            <p className="font-semibold text-gray-900">Movement History Report</p>
+            <p className="font-semibold text-gray-900 dark:text-white">Movement History Report</p>
             <p className="text-sm text-gray-500">All container movements with timestamps and operators.</p>
           </div>
         </div>

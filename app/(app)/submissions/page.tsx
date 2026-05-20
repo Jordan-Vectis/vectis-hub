@@ -5,7 +5,7 @@ import { SubmissionStatus } from "@/app/generated/prisma/enums"
 import DeleteSubmissionButton from "./delete-button"
 
 const statusLabels: Record<SubmissionStatus, { label: string; color: string }> = {
-  PENDING_ASSIGNMENT: { label: "Pending Assignment", color: "bg-gray-100 text-gray-700" },
+  PENDING_ASSIGNMENT: { label: "Pending Assignment", color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300" },
   PENDING_VALUATION: { label: "Pending Valuation", color: "bg-yellow-100 text-yellow-700" },
   VALUATION_COMPLETE: { label: "Valuation Complete", color: "bg-blue-100 text-blue-700" },
   PENDING_CUSTOMER_DECISION: { label: "Awaiting Decision", color: "bg-purple-100 text-purple-700" },
@@ -70,7 +70,7 @@ export default async function SubmissionsPage({
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Submissions</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Submissions</h1>
           <p className="text-sm text-gray-500 mt-0.5">{submissions.length} total</p>
         </div>
         {isCollectionsOrAdmin && (
@@ -89,12 +89,12 @@ export default async function SubmissionsPage({
           name="search"
           defaultValue={search}
           placeholder="Search customer or reference..."
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-56"
+          className="rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-56"
         />
         <select
           name="status"
           defaultValue={status || ""}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="">All statuses</option>
           {Object.entries(statusLabels).map(([value, { label }]) => (
@@ -104,7 +104,7 @@ export default async function SubmissionsPage({
         <select
           name="channel"
           defaultValue={channel || ""}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="">All channels</option>
           {Object.entries(channelLabels).map(([value, label]) => (
@@ -114,7 +114,7 @@ export default async function SubmissionsPage({
         <select
           name="department"
           defaultValue={department || ""}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="">All departments</option>
           {departments.map((d) => (
@@ -135,13 +135,13 @@ export default async function SubmissionsPage({
       </form>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         {submissions.length === 0 ? (
           <div className="text-center py-12 text-gray-400 text-sm">No submissions found.</div>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
+              <tr className="border-b border-gray-100 bg-gray-50 dark:bg-[#141416]">
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Reference</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Customer</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Channel</th>
@@ -165,7 +165,7 @@ export default async function SubmissionsPage({
                         {sub.reference.slice(0, 8).toUpperCase()}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 font-medium text-gray-900">{sub.contact.name}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{sub.contact.name}</td>
                     <td className="px-4 py-3 text-gray-500">{channelLabels[sub.channel]}</td>
                     <td className="px-4 py-3 text-gray-500">{sub._count.items}</td>
                     <td className="px-4 py-3 text-gray-500">{sub.department?.name ?? "—"}</td>

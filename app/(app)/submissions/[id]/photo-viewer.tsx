@@ -35,7 +35,7 @@ export default function PhotoViewer({ imageUrls }: { imageUrls: string[] }) {
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 bg-gray-50 border border-gray-200 rounded px-2 py-1"
+                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 bg-gray-50 dark:bg-[#141416] border border-gray-200 dark:border-gray-700 rounded px-2 py-1"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -48,7 +48,7 @@ export default function PhotoViewer({ imageUrls }: { imageUrls: string[] }) {
                 src={url}
                 alt={`Photo ${i + 1}`}
                 onClick={() => setLightbox(url)}
-                className="w-20 h-20 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity"
+                className="w-20 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-80 transition-opacity"
               />
             )
           ))}

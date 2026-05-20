@@ -29,12 +29,12 @@ export default function AssignForm({ submissionId, departments, cataloguers }: P
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Department</label>
         <select
           value={departmentId}
           onChange={(e) => { setDepartmentId(e.target.value); setCataloguerId("") }}
           required
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="">Select department...</option>
           {departments.map((d) => (
@@ -44,13 +44,13 @@ export default function AssignForm({ submissionId, departments, cataloguers }: P
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Assign to cataloguer</label>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assign to cataloguer</label>
         <select
           value={cataloguerId}
           onChange={(e) => setCataloguerId(e.target.value)}
           required
           disabled={!departmentId}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
         >
           <option value="">Select cataloguer...</option>
           {filteredCataloguers.map((c) => (

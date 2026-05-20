@@ -25,7 +25,7 @@ export default async function WarehouseLayout({ children }: { children: React.Re
   return (
     <div className="flex h-full w-full">
       <WarehouseSidebar whRole={whRole} />
-      <div className="flex-1 overflow-auto bg-gray-50">
+      <div className="flex-1 overflow-auto bg-gray-50 dark:bg-[#141416]">
         {children}
       </div>
     </div>

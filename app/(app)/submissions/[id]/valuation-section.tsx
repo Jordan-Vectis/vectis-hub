@@ -47,7 +47,7 @@ export default function ValuationSection({ item, submissionId }: Props) {
             value={value}
             onChange={(e) => setValue(e.target.value)}
             required
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded border border-gray-300 dark:border-gray-600 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
       </div>
@@ -57,7 +57,7 @@ export default function ValuationSection({ item, submissionId }: Props) {
           value={comments}
           onChange={(e) => setComments(e.target.value)}
           rows={2}
-          className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          className="w-full rounded border border-gray-300 dark:border-gray-600 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
         />
       </div>
       <div className="flex gap-2">
