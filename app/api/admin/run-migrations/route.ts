@@ -203,6 +203,19 @@ const MIGRATIONS = [
     CONSTRAINT "DocumentFile_folderId_fkey" FOREIGN KEY ("folderId")
       REFERENCES "DocumentFolder"("id") ON DELETE SET NULL ON UPDATE CASCADE
   )`,
+
+  // 2026-04-29 — MacroFile: stores uploaded macro/instruction files for Auction AI
+  `CREATE TABLE IF NOT EXISTS "MacroFile" (
+    "id"          TEXT         NOT NULL,
+    "name"        TEXT         NOT NULL,
+    "filename"    TEXT         NOT NULL,
+    "description" TEXT,
+    "content"     BYTEA        NOT NULL,
+    "mimeType"    TEXT         NOT NULL DEFAULT 'text/plain',
+    "size"        INTEGER      NOT NULL,
+    "createdAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "MacroFile_pkey" PRIMARY KEY ("id")
+  )`,
 ]
 
 export async function POST() {
