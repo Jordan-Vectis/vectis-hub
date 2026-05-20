@@ -123,7 +123,7 @@ export default async function SubmissionsPage({
         </select>
         <button
           type="submit"
-          className="bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          className="bg-white dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
         >
           Filter
         </button>

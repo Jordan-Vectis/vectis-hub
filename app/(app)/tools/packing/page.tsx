@@ -359,7 +359,7 @@ export default function PackingPage() {
                 {(selected.status === "LABEL_CREATED" || selected.labelPdf) && (
                   <button
                     onClick={() => openLabel(selected)}
-                    className="w-full bg-gray-800 hover:bg-gray-900 text-white text-sm font-medium py-2 rounded-lg"
+                    className="w-full bg-white dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-900 text-white text-sm font-medium py-2 rounded-lg"
                   >
                     🖨 Print Label (PDF)
                   </button>
