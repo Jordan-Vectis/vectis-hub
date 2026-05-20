@@ -437,16 +437,16 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
         <div className="space-y-5">
           <div>
             <h2 className="text-sm font-semibold text-gray-200">AI Description Upgrade</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">
               Select the lots to process, choose a preset and model, then run.
             </p>
           </div>
 
           {/* Preset */}
           <div>
-            <label className="block text-xs text-gray-500 mb-1.5 uppercase tracking-wider">AI Instruction Preset</label>
+            <label className="block text-xs text-gray-600 dark:text-gray-500 mb-1.5 uppercase tracking-wider">AI Instruction Preset</label>
             <select value={preset} onChange={e => setPreset(e.target.value)}
-              className="w-full bg-[#2C2C2E] border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500">
+              className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500">
               {presetKeys.map(k => (
                 <option key={k} value={k}>
                   {k}{overrides[k] !== undefined ? " ✎" : ""}
@@ -458,7 +458,7 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
           {/* Model */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs text-gray-500 uppercase tracking-wider">Model</label>
+              <label className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider">Model</label>
               <button onClick={testAllModels} disabled={testingAll}
                 className="text-xs text-purple-400 hover:text-purple-300 disabled:opacity-50 transition-colors">
                 {testingAll ? "Testing…" : "⚡ Test all models"}
@@ -472,15 +472,15 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
                 const isSelected = model === m
                 return (
                   <button key={m} onClick={() => setModel(m)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors border-b border-gray-800 last:border-0 ${
-                      isSelected ? "bg-purple-900/20" : "hover:bg-[#1a1a1e]"
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors border-b border-gray-200 dark:border-gray-800 last:border-0 ${
+                      isSelected ? "bg-purple-900/20" : "hover:bg-gray-50 dark:hover:bg-[#1a1a1e]"
                     }`}>
                     <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
                       isSelected ? "bg-purple-500" : "bg-gray-700"
                     }`} />
-                    <span className={`text-sm flex-1 font-mono ${isSelected ? "text-purple-200" : "text-gray-400"}`}>{m}</span>
+                    <span className={`text-sm flex-1 font-mono ${isSelected ? "text-purple-200" : "text-gray-600 dark:text-gray-400"}`}>{m}</span>
                     {status === "testing" && (
-                      <span className="text-xs text-gray-500 animate-pulse">testing…</span>
+                      <span className="text-xs text-gray-600 dark:text-gray-500 animate-pulse">testing…</span>
                     )}
                     {status && status !== "testing" && (
                       status.ok
@@ -502,17 +502,17 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
             <label className="flex items-center gap-3 cursor-pointer select-none">
               <input type="checkbox" checked={sendDesc} onChange={e => setSendDesc(e.target.checked)}
                 className="w-4 h-4 rounded accent-purple-500" />
-              <span className="text-sm text-gray-300">Send existing</span>
+              <span className="text-sm text-gray-600 dark:text-gray-300">Send existing</span>
             </label>
             <select value={contextField} onChange={e => setContextField(e.target.value as "keyPoints" | "description")}
               disabled={!sendDesc}
-              className="bg-[#2C2C2E] border border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-40">
+              className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-40">
               <option value="keyPoints">Key Points</option>
               <option value="description">Description</option>
             </select>
-            <span className="text-sm text-gray-300">to the AI</span>
+            <span className="text-sm text-gray-600 dark:text-gray-300">to the AI</span>
             <span className="text-xs text-gray-600">(helps the AI refine rather than rewrite from scratch)</span>
-            <label className={`flex items-center gap-2 cursor-pointer px-2.5 py-1 rounded-lg border transition-colors ${grounded ? "bg-blue-950/50 border-blue-600/60 text-blue-300" : "border-gray-700 text-gray-400 hover:border-gray-500"}`}>
+            <label className={`flex items-center gap-2 cursor-pointer px-2.5 py-1 rounded-lg border transition-colors ${grounded ? "bg-blue-950/50 border-blue-600/60 text-blue-300" : "border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
               <input type="checkbox" checked={grounded} onChange={e => setGrounded(e.target.checked)}
                 className="w-3.5 h-3.5 rounded accent-blue-500" />
               <span className="text-xs font-medium">🔍 Google Search</span>
@@ -522,25 +522,25 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
           {/* Lot selector */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-xs text-gray-500 uppercase tracking-wider">Select lots</label>
+              <label className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider">Select lots</label>
               <div className="flex gap-2 flex-wrap justify-end">
                 <button onClick={() => quickSelect(lots.filter(l => !l.aiUpgraded && l.imageUrls.length > 0).map(l => l.id))}
-                  className="text-xs text-gray-500 hover:text-purple-400 transition-colors">Not upgraded</button>
+                  className="text-xs text-gray-600 dark:text-gray-500 hover:text-purple-400 transition-colors">Not upgraded</button>
                 <span className="text-gray-700 text-xs">·</span>
                 <button onClick={() => quickSelect(lots.filter(l => l.imageUrls.length > 0).map(l => l.id))}
-                  className="text-xs text-gray-500 hover:text-purple-400 transition-colors">Has photos</button>
+                  className="text-xs text-gray-600 dark:text-gray-500 hover:text-purple-400 transition-colors">Has photos</button>
                 <span className="text-gray-700 text-xs">·</span>
                 <button onClick={() => quickSelect(lots.map(l => l.id))}
-                  className="text-xs text-gray-500 hover:text-purple-400 transition-colors">All</button>
+                  className="text-xs text-gray-600 dark:text-gray-500 hover:text-purple-400 transition-colors">All</button>
                 <span className="text-gray-700 text-xs">·</span>
                 <button onClick={() => quickSelect([])}
-                  className="text-xs text-gray-500 hover:text-gray-300 transition-colors">None</button>
+                  className="text-xs text-gray-600 dark:text-gray-500 hover:text-gray-300 transition-colors">None</button>
               </div>
             </div>
 
             <div className="border border-gray-700 rounded-xl overflow-hidden">
               {/* Header */}
-              <div className="flex items-center gap-3 px-4 py-2 bg-[#111113] border-b border-gray-800">
+              <div className="flex items-center gap-3 px-4 py-2 bg-gray-100 dark:bg-[#111113] border-b border-gray-200 dark:border-gray-800">
                 <input type="checkbox"
                   checked={lots.length > 0 && selectedLotIds.size === lots.length}
                   onChange={() => selectedLotIds.size === lots.length ? quickSelect([]) : quickSelect(lots.map(l => l.id))}
@@ -556,13 +556,13 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
               <div className="max-h-56 overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "#4b5563 transparent" }}>
                 {lots.map(lot => (
                   <label key={lot.id}
-                    className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer border-b border-gray-800 last:border-0 transition-colors ${
-                      selectedLotIds.has(lot.id) ? "bg-purple-900/10" : "hover:bg-[#1a1a1e]"
+                    className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer border-b border-gray-200 dark:border-gray-800 last:border-0 transition-colors ${
+                      selectedLotIds.has(lot.id) ? "bg-purple-900/10" : "hover:bg-gray-50 dark:hover:bg-[#1a1a1e]"
                     }`}>
                     <input type="checkbox" checked={selectedLotIds.has(lot.id)} onChange={() => toggleLot(lot.id)}
                       className="w-3.5 h-3.5 rounded accent-purple-500 flex-shrink-0" />
                     <span className="font-mono text-xs text-purple-300 w-14 flex-shrink-0">{lot.lotNumber}</span>
-                    <span className="text-xs text-gray-300 flex-1 truncate">{lot.title || <span className="text-gray-600 italic">Untitled</span>}</span>
+                    <span className="text-xs text-gray-600 dark:text-gray-300 flex-1 truncate">{lot.title || <span className="text-gray-600 italic">Untitled</span>}</span>
                     <span className="text-xs w-10 text-center">
                       {lot.imageUrls.length > 0
                         ? <span className="text-[#2AB4A6]">{lot.imageUrls.length}</span>
@@ -623,12 +623,12 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-semibold text-gray-200">Review AI Results</h2>
-              <p className="text-xs text-gray-500 mt-0.5">
+              <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">
                 {okCount} generated · {failedCount > 0 ? `${failedCount} failed · ` : ""}{approvedCount} approved
               </p>
             </div>
             <div className="flex gap-2">
-              <button onClick={rejectAll}   className="px-3 py-1.5 rounded-lg border border-gray-700 text-gray-400 text-xs hover:border-gray-500 transition-colors">Deselect all</button>
+              <button onClick={rejectAll}   className="px-3 py-1.5 rounded-lg border border-gray-700 text-gray-600 dark:text-gray-400 text-xs hover:border-gray-500 transition-colors">Deselect all</button>
               <button onClick={approveAll}  className="px-3 py-1.5 rounded-lg border border-purple-700/50 text-purple-300 text-xs hover:border-purple-500 transition-colors">Select all</button>
             </div>
           </div>
@@ -643,7 +643,7 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
 
           <div className="flex gap-3 pt-1">
             <button onClick={() => { setPhase("idle"); setResults([]) }}
-              className="px-5 py-2.5 rounded-lg border border-gray-700 text-gray-400 text-sm hover:border-gray-500 transition-colors">
+              className="px-5 py-2.5 rounded-lg border border-gray-700 text-gray-600 dark:text-gray-400 text-sm hover:border-gray-500 transition-colors">
               ← Start over
             </button>
             <button onClick={applyApproved} disabled={approvedCount === 0}
@@ -657,11 +657,11 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
       {/* ── Saving ── */}
       {phase === "saving" && (
         <div className="space-y-4">
-          <div className="bg-[#1C1C1E] border border-gray-700 rounded-xl px-6 py-5 flex flex-col gap-3">
+          <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl px-6 py-5 flex flex-col gap-3">
             <div className="flex items-center gap-3">
               <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />
-              <p className="text-sm text-gray-300 font-medium">Saving descriptions…</p>
-              <span className="ml-auto text-xs text-gray-500">{saveProgress.done} / {saveProgress.total}</span>
+              <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">Saving descriptions…</p>
+              <span className="ml-auto text-xs text-gray-600 dark:text-gray-500">{saveProgress.done} / {saveProgress.total}</span>
             </div>
             <div className="w-full bg-gray-800 rounded-full h-2">
               <div className="bg-purple-500 h-2 rounded-full transition-all duration-300"
@@ -669,7 +669,7 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
             </div>
           </div>
           {log.length > 0 && (
-            <div ref={logRef} className="bg-[#0d0d0f] border border-gray-800 rounded-xl p-4 h-72 overflow-y-auto font-mono text-xs text-gray-400 space-y-0.5">
+            <div ref={logRef} className="bg-gray-100 dark:bg-[#0d0d0f] border border-gray-200 dark:border-gray-800 rounded-xl p-4 h-72 overflow-y-auto font-mono text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
               {log.map((l, i) => <div key={i}>{l}</div>)}
             </div>
           )}
@@ -682,10 +682,10 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
           <div className="bg-purple-900/10 border border-purple-700/30 rounded-xl px-6 py-8 flex flex-col items-center gap-2">
             <span className="text-4xl">✓</span>
             <p className="text-sm font-semibold text-purple-300">Descriptions updated</p>
-            <p className="text-xs text-gray-400">{approvedCount} lot{approvedCount !== 1 ? "s" : ""} updated with AI-generated descriptions</p>
+            <p className="text-xs text-gray-600 dark:text-gray-400">{approvedCount} lot{approvedCount !== 1 ? "s" : ""} updated with AI-generated descriptions</p>
           </div>
           <button onClick={() => { setPhase("idle"); setResults([]) }}
-            className="w-full py-2.5 rounded-lg border border-gray-700 text-gray-400 text-sm hover:border-gray-500 transition-colors">
+            className="w-full py-2.5 rounded-lg border border-gray-700 text-gray-600 dark:text-gray-400 text-sm hover:border-gray-500 transition-colors">
             Run again
           </button>
         </div>
@@ -712,9 +712,9 @@ function ProgressCard({
 }) {
   return (
     <div className="space-y-4">
-      <div className="bg-[#1C1C1E] border border-gray-700 rounded-xl px-6 py-6 flex flex-col gap-4">
+      <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl px-6 py-6 flex flex-col gap-4">
         <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-300 font-medium">{title}</p>
+          <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">{title}</p>
           <div className="flex items-center gap-3">
             {onReviewNow && (
               <button onClick={onReviewNow}
@@ -746,10 +746,10 @@ function ProgressCard({
             style={{ width: `${pct}%` }}
           />
         </div>
-        <p className="text-xs text-gray-500 text-center">{subtitle}</p>
+        <p className="text-xs text-gray-600 dark:text-gray-500 text-center">{subtitle}</p>
       </div>
       {log.length > 0 && (
-        <div ref={logRef} className="bg-[#0d0d0f] border border-gray-800 rounded-xl p-4 h-72 overflow-y-auto font-mono text-xs text-gray-400 space-y-0.5">
+        <div ref={logRef} className="bg-gray-100 dark:bg-[#0d0d0f] border border-gray-200 dark:border-gray-800 rounded-xl p-4 h-72 overflow-y-auto font-mono text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
           {log.map((l, i) => <div key={i}>{l}</div>)}
         </div>
       )}
@@ -771,7 +771,7 @@ function ReviewRow({ result, onToggle }: { result: LotResult; onToggle: () => vo
 
   return (
     <div className={`border rounded-xl overflow-hidden transition-colors ${
-      result.approved ? "border-purple-700/50 bg-purple-900/10" : "border-gray-700 bg-[#1C1C1E]"
+      result.approved ? "border-purple-700/50 bg-purple-900/10" : "border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1C1C1E]"
     }`}>
       {/* Compact header row */}
       <div className="flex items-center gap-3 px-4 py-3">
@@ -794,10 +794,10 @@ function ReviewRow({ result, onToggle }: { result: LotResult; onToggle: () => vo
 
       {/* Expanded diff */}
       {expanded && (
-        <div className="grid grid-cols-2 gap-0 border-t border-gray-800">
-          <div className="p-4 border-r border-gray-800">
+        <div className="grid grid-cols-2 gap-0 border-t border-gray-200 dark:border-gray-800">
+          <div className="p-4 border-r border-gray-200 dark:border-gray-800">
             <p className="text-xs text-gray-600 uppercase tracking-wider mb-2">Current</p>
-            <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap">
+            <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-wrap">
               {result.oldDescription || <span className="italic text-gray-700">No description</span>}
             </p>
             {result.oldEstimateLow && (
@@ -806,7 +806,7 @@ function ReviewRow({ result, onToggle }: { result: LotResult; onToggle: () => vo
           </div>
           <div className="p-4">
             <p className="text-xs text-purple-400 uppercase tracking-wider mb-2">AI Upgraded</p>
-            <p className="text-xs text-gray-200 leading-relaxed whitespace-pre-wrap">{result.newDescription}</p>
+            <p className="text-xs text-gray-700 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">{result.newDescription}</p>
             {result.newEstimateRaw && (
               <p className="text-xs text-purple-400 mt-2">Estimate: {result.newEstimateRaw}</p>
             )}

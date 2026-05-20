@@ -708,6 +708,29 @@ model ClaudeMemory {
   updatedAt DateTime @updatedAt
 }
 
+model DocumentFolder {
+  id        String           @id @default(cuid())
+  name      String
+  parentId  String?
+  parent    DocumentFolder?  @relation("FolderChildren", fields: [parentId], references: [id])
+  children  DocumentFolder[] @relation("FolderChildren")
+  files     DocumentFile[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+}
+
+model DocumentFile {
+  id           String          @id @default(cuid())
+  name         String
+  key          String
+  size         Int
+  mimeType     String
+  folderId     String?
+  folder       DocumentFolder? @relation(fields: [folderId], references: [id])
+  uploadedBy   String
+  createdAt    DateTime        @default(now())
+}
+
 // Pre-typed email reply snippets staff can copy into customer responses.
 // Lives behind the IT Tools "Templates" tab.
 model EmailTemplate {

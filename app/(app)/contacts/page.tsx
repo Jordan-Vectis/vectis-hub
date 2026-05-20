@@ -144,7 +144,7 @@ export default function ContactsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Customers</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {total > 0 ? `${total.toLocaleString()} contacts` : "Unified contact database"}
           </p>
@@ -160,21 +160,21 @@ export default function ContactsPage() {
       {/* Search */}
       <div className="flex gap-2">
         <input
-          className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="Search name, phone, email, postcode, address, ID…"
           value={search}
           onChange={e => setSearch(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") runSearch() }}
         />
         <button className="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg" onClick={runSearch}>Search</button>
-        <button className="border border-gray-300 text-sm px-4 py-2 rounded-lg text-gray-600" onClick={clearSearch}>Clear</button>
+        <button className="border border-gray-300 dark:border-gray-600 text-sm px-4 py-2 rounded-lg text-gray-600" onClick={clearSearch}>Clear</button>
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         <table className="w-full">
           <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
+            <tr className="bg-gray-50 dark:bg-[#141416] border-b border-gray-200 dark:border-gray-700">
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">ID</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Phone</th>
@@ -194,7 +194,7 @@ export default function ContactsPage() {
             ) : contacts.map(c => (
               <tr key={c.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => openOverlay(c)}>
                 <td className="px-4 py-3 font-mono text-xs text-gray-400">{c.id}</td>
-                <td className="px-4 py-3 font-medium text-gray-900 text-sm">{c.salutation ? `${c.salutation} ` : ""}{c.name}</td>
+                <td className="px-4 py-3 font-medium text-gray-900 dark:text-white text-sm">{c.salutation ? `${c.salutation} ` : ""}{c.name}</td>
                 <td className="px-4 py-3 text-gray-500 text-sm">{c.phone || "—"}</td>
                 <td className="px-4 py-3 text-gray-500 text-sm">{c.email || "—"}</td>
                 <td className="px-4 py-3 text-gray-500 text-sm">{c.postcode || "—"}</td>
@@ -202,12 +202,12 @@ export default function ContactsPage() {
                 <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
                   {c.isSeller
                     ? <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600 text-xs font-bold">✓</span>
-                    : <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-gray-300 text-xs">—</span>}
+                    : <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-300 text-xs">—</span>}
                 </td>
                 <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
                   {c.isBuyer
                     ? <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-xs font-bold">✓</span>
-                    : <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-gray-300 text-xs">—</span>}
+                    : <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-300 text-xs">—</span>}
                 </td>
                 <td className="px-4 py-3 text-right">
                   <span className="text-sm text-blue-600 font-medium">View →</span>
@@ -225,12 +225,12 @@ export default function ContactsPage() {
               <button
                 disabled={offset === 0}
                 onClick={() => goPage(offset - PAGE_SIZE)}
-                className="px-3 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50"
+                className="px-3 py-1 rounded border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50"
               >← Prev</button>
               <button
                 disabled={offset + PAGE_SIZE >= total}
                 onClick={() => goPage(offset + PAGE_SIZE)}
-                className="px-3 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50"
+                className="px-3 py-1 rounded border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50"
               >Next →</button>
             </div>
           </div>
@@ -240,47 +240,47 @@ export default function ContactsPage() {
       {/* ── Create Modal ── */}
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.5)" }}>
-          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg space-y-4">
-            <h2 className="font-semibold text-lg text-gray-900">New Customer</h2>
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl p-6 w-full max-w-lg space-y-4">
+            <h2 className="font-semibold text-lg text-gray-900 dark:text-white">New Customer</h2>
             {createMsg && <p className="text-sm text-red-600">{createMsg}</p>}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Salutation</label>
-                <select className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.salutation} onChange={e => setForm({ ...form, salutation: e.target.value })}>
+                <select className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={form.salutation} onChange={e => setForm({ ...form, salutation: e.target.value })}>
                   {SALUTATIONS.map(s => <option key={s} value={s}>{s || "—"}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Name *</label>
-                <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+                <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Phone</label>
-                <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
+                <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Email</label>
-                <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+                <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
               </div>
               <div className="col-span-2">
                 <label className="block text-xs font-medium text-gray-500 mb-1">Address Line 1</label>
-                <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.addressLine1} onChange={e => setForm({ ...form, addressLine1: e.target.value })} />
+                <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={form.addressLine1} onChange={e => setForm({ ...form, addressLine1: e.target.value })} />
               </div>
               <div className="col-span-2">
                 <label className="block text-xs font-medium text-gray-500 mb-1">Address Line 2</label>
-                <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.addressLine2} onChange={e => setForm({ ...form, addressLine2: e.target.value })} />
+                <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={form.addressLine2} onChange={e => setForm({ ...form, addressLine2: e.target.value })} />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Postcode</label>
-                <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.postcode} onChange={e => setForm({ ...form, postcode: e.target.value })} />
+                <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={form.postcode} onChange={e => setForm({ ...form, postcode: e.target.value })} />
               </div>
               <div className="col-span-2">
                 <label className="block text-xs font-medium text-gray-500 mb-1">Notes</label>
-                <textarea className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" rows={2} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+                <textarea className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" rows={2} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
               </div>
             </div>
             <div className="flex gap-2 pt-1">
-              <button className="flex-1 border border-gray-300 text-sm py-2 rounded-lg text-gray-600" onClick={() => { setShowCreate(false); setCreateMsg("") }}>Cancel</button>
+              <button className="flex-1 border border-gray-300 dark:border-gray-600 text-sm py-2 rounded-lg text-gray-600" onClick={() => { setShowCreate(false); setCreateMsg("") }}>Cancel</button>
               <button className="flex-1 bg-blue-600 text-white text-sm py-2 rounded-lg font-medium" onClick={doCreate} disabled={creating}>{creating ? "Creating…" : "Create"}</button>
             </div>
           </div>
@@ -291,15 +291,15 @@ export default function ContactsPage() {
       {overlay && editForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)" }} onClick={closeOverlay}>
           <div
-            className="bg-white rounded-2xl shadow-2xl flex flex-col w-full"
+            className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl flex flex-col w-full"
             style={{ height: "92vh", maxWidth: "1100px" }}
             onClick={e => e.stopPropagation()}
           >
             {/* Overlay header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
               <div className="flex items-center gap-3">
                 <span className="font-mono text-sm text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{overlay.id}</span>
-                <h2 className="text-lg font-bold text-gray-900">
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">
                   {overlay.salutation ? `${overlay.salutation} ` : ""}{overlay.name}
                 </h2>
                 {receipts.length > 0 && (
@@ -335,46 +335,46 @@ export default function ContactsPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-gray-500 mb-1">Salutation</label>
-                      <select className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={editForm.salutation} onChange={e => setEditForm({ ...editForm, salutation: e.target.value })}>
+                      <select className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={editForm.salutation} onChange={e => setEditForm({ ...editForm, salutation: e.target.value })}>
                         {SALUTATIONS.map(s => <option key={s} value={s}>{s || "—"}</option>)}
                       </select>
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
-                      <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} />
+                      <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-500 mb-1">Phone</label>
-                      <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} />
+                      <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-500 mb-1">Email</label>
-                      <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} />
+                      <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} />
                     </div>
                     <div className="col-span-2">
                       <label className="block text-xs font-medium text-gray-500 mb-1">Address Line 1</label>
-                      <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={editForm.addressLine1} onChange={e => setEditForm({ ...editForm, addressLine1: e.target.value })} />
+                      <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={editForm.addressLine1} onChange={e => setEditForm({ ...editForm, addressLine1: e.target.value })} />
                     </div>
                     <div className="col-span-2">
                       <label className="block text-xs font-medium text-gray-500 mb-1">Address Line 2</label>
-                      <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={editForm.addressLine2} onChange={e => setEditForm({ ...editForm, addressLine2: e.target.value })} />
+                      <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={editForm.addressLine2} onChange={e => setEditForm({ ...editForm, addressLine2: e.target.value })} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-500 mb-1">Postcode</label>
-                      <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={editForm.postcode} onChange={e => setEditForm({ ...editForm, postcode: e.target.value })} />
+                      <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={editForm.postcode} onChange={e => setEditForm({ ...editForm, postcode: e.target.value })} />
                     </div>
                     <div className="col-span-2">
                       <label className="block text-xs font-medium text-gray-500 mb-1">Notes</label>
-                      <textarea className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" rows={3} value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} />
+                      <textarea className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" rows={3} value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} />
                     </div>
                     <div className="col-span-2 flex gap-6 pt-1">
                       <label className="flex items-center gap-2 cursor-pointer select-none">
                         <input type="checkbox" className="w-4 h-4 rounded accent-green-600" checked={editForm.isSeller} onChange={e => setEditForm({ ...editForm, isSeller: e.target.checked })} />
-                        <span className="text-sm font-medium text-gray-700">Seller</span>
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Seller</span>
                       </label>
                       <label className="flex items-center gap-2 cursor-pointer select-none">
                         <input type="checkbox" className="w-4 h-4 rounded accent-blue-600" checked={editForm.isBuyer} onChange={e => setEditForm({ ...editForm, isBuyer: e.target.checked })} />
-                        <span className="text-sm font-medium text-gray-700">Buyer</span>
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Buyer</span>
                       </label>
                     </div>
                   </div>
@@ -393,7 +393,7 @@ export default function ContactsPage() {
                     <p className="text-sm text-gray-400">No warehouse receipts found for this customer.</p>
                   ) : (
                     <table className="w-full text-sm">
-                      <thead><tr className="border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                      <thead><tr className="border-b border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-500 uppercase">
                         <th className="pb-2 text-left">Receipt ID</th>
                         <th className="pb-2 text-left">Status</th>
                         <th className="pb-2 text-left">Date</th>
@@ -403,8 +403,8 @@ export default function ContactsPage() {
                       <tbody className="divide-y divide-gray-100">
                         {receipts.map((r: any) => (
                           <tr key={r.id} className="py-2">
-                            <td className="py-2 font-mono font-bold text-gray-800">{r.id}</td>
-                            <td className="py-2"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${r.status === "open" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>{r.status}</span></td>
+                            <td className="py-2 font-mono font-bold text-gray-800 dark:text-gray-100">{r.id}</td>
+                            <td className="py-2"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${r.status === "open" ? "bg-green-100 text-green-700" : "bg-gray-100 dark:bg-gray-800 text-gray-600"}`}>{r.status}</span></td>
                             <td className="py-2 text-gray-500">{new Date(r.created_at).toLocaleDateString("en-GB")}</td>
                             <td className="py-2 text-gray-500">{r.containers?.length ?? 0}</td>
                             <td className="py-2 text-right">
@@ -426,7 +426,7 @@ export default function ContactsPage() {
                     <p className="text-sm text-gray-400">No CRM submissions found for this customer.</p>
                   ) : (
                     <table className="w-full text-sm">
-                      <thead><tr className="border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                      <thead><tr className="border-b border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-500 uppercase">
                         <th className="pb-2 text-left">Reference</th>
                         <th className="pb-2 text-left">Status</th>
                         <th className="pb-2 text-left">Channel</th>
@@ -456,7 +456,7 @@ export default function ContactsPage() {
 
                   {/* Receipt documents */}
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Receipts</h3>
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Receipts</h3>
                     {detailLoading ? (
                       <p className="text-sm text-gray-400">Loading…</p>
                     ) : receipts.length === 0 ? (
@@ -464,10 +464,10 @@ export default function ContactsPage() {
                     ) : (
                       <div className="space-y-2">
                         {receipts.map((r: any) => (
-                          <div key={r.id} className="flex items-center justify-between px-4 py-2 rounded-lg border border-gray-200 bg-gray-50">
+                          <div key={r.id} className="flex items-center justify-between px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#141416]">
                             <div>
-                              <span className="font-mono text-sm font-semibold text-gray-800">{r.id}</span>
-                              <span className={`ml-3 px-2 py-0.5 rounded-full text-xs font-medium ${r.status === "open" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>{r.status}</span>
+                              <span className="font-mono text-sm font-semibold text-gray-800 dark:text-gray-100">{r.id}</span>
+                              <span className={`ml-3 px-2 py-0.5 rounded-full text-xs font-medium ${r.status === "open" ? "bg-green-100 text-green-700" : "bg-gray-100 dark:bg-gray-800 text-gray-600"}`}>{r.status}</span>
                               <span className="ml-3 text-xs text-gray-400">{new Date(r.created_at).toLocaleDateString("en-GB")}</span>
                             </div>
                             <button
@@ -484,7 +484,7 @@ export default function ContactsPage() {
 
                   {/* Auction documents */}
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Auction Documents</h3>
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Auction Documents</h3>
                     {detailLoading ? (
                       <p className="text-sm text-gray-400">Loading…</p>
                     ) : auctions.length === 0 ? (
@@ -492,7 +492,7 @@ export default function ContactsPage() {
                     ) : (
                       <div className="space-y-3">
                         <select
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm"
                           value={selectedAuctionId}
                           onChange={e => setSelectedAuctionId(e.target.value)}
                         >
@@ -506,21 +506,21 @@ export default function ContactsPage() {
                         {selectedAuctionId && (
                           <div className="grid grid-cols-3 gap-2">
                             <button
-                              className="flex flex-col items-center gap-1 px-3 py-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors text-sm font-medium text-gray-700"
+                              className="flex flex-col items-center gap-1 px-3 py-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-blue-300 hover:bg-blue-50 transition-colors text-sm font-medium text-gray-700 dark:text-gray-300"
                               onClick={() => openDoc(`/api/warehouse/documents/pre-sale?customerId=${overlay.id}&auctionId=${selectedAuctionId}`)}
                             >
                               <span className="text-lg">📋</span>
                               Pre-Sale Advice
                             </button>
                             <button
-                              className="flex flex-col items-center gap-1 px-3 py-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors text-sm font-medium text-gray-700"
+                              className="flex flex-col items-center gap-1 px-3 py-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-blue-300 hover:bg-blue-50 transition-colors text-sm font-medium text-gray-700 dark:text-gray-300"
                               onClick={() => openDoc(`/api/warehouse/documents/post-sale?customerId=${overlay.id}&auctionId=${selectedAuctionId}`)}
                             >
                               <span className="text-lg">📋</span>
                               Post-Sale Advice
                             </button>
                             <button
-                              className="flex flex-col items-center gap-1 px-3 py-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors text-sm font-medium text-gray-700"
+                              className="flex flex-col items-center gap-1 px-3 py-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-blue-300 hover:bg-blue-50 transition-colors text-sm font-medium text-gray-700 dark:text-gray-300"
                               onClick={() => openDoc(`/api/warehouse/documents/vendor-statement?customerId=${overlay.id}&auctionId=${selectedAuctionId}`)}
                             >
                               <span className="text-lg">💰</span>

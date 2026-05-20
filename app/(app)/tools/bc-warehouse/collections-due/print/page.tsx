@@ -149,7 +149,7 @@ export default function CollectionsDuePrintPage() {
         <div className="flex gap-2">
           <button
             onClick={() => window.print()}
-            className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-1.5 rounded transition-colors"
+            className="bg-blue-600 hover:bg-blue-500 text-gray-900 dark:text-white text-sm font-semibold px-4 py-1.5 rounded transition-colors"
           >
             🖨 Print / Save as PDF
           </button>
@@ -163,10 +163,10 @@ export default function CollectionsDuePrintPage() {
       </div>
 
       <div className="page">
-        {loading && <p className="text-sm text-gray-500">Loading from BC…</p>}
+        {loading && <p className="text-sm text-gray-600 dark:text-gray-500">Loading from BC…</p>}
         {error && <p className="text-sm text-red-600">{error}</p>}
         {items && items.length === 0 && (
-          <p className="text-sm text-gray-500">No matching items found.</p>
+          <p className="text-sm text-gray-600 dark:text-gray-500">No matching items found.</p>
         )}
 
         {aisleGroups.map(group => (

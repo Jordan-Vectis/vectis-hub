@@ -95,8 +95,8 @@ export default function DevicesClient({ devices: initial, users }: Props) {
     <div className="p-8 max-w-4xl">
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Devices</h1>
-          <p className="text-sm text-gray-500 mt-1">Track tablets and other devices used by staff.</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Devices</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Track tablets and other devices used by staff.</p>
         </div>
         <button
           onClick={openAdd}
@@ -108,34 +108,34 @@ export default function DevicesClient({ devices: initial, users }: Props) {
 
       {/* Add / Edit form */}
       {showAdd && (
-        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
-          <h2 className="text-sm font-semibold text-gray-800 mb-4">{editing ? "Edit device" : "Add device"}</h2>
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6 mb-6">
+          <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-4">{editing ? "Edit device" : "Add device"}</h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Device name</label>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Device name</label>
               <input
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                 placeholder="e.g. Warehouse iPad 1"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Serial number</label>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Serial number</label>
               <input
                 value={form.serialNumber}
                 onChange={e => setForm(f => ({ ...f, serialNumber: e.target.value }))}
                 placeholder="e.g. DMPYQ3NJQ6NV"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-400"
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-400"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Device type</label>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Device type</label>
               <select
                 value={form.deviceType}
                 onChange={e => setForm(f => ({ ...f, deviceType: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
               >
                 <option>iPad</option>
                 <option>iPad Pro</option>
@@ -146,11 +146,11 @@ export default function DevicesClient({ devices: initial, users }: Props) {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Assigned to</label>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Assigned to</label>
               <select
                 value={form.assignedToId}
                 onChange={e => setForm(f => ({ ...f, assignedToId: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
               >
                 <option value="">— Unassigned —</option>
                 {users.map(u => (
@@ -159,12 +159,12 @@ export default function DevicesClient({ devices: initial, users }: Props) {
               </select>
             </div>
             <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Notes</label>
               <input
                 value={form.notes}
                 onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                 placeholder="e.g. Cracked screen, kept in warehouse"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
               />
             </div>
           </div>
@@ -181,7 +181,7 @@ export default function DevicesClient({ devices: initial, users }: Props) {
             </button>
             <button
               onClick={closeForm}
-              className="text-sm text-gray-500 hover:text-gray-700 px-4 py-2 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors"
+              className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:border-gray-600 transition-colors"
             >
               Cancel
             </button>
@@ -191,12 +191,12 @@ export default function DevicesClient({ devices: initial, users }: Props) {
 
       {/* Device list */}
       {devices.length === 0 ? (
-        <div className="text-center py-16 text-sm text-gray-400">No devices registered yet.</div>
+        <div className="text-center py-16 text-sm text-gray-400 dark:text-gray-500">No devices registered yet.</div>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 text-xs font-medium text-gray-400 uppercase tracking-wider">
+              <tr className="border-b border-gray-100 dark:border-gray-800 text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                 <th className="text-left px-5 py-3">Name</th>
                 <th className="text-left px-5 py-3">Type</th>
                 <th className="text-left px-5 py-3">Serial number</th>
@@ -207,22 +207,22 @@ export default function DevicesClient({ devices: initial, users }: Props) {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {devices.map(d => (
-                <tr key={d.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-5 py-3 font-medium text-gray-900">{d.name}</td>
-                  <td className="px-5 py-3 text-gray-500">{d.deviceType}</td>
-                  <td className="px-5 py-3 font-mono text-gray-600 text-xs">{d.serialNumber}</td>
-                  <td className="px-5 py-3 text-gray-700">
+                <tr key={d.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                  <td className="px-5 py-3 font-medium text-gray-900 dark:text-white">{d.name}</td>
+                  <td className="px-5 py-3 text-gray-500 dark:text-gray-400">{d.deviceType}</td>
+                  <td className="px-5 py-3 font-mono text-gray-600 dark:text-gray-400 text-xs">{d.serialNumber}</td>
+                  <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
                     {d.assignedTo
                       ? <span>{d.assignedTo.name}</span>
-                      : <span className="text-gray-400 italic">Unassigned</span>
+                      : <span className="text-gray-400 dark:text-gray-500 italic">Unassigned</span>
                     }
                   </td>
-                  <td className="px-5 py-3 text-gray-500">{d.notes ?? "—"}</td>
+                  <td className="px-5 py-3 text-gray-500 dark:text-gray-400">{d.notes ?? "—"}</td>
                   <td className="px-5 py-3 text-right">
                     <div className="flex items-center justify-end gap-3">
                       <button
                         onClick={() => openEdit(d)}
-                        className="text-xs text-gray-400 hover:text-gray-700 transition-colors"
+                        className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:text-gray-300 transition-colors"
                       >
                         Edit
                       </button>

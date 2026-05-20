@@ -334,7 +334,7 @@ const PLATFORM_COLOURS: Record<string, string> = {
 }
 
 const STATUS_COLOURS: Record<string, string> = {
-  DRAFT:     "bg-gray-700 text-gray-300",
+  DRAFT:     "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300",
   SCHEDULED: "bg-amber-900/60 text-amber-300",
   POSTED:    "bg-green-900/60 text-green-300",
   FAILED:    "bg-red-900/60 text-red-400",
@@ -525,16 +525,16 @@ export default function SocialPostsTab() {
     <div className="flex h-full min-h-0">
 
       {/* ── Left sidebar — special dates ── */}
-      <div className="w-64 shrink-0 border-r border-gray-800 flex flex-col min-h-0">
+      <div className="w-64 shrink-0 border-r border-gray-200 dark:border-gray-800 flex flex-col min-h-0">
         <div className="px-4 pt-4 pb-2 shrink-0">
-          <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-3">📅 Upcoming Dates</h3>
+          <h3 className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-3">📅 Upcoming Dates</h3>
           <div className="flex flex-wrap gap-1">
             {(["all", "collector", "historical", "seasonal"] as const).map(f => (
               <button
                 key={f}
                 onClick={() => setSidebarFilter(f)}
                 className={`px-2 py-0.5 rounded text-xs font-medium capitalize transition-colors ${
-                  sidebarFilter === f ? "bg-pink-600 text-white" : "bg-gray-800 text-gray-400 hover:text-white"
+                  sidebarFilter === f ? "bg-pink-600 text-gray-900 dark:text-white" : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-white"
                 }`}
               >
                 {f}
@@ -551,17 +551,17 @@ export default function SocialPostsTab() {
               key={i}
               onClick={() => pickSpecialDate(sd)}
               className={`w-full text-left px-3 py-2 rounded-lg transition-colors group ${
-                specialDateTag === sd.tag ? "bg-pink-900/40 border border-pink-700/50" : "hover:bg-gray-800"
+                specialDateTag === sd.tag ? "bg-pink-900/40 border border-pink-700/50" : "hover:bg-gray-100 dark:hover:bg-gray-800"
               }`}
             >
               <div className="flex items-start gap-2">
                 <span className="text-base shrink-0 mt-0.5">{sd.emoji}</span>
                 <div className="min-w-0">
-                  <p className="text-xs text-white font-medium leading-tight">{sd.label}</p>
+                  <p className="text-xs text-gray-900 dark:text-white font-medium leading-tight">{sd.label}</p>
                   {sd.anniversary && (
                     <p className="text-xs text-pink-400 font-bold">{sd.anniversary}th anniversary</p>
                   )}
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">
                     {format(sd.date, "d MMM")}
                     {sd.daysAway === 0 ? " · Today!" : sd.daysAway === 1 ? " · Tomorrow" : ` · ${sd.daysAway}d`}
                   </p>
@@ -576,13 +576,13 @@ export default function SocialPostsTab() {
       <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
 
         {/* ── Compose panel ── */}
-        <div className="border-b border-gray-800 p-5 space-y-4">
+        <div className="border-b border-gray-200 dark:border-gray-800 p-5 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-white">✍️ Compose Post</h2>
+            <h2 className="text-sm font-bold text-gray-900 dark:text-white">✍️ Compose Post</h2>
 
             {/* Platform multi-select */}
             <div className="flex gap-1.5 items-center">
-              <span className="text-xs text-gray-500 mr-1">Post to:</span>
+              <span className="text-xs text-gray-600 dark:text-gray-500 mr-1">Post to:</span>
               {[
                 { key: "FACEBOOK",  label: "f Facebook",   active: "bg-blue-600" },
                 { key: "INSTAGRAM", label: "◎ Instagram",  active: "bg-gradient-to-r from-purple-600 to-pink-600" },
@@ -601,8 +601,8 @@ export default function SocialPostsTab() {
                     }}
                     className={`px-3 py-1 rounded-md text-xs font-semibold transition-all border ${
                       selected
-                        ? `${p.active} text-white border-transparent`
-                        : "border-gray-700 text-gray-400 hover:text-white hover:border-gray-500"
+                        ? `${p.active} text-gray-900 dark:text-white border-transparent`
+                        : "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:text-white hover:border-gray-500"
                     }`}
                   >
                     {selected && <span className="mr-1">✓</span>}{p.label}
@@ -617,7 +617,7 @@ export default function SocialPostsTab() {
             <div className="space-y-3">
               {/* Context / occasion */}
               <div>
-                <label className="block text-xs text-gray-400 mb-1 font-medium">
+                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1 font-medium">
                   Occasion / Topic
                   {specialDateTag && (
                     <span className="ml-2 text-pink-400 font-normal">
@@ -631,12 +631,12 @@ export default function SocialPostsTab() {
                     placeholder="e.g. New Matchbox auction live, Transformers anniversary…"
                     value={context}
                     onChange={e => setContext(e.target.value)}
-                    className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                    className="flex-1 bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-pink-500"
                   />
                   <button
                     onClick={generate}
                     disabled={generating || (!context && !specialDateTag)}
-                    className="px-3 py-2 rounded-lg bg-pink-600 hover:bg-pink-500 text-white text-xs font-semibold transition-colors disabled:opacity-40 whitespace-nowrap flex items-center gap-1.5"
+                    className="px-3 py-2 rounded-lg bg-pink-600 hover:bg-pink-500 text-gray-900 dark:text-white text-xs font-semibold transition-colors disabled:opacity-40 whitespace-nowrap flex items-center gap-1.5"
                   >
                     {generating ? <span className="animate-spin">⟳</span> : "✨"} Generate
                   </button>
@@ -646,25 +646,25 @@ export default function SocialPostsTab() {
 
               {/* Copy */}
               <div>
-                <label className="block text-xs text-gray-400 mb-1 font-medium">Post Copy</label>
+                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1 font-medium">Post Copy</label>
                 <textarea
                   rows={6}
                   value={copy}
                   onChange={e => setCopy(e.target.value)}
                   placeholder="Write your post here, or click Generate above…"
-                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-pink-500 resize-none"
+                  className="w-full bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-pink-500 resize-none"
                 />
               </div>
 
               {/* Hashtags */}
               <div>
-                <label className="block text-xs text-gray-400 mb-1 font-medium">Hashtags</label>
+                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1 font-medium">Hashtags</label>
                 <textarea
                   rows={2}
                   value={hashtags}
                   onChange={e => setHashtags(e.target.value)}
                   placeholder="#VectisAuctions #ToyCollector #Diecast…"
-                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-pink-400 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-pink-500 resize-none font-mono"
+                  className="w-full bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-pink-400 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-pink-500 resize-none font-mono"
                 />
               </div>
             </div>
@@ -673,7 +673,7 @@ export default function SocialPostsTab() {
             <div className="space-y-3">
               {/* Image upload */}
               <div>
-                <label className="block text-xs text-gray-400 mb-1 font-medium">Image</label>
+                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1 font-medium">Image</label>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -684,11 +684,11 @@ export default function SocialPostsTab() {
 
                 {/* Upload area / preview */}
                 {imageUrl ? (
-                  <div className="relative rounded-lg overflow-hidden border border-gray-700 h-36 bg-gray-900">
+                  <div className="relative rounded-lg overflow-hidden border border-gray-300 dark:border-gray-700 h-36 bg-gray-100 dark:bg-gray-900">
                     <img src={imageUrl} alt="preview" className="h-full w-full object-cover" />
                     <button
                       onClick={() => { setImageUrl(""); setImageKey("") }}
-                      className="absolute top-2 right-2 bg-black/70 hover:bg-black text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold transition-colors"
+                      className="absolute top-2 right-2 bg-black/70 hover:bg-black text-gray-900 dark:text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold transition-colors"
                       title="Remove image"
                     >
                       ✕
@@ -698,17 +698,17 @@ export default function SocialPostsTab() {
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploading}
-                    className="w-full h-36 rounded-lg border-2 border-dashed border-gray-700 hover:border-pink-600 flex flex-col items-center justify-center gap-2 transition-colors group disabled:opacity-50"
+                    className="w-full h-36 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-pink-600 flex flex-col items-center justify-center gap-2 transition-colors group disabled:opacity-50"
                   >
                     {uploading ? (
                       <>
                         <span className="text-2xl animate-spin">⟳</span>
-                        <span className="text-xs text-gray-400">Uploading…</span>
+                        <span className="text-xs text-gray-600 dark:text-gray-400">Uploading…</span>
                       </>
                     ) : (
                       <>
                         <span className="text-2xl text-gray-600 group-hover:text-pink-500 transition-colors">📷</span>
-                        <span className="text-xs text-gray-500 group-hover:text-gray-300 transition-colors">Click to upload image</span>
+                        <span className="text-xs text-gray-600 dark:text-gray-500 group-hover:text-gray-300 transition-colors">Click to upload image</span>
                         <span className="text-xs text-gray-700">JPG, PNG, WEBP, GIF · max 20MB</span>
                       </>
                     )}
@@ -719,32 +719,32 @@ export default function SocialPostsTab() {
 
               {/* Schedule date + time */}
               <div>
-                <label className="block text-xs text-gray-400 mb-1 font-medium">Schedule Date & Time</label>
+                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1 font-medium">Schedule Date & Time</label>
                 <div className="flex gap-2">
                   <input
                     type="date"
                     value={scheduledAt}
                     onChange={e => setScheduledAt(e.target.value)}
-                    className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
+                    className="flex-1 bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
                   />
                   <input
                     type="time"
                     value={scheduledTime}
                     onChange={e => setScheduledTime(e.target.value)}
-                    className="w-24 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
+                    className="w-24 bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
                   />
                 </div>
               </div>
 
               {/* Auction code (optional) */}
               <div>
-                <label className="block text-xs text-gray-400 mb-1 font-medium">Auction Code <span className="font-normal text-gray-600">(optional)</span></label>
+                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1 font-medium">Auction Code <span className="font-normal text-gray-600">(optional)</span></label>
                 <input
                   type="text"
                   placeholder="e.g. SW2024"
                   value={auctionCode}
                   onChange={e => setAuctionCode(e.target.value)}
-                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  className="w-full bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-pink-500"
                 />
               </div>
 
@@ -753,14 +753,14 @@ export default function SocialPostsTab() {
                 <button
                   onClick={() => savePost("DRAFT")}
                   disabled={saving}
-                  className="flex-1 py-2 rounded-lg border border-gray-600 text-gray-300 hover:text-white hover:border-gray-400 text-sm font-semibold transition-colors disabled:opacity-40"
+                  className="flex-1 py-2 rounded-lg border border-gray-600 text-gray-600 dark:text-gray-300 hover:text-white hover:border-gray-400 text-sm font-semibold transition-colors disabled:opacity-40"
                 >
                   Save Draft
                 </button>
                 <button
                   onClick={() => savePost("SCHEDULED")}
                   disabled={saving || !scheduledAt}
-                  className="flex-1 py-2 rounded-lg bg-pink-600 hover:bg-pink-500 text-white text-sm font-semibold transition-colors disabled:opacity-40"
+                  className="flex-1 py-2 rounded-lg bg-pink-600 hover:bg-pink-500 text-gray-900 dark:text-white text-sm font-semibold transition-colors disabled:opacity-40"
                 >
                   {saving ? "Saving…" : "📅 Schedule"}
                 </button>
@@ -773,8 +773,8 @@ export default function SocialPostsTab() {
         {/* ── Post queue ── */}
         <div className="flex-1 p-5">
           <div className="flex items-center gap-4 mb-4">
-            <h2 className="text-sm font-bold text-white">Post Queue</h2>
-            <div className="flex gap-1 bg-gray-900 rounded-lg p-0.5">
+            <h2 className="text-sm font-bold text-gray-900 dark:text-white">Post Queue</h2>
+            <div className="flex gap-1 bg-gray-100 dark:bg-gray-900 rounded-lg p-0.5">
               {(["SCHEDULED", "DRAFT", "POSTED"] as const).map(s => {
                 const count = posts.filter(p => p.status === s).length
                 return (
@@ -782,22 +782,22 @@ export default function SocialPostsTab() {
                     key={s}
                     onClick={() => setQueueTab(s)}
                     className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
-                      queueTab === s ? "bg-gray-700 text-white" : "text-gray-500 hover:text-white"
+                      queueTab === s ? "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white" : "text-gray-600 dark:text-gray-500 hover:text-white"
                     }`}
                   >
                     {s === "SCHEDULED" ? "📅" : s === "DRAFT" ? "📝" : "✅"} {s.charAt(0) + s.slice(1).toLowerCase()}
-                    {count > 0 && <span className="ml-1.5 bg-pink-600 text-white text-xs px-1.5 py-0.5 rounded-full">{count}</span>}
+                    {count > 0 && <span className="ml-1.5 bg-pink-600 text-gray-900 dark:text-white text-xs px-1.5 py-0.5 rounded-full">{count}</span>}
                   </button>
                 )
               })}
             </div>
-            {loadingPosts && <span className="text-xs text-gray-500 animate-pulse">Loading…</span>}
+            {loadingPosts && <span className="text-xs text-gray-600 dark:text-gray-500 animate-pulse">Loading…</span>}
           </div>
 
           {queuedPosts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-gray-700">
               <span className="text-4xl mb-3">{queueTab === "SCHEDULED" ? "📅" : queueTab === "DRAFT" ? "📝" : "✅"}</span>
-              <p className="text-sm font-medium text-gray-500">No {queueTab.toLowerCase()} posts.</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-500">No {queueTab.toLowerCase()} posts.</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -805,13 +805,13 @@ export default function SocialPostsTab() {
                 const sd = SPECIAL_DATES.find(s => s.tag === post.specialDateTag)
                 const isExpanded = expandedId === post.id
                 return (
-                  <div key={post.id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                  <div key={post.id} className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
                     {/* Header row */}
                     <div className="flex items-center gap-3 px-4 py-3">
                       {/* Platform badges (may be multiple) */}
                       <div className="flex gap-1 shrink-0">
                         {post.platform.split(",").map(p => (
-                          <span key={p} className={`text-xs font-bold text-white px-2 py-0.5 rounded ${PLATFORM_COLOURS[p.trim()] ?? "bg-gray-700"}`}>
+                          <span key={p} className={`text-xs font-bold text-gray-900 dark:text-white px-2 py-0.5 rounded ${PLATFORM_COLOURS[p.trim()] ?? "bg-gray-200 dark:bg-gray-700"}`}>
                             {p.trim() === "FACEBOOK" ? "f" : "◎"}
                           </span>
                         ))}
@@ -825,7 +825,7 @@ export default function SocialPostsTab() {
                       {/* Copy preview */}
                       <button
                         onClick={() => setExpandedId(isExpanded ? null : post.id)}
-                        className="flex-1 text-left text-sm text-gray-300 truncate hover:text-white transition-colors"
+                        className="flex-1 text-left text-sm text-gray-600 dark:text-gray-300 truncate hover:text-white transition-colors"
                       >
                         {post.copy.slice(0, 90)}{post.copy.length > 90 ? "…" : ""}
                       </button>
@@ -866,8 +866,8 @@ export default function SocialPostsTab() {
 
                     {/* Expanded view */}
                     {isExpanded && (
-                      <div className="border-t border-gray-800 px-4 py-3 space-y-2">
-                        <p className="text-sm text-gray-200 whitespace-pre-wrap leading-relaxed">{post.copy}</p>
+                      <div className="border-t border-gray-200 dark:border-gray-800 px-4 py-3 space-y-2">
+                        <p className="text-sm text-gray-700 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">{post.copy}</p>
                         {post.hashtags && (
                           <p className="text-xs text-pink-400 font-mono">{post.hashtags}</p>
                         )}
@@ -879,14 +879,14 @@ export default function SocialPostsTab() {
                           />
                         )}
                         {post.auctionCode && (
-                          <p className="text-xs text-gray-500">Auction: <span className="font-mono text-gray-400">{post.auctionCode}</span></p>
+                          <p className="text-xs text-gray-600 dark:text-gray-500">Auction: <span className="font-mono text-gray-600 dark:text-gray-400">{post.auctionCode}</span></p>
                         )}
                         <div className="flex gap-2 pt-1">
                           <button
                             onClick={() => {
                               navigator.clipboard.writeText(`${post.copy}\n\n${post.hashtags ?? ""}`.trim())
                             }}
-                            className="text-xs px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-white transition-colors"
+                            className="text-xs px-3 py-1 rounded bg-gray-200 dark:bg-gray-700 hover:bg-gray-600 text-gray-900 dark:text-white transition-colors"
                           >
                             Copy post
                           </button>

@@ -81,17 +81,17 @@ export default function BcApiViewerPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0d0f1a] text-gray-200 p-6 space-y-6">
+    <div className="min-h-screen bg-gray-100 dark:bg-[#0d0f1a] text-gray-700 dark:text-gray-200 p-6 space-y-6">
 
       {/* ── Header ── */}
       <div>
-        <h1 className="text-2xl font-bold text-white">BC API Viewer</h1>
-        <p className="text-sm text-gray-500 mt-1">Inspect field names and sample data from any Business Central endpoint</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">BC API Viewer</h1>
+        <p className="text-sm text-gray-600 dark:text-gray-500 mt-1">Inspect field names and sample data from any Business Central endpoint</p>
       </div>
 
       {/* ── Quick endpoints ── */}
       <div>
-        <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Known Endpoints</p>
+        <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-2">Known Endpoints</p>
         <div className="flex flex-wrap gap-2">
           {KNOWN_ENDPOINTS.map(ep => (
             <button key={ep.value}
@@ -99,7 +99,7 @@ export default function BcApiViewerPage() {
               className={`text-xs px-3 py-1.5 rounded border transition-colors font-mono
                 ${endpoint === ep.value && result
                   ? "bg-[#C8A96E]/20 border-[#C8A96E] text-[#C8A96E]"
-                  : "bg-[#1C1C2E] border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200"}`}>
+                  : "bg-white dark:bg-[#1C1C2E] border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500 hover:text-gray-200"}`}>
               {ep.label}
             </button>
           ))}
@@ -107,15 +107,15 @@ export default function BcApiViewerPage() {
       </div>
 
       {/* ── Custom query ── */}
-      <div className="bg-[#1C1C2E] border border-gray-700 rounded-xl p-4 space-y-3">
-        <p className="text-xs text-gray-500 uppercase tracking-wider">Custom Query</p>
+      <div className="bg-white dark:bg-[#1C1C2E] border border-gray-300 dark:border-gray-700 rounded-xl p-4 space-y-3">
+        <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider">Custom Query</p>
 
         <div className="flex gap-2">
           <input value={endpoint} onChange={e => setEndpoint(e.target.value)}
             placeholder="Endpoint name e.g. Auction_Receipt_Lines_Excel"
-            className="flex-1 bg-[#0d0f1a] border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 font-mono focus:outline-none focus:border-[#C8A96E] placeholder:text-gray-600" />
+            className="flex-1 bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 font-mono focus:outline-none focus:border-[#C8A96E] placeholder:text-gray-600" />
           <select value={limit} onChange={e => setLimit(Number(e.target.value))}
-            className="bg-[#0d0f1a] border border-gray-700 rounded px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-[#C8A96E]">
+            className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-600 dark:text-gray-300 focus:outline-none focus:border-[#C8A96E]">
             <option value={1}>1 row</option>
             <option value={5}>5 rows</option>
             <option value={10}>10 rows</option>
@@ -127,10 +127,10 @@ export default function BcApiViewerPage() {
         <div className="flex gap-2">
           <input value={filter} onChange={e => setFilter(e.target.value)}
             placeholder="$filter (optional) e.g. Field_Caption eq 'Location'"
-            className="flex-1 bg-[#0d0f1a] border border-gray-700 rounded px-3 py-2 text-sm text-gray-400 font-mono focus:outline-none focus:border-[#C8A96E] placeholder:text-gray-600" />
+            className="flex-1 bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-600 dark:text-gray-400 font-mono focus:outline-none focus:border-[#C8A96E] placeholder:text-gray-600" />
           <input value={orderby} onChange={e => setOrderby(e.target.value)}
             placeholder="$orderby (optional)"
-            className="w-48 bg-[#0d0f1a] border border-gray-700 rounded px-3 py-2 text-sm text-gray-400 font-mono focus:outline-none focus:border-[#C8A96E] placeholder:text-gray-600" />
+            className="w-48 bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-600 dark:text-gray-400 font-mono focus:outline-none focus:border-[#C8A96E] placeholder:text-gray-600" />
         </div>
 
         <button onClick={() => fetch_()} disabled={loading || !endpoint.trim()}
@@ -141,7 +141,7 @@ export default function BcApiViewerPage() {
 
       {/* ── Error ── */}
       {error && (
-        <div className="bg-red-950 border border-red-800 rounded-lg px-4 py-3 text-sm text-red-300">
+        <div className="bg-red-950 border border-red-800 rounded-lg px-4 py-3 text-sm text-red-700 dark:text-red-300">
           ✕ {error}
         </div>
       )}
@@ -152,20 +152,20 @@ export default function BcApiViewerPage() {
 
           {/* Summary */}
           <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-400">
-              <span className="text-white font-semibold">{result.count}</span> rows returned from{" "}
+            <span className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="text-gray-900 dark:text-white font-semibold">{result.count}</span> rows returned from{" "}
               <span className="font-mono text-[#C8A96E]">{result.endpoint}</span>
             </span>
             <span className="text-xs text-gray-600">·</span>
-            <span className="text-xs text-gray-500">{result.fields.length} fields</span>
+            <span className="text-xs text-gray-600 dark:text-gray-500">{result.fields.length} fields</span>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
             {/* ── Field names panel ── */}
-            <div className="bg-[#1C1C2E] border border-gray-700 rounded-xl overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-gray-700 bg-[#16162a] flex items-center justify-between">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Field Names</p>
+            <div className="bg-white dark:bg-[#1C1C2E] border border-gray-300 dark:border-gray-700 rounded-xl overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#16162a] flex items-center justify-between">
+                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Field Names</p>
                 <button onClick={() => { copyText(result.fields.map(f => f.name).join("\n")); setCopiedField("__all__"); setTimeout(() => setCopiedField(null), 1500) }}
                   className="text-xs px-2.5 py-1 bg-[#C8A96E]/20 hover:bg-[#C8A96E]/40 text-[#C8A96E] rounded transition-colors">
                   {copiedField === "__all__" ? "✓ Copied" : "Copy All"}
@@ -174,8 +174,8 @@ export default function BcApiViewerPage() {
               <div className="overflow-y-auto max-h-[600px]">
                 {result.fields.map(f => (
                   <div key={f.name}
-                    className={`flex items-center gap-3 px-4 py-2 border-b border-gray-800 last:border-0 group hover:bg-[#252540] transition-colors ${f.allNull ? "opacity-40" : ""}`}>
-                    <span className="flex-1 font-mono text-xs text-gray-300 truncate" title={f.name}>{f.name}</span>
+                    className={`flex items-center gap-3 px-4 py-2 border-b border-gray-200 dark:border-gray-800 last:border-0 group hover:bg-gray-100 dark:hover:bg-[#252540] transition-colors ${f.allNull ? "opacity-40" : ""}`}>
+                    <span className="flex-1 font-mono text-xs text-gray-600 dark:text-gray-300 truncate" title={f.name}>{f.name}</span>
                     <span className="text-xs text-gray-600 truncate max-w-[140px]" title={formatValue(f.sample)}>
                       {formatValue(f.sample)}
                     </span>
@@ -190,27 +190,27 @@ export default function BcApiViewerPage() {
             </div>
 
             {/* ── Raw rows panel ── */}
-            <div className="bg-[#1C1C2E] border border-gray-700 rounded-xl overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-gray-700 bg-[#16162a]">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Sample Rows — click to expand</p>
+            <div className="bg-white dark:bg-[#1C1C2E] border border-gray-300 dark:border-gray-700 rounded-xl overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#16162a]">
+                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Sample Rows — click to expand</p>
               </div>
               <div className="overflow-y-auto max-h-[600px]">
                 {result.rows.map((row, i) => (
-                  <div key={i} className="border-b border-gray-800 last:border-0">
+                  <div key={i} className="border-b border-gray-200 dark:border-gray-800 last:border-0">
                     <button onClick={() => setExpandedRow(expandedRow === i ? null : i)}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[#252540] transition-colors text-left">
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-[#252540] transition-colors text-left">
                       <span className="text-xs text-gray-600 flex-shrink-0 w-4">#{i + 1}</span>
-                      <span className="text-xs text-gray-400 truncate flex-1 font-mono">
+                      <span className="text-xs text-gray-600 dark:text-gray-400 truncate flex-1 font-mono">
                         {Object.values(row).slice(0, 3).map(v => formatValue(v)).join("  ·  ")}
                       </span>
                       <span className="text-gray-600 text-xs flex-shrink-0">{expandedRow === i ? "▲" : "▼"}</span>
                     </button>
                     {expandedRow === i && (
-                      <div className="px-4 pb-3 space-y-1 bg-[#0d0f1a]">
+                      <div className="px-4 pb-3 space-y-1 bg-gray-100 dark:bg-[#0d0f1a]">
                         {Object.entries(row).map(([k, v]) => (
                           <div key={k} className="flex gap-3 text-xs">
                             <span className="font-mono text-[#C8A96E] flex-shrink-0 w-48 truncate" title={k}>{k}</span>
-                            <span className="text-gray-300 break-all">{formatValue(v)}</span>
+                            <span className="text-gray-600 dark:text-gray-300 break-all">{formatValue(v)}</span>
                           </div>
                         ))}
                       </div>

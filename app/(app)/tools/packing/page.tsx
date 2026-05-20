@@ -36,7 +36,7 @@ const STATUS_COLOURS: Record<string, string> = {
   PENDING:       "bg-yellow-100 text-yellow-800",
   LABEL_CREATED: "bg-blue-100 text-blue-800",
   DISPATCHED:    "bg-green-100 text-green-800",
-  CANCELLED:     "bg-gray-100 text-gray-500",
+  CANCELLED:     "bg-gray-100 dark:bg-gray-800 text-gray-500",
 }
 
 const EMPTY_FORM = {
@@ -177,13 +177,13 @@ export default function PackingPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Packing & Dispatch</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Packing & Dispatch</h1>
           <p className="text-sm text-gray-500 mt-0.5">Royal Mail Click &amp; Drop integration</p>
         </div>
         <div className="flex items-center gap-3">
           <Link
             href="/tools/packing/packers"
-            className="text-sm text-gray-600 hover:text-gray-900 border border-gray-300 hover:border-gray-400 px-3 py-2 rounded-lg transition-colors"
+            className="text-sm text-gray-600 hover:text-gray-900 border border-gray-300 dark:border-gray-600 hover:border-gray-400 px-3 py-2 rounded-lg transition-colors"
           >
             👥 Packer Barcodes
           </Link>
@@ -212,7 +212,7 @@ export default function PackingPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 gap-6">
+      <div className="flex border-b border-gray-200 dark:border-gray-700 gap-6">
         {([
           ["all",        "All",         parcels.length],
           ["pending",    "Pending",     parcels.filter(p => p.status === "PENDING").length],
@@ -226,7 +226,7 @@ export default function PackingPage() {
               tab === key ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"
             }`}
           >
-            {label} <span className="ml-1 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">{count}</span>
+            {label} <span className="ml-1 text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 px-1.5 py-0.5 rounded-full">{count}</span>
           </button>
         ))}
       </div>
@@ -234,22 +234,22 @@ export default function PackingPage() {
       {/* Search */}
       <div className="flex gap-2">
         <input
-          className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="Search recipient, postcode, reference, tracking…"
           value={search}
           onChange={e => setSearch(e.target.value)}
           onKeyDown={e => e.key === "Enter" && load()}
         />
         <button className="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg" onClick={load}>Search</button>
-        <button className="border border-gray-300 text-sm px-4 py-2 rounded-lg text-gray-600" onClick={() => { setSearch(""); setFilterStatus("") }}>Clear</button>
+        <button className="border border-gray-300 dark:border-gray-600 text-sm px-4 py-2 rounded-lg text-gray-600" onClick={() => { setSearch(""); setFilterStatus("") }}>Clear</button>
       </div>
 
       <div className="flex gap-4">
         {/* Table */}
-        <div className="flex-1 bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="flex-1 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
           <table className="w-full">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
+              <tr className="bg-gray-50 dark:bg-[#141416] border-b border-gray-200 dark:border-gray-700">
                 <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Reference</th>
                 <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Recipient</th>
                 <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Postcode</th>
@@ -273,14 +273,14 @@ export default function PackingPage() {
                 >
                   <td className="px-4 py-3 font-mono text-xs text-gray-500">{p.reference.slice(0, 8).toUpperCase()}</td>
                   <td className="px-4 py-3">
-                    <p className="text-sm font-medium text-gray-900">{p.recipientName}</p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">{p.recipientName}</p>
                     {p.recipientCompany && <p className="text-xs text-gray-400">{p.recipientCompany}</p>}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-500">{p.recipientPostcode}</td>
                   <td className="px-4 py-3 text-sm text-gray-500">{RM_SERVICES[p.serviceCode] ?? p.serviceCode}</td>
                   <td className="px-4 py-3 text-sm text-gray-500">{p.weightInGrams}g</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOURS[p.status] ?? "bg-gray-100 text-gray-600"}`}>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOURS[p.status] ?? "bg-gray-100 dark:bg-gray-800 text-gray-600"}`}>
                       {p.status.replace("_", " ")}
                     </span>
                   </td>
@@ -297,7 +297,7 @@ export default function PackingPage() {
         {/* Detail panel */}
         {selected && (
           <div className="w-80 flex-shrink-0 space-y-3">
-            <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded">{selected.reference?.slice(0, 8).toUpperCase()}</span>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOURS[selected.status] ?? ""}`}>
@@ -306,7 +306,7 @@ export default function PackingPage() {
               </div>
 
               <div className="space-y-1 text-sm">
-                <p className="font-semibold text-gray-900">{selected.recipientName}</p>
+                <p className="font-semibold text-gray-900 dark:text-white">{selected.recipientName}</p>
                 {selected.recipientCompany && <p className="text-gray-500">{selected.recipientCompany}</p>}
                 <p className="text-gray-500">{selected.recipientLine1}</p>
                 {selected.recipientLine2 && <p className="text-gray-500">{selected.recipientLine2}</p>}
@@ -317,10 +317,10 @@ export default function PackingPage() {
               </div>
 
               <div className="border-t pt-2 grid grid-cols-2 gap-2 text-xs text-gray-500">
-                <div><span className="font-medium text-gray-700">Service</span><br />{RM_SERVICES[selected.serviceCode] ?? selected.serviceCode}</div>
-                <div><span className="font-medium text-gray-700">Format</span><br />{selected.packageFormat}</div>
-                <div><span className="font-medium text-gray-700">Weight</span><br />{selected.weightInGrams}g</div>
-                {selected.trackingNumber && <div><span className="font-medium text-gray-700">Tracking</span><br /><span className="font-mono">{selected.trackingNumber}</span></div>}
+                <div><span className="font-medium text-gray-700 dark:text-gray-300">Service</span><br />{RM_SERVICES[selected.serviceCode] ?? selected.serviceCode}</div>
+                <div><span className="font-medium text-gray-700 dark:text-gray-300">Format</span><br />{selected.packageFormat}</div>
+                <div><span className="font-medium text-gray-700 dark:text-gray-300">Weight</span><br />{selected.weightInGrams}g</div>
+                {selected.trackingNumber && <div><span className="font-medium text-gray-700 dark:text-gray-300">Tracking</span><br /><span className="font-mono">{selected.trackingNumber}</span></div>}
               </div>
 
               {selected.lots?.length > 0 && (
@@ -359,7 +359,7 @@ export default function PackingPage() {
                 {(selected.status === "LABEL_CREATED" || selected.labelPdf) && (
                   <button
                     onClick={() => openLabel(selected)}
-                    className="w-full bg-gray-800 hover:bg-gray-900 text-white text-sm font-medium py-2 rounded-lg"
+                    className="w-full bg-white dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-900 text-white text-sm font-medium py-2 rounded-lg"
                   >
                     🖨 Print Label (PDF)
                   </button>
@@ -369,7 +369,7 @@ export default function PackingPage() {
                     href={`https://www.royalmail.com/track-your-item#/tracking-results/${selected.trackingNumber}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="block w-full text-center border border-gray-300 text-gray-700 text-sm font-medium py-2 rounded-lg hover:bg-gray-50"
+                    className="block w-full text-center border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium py-2 rounded-lg hover:bg-gray-50"
                   >
                     📍 Track on Royal Mail
                   </a>
@@ -402,11 +402,11 @@ export default function PackingPage() {
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)" }} onClick={() => setShowCreate(false)}>
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+            className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
             onClick={e => e.stopPropagation()}
           >
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900">New Parcel</h2>
+            <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">New Parcel</h2>
               <button onClick={() => setShowCreate(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
             </div>
             <div className="p-6 space-y-5">
@@ -417,39 +417,39 @@ export default function PackingPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2">
                     <label className="block text-xs text-gray-500 mb-1">Full Name *</label>
-                    <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.recipientName} onChange={e => setForm({...form, recipientName: e.target.value})} />
+                    <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={form.recipientName} onChange={e => setForm({...form, recipientName: e.target.value})} />
                   </div>
                   <div className="col-span-2">
                     <label className="block text-xs text-gray-500 mb-1">Company</label>
-                    <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.recipientCompany} onChange={e => setForm({...form, recipientCompany: e.target.value})} />
+                    <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={form.recipientCompany} onChange={e => setForm({...form, recipientCompany: e.target.value})} />
                   </div>
                   <div className="col-span-2">
                     <label className="block text-xs text-gray-500 mb-1">Address Line 1 *</label>
-                    <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.recipientLine1} onChange={e => setForm({...form, recipientLine1: e.target.value})} />
+                    <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={form.recipientLine1} onChange={e => setForm({...form, recipientLine1: e.target.value})} />
                   </div>
                   <div className="col-span-2">
                     <label className="block text-xs text-gray-500 mb-1">Address Line 2</label>
-                    <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.recipientLine2} onChange={e => setForm({...form, recipientLine2: e.target.value})} />
+                    <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={form.recipientLine2} onChange={e => setForm({...form, recipientLine2: e.target.value})} />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">City *</label>
-                    <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.recipientCity} onChange={e => setForm({...form, recipientCity: e.target.value})} />
+                    <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={form.recipientCity} onChange={e => setForm({...form, recipientCity: e.target.value})} />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">County</label>
-                    <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.recipientCounty} onChange={e => setForm({...form, recipientCounty: e.target.value})} />
+                    <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={form.recipientCounty} onChange={e => setForm({...form, recipientCounty: e.target.value})} />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Postcode *</label>
-                    <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm uppercase" value={form.recipientPostcode} onChange={e => setForm({...form, recipientPostcode: e.target.value.toUpperCase()})} />
+                    <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm uppercase" value={form.recipientPostcode} onChange={e => setForm({...form, recipientPostcode: e.target.value.toUpperCase()})} />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Email</label>
-                    <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" type="email" value={form.recipientEmail} onChange={e => setForm({...form, recipientEmail: e.target.value})} />
+                    <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" type="email" value={form.recipientEmail} onChange={e => setForm({...form, recipientEmail: e.target.value})} />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Phone</label>
-                    <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.recipientPhone} onChange={e => setForm({...form, recipientPhone: e.target.value})} />
+                    <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={form.recipientPhone} onChange={e => setForm({...form, recipientPhone: e.target.value})} />
                   </div>
                 </div>
               </div>
@@ -460,7 +460,7 @@ export default function PackingPage() {
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">RM Service</label>
                     <select
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                      className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm"
                       value={form.serviceCode}
                       onChange={e => setForm({ ...form, serviceCode: e.target.value })}
                     >
@@ -471,7 +471,7 @@ export default function PackingPage() {
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Package Format</label>
-                    <select className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.packageFormat} onChange={e => setForm({...form, packageFormat: e.target.value})}>
+                    <select className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={form.packageFormat} onChange={e => setForm({...form, packageFormat: e.target.value})}>
                       {Object.entries(RM_FORMATS).map(([code, label]) => (
                         <option key={code} value={code}>{label}</option>
                       ))}
@@ -479,22 +479,22 @@ export default function PackingPage() {
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Weight (grams)</label>
-                    <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" type="number" min="1" value={form.weightInGrams} onChange={e => setForm({...form, weightInGrams: e.target.value})} />
+                    <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" type="number" min="1" value={form.weightInGrams} onChange={e => setForm({...form, weightInGrams: e.target.value})} />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Special Instructions</label>
-                    <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.specialInstructions} onChange={e => setForm({...form, specialInstructions: e.target.value})} />
+                    <input className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" value={form.specialInstructions} onChange={e => setForm({...form, specialInstructions: e.target.value})} />
                   </div>
                   <div className="col-span-2">
                     <label className="block text-xs text-gray-500 mb-1">Internal Notes</label>
-                    <textarea className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" rows={2} value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} />
+                    <textarea className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm" rows={2} value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} />
                   </div>
                 </div>
               </div>
 
               <div className="flex gap-2 pt-1">
                 <button
-                  className="flex-1 border border-gray-300 text-sm py-2.5 rounded-lg text-gray-600 hover:bg-gray-50"
+                  className="flex-1 border border-gray-300 dark:border-gray-600 text-sm py-2.5 rounded-lg text-gray-600 hover:bg-gray-50"
                   onClick={() => setShowCreate(false)}
                 >
                   Cancel

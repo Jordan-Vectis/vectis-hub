@@ -139,14 +139,14 @@ export default function ImportTab({ auctionId, auctionCode, onImported }: Props)
   return (
     <div className="p-4 md:p-6 max-w-4xl">
       <div className="mb-5">
-        <h2 className="text-sm font-semibold text-gray-200">Import Lots</h2>
-        <p className="text-xs text-gray-500 mt-0.5">{auctionCode} — upload an Excel file exported from this app</p>
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Import Lots</h2>
+        <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">{auctionCode} — upload an Excel file exported from this app</p>
       </div>
 
       {/* File picker */}
       <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile} />
       <button onClick={() => fileRef.current?.click()}
-        className="w-full py-8 rounded-xl border-2 border-dashed border-gray-600 hover:border-[#2AB4A6] text-gray-400 hover:text-[#2AB4A6] transition-colors flex flex-col items-center gap-2 mb-4">
+        className="w-full py-8 rounded-xl border-2 border-dashed border-gray-600 hover:border-[#2AB4A6] text-gray-600 dark:text-gray-400 hover:text-[#2AB4A6] transition-colors flex flex-col items-center gap-2 mb-4">
         <span className="text-3xl">📂</span>
         <span className="text-sm font-medium">{fileName ?? "Choose Excel file"}</span>
         <span className="text-xs text-gray-600">Supports standard exports and catalogue exports (auto-detected)</span>
@@ -160,8 +160,8 @@ export default function ImportTab({ auctionId, auctionCode, onImported }: Props)
         <>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <p className="text-xs text-gray-400">{rows.length} lots ready to import</p>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${format === "catalogue" ? "bg-purple-900/40 text-purple-300" : "bg-gray-700 text-gray-400"}`}>
+              <p className="text-xs text-gray-600 dark:text-gray-400">{rows.length} lots ready to import</p>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${format === "catalogue" ? "bg-purple-900/40 text-purple-300" : "bg-gray-700 text-gray-600 dark:text-gray-400"}`}>
                 {format === "catalogue" ? "Catalogue export" : "Standard format"}
               </span>
             </div>
@@ -170,36 +170,36 @@ export default function ImportTab({ auctionId, auctionCode, onImported }: Props)
               {pending ? "Importing…" : `Import ${rows.length} Lots`}
             </button>
           </div>
-          <div className="bg-[#1C1C1E] border border-gray-700 rounded-xl overflow-x-auto">
+          <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl overflow-x-auto">
             <table className="w-full text-xs min-w-[600px]">
               <thead>
-                <tr className="border-b border-gray-700 bg-[#141416]">
+                <tr className="border-b border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#141416]">
                   {format === "catalogue"
                     ? ["Lot No.", "Key Points", "Barcode", "Vendor", "Category", "Est. Low/High"].map(h => (
-                        <th key={h} className="text-left px-3 py-2 text-gray-500 font-medium uppercase tracking-wide">{h}</th>
+                        <th key={h} className="text-left px-3 py-2 text-gray-600 dark:text-gray-500 font-medium uppercase tracking-wide">{h}</th>
                       ))
                     : ["Lot No.", "Title", "Vendor", "Tote", "Category", "Status"].map(h => (
-                        <th key={h} className="text-left px-3 py-2 text-gray-500 font-medium uppercase tracking-wide">{h}</th>
+                        <th key={h} className="text-left px-3 py-2 text-gray-600 dark:text-gray-500 font-medium uppercase tracking-wide">{h}</th>
                       ))
                   }
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r, i) => (
-                  <tr key={i} className="border-b border-gray-800 hover:bg-[#2C2C2E]">
+                  <tr key={i} className="border-b border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-[#2C2C2E]">
                     <td className="px-3 py-2 font-mono text-[#2AB4A6]">{r.lotNumber}</td>
                     {format === "catalogue" ? <>
-                      <td className="px-3 py-2 text-gray-300 max-w-[220px] truncate">{r.keyPoints || "—"}</td>
-                      <td className="px-3 py-2 text-gray-400 font-mono">{r.barcode || "—"}</td>
-                      <td className="px-3 py-2 text-gray-400">{r.vendor || "—"}</td>
-                      <td className="px-3 py-2 text-gray-400">{r.category || "—"}</td>
-                      <td className="px-3 py-2 text-gray-400">{r.estimateLow || "—"} / {r.estimateHigh || "—"}</td>
+                      <td className="px-3 py-2 text-gray-600 dark:text-gray-300 max-w-[220px] truncate">{r.keyPoints || "—"}</td>
+                      <td className="px-3 py-2 text-gray-600 dark:text-gray-400 font-mono">{r.barcode || "—"}</td>
+                      <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{r.vendor || "—"}</td>
+                      <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{r.category || "—"}</td>
+                      <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{r.estimateLow || "—"} / {r.estimateHigh || "—"}</td>
                     </> : <>
-                      <td className="px-3 py-2 text-gray-300 max-w-[200px] truncate">{r.title || "—"}</td>
-                      <td className="px-3 py-2 text-gray-400">{r.vendor || "—"}</td>
-                      <td className="px-3 py-2 text-gray-400 font-mono">{r.tote || "—"}</td>
-                      <td className="px-3 py-2 text-gray-400">{r.category || "—"}</td>
-                      <td className="px-3 py-2 text-gray-400">{r.status || "ENTERED"}</td>
+                      <td className="px-3 py-2 text-gray-600 dark:text-gray-300 max-w-[200px] truncate">{r.title || "—"}</td>
+                      <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{r.vendor || "—"}</td>
+                      <td className="px-3 py-2 text-gray-600 dark:text-gray-400 font-mono">{r.tote || "—"}</td>
+                      <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{r.category || "—"}</td>
+                      <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{r.status || "ENTERED"}</td>
                     </>}
                   </tr>
                 ))}

@@ -107,7 +107,7 @@ function ContainerRow({ container, receipt, customer, onUpdated }: { container: 
           <PrintLabel container={container} receipt={receipt} customer={customer} />
         </div>
       </div>
-      <p className="text-xs text-gray-700">{container.description}</p>
+      <p className="text-xs text-gray-700 dark:text-gray-300">{container.description}</p>
       {(container.category || container.subcategory) && (
         <p className="text-xs text-gray-500">
           {container.category}{container.subcategory ? ` / ${container.subcategory}` : ""}
@@ -163,7 +163,7 @@ function AddContainerForm({ receiptId, onAdded }: { receiptId: string; onAdded: 
   }
 
   return (
-    <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 space-y-2">
+    <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 dark:bg-[#141416] space-y-2">
       <p className="text-xs font-semibold text-gray-600">Add Container</p>
       {error && <p className="text-xs text-red-500">{error}</p>}
       <div className="grid grid-cols-2 gap-2">
@@ -237,7 +237,7 @@ function ReassignModal({ receiptId, currentCustomerId, onDone, onClose }: { rece
           <button className="wh-btn-primary" onClick={doSearch}>Search</button>
         </div>
         {results.length > 0 && (
-          <div className="border border-gray-200 rounded divide-y divide-gray-100 max-h-60 overflow-y-auto">
+          <div className="border border-gray-200 dark:border-gray-700 rounded divide-y divide-gray-100 max-h-60 overflow-y-auto">
             {results.map(c => (
               <div key={c.id} className="px-3 py-2 flex items-center justify-between hover:bg-gray-50">
                 <div>
@@ -356,7 +356,7 @@ export default function ReceiptsPage() {
       )}
 
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Receipts</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Receipts</h1>
         <select className="wh-input" style={{ width: "9rem" }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
           <option value="">All</option>
           <option value="open">Open</option>
@@ -433,7 +433,7 @@ export default function ReceiptsPage() {
             </div>
 
             <div className="wh-card p-0 overflow-hidden">
-              <div className="px-4 py-2 flex items-center justify-between bg-gray-50">
+              <div className="px-4 py-2 flex items-center justify-between bg-gray-50 dark:bg-[#141416]">
                 <p className="text-sm font-semibold text-gray-600">Containers ({containers.length})</p>
                 <button className="wh-btn-primary wh-btn-sm" onClick={() => setShowAddContainer(v => !v)}>
                   {showAddContainer ? "Cancel" : "+ Add"}
@@ -452,7 +452,7 @@ export default function ReceiptsPage() {
 
             {lots.length > 0 && (
               <div className="wh-card p-0 overflow-hidden">
-                <div className="px-4 py-2 bg-gray-50">
+                <div className="px-4 py-2 bg-gray-50 dark:bg-[#141416]">
                   <p className="text-sm font-semibold text-gray-600">Catalogue Lots ({lots.length})</p>
                 </div>
                 <div className="divide-y divide-gray-100 max-h-80 overflow-y-auto">
@@ -460,7 +460,7 @@ export default function ReceiptsPage() {
                     <div key={lot.id} className="px-4 py-2.5 flex items-center gap-3">
                       <span className="font-mono text-xs text-gray-400 w-20 shrink-0">{lot.receipt}</span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate">{lot.title || <span className="text-gray-400 italic">Untitled</span>}</p>
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{lot.title || <span className="text-gray-400 italic">Untitled</span>}</p>
                         <p className="text-xs text-gray-400">
                           {lot.auction?.code} · Lot {lot.lotNumber}
                           {lot.estimateLow ? ` · £${lot.estimateLow}–£${lot.estimateHigh}` : ""}

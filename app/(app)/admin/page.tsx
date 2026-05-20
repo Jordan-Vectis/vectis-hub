@@ -19,7 +19,7 @@ const sections = [
   {
     href:        "/admin/departments",
     label:       "Departments",
-    description: "Manage cataloguer departments used across the CRM.",
+    description: "Manage cataloguer departments used across the app.",
     icon:        "🏢",
   },
   {
@@ -33,12 +33,6 @@ const sections = [
     label:       "Roles & Defaults",
     description: "Create custom roles, set their default app access, and push permissions to existing users.",
     icon:        "🔑",
-  },
-  {
-    href:        "/admin/cataloguing-reports",
-    label:       "Cataloguing Reports",
-    description: "View time-per-lot reports across all cataloguers — average speed, method breakdown and recent activity.",
-    icon:        "📊",
   },
   {
     href:        "/admin/devices",
@@ -58,6 +52,12 @@ const sections = [
     description: "Browse what Claude remembers about you, this project, and how to work with you.",
     icon:        "🧠",
   },
+  {
+    href:        "/admin/documents",
+    label:       "Document Storage",
+    description: "Upload and organise documents and images into folders. Accessible by all staff.",
+    icon:        "🗂️",
+  },
 ]
 
 export default async function AdminOverviewPage() {
@@ -67,17 +67,17 @@ export default async function AdminOverviewPage() {
   return (
     <div className="p-8 max-w-7xl">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Admin</h1>
-        <p className="text-sm text-gray-500 mt-1">System-wide settings and management</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Admin</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">System-wide settings and management</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {sections.map(s => (
           <Link key={s.href} href={s.href}
-            className="bg-white border border-gray-200 rounded-xl p-5 hover:border-slate-400 hover:shadow-sm transition-all group">
+            className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-5 hover:border-slate-400 hover:shadow-sm transition-all group">
             <div className="text-3xl mb-3">{s.icon}</div>
-            <h2 className="font-semibold text-gray-800 group-hover:text-slate-700 mb-1">{s.label}</h2>
-            <p className="text-sm text-gray-500 leading-relaxed">{s.description}</p>
+            <h2 className="font-semibold text-gray-800 dark:text-gray-200 group-hover:text-slate-700 mb-1">{s.label}</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">{s.description}</p>
           </Link>
         ))}
       </div>

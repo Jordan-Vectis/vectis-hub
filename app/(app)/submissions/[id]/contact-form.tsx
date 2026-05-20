@@ -26,11 +26,11 @@ export default function ContactForm({ submissionId }: { submissionId: string }) 
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Contact method</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Contact method</label>
           <select
             value={method}
             onChange={(e) => setMethod(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="phone">Phone</option>
             <option value="email">Email</option>
@@ -38,12 +38,12 @@ export default function ContactForm({ submissionId }: { submissionId: string }) 
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Outcome</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Outcome</label>
           <select
             value={outcome}
             onChange={(e) => setOutcome(e.target.value)}
             required
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Select outcome...</option>
             <option value="approved">Approved — happy to proceed</option>
@@ -56,13 +56,13 @@ export default function ContactForm({ submissionId }: { submissionId: string }) 
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</label>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={3}
           placeholder="Any notes from the conversation..."
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
         />
       </div>
 

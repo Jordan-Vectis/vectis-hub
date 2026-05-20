@@ -27,17 +27,17 @@ export default function BcMarketingPage() {
   const [tab, setTab] = useState<TabKey>("content")
 
   return (
-    <div className="flex flex-col h-full bg-gray-950 text-white">
+    <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-white">
       {/* Tab bar */}
-      <div className="flex gap-1 px-4 pt-3 border-b border-gray-800 shrink-0 overflow-x-auto">
+      <div className="flex gap-1 px-4 pt-3 border-b border-gray-200 dark:border-gray-800 shrink-0 overflow-x-auto">
         {TABS.map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`px-4 py-2 text-sm rounded-t transition-colors whitespace-nowrap ${
               tab === t.key
-                ? "bg-gray-800 text-white border-b-2 border-pink-500"
-                : "text-gray-400 hover:text-white hover:bg-gray-900"
+                ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-b-2 border-pink-500"
+                : "text-gray-600 dark:text-gray-400 hover:text-white hover:bg-gray-200 dark:hover:bg-gray-900"
             }`}
           >
             {t.label}

@@ -63,10 +63,10 @@ interface Props {
 
 // ── Shared UI bits ─────────────────────────────────────────────────────────
 
-const COL_INPUT  = "w-full rounded border border-gray-700 bg-[#111113] px-2 py-1 text-xs text-gray-300 placeholder-gray-700 focus:outline-none focus:ring-1 focus:ring-violet-500"
-const COL_SELECT = "w-full rounded border border-gray-700 bg-[#111113] px-1 py-1 text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
-const EDIT_INPUT = "w-full rounded-lg border border-gray-700 bg-[#2C2C2E] px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
-const EDIT_SELECT = "w-full rounded-lg border border-gray-700 bg-[#2C2C2E] px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+const COL_INPUT  = "w-full rounded border border-gray-700 bg-gray-100 dark:bg-[#111113] px-2 py-1 text-xs text-gray-300 placeholder-gray-700 focus:outline-none focus:ring-1 focus:ring-violet-500"
+const COL_SELECT = "w-full rounded border border-gray-700 bg-gray-100 dark:bg-[#111113] px-1 py-1 text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
+const EDIT_INPUT = "w-full rounded-lg border border-gray-700 bg-gray-100 dark:bg-[#2C2C2E] px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+const EDIT_SELECT = "w-full rounded-lg border border-gray-700 bg-gray-100 dark:bg-[#2C2C2E] px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
 
 function match(value: string | null | undefined, filter: string) {
   if (!filter.trim()) return true
@@ -93,7 +93,7 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
 
 function Badge({ children, color = "gray" }: { children: React.ReactNode; color?: "gray"|"green"|"blue"|"amber"|"red"|"violet" }) {
   const s: Record<string, string> = {
-    gray:   "bg-gray-800 text-gray-400",
+    gray:   "bg-white dark:bg-gray-800 text-gray-400",
     green:  "bg-green-900/40 text-green-400",
     blue:   "bg-blue-900/40 text-blue-400",
     amber:  "bg-amber-900/40 text-amber-400",
@@ -129,14 +129,14 @@ function ColumnPicker({ columns, visible, onToggle }: {
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-700 bg-[#1C1C1E] text-xs text-gray-400 hover:border-gray-500 hover:text-gray-300 transition-colors">
+        className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-700 bg-white dark:bg-[#1C1C1E] text-xs text-gray-400 hover:border-gray-500 hover:text-gray-300 transition-colors">
         <span>⚙</span> Columns
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-20 bg-[#1C1C1E] border border-gray-700 rounded-xl shadow-xl p-3 min-w-[160px]">
+        <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-[#1C1C1E] border border-gray-700 rounded-xl shadow-xl p-3 min-w-[160px]">
           <p className="text-xs text-gray-600 mb-2 px-1">Show / hide columns</p>
           {columns.map(col => (
-            <label key={col.key} className="flex items-center gap-2 px-1 py-1 rounded hover:bg-gray-800 cursor-pointer">
+            <label key={col.key} className="flex items-center gap-2 px-1 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer">
               <input type="checkbox" checked={visible.has(col.key)} onChange={() => onToggle(col.key)}
                 className="accent-violet-500" />
               <span className="text-xs text-gray-300">{col.label}</span>
@@ -209,7 +209,7 @@ function ReceiptEditPanel({ row, onClose, onSaved }: { row: ReceiptRow; onClose:
 
   return (
     <div className="space-y-4">
-      <div className="bg-[#111113] rounded-lg border border-gray-800 px-4 py-3 text-sm space-y-1">
+      <div className="bg-gray-100 dark:bg-[#111113] rounded-lg border border-gray-800 px-4 py-3 text-sm space-y-1">
         <div><span className="text-gray-500">Contact: </span><span className="text-gray-200">{row.contactName}</span></div>
         <div><span className="text-gray-500 text-xs">ID: </span><span className="text-gray-600 font-mono text-xs">{row.id}</span></div>
       </div>
@@ -267,7 +267,7 @@ function ContainerEditPanel({ row, locations, onClose, onSaved }: {
 
   return (
     <div className="space-y-4">
-      <div className="bg-[#111113] rounded-lg border border-gray-800 px-4 py-3 text-sm space-y-1">
+      <div className="bg-gray-100 dark:bg-[#111113] rounded-lg border border-gray-800 px-4 py-3 text-sm space-y-1">
         <div><span className="text-gray-500">Contact: </span><span className="text-gray-200">{row.contactName}</span></div>
         <div><span className="text-gray-500 text-xs">ID: </span><span className="text-gray-600 font-mono text-xs">{row.id}</span></div>
       </div>
@@ -435,7 +435,7 @@ function Drawer({ title, subtitle, open, onClose, children }: {
   return (
     <>
       {open && <div className="fixed inset-0 bg-black/60 z-40" onClick={onClose} />}
-      <div className={`fixed inset-y-0 right-0 z-50 w-full max-w-sm bg-[#18181B] border-l border-gray-800 flex flex-col transition-transform duration-300 ${open ? "translate-x-0" : "translate-x-full"}`}>
+      <div className={`fixed inset-y-0 right-0 z-50 w-full max-w-sm bg-gray-100 dark:bg-[#18181B] border-l border-gray-800 flex flex-col transition-transform duration-300 ${open ? "translate-x-0" : "translate-x-full"}`}>
         <div className="flex items-start justify-between p-5 border-b border-gray-800 shrink-0">
           <div>
             <h3 className="text-sm font-semibold text-gray-100">{title}</h3>
@@ -609,10 +609,10 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
   ]
 
   // ── Row classes ──────────────────────────────────────────────────────────
-  const TR = (i: number) => `cursor-pointer border-b border-gray-800/50 hover:bg-violet-900/10 transition-colors ${i % 2 === 0 ? "" : "bg-[#1C1C1E]/30"}`
+  const TR = (i: number) => `cursor-pointer border-b border-gray-800/50 hover:bg-violet-900/10 transition-colors ${i % 2 === 0 ? "" : "bg-white dark:bg-[#1C1C1E]/30"}`
 
   return (
-    <div className="min-h-screen bg-[#0D0D0F] text-gray-100">
+    <div className="min-h-screen bg-gray-50 dark:bg-[#0D0D0F] text-gray-100">
       <div className="max-w-7xl mx-auto px-4 py-6">
 
         {/* Header */}
@@ -649,7 +649,7 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
           <div className="overflow-x-auto rounded-b-xl rounded-tr-xl border border-gray-800 border-t-0">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-800 bg-[#1C1C1E]">
+                <tr className="border-b border-gray-800 bg-white dark:bg-[#1C1C1E]">
                   {visCust.has("name")   && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Name</th>}
                   {visCust.has("email")  && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Email</th>}
                   {visCust.has("phone")  && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Phone</th>}
@@ -657,7 +657,7 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                   {visCust.has("buyer")  && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Buyer</th>}
                   {visCust.has("seller") && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Seller</th>}
                 </tr>
-                <tr className="border-b border-gray-900 bg-[#111113]">
+                <tr className="border-b border-gray-900 bg-gray-100 dark:bg-[#111113]">
                   {visCust.has("name")   && <td className="px-2 py-1.5"><input value={cName}  onChange={e => setCName(e.target.value)}  placeholder="Filter…" className={COL_INPUT} /></td>}
                   {visCust.has("email")  && <td className="px-2 py-1.5"><input value={cEmail} onChange={e => setCEmail(e.target.value)} placeholder="Filter…" className={COL_INPUT} /></td>}
                   {visCust.has("phone")  && <td className="px-2 py-1.5"><input value={cPhone} onChange={e => setCPhone(e.target.value)} placeholder="Filter…" className={COL_INPUT} /></td>}
@@ -670,11 +670,11 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                 {filteredContacts.map((c, i) => (
                   <tr key={c.id} onClick={() => setEditContact(c)} className={TR(i)}>
                     {visCust.has("name")   && <td className="px-3 py-2.5 text-gray-200 font-medium">{c.name}</td>}
-                    {visCust.has("email")  && <td className="px-3 py-2.5 text-gray-400">{c.email ?? <span className="text-gray-700">—</span>}</td>}
-                    {visCust.has("phone")  && <td className="px-3 py-2.5 text-gray-400">{c.phone ?? <span className="text-gray-700">—</span>}</td>}
+                    {visCust.has("email")  && <td className="px-3 py-2.5 text-gray-400">{c.email ?? <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
+                    {visCust.has("phone")  && <td className="px-3 py-2.5 text-gray-400">{c.phone ?? <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
                     {visCust.has("notes")  && <td className="px-3 py-2.5 text-gray-600 max-w-[200px] truncate text-xs">{c.notes ?? "—"}</td>}
-                    {visCust.has("buyer")  && <td className="px-3 py-2.5">{c.isBuyer  ? <Badge color="green">Yes</Badge> : <span className="text-gray-700 text-xs">—</span>}</td>}
-                    {visCust.has("seller") && <td className="px-3 py-2.5">{c.isSeller ? <Badge color="blue">Yes</Badge>  : <span className="text-gray-700 text-xs">—</span>}</td>}
+                    {visCust.has("buyer")  && <td className="px-3 py-2.5">{c.isBuyer  ? <Badge color="green">Yes</Badge> : <span className="text-gray-700 dark:text-gray-300 text-xs">—</span>}</td>}
+                    {visCust.has("seller") && <td className="px-3 py-2.5">{c.isSeller ? <Badge color="blue">Yes</Badge>  : <span className="text-gray-700 dark:text-gray-300 text-xs">—</span>}</td>}
                   </tr>
                 ))}
                 {filteredContacts.length === 0 && <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-600 text-sm">No customers match your filters</td></tr>}
@@ -688,7 +688,7 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
           <div className="overflow-x-auto rounded-b-xl rounded-tr-xl border border-gray-800 border-t-0">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-800 bg-[#1C1C1E]">
+                <tr className="border-b border-gray-800 bg-white dark:bg-[#1C1C1E]">
                   {visRcpt.has("id")         && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">ID</th>}
                   {visRcpt.has("contact")    && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Contact</th>}
                   {visRcpt.has("commission") && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Commission %</th>}
@@ -696,7 +696,7 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                   {visRcpt.has("notes")      && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Notes</th>}
                   {visRcpt.has("status")     && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>}
                 </tr>
-                <tr className="border-b border-gray-900 bg-[#111113]">
+                <tr className="border-b border-gray-900 bg-gray-100 dark:bg-[#111113]">
                   {visRcpt.has("id")         && <td className="px-2 py-1.5"><input value={rId}      onChange={e => setRId(e.target.value)}      placeholder="Filter…" className={COL_INPUT} /></td>}
                   {visRcpt.has("contact")    && <td className="px-2 py-1.5"><input value={rContact} onChange={e => setRContact(e.target.value)} placeholder="Filter…" className={COL_INPUT} /></td>}
                   {visRcpt.has("commission") && <td className="px-2 py-1.5"><input value={rComm}    onChange={e => setRComm(e.target.value)}    placeholder="Filter…" className={COL_INPUT} /></td>}
@@ -727,7 +727,7 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
           <div className="overflow-x-auto rounded-b-xl rounded-tr-xl border border-gray-800 border-t-0">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-800 bg-[#1C1C1E]">
+                <tr className="border-b border-gray-800 bg-white dark:bg-[#1C1C1E]">
                   {visTote.has("id")          && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">ID</th>}
                   {visTote.has("type")        && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Type</th>}
                   {visTote.has("description") && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Description</th>}
@@ -735,7 +735,7 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                   {visTote.has("category")    && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Category</th>}
                   {visTote.has("location")    && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Location</th>}
                 </tr>
-                <tr className="border-b border-gray-900 bg-[#111113]">
+                <tr className="border-b border-gray-900 bg-gray-100 dark:bg-[#111113]">
                   {visTote.has("id")          && <td className="px-2 py-1.5"><input value={tId}      onChange={e => setTId(e.target.value)}      placeholder="Filter…" className={COL_INPUT} /></td>}
                   {visTote.has("type")        && <td className="px-2 py-1.5"><select value={tType} onChange={e => setTType(e.target.value)} className={COL_SELECT}><option value="">All</option>{toteTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></td>}
                   {visTote.has("description") && <td className="px-2 py-1.5"><input value={tDesc}    onChange={e => setTDesc(e.target.value)}    placeholder="Filter…" className={COL_INPUT} /></td>}
@@ -751,8 +751,8 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                     {visTote.has("type")        && <td className="px-3 py-2.5 text-gray-400">{c.type}</td>}
                     {visTote.has("description") && <td className="px-3 py-2.5 text-gray-200 max-w-[200px] truncate">{c.description}</td>}
                     {visTote.has("contact")     && <td className="px-3 py-2.5 text-gray-400">{c.contactName}</td>}
-                    {visTote.has("category")    && <td className="px-3 py-2.5 text-gray-400">{c.category ? `${c.category}${c.subcategory ? ` / ${c.subcategory}` : ""}` : <span className="text-gray-700">—</span>}</td>}
-                    {visTote.has("location")    && <td className="px-3 py-2.5">{c.lastLocation ? <Badge color="violet">{c.lastLocation}</Badge> : <span className="text-gray-700">—</span>}</td>}
+                    {visTote.has("category")    && <td className="px-3 py-2.5 text-gray-400">{c.category ? `${c.category}${c.subcategory ? ` / ${c.subcategory}` : ""}` : <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
+                    {visTote.has("location")    && <td className="px-3 py-2.5">{c.lastLocation ? <Badge color="violet">{c.lastLocation}</Badge> : <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
                   </tr>
                 ))}
                 {filteredContainers.length === 0 && <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-600 text-sm">No totes match your filters</td></tr>}
@@ -766,7 +766,7 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
           <div className="overflow-x-auto rounded-b-xl rounded-tr-xl border border-gray-800 border-t-0">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-800 bg-[#1C1C1E]">
+                <tr className="border-b border-gray-800 bg-white dark:bg-[#1C1C1E]">
                   {visLot.has("lotNumber") && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Lot No.</th>}
                   {visLot.has("title")     && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Title</th>}
                   {visLot.has("auction")   && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Auction</th>}
@@ -779,7 +779,7 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                   {visLot.has("photos")    && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Photos</th>}
                   {visLot.has("status")    && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>}
                 </tr>
-                <tr className="border-b border-gray-900 bg-[#111113]">
+                <tr className="border-b border-gray-900 bg-gray-100 dark:bg-[#111113]">
                   {visLot.has("lotNumber") && <td className="px-2 py-1.5"><input value={lLotNo}   onChange={e => setLLotNo(e.target.value)}   placeholder="Filter…" className={COL_INPUT} /></td>}
                   {visLot.has("title")     && <td className="px-2 py-1.5"><input value={lTitle}   onChange={e => setLTitle(e.target.value)}   placeholder="Filter…" className={COL_INPUT} /></td>}
                   {visLot.has("auction")   && <td className="px-2 py-1.5"><select value={lAuction} onChange={e => setLAuction(e.target.value)} className={COL_SELECT}><option value="">All</option>{auctionCodes.map(a => <option key={a} value={a}>{a}</option>)}</select></td>}
@@ -799,13 +799,13 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                     {visLot.has("lotNumber") && <td className="px-3 py-2.5 text-gray-300 font-mono">{l.lotNumber}</td>}
                     {visLot.has("title")     && <td className="px-3 py-2.5 text-gray-200 max-w-[180px] truncate">{l.title || <span className="text-gray-600">Untitled</span>}</td>}
                     {visLot.has("auction")   && <td className="px-3 py-2.5 text-gray-400">{l.auctionCode}</td>}
-                    {visLot.has("vendor")    && <td className="px-3 py-2.5 text-gray-400">{l.vendor ?? <span className="text-gray-700">—</span>}</td>}
-                    {visLot.has("receipt")   && <td className="px-3 py-2.5 text-gray-400">{l.receipt ?? <span className="text-gray-700">—</span>}</td>}
-                    {visLot.has("tote")      && <td className="px-3 py-2.5 text-gray-400 font-mono">{l.tote ?? <span className="text-gray-700">—</span>}</td>}
-                    {visLot.has("category")  && <td className="px-3 py-2.5 text-gray-400">{l.category ? `${l.category}${l.subCategory ? ` / ${l.subCategory}` : ""}` : <span className="text-gray-700">—</span>}</td>}
-                    {visLot.has("condition") && <td className="px-3 py-2.5 text-gray-400">{l.condition ?? <span className="text-gray-700">—</span>}</td>}
-                    {visLot.has("estimate")  && <td className="px-3 py-2.5 text-gray-400">{l.estimateLow || l.estimateHigh ? `£${l.estimateLow ?? "?"}–${l.estimateHigh ?? "?"}` : <span className="text-gray-700">—</span>}</td>}
-                    {visLot.has("photos")    && <td className="px-3 py-2.5">{l.imageCount > 0 ? <Badge color="violet">{l.imageCount}</Badge> : <span className="text-gray-700">—</span>}</td>}
+                    {visLot.has("vendor")    && <td className="px-3 py-2.5 text-gray-400">{l.vendor ?? <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
+                    {visLot.has("receipt")   && <td className="px-3 py-2.5 text-gray-400">{l.receipt ?? <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
+                    {visLot.has("tote")      && <td className="px-3 py-2.5 text-gray-400 font-mono">{l.tote ?? <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
+                    {visLot.has("category")  && <td className="px-3 py-2.5 text-gray-400">{l.category ? `${l.category}${l.subCategory ? ` / ${l.subCategory}` : ""}` : <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
+                    {visLot.has("condition") && <td className="px-3 py-2.5 text-gray-400">{l.condition ?? <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
+                    {visLot.has("estimate")  && <td className="px-3 py-2.5 text-gray-400">{l.estimateLow || l.estimateHigh ? `£${l.estimateLow ?? "?"}–${l.estimateHigh ?? "?"}` : <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
+                    {visLot.has("photos")    && <td className="px-3 py-2.5">{l.imageCount > 0 ? <Badge color="violet">{l.imageCount}</Badge> : <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
                     {visLot.has("status")    && <td className="px-3 py-2.5">{statusBadge(l.status)}</td>}
                   </tr>
                 ))}
@@ -820,7 +820,7 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
           <div className="overflow-x-auto rounded-b-xl rounded-tr-xl border border-gray-800 border-t-0">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-800 bg-[#1C1C1E]">
+                <tr className="border-b border-gray-800 bg-white dark:bg-[#1C1C1E]">
                   <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Auction</th>
                   <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Lot No.</th>
                   <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Title</th>
@@ -832,7 +832,7 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                   <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
                   <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Placed</th>
                 </tr>
-                <tr className="border-b border-gray-900 bg-[#111113]">
+                <tr className="border-b border-gray-900 bg-gray-100 dark:bg-[#111113]">
                   <td className="px-2 py-1.5">
                     <select value={bAuction} onChange={e => setBAuction(e.target.value)} className={COL_SELECT}>
                       <option value="">All</option>
@@ -872,17 +872,17 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                         <p className="text-gray-200 text-xs">{b.customerName}</p>
                         <p className="text-gray-600 text-[10px]">{b.customerEmail}</p>
                       </td>
-                      <td className="px-3 py-2.5 text-gray-400 font-mono text-xs">{b.contactId ?? <span className="text-gray-700">—</span>}</td>
+                      <td className="px-3 py-2.5 text-gray-400 font-mono text-xs">{b.contactId ?? <span className="text-gray-700 dark:text-gray-300">—</span>}</td>
                       <td className="px-3 py-2.5 text-gray-400 text-xs whitespace-nowrap">
                         {b.estimateLow || b.estimateHigh
                           ? `£${b.estimateLow ?? "?"}–£${b.estimateHigh ?? "?"}`
-                          : <span className="text-gray-700">—</span>}
+                          : <span className="text-gray-700 dark:text-gray-300">—</span>}
                       </td>
                       <td className="px-3 py-2.5 text-violet-400 font-bold whitespace-nowrap">£{b.maxBid.toLocaleString("en-GB")}</td>
                       <td className="px-3 py-2.5 text-gray-400 text-xs whitespace-nowrap">
                         {b.hammerPrice != null
                           ? <span className={won ? "text-green-400 font-bold" : "text-gray-400"}>£{b.hammerPrice.toLocaleString("en-GB")}</span>
-                          : <span className="text-gray-700">—</span>}
+                          : <span className="text-gray-700 dark:text-gray-300">—</span>}
                       </td>
                       <td className="px-3 py-2.5">
                         {won     ? <Badge color="green">WON</Badge>
@@ -1038,7 +1038,7 @@ function BrowseAnyTab() {
             <select
               value={tableKey}
               onChange={e => { setTableKey(e.target.value); setSelectedRow(null) }}
-              className="flex-1 rounded-lg border border-gray-700 bg-[#1C1C1E] px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              className="flex-1 rounded-lg border border-gray-700 bg-white dark:bg-[#1C1C1E] px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
             >
               <option value="">— Pick a table —</option>
               {grouped.map(([group, items]) => (
@@ -1068,7 +1068,7 @@ function BrowseAnyTab() {
             onChange={e => setSearch(e.target.value)}
             placeholder="Case-insensitive contains across text fields"
             disabled={!tableKey}
-            className="w-full rounded-lg border border-gray-700 bg-[#1C1C1E] px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:opacity-40"
+            className="w-full rounded-lg border border-gray-700 bg-white dark:bg-[#1C1C1E] px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:opacity-40"
           />
         </div>
 
@@ -1114,7 +1114,7 @@ function BrowseAnyTab() {
                     <button
                       key={t.key}
                       onClick={() => setTableKey(t.key)}
-                      className="text-left bg-[#141416] border border-gray-800 rounded-lg p-4 hover:border-violet-600 hover:bg-[#1a1a1d] transition-colors"
+                      className="text-left bg-gray-50 dark:bg-[#141416] border border-gray-800 rounded-lg p-4 hover:border-violet-600 hover:bg-gray-100 dark:hover:bg-[#1a1a1d] transition-colors"
                     >
                       <div className="flex items-baseline justify-between gap-3 mb-1">
                         <h4 className="font-semibold text-gray-200 truncate">{t.label}</h4>
@@ -1128,14 +1128,14 @@ function BrowseAnyTab() {
                       </div>
                       <p className="text-xs text-gray-500 mb-2.5 line-clamp-2">{t.description}</p>
                       {t.samples.length > 0 ? (
-                        <div className="bg-[#0a0a0c] border border-gray-900 rounded p-2 overflow-x-auto">
+                        <div className="bg-gray-50 dark:bg-[#0a0a0c] border border-gray-900 rounded p-2 overflow-x-auto">
                           <table className="text-[10px] w-full">
                             <thead>
                               <tr>
                                 {t.columns.slice(0, 5).map(c => (
                                   <th key={c} className="text-left px-1.5 py-1 text-gray-600 font-medium whitespace-nowrap">{c}</th>
                                 ))}
-                                {t.columns.length > 5 && <th className="text-left px-1.5 py-1 text-gray-700">…</th>}
+                                {t.columns.length > 5 && <th className="text-left px-1.5 py-1 text-gray-700 dark:text-gray-300">…</th>}
                               </tr>
                             </thead>
                             <tbody>
@@ -1146,18 +1146,18 @@ function BrowseAnyTab() {
                                     const txt = v === null || v === undefined ? "" : String(v)
                                     return (
                                       <td key={c} className="px-1.5 py-1 text-gray-400 max-w-[140px] truncate" title={txt}>
-                                        {txt || <span className="text-gray-700">—</span>}
+                                        {txt || <span className="text-gray-700 dark:text-gray-300">—</span>}
                                       </td>
                                     )
                                   })}
-                                  {t.columns.length > 5 && <td className="px-1.5 py-1 text-gray-700">…</td>}
+                                  {t.columns.length > 5 && <td className="px-1.5 py-1 text-gray-700 dark:text-gray-300">…</td>}
                                 </tr>
                               ))}
                             </tbody>
                           </table>
                         </div>
                       ) : (
-                        <p className="text-[10px] text-gray-700 italic">Empty</p>
+                        <p className="text-[10px] text-gray-700 dark:text-gray-300 italic">Empty</p>
                       )}
                     </button>
                   ))}
@@ -1172,7 +1172,7 @@ function BrowseAnyTab() {
       {tableKey && rows.length > 0 && (
         <div className="overflow-auto border border-gray-800 rounded-lg max-h-[70vh]">
           <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-[#1C1C1E]">
+            <thead className="sticky top-0 bg-white dark:bg-[#1C1C1E]">
               <tr>
                 {columns.map(c => (
                   <th key={c} className="text-left px-3 py-2 text-[10px] uppercase tracking-wider text-gray-500 font-medium whitespace-nowrap border-b border-gray-800">{c}</th>
@@ -1184,7 +1184,7 @@ function BrowseAnyTab() {
                 <tr
                   key={r.id ?? r.uniqueId ?? i}
                   onClick={() => setSelectedRow(r)}
-                  className={`border-b border-gray-800/50 hover:bg-violet-900/10 transition-colors cursor-pointer ${i % 2 === 0 ? "" : "bg-[#1C1C1E]/30"}`}
+                  className={`border-b border-gray-800/50 hover:bg-violet-900/10 transition-colors cursor-pointer ${i % 2 === 0 ? "" : "bg-white dark:bg-[#1C1C1E]/30"}`}
                 >
                   {columns.map(c => {
                     const v = r[c]
@@ -1211,8 +1211,8 @@ function BrowseAnyTab() {
       {/* Row detail drawer */}
       {selectedRow && (
         <div className="fixed inset-0 z-30 bg-black/60 flex items-end sm:items-center sm:justify-end p-4 sm:p-6" onClick={() => setSelectedRow(null)}>
-          <div onClick={e => e.stopPropagation()} className="bg-[#0d0d0f] border border-gray-800 rounded-xl w-full sm:max-w-2xl max-h-[80vh] overflow-y-auto">
-            <div className="sticky top-0 bg-[#0d0d0f] border-b border-gray-800 px-5 py-3 flex items-center justify-between">
+          <div onClick={e => e.stopPropagation()} className="bg-gray-50 dark:bg-[#0D0D0F] border border-gray-800 rounded-xl w-full sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gray-50 dark:bg-[#0D0D0F] border-b border-gray-800 px-5 py-3 flex items-center justify-between">
               <h3 className="font-semibold text-gray-200">{currentMeta?.label} — row detail</h3>
               <button onClick={() => setSelectedRow(null)} className="text-gray-500 hover:text-gray-300 text-xl leading-none">×</button>
             </div>
@@ -1221,7 +1221,7 @@ function BrowseAnyTab() {
                 <div key={c} className="grid grid-cols-3 gap-3 border-b border-gray-900 pb-2 last:border-0">
                   <span className="text-xs text-gray-500 font-medium">{c}</span>
                   <span className="col-span-2 text-xs text-gray-200 font-mono break-all whitespace-pre-wrap">
-                    {formatCell(selectedRow[c]) || <span className="text-gray-700">—</span>}
+                    {formatCell(selectedRow[c]) || <span className="text-gray-700 dark:text-gray-300">—</span>}
                   </span>
                 </div>
               ))}

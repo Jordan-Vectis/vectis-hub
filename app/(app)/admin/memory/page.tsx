@@ -3,7 +3,7 @@
 import { useState } from "react"
 
 // ─── Static memory content ────────────────────────────────────────────────────
-// Updated by Claude alongside memory file changes. Last synced: 2026-05-13
+// Updated by Claude alongside memory file changes. Last synced: 2026-05-19
 
 type Entry = { filename: string; content: string }
 
@@ -156,11 +156,12 @@ type: user
 - Another developer (unnamed) also works on the same staging branch and pushes changes independently`,
   },
   {
-    filename: "project_vectis_crm.md",
+    filename: "project_vectis_hub.md",
     content: `---
 name: Vectis Hub Project
 description: Full spec, tech stack, deployment details, and current feature state for the Vectis Hub app
 type: project
+last_updated: 2026-05-19
 ---
 
 # Vectis Hub
@@ -171,8 +172,8 @@ type: project
 **Local path:** C:\\Dev apps\\vectis-hub
 
 ## Stack
-- Next.js (App Router), TypeScript, Tailwind CSS
-- Prisma 7 with \`@prisma/adapter-pg\` (requires adapter — no direct URL in client)
+- Next.js 16.2 (App Router), TypeScript, Tailwind CSS v4 (CSS-first, no tailwind.config.ts)
+- Prisma 7.7 with \`@prisma/adapter-pg\` (requires adapter — no direct URL in client)
 - PostgreSQL on Neon
 - NextAuth v5 beta (JWT sessions, Credentials provider)
 - Hosted on Railway (auto-deploys: push to \`main\` → production, push to \`staging\` → staging)
@@ -182,6 +183,7 @@ type: project
 - Business Central OData API (BC Reports, BC Warehouse, BC Marketing)
 - Cloudflare R2 for lot photo storage
 - D-ID API for AI Presenter avatar
+- pdf-lib + sharp + bwip-js for server-side PDF generation (NOT pdfkit)
 
 ## Key config notes
 - \`prisma generate\` runs as part of \`npm run build\`
@@ -190,39 +192,50 @@ type: project
 - Auth split: \`auth.config.ts\` (Edge-safe) + \`auth.ts\` (full, uses Prisma)
 - Prisma client generated at \`app/generated/prisma/\`
 - \`DATABASE_URL\`, \`AUTH_SECRET\`, \`NEXTAUTH_URL\` set in Railway Variables
-- \`prisma migrate deploy\` runs on startup via server.js (DATABASE_URL not available at build time)
 - Jordan never runs the app locally — always uses the Railway staging URL
 
-## Roles
-- **ADMIN** — full access, hardcoded for it@vectis.co.uk
-- **COLLECTIONS** — CRM, submissions, follow-ups
-- **CATALOGUER** — cataloguing tools
+## Roles — custom-creatable
+- **ADMIN** — full access, hardcoded for it@vectis.co.uk, can't be deleted via UI
+- All other roles are free-form strings on User.role. Defaults come from RoleDefault table.
+- Pre-seeded defaults: COLLECTIONS, CATALOGUER
 
 ## Git discipline
 - Default branch for all work: \`staging\`
 - Never push to \`main\` unless Jordan explicitly says "push to main"
 - Always pull from remote staging before pushing (another developer works on the same branch)
-- Merge to production: \`git fetch origin main && git checkout main && git merge origin/staging --no-edit && git push origin main && git checkout staging\`
 
-## Admin section — current features
-- **About** (\`/admin/about\`) — comprehensive documentation for every app, all sub-tabs, DB models, rules, dependencies, and hardcoded constants. Updated 2026-05-07.
-- **Users & Permissions** — grouped by section matching hub page layout
-- **Role Defaults** — default allowedApps + appPermissions per role, auto-applied on user creation
-- **Home Page** — drag-to-reorder hub cards
-- **Departments** — cataloguer department management
-- **Cataloguing Reports** — time-per-lot stats
-- **Run Migrations** — emergency SQL button (all migrations must also be added here)
-- **Claude Memory** (\`/admin/memory\`) — static page with memory content hardcoded in ENTRIES array. Jordan can also upload .md files manually. Updated alongside memory files on each session.
+## Current feature surface
 
-## Hub page sections
-- Cataloguing & AI: Auction AI, Cataloguing, BC Marketing
-- Business Central: BC Reports, BC Warehouse, BC API Viewer
-- Operations: Warehouse, Submissions, Customers, Databases, Packing/Dispatch
-- Auction: Website, Auction Controller, Saleroom Trainer, AI Presenter
-- Admin: standalone card
+### Cataloguing (/tools/cataloguing)
+- Per-auction tabs: Manage Lots, Add Lot, Photo Only Cataloguing, Import Lots, Upload Photos, AI Upgrade, Statistics, Lot History, Auction Settings
+- Lots have addedToBC boolean, aliases for Unique ID matcher
+- Mass actions: delete, generate titles, mark added to BC
 
-## Planned features
-- iPad device tracking — register devices by localStorage UUID, check-in system showing who has each iPad`,
+### Auction AI (/tools/auction-ai)
+- Batch AI run with Gemini — up to 24 images per lot, 12s inter-lot delay, infinite retry loop
+- Presets in lib/auction-ai-presets.ts: Vinyl & Memorabilia, TV & Film, Modern Diecast, Comics & Toys, Model Railway (strict + free), Teddy Bears, General Toys, Military Figures, Matchbox
+- Chat mode (up to 6 images), Model Tester, Description Copier, Duplicate Checker
+
+### BC Marketing (/tools/bc-marketing) — 5 tabs
+Content Generator, Paste & Generate, Insights, Saved Drafts, Hashtag Bank
+
+### BC Warehouse (/tools/bc-warehouse) — 8 tabs
+Location Heatmap, Sale Checklist, Search by Location, Location History (DO NOT redesign), Tote Data, Collections Due, Unsold Items, Data Sync, DB Explorer
+
+### BC Reports (/tools/bc-reports)
+Cataloguing report (barcode/uniqueid/compare modes), Packing report
+
+### Packing (/tools/packing)
+Royal Mail dispatch, Packers sub-page with Full Time/Agency/Ex-Staff groups, aliases, barcode sheet PDF
+
+### Auction Monitor (/tools/auction-monitor)
+Live WebSocket monitor, ntfy.sh push notifications, 10 alert rules
+
+### Admin (/admin)
+About, Users & Permissions, Roles & Defaults, Home Page (drag-to-reorder), Departments, Cataloguing Reports, Devices, Claude Memory, Run Migrations
+
+### Databases (/databases)
+Customers, Receipts, Totes, Lots, Bids editors + Browse Any Table (30 models)`,
   },
   {
     filename: "opening_message.md",
@@ -242,9 +255,191 @@ Hi Claude. Before we start, here are the rules for working with me:
 
 **Common sense on confirmation.** You don't need to check with me on every small thing — fixing a bug, a TypeScript error, a styling tweak within an existing file is fine to just do. But if the decision involves WHERE something lives, WHAT it connects to, or anything that affects the structure of the app — ask first.
 
-**The app is hosted on Railway (staging + production). The database is on Neon. Images are on Cloudflare R2. Never suggest looking for a Postgres service in Railway.**
+**Keep responses short.** One paragraph max unless explaining something technical. Lead with the action or answer, skip preamble. No summaries at the end, no "here's what I did" recaps.
 
-**This is an auction house app for Vectis Auctions, not a CRM. British English throughout.**`,
+**Don't suggest console commands.** Any admin operation that needs to be triggered manually must have a proper UI button.
+
+**Match the complexity of the solution to the simplicity of the request.** If I say "put a copy on the site", embed it statically — don't build a syncing system.
+
+---
+
+## The app
+
+This is the **Vectis Hub** — an internal tool for Vectis Auctions. It is NOT a CRM. Never call it a CRM. British English throughout (colour, unauthorised, etc.).
+
+**Production:** https://vectis-crm-production.up.railway.app
+**Staging:** https://vectis-staging.up.railway.app
+**Reports-only:** Separate Railway environment, deploys from reports-only branch (DIVERGED — has its own server.js and Logo handling)
+**GitHub:** https://github.com/Jordan-Vectis/vectis-hub
+**Local path:** C:\\Dev apps\\vectis-hub
+
+I (Jordan) never run the app locally. I always use the Railway staging URL. Any feature that only works locally is useless.
+
+---
+
+## Tech stack
+
+- Next.js 16.2 (App Router), TypeScript, Tailwind CSS v4 (CSS-first — NO tailwind.config.ts, config goes in the CSS file)
+- Prisma 7.7 with @prisma/adapter-pg (requires adapter — no direct URL in client)
+- PostgreSQL on Neon (NOT Railway — never look for a Postgres service in Railway)
+- NextAuth v5 beta (JWT sessions, Credentials provider)
+- Socket.IO for live auction real-time events
+- Google Gemini API (lot descriptions, BC Marketing articles)
+- Royal Mail Click & Drop API (packing/dispatch)
+- Business Central OData API (BC Reports, BC Warehouse, BC Marketing)
+- Cloudflare R2 for lot photo storage
+- D-ID API for AI Presenter avatar
+- pdf-lib + sharp + bwip-js for server-side PDF generation (NEVER pdfkit — fails on Railway with missing Helvetica.afm)
+
+Key config notes:
+- prisma generate runs as part of npm run build
+- trustHost: true in auth.config.ts — required for Railway domain
+- proxy.ts (not middleware.ts) — Next.js renamed middleware
+- Auth split: auth.config.ts (Edge-safe) + auth.ts (full, uses Prisma)
+- Prisma client generated at app/generated/prisma/
+- DATABASE_URL, AUTH_SECRET, NEXTAUTH_URL set in Railway Variables
+
+---
+
+## Git workflow
+
+- Default branch for ALL work: staging — never push to main unless I explicitly say "push to main" or "merge to production"
+- "Push it" or "deploy it" are NOT permission to push to main
+- Always git pull origin staging before pushing — another developer also pushes to this branch
+- Merge to production: git push origin staging:main
+
+---
+
+## Database migrations
+
+Whenever a new Prisma migration is added, ALSO add the equivalent SQL to the MIGRATIONS array in app/api/admin/run-migrations/route.ts. The Run Migrations button on /admin is the one-click fix — prisma migrate deploy is unreliable on Railway.
+
+---
+
+## Memory workflow
+
+The Claude Memory viewer at /admin/memory is a static page — content is hardcoded in the ENTRIES array in app/(app)/admin/memory/page.tsx. Whenever memory files are updated, ALSO update the corresponding entry in the ENTRIES array and push to staging in the same commit.
+
+---
+
+## Lot identifier rules — CRITICAL
+
+Three separate fields. Never interchange them.
+- receiptUniqueId: format R000016-413 — for AI runs and receipt matching
+- barcode: format F066001 — physical label on item
+- lotNumber: integer string "42" — catalogue sequence
+
+Unique IDs (R000016-413 format) always go in receiptUniqueId, NEVER in lotNumber. Lots created via Apply to Auction have empty lotNumber — this is correct. Folder in Description Copier must always be receiptUniqueId || lotNumber, never just lotNumber.
+
+Detection regex:
+- Unique ID: /^[A-Za-z]\\d{4,7}-\\d{1,6}$/
+- Barcode: /^[A-Za-z]\\d{6,7}$/ or unique ID pattern
+- Strip non-ASCII before testing: .replace(/[^\\x20-\\x7E]/g, "")
+
+---
+
+## Lot titles
+
+Max 83 characters. Extracted from first sentence of description (split on . or newline). Fallback: "Untitled".
+
+## Lot status values
+
+ENTERED | REVIEWED | PUBLISHED | SOLD | UNSOLD | WITHDRAWN — default on creation: ENTERED
+
+## Auction types
+
+GENERAL | DIECAST | TRAINS | VINYL | TV_FILM | MATCHBOX | COMICS | BEARS | DOLLS
+
+---
+
+## Estimate parsing
+
+Regex: /£([\\d,]+)\\s*[–\\-]\\s*£?([\\d,]+)/
+Accepts en-dash and hyphen, optional £ on second value. Strip commas from numbers.
+
+Bidding increments: £0–50: £5 | £50–200: £10 | £200–700: £20 | £700–1000: £50 | £1000–3000: £100 | £3000–7000: £200 | £7000–10000: £500 | £10000+: £1000
+
+---
+
+## Batch AI run rules
+
+- maxDuration: 300s. Up to 24 images per lot. 12-second delay between lots.
+- Retry loop is infinite — never silently fail a lot. Only abort on Gemini content block.
+- Rate limit backoff: exponential — Math.min(60000 * 2^(attempt-1), 1800000)
+- Other error backoff: Math.min(attempt * 12000, 30000)
+- On retry, alternate between primary and fallback model
+- Returns HTTP 200 even when lots fail — always check results[0].status, not res.ok
+- Join description lines with \\n, never space — collapsing to space destroys formatting
+
+Always check before calling .text(): (1) response.promptFeedback?.blockReason and (2) response.candidates?.[0]?.finishReason — only "STOP" and "MAX_TOKENS" are acceptable. 503 from Gemini = transient, retry. Use 422 (not 500) for content blocks.
+
+---
+
+## BC OData API — critical field differences
+
+- Auction_Lines_Excel: auction code = EVA_AuctionNo
+- Receipt_Lines_Excel: auction code = EVA_SalesAllocation
+- These are NOT interchangeable — wrong field = silent failure or 400 error
+
+Always use /api/bc/api-viewer?endpoint=<Name>&limit=1 to confirm field names before writing new BC queries. Complex OR filters time out — run per-key in parallel with Promise.allSettled. Use @odata.nextLink for pagination, NOT $skip (BC has ~38k row $skip limit). $apply=groupby is NOT supported.
+
+---
+
+## PDF generation
+
+Always use pdf-lib (pure JS). Logo: sharp rasterises SVG → PNG, then pdfDoc.embedPng(). Helper: lib/pdf-logo.ts. Barcodes: bwip-js for Code 128. Always generate server-side. Use fixed slot heights.
+
+---
+
+## BC Warehouse — Location History tab
+
+DO NOT change the design or behaviour of the Location History tab in /tools/bc-warehouse. It was accidentally replaced once already. Two modes: Tote and Barcode. API route: /api/bc/location-history. Most recent row highlighted with bg-blue-950/30.
+
+---
+
+## Common gotchas
+
+- fillLotsFromTotes must SELECT receiptUniqueId and preserve existing IDs — earlier bug wiped them
+- Hub cards / app permissions: distinguish "key not configured" (default all-on) from "key present but empty" (respect empty). Don't use array length as the configured signal
+- Mass-select async: use server-side atomic ops, not client-side list arithmetic — React state is async
+- CORS preflight blocks custom headers on ntfy.sh — use JSON body POST format
+- Auction codes get reused across years — sort by date DESC and pick most recent
+- WarehouseItem.auctionName is a cache — use "Refresh auction names from BC" button to re-pull
+
+---
+
+## Current feature surface (as of 2026-05-19)
+
+Cataloguing (/tools/cataloguing): Auction list → per-auction tabs: Manage Lots (filters, inline edit, mass actions inc. mark-added-to-BC), Add Lot, Photo Only Cataloguing, Import Lots, Upload Photos, AI Upgrade, Statistics, Lot History, Auction Settings. Lots have addedToBC boolean and aliases for Unique ID matcher.
+
+Auction AI (/tools/auction-ai): Batch run with Gemini (24 images/lot, 12s delay, infinite retry). Presets in lib/auction-ai-presets.ts (Vinyl, TV/Film, Modern Diecast, Comics, Model Railway strict+free, Teddy Bears, General Toys, Military Figures, Matchbox). Chat mode (6 images), Model Tester, Description Copier, Duplicate Checker.
+
+BC Marketing (/tools/bc-marketing): 5 tabs — Content Generator (16 content types, DB-sourced), Paste & Generate, Insights, Saved Drafts (DRAFT/APPROVED/PUBLISHED), Hashtag Bank. BC internal codes (F025, DM0126 etc.) must NEVER appear in AI output.
+
+BC Warehouse (/tools/bc-warehouse): 8 tabs — Location Heatmap, Sale Checklist, Search by Location, Location History (DO NOT redesign), Tote Data, Collections Due (per-aisle PDFs), Unsold Items, Data Sync, DB Explorer.
+
+BC Reports (/tools/bc-reports): Cataloguing report (barcode/uniqueid/compare modes), Packing report (fuzzy matcher + aliases).
+
+Packing (/tools/packing + /tools/packing/packers): Royal Mail dispatch. Packers: Full Time / Agency / Ex-Staff groups, aliases, barcode sheet PDF (10 rows/page, Code 128, Vectis logo).
+
+Auction Monitor (/tools/auction-monitor): Live WebSocket monitor (wss://www.vectis.co.uk/wss/{auctionId}). Tracks bids, session totals, sale-state flags. ntfy.sh push notifications (10 alert rules, JSON body POST). Persistent lot-outcomes store (~2000 lots).
+
+Admin (/admin): About, Users & Permissions, Roles & Defaults, Home Page (drag-to-reorder), Departments, Cataloguing Reports, Devices (serial/user tracking), Claude Memory, Run Migrations.
+
+Databases (/databases): Customers, Receipts, Totes, Lots, Bids editors + Browse Any Table (read-only, ~30 models, row counts + 3 sample rows).
+
+---
+
+## Recent work (as of 2026-05-19)
+
+- Idle log cleanup — delete with 10-hour exclusion rule (logs under 10h old protected)
+- AI preset Edited badge — fixed bug where badge wasn't showing on preset changes
+- Military Figures preset — fully rewritten examples-first; Set 2055 Confederate Cavalry expanded; WRONG OUTPUT example added
+- Matchbox preset — new preset from scratch; full 1-75 reference table (417 model variants, 75 slots, 1953–1982); 6 correct-output examples; 10 strict rules
+
+## Next task: Dark mode
+
+Agreed to implement app-wide dark mode with dark as the default. Current state: hub is already dark (hardcoded), admin/tool pages are light. Tailwind v4 — dark mode config goes in the CSS file. Plan: configure dark variant in CSS → add theme toggle to top bar (localStorage + dark class on html) → update all pages/components with dark: variants. Hub page flips the other way (already dark, needs light mode variants).`,
   },
   {
     filename: "feedback_vectis.md",
@@ -397,7 +592,7 @@ type: reference
 # Memory Index
 
 - [User Profile](user_profile.md) — Jordan Orange, Vectis auction house, non-technical, always uses Railway URL never local
-- [Vectis Hub Project](project_vectis_crm.md) — Full spec, stack, deployment, current admin features, planned iPad tracking
+- [Vectis Hub Project](project_vectis_hub.md) — Full spec, stack, deployment, current admin features, planned iPad tracking
 - [Vectis Company Facts](vectis_company_facts.md) — Authoritative company facts; use in any AI-generated content prompt
 - [BC OData API Reference](bc_api_reference.md) — Endpoint field names, gotchas, cataloguing modes, bidstream WebSocket protocol + ntfy.sh push pattern
 - [PDF Generation Patterns](feedback_pdf_patterns.md) — pdf-lib (not pdfkit), sharp for SVG logos, bwip-js for barcodes, server-side over browser print
@@ -435,19 +630,19 @@ function renderInline(text: string): React.ReactNode {
   const parts = text.split(/(\*\*[^*]+\*\*)/)
   return parts.map((part, i) =>
     part.startsWith("**") && part.endsWith("**")
-      ? <strong key={i} className="font-semibold text-gray-900">{part.slice(2, -2)}</strong>
+      ? <strong key={i} className="font-semibold text-gray-900 dark:text-white">{part.slice(2, -2)}</strong>
       : part
   )
 }
 
 function renderBody(body: string) {
   return body.split("\n").map((line, i) => {
-    if (line.startsWith("# "))   return <h2 key={i} className="text-base font-bold text-gray-900 mt-4 mb-1">{line.slice(2)}</h2>
-    if (line.startsWith("## "))  return <h3 key={i} className="text-sm font-semibold text-gray-800 mt-3 mb-1">{line.slice(3)}</h3>
-    if (line.startsWith("### ")) return <h4 key={i} className="text-sm font-medium text-gray-700 mt-2 mb-0.5">{line.slice(4)}</h4>
-    if (line.startsWith("- "))   return <p key={i} className="text-sm text-gray-700 leading-relaxed pl-3 before:content-['–'] before:mr-2 before:text-gray-400">{renderInline(line.slice(2))}</p>
+    if (line.startsWith("# "))   return <h2 key={i} className="text-base font-bold text-gray-900 dark:text-white mt-4 mb-1">{line.slice(2)}</h2>
+    if (line.startsWith("## "))  return <h3 key={i} className="text-sm font-semibold text-gray-800 dark:text-gray-200 mt-3 mb-1">{line.slice(3)}</h3>
+    if (line.startsWith("### ")) return <h4 key={i} className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-2 mb-0.5">{line.slice(4)}</h4>
+    if (line.startsWith("- "))   return <p key={i} className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed pl-3 before:content-['–'] before:mr-2 before:text-gray-400 dark:text-gray-500">{renderInline(line.slice(2))}</p>
     if (line.trim() === "")      return <div key={i} className="h-2" />
-    return <p key={i} className="text-sm text-gray-700 leading-relaxed">{renderInline(line)}</p>
+    return <p key={i} className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{renderInline(line)}</p>
   })
 }
 
@@ -482,12 +677,12 @@ export default function MemoryPage() {
     <div className="p-8 max-w-3xl">
       <div className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Claude Memory</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Claude Memory</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             What Claude remembers about you, this project, and how to work with you.
           </p>
         </div>
-        <label className="shrink-0 cursor-pointer text-sm text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-300 px-4 py-2 rounded-lg transition-colors">
+        <label className="shrink-0 cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:border-gray-600 px-4 py-2 rounded-lg transition-colors">
           Upload .md
           <input type="file" accept=".md" multiple onChange={handleUpload} className="hidden" />
         </label>
@@ -497,30 +692,30 @@ export default function MemoryPage() {
         {entries.map(entry => {
           const { meta, body } = parseFrontmatter(entry.content)
           const isOpen    = open === entry.filename
-          const typeClass = TYPE_COLOURS[meta.type ?? ""] ?? "bg-gray-100 text-gray-600"
+          const typeClass = TYPE_COLOURS[meta.type ?? ""] ?? "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
 
           return (
-            <div key={entry.filename} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div key={entry.filename} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
               <button
                 onClick={() => setOpen(isOpen ? null : entry.filename)}
-                className="w-full flex items-start gap-4 px-5 py-4 text-left hover:bg-gray-50 transition-colors"
+                className="w-full flex items-start gap-4 px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-gray-900 text-sm">{meta.name ?? entry.filename}</span>
+                    <span className="font-medium text-gray-900 dark:text-white text-sm">{meta.name ?? entry.filename}</span>
                     {meta.type && (
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${typeClass}`}>
                         {meta.type}
                       </span>
                     )}
-                    <span className="text-xs text-gray-400 font-mono">{entry.filename}</span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500 font-mono">{entry.filename}</span>
                   </div>
                   {meta.description && (
-                    <p className="text-xs text-gray-500 mt-0.5">{meta.description}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{meta.description}</p>
                   )}
                 </div>
                 <svg
-                  className={`w-4 h-4 text-gray-400 mt-0.5 shrink-0 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                  className={`w-4 h-4 text-gray-400 dark:text-gray-500 mt-0.5 shrink-0 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
                   fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -528,7 +723,7 @@ export default function MemoryPage() {
               </button>
 
               {isOpen && (
-                <div className="border-t border-gray-100 px-5 py-4 space-y-1">
+                <div className="border-t border-gray-100 dark:border-gray-800 px-5 py-4 space-y-1">
                   {renderBody(body)}
                 </div>
               )}

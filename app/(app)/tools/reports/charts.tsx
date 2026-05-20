@@ -177,12 +177,12 @@ export default function CataloguingReportsCharts({
   return (
     <div className="space-y-8">
       {/* Leaderboard chart */}
-      <div className="bg-[#1C1C1E] border border-gray-800 rounded-xl p-6">
+      <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl p-6">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-          <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider">
+          <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
             Team Leaderboard
           </h2>
-          <div className="flex gap-1.5 bg-[#2C2C2E] rounded-lg p-1">
+          <div className="flex gap-1.5 bg-gray-100 dark:bg-[#2C2C2E] rounded-lg p-1">
             {views.map(v => (
               <button
                 key={v.key}
@@ -190,7 +190,7 @@ export default function CataloguingReportsCharts({
                 className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
                   view === v.key
                     ? "bg-[#2AB4A6] text-white"
-                    : "text-gray-400 hover:text-white"
+                    : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
                 }`}
               >
                 {v.label}
@@ -200,7 +200,7 @@ export default function CataloguingReportsCharts({
         </div>
 
         {chartData.length === 0 ? (
-          <p className="text-gray-500 text-sm text-center py-8">No data to display.</p>
+          <p className="text-gray-500 dark:text-gray-400 text-sm text-center py-8">No data to display.</p>
         ) : (
           <HorizontalBars
             data={chartData}
@@ -213,7 +213,7 @@ export default function CataloguingReportsCharts({
 
       {/* Monthly totals chart */}
       {monthlyBuckets.length > 0 && (
-        <div className="bg-[#1C1C1E] border border-gray-800 rounded-xl p-6">
+        <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl p-6">
           <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-6">
             Monthly Totals — Last 12 Months
           </h2>

@@ -1,4 +1,4 @@
-import Link from "next/link"
+﻿import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
@@ -29,53 +29,53 @@ export default async function AuctionsPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Auctions</h1>
-          <p className="text-sm text-gray-400 mt-0.5">Manage catalogue auctions and lots</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Auctions</h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">Manage catalogue auctions and lots</p>
         </div>
         <NewAuctionButton />
       </div>
 
       {/* Stats bar */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-[#1C1C1E] rounded-xl border border-gray-700 p-4">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Total Auctions</p>
-          <p className="text-2xl font-bold text-white mt-1">{auctions.length}</p>
+        <div className="bg-white dark:bg-[#1C1C1E] rounded-xl border border-gray-300 dark:border-gray-700 p-4">
+          <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Total Auctions</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{auctions.length}</p>
         </div>
-        <div className="bg-[#1C1C1E] rounded-xl border border-gray-700 p-4">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Active</p>
-          <p className="text-2xl font-bold text-white mt-1">{activeAuctions}</p>
+        <div className="bg-white dark:bg-[#1C1C1E] rounded-xl border border-gray-300 dark:border-gray-700 p-4">
+          <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Active</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{activeAuctions}</p>
         </div>
-        <div className="bg-[#1C1C1E] rounded-xl border border-gray-700 p-4">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Total Lots</p>
-          <p className="text-2xl font-bold text-white mt-1">{totalLots}</p>
+        <div className="bg-white dark:bg-[#1C1C1E] rounded-xl border border-gray-300 dark:border-gray-700 p-4">
+          <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Total Lots</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{totalLots}</p>
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-[#1C1C1E] rounded-xl border border-gray-700 overflow-hidden">
+      <div className="bg-white dark:bg-[#1C1C1E] rounded-xl border border-gray-300 dark:border-gray-700 overflow-hidden">
         {auctions.length === 0 ? (
-          <div className="text-center py-12 text-gray-500 text-sm">
+          <div className="text-center py-12 text-gray-600 dark:text-gray-500 text-sm">
             No auctions yet. Create the first one.
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-800 bg-[#1C1C1E]">
-                <th className="text-left px-4 py-3 font-medium text-gray-400">Code</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-400">Name</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-400">Date</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-400">Type</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-400">Lots</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-400">Locked</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-400">Finished</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-400">Complete</th>
+              <tr className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E]">
+                <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Code</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Name</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Date</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Type</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Lots</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Locked</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Finished</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Complete</th>
               </tr>
             </thead>
             <tbody>
               {auctions.map((auction) => (
                 <tr
                   key={auction.id}
-                  className="border-b border-gray-800 last:border-0 hover:bg-[#2C2C2E] transition-colors"
+                  className="border-b border-gray-200 dark:border-gray-800 last:border-0 hover:bg-gray-100 dark:hover:bg-[#2C2C2E] transition-colors"
                 >
                   <td className="px-4 py-3">
                     <Link
@@ -85,14 +85,14 @@ export default async function AuctionsPage() {
                       {auction.code}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 font-medium text-gray-100">{auction.name}</td>
-                  <td className="px-4 py-3 text-gray-400">
+                  <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">{auction.name}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
                     {auction.auctionDate
                       ? new Date(auction.auctionDate).toLocaleDateString("en-GB")
                       : "—"}
                   </td>
-                  <td className="px-4 py-3 text-gray-400">{auction.auctionType}</td>
-                  <td className="px-4 py-3 text-gray-400">{auction._count.lots}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{auction.auctionType}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{auction._count.lots}</td>
                   <td className="px-4 py-3 text-center">
                     {auction.locked ? (
                       <span className="text-green-400 font-bold">✓</span>
@@ -123,3 +123,4 @@ export default async function AuctionsPage() {
     </div>
   )
 }
+

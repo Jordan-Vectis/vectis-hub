@@ -238,7 +238,7 @@ export default function PackersPage() {
     <div className="p-6 max-w-5xl" style={{ fontFamily: "Arial, sans-serif" }}>
       <div className="mb-6">
         <Link href="/tools/packing" className="text-sm text-gray-500 hover:text-gray-700">← Packing &amp; Dispatch</Link>
-        <h1 className="text-2xl font-bold text-gray-900 mt-2">Packer Barcodes</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-2">Packer Barcodes</h1>
         <p className="text-sm text-gray-500 mt-0.5">
           Manage the list of packing-floor staff. Print barcode sheets for the benches —
           each barcode is the packer's name in Code 128 so it scans straight into BC.
@@ -246,8 +246,8 @@ export default function PackersPage() {
       </div>
 
       {/* Add new */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
-        <h2 className="text-sm font-semibold text-gray-700 mb-3">Add packer</h2>
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 mb-6">
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Add packer</h2>
         <div className="flex flex-col sm:flex-row gap-2">
           <input
             type="text"
@@ -255,12 +255,12 @@ export default function PackersPage() {
             onChange={e => setNewName(e.target.value)}
             onKeyDown={e => e.key === "Enter" && addPacker()}
             placeholder="Full name (e.g. Caitlain Ankers)"
-            className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <select
             value={newGroup}
             onChange={e => setNewGroup(e.target.value as "FULL_TIME" | "AGENCY" | "EX_STAFF")}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="FULL_TIME">Full Time</option>
             <option value="AGENCY">Agency</option>
@@ -296,7 +296,7 @@ export default function PackersPage() {
               <select
                 value={suggDays}
                 onChange={e => setSuggDays(Number(e.target.value))}
-                className="text-xs rounded border border-amber-300 bg-white px-2 py-1 text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                className="text-xs rounded border border-amber-300 bg-white dark:bg-gray-900 px-2 py-1 text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
               >
                 <option value={30}>Last 30 days</option>
                 <option value={90}>Last 90 days</option>
@@ -313,7 +313,7 @@ export default function PackersPage() {
           <ul className="divide-y divide-amber-100">
             {suggestions.map(s => (
               <li key={s.raw} className="px-4 py-2.5 flex items-center gap-3 hover:bg-amber-100/40 flex-wrap">
-                <code className="bg-white border border-amber-200 rounded px-2 py-1 text-sm text-amber-900 font-mono flex-shrink-0">{s.raw}</code>
+                <code className="bg-white dark:bg-gray-900 border border-amber-200 rounded px-2 py-1 text-sm text-amber-900 font-mono flex-shrink-0">{s.raw}</code>
                 <span className="text-xs text-amber-700 whitespace-nowrap">
                   {s.count} shipment{s.count === 1 ? "" : "s"}
                 </span>
@@ -326,7 +326,7 @@ export default function PackersPage() {
                     if (v) { assignAsAlias(s.raw, v); e.currentTarget.value = "" }
                   }}
                   disabled={addingFromSugg === s.raw || packers.length === 0}
-                  className="text-xs rounded border border-amber-300 bg-white px-2 py-1 text-amber-900 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-amber-400 max-w-[180px]"
+                  className="text-xs rounded border border-amber-300 bg-white dark:bg-gray-900 px-2 py-1 text-amber-900 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-amber-400 max-w-[180px]"
                   title="Assign this raw name as an alias of an existing packer"
                 >
                   <option value="">→ Assign to packer…</option>
@@ -376,7 +376,7 @@ export default function PackersPage() {
             <select
               value={suggDays}
               onChange={e => setSuggDays(Number(e.target.value))}
-              className="text-xs rounded border border-emerald-300 bg-white px-2 py-1 text-emerald-900 focus:outline-none"
+              className="text-xs rounded border border-emerald-300 bg-white dark:bg-gray-900 px-2 py-1 text-emerald-900 focus:outline-none"
             >
               <option value={30}>Last 30 days</option>
               <option value={90}>Last 90 days</option>
@@ -398,10 +398,10 @@ export default function PackersPage() {
         const list = byGroup[g.key].sort(byOrder)
         const activeCount = list.filter(p => p.active).length
         return (
-          <div key={g.key} className="bg-white rounded-xl border border-gray-200 mb-4">
+          <div key={g.key} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 mb-4">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
               <div>
-                <h2 className="font-semibold text-gray-800">{g.label}</h2>
+                <h2 className="font-semibold text-gray-800 dark:text-gray-100">{g.label}</h2>
                 <p className="text-xs text-gray-500">{g.description} · {activeCount} active</p>
               </div>
               <button
@@ -437,14 +437,14 @@ export default function PackersPage() {
                         onBlur={e => { if (e.target.value.trim() && e.target.value !== p.name) patchPacker(p.id, { name: e.target.value.trim() }) }}
                         onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur() }}
                         title="Click to rename"
-                        className="flex-1 bg-transparent text-sm text-gray-800 rounded px-1.5 py-0.5 cursor-text
+                        className="flex-1 bg-transparent text-sm text-gray-800 dark:text-gray-100 rounded px-1.5 py-0.5 cursor-text
                                    border border-transparent hover:border-gray-300 hover:bg-white
                                    focus:outline-none focus:border-blue-400 focus:bg-white"
                       />
                       <select
                         value={p.staffGroup}
                         onChange={e => patchPacker(p.id, { staffGroup: e.target.value as any })}
-                        className="text-xs rounded border border-gray-200 px-2 py-1 text-gray-600 focus:outline-none focus:border-blue-400"
+                        className="text-xs rounded border border-gray-200 dark:border-gray-700 px-2 py-1 text-gray-600 focus:outline-none focus:border-blue-400"
                         title="Move to other group"
                       >
                         <option value="FULL_TIME">Full Time</option>
@@ -475,7 +475,7 @@ export default function PackersPage() {
                                   }}
                                   onBlur={() => commitEditAlias(p.id, a)}
                                   autoFocus
-                                  className="font-mono bg-white border border-emerald-300 rounded px-1 py-0 text-xs text-emerald-900 focus:outline-none focus:ring-1 focus:ring-emerald-400 min-w-[80px]"
+                                  className="font-mono bg-white dark:bg-gray-900 border border-emerald-300 rounded px-1 py-0 text-xs text-emerald-900 focus:outline-none focus:ring-1 focus:ring-emerald-400 min-w-[80px]"
                                 />
                               ) : (
                                 <button

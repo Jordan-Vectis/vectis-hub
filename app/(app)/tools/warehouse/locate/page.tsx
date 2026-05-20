@@ -66,7 +66,7 @@ export default function LocatePage() {
 
   return (
     <div className="p-6 max-w-lg space-y-6" style={{ fontFamily: "Arial, sans-serif" }}>
-      <h1 className="text-2xl font-bold text-gray-900">Locate Container</h1>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Locate Container</h1>
 
       {error && <p className="text-red-500 text-sm">{error}</p>}
 

@@ -68,8 +68,8 @@ const STATUS_STYLES: Record<string, string> = {
   WITHDRAWN: "bg-orange-900/50 text-orange-300",
 }
 
-const input = "w-full rounded-lg border border-gray-700 bg-[#2C2C2E] px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]"
-const lbl   = "block text-xs font-medium text-gray-400 mb-1"
+const input = "w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#2C2C2E] px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]"
+const lbl   = "block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1"
 
 // ─── Main tabbed component ────────────────────────────────────────────────────
 
@@ -146,14 +146,14 @@ function DupeCheckerModal({ lots, auctionId, onClose, onDeleted }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={onClose}>
-      <div className="bg-[#1C1C1E] border border-gray-700 rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl"
+      <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl"
         onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-300 dark:border-gray-700">
           <div>
-            <h2 className="text-base font-semibold text-white">Duplicate Checker</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Lots sharing the same Receipt Unique ID — best filled kept automatically</p>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Duplicate Checker</h2>
+            <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">Lots sharing the same Receipt Unique ID — best filled kept automatically</p>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-xl leading-none">✕</button>
+          <button onClick={onClose} className="text-gray-600 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-xl leading-none">✕</button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5">
@@ -162,7 +162,7 @@ function DupeCheckerModal({ lots, auctionId, onClose, onDeleted }: {
           ) : (
             <div className="space-y-4">
               {visibleGroups.map((group, gi) => (
-                <div key={gi} className="bg-[#141416] border border-gray-800 rounded-lg overflow-hidden">
+                <div key={gi} className="bg-gray-50 dark:bg-[#141416] border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
                   <div className="px-4 py-2 bg-yellow-900/20 border-b border-yellow-700/30">
                     <span className="text-xs font-mono text-yellow-400 font-semibold">{group[0].receiptUniqueId}</span>
                     <span className="text-xs text-yellow-600 ml-2">— {group.length} lots</span>
@@ -170,19 +170,19 @@ function DupeCheckerModal({ lots, auctionId, onClose, onDeleted }: {
                   {group.map((lot, li) => {
                     const isKeep = li === 0
                     return (
-                      <div key={lot.id} className={`flex items-center gap-3 px-4 py-3 border-b border-gray-800 last:border-0 ${isKeep ? "bg-green-950/20" : ""}`}>
+                      <div key={lot.id} className={`flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-800 last:border-0 ${isKeep ? "bg-green-950/20" : ""}`}>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 text-xs">
                             {isKeep
                               ? <span className="text-green-400 font-semibold">✓ Keep</span>
                               : <span className="text-red-400">Remove</span>}
-                            <span className="font-mono text-gray-400">Lot {lot.lotNumber || "—"}</span>
+                            <span className="font-mono text-gray-600 dark:text-gray-400">Lot {lot.lotNumber || "—"}</span>
                             {lot.imageUrls.length > 0 && <span className="text-blue-400">{lot.imageUrls.length} photos</span>}
                             {lot.description && <span className="text-green-400">Description</span>}
-                            {lot.title && <span className="text-gray-400">Title</span>}
+                            {lot.title && <span className="text-gray-600 dark:text-gray-400">Title</span>}
                             <span className="text-gray-600">score {lotScore(lot)}</span>
                           </div>
-                          <p className="text-xs text-gray-300 truncate mt-0.5">{lot.title || "No title"}</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-300 truncate mt-0.5">{lot.title || "No title"}</p>
                         </div>
                         {!isKeep && (
                           <button
@@ -202,8 +202,8 @@ function DupeCheckerModal({ lots, auctionId, onClose, onDeleted }: {
           )}
         </div>
 
-        <div className="px-5 py-3 border-t border-gray-700 flex items-center justify-between">
-          <span className="text-xs text-gray-500">
+        <div className="px-5 py-3 border-t border-gray-300 dark:border-gray-700 flex items-center justify-between">
+          <span className="text-xs text-gray-600 dark:text-gray-500">
             {visibleGroups.length > 0
               ? `${visibleGroups.length} group${visibleGroups.length !== 1 ? "s" : ""} · ${totalToDelete} lot${totalToDelete !== 1 ? "s" : ""} to remove`
               : "All clear"}
@@ -289,7 +289,7 @@ export default function AuctionTabs({ auction, lots, userId, userName, showScanT
         </button>
         <span className="text-gray-700">/</span>
         <span className="font-mono font-bold text-[#2AB4A6]">{auction.code}</span>
-        <span className="text-gray-300 font-medium">{auction.name}</span>
+        <span className="text-gray-600 dark:text-gray-300 font-medium">{auction.name}</span>
         {auction.locked   && <span className="text-xs px-2 py-0.5 rounded-full bg-blue-900/50 text-blue-300">Locked</span>}
         {auction.finished && <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-900/50 text-yellow-300">Finished</span>}
         {auction.complete && <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/50 text-green-300">Complete</span>}
@@ -297,7 +297,7 @@ export default function AuctionTabs({ auction, lots, userId, userName, showScanT
 
         <div className="ml-auto flex items-center gap-2">
           <button onClick={() => setShowDupeChecker(true)}
-            className="relative text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors bg-yellow-900/20 border border-yellow-700/40 text-yellow-300 hover:bg-yellow-900/40">
+            className="relative text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-400 dark:border-yellow-700/40 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900/40">
             🔍 Check Duplicates
             {dupeCount > 0 && (
               <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center leading-none">
@@ -318,11 +318,11 @@ export default function AuctionTabs({ auction, lots, userId, userName, showScanT
             localStorage.setItem("copier_preload", JSON.stringify(data))
             window.open("/tools/auction-ai?tab=copier", "_blank")
           }}
-            className="text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors bg-[#C8A96E]/10 border border-[#C8A96E]/40 text-[#C8A96E] hover:bg-[#C8A96E]/20">
+            className="text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors bg-amber-50 dark:bg-[#C8A96E]/10 border border-amber-400 dark:border-[#C8A96E]/40 text-amber-700 dark:text-[#C8A96E] hover:bg-amber-100 dark:hover:bg-[#C8A96E]/20">
             📋 Description Copier
           </button>
           <button onClick={() => switchTab("ai-upgrade")}
-            className="text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors bg-purple-900/20 border border-purple-700/40 text-purple-300 hover:bg-purple-900/40">
+            className="text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors bg-purple-50 dark:bg-purple-900/20 border border-purple-400 dark:border-purple-700/40 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/40">
             ✨ Upgrade descriptions with AI
           </button>
           <button
@@ -330,8 +330,8 @@ export default function AuctionTabs({ auction, lots, userId, userName, showScanT
             disabled={pubPending}
             className={`text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50 ${
               published
-                ? "bg-red-900/30 border border-red-700 text-red-300 hover:bg-red-900/50"
-                : "bg-emerald-900/30 border border-emerald-700 text-emerald-300 hover:bg-emerald-900/50"
+                ? "bg-red-50 dark:bg-red-900/30 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50"
+                : "bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-500 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50"
             }`}
           >
             {pubPending ? "…" : published ? "Unpublish from Site" : "Publish to Site"}
@@ -340,13 +340,13 @@ export default function AuctionTabs({ auction, lots, userId, userName, showScanT
       </div>
 
       {/* Tab bar */}
-      <div className="flex-shrink-0 flex border-b border-gray-700 mb-6 overflow-x-auto scrollbar-none -mx-6 px-6">
+      <div className="flex-shrink-0 flex border-b border-gray-300 dark:border-gray-700 mb-6 overflow-x-auto scrollbar-none -mx-6 px-6">
         {tabs.map(t => (
           <button key={t.id} onClick={() => switchTab(t.id)}
             className={`flex-shrink-0 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap ${
               tab === t.id
                 ? "border-[#2AB4A6] text-[#2AB4A6]"
-                : "border-transparent text-gray-500 hover:text-gray-300"
+                : "border-transparent text-gray-600 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
             }`}>
             {t.label}
           </button>
@@ -499,7 +499,7 @@ function SettingsTab({ auction }: { auction: Auction }) {
               <input type="checkbox" name={f} value="true"
                 defaultChecked={(auction as any)[f]}
                 className="w-4 h-4 rounded border-gray-600 accent-[#2AB4A6]" />
-              <span className="text-sm text-gray-400 capitalize">{f}</span>
+              <span className="text-sm text-gray-600 dark:text-gray-400 capitalize">{f}</span>
             </label>
           ))}
         </div>
@@ -516,7 +516,7 @@ function SettingsTab({ auction }: { auction: Auction }) {
       {/* Danger zone */}
       <div className="mt-10 border border-red-900/50 rounded-xl p-5">
         <h3 className="text-sm font-semibold text-red-400 mb-1">Danger Zone</h3>
-        <p className="text-xs text-gray-500 mb-3">Permanently delete this auction and all its lots.</p>
+        <p className="text-xs text-gray-600 dark:text-gray-500 mb-3">Permanently delete this auction and all its lots.</p>
         {!confirmDelete ? (
           <button onClick={() => setConfirmDelete(true)}
             className="text-sm px-4 py-2 border border-red-800 text-red-400 rounded-lg hover:bg-red-900/30 transition-colors">
@@ -530,7 +530,7 @@ function SettingsTab({ auction }: { auction: Auction }) {
               {pending ? "Deleting…" : "Yes, delete"}
             </button>
             <button onClick={() => setConfirmDelete(false)}
-              className="text-sm text-gray-500 hover:text-gray-300 transition-colors">
+              className="text-sm text-gray-600 dark:text-gray-500 hover:text-gray-300 transition-colors">
               Cancel
             </button>
           </div>
@@ -542,8 +542,8 @@ function SettingsTab({ auction }: { auction: Auction }) {
 
 // ─── Manage lots tab ──────────────────────────────────────────────────────────
 
-const COL_INPUT  = "w-full rounded border border-gray-700 bg-[#0d0d0f] px-2 py-1 text-xs text-gray-300 placeholder-gray-700 focus:outline-none focus:ring-1 focus:ring-[#2AB4A6]"
-const COL_SELECT = "w-full rounded border border-gray-700 bg-[#0d0d0f] px-1 py-1 text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-[#2AB4A6]"
+const COL_INPUT  = "w-full rounded border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#0d0d0f] px-2 py-1 text-xs text-gray-600 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-700 focus:outline-none focus:ring-1 focus:ring-[#2AB4A6]"
+const COL_SELECT = "w-full rounded border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#0d0d0f] px-1 py-1 text-xs text-gray-600 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-[#2AB4A6]"
 
 function colMatch(value: string | null | undefined, filter: string) {
   if (!filter.trim()) return true
@@ -933,50 +933,50 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
         <div className="flex items-center gap-2 mb-4">
           <button
             onClick={() => setShowMassAdd(v => !v)}
-            className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showMassAdd ? "border-orange-500 text-orange-400 bg-orange-900/20" : "border-gray-600 text-gray-400 hover:border-orange-500 hover:text-orange-400"}`}>
+            className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showMassAdd ? "border-orange-500 text-orange-400 bg-orange-900/20" : "border-gray-600 text-gray-600 dark:text-gray-400 hover:border-orange-500 hover:text-orange-400"}`}>
             ➕ Mass Add Lots
           </button>
           {massMsg && <span className="text-xs text-orange-400">{massMsg}</span>}
         </div>
         {showMassAdd && (
-          <div className="mb-4 bg-[#1C1C1E] border border-orange-700/40 rounded-xl p-4 space-y-4">
+          <div className="mb-4 bg-white dark:bg-[#1C1C1E] border border-orange-700/40 rounded-xl p-4 space-y-4">
             <div>
               <p className="text-sm font-semibold text-orange-300">Mass Add Lots</p>
-              <p className="text-xs text-gray-500 mt-0.5">
+              <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">
                 Creates blank lots in bulk. Barcodes are auto-generated as {auction.code}001, {auction.code}002… continuing from the highest existing barcode.
               </p>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div>
-                <label className="text-xs text-gray-400 block mb-1">Number of lots <span className="text-orange-400">*</span></label>
+                <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Number of lots <span className="text-orange-400">*</span></label>
                 <input type="number" min={1} max={1000} value={massCount}
                   onChange={e => setMassCount(Math.max(1, Math.min(1000, parseInt(e.target.value) || 1)))}
-                  className="w-full bg-[#2C2C2E] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500" />
+                  className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-orange-500" />
               </div>
               <div>
-                <label className="text-xs text-gray-400 block mb-1">Vendor</label>
+                <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Vendor</label>
                 <input type="text" value={massVendor} onChange={e => setMassVendor(e.target.value)} placeholder="e.g. V000123"
-                  className="w-full bg-[#2C2C2E] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500" />
+                  className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-orange-500" />
               </div>
               <div>
-                <label className="text-xs text-gray-400 block mb-1">Tote</label>
+                <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Tote</label>
                 <input type="text" value={massTote} onChange={e => setMassTote(e.target.value)} placeholder="e.g. T01"
-                  className="w-full bg-[#2C2C2E] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500" />
+                  className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-orange-500" />
               </div>
               <div>
-                <label className="text-xs text-gray-400 block mb-1">Receipt</label>
+                <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Receipt</label>
                 <input type="text" value={massReceipt} onChange={e => setMassReceipt(e.target.value)} placeholder="e.g. R000123"
-                  className="w-full bg-[#2C2C2E] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500" />
+                  className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-orange-500" />
               </div>
               <div>
-                <label className="text-xs text-gray-400 block mb-1">Category</label>
+                <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Category</label>
                 <input type="text" value={massCategory} onChange={e => setMassCategory(e.target.value)} placeholder="e.g. Toys"
-                  className="w-full bg-[#2C2C2E] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500" />
+                  className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-orange-500" />
               </div>
               <div>
-                <label className="text-xs text-gray-400 block mb-1">Sub-category</label>
+                <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Sub-category</label>
                 <input type="text" value={massSubCat} onChange={e => setMassSubCat(e.target.value)} placeholder="e.g. Action Figures"
-                  className="w-full bg-[#2C2C2E] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500" />
+                  className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-orange-500" />
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -996,12 +996,12 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
                 className="px-5 py-2 bg-orange-600 hover:bg-orange-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors">
                 {massAdding ? "Creating…" : `Create ${massCount} lot${massCount !== 1 ? "s" : ""}`}
               </button>
-              <button onClick={() => setShowMassAdd(false)} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">Cancel</button>
+              <button onClick={() => setShowMassAdd(false)} className="text-xs text-gray-600 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Cancel</button>
             </div>
           </div>
         )}
         <div className="text-center py-16 text-gray-600">
-          No lots yet — use the <span className="text-gray-400">Add Lot</span> tab or Mass Add above to get started.
+          No lots yet — use the <span className="text-gray-600 dark:text-gray-400">Add Lot</span> tab or Mass Add above to get started.
         </div>
       </div>
     )
@@ -1023,34 +1023,34 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
               })
             }}
             disabled={fillPending}
-            className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-400 hover:border-[#2AB4A6] hover:text-[#2AB4A6] transition-colors disabled:opacity-50"
+            className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-600 dark:text-gray-400 hover:border-[#2AB4A6] hover:text-[#2AB4A6] transition-colors disabled:opacity-50"
           >
             {fillPending ? "Pulling…" : "⟳ Pull Vendor/Receipt from Totes"}
           </button>
           <button
             onClick={() => { setShowMassAdd(v => !v); setShowAutolotter(false); setShowBids(false) }}
-            className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showMassAdd ? "border-orange-500 text-orange-400 bg-orange-900/20" : "border-gray-600 text-gray-400 hover:border-orange-500 hover:text-orange-400"}`}>
+            className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showMassAdd ? "border-orange-500 text-orange-400 bg-orange-900/20" : "border-gray-600 text-gray-600 dark:text-gray-400 hover:border-orange-500 hover:text-orange-400"}`}>
             ➕ Mass Add Lots
           </button>
           <button
             onClick={() => { setShowAutolotter(v => !v); setShowBids(false); setShowMassAdd(false) }}
-            className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showAutolotter ? "border-yellow-500 text-yellow-400 bg-yellow-900/20" : "border-gray-600 text-gray-400 hover:border-yellow-500 hover:text-yellow-400"}`}>
+            className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showAutolotter ? "border-yellow-500 text-yellow-400 bg-yellow-900/20" : "border-gray-600 text-gray-600 dark:text-gray-400 hover:border-yellow-500 hover:text-yellow-400"}`}>
             🔢 Auto-number Lots
           </button>
           <button
             onClick={() => { setShowBids(v => !v); setShowAutolotter(false); setShowMassAdd(false); setShowUniqueIdMatcher(false) }}
-            className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showBids ? "border-green-500 text-green-400 bg-green-900/20" : "border-gray-600 text-gray-400 hover:border-green-500 hover:text-green-400"}`}>
+            className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showBids ? "border-green-500 text-green-400 bg-green-900/20" : "border-gray-600 text-gray-600 dark:text-gray-400 hover:border-green-500 hover:text-green-400"}`}>
             💰 Set Starting Bids
           </button>
           <button
             onClick={() => { setShowUniqueIdMatcher(v => !v); setUniqueIdPairs([]); setUniqueIdMsg(null); setShowBids(false); setShowAutolotter(false); setShowMassAdd(false) }}
-            className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showUniqueIdMatcher ? "border-cyan-500 text-cyan-400 bg-cyan-900/20" : "border-gray-600 text-gray-400 hover:border-cyan-500 hover:text-cyan-400"}`}>
+            className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showUniqueIdMatcher ? "border-cyan-500 text-cyan-400 bg-cyan-900/20" : "border-gray-600 text-gray-600 dark:text-gray-400 hover:border-cyan-500 hover:text-cyan-400"}`}>
             🔗 Unique ID Matcher
           </button>
           <button
             onClick={handleBulkAddConditions}
             disabled={condPending}
-            className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-400 hover:border-[#2AB4A6] hover:text-[#2AB4A6] transition-colors disabled:opacity-50">
+            className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-600 dark:text-gray-400 hover:border-[#2AB4A6] hover:text-[#2AB4A6] transition-colors disabled:opacity-50">
             {condPending ? "Updating…" : "✚ Add Conditions to Descriptions"}
           </button>
           {fillMsg  && <span className="text-xs text-[#2AB4A6]">{fillMsg}</span>}
@@ -1087,21 +1087,21 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
           )}
           {bcMsg && <span className="text-xs text-emerald-400">{bcMsg}</span>}
           {filtersActive && (
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-gray-600 dark:text-gray-500">
               {filtered.length} / {lots.length} lots
               <button onClick={clearFilters} className="ml-2 text-[#2AB4A6] hover:underline">clear</button>
             </span>
           )}
           <button onClick={exportForAHK}
-            className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-400 hover:border-purple-400 hover:text-purple-400 transition-colors">
+            className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-600 dark:text-gray-400 hover:border-purple-400 hover:text-purple-400 transition-colors">
             ⬇ Export for BC Macro (Tote)
           </button>
           <button onClick={exportForAHKReceipt}
-            className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-400 hover:border-purple-400 hover:text-purple-400 transition-colors">
+            className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-600 dark:text-gray-400 hover:border-purple-400 hover:text-purple-400 transition-colors">
             ⬇ Export for BC Macro (Receipt)
           </button>
           <button onClick={exportPhotos} disabled={photoExporting}
-            className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-400 hover:border-[#2AB4A6] hover:text-[#2AB4A6] transition-colors disabled:opacity-50">
+            className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-600 dark:text-gray-400 hover:border-[#2AB4A6] hover:text-[#2AB4A6] transition-colors disabled:opacity-50">
             {photoExporting ? "⏳ Exporting…" : "📷 Export Photos (.zip)"}
           </button>
           <button onClick={exportExcel}
@@ -1114,44 +1114,44 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
 
       {/* ── Mass Add Lots panel ── */}
       {showMassAdd && (
-        <div className="mb-4 bg-[#1C1C1E] border border-orange-700/40 rounded-xl p-4 space-y-4">
+        <div className="mb-4 bg-white dark:bg-[#1C1C1E] border border-orange-700/40 rounded-xl p-4 space-y-4">
           <div>
             <p className="text-sm font-semibold text-orange-300">Mass Add Lots</p>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">
               Creates blank lots in bulk. Barcodes are auto-generated as {auction.code}001, {auction.code}002… continuing from the highest existing barcode.
             </p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <div>
-              <label className="text-xs text-gray-400 block mb-1">Number of lots <span className="text-orange-400">*</span></label>
+              <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Number of lots <span className="text-orange-400">*</span></label>
               <input type="number" min={1} max={1000} value={massCount}
                 onChange={e => setMassCount(Math.max(1, Math.min(1000, parseInt(e.target.value) || 1)))}
-                className="w-full bg-[#2C2C2E] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500" />
+                className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-orange-500" />
             </div>
             <div>
-              <label className="text-xs text-gray-400 block mb-1">Vendor</label>
+              <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Vendor</label>
               <input type="text" value={massVendor} onChange={e => setMassVendor(e.target.value)} placeholder="e.g. V000123"
-                className="w-full bg-[#2C2C2E] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500" />
+                className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-orange-500" />
             </div>
             <div>
-              <label className="text-xs text-gray-400 block mb-1">Tote</label>
+              <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Tote</label>
               <input type="text" value={massTote} onChange={e => setMassTote(e.target.value)} placeholder="e.g. T01"
-                className="w-full bg-[#2C2C2E] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500" />
+                className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-orange-500" />
             </div>
             <div>
-              <label className="text-xs text-gray-400 block mb-1">Receipt</label>
+              <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Receipt</label>
               <input type="text" value={massReceipt} onChange={e => setMassReceipt(e.target.value)} placeholder="e.g. R000123"
-                className="w-full bg-[#2C2C2E] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500" />
+                className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-orange-500" />
             </div>
             <div>
-              <label className="text-xs text-gray-400 block mb-1">Category</label>
+              <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Category</label>
               <input type="text" value={massCategory} onChange={e => setMassCategory(e.target.value)} placeholder="e.g. Toys"
-                className="w-full bg-[#2C2C2E] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500" />
+                className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-orange-500" />
             </div>
             <div>
-              <label className="text-xs text-gray-400 block mb-1">Sub-category</label>
+              <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Sub-category</label>
               <input type="text" value={massSubCat} onChange={e => setMassSubCat(e.target.value)} placeholder="e.g. Action Figures"
-                className="w-full bg-[#2C2C2E] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500" />
+                className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-orange-500" />
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -1175,16 +1175,16 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
               className="px-5 py-2 bg-orange-600 hover:bg-orange-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors">
               {massAdding ? "Creating…" : `Create ${massCount} lot${massCount !== 1 ? "s" : ""}`}
             </button>
-            <button onClick={() => setShowMassAdd(false)} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">Cancel</button>
+            <button onClick={() => setShowMassAdd(false)} className="text-xs text-gray-600 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Cancel</button>
           </div>
         </div>
       )}
 
       {/* ── Auto-number Lots panel ── */}
       {showAutolotter && (
-        <div className="mb-4 bg-[#1C1C1E] border border-yellow-700/40 rounded-xl p-4 space-y-3">
+        <div className="mb-4 bg-white dark:bg-[#1C1C1E] border border-yellow-700/40 rounded-xl p-4 space-y-3">
           <p className="text-sm font-semibold text-yellow-300">Auto-number Lots</p>
-          <p className="text-xs text-gray-500">Sorts all {lots.length} lots by the chosen criteria then assigns lot numbers 1, 2, 3… sequentially.</p>
+          <p className="text-xs text-gray-600 dark:text-gray-500">Sorts all {lots.length} lots by the chosen criteria then assigns lot numbers 1, 2, 3… sequentially.</p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {([
               ["subcat",        "By Sub-Category"],
@@ -1194,14 +1194,14 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
             ] as const).map(([val, label]) => (
               <button key={val} onClick={() => setSortMode(val)}
                 className={`py-2 px-3 rounded-lg border text-xs font-medium transition-colors ${
-                  sortMode === val ? "border-yellow-500 bg-yellow-900/20 text-yellow-300" : "border-gray-700 text-gray-400 hover:border-gray-500"
+                  sortMode === val ? "border-yellow-500 bg-yellow-900/20 text-yellow-300" : "border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"
                 }`}>
                 {label}
               </button>
             ))}
           </div>
           {/* Preview groups */}
-          <div className="text-xs text-gray-500 space-y-0.5 max-h-32 overflow-y-auto">
+          <div className="text-xs text-gray-600 dark:text-gray-500 space-y-0.5 max-h-32 overflow-y-auto">
             {Object.entries(getAutoLotterPreview()).map(([group, count]) => (
               <div key={group} className="flex gap-2">
                 <span className="text-yellow-400/70 w-6 text-right">{count}</span>
@@ -1211,7 +1211,7 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
           </div>
           <div className="flex gap-2">
             <button onClick={() => setShowAutolotter(false)}
-              className="px-4 py-2 rounded-lg border border-gray-700 text-gray-400 text-sm hover:border-gray-500 transition-colors">
+              className="px-4 py-2 rounded-lg border border-gray-700 text-gray-600 dark:text-gray-400 text-sm hover:border-gray-500 transition-colors">
               Cancel
             </button>
             <button onClick={handleAssignLotNumbers} disabled={lotterPending}
@@ -1231,25 +1231,25 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
           bid: roundUpToIncrement(Math.ceil(l.estimateLow! * bidPct / 100)),
         }))
         return (
-          <div className="mb-4 bg-[#1C1C1E] border border-green-700/40 rounded-xl p-4 space-y-3">
+          <div className="mb-4 bg-white dark:bg-[#1C1C1E] border border-green-700/40 rounded-xl p-4 space-y-3">
             <p className="text-sm font-semibold text-green-300">Set Starting Bids</p>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-600 dark:text-gray-500">
               Calculates {bidPct}% of each lot's low estimate, rounded up to the nearest bidding increment.
               {selected.size > 0 ? ` Applies to ${eligible.length} selected lot${eligible.length !== 1 ? "s" : ""} with estimates.` : ` Applies to all ${eligible.length} lots with estimates.`}
             </p>
             <div className="flex items-center gap-3">
-              <label className="text-xs text-gray-400">Percentage of low estimate:</label>
+              <label className="text-xs text-gray-600 dark:text-gray-400">Percentage of low estimate:</label>
               <input type="number" min={1} max={100} value={bidPct}
                 onChange={e => setBidPct(Math.max(1, Math.min(100, Number(e.target.value))))}
-                className="w-20 bg-[#2C2C2E] border border-gray-700 rounded px-2 py-1 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-center" />
+                className="w-20 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-center" />
               <span className="text-xs text-gray-600">%</span>
             </div>
             {preview.length > 0 && (
-              <div className="text-xs text-gray-500 space-y-1">
+              <div className="text-xs text-gray-600 dark:text-gray-500 space-y-1">
                 <p className="text-gray-600 uppercase tracking-wider">Preview</p>
                 {preview.map(p => (
                   <div key={p.lotNumber} className="flex gap-3">
-                    <span className="text-gray-400 font-mono w-10">{p.lotNumber}</span>
+                    <span className="text-gray-600 dark:text-gray-400 font-mono w-10">{p.lotNumber}</span>
                     <span>Low est. £{p.low} → starting bid <span className="text-green-400 font-semibold">£{p.bid}</span></span>
                   </div>
                 ))}
@@ -1258,7 +1258,7 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
             )}
             <div className="flex gap-2">
               <button onClick={() => setShowBids(false)}
-                className="px-4 py-2 rounded-lg border border-gray-700 text-gray-400 text-sm hover:border-gray-500 transition-colors">
+                className="px-4 py-2 rounded-lg border border-gray-700 text-gray-600 dark:text-gray-400 text-sm hover:border-gray-500 transition-colors">
                 Cancel
               </button>
               <button onClick={handleSetStartingBids} disabled={bidsPending || eligible.length === 0}
@@ -1272,11 +1272,11 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
 
       {/* ── Unique ID Matcher panel ── */}
       {showUniqueIdMatcher && (
-        <div className="mb-4 bg-[#1C1C1E] border border-cyan-700/40 rounded-xl p-4 space-y-4">
+        <div className="mb-4 bg-white dark:bg-[#1C1C1E] border border-cyan-700/40 rounded-xl p-4 space-y-4">
           <div>
             <p className="text-sm font-semibold text-cyan-300">Unique ID Matcher</p>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Upload a spreadsheet with <span className="font-mono text-gray-400">Internal Barcode</span> and <span className="font-mono text-gray-400">UniqueID</span> columns.
+            <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">
+              Upload a spreadsheet with <span className="font-mono text-gray-600 dark:text-gray-400">Internal Barcode</span> and <span className="font-mono text-gray-600 dark:text-gray-400">UniqueID</span> columns.
               The matching lots in this auction will have their Unique ID updated automatically.
             </p>
           </div>
@@ -1315,28 +1315,28 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
           {uniqueIdPairs.length === 0 ? (
             <button
               onClick={() => uniqueIdInputRef.current?.click()}
-              className="w-full py-6 rounded-xl border-2 border-dashed border-gray-700 hover:border-cyan-500 text-gray-400 hover:text-cyan-400 transition-colors flex flex-col items-center gap-1.5 text-sm font-medium">
+              className="w-full py-6 rounded-xl border-2 border-dashed border-gray-700 hover:border-cyan-500 text-gray-600 dark:text-gray-400 hover:text-cyan-400 transition-colors flex flex-col items-center gap-1.5 text-sm font-medium">
               <span className="text-2xl">📄</span>
               Click to select spreadsheet (.xlsx / .csv)
             </button>
           ) : (
             <div className="space-y-3">
               {/* Preview */}
-              <div className="bg-[#141416] border border-gray-700 rounded-lg overflow-hidden max-h-56 overflow-y-auto">
+              <div className="bg-gray-50 dark:bg-[#141416] border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-56 overflow-y-auto">
                 <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-[#0d0d0f] border-b border-gray-700">
+                  <thead className="sticky top-0 bg-gray-100 dark:bg-[#0d0d0f] border-b border-gray-200 dark:border-gray-700">
                     <tr>
-                      <th className="text-left px-3 py-2 text-gray-500 font-medium">Barcode</th>
-                      <th className="text-left px-3 py-2 text-gray-500 font-medium">Unique ID</th>
-                      <th className="text-left px-3 py-2 text-gray-500 font-medium">Match</th>
+                      <th className="text-left px-3 py-2 text-gray-600 dark:text-gray-500 font-medium">Barcode</th>
+                      <th className="text-left px-3 py-2 text-gray-600 dark:text-gray-500 font-medium">Unique ID</th>
+                      <th className="text-left px-3 py-2 text-gray-600 dark:text-gray-500 font-medium">Match</th>
                     </tr>
                   </thead>
                   <tbody>
                     {uniqueIdPairs.slice(0, 100).map((p, i) => {
                       const matched = lots.some(l => l.barcode?.toLowerCase() === p.barcode.toLowerCase())
                       return (
-                        <tr key={i} className="border-b border-gray-800 last:border-0">
-                          <td className="px-3 py-1.5 font-mono text-gray-300">{p.barcode}</td>
+                        <tr key={i} className="border-b border-gray-200 dark:border-gray-800 last:border-0">
+                          <td className="px-3 py-1.5 font-mono text-gray-600 dark:text-gray-300">{p.barcode}</td>
                           <td className="px-3 py-1.5 font-mono text-cyan-400">{p.uniqueId}</td>
                           <td className="px-3 py-1.5">
                             {matched
@@ -1349,7 +1349,7 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
                   </tbody>
                 </table>
               </div>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-600 dark:text-gray-500">
                 {uniqueIdPairs.length} rows in file ·{" "}
                 <span className="text-green-400 font-medium">
                   {uniqueIdPairs.filter(p => lots.some(l => l.barcode?.toLowerCase() === p.barcode.toLowerCase())).length} matched
@@ -1359,7 +1359,7 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => { setUniqueIdPairs([]); setUniqueIdMsg(null) }}
-                  className="px-4 py-2 rounded-lg border border-gray-700 text-gray-400 text-sm hover:border-gray-500 transition-colors">
+                  className="px-4 py-2 rounded-lg border border-gray-700 text-gray-600 dark:text-gray-400 text-sm hover:border-gray-500 transition-colors">
                   ← Change file
                 </button>
                 <button
@@ -1384,27 +1384,27 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
       )}
 
       {/* Table */}
-      <div className="bg-[#1C1C1E] border border-gray-700 rounded-xl overflow-x-auto">
+      <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl overflow-x-auto">
         <table className="w-full text-sm min-w-[700px]">
           <thead>
-            <tr className="border-b border-gray-700 bg-[#141416]">
+            <tr className="border-b border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#141416]">
               <th className="px-4 py-3 w-8">
                 <input type="checkbox" checked={filtered.length > 0 && selected.size === filtered.length}
                   onChange={toggleSelectAll} className="w-4 h-4 rounded border-gray-600 accent-[#2AB4A6]" />
               </th>
               {(["lotNumber","barcode","receiptUniqueId","title","vendor","receipt","tote","category","photos","status"] as SortCol[]).map((col, i) => (
                 <th key={col} onClick={() => toggleSort(col)}
-                  className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wide cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
+                  className="text-left px-4 py-3 text-xs font-medium text-gray-600 dark:text-gray-500 uppercase tracking-wide cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
                   {["Lot No.","Barcode","Unique ID","Title","Vendor","Receipt","Tote","Category","Photos","Status"][i]}
                   {sortCol === col ? (sortDir === "asc" ? " ▲" : " ▼") : <span className="text-gray-700"> ⇅</span>}
                 </th>
               ))}
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">AI</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">BC</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-500 uppercase tracking-wide whitespace-nowrap">AI</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-500 uppercase tracking-wide whitespace-nowrap">BC</th>
               <th className="px-4 py-3" />
             </tr>
             {/* Filter row */}
-            <tr className="border-b border-gray-800 bg-[#111113]">
+            <tr className="border-b border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-[#111113]">
               <td className="px-4 py-1.5" />
               <td className="px-2 py-1.5"><input value={fLotNo}    onChange={e => setFLotNo(e.target.value)}    placeholder="Filter…" className={COL_INPUT} /></td>
               <td className="px-2 py-1.5"><input value={fBarcode}  onChange={e => setFBarcode(e.target.value)}  placeholder="Filter…" className={COL_INPUT} /></td>
@@ -1446,7 +1446,7 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
           </thead>
           <tbody>
             {filtered.map(lot => (
-              <tr key={lot.id} className={`border-b border-gray-800 last:border-0 hover:bg-[#2C2C2E] transition-colors cursor-pointer ${selected.has(lot.id) ? "bg-[#2AB4A6]/5" : ""}`} onClick={() => onEdit(lot.id)}>
+              <tr key={lot.id} className={`border-b border-gray-200 dark:border-gray-800 last:border-0 hover:bg-gray-100 dark:hover:bg-[#2C2C2E] transition-colors cursor-pointer ${selected.has(lot.id) ? "bg-[#2AB4A6]/5" : ""}`} onClick={() => onEdit(lot.id)}>
                 <td className="w-8" onClick={e => e.stopPropagation()}>
                   <label className="flex items-center justify-center px-4 py-3 cursor-pointer h-full">
                     <input type="checkbox" checked={selected.has(lot.id)} onChange={() => toggleSelect(lot.id)}
@@ -1454,19 +1454,19 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
                   </label>
                 </td>
                 <td className="px-4 py-3 font-mono font-semibold text-[#2AB4A6] whitespace-nowrap">{lot.lotNumber || "—"}</td>
-                <td className="px-4 py-3 font-mono text-xs text-gray-400 whitespace-nowrap">{lot.barcode ?? "—"}</td>
+                <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{lot.barcode ?? "—"}</td>
                 <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">
                   {lot.receiptUniqueId
                     ? <span className="text-cyan-400">{lot.receiptUniqueId}</span>
                     : <span className="text-gray-700">—</span>}
                 </td>
-                <td className="px-4 py-3 text-gray-200 max-w-[160px] truncate">{lot.title || <span className="text-gray-600 italic">Uncatalogued</span>}</td>
-                <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{lot.vendor ?? "—"}</td>
-                <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
+                <td className="px-4 py-3 text-gray-700 dark:text-gray-200 max-w-[160px] truncate">{lot.title || <span className="text-gray-600 italic">Uncatalogued</span>}</td>
+                <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap">{lot.vendor ?? "—"}</td>
+                <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap">
                   {lot.receiptUniqueId ?? lot.receipt ?? "—"}
                 </td>
-                <td className="px-4 py-3 text-gray-400 text-xs font-mono whitespace-nowrap">{lot.tote ?? "—"}</td>
-                <td className="px-4 py-3 text-gray-400 text-xs">
+                <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs font-mono whitespace-nowrap">{lot.tote ?? "—"}</td>
+                <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">
                   {lot.category ? (
                     <span>{lot.category}{lot.subCategory && <span className="text-gray-600"> › {lot.subCategory}</span>}</span>
                   ) : "—"}
@@ -1665,7 +1665,7 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
   return (
     <div>
       {/* Sticky nav bar */}
-      <div className="sticky top-0 z-10 flex items-center gap-2 py-2 mb-5 bg-[#141416] border-b border-gray-800 -mx-3 px-3">
+      <div className="sticky top-0 z-10 flex items-center gap-2 py-2 mb-5 bg-gray-50 dark:bg-[#141416] border-b border-gray-200 dark:border-gray-800 -mx-3 px-3">
         <button onClick={onDone} className="text-sm text-[#2AB4A6] hover:text-[#24a090] transition-colors flex-shrink-0">
           ← Back to lots
         </button>
@@ -1673,7 +1673,7 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
           <span className="text-xs text-gray-600 flex-1 text-center">{currentIdx + 1} / {sortedLots.length}</span>
         )}
         <button type="button" onClick={() => prevLot && navigate(prevLot.id, "prev")} disabled={!prevLot}
-          className="px-3 py-1.5 rounded-lg border border-gray-700 bg-[#2C2C2E] text-xs text-gray-300 hover:bg-[#3C3C3E] disabled:opacity-25 transition-colors flex-shrink-0">
+          className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#2C2C2E] text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-[#3C3C3E] disabled:opacity-25 transition-colors flex-shrink-0">
           ← Prev
         </button>
         <button type="button" onClick={() => nextLot && navigate(nextLot.id, "next")} disabled={!nextLot}
@@ -1733,24 +1733,24 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <label className={lbl} style={{ margin: 0 }}>Condition</label>
-                {cond1 && <button type="button" onClick={() => setCond1("")} className="text-xs text-gray-500 hover:text-red-400 transition-colors leading-none">× clear</button>}
+                {cond1 && <button type="button" onClick={() => setCond1("")} className="text-xs text-gray-600 dark:text-gray-500 hover:text-red-400 transition-colors leading-none">× clear</button>}
               </div>
               <div className="flex flex-wrap gap-1.5 mb-2">
                 {CONDITIONS.map(c => (
                   <button key={c} type="button" onClick={() => setCond1(c)}
-                    className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${cond1 === c ? "border-[#2AB4A6] bg-[#2AB4A6]/20 text-[#2AB4A6]" : "border-gray-700 text-gray-400 hover:border-gray-500"}`}>
+                    className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${cond1 === c ? "border-[#2AB4A6] bg-[#2AB4A6]/20 text-[#2AB4A6]" : "border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
                     {c}
                   </button>
                 ))}
               </div>
               <div className="flex items-center gap-2 mb-1">
                 <label className={lbl} style={{ margin: 0 }}>Condition To <span className="text-gray-600 font-normal">(optional)</span></label>
-                {cond2 && <button type="button" onClick={() => setCond2("")} className="text-xs text-gray-500 hover:text-red-400 transition-colors leading-none">× clear</button>}
+                {cond2 && <button type="button" onClick={() => setCond2("")} className="text-xs text-gray-600 dark:text-gray-500 hover:text-red-400 transition-colors leading-none">× clear</button>}
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {CONDITIONS.map(c => (
                   <button key={c} type="button" onClick={() => setCond2(c)}
-                    className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${cond2 === c ? "border-[#2AB4A6] bg-[#2AB4A6]/20 text-[#2AB4A6]" : "border-gray-700 text-gray-400 hover:border-gray-500"}`}>
+                    className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${cond2 === c ? "border-[#2AB4A6] bg-[#2AB4A6]/20 text-[#2AB4A6]" : "border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
                     {c}
                   </button>
                 ))}
@@ -1769,7 +1769,7 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
               <div className="flex flex-wrap gap-1.5">
                 {PARCEL_OPTIONS.map(opt => (
                   <button key={opt} type="button" onClick={() => setParcel(v => v === opt ? "" : opt)}
-                    className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${parcel === opt ? "border-[#2AB4A6] bg-[#2AB4A6]/20 text-[#2AB4A6]" : "border-gray-700 text-gray-400 hover:border-gray-500"}`}>
+                    className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${parcel === opt ? "border-[#2AB4A6] bg-[#2AB4A6]/20 text-[#2AB4A6]" : "border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
                     {opt}
                   </button>
                 ))}
@@ -1855,11 +1855,11 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
               />
               <input type="hidden" name="brand" value={brand} />
               {brandFocused && filteredBrands.length > 0 && (
-                <ul className="absolute z-10 w-full mt-1 bg-[#1C1C1E] border border-gray-700 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                <ul className="absolute z-10 w-full mt-1 bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl max-h-48 overflow-y-auto">
                   {filteredBrands.map(b => (
                     <li key={b}>
                       <button type="button" onClick={() => { setBrand(b); setBrandSearch(b) }}
-                        className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-[#2C2C2E] transition-colors">
+                        className="w-full text-left px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#2C2C2E] transition-colors">
                         {b}
                       </button>
                     </li>
@@ -1870,9 +1870,9 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
           </div>
         </div>
 
-        <div className="flex items-center gap-3 pt-2 border-t border-gray-700">
+        <div className="flex items-center gap-3 pt-2 border-t border-gray-300 dark:border-gray-700">
           <button onClick={onDone} type="button"
-            className="px-4 py-2 rounded-lg border border-gray-700 bg-[#2C2C2E] text-sm text-gray-400 hover:bg-[#3C3C3E] transition-colors">
+            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#2C2C2E] text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#3C3C3E] transition-colors">
             ← Back
           </button>
           <button type="submit" disabled={pending}
@@ -1883,12 +1883,12 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
       </form>
 
       {/* ── Photo management ── */}
-      <div className="mt-6 border-t border-gray-800 pt-6">
+      <div className="mt-6 border-t border-gray-200 dark:border-gray-800 pt-6">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-gray-300">Photos ({imageKeys.length})</h3>
+          <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-300">Photos ({imageKeys.length})</h3>
           <input ref={photoRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoUpload} />
           <button onClick={() => photoRef.current?.click()} disabled={uploadingPhoto}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-gray-600 hover:border-[#2AB4A6] text-gray-400 hover:text-[#2AB4A6] text-xs transition-colors disabled:opacity-50">
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-gray-600 hover:border-[#2AB4A6] text-gray-600 dark:text-gray-400 hover:text-[#2AB4A6] text-xs transition-colors disabled:opacity-50">
             {uploadingPhoto ? "Uploading…" : "📷 Add photo"}
           </button>
         </div>

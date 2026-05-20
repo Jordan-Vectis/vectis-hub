@@ -29,7 +29,7 @@ export default function HistoryPage() {
 
   return (
     <div className="p-6 space-y-4" style={{ fontFamily: "Arial, sans-serif" }}>
-      <h1 className="text-2xl font-bold text-gray-900">Movement History</h1>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Movement History</h1>
 
       <div className="wh-card">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

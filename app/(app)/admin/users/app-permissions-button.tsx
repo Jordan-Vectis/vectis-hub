@@ -55,7 +55,7 @@ export default function AppPermissionsButton({ userId, userName, currentApps, us
     <>
       <div className="flex flex-wrap items-center gap-1">
         {currentApps.length === 0 ? (
-          <span className="text-xs text-gray-400 italic">No access</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500 italic">No access</span>
         ) : (
           currentApps.map(k => {
             const app = ALL_APPS.find(a => a.key === k)
@@ -68,7 +68,7 @@ export default function AppPermissionsButton({ userId, userName, currentApps, us
         )}
         <button
           onClick={handleOpen}
-          className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-colors ml-1"
+          className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-700 dark:text-gray-300 transition-colors ml-1"
         >
           Edit ✎
         </button>
@@ -76,9 +76,9 @@ export default function AppPermissionsButton({ userId, userName, currentApps, us
 
       {open && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
-            <h3 className="font-semibold text-gray-900 mb-1">App Access</h3>
-            <p className="text-sm text-gray-500 mb-4">Select which apps <strong>{userName}</strong> can see and use.</p>
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <h3 className="font-semibold text-gray-900 dark:text-white mb-1">App Access</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Select which apps <strong>{userName}</strong> can see and use.</p>
 
             <div className="flex flex-col gap-2 mb-5">
               {ALL_APPS.map(app => (
@@ -88,7 +88,7 @@ export default function AppPermissionsButton({ userId, userName, currentApps, us
                     className={`w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
                       selected.includes(app.key)
                         ? "bg-blue-600 border-blue-600"
-                        : "border-gray-300 group-hover:border-blue-400"
+                        : "border-gray-300 dark:border-gray-600 group-hover:border-blue-400"
                     }`}
                   >
                     {selected.includes(app.key) && (
@@ -97,7 +97,7 @@ export default function AppPermissionsButton({ userId, userName, currentApps, us
                       </svg>
                     )}
                   </div>
-                  <span className="text-sm text-gray-700 group-hover:text-gray-900">{app.label}</span>
+                  <span className="text-sm text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:text-white">{app.label}</span>
                 </label>
               ))}
             </div>
@@ -106,7 +106,7 @@ export default function AppPermissionsButton({ userId, userName, currentApps, us
 
             <div className="flex gap-2 justify-end">
               <button onClick={() => setOpen(false)}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-gray-300 dark:border-gray-600 transition-colors">
                 Cancel
               </button>
               <button onClick={handleSave} disabled={isPending}

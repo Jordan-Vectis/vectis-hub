@@ -82,7 +82,7 @@ type SearchTote = {
   syncedAt: string | null
 }
 
-type Tab = "heatmap" | "sale-checklist" | "search" | "location-history" | "tote-data" | "collections-due" | "unsold-items" | "data-sync" | "db-explorer" | "location-barcodes"
+type Tab = "home" | "heatmap" | "sale-checklist" | "search" | "location-history" | "tote-data" | "collections-due" | "unsold-items" | "data-sync" | "db-explorer" | "location-barcodes"
 
 const STALE_MS = 15 * 60 * 1000 // 15 minutes
 
@@ -98,7 +98,7 @@ function SyncBar({ status, onSync }: { status: SyncStatus | null; onSync: () => 
   const running = (status?.running ?? []).length > 0
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2 bg-gray-900 border-t border-gray-700 text-xs text-gray-400">
+    <div className="flex items-center gap-3 px-4 py-2 bg-gray-100 dark:bg-gray-900 border-t border-gray-300 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-400">
       <span>{status?.itemCount ?? 0} items in DB</span>
       {last && (
         <span>· Last sync {new Date(last).toLocaleTimeString()}</span>
@@ -107,7 +107,7 @@ function SyncBar({ status, onSync }: { status: SyncStatus | null; onSync: () => 
       <button
         onClick={onSync}
         disabled={running}
-        className="ml-auto text-blue-400 hover:text-blue-300 disabled:opacity-40"
+        className="ml-auto text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 disabled:opacity-40"
       >
         Sync now
       </button>
@@ -191,8 +191,8 @@ function FirstSyncPanel({ onComplete }: { onComplete: () => void }) {
     <div className="flex flex-col items-center justify-center h-full gap-6 text-center p-8">
       <div className="text-4xl">📦</div>
       <div>
-        <h2 className="text-xl font-semibold text-white mb-1">No warehouse data yet</h2>
-        <p className="text-gray-400 text-sm max-w-sm">
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-1">No warehouse data yet</h2>
+        <p className="text-gray-600 dark:text-gray-400 text-sm max-w-sm">
           The first sync downloads all items from Business Central and stores them locally.
           This takes a few minutes — subsequent syncs are instant.
         </p>
@@ -201,7 +201,7 @@ function FirstSyncPanel({ onComplete }: { onComplete: () => void }) {
       {phase === "idle" && (
         <button
           onClick={runSync}
-          className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium"
+          className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-gray-900 dark:text-white rounded-lg font-medium"
         >
           Start initial sync
         </button>
@@ -216,10 +216,10 @@ function FirstSyncPanel({ onComplete }: { onComplete: () => void }) {
             </svg>
             <span>Syncing… {items.toLocaleString()} items ({batch} batches done)</span>
           </div>
-          <p className="text-xs text-gray-500">Do not close this tab — this may take a few minutes</p>
+          <p className="text-xs text-gray-600 dark:text-gray-500">Do not close this tab — this may take a few minutes</p>
           <button
             onClick={() => { abortRef.current = true; setPhase("error"); setError("Cancelled") }}
-            className="text-xs text-gray-500 hover:text-gray-300"
+            className="text-xs text-gray-600 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-300"
           >
             Cancel
           </button>
@@ -235,7 +235,7 @@ function FirstSyncPanel({ onComplete }: { onComplete: () => void }) {
           <p className="text-red-400 text-sm">{error}</p>
           <button
             onClick={runSync}
-            className="px-4 py-2 bg-red-900 hover:bg-red-800 text-white rounded text-sm"
+            className="px-4 py-2 bg-red-900 hover:bg-red-800 text-gray-900 dark:text-white rounded text-sm"
           >
             Retry
           </button>
@@ -249,7 +249,7 @@ function FirstSyncPanel({ onComplete }: { onComplete: () => void }) {
 
 // Traffic-light colours by item count
 function fillColor(total: number): { bg: string; ring: string; text: string } {
-  if (total === 0)  return { bg: "bg-gray-900",   ring: "ring-gray-800",   text: "text-gray-600" }
+  if (total === 0)  return { bg: "bg-gray-100 dark:bg-gray-900",   ring: "ring-gray-800",   text: "text-gray-600 dark:text-gray-400" }
   if (total <= 2)   return { bg: "bg-emerald-700/70", ring: "ring-emerald-500/40", text: "text-emerald-100" }
   if (total <= 5)   return { bg: "bg-yellow-600/70", ring: "ring-yellow-400/40", text: "text-yellow-50" }
   if (total <= 9)   return { bg: "bg-orange-600/80", ring: "ring-orange-400/50", text: "text-orange-50" }
@@ -309,7 +309,7 @@ function WarehouseHeatmapTab() {
     setItemsLoading(false)
   }
 
-  if (loading && !data) return <div className="p-6 text-gray-400 text-sm">Loading heatmap…</div>
+  if (loading && !data) return <div className="p-6 text-gray-600 dark:text-gray-400 text-sm">Loading heatmap…</div>
   if (!data) return <div className="p-6 text-red-400 text-sm">Failed to load heatmap</div>
 
   // Group locations by aisle, then by bay
@@ -346,23 +346,23 @@ function WarehouseHeatmapTab() {
       <div className="flex-1 overflow-y-auto p-4 min-w-0">
 
         {/* Header bar */}
-        <div className="mb-4 pb-3 border-b border-gray-800 space-y-2">
+        <div className="mb-4 pb-3 border-b border-gray-200 dark:border-gray-800 space-y-2">
           {/* Stats row */}
           <div className="flex flex-wrap items-center gap-3">
             <div className="text-sm">
               {loading ? (
-                <span className="text-gray-500 text-xs animate-pulse">Refreshing…</span>
+                <span className="text-gray-600 dark:text-gray-500 text-xs animate-pulse">Refreshing…</span>
               ) : (
                 <>
-                  <span className="text-white font-semibold">{data.locations.length.toLocaleString()}</span>
-                  <span className="text-gray-500"> locations · </span>
+                  <span className="text-gray-900 dark:text-white font-semibold">{data.locations.length.toLocaleString()}</span>
+                  <span className="text-gray-600 dark:text-gray-500"> locations · </span>
                   <span className="text-emerald-400 font-medium">{occupied.toLocaleString()}</span>
-                  <span className="text-gray-500"> occupied · </span>
-                  <span className="text-gray-500 font-medium">{empty.toLocaleString()} empty · </span>
-                  <span className="text-gray-300 font-medium">{data.meta.totalItems?.toLocaleString() ?? 0}</span>
-                  <span className="text-gray-500"> items · </span>
-                  <span className="text-cyan-300 font-medium">{data.meta.totalTotes?.toLocaleString() ?? 0}</span>
-                  <span className="text-gray-500"> totes</span>
+                  <span className="text-gray-600 dark:text-gray-500"> occupied · </span>
+                  <span className="text-gray-600 dark:text-gray-500 font-medium">{empty.toLocaleString()} empty · </span>
+                  <span className="text-gray-700 dark:text-gray-300 font-medium">{data.meta.totalItems?.toLocaleString() ?? 0}</span>
+                  <span className="text-gray-600 dark:text-gray-500"> items · </span>
+                  <span className="text-cyan-700 dark:text-cyan-300 font-medium">{data.meta.totalTotes?.toLocaleString() ?? 0}</span>
+                  <span className="text-gray-600 dark:text-gray-500"> totes</span>
                 </>
               )}
             </div>
@@ -372,13 +372,13 @@ function WarehouseHeatmapTab() {
               <select
                 value={aisleFilter}
                 onChange={e => setAisleFilter(e.target.value)}
-                className="bg-gray-800 border border-gray-700 text-gray-200 rounded text-xs px-2 py-1.5 focus:outline-none focus:border-blue-500"
+                className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded text-xs px-2 py-1.5 focus:outline-none focus:border-blue-500"
               >
                 <option value="ALL">All aisles ({aisleNames.length})</option>
                 {aisleNames.map(a => <option key={a} value={a}>{a}</option>)}
               </select>
 
-              <label className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer">
+              <label className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={showEmpty}
@@ -398,21 +398,21 @@ function WarehouseHeatmapTab() {
                 onClick={() => { setHeatFilter(f); setSelected(null) }}
                 className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
                   heatFilter === f
-                    ? "bg-blue-600 border-blue-500 text-white"
-                    : "bg-gray-900 border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200"
+                    ? "bg-blue-600 border-blue-500 text-gray-900 dark:text-white"
+                    : "bg-gray-100 dark:bg-gray-900 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500 hover:text-gray-200"
                 }`}
               >
                 {HEAT_FILTER_LABELS[f]}
               </button>
             ))}
 
-            <div className="h-4 w-px bg-gray-700 mx-1" />
+            <div className="h-4 w-px bg-gray-200 dark:bg-gray-700 mx-1" />
 
             {/* Auction filter */}
             <select
               value={auctionFilter}
               onChange={e => { setAuctionFilter(e.target.value); setSelected(null) }}
-              className="bg-gray-900 border border-gray-700 text-gray-300 rounded-full text-xs px-3 py-1 focus:outline-none focus:border-blue-500"
+              className="bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-full text-xs px-3 py-1 focus:outline-none focus:border-blue-500"
             >
               <option value="">All auctions</option>
               {(data.auctions ?? []).map(a => <option key={a} value={a}>{a}</option>)}
@@ -421,7 +421,7 @@ function WarehouseHeatmapTab() {
             {(heatFilter !== "all" || auctionFilter !== "") && (
               <button
                 onClick={() => { setHeatFilter("all"); setAuctionFilter(""); setSelected(null) }}
-                className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                className="text-xs text-gray-600 dark:text-gray-500 hover:text-gray-300 transition-colors"
               >
                 ✕ Clear filters
               </button>
@@ -430,9 +430,9 @@ function WarehouseHeatmapTab() {
         </div>
 
         {/* Legend */}
-        <div className="flex items-center gap-3 mb-4 text-xs text-gray-400">
-          <span className="text-gray-500 uppercase tracking-wider">Fill level:</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-gray-900 ring-1 ring-gray-800" /> Empty</span>
+        <div className="flex items-center gap-3 mb-4 text-xs text-gray-600 dark:text-gray-400">
+          <span className="text-gray-600 dark:text-gray-500 uppercase tracking-wider">Fill level:</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-gray-100 dark:bg-gray-900 ring-1 ring-gray-800" /> Empty</span>
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-700/70" /> 1–2</span>
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-yellow-600/70" /> 3–5</span>
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-orange-600/80" /> 6–9</span>
@@ -446,7 +446,7 @@ function WarehouseHeatmapTab() {
           <button
             onClick={() => selectLocation("")}
             className={`mb-4 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-              selected === "" ? "bg-blue-700 border-blue-500 text-white" : "bg-gray-900 border-gray-700 text-gray-300 hover:border-gray-500"
+              selected === "" ? "bg-blue-700 border-blue-500 text-gray-900 dark:text-white" : "bg-gray-100 dark:bg-gray-900 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-500"
             }`}
           >
             ⚠ Unlocated · {data.unlocated.toLocaleString()} items
@@ -463,10 +463,10 @@ function WarehouseHeatmapTab() {
             const totalCells = [...bays.values()].flat().length
 
             return (
-              <div key={aisle} className="bg-gray-900/40 rounded-lg border border-gray-800 p-3">
+              <div key={aisle} className="bg-gray-100 dark:bg-gray-900/40 rounded-lg border border-gray-200 dark:border-gray-800 p-3">
                 <div className="flex items-baseline justify-between mb-2">
-                  <h3 className="text-sm font-semibold text-white font-mono">{aisle}</h3>
-                  <span className="text-xs text-gray-500">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white font-mono">{aisle}</h3>
+                  <span className="text-xs text-gray-600 dark:text-gray-500">
                     {filledInAisle}/{totalCells} shelves · {totalInAisle} items
                   </span>
                 </div>
@@ -498,7 +498,7 @@ function WarehouseHeatmapTab() {
                       {/* Shelf rows */}
                       {shelfRows.map(shelfNum => (
                         <div key={shelfNum} className="flex items-center gap-1 mb-1 last:mb-0">
-                          <span className="text-[10px] font-mono text-gray-600 w-4 flex-shrink-0 text-right">{shelfNum}</span>
+                          <span className="text-[10px] font-mono text-gray-600 dark:text-gray-400 w-4 flex-shrink-0 text-right">{shelfNum}</span>
                           {bayNames.map(bay => {
                             const loc = lookup.get(bay)?.get(shelfNum)
                             if (!loc) {
@@ -531,10 +531,10 @@ function WarehouseHeatmapTab() {
                       ))}
 
                       {/* Bay labels along the bottom */}
-                      <div className="flex items-center gap-1 mt-1 pt-1 border-t border-gray-800">
+                      <div className="flex items-center gap-1 mt-1 pt-1 border-t border-gray-200 dark:border-gray-800">
                         <span className="w-4 flex-shrink-0" />
                         {bayNames.map(bay => (
-                          <span key={bay} className="w-9 text-center text-xs font-mono font-semibold text-gray-400">
+                          <span key={bay} className="w-9 text-center text-xs font-mono font-semibold text-gray-600 dark:text-gray-400">
                             {bay}
                           </span>
                         ))}
@@ -548,8 +548,8 @@ function WarehouseHeatmapTab() {
 
           {/* Other (codes not matching aisle/bay/shelf pattern) */}
           {aisleFilter === "ALL" && other.length > 0 && (
-            <div className="bg-gray-900/40 rounded-lg border border-gray-800 p-3">
-              <h3 className="text-sm font-semibold text-white mb-2">Other locations</h3>
+            <div className="bg-gray-100 dark:bg-gray-900/40 rounded-lg border border-gray-200 dark:border-gray-800 p-3">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Other locations</h3>
               <div className="flex flex-wrap gap-1.5">
                 {other.filter(l => showEmpty || l.total > 0).map(loc => {
                   const c = fillColor(loc.total)
@@ -574,19 +574,19 @@ function WarehouseHeatmapTab() {
       </div>
 
       {/* Details panel */}
-      <div className="w-96 flex-shrink-0 border-l border-gray-800 overflow-y-auto p-4 bg-gray-950">
+      <div className="w-96 flex-shrink-0 border-l border-gray-200 dark:border-gray-800 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-950">
         {!selected && selected !== "" ? (
-          <div className="text-gray-500 text-sm mt-8 text-center">Click a shelf to see its contents</div>
+          <div className="text-gray-600 dark:text-gray-500 text-sm mt-8 text-center">Click a shelf to see its contents</div>
         ) : itemsLoading ? (
-          <div className="text-gray-400 text-sm">Loading…</div>
+          <div className="text-gray-600 dark:text-gray-400 text-sm">Loading…</div>
         ) : items.length === 0 && totes.length === 0 ? (
-          <div className="text-gray-500 text-sm">No items or totes found</div>
+          <div className="text-gray-600 dark:text-gray-500 text-sm">No items or totes found</div>
         ) : (
           <div className="space-y-3">
             {/* Header */}
-            <div className="pb-2 border-b border-gray-800">
+            <div className="pb-2 border-b border-gray-200 dark:border-gray-800">
               <div className="font-mono text-base text-blue-400 font-semibold">{selected || "Unlocated"}</div>
-              <div className="text-xs text-gray-500">
+              <div className="text-xs text-gray-600 dark:text-gray-500">
                 {items.length > 0 && `${items.length} item${items.length === 1 ? "" : "s"}`}
                 {items.length > 0 && totes.length > 0 && " · "}
                 {totes.length > 0 && <span className="text-cyan-400">{totes.length} tote{totes.length === 1 ? "" : "s"}</span>}
@@ -599,19 +599,19 @@ function WarehouseHeatmapTab() {
                 <div className="text-xs text-cyan-500 uppercase tracking-wider mb-1.5">Totes</div>
                 <div className="space-y-1.5">
                   {totes.map(tote => (
-                    <div key={tote.toteNo} className="bg-gray-800/80 rounded-lg px-3 py-2.5 text-xs border border-cyan-900/30">
+                    <div key={tote.toteNo} className="bg-white dark:bg-gray-800/80 rounded-lg px-3 py-2.5 text-xs border border-cyan-900/30">
                       <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="font-mono text-cyan-300 font-semibold">{tote.toteNo}</span>
+                        <span className="font-mono text-cyan-700 dark:text-cyan-300 font-semibold">{tote.toteNo}</span>
                         {tote.catalogued != null && (
                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${tote.catalogued ? "bg-green-900/60 text-green-300" : "bg-amber-900/60 text-amber-300"}`}>
                             {tote.catalogued ? "Catalogued" : "Active"}
                           </span>
                         )}
                       </div>
-                      <div className="space-y-0.5 text-gray-400">
-                        {tote.receiptNo   && <div><span className="text-gray-600">Receipt </span>{tote.receiptNo}</div>}
-                        {tote.vendorName  && <div><span className="text-gray-600">Vendor </span>{tote.vendorName}{tote.vendorNo ? ` (${tote.vendorNo})` : ""}</div>}
-                        {tote.status && tote.status !== "No Reserve" && <div><span className="text-gray-600">Status </span>{tote.status}</div>}
+                      <div className="space-y-0.5 text-gray-600 dark:text-gray-400">
+                        {tote.receiptNo   && <div><span className="text-gray-600 dark:text-gray-400">Receipt </span>{tote.receiptNo}</div>}
+                        {tote.vendorName  && <div><span className="text-gray-600 dark:text-gray-400">Vendor </span>{tote.vendorName}{tote.vendorNo ? ` (${tote.vendorNo})` : ""}</div>}
+                        {tote.status && tote.status !== "No Reserve" && <div><span className="text-gray-600 dark:text-gray-400">Status </span>{tote.status}</div>}
                       </div>
                     </div>
                   ))}
@@ -622,13 +622,13 @@ function WarehouseHeatmapTab() {
             {/* Items */}
             {items.length > 0 && (
               <div>
-                <div className="text-xs text-gray-500 uppercase tracking-wider mb-1.5">Items</div>
+                <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1.5">Items</div>
                 <div className="space-y-1.5">
                   {items.map(item => (
-                    <div key={item.uniqueId} className="bg-gray-800 rounded-lg px-3 py-2.5 text-xs">
+                    <div key={item.uniqueId} className="bg-white dark:bg-gray-800 rounded-lg px-3 py-2.5 text-xs">
                       <div className="flex items-start justify-between gap-2 mb-1">
                         <div className="flex flex-wrap items-center gap-1">
-                          <span className="font-mono text-gray-300">{item.uniqueId}</span>
+                          <span className="font-mono text-gray-600 dark:text-gray-300">{item.uniqueId}</span>
                           {item.auctionCode && (
                             <span className="bg-blue-900 text-blue-200 px-1.5 py-0.5 rounded text-[10px]">{item.auctionCode}</span>
                           )}
@@ -637,19 +637,19 @@ function WarehouseHeatmapTab() {
                           )}
                         </div>
                       </div>
-                      <div className="space-y-0.5 text-gray-400">
+                      <div className="space-y-0.5 text-gray-600 dark:text-gray-400">
                         {(item.artist || item.description) && (
-                          <div className="text-gray-200">
+                          <div className="text-gray-700 dark:text-gray-200">
                             {item.artist && <span className="text-yellow-400">{item.artist} — </span>}
                             {item.description}
                           </div>
                         )}
-                        {item.barcode     && <div><span className="text-gray-600">Barcode </span><span className="font-mono">{item.barcode}</span></div>}
-                        {(() => { const lot = item.currentLotNo ?? item.lotNo; return lot && lot !== "0" ? <div><span className="text-gray-600">Lot </span>{lot}</div> : null })()}
-                        {item.toteNo      && <div><span className="text-gray-600">Tote </span>{item.toteNo}</div>}
-                        {item.binCode     && <div><span className="text-gray-600">Bin </span>{item.binCode}</div>}
-                        {item.category    && <div><span className="text-gray-600">Category </span>{item.category}</div>}
-                        {item.locationScannedAt && <div><span className="text-gray-600">Scanned </span>{new Date(item.locationScannedAt).toLocaleDateString("en-GB")}</div>}
+                        {item.barcode     && <div><span className="text-gray-600 dark:text-gray-400">Barcode </span><span className="font-mono">{item.barcode}</span></div>}
+                        {(() => { const lot = item.currentLotNo ?? item.lotNo; return lot && lot !== "0" ? <div><span className="text-gray-600 dark:text-gray-400">Lot </span>{lot}</div> : null })()}
+                        {item.toteNo      && <div><span className="text-gray-600 dark:text-gray-400">Tote </span>{item.toteNo}</div>}
+                        {item.binCode     && <div><span className="text-gray-600 dark:text-gray-400">Bin </span>{item.binCode}</div>}
+                        {item.category    && <div><span className="text-gray-600 dark:text-gray-400">Category </span>{item.category}</div>}
+                        {item.locationScannedAt && <div><span className="text-gray-600 dark:text-gray-400">Scanned </span>{new Date(item.locationScannedAt).toLocaleDateString("en-GB")}</div>}
                       </div>
                     </div>
                   ))}
@@ -684,7 +684,7 @@ function SaleChecklistTab() {
       .catch(e => { setError(e.message); setLoading(false) })
   }, [])
 
-  if (loading) return <div className="p-6 text-gray-400 text-sm">Loading sale checklist…</div>
+  if (loading) return <div className="p-6 text-gray-600 dark:text-gray-400 text-sm">Loading sale checklist…</div>
   if (error || !data) return <div className="p-6 text-red-400 text-sm">Failed to load sale checklist{error ? `: ${error}` : ""}</div>
 
   const auctions = data.auctions.filter(a => {
@@ -695,18 +695,18 @@ function SaleChecklistTab() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex gap-3 p-3 border-b border-gray-700 items-center">
+      <div className="flex gap-3 p-3 border-b border-gray-300 dark:border-gray-700 items-center">
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search auction code or name…"
-          className="flex-1 bg-gray-800 border border-gray-600 rounded px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+          className="flex-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
         />
         {(["all", "located", "missing"] as const).map(f => (
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded text-sm ${filter === f ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"}`}
+            className={`px-3 py-1.5 rounded text-sm ${filter === f ? "bg-blue-600 text-gray-900 dark:text-white" : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-700"}`}
           >
             {f === "all" ? "All" : f === "located" ? "Located" : "Missing"}
           </button>
@@ -715,7 +715,7 @@ function SaleChecklistTab() {
 
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {auctions.length === 0 && (
-          <div className="text-gray-500 text-sm text-center mt-8">No auctions found</div>
+          <div className="text-gray-600 dark:text-gray-500 text-sm text-center mt-8">No auctions found</div>
         )}
         {auctions.map(auction => {
           const items = filter === "all" ? auction.items
@@ -729,32 +729,32 @@ function SaleChecklistTab() {
           const missing = auction.items.length - located
 
           return (
-            <div key={auction.code} className="bg-gray-800 rounded-lg overflow-hidden">
+            <div key={auction.code} className="bg-white dark:bg-gray-800 rounded-lg overflow-hidden">
               <button
                 onClick={() => setExpanded(isOpen ? null : auction.code)}
                 className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-750 text-left"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="font-mono font-semibold text-white flex-shrink-0">{auction.code}</span>
+                  <span className="font-mono font-semibold text-gray-900 dark:text-white flex-shrink-0">{auction.code}</span>
                   {auction.name && (
-                    <span className="text-sm text-gray-300 truncate">{auction.name}</span>
+                    <span className="text-sm text-gray-600 dark:text-gray-300 truncate">{auction.name}</span>
                   )}
                   {auction.date && (
-                    <span className="text-xs text-gray-400 flex-shrink-0">{new Date(auction.date).toLocaleDateString()}</span>
+                    <span className="text-xs text-gray-600 dark:text-gray-400 flex-shrink-0">{new Date(auction.date).toLocaleDateString()}</span>
                   )}
                 </div>
                 <div className="flex items-center gap-3 text-xs">
                   <span className="text-green-400">{located} located</span>
                   {missing > 0 && <span className="text-red-400">{missing} missing</span>}
-                  <span className="text-gray-500">{auction.items.length} total</span>
-                  <span className="text-gray-500">{isOpen ? "▲" : "▼"}</span>
+                  <span className="text-gray-600 dark:text-gray-500">{auction.items.length} total</span>
+                  <span className="text-gray-600 dark:text-gray-500">{isOpen ? "▲" : "▼"}</span>
                 </div>
               </button>
 
               {isOpen && (
-                <div className="border-t border-gray-700">
+                <div className="border-t border-gray-300 dark:border-gray-700">
                   <table className="w-full text-xs">
-                    <thead className="bg-gray-900 text-gray-400">
+                    <thead className="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-400">
                       <tr>
                         <th className="px-3 py-2 text-left">Unique ID</th>
                         <th className="px-3 py-2 text-left">Barcode</th>
@@ -765,13 +765,13 @@ function SaleChecklistTab() {
                         <th className="px-3 py-2 text-left">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-700">
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                       {items.map(item => (
                         <tr key={item.uniqueId} className={!item.location ? "bg-red-950/30" : ""}>
-                          <td className="px-3 py-2 font-mono text-gray-300">{item.uniqueId}</td>
-                          <td className="px-3 py-2 font-mono text-gray-400">{item.barcode ?? "—"}</td>
-                          <td className="px-3 py-2 text-gray-300">{item.currentLotNo ?? item.lotNo ?? "—"}</td>
-                          <td className="px-3 py-2 text-gray-200 max-w-xs truncate">
+                          <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-300">{item.uniqueId}</td>
+                          <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-400">{item.barcode ?? "—"}</td>
+                          <td className="px-3 py-2 text-gray-600 dark:text-gray-300">{item.currentLotNo ?? item.lotNo ?? "—"}</td>
+                          <td className="px-3 py-2 text-gray-700 dark:text-gray-200 max-w-xs truncate">
                             {item.artist ? <span className="text-yellow-400">{item.artist} — </span> : null}
                             {item.description ?? "—"}
                           </td>
@@ -782,7 +782,7 @@ function SaleChecklistTab() {
                               <span className="text-red-400">Missing</span>
                             )}
                           </td>
-                          <td className="px-3 py-2 text-gray-400">{item.vendorName ?? item.vendorNo ?? "—"}</td>
+                          <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{item.vendorName ?? item.vendorNo ?? "—"}</td>
                           <td className="px-3 py-2">
                             {item.withdrawLot && <span className="text-orange-400">Withdraw</span>}
                             {item.collected && <span className="text-blue-400">Collected</span>}
@@ -833,7 +833,7 @@ function SearchByLocationTab() {
   return (
     <div className="h-full flex flex-col">
       {/* Search bar */}
-      <div className="p-4 border-b border-gray-800 space-y-3">
+      <div className="p-4 border-b border-gray-200 dark:border-gray-800 space-y-3">
         {/* Mode toggle */}
         <div className="flex gap-2">
           {([
@@ -845,8 +845,8 @@ function SearchByLocationTab() {
               onClick={() => { setMode(m.id); setSearched(false) }}
               className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
                 mode === m.id
-                  ? "border-blue-500 bg-blue-500/20 text-blue-300"
-                  : "border-gray-700 text-gray-500 hover:border-gray-500 hover:text-gray-300"
+                  ? "border-blue-500 bg-blue-500/20 text-blue-700 dark:text-blue-300"
+                  : "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-500 hover:border-gray-500 hover:text-gray-300"
               }`}
             >
               {m.label}
@@ -859,20 +859,20 @@ function SearchByLocationTab() {
             value={query}
             onChange={e => setQuery(e.target.value.toUpperCase())}
             placeholder={mode === "exact" ? "Location e.g. A2A1, barcode e.g. F066001, tote e.g. T001234…" : "Aisle e.g. A2, A10, BENCH…"}
-            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 font-mono"
+            className="flex-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 font-mono"
             autoFocus
           />
           <button
             type="submit"
             disabled={loading}
-            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition-colors"
+            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-gray-900 dark:text-white rounded-lg text-sm font-medium transition-colors"
           >
             {loading ? "Searching…" : "Search"}
           </button>
         </form>
 
         {searched && !loading && (
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-gray-600 dark:text-gray-500">
             {total === 0
               ? `Nothing found ${mode === "aisle" ? `in aisle` : `at`} "${searchedFor}"`
               : `${total.toLocaleString()} result${total === 1 ? "" : "s"} ${mode === "aisle" ? `in aisle` : `at`} ${searchedFor}${items.length ? ` · ${items.length.toLocaleString()} item${items.length === 1 ? "" : "s"}` : ""}${totes.length ? ` · ${totes.length.toLocaleString()} tote${totes.length === 1 ? "" : "s"}` : ""}`}
@@ -883,7 +883,7 @@ function SearchByLocationTab() {
       {/* Results */}
       <div className="flex-1 overflow-y-auto">
         {!searched && (
-          <div className="flex flex-col items-center justify-center h-full text-center text-gray-600 gap-2">
+          <div className="flex flex-col items-center justify-center h-full text-center text-gray-600 dark:text-gray-400 gap-2">
             <div className="text-4xl">📍</div>
             <div className="text-sm">
               {mode === "exact"
@@ -897,21 +897,21 @@ function SearchByLocationTab() {
         )}
 
         {searched && !loading && total === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center text-gray-600 gap-2">
+          <div className="flex flex-col items-center justify-center h-full text-center text-gray-600 dark:text-gray-400 gap-2">
             <div className="text-4xl">🔍</div>
-            <div className="text-sm">Nothing found {mode === "aisle" ? "in aisle" : "at"} <span className="font-mono text-gray-400">"{searchedFor}"</span></div>
+            <div className="text-sm">Nothing found {mode === "aisle" ? "in aisle" : "at"} <span className="font-mono text-gray-600 dark:text-gray-400">"{searchedFor}"</span></div>
             {mode === "exact" && <div className="text-xs text-gray-700">Switch to "Whole aisle" to search all shelves in an aisle</div>}
           </div>
         )}
 
         {/* Totes section */}
         {totes.length > 0 && (
-          <div className="border-b border-gray-800">
-            <div className="px-4 py-2 bg-gray-900/50 text-xs font-medium text-cyan-500 uppercase tracking-wider">
+          <div className="border-b border-gray-200 dark:border-gray-800">
+            <div className="px-4 py-2 bg-gray-100 dark:bg-gray-900/50 text-xs font-medium text-cyan-500 uppercase tracking-wider">
               Totes · {totes.length.toLocaleString()}
             </div>
             <table className="w-full text-xs">
-              <thead className="bg-gray-900 text-gray-500 sticky top-0">
+              <thead className="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-500 sticky top-0">
                 <tr>
                   <th className="px-4 py-2 text-left font-medium">Tote No</th>
                   {mode === "aisle" && <th className="px-4 py-2 text-left font-medium">Location</th>}
@@ -921,14 +921,14 @@ function SearchByLocationTab() {
                   <th className="px-4 py-2 text-left font-medium">State</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800/60">
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-800/60">
                 {totes.map(t => (
                   <tr key={t.toteNo} className="hover:bg-gray-800/40 transition-colors">
-                    <td className="px-4 py-2.5 font-mono text-cyan-300 font-semibold">{t.toteNo}</td>
-                    {mode === "aisle" && <td className="px-4 py-2.5 font-mono text-gray-500">{t.location ?? "—"}</td>}
-                    <td className="px-4 py-2.5 font-mono text-gray-400">{t.receiptNo ?? "—"}</td>
-                    <td className="px-4 py-2.5 text-gray-300">{t.vendorName ?? t.vendorNo ?? "—"}</td>
-                    <td className="px-4 py-2.5 text-gray-400">{t.status && t.status !== "No Reserve" ? t.status : "—"}</td>
+                    <td className="px-4 py-2.5 font-mono text-cyan-700 dark:text-cyan-300 font-semibold">{t.toteNo}</td>
+                    {mode === "aisle" && <td className="px-4 py-2.5 font-mono text-gray-600 dark:text-gray-500">{t.location ?? "—"}</td>}
+                    <td className="px-4 py-2.5 font-mono text-gray-600 dark:text-gray-400">{t.receiptNo ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-gray-600 dark:text-gray-300">{t.vendorName ?? t.vendorNo ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400">{t.status && t.status !== "No Reserve" ? t.status : "—"}</td>
                     <td className="px-4 py-2.5">
                       {t.catalogued != null
                         ? <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${t.catalogued ? "bg-green-900/50 text-green-300" : "bg-amber-900/50 text-amber-300"}`}>
@@ -946,11 +946,11 @@ function SearchByLocationTab() {
         {/* Items section */}
         {items.length > 0 && (
           <div>
-            <div className="px-4 py-2 bg-gray-900/50 text-xs font-medium text-gray-400 uppercase tracking-wider">
+            <div className="px-4 py-2 bg-gray-100 dark:bg-gray-900/50 text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">
               Items · {items.length.toLocaleString()}
             </div>
             <table className="w-full text-xs">
-              <thead className="bg-gray-900 text-gray-500 sticky top-0">
+              <thead className="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-500 sticky top-0">
                 <tr>
                   <th className="px-4 py-2 text-left font-medium">Unique ID</th>
                   <th className="px-4 py-2 text-left font-medium">Barcode</th>
@@ -962,24 +962,24 @@ function SearchByLocationTab() {
                   <th className="px-4 py-2 text-left font-medium">Tote / Bin</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800/60">
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-800/60">
                 {items.map(item => (
                   <tr key={item.uniqueId} className="hover:bg-gray-800/40 transition-colors">
-                    <td className="px-4 py-2.5 font-mono text-gray-300">{item.uniqueId}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-500">{item.barcode ?? "—"}</td>
-                    {mode === "aisle" && <td className="px-4 py-2.5 font-mono text-gray-400">{item.location ?? "—"}</td>}
-                    <td className="px-4 py-2.5 text-gray-200 max-w-xs">
+                    <td className="px-4 py-2.5 font-mono text-gray-600 dark:text-gray-300">{item.uniqueId}</td>
+                    <td className="px-4 py-2.5 font-mono text-gray-600 dark:text-gray-500">{item.barcode ?? "—"}</td>
+                    {mode === "aisle" && <td className="px-4 py-2.5 font-mono text-gray-600 dark:text-gray-400">{item.location ?? "—"}</td>}
+                    <td className="px-4 py-2.5 text-gray-700 dark:text-gray-200 max-w-xs">
                       {item.artist && <span className="text-yellow-400">{item.artist} — </span>}
                       {item.description ?? "—"}
                     </td>
                     <td className="px-4 py-2.5">
                       {item.auctionCode
-                        ? <span className="bg-blue-900/60 text-blue-300 px-2 py-0.5 rounded font-mono">{item.auctionCode}</span>
-                        : <span className="text-gray-600">—</span>}
+                        ? <span className="bg-blue-900/60 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded font-mono">{item.auctionCode}</span>
+                        : <span className="text-gray-600 dark:text-gray-400">—</span>}
                     </td>
-                    <td className="px-4 py-2.5 text-gray-400">{item.currentLotNo ?? item.lotNo ?? "—"}</td>
-                    <td className="px-4 py-2.5 text-gray-500">{item.category ?? "—"}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-500">{[item.toteNo, item.binCode].filter(Boolean).join(" / ") || "—"}</td>
+                    <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400">{item.currentLotNo ?? item.lotNo ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-gray-600 dark:text-gray-500">{item.category ?? "—"}</td>
+                    <td className="px-4 py-2.5 font-mono text-gray-600 dark:text-gray-500">{[item.toteNo, item.binCode].filter(Boolean).join(" / ") || "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1020,6 +1020,17 @@ function formatDateTime(iso: string) {
   } catch { return iso }
 }
 
+type SimilarEntry = {
+  itemKey:   string
+  itemKey2:  string | null
+  barcode:   string | null
+  from:      string
+  to:        string
+  changedBy: string
+  changedAt: string
+  type:      "tote" | "item"
+}
+
 function LocationHistoryTab() {
   const [input, setInput]   = useState("")
   const [mode, setMode]     = useState<"tote" | "barcode">("tote")
@@ -1027,10 +1038,17 @@ function LocationHistoryTab() {
   const [error, setError]   = useState<string | null>(null)
   const [result, setResult] = useState<{ field1: string; field2: string | null; entries: LocationEntry[] } | null>(null)
 
+  const [similarLoading, setSimilarLoading] = useState(false)
+  const [similarError, setSimilarError]     = useState<string | null>(null)
+  const [similarResult, setSimilarResult]   = useState<SimilarEntry[] | null>(null)
+  const [similarWindow, setSimilarWindow]   = useState<{ from: string; to: string } | null>(null)
+  const [similarElapsed, setSimilarElapsed] = useState(0)
+
   async function lookup() {
     const q = input.trim()
     if (!q) return
     setLoading(true); setError(null); setResult(null)
+    setSimilarResult(null); setSimilarError(null); setSimilarWindow(null)
     try {
       const res  = await fetch(`/api/bc/location-history?q=${encodeURIComponent(q)}&mode=${mode}`)
       const data = await res.json()
@@ -1040,17 +1058,103 @@ function LocationHistoryTab() {
     finally { setLoading(false) }
   }
 
-  return (
-    <div>
-      <h2 className="text-lg font-semibold text-white mb-1">Location History</h2>
-      <p className="text-gray-500 text-sm mb-5">Look up every location a tote or lot has ever been moved to via BC change logs.</p>
+  async function checkSimilar() {
+    if (!result || result.entries.length === 0) return
+    // Use the most recent entry (index 0, sorted newest-first) as the centre of the window.
+    // Using min/max across all entries would span weeks if the item has an old history.
+    const mostRecentTs = result.entries[0]?.changedAt
+    if (!mostRecentTs) return
+    const centreMs = new Date(mostRecentTs).getTime()
+    const fromDt = new Date(centreMs - 5 * 60 * 1000).toISOString()
+    const toDt   = new Date(centreMs + 5 * 60 * 1000).toISOString()
+    setSimilarWindow({ from: fromDt, to: toDt })
+    setSimilarLoading(true); setSimilarError(null); setSimilarResult(null); setSimilarElapsed(0)
 
-      <div className="bg-[#0d0f1a] border border-gray-700 rounded-xl p-5 max-w-lg space-y-4">
+    // Elapsed-time counter
+    let elapsed = 0
+    const timer = setInterval(() => { elapsed++; setSimilarElapsed(elapsed) }, 1000)
+
+    try {
+      const res = await fetch(
+        `/api/bc/location-history/similar?from=${encodeURIComponent(fromDt)}&to=${encodeURIComponent(toDt)}`,
+        { signal: AbortSignal.timeout(55_000) }
+      )
+      // Handle non-JSON responses (e.g. Railway 504 HTML page)
+      const text = await res.text()
+      let data: any
+      try { data = JSON.parse(text) } catch {
+        setSimilarError(`Server returned an unexpected response (HTTP ${res.status}). BC may be timing out — try again in a moment.`)
+        return
+      }
+      if (!res.ok) {
+        setSimilarError(`BC error (${res.status}): ${data?.error ?? "Query failed"}`)
+        return
+      }
+      if (data?.warning) setSimilarError(data.warning)
+      setSimilarResult(data.entries ?? [])
+    } catch (e: any) {
+      if (e?.name === "TimeoutError" || e?.name === "AbortError") {
+        setSimilarError("Request timed out after 55 seconds. BC is taking too long — try a narrower date range or try again shortly.")
+      } else {
+        setSimilarError(`Network error: ${e?.message ?? "Unknown error"}`)
+      }
+    } finally {
+      clearInterval(timer)
+      setSimilarLoading(false)
+    }
+  }
+
+  function printSimilar() {
+    if (!similarResult) return
+    const rows = similarResult.map(e => `
+      <tr>
+        <td>${e.itemKey}${e.itemKey2 ? ` · ${e.itemKey2}` : ""}</td>
+        <td>${e.barcode ?? "—"}</td>
+        <td>${e.type === "tote" ? "Tote" : "Item"}</td>
+        <td>${e.from || "—"}</td>
+        <td>${e.to || "—"}</td>
+        <td>${SALESPERSON_NAMES[e.changedBy] ?? e.changedBy}</td>
+        <td>${formatDateTime(e.changedAt)}</td>
+      </tr>`).join("")
+    const windowLabel = similarWindow
+      ? `${formatDateTime(similarWindow.from)} – ${formatDateTime(similarWindow.to)}`
+      : ""
+    const html = `<!DOCTYPE html><html><head><title>Similar Location Changes</title>
+      <style>
+        body { font-family: Arial, sans-serif; font-size: 12px; margin: 20px; }
+        h2 { font-size: 16px; margin-bottom: 4px; }
+        p  { font-size: 11px; color: #666; margin-bottom: 12px; }
+        table { border-collapse: collapse; width: 100%; }
+        th { background: #f0f0f0; text-align: left; padding: 6px 10px; border-bottom: 2px solid #ccc; font-size: 11px; text-transform: uppercase; }
+        td { padding: 5px 10px; border-bottom: 1px solid #e0e0e0; }
+        tr:nth-child(even) { background: #fafafa; }
+        @media print { body { margin: 10px; } }
+      </style></head><body>
+      <h2>Similar Location Changes</h2>
+      <p>Window: ${windowLabel} &nbsp;|&nbsp; ${similarResult.length} change${similarResult.length !== 1 ? "s" : ""}</p>
+      <table>
+        <thead><tr><th>Item Key</th><th>Barcode</th><th>Type</th><th>From</th><th>To</th><th>Changed By</th><th>Date / Time</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <script>window.onload = () => { window.print() }<\/script>
+      </body></html>`
+    const w = window.open("", "_blank")
+    if (w) { w.document.write(html); w.document.close() }
+  }
+
+  return (
+    <div className="h-full flex flex-col p-6 space-y-5 overflow-y-auto">
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Location History</h2>
+        <p className="text-gray-600 dark:text-gray-500 text-sm">Look up every location a tote or lot has ever been moved to via BC change logs.</p>
+      </div>
+
+      <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded-xl p-5 max-w-lg space-y-4">
         <div className="flex gap-2">
           {(["tote", "barcode"] as const).map(m => (
             <button key={m} onClick={() => { setMode(m); setResult(null); setError(null) }}
               className={`px-4 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
-                mode === m ? "border-blue-500 bg-blue-500/20 text-blue-300" : "border-gray-700 text-gray-500 hover:border-gray-500 hover:text-gray-300"
+                mode === m ? "border-blue-500 bg-blue-500/20 text-blue-700 dark:text-blue-300" : "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-500 hover:border-gray-500 hover:text-gray-300"
               }`}>
               {m === "tote" ? "🗂 Tote number" : "🔖 Barcode"}
             </button>
@@ -1059,58 +1163,146 @@ function LocationHistoryTab() {
         <div className="flex gap-2">
           <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && lookup()}
             placeholder={mode === "tote" ? "e.g. T000123" : "e.g. F037458"} autoFocus
-            className="flex-1 bg-[#07070f] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono" />
+            className="flex-1 bg-white dark:bg-[#07070f] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono" />
           <button onClick={lookup} disabled={loading || !input.trim()}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors">
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-gray-900 dark:text-white text-sm font-semibold rounded-lg transition-colors">
             {loading ? "Searching…" : "Look up"}
           </button>
         </div>
-        {mode === "barcode" && <p className="text-xs text-gray-600">Barcode lookup does two BC queries: first finds the item key from the barcode, then fetches all location changes for that item.</p>}
+        {mode === "barcode" && <p className="text-xs text-gray-600 dark:text-gray-400">Barcode lookup does two BC queries: first finds the item key from the barcode, then fetches all location changes for that item.</p>}
       </div>
 
-      {error && <div className="mt-4 max-w-lg"><p className="text-red-400 text-sm">{error}</p></div>}
+      {error && <p className="text-red-400 text-sm">{error}</p>}
 
       {result && (
-        <div className="mt-5 max-w-2xl space-y-4">
+        <div className="w-full space-y-4">
           <div className="flex items-center gap-8">
             <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wide">BC Item Key</p>
-              <p className="text-white font-mono text-sm">{result.field1}{result.field2 ? ` · ${result.field2}` : ""}</p>
+              <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wide">BC Item Key</p>
+              <p className="text-gray-900 dark:text-white font-mono text-sm">{result.field1}{result.field2 ? ` · ${result.field2}` : ""}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wide">Movements found</p>
-              <p className="text-white font-semibold">{result.entries.length}</p>
+              <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wide">Movements found</p>
+              <p className="text-gray-900 dark:text-white font-semibold">{result.entries.length}</p>
             </div>
           </div>
 
           {result.entries.length === 0 ? (
-            <div className="bg-[#0d0f1a] border border-gray-700 rounded-xl p-6 text-center">
-              <p className="text-gray-400 text-sm">No location changes found in the BC change log.</p>
-              <p className="text-gray-600 text-xs mt-1">The item may not have been moved, or the change log wasn't active when it was.</p>
+            <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded-xl p-6 text-center">
+              <p className="text-gray-600 dark:text-gray-400 text-sm">No location changes found in the BC change log.</p>
+              <p className="text-gray-600 dark:text-gray-400 text-xs mt-1">The item may not have been moved, or the change log wasn't active when it was.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-gray-700">
-              <table className="w-full text-sm">
-                <thead className="bg-[#0d0f1a] text-gray-500 text-xs uppercase">
-                  <tr>
-                    <th className="px-4 py-2.5 text-left">From</th>
-                    <th className="px-4 py-2.5 text-left">To</th>
-                    <th className="px-4 py-2.5 text-left">Changed by</th>
-                    <th className="px-4 py-2.5 text-left">Date / Time</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-800">
-                  {result.entries.map((e, i) => (
-                    <tr key={i} className={`hover:bg-[#0d0f1a] ${i === 0 ? "bg-blue-950/30" : ""}`}>
-                      <td className="px-4 py-2 text-gray-400 font-mono text-xs">{e.from || <span className="text-gray-600 italic">empty</span>}</td>
-                      <td className="px-4 py-2 text-white font-mono text-xs font-semibold">{e.to || <span className="text-gray-600 italic">empty</span>}</td>
-                      <td className="px-4 py-2 text-gray-300">{SALESPERSON_NAMES[e.changedBy] ?? e.changedBy}</td>
-                      <td className="px-4 py-2 text-gray-400 text-xs">{formatDateTime(e.changedAt)}</td>
+            <>
+              <div className="overflow-x-auto rounded-xl border border-gray-300 dark:border-gray-700">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase">
+                    <tr>
+                      <th className="px-4 py-2.5 text-left">From</th>
+                      <th className="px-4 py-2.5 text-left">To</th>
+                      <th className="px-4 py-2.5 text-left">Changed by</th>
+                      <th className="px-4 py-2.5 text-left">Date / Time</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                    {result.entries.map((e, i) => (
+                      <tr key={i} className={`hover:bg-gray-200 dark:hover:bg-[#0d0f1a] ${i === 0 ? "bg-blue-950/30" : ""}`}>
+                        <td className="px-4 py-2 text-gray-600 dark:text-gray-400 font-mono text-xs">{e.from || <span className="text-gray-600 dark:text-gray-400 italic">empty</span>}</td>
+                        <td className="px-4 py-2 text-gray-900 dark:text-white font-mono text-xs font-semibold">{e.to || <span className="text-gray-600 dark:text-gray-400 italic">empty</span>}</td>
+                        <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{SALESPERSON_NAMES[e.changedBy] ?? e.changedBy}</td>
+                        <td className="px-4 py-2 text-gray-600 dark:text-gray-400 text-xs">{formatDateTime(e.changedAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Similar Changes */}
+              <div className="pt-2 space-y-3">
+                <button onClick={checkSimilar} disabled={similarLoading}
+                  className="px-4 py-2 bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-gray-900 dark:text-white text-sm font-semibold rounded-lg transition-colors">
+                  {similarLoading ? "Searching…" : "🔍 Check Similar Changes"}
+                </button>
+
+                {similarLoading && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 bg-white dark:bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="h-full bg-purple-500 rounded-full transition-all duration-1000 ease-out"
+                          style={{ width: `${Math.min(similarElapsed * 1.8, 90)}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-gray-600 dark:text-gray-500 tabular-nums w-8 text-right">{similarElapsed}s</span>
+                    </div>
+                    <p className="text-xs text-gray-600 dark:text-gray-500">Querying BC change logs for tote moves and item location changes…</p>
+                  </div>
+                )}
+
+                {similarWindow && !similarLoading && !similarError && (
+                  <p className="text-xs text-gray-600 dark:text-gray-500">
+                    Searched {formatDateTime(similarWindow.from)} → {formatDateTime(similarWindow.to)} (±5 min)
+                  </p>
+                )}
+
+                {similarError && (
+                  <div className="bg-red-950/40 border border-red-800/50 rounded-lg px-4 py-3">
+                    <p className="text-red-400 text-sm font-medium">Query failed</p>
+                    <p className="text-red-700 dark:text-red-300/70 text-xs mt-1">{similarError}</p>
+                  </div>
+                )}
+              </div>
+
+              {similarResult && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <span className="text-gray-900 dark:text-white font-semibold">{similarResult.length}</span> change{similarResult.length !== 1 ? "s" : ""} found in that window
+                    </p>
+                    <button onClick={printSimilar}
+                      className="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-600 text-gray-900 dark:text-white text-xs font-semibold rounded-lg transition-colors">
+                      🖨 Print Report
+                    </button>
+                  </div>
+                  {similarResult.length === 0 ? (
+                    <p className="text-gray-600 dark:text-gray-500 text-sm">No other location changes found in that time window.</p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-purple-900/50">
+                      <table className="w-full text-sm">
+                        <thead className="bg-purple-950/30 text-gray-600 dark:text-gray-500 text-xs uppercase">
+                          <tr>
+                            <th className="px-4 py-2.5 text-left">Item Key</th>
+                            <th className="px-4 py-2.5 text-left">Barcode</th>
+                            <th className="px-4 py-2.5 text-left">Type</th>
+                            <th className="px-4 py-2.5 text-left">From</th>
+                            <th className="px-4 py-2.5 text-left">To</th>
+                            <th className="px-4 py-2.5 text-left">Changed by</th>
+                            <th className="px-4 py-2.5 text-left">Date / Time</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                          {similarResult.map((e, i) => (
+                            <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
+                              <td className="px-4 py-2 text-gray-900 dark:text-white font-mono text-xs">{e.itemKey}{e.itemKey2 ? ` · ${e.itemKey2}` : ""}</td>
+                              <td className="px-4 py-2 text-gray-600 dark:text-gray-300 font-mono text-xs">{e.barcode ?? <span className="text-gray-600 dark:text-gray-400">—</span>}</td>
+                              <td className="px-4 py-2">
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${e.type === "tote" ? "bg-blue-900/50 text-blue-700 dark:text-blue-300" : "bg-emerald-900/50 text-emerald-700 dark:text-emerald-300"}`}>
+                                  {e.type === "tote" ? "Tote" : "Item"}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2 text-gray-600 dark:text-gray-400 font-mono text-xs">{e.from || <span className="text-gray-600 dark:text-gray-400 italic">empty</span>}</td>
+                              <td className="px-4 py-2 text-gray-900 dark:text-white font-mono text-xs font-semibold">{e.to || <span className="text-gray-600 dark:text-gray-400 italic">empty</span>}</td>
+                              <td className="px-4 py-2 text-gray-600 dark:text-gray-300 text-xs">{SALESPERSON_NAMES[e.changedBy] ?? e.changedBy}</td>
+                              <td className="px-4 py-2 text-gray-600 dark:text-gray-400 text-xs">{formatDateTime(e.changedAt)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -1131,10 +1323,10 @@ function HorizBar({ value, max, color = "bg-blue-500" }: { value: number; max: n
   const pct = max > 0 ? Math.max((value / max) * 100, 0.5) : 0
   return (
     <div className="flex items-center gap-3 min-w-0">
-      <div className="flex-1 bg-gray-800 rounded-sm h-5 overflow-hidden">
+      <div className="flex-1 bg-white dark:bg-gray-800 rounded-sm h-5 overflow-hidden">
         <div className={`${color} h-full rounded-sm transition-all`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs font-mono text-gray-300 w-10 text-right flex-shrink-0">{value.toLocaleString()}</span>
+      <span className="text-xs font-mono text-gray-600 dark:text-gray-300 w-10 text-right flex-shrink-0">{value.toLocaleString()}</span>
     </div>
   )
 }
@@ -1159,11 +1351,11 @@ function ToteDataTab() {
 
   useEffect(() => { load() }, [])
 
-  if (loading) return <div className="p-6 text-gray-400 text-sm">Loading tote report…</div>
+  if (loading) return <div className="p-6 text-gray-600 dark:text-gray-400 text-sm">Loading tote report…</div>
   if (error) return (
     <div className="p-6 space-y-3">
       <p className="text-red-400 text-sm">{error}</p>
-      <button onClick={load} className="px-4 py-2 bg-red-900 hover:bg-red-800 text-white rounded text-sm">Retry</button>
+      <button onClick={load} className="px-4 py-2 bg-red-900 hover:bg-red-800 text-gray-900 dark:text-white rounded text-sm">Retry</button>
     </div>
   )
   if (!data) return null
@@ -1181,44 +1373,44 @@ function ToteDataTab() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="px-6 pt-5 pb-4 border-b border-gray-800 flex items-start justify-between">
+      <div className="px-6 pt-5 pb-4 border-b border-gray-200 dark:border-gray-800 flex items-start justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-white">Tote Report</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Active totes by category and location</p>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Tote Report</h2>
+          <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">Active totes by category and location</p>
         </div>
         <button
           onClick={load}
-          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-medium transition-colors"
+          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-gray-900 dark:text-white rounded text-xs font-medium transition-colors"
         >
           ⟳ Refresh
         </button>
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-3 gap-3 px-6 py-4 border-b border-gray-800">
-        <div className="bg-gray-900 border border-gray-800 rounded-lg px-4 py-3">
-          <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Total Totes</div>
-          <div className="text-2xl font-mono font-semibold text-white">{stats.total.toLocaleString()}</div>
-          <div className="text-xs text-gray-600 mt-0.5">
+      <div className="grid grid-cols-3 gap-3 px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-4 py-3">
+          <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Total Totes</div>
+          <div className="text-2xl font-mono font-semibold text-gray-900 dark:text-white">{stats.total.toLocaleString()}</div>
+          <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
             <span className="text-amber-400">{stats.active.toLocaleString()} active</span>
             {" · "}
-            <span className="text-gray-500">{(stats.total - stats.active).toLocaleString()} done</span>
+            <span className="text-gray-600 dark:text-gray-500">{(stats.total - stats.active).toLocaleString()} done</span>
           </div>
         </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-lg px-4 py-3">
-          <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Categories</div>
-          <div className="text-2xl font-mono font-semibold text-white">{byCategory.length}</div>
-          <div className="text-xs text-gray-600 mt-0.5">with active totes</div>
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-4 py-3">
+          <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Categories</div>
+          <div className="text-2xl font-mono font-semibold text-gray-900 dark:text-white">{byCategory.length}</div>
+          <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">with active totes</div>
         </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-lg px-4 py-3">
-          <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Largest Category</div>
-          <div className="text-lg font-semibold text-white truncate">{largestCategory}</div>
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-4 py-3">
+          <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Largest Category</div>
+          <div className="text-lg font-semibold text-gray-900 dark:text-white truncate">{largestCategory}</div>
           <div className="text-xs text-amber-400 mt-0.5">{byCategory[0]?.activeTotes.toLocaleString() ?? 0} active totes</div>
         </div>
       </div>
 
       {/* Sub-tab bar */}
-      <div className="flex gap-1 px-6 pt-3 border-b border-gray-800">
+      <div className="flex gap-1 px-6 pt-3 border-b border-gray-200 dark:border-gray-800">
         {([
           { id: "category", label: "By Category" },
           { id: "location", label: "By Location" },
@@ -1229,8 +1421,8 @@ function ToteDataTab() {
             onClick={() => setView(t.id)}
             className={`px-4 py-2 text-sm rounded-t transition-colors ${
               view === t.id
-                ? "bg-gray-800 text-white border-b-2 border-blue-500"
-                : "text-gray-400 hover:text-gray-200"
+                ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-b-2 border-blue-500"
+                : "text-gray-600 dark:text-gray-400 hover:text-gray-200"
             }`}
           >
             {t.label}
@@ -1245,16 +1437,16 @@ function ToteDataTab() {
         {view === "category" && (
           <div className="space-y-1.5 max-w-3xl">
             {byCategory.length === 0 && (
-              <div className="text-gray-600 text-sm">No active totes found</div>
+              <div className="text-gray-600 dark:text-gray-400 text-sm">No active totes found</div>
             )}
             {byCategory.map(row => (
               <div key={row.category} className="grid items-center gap-3" style={{ gridTemplateColumns: "180px 1fr" }}>
-                <div className="text-xs text-gray-400 text-right truncate pr-2 font-mono">{row.category}</div>
+                <div className="text-xs text-gray-600 dark:text-gray-400 text-right truncate pr-2 font-mono">{row.category}</div>
                 <HorizBar value={row.activeTotes} max={maxTotes} color="bg-blue-500" />
               </div>
             ))}
             {/* x-axis ticks */}
-            <div className="grid gap-3 mt-2 text-xs text-gray-600" style={{ gridTemplateColumns: "180px 1fr" }}>
+            <div className="grid gap-3 mt-2 text-xs text-gray-600 dark:text-gray-400" style={{ gridTemplateColumns: "180px 1fr" }}>
               <div />
               <div className="flex justify-between pr-10">
                 <span>0</span>
@@ -1271,15 +1463,15 @@ function ToteDataTab() {
         {view === "location" && (
           <div className="space-y-1.5 max-w-3xl">
             {byLocation.length === 0 && (
-              <div className="text-gray-600 text-sm">No location data found</div>
+              <div className="text-gray-600 dark:text-gray-400 text-sm">No location data found</div>
             )}
             {byLocation.map(row => (
               <div key={row.location} className="grid items-center gap-3" style={{ gridTemplateColumns: "120px 1fr" }}>
-                <div className="text-xs text-gray-400 text-right truncate pr-2 font-mono">{row.location ?? "—"}</div>
+                <div className="text-xs text-gray-600 dark:text-gray-400 text-right truncate pr-2 font-mono">{row.location ?? "—"}</div>
                 <HorizBar value={row.toteCount} max={maxLoc} color="bg-cyan-500" />
               </div>
             ))}
-            <div className="grid gap-3 mt-2 text-xs text-gray-600" style={{ gridTemplateColumns: "120px 1fr" }}>
+            <div className="grid gap-3 mt-2 text-xs text-gray-600 dark:text-gray-400" style={{ gridTemplateColumns: "120px 1fr" }}>
               <div />
               <div className="flex justify-between pr-10">
                 <span>0</span>
@@ -1294,13 +1486,13 @@ function ToteDataTab() {
 
         {/* ── Raw data table ── */}
         {view === "raw" && (
-          <div className="border border-gray-800 rounded-lg overflow-hidden">
+          <div className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
             {totes.length === 0 ? (
-              <div className="p-6 text-center text-gray-600 text-sm">No active totes found</div>
+              <div className="p-6 text-center text-gray-600 dark:text-gray-400 text-sm">No active totes found</div>
             ) : (
               <>
                 <table className="w-full text-xs">
-                  <thead className="bg-gray-900 text-gray-500 sticky top-0">
+                  <thead className="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-500 sticky top-0">
                     <tr>
                       <th className="px-4 py-2 text-left font-medium">Tote No</th>
                       <th className="px-4 py-2 text-left font-medium">Location</th>
@@ -1309,20 +1501,20 @@ function ToteDataTab() {
                       <th className="px-4 py-2 text-left font-medium">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-800/60">
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800/60">
                     {visibleTotes.map(t => (
                       <tr key={t.toteNo} className="hover:bg-gray-800/30 transition-colors">
-                        <td className="px-4 py-2.5 font-mono text-cyan-300 font-semibold">{t.toteNo}</td>
-                        <td className="px-4 py-2.5 font-mono text-gray-400">{t.location ?? <span className="text-gray-700">—</span>}</td>
-                        <td className="px-4 py-2.5 text-gray-400">{t.receiptNo ?? <span className="text-gray-700">—</span>}</td>
-                        <td className="px-4 py-2.5 text-gray-300">{t.vendorName ?? <span className="text-gray-700">—</span>}</td>
-                        <td className="px-4 py-2.5 text-gray-500">{t.status && t.status !== "No Reserve" ? t.status : <span className="text-gray-700">—</span>}</td>
+                        <td className="px-4 py-2.5 font-mono text-cyan-700 dark:text-cyan-300 font-semibold">{t.toteNo}</td>
+                        <td className="px-4 py-2.5 font-mono text-gray-600 dark:text-gray-400">{t.location ?? <span className="text-gray-700">—</span>}</td>
+                        <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400">{t.receiptNo ?? <span className="text-gray-700">—</span>}</td>
+                        <td className="px-4 py-2.5 text-gray-600 dark:text-gray-300">{t.vendorName ?? <span className="text-gray-700">—</span>}</td>
+                        <td className="px-4 py-2.5 text-gray-600 dark:text-gray-500">{t.status && t.status !== "No Reserve" ? t.status : <span className="text-gray-700">—</span>}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
                 {totes.length > 150 && (
-                  <div className="px-4 py-3 border-t border-gray-800 text-center bg-gray-900">
+                  <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-800 text-center bg-gray-100 dark:bg-gray-900">
                     <button
                       onClick={() => setShowAll(v => !v)}
                       className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
@@ -1448,27 +1640,27 @@ function CollectionsDueTab() {
     <div className="p-4 space-y-4 h-full overflow-auto">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="text-lg font-semibold text-white">Collections Due</h2>
-          <p className="text-sm text-gray-400">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Collections Due</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
             Items in the chosen aisles that have a collection docket — typically due to be shipped but not yet collected.
           </p>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
+      <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
           <div className="sm:col-span-2">
-            <label className="block text-xs text-gray-400 mb-1">Aisle prefixes</label>
+            <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Aisle prefixes</label>
             <input
               type="text"
               value={aislesText}
               onChange={e => setAislesText(e.target.value)}
               onKeyDown={e => e.key === "Enter" && search()}
               placeholder="e.g. A39, A40, A41"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
             />
-            <p className="text-[11px] text-gray-500 mt-1">
+            <p className="text-[11px] text-gray-600 dark:text-gray-500 mt-1">
               Comma-separated prefixes — matches anything starting with these (e.g. A39 catches A39A1, A39B5, A39C3…).
             </p>
           </div>
@@ -1476,11 +1668,11 @@ function CollectionsDueTab() {
             <button
               onClick={search}
               disabled={loading || !aislesText.trim()}
-              className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+              className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-gray-900 dark:text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
             >
               {loading ? "Searching BC…" : "Search"}
             </button>
-            <label className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer select-none">
+            <label className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={groupByDocket}
@@ -1494,21 +1686,21 @@ function CollectionsDueTab() {
       </div>
 
       {error && (
-        <div className="bg-red-900/40 border border-red-700 rounded-xl px-4 py-3 text-red-300 text-sm">{error}</div>
+        <div className="bg-red-900/40 border border-red-700 rounded-xl px-4 py-3 text-red-700 dark:text-red-300 text-sm">{error}</div>
       )}
 
       {/* Results */}
       {items !== null && (
         <>
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
               {items.length === 0 ? (
                 "No matching items found."
               ) : (
                 <>
-                  <span className="text-white font-semibold">{items.length}</span> item{items.length === 1 ? "" : "s"} found
+                  <span className="text-gray-900 dark:text-white font-semibold">{items.length}</span> item{items.length === 1 ? "" : "s"} found
                   {groupByDocket && grouped.length > 0 && (
-                    <> · <span className="text-white font-semibold">{grouped.length}</span> docket{grouped.length === 1 ? "" : "s"}</>
+                    <> · <span className="text-gray-900 dark:text-white font-semibold">{grouped.length}</span> docket{grouped.length === 1 ? "" : "s"}</>
                   )}
                 </>
               )}
@@ -1517,7 +1709,7 @@ function CollectionsDueTab() {
               <button
                 onClick={downloadPdf}
                 disabled={downloadingPdf}
-                className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+                className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-gray-900 dark:text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
                 title="Download a PDF with each aisle on its own report."
               >
                 {downloadingPdf ? "Generating PDF…" : "📄 Download PDF"}
@@ -1526,10 +1718,10 @@ function CollectionsDueTab() {
           </div>
 
           {items.length > 0 && !groupByDocket && (
-            <div className="overflow-auto border border-gray-800 rounded-lg">
+            <div className="overflow-auto border border-gray-200 dark:border-gray-800 rounded-lg">
               <table className="text-xs w-full">
-                <thead className="bg-gray-800 sticky top-0">
-                  <tr className="text-left text-gray-400">
+                <thead className="bg-white dark:bg-gray-800 sticky top-0">
+                  <tr className="text-left text-gray-600 dark:text-gray-400">
                     <th className="px-3 py-2">Location</th>
                     <th className="px-3 py-2">Barcode</th>
                     <th className="px-3 py-2">Description</th>
@@ -1538,10 +1730,10 @@ function CollectionsDueTab() {
                 </thead>
                 <tbody>
                   {items.map(it => (
-                    <tr key={it.uniqueId} className="border-t border-gray-800 hover:bg-gray-900">
-                      <td className="px-3 py-2 font-mono text-gray-300">{it.location}</td>
-                      <td className="px-3 py-2 font-mono text-gray-300">{it.barcode}</td>
-                      <td className="px-3 py-2 text-gray-200">{it.description}</td>
+                    <tr key={it.uniqueId} className="border-t border-gray-200 dark:border-gray-800 hover:bg-gray-900">
+                      <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-300">{it.location}</td>
+                      <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-300">{it.barcode}</td>
+                      <td className="px-3 py-2 text-gray-700 dark:text-gray-200">{it.description}</td>
                       <td className="px-3 py-2 font-mono text-emerald-400">{it.collectionNo}</td>
                     </tr>
                   ))}
@@ -1553,18 +1745,18 @@ function CollectionsDueTab() {
           {items.length > 0 && groupByDocket && (
             <div className="space-y-3">
               {grouped.map(g => (
-                <div key={g.collectionNo} className="border border-gray-800 rounded-lg overflow-hidden">
-                  <div className="bg-gray-800 px-3 py-2 flex items-center justify-between">
+                <div key={g.collectionNo} className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
+                  <div className="bg-white dark:bg-gray-800 px-3 py-2 flex items-center justify-between">
                     <span className="font-mono text-emerald-400 text-sm">{g.collectionNo}</span>
-                    <span className="text-xs text-gray-400">{g.items.length} item{g.items.length === 1 ? "" : "s"}</span>
+                    <span className="text-xs text-gray-600 dark:text-gray-400">{g.items.length} item{g.items.length === 1 ? "" : "s"}</span>
                   </div>
                   <table className="text-xs w-full">
                     <tbody>
                       {g.items.map(it => (
-                        <tr key={it.uniqueId} className="border-t border-gray-800 hover:bg-gray-900">
-                          <td className="px-3 py-2 font-mono text-gray-300 w-24">{it.location}</td>
-                          <td className="px-3 py-2 font-mono text-gray-300 w-24">{it.barcode}</td>
-                          <td className="px-3 py-2 text-gray-200">{it.description}</td>
+                        <tr key={it.uniqueId} className="border-t border-gray-200 dark:border-gray-800 hover:bg-gray-900">
+                          <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-300 w-24">{it.location}</td>
+                          <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-300 w-24">{it.barcode}</td>
+                          <td className="px-3 py-2 text-gray-700 dark:text-gray-200">{it.description}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1668,28 +1860,28 @@ function UnsoldItemsTab() {
     <div className="p-4 space-y-4 h-full overflow-auto">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="text-lg font-semibold text-white">Unsold Items</h2>
-          <p className="text-sm text-gray-400">
-            Items in the chosen aisles where <span className="font-mono text-gray-200">Hammer Price = 0</span> —
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Unsold Items</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Items in the chosen aisles where <span className="font-mono text-gray-700 dark:text-gray-200">Hammer Price = 0</span> —
             i.e. passed at auction or not yet sold. Same workflow as Collections Due.
           </p>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
+      <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
           <div className="sm:col-span-2">
-            <label className="block text-xs text-gray-400 mb-1">Aisle prefixes</label>
+            <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Aisle prefixes</label>
             <input
               type="text"
               value={aislesText}
               onChange={e => setAislesText(e.target.value)}
               onKeyDown={e => e.key === "Enter" && search()}
               placeholder="e.g. A50, A51, A52"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
             />
-            <p className="text-[11px] text-gray-500 mt-1">
+            <p className="text-[11px] text-gray-600 dark:text-gray-500 mt-1">
               Comma-separated prefixes — matches anything starting with these (e.g. A50 catches A50A1, A50B5, A50C3…).
             </p>
           </div>
@@ -1697,11 +1889,11 @@ function UnsoldItemsTab() {
             <button
               onClick={search}
               disabled={loading || !aislesText.trim()}
-              className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+              className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-gray-900 dark:text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
             >
               {loading ? "Searching BC…" : "Search"}
             </button>
-            <label className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer select-none">
+            <label className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={groupByVendor}
@@ -1715,21 +1907,21 @@ function UnsoldItemsTab() {
       </div>
 
       {error && (
-        <div className="bg-red-900/40 border border-red-700 rounded-xl px-4 py-3 text-red-300 text-sm">{error}</div>
+        <div className="bg-red-900/40 border border-red-700 rounded-xl px-4 py-3 text-red-700 dark:text-red-300 text-sm">{error}</div>
       )}
 
       {/* Results */}
       {items !== null && (
         <>
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
               {items.length === 0 ? (
                 "No matching items found."
               ) : (
                 <>
-                  <span className="text-white font-semibold">{items.length}</span> item{items.length === 1 ? "" : "s"} found
+                  <span className="text-gray-900 dark:text-white font-semibold">{items.length}</span> item{items.length === 1 ? "" : "s"} found
                   {groupByVendor && grouped.length > 0 && (
-                    <> · <span className="text-white font-semibold">{grouped.length}</span> vendor{grouped.length === 1 ? "" : "s"}</>
+                    <> · <span className="text-gray-900 dark:text-white font-semibold">{grouped.length}</span> vendor{grouped.length === 1 ? "" : "s"}</>
                   )}
                 </>
               )}
@@ -1738,7 +1930,7 @@ function UnsoldItemsTab() {
               <button
                 onClick={downloadPdf}
                 disabled={downloadingPdf}
-                className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+                className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-gray-900 dark:text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
                 title="Download a PDF with each aisle on its own report."
               >
                 {downloadingPdf ? "Generating PDF…" : "📄 Download PDF"}
@@ -1747,10 +1939,10 @@ function UnsoldItemsTab() {
           </div>
 
           {items.length > 0 && !groupByVendor && (
-            <div className="overflow-auto border border-gray-800 rounded-lg">
+            <div className="overflow-auto border border-gray-200 dark:border-gray-800 rounded-lg">
               <table className="text-xs w-full">
-                <thead className="bg-gray-800 sticky top-0">
-                  <tr className="text-left text-gray-400">
+                <thead className="bg-white dark:bg-gray-800 sticky top-0">
+                  <tr className="text-left text-gray-600 dark:text-gray-400">
                     <th className="px-3 py-2">Location</th>
                     <th className="px-3 py-2">Barcode</th>
                     <th className="px-3 py-2">Description</th>
@@ -1760,12 +1952,12 @@ function UnsoldItemsTab() {
                 </thead>
                 <tbody>
                   {items.map(it => (
-                    <tr key={it.uniqueId} className="border-t border-gray-800 hover:bg-gray-900">
-                      <td className="px-3 py-2 font-mono text-gray-300">{it.location}</td>
-                      <td className="px-3 py-2 font-mono text-gray-300">{it.barcode}</td>
-                      <td className="px-3 py-2 text-gray-200">{it.description}</td>
-                      <td className="px-3 py-2 text-gray-300">{it.vendorName || it.vendorNo || "—"}</td>
-                      <td className="px-3 py-2 font-mono text-gray-500">{it.auctionCode || "—"}</td>
+                    <tr key={it.uniqueId} className="border-t border-gray-200 dark:border-gray-800 hover:bg-gray-900">
+                      <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-300">{it.location}</td>
+                      <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-300">{it.barcode}</td>
+                      <td className="px-3 py-2 text-gray-700 dark:text-gray-200">{it.description}</td>
+                      <td className="px-3 py-2 text-gray-600 dark:text-gray-300">{it.vendorName || it.vendorNo || "—"}</td>
+                      <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-500">{it.auctionCode || "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1776,19 +1968,19 @@ function UnsoldItemsTab() {
           {items.length > 0 && groupByVendor && (
             <div className="space-y-3">
               {grouped.map(g => (
-                <div key={g.vendor} className="border border-gray-800 rounded-lg overflow-hidden">
-                  <div className="bg-gray-800 px-3 py-2 flex items-center justify-between">
+                <div key={g.vendor} className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
+                  <div className="bg-white dark:bg-gray-800 px-3 py-2 flex items-center justify-between">
                     <span className="text-emerald-400 text-sm">{g.vendor}</span>
-                    <span className="text-xs text-gray-400">{g.items.length} item{g.items.length === 1 ? "" : "s"}</span>
+                    <span className="text-xs text-gray-600 dark:text-gray-400">{g.items.length} item{g.items.length === 1 ? "" : "s"}</span>
                   </div>
                   <table className="text-xs w-full">
                     <tbody>
                       {g.items.map(it => (
-                        <tr key={it.uniqueId} className="border-t border-gray-800 hover:bg-gray-900">
-                          <td className="px-3 py-2 font-mono text-gray-300 w-24">{it.location}</td>
-                          <td className="px-3 py-2 font-mono text-gray-300 w-24">{it.barcode}</td>
-                          <td className="px-3 py-2 text-gray-200">{it.description}</td>
-                          <td className="px-3 py-2 font-mono text-gray-500 w-20">{it.auctionCode || "—"}</td>
+                        <tr key={it.uniqueId} className="border-t border-gray-200 dark:border-gray-800 hover:bg-gray-900">
+                          <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-300 w-24">{it.location}</td>
+                          <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-300 w-24">{it.barcode}</td>
+                          <td className="px-3 py-2 text-gray-700 dark:text-gray-200">{it.description}</td>
+                          <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-500 w-20">{it.auctionCode || "—"}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1897,8 +2089,8 @@ function DbExplorerTab() {
     <div className="p-4 space-y-4 h-full overflow-auto">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="text-lg font-semibold text-white">DB Explorer</h2>
-          <p className="text-sm text-gray-400">Inspect raw data stored in the database</p>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">DB Explorer</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400">Inspect raw data stored in the database</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           {refreshMsg && (
@@ -1915,14 +2107,14 @@ function DbExplorerTab() {
             onClick={refreshAuctionNames}
             disabled={refreshingNames}
             title="Re-pull all auction names from BC. Use this when a cached sale name in the DB looks stale."
-            className="text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-gray-600 disabled:opacity-50 text-gray-200 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+            className="text-xs bg-white dark:bg-gray-800 hover:bg-gray-700 border border-gray-300 dark:border-gray-700 hover:border-gray-600 disabled:opacity-50 text-gray-700 dark:text-gray-200 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
           >
             {refreshingNames ? "Refreshing…" : "↻ Refresh auction names from BC"}
           </button>
           <button
             onClick={() => { setClearOpen(o => !o); setClearMsg(null); setClearConfirmText("") }}
             title="Wipe all BC-synced cache rows (Warehouse Items / Totes) so the next sync re-pulls from scratch. Admin only."
-            className="text-xs bg-red-950 hover:bg-red-900 border border-red-900 hover:border-red-800 text-red-300 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+            className="text-xs bg-red-950 hover:bg-red-900 border border-red-900 hover:border-red-800 text-red-700 dark:text-red-300 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
           >
             ⚠ Clear BC data…
           </button>
@@ -1934,7 +2126,7 @@ function DbExplorerTab() {
         <div className="bg-red-950/40 border border-red-900 rounded-xl p-5 space-y-4">
           <div>
             <h3 className="text-sm font-bold text-red-200">⚠ Clear BC-synced cache</h3>
-            <p className="text-xs text-red-300 mt-1">
+            <p className="text-xs text-red-700 dark:text-red-300 mt-1">
               This permanently deletes the chosen Warehouse rows from our database.
               Other BC-dependent features (sale checklist, location heatmap,
               BC Marketing) will appear empty until the next sync completes.
@@ -1950,7 +2142,7 @@ function DbExplorerTab() {
                   key={t}
                   onClick={() => setClearTarget(t)}
                   className={`px-3 py-1.5 text-xs rounded-md transition-colors capitalize ${
-                    clearTarget === t ? "bg-red-700 text-white" : "text-red-300 hover:text-white"
+                    clearTarget === t ? "bg-red-700 text-gray-900 dark:text-white" : "text-red-700 dark:text-red-300 hover:text-white"
                   }`}
                 >
                   {t === "both" ? "Both items & totes" : `Warehouse ${t}`}
@@ -1968,26 +2160,26 @@ function DbExplorerTab() {
               value={clearConfirmText}
               onChange={e => setClearConfirmText(e.target.value)}
               placeholder="DELETE"
-              className="w-full max-w-xs bg-gray-900 border border-red-900 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-red-500"
+              className="w-full max-w-xs bg-gray-100 dark:bg-gray-900 border border-red-900 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white font-mono focus:outline-none focus:border-red-500"
               autoFocus
             />
           </div>
 
           {clearMsg && (
-            <p className={`text-xs ${clearMsg.startsWith("✓") ? "text-emerald-400" : "text-red-300"}`}>{clearMsg}</p>
+            <p className={`text-xs ${clearMsg.startsWith("✓") ? "text-emerald-400" : "text-red-700 dark:text-red-300"}`}>{clearMsg}</p>
           )}
 
           <div className="flex gap-2">
             <button
               onClick={clearBcData}
               disabled={clearing || clearConfirmText !== "DELETE"}
-              className="px-4 py-2 bg-red-700 hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg transition-colors"
+              className="px-4 py-2 bg-red-700 hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed text-gray-900 dark:text-white text-xs font-bold rounded-lg transition-colors"
             >
               {clearing ? "Clearing…" : `Clear ${clearTarget === "both" ? "items & totes" : clearTarget}`}
             </button>
             <button
               onClick={() => { setClearOpen(false); setClearConfirmText(""); setClearMsg(null) }}
-              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs rounded-lg transition-colors"
+              className="px-4 py-2 bg-white dark:bg-gray-800 hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs rounded-lg transition-colors"
             >
               Cancel
             </button>
@@ -1997,49 +2189,49 @@ function DbExplorerTab() {
 
       {/* Controls */}
       <div className="flex gap-2 flex-wrap">
-        <div className="flex rounded overflow-hidden border border-gray-700">
+        <div className="flex rounded overflow-hidden border border-gray-300 dark:border-gray-700">
           {(["items","totes"] as const).map(t => (
             <button key={t} onClick={() => { setTable(t); setField(t === "items" ? "auctionCode" : "toteNo"); setRows([]); setCount(null) }}
-              className={`px-4 py-2 text-sm transition-colors ${table === t ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400 hover:text-white"}`}>
+              className={`px-4 py-2 text-sm transition-colors ${table === t ? "bg-blue-600 text-gray-900 dark:text-white" : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-white"}`}>
               {t === "items" ? "Warehouse Items" : "Warehouse Totes"}
             </button>
           ))}
         </div>
         <select value={field} onChange={e => setField(e.target.value)}
-          className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+          className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-blue-500">
           {fields.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
         </select>
         <input value={q} onChange={e => setQ(e.target.value)}
           onKeyDown={e => e.key === "Enter" && search()}
           placeholder="Search value (blank = all)"
-          className="flex-1 min-w-48 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500 placeholder:text-gray-600" />
+          className="flex-1 min-w-48 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-blue-500 placeholder:text-gray-600" />
         <button onClick={search} disabled={loading}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-semibold rounded transition-colors">
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-gray-900 dark:text-white text-sm font-semibold rounded transition-colors">
           {loading ? "Loading…" : "Search"}
         </button>
       </div>
 
       {count !== null && (
-        <p className="text-sm text-gray-400">{count} row{count !== 1 ? "s" : ""} returned {count === 200 && <span className="text-yellow-500">(capped at 200)</span>}</p>
+        <p className="text-sm text-gray-600 dark:text-gray-400">{count} row{count !== 1 ? "s" : ""} returned {count === 200 && <span className="text-yellow-500">(capped at 200)</span>}</p>
       )}
 
       {/* Table */}
       {rows.length > 0 && (
-        <div className="overflow-auto border border-gray-700 rounded-lg">
+        <div className="overflow-auto border border-gray-300 dark:border-gray-700 rounded-lg">
           <table className="text-xs w-full">
-            <thead className="bg-gray-800 sticky top-0">
+            <thead className="bg-white dark:bg-gray-800 sticky top-0">
               <tr>
                 {columns.map(c => (
-                  <th key={c} className="px-3 py-2 text-left text-gray-300 font-mono whitespace-nowrap border-r border-gray-700 last:border-0">{c}</th>
+                  <th key={c} className="px-3 py-2 text-left text-gray-600 dark:text-gray-300 font-mono whitespace-nowrap border-r border-gray-300 dark:border-gray-700 last:border-0">{c}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {rows.map((row, i) => (
-                <tr key={i} className={i % 2 === 0 ? "bg-gray-900" : "bg-gray-850"}>
+                <tr key={i} className={i % 2 === 0 ? "bg-gray-100 dark:bg-gray-900" : "bg-white dark:bg-gray-800"}>
                   {columns.map(c => (
-                    <td key={c} className="px-3 py-1.5 text-gray-300 font-mono whitespace-nowrap border-r border-gray-800 last:border-0 max-w-xs truncate" title={String(row[c] ?? "")}>
-                      {row[c] === null || row[c] === undefined ? <span className="text-gray-600">null</span> : String(row[c])}
+                    <td key={c} className="px-3 py-1.5 text-gray-600 dark:text-gray-300 font-mono whitespace-nowrap border-r border-gray-200 dark:border-gray-800 last:border-0 max-w-xs truncate" title={String(row[c] ?? "")}>
+                      {row[c] === null || row[c] === undefined ? <span className="text-gray-600 dark:text-gray-400">null</span> : String(row[c])}
                     </td>
                   ))}
                 </tr>
@@ -2310,30 +2502,30 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
 
   return (
     <div className="h-full overflow-y-auto p-6 max-w-4xl mx-auto">
-      <h2 className="text-xl font-semibold text-white mb-1">Data Sync</h2>
-      <p className="text-sm text-gray-400 mb-6">
+      <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-1">Data Sync</h2>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
         Pulls warehouse items, current lot numbers, and location scans from Business Central into the local database.
         Subsequent runs are incremental — only changed records are re-fetched.
       </p>
 
       {/* Stats grid — each table card has its own re-sync buttons */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-          <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Items in DB</div>
-          <div className="text-2xl font-mono text-white">{liveCount.toLocaleString()}</div>
-          <div className="text-xs text-gray-500 mt-1">{(status?.toteCount ?? 0).toLocaleString()} totes</div>
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3">
+          <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Items in DB</div>
+          <div className="text-2xl font-mono text-gray-900 dark:text-white">{liveCount.toLocaleString()}</div>
+          <div className="text-xs text-gray-600 dark:text-gray-500 mt-1">{(status?.toteCount ?? 0).toLocaleString()} totes</div>
         </div>
 
         {/* Receipt Lines */}
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 flex flex-col">
-          <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Receipt Lines</div>
-          <div className="text-sm text-gray-200">{fmtAge(status?.sources.receipt_lines?.completedAt)}</div>
-          <div className="text-xs text-gray-500">{status?.sources.receipt_lines?.itemsProcessed?.toLocaleString() ?? 0} last run</div>
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3 flex flex-col">
+          <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Receipt Lines</div>
+          <div className="text-sm text-gray-700 dark:text-gray-200">{fmtAge(status?.sources.receipt_lines?.completedAt)}</div>
+          <div className="text-xs text-gray-600 dark:text-gray-500">{status?.sources.receipt_lines?.itemsProcessed?.toLocaleString() ?? 0} last run</div>
           <div className="mt-2 flex gap-1">
             <button
               disabled={running}
               onClick={() => runOneStage("receipt-lines", "Receipt Lines", false)}
-              className="flex-1 text-[11px] px-2 py-1 rounded bg-blue-900/40 hover:bg-blue-800/60 text-blue-300 disabled:opacity-30 transition-colors"
+              className="flex-1 text-[11px] px-2 py-1 rounded bg-blue-900/40 hover:bg-blue-800/60 text-blue-700 dark:text-blue-300 disabled:opacity-30 transition-colors"
               title="Incremental sync of receipt lines only"
             >
               ⟳ Sync
@@ -2353,15 +2545,15 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
         </div>
 
         {/* Auction Lines */}
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 flex flex-col">
-          <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Auction Lines</div>
-          <div className="text-sm text-gray-200">{fmtAge(status?.sources.auction_lines?.completedAt)}</div>
-          <div className="text-xs text-gray-500">{status?.sources.auction_lines?.itemsProcessed?.toLocaleString() ?? 0} last run</div>
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3 flex flex-col">
+          <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Auction Lines</div>
+          <div className="text-sm text-gray-700 dark:text-gray-200">{fmtAge(status?.sources.auction_lines?.completedAt)}</div>
+          <div className="text-xs text-gray-600 dark:text-gray-500">{status?.sources.auction_lines?.itemsProcessed?.toLocaleString() ?? 0} last run</div>
           <div className="mt-2 flex gap-1">
             <button
               disabled={running}
               onClick={() => runOneStage("auction-lines", "Auction Lines", false)}
-              className="flex-1 text-[11px] px-2 py-1 rounded bg-blue-900/40 hover:bg-blue-800/60 text-blue-300 disabled:opacity-30 transition-colors"
+              className="flex-1 text-[11px] px-2 py-1 rounded bg-blue-900/40 hover:bg-blue-800/60 text-blue-700 dark:text-blue-300 disabled:opacity-30 transition-colors"
             >
               ⟳ Sync
             </button>
@@ -2379,15 +2571,15 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
         </div>
 
         {/* Change Log */}
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 flex flex-col">
-          <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Change Log</div>
-          <div className="text-sm text-gray-200">{fmtAge(status?.sources.changelog?.completedAt)}</div>
-          <div className="text-xs text-gray-500">{status?.sources.changelog?.itemsProcessed?.toLocaleString() ?? 0} last run</div>
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3 flex flex-col">
+          <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Change Log</div>
+          <div className="text-sm text-gray-700 dark:text-gray-200">{fmtAge(status?.sources.changelog?.completedAt)}</div>
+          <div className="text-xs text-gray-600 dark:text-gray-500">{status?.sources.changelog?.itemsProcessed?.toLocaleString() ?? 0} last run</div>
           <div className="mt-2 flex gap-1">
             <button
               disabled={running}
               onClick={() => runOneStage("changelog", "Change Log", false)}
-              className="flex-1 text-[11px] px-2 py-1 rounded bg-blue-900/40 hover:bg-blue-800/60 text-blue-300 disabled:opacity-30 transition-colors"
+              className="flex-1 text-[11px] px-2 py-1 rounded bg-blue-900/40 hover:bg-blue-800/60 text-blue-700 dark:text-blue-300 disabled:opacity-30 transition-colors"
             >
               ⟳ Sync
             </button>
@@ -2405,15 +2597,15 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
         </div>
 
         {/* Totes — Totes_Excel (all) */}
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 flex flex-col">
-          <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Totes</div>
-          <div className="text-sm text-gray-200">{fmtAge(status?.sources.totes?.completedAt)}</div>
-          <div className="text-xs text-gray-500">{status?.sources.totes?.itemsProcessed?.toLocaleString() ?? 0} last run</div>
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3 flex flex-col">
+          <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Totes</div>
+          <div className="text-sm text-gray-700 dark:text-gray-200">{fmtAge(status?.sources.totes?.completedAt)}</div>
+          <div className="text-xs text-gray-600 dark:text-gray-500">{status?.sources.totes?.itemsProcessed?.toLocaleString() ?? 0} last run</div>
           <div className="mt-2 flex gap-1">
             <button
               disabled={running}
               onClick={() => runOneStage("totes", "Totes", false)}
-              className="flex-1 text-[11px] px-2 py-1 rounded bg-blue-900/40 hover:bg-blue-800/60 text-blue-300 disabled:opacity-30 transition-colors"
+              className="flex-1 text-[11px] px-2 py-1 rounded bg-blue-900/40 hover:bg-blue-800/60 text-blue-700 dark:text-blue-300 disabled:opacity-30 transition-colors"
               title="Sync all T/P-prefixed totes from Totes_Excel"
             >
               ⟳ Sync
@@ -2432,15 +2624,15 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
         </div>
 
         {/* Active Totes — Receipt_Totes_Excel (enrichment) */}
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 flex flex-col">
-          <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Active Totes</div>
-          <div className="text-sm text-gray-200">{fmtAge(status?.sources["totes-active"]?.completedAt)}</div>
-          <div className="text-xs text-gray-500">{status?.sources["totes-active"]?.itemsProcessed?.toLocaleString() ?? 0} last run</div>
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3 flex flex-col">
+          <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Active Totes</div>
+          <div className="text-sm text-gray-700 dark:text-gray-200">{fmtAge(status?.sources["totes-active"]?.completedAt)}</div>
+          <div className="text-xs text-gray-600 dark:text-gray-500">{status?.sources["totes-active"]?.itemsProcessed?.toLocaleString() ?? 0} last run</div>
           <div className="mt-2 flex gap-1">
             <button
               disabled={running}
               onClick={() => runOneStage("totes-active", "Active Totes", false)}
-              className="flex-1 text-[11px] px-2 py-1 rounded bg-blue-900/40 hover:bg-blue-800/60 text-blue-300 disabled:opacity-30 transition-colors"
+              className="flex-1 text-[11px] px-2 py-1 rounded bg-blue-900/40 hover:bg-blue-800/60 text-blue-700 dark:text-blue-300 disabled:opacity-30 transition-colors"
               title="Enrich active totes with location and vendor data from Receipt_Totes_Excel"
             >
               ⟳ Sync
@@ -2455,7 +2647,7 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
           <>
             <button
               onClick={() => runSync()}
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium text-sm transition-colors"
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-gray-900 dark:text-white rounded-lg font-medium text-sm transition-colors"
             >
               ⟳ Run sync now
             </button>
@@ -2464,7 +2656,7 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
                 if (!confirm("Full re-sync ignores the last-synced timestamp and re-fetches every record from Business Central. This can take 15+ minutes. Continue?")) return
                 runSync({ full: true })
               }}
-              className="px-5 py-2.5 bg-amber-700/80 hover:bg-amber-600 text-white rounded-lg font-medium text-sm transition-colors"
+              className="px-5 py-2.5 bg-amber-700/80 hover:bg-amber-600 text-gray-900 dark:text-white rounded-lg font-medium text-sm transition-colors"
               title="Re-fetches everything from BC — use if items appear missing"
             >
               ⤓ Full re-sync
@@ -2473,7 +2665,7 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
         ) : (
           <button
             onClick={() => { cancelRef.current = true; addLog("warn", "Cancel requested — finishing current batch…") }}
-            className="px-5 py-2.5 bg-red-700 hover:bg-red-600 text-white rounded-lg font-medium text-sm transition-colors"
+            className="px-5 py-2.5 bg-red-700 hover:bg-red-600 text-gray-900 dark:text-white rounded-lg font-medium text-sm transition-colors"
           >
             ⛔ Cancel
           </button>
@@ -2488,12 +2680,12 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
               </svg>
               <span className="font-medium">{phase}</span>
             </div>
-            <span className="text-gray-400">·</span>
-            <span className="text-gray-300">{batchTotal} batch{batchTotal === 1 ? "" : "es"}</span>
-            <span className="text-gray-400">·</span>
-            <span className="text-gray-300">{itemTotal.toLocaleString()} items processed</span>
-            <span className="text-gray-400">·</span>
-            <span className="text-gray-500 tabular-nums">{elapsedStr}</span>
+            <span className="text-gray-600 dark:text-gray-400">·</span>
+            <span className="text-gray-600 dark:text-gray-300">{batchTotal} batch{batchTotal === 1 ? "" : "es"}</span>
+            <span className="text-gray-600 dark:text-gray-400">·</span>
+            <span className="text-gray-600 dark:text-gray-300">{itemTotal.toLocaleString()} items processed</span>
+            <span className="text-gray-600 dark:text-gray-400">·</span>
+            <span className="text-gray-600 dark:text-gray-500 tabular-nums">{elapsedStr}</span>
           </div>
         )}
 
@@ -2508,34 +2700,34 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
       {/* Error banner */}
       {error && (
         <div className="mb-4 bg-red-950/40 border border-red-700/50 rounded-lg p-3">
-          <div className="text-sm font-semibold text-red-300 mb-1">Sync error</div>
+          <div className="text-sm font-semibold text-red-700 dark:text-red-300 mb-1">Sync error</div>
           <div className="text-xs text-red-200 font-mono break-all">{error}</div>
         </div>
       )}
 
       {/* Log */}
       <div className="mb-1 flex items-center justify-between">
-        <span className="text-xs text-gray-500 uppercase tracking-wider">Activity log</span>
+        <span className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider">Activity log</span>
         {log.length > 0 && (
-          <button onClick={() => setLog([])} className="text-xs text-gray-500 hover:text-gray-300">Clear</button>
+          <button onClick={() => setLog([])} className="text-xs text-gray-600 dark:text-gray-500 hover:text-gray-300">Clear</button>
         )}
       </div>
       <div
         ref={logRef}
-        className="bg-black/50 border border-gray-800 rounded-lg p-3 font-mono text-xs h-96 overflow-y-auto"
+        className="bg-black/50 border border-gray-200 dark:border-gray-800 rounded-lg p-3 font-mono text-xs h-96 overflow-y-auto"
       >
         {log.length === 0 ? (
-          <div className="text-gray-600 italic">No activity yet — click "Run sync now" to begin.</div>
+          <div className="text-gray-600 dark:text-gray-400 italic">No activity yet — click "Run sync now" to begin.</div>
         ) : (
           log.map((entry, i) => {
             const colour =
               entry.level === "ok"    ? "text-emerald-400" :
               entry.level === "warn"  ? "text-yellow-400"  :
               entry.level === "error" ? "text-red-400"     :
-                                        "text-gray-400"
+                                        "text-gray-600 dark:text-gray-400"
             return (
               <div key={i} className={`${colour} leading-relaxed whitespace-pre-wrap`}>
-                <span className="text-gray-600">[{fmtTime(entry.time)}]</span> {entry.text}
+                <span className="text-gray-600 dark:text-gray-400">[{fmtTime(entry.time)}]</span> {entry.text}
               </div>
             )
           })
@@ -2544,27 +2736,27 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
 
       {/* Raw BC response feed */}
       <div className="mt-4 mb-1 flex items-center justify-between">
-        <span className="text-xs text-gray-500 uppercase tracking-wider">Raw BC responses</span>
+        <span className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider">Raw BC responses</span>
         {bcLog.length > 0 && (
-          <button onClick={() => setBcLog([])} className="text-xs text-gray-500 hover:text-gray-300">Clear</button>
+          <button onClick={() => setBcLog([])} className="text-xs text-gray-600 dark:text-gray-500 hover:text-gray-300">Clear</button>
         )}
       </div>
       <div
         ref={bcLogRef}
-        className="bg-black/50 border border-gray-800 rounded-lg p-3 font-mono text-[11px] h-56 overflow-y-auto"
+        className="bg-black/50 border border-gray-200 dark:border-gray-800 rounded-lg p-3 font-mono text-[11px] h-56 overflow-y-auto"
       >
         {bcLog.length === 0 ? (
-          <div className="text-gray-600 italic">Each BC response logged here — page count, items returned, whether a nextLink was issued, and the tail of the skiptoken if present. If BC stops issuing nextLink before all rows are walked, that's how to spot it.</div>
+          <div className="text-gray-600 dark:text-gray-400 italic">Each BC response logged here — page count, items returned, whether a nextLink was issued, and the tail of the skiptoken if present. If BC stops issuing nextLink before all rows are walked, that's how to spot it.</div>
         ) : (
           bcLog.map((entry, i) => {
             const colour =
               entry.level === "ok"    ? "text-emerald-400" :
               entry.level === "warn"  ? "text-yellow-400"  :
               entry.level === "error" ? "text-red-400"     :
-                                        "text-cyan-300"
+                                        "text-cyan-700 dark:text-cyan-300"
             return (
               <div key={i} className={`${colour} leading-relaxed whitespace-pre-wrap break-all`}>
-                <span className="text-gray-600">[{fmtTime(entry.time)}]</span> {entry.text}
+                <span className="text-gray-600 dark:text-gray-400">[{fmtTime(entry.time)}]</span> {entry.text}
               </div>
             )
           })
@@ -2574,14 +2766,236 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
   )
 }
 
+// ─── WarehouseHomeTab ─────────────────────────────────────────────────────────
+
+const HOME_CARDS: {
+  id:          Tab
+  icon:        string
+  label:       string
+  description: string
+  colour:      string   // Tailwind border + glow classes
+  btn:         string   // button bg classes
+}[] = [
+  {
+    id:          "heatmap",
+    icon:        "🗺️",
+    label:       "Location Heatmap",
+    description: "Visual overview of all warehouse locations — see which areas are busy, empty, or holding totes at a glance.",
+    colour:      "border-blue-400 dark:border-blue-800/60 hover:shadow-blue-900/40",
+    btn:         "bg-blue-700 hover:bg-blue-600",
+  },
+  {
+    id:          "sale-checklist",
+    icon:        "📋",
+    label:       "Sale Checklist",
+    description: "Review items assigned to upcoming auctions. Check warehouse locations, lot numbers and withdrawal flags before sale day.",
+    colour:      "border-violet-400 dark:border-violet-800/60 hover:shadow-violet-900/40",
+    btn:         "bg-violet-700 hover:bg-violet-600",
+  },
+  {
+    id:          "search",
+    icon:        "🔍",
+    label:       "Search by Location",
+    description: "Find everything stored in a specific bin, tote or warehouse location. Search by barcode or location code.",
+    colour:      "border-sky-400 dark:border-sky-800/60 hover:shadow-sky-900/40",
+    btn:         "bg-sky-700 hover:bg-sky-600",
+  },
+  {
+    id:          "location-history",
+    icon:        "📍",
+    label:       "Location History",
+    description: "Track the movement history of any tote or barcode — see every location change and who made it.",
+    colour:      "border-teal-400 dark:border-teal-800/60 hover:shadow-teal-900/40",
+    btn:         "bg-teal-700 hover:bg-teal-600",
+  },
+  {
+    id:          "tote-data",
+    icon:        "📦",
+    label:       "Tote Data",
+    description: "Browse and search all active totes in the warehouse. View contents, receipts, vendors and current locations.",
+    colour:      "border-amber-400 dark:border-amber-800/60 hover:shadow-amber-900/40",
+    btn:         "bg-amber-700 hover:bg-amber-600",
+  },
+  {
+    id:          "collections-due",
+    icon:        "🚚",
+    label:       "Collections Due",
+    description: "View lots ready for customer collection, grouped by auction. Print collection sheets and track what's been picked up.",
+    colour:      "border-orange-400 dark:border-orange-800/60 hover:shadow-orange-900/40",
+    btn:         "bg-orange-700 hover:bg-orange-600",
+  },
+  {
+    id:          "unsold-items",
+    icon:        "🏷️",
+    label:       "Unsold Items",
+    description: "Manage items that didn't sell at auction. Review, export or action unsold stock across all recent sales.",
+    colour:      "border-red-400 dark:border-red-800/60 hover:shadow-red-900/40",
+    btn:         "bg-red-700 hover:bg-red-600",
+  },
+  {
+    id:          "location-barcodes",
+    icon:        "📄",
+    label:       "Location Barcodes",
+    description: "Generate printable barcode sheets for warehouse shelf labels. Type location codes, pick an arrow direction and download.",
+    colour:      "border-emerald-400 dark:border-emerald-800/60 hover:shadow-emerald-900/40",
+    btn:         "bg-emerald-700 hover:bg-emerald-600",
+  },
+  {
+    id:          "data-sync",
+    icon:        "🔄",
+    label:       "Data Sync",
+    description: "Sync the latest stock, auction and tote data from Business Central. Check sync status and trigger manual refreshes.",
+    colour:      "border-gray-300 dark:border-gray-400 dark:border-gray-700/60 hover:shadow-gray-800/40",
+    btn:         "bg-gray-600 hover:bg-gray-500",
+  },
+  {
+    id:          "db-explorer",
+    icon:        "🔎",
+    label:       "DB Explorer",
+    description: "Query the raw warehouse database tables directly. For admin use — search items and totes by any field.",
+    colour:      "border-gray-300 dark:border-gray-400 dark:border-gray-700/60 hover:shadow-gray-800/40",
+    btn:         "bg-gray-600 hover:bg-gray-500",
+  },
+]
+
+function WarehouseHomeTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
+  const [editOrder,  setEditOrder]  = useState(false)
+  const [cardOrder,  setCardOrder]  = useState<Tab[]>(HOME_CARDS.map(c => c.id))
+  const dragItem = useRef<number | null>(null)
+  const dragOver = useRef<number | null>(null)
+
+  // Load saved order from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("warehouse_home_order")
+      if (stored) {
+        const parsed = JSON.parse(stored) as Tab[]
+        const allIds = HOME_CARDS.map(c => c.id)
+        const valid   = parsed.filter(id => allIds.includes(id))
+        const missing = allIds.filter(id => !valid.includes(id))
+        setCardOrder([...valid, ...missing])
+      }
+    } catch {}
+  }, [])
+
+  // Persist order whenever it changes
+  useEffect(() => {
+    localStorage.setItem("warehouse_home_order", JSON.stringify(cardOrder))
+  }, [cardOrder])
+
+  function handleDragStart(i: number) { dragItem.current = i }
+  function handleDragEnter(i: number) { dragOver.current = i }
+  function handleDragEnd() {
+    if (dragItem.current === null || dragOver.current === null || dragItem.current === dragOver.current) {
+      dragItem.current = null; dragOver.current = null; return
+    }
+    const next = [...cardOrder]
+    const [moved] = next.splice(dragItem.current, 1)
+    next.splice(dragOver.current, 0, moved)
+    setCardOrder(next)
+    dragItem.current = null; dragOver.current = null
+  }
+
+  const orderedCards = cardOrder.map(id => HOME_CARDS.find(c => c.id === id)!).filter(Boolean)
+
+  return (
+    <div className="overflow-y-auto h-full px-8 py-10">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex items-end justify-between mb-10">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">BC Warehouse</h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Select a section to get started.</p>
+          </div>
+          <button
+            onClick={() => setEditOrder(v => !v)}
+            className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+              editOrder
+                ? "bg-blue-600 border-blue-500 text-gray-900 dark:text-white"
+                : "bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:text-white"
+            }`}
+          >
+            {editOrder ? "✓ Done" : "⠿ Reorder"}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          {orderedCards.map((card, i) => (
+            <div
+              key={card.id}
+              draggable={editOrder}
+              onDragStart={() => handleDragStart(i)}
+              onDragEnter={() => handleDragEnter(i)}
+              onDragEnd={handleDragEnd}
+              onDragOver={e => e.preventDefault()}
+              className={`relative bg-white dark:bg-gray-900 border ${card.colour} rounded-xl p-6 flex flex-col
+                transition-all duration-200
+                ${editOrder ? "cursor-grab active:cursor-grabbing hover:border-blue-500/60 select-none" : "hover:shadow-xl hover:-translate-y-0.5"}`}
+            >
+              {editOrder && (
+                <div className="absolute top-3 right-3 text-gray-600 dark:text-gray-500 text-lg leading-none">⠿</div>
+              )}
+              <div className="text-4xl mb-4">{card.icon}</div>
+              <h2 className="text-base font-bold text-gray-900 dark:text-white mb-2">{card.label}</h2>
+              <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed mb-5 flex-1">{card.description}</p>
+              <button
+                onClick={() => !editOrder && onNavigate(card.id)}
+                disabled={editOrder}
+                className={`w-full text-center text-sm font-semibold text-gray-900 dark:text-white py-2 px-4 rounded-lg transition-colors
+                  ${editOrder ? "opacity-40 cursor-not-allowed bg-gray-200 dark:bg-gray-700" : card.btn}`}
+              >
+                Open {card.label} →
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {editOrder && (
+          <p className="text-center text-xs text-gray-600 dark:text-gray-500 mt-6">Drag cards to rearrange — order is saved automatically</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── LocationBarcodesTab ──────────────────────────────────────────────────────
+
+// Detect a trailing number in the last non-empty line so we can offer to continue the sequence.
+// e.g. "SHELF-A1" → { prefix: "SHELF-A", num: 1, padLen: 1 }
+// e.g. "LOC-003"  → { prefix: "LOC-",    num: 3, padLen: 3 }
+function parseSequence(text: string): { prefix: string; num: number; padLen: number } | null {
+  const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0)
+  if (lines.length === 0) return null
+  const last  = lines[lines.length - 1]
+  const match = /^(.*?)(\d+)$/.exec(last)
+  if (!match) return null
+  return { prefix: match[1], num: parseInt(match[2], 10), padLen: match[2].length }
+}
 
 function LocationBarcodesTab() {
   const [locationText,   setLocationText]   = useState("")
   const [downloading,    setDownloading]    = useState(false)
   const [error,          setError]          = useState<string | null>(null)
+  const [arrow,          setArrow]          = useState<"none" | "left" | "right">("none")
+  const [fillCount,      setFillCount]      = useState(5)
+  const [fillDir,        setFillDir]        = useState<"up" | "down">("up")
 
   const locations = locationText.split("\n").map(l => l.trim()).filter(l => l.length > 0)
+  const seq       = parseSequence(locationText)
+
+  function addSequence() {
+    if (!seq) return
+    const newLines: string[] = []
+    for (let i = 1; i <= fillCount; i++) {
+      const next = fillDir === "up" ? seq.num + i : seq.num - i
+      if (next < 0) break   // don't go negative
+      const n = next.toString().padStart(seq.padLen, "0")
+      newLines.push(`${seq.prefix}${n}`)
+    }
+    setLocationText(prev => {
+      const trimmed = prev.trimEnd()
+      return trimmed + (trimmed ? "\n" : "") + newLines.join("\n")
+    })
+  }
 
   async function download() {
     if (locations.length === 0) return
@@ -2591,7 +3005,7 @@ function LocationBarcodesTab() {
       const res = await fetch("/api/packers/location-sheet", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ locations }),
+        body:    JSON.stringify({ locations, arrow }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
@@ -2616,8 +3030,8 @@ function LocationBarcodesTab() {
   return (
     <div className="p-6 overflow-y-auto h-full">
       <div className="max-w-xl">
-        <h2 className="text-lg font-semibold text-white mb-1">Location Barcode Sheet</h2>
-        <p className="text-sm text-gray-400 mb-5">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Location Barcode Sheet</h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-5">
           Type one location code per line. Downloads a PDF with 6 rows per A4 page —
           barcode on the left, location code on the right.
         </p>
@@ -2627,18 +3041,75 @@ function LocationBarcodesTab() {
           onChange={e => setLocationText(e.target.value)}
           placeholder={"SHELF-A1\nSHELF-A2\nSHELF-B1"}
           rows={10}
-          className="w-full rounded-lg bg-gray-800 border border-gray-700 text-white px-3 py-2 text-sm font-mono
+          className="w-full rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white px-3 py-2 text-sm font-mono
                      focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y placeholder:text-gray-600"
         />
 
+        {/* Sequence autofill */}
+        {seq && (
+          <div className="mt-2 flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2">
+            <span className="text-xs text-gray-600 dark:text-gray-400 flex-1">
+              Continue from <span className="text-gray-900 dark:text-white font-mono">{seq.prefix}{seq.num}</span>
+            </span>
+            {/* Up / Down toggle */}
+            <div className="flex rounded overflow-hidden border border-gray-300 dark:border-gray-600 text-xs">
+              {(["up", "down"] as const).map(d => (
+                <button
+                  key={d}
+                  onClick={() => setFillDir(d)}
+                  className={`px-2 py-1 transition-colors ${fillDir === d ? "bg-blue-600 text-gray-900 dark:text-white" : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:text-white"}`}
+                >
+                  {d === "up" ? "↑" : "↓"}
+                </button>
+              ))}
+            </div>
+            <span className="text-xs text-gray-600 dark:text-gray-500">Add</span>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={fillCount}
+              onChange={e => setFillCount(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+              className="w-14 rounded bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-xs text-center px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            <span className="text-xs text-gray-600 dark:text-gray-500">more</span>
+            <button
+              onClick={addSequence}
+              className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-gray-900 dark:text-white text-xs font-semibold rounded transition-colors"
+            >
+              + Fill
+            </button>
+          </div>
+        )}
+
+        {/* Arrow picker */}
+        <div className="mt-3 mb-3">
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Direction arrow on each row</p>
+          <div className="flex gap-2">
+            {(["none", "left", "right"] as const).map(opt => (
+              <button
+                key={opt}
+                onClick={() => setArrow(opt)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+                  arrow === opt
+                    ? "bg-blue-600 border-blue-500 text-gray-900 dark:text-white"
+                    : "bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:text-white"
+                }`}
+              >
+                {opt === "none" ? "No arrow" : opt === "left" ? "← Left" : "→ Right"}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="flex items-center justify-between mt-3">
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-gray-600 dark:text-gray-500">
             {locations.length} location{locations.length === 1 ? "" : "s"}
           </span>
           <button
             onClick={download}
             disabled={downloading || locations.length === 0}
-            className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+            className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-gray-900 dark:text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
           >
             {downloading ? "Generating…" : "📄 Download PDF"}
           </button>
@@ -2655,7 +3126,7 @@ function LocationBarcodesTab() {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function BCWarehousePage() {
-  const [tab, setTab] = useState<Tab>("heatmap")
+  const [tab, setTab] = useState<Tab>("home")
   const [status, setStatus] = useState<SyncStatus | null>(null)
   const [showFirstSync, setShowFirstSync] = useState(false)
   const syncingRef = useRef(false)
@@ -2727,23 +3198,33 @@ export default function BCWarehousePage() {
   ]
 
   return (
-    <div className="flex flex-col h-full bg-gray-950 text-white">
-      {/* Tab bar */}
-      <div className="flex gap-1 px-4 pt-3 border-b border-gray-800 shrink-0">
-        {tabs.map(t => (
+    <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-white">
+      {/* Tab bar — hidden on home screen */}
+      {tab !== "home" && (
+        <div className="flex gap-1 px-4 pt-3 border-b border-gray-200 dark:border-gray-800 shrink-0 overflow-x-auto">
           <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-4 py-2 text-sm rounded-t transition-colors ${
-              tab === t.id
-                ? "bg-gray-800 text-white border-b-2 border-blue-500"
-                : "text-gray-400 hover:text-gray-200"
-            }`}
+            onClick={() => setTab("home")}
+            className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-white transition-colors shrink-0"
+            title="Back to overview"
           >
-            {t.label}
+            ⌂
           </button>
-        ))}
-      </div>
+          <div className="w-px bg-gray-200 dark:bg-gray-700 my-1.5 shrink-0" />
+          {tabs.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`px-4 py-2 text-sm rounded-t transition-colors shrink-0 ${
+                tab === t.id
+                  ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-b-2 border-blue-500"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-hidden">
@@ -2751,6 +3232,7 @@ export default function BCWarehousePage() {
           <FirstSyncPanel onComplete={() => { setShowFirstSync(false); fetchStatus() }} />
         ) : (
           <>
+            {tab === "home"             && <WarehouseHomeTab onNavigate={setTab} />}
             {tab === "heatmap"          && <WarehouseHeatmapTab />}
             {tab === "sale-checklist"   && <SaleChecklistTab />}
             {tab === "search"           && <SearchByLocationTab />}

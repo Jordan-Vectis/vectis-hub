@@ -36,34 +36,34 @@ export default async function UsersPage() {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Users</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Manage team access and roles</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Users</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Manage team access and roles</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6 max-w-3xl">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden mb-6 max-w-3xl">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50">
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Username</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Email</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Role</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Department</th>
+            <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800">
+              <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Name</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Username</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Email</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Role</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Department</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
             {users.map((user) => {
-              const { label, color } = roleLabels[user.role] ?? { label: user.role, color: "bg-gray-100 text-gray-700" }
+              const { label, color } = roleLabels[user.role] ?? { label: user.role, color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300" }
               return (
-                <tr key={user.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-800">{user.name}</td>
-                  <td className="px-4 py-3 text-gray-500">{user.username ?? <span className="text-gray-300">—</span>}</td>
-                  <td className="px-4 py-3 text-gray-500">{user.email}</td>
+                <tr key={user.id} className="border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                  <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">{user.name}</td>
+                  <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{user.username ?? <span className="text-gray-300">—</span>}</td>
+                  <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{user.email}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${color}`}>{label}</span>
                   </td>
-                  <td className="px-4 py-3 text-gray-500">{user.department?.name ?? "—"}</td>
+                  <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{user.department?.name ?? "—"}</td>
                   <td className="px-4 py-3 text-right">
                     <Link href={`/admin/users/${user.id}`}
                       className="text-sm text-blue-600 hover:text-blue-800 font-medium">
@@ -77,8 +77,8 @@ export default async function UsersPage() {
         </table>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-5 max-w-md">
-        <h2 className="font-semibold text-gray-800 mb-4">Add User</h2>
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5 max-w-md">
+        <h2 className="font-semibold text-gray-800 dark:text-gray-200 mb-4">Add User</h2>
         <CreateUserForm departments={departments} roles={roles} />
       </div>
     </div>

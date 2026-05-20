@@ -158,18 +158,18 @@ export default function WebDescriptionsTab() {
       <div className="flex flex-1 min-h-0 gap-0">
 
         {/* ── Left panel — generator ── */}
-        <div className="w-1/2 border-r border-gray-800 flex flex-col min-h-0 overflow-y-auto p-6 gap-5">
+        <div className="w-1/2 border-r border-gray-200 dark:border-gray-800 flex flex-col min-h-0 overflow-y-auto p-6 gap-5">
 
           <div>
-            <h2 className="text-base font-bold text-white mb-1">Web Description Generator</h2>
-            <p className="text-xs text-gray-400">
+            <h2 className="text-base font-bold text-gray-900 dark:text-white mb-1">Web Description Generator</h2>
+            <p className="text-xs text-gray-600 dark:text-gray-400">
               Select an auction and generate a unique, SEO-friendly description of its contents.
             </p>
           </div>
 
           {/* Auction search + picker */}
           <div>
-            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">
               Select Auction
             </label>
             <input
@@ -177,13 +177,13 @@ export default function WebDescriptionsTab() {
               placeholder="Search by code or name..."
               value={auctionSearch}
               onChange={e => setAuctionSearch(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-pink-500 mb-2"
+              className="w-full bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-pink-500 mb-2"
             />
-            <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-700 divide-y divide-gray-800">
+            <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-300 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-800">
               {loadingAuctions ? (
-                <div className="px-4 py-6 text-center text-gray-500 text-xs">Loading auctions…</div>
+                <div className="px-4 py-6 text-center text-gray-600 dark:text-gray-500 text-xs">Loading auctions…</div>
               ) : filteredAuctions.length === 0 ? (
-                <div className="px-4 py-6 text-center text-gray-500 text-xs">No auctions found.</div>
+                <div className="px-4 py-6 text-center text-gray-600 dark:text-gray-500 text-xs">No auctions found.</div>
               ) : filteredAuctions.map(a => (
                 <button
                   key={a.id}
@@ -191,12 +191,12 @@ export default function WebDescriptionsTab() {
                   className={`w-full text-left px-4 py-2.5 transition-colors text-sm flex justify-between items-center ${
                     selectedId === a.id
                       ? "bg-pink-900/40 text-pink-300"
-                      : "hover:bg-gray-800 text-gray-300"
+                      : "hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300"
                   }`}
                 >
                   <span>
-                    <span className="font-mono font-semibold text-white mr-2">{a.code}</span>
-                    <span className="text-gray-400">{a.name}</span>
+                    <span className="font-mono font-semibold text-gray-900 dark:text-white mr-2">{a.code}</span>
+                    <span className="text-gray-600 dark:text-gray-400">{a.name}</span>
                   </span>
                   <span className="text-xs text-gray-600 ml-2 shrink-0">{a.lotCount} lots</span>
                 </button>
@@ -207,13 +207,13 @@ export default function WebDescriptionsTab() {
           {/* Model selector */}
           {modelList.length > 0 && (
             <div>
-              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">
                 AI Model
               </label>
               <select
                 value={modelId}
                 onChange={e => setModelId(e.target.value)}
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
+                className="w-full bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
               >
                 {modelList.map(m => (
                   <option key={m} value={m}>{m}</option>
@@ -226,7 +226,7 @@ export default function WebDescriptionsTab() {
           <button
             onClick={generate}
             disabled={!selectedId || generating}
-            className="w-full py-3 rounded-xl font-semibold text-sm transition-all bg-pink-600 hover:bg-pink-500 text-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full py-3 rounded-xl font-semibold text-sm transition-all bg-pink-600 hover:bg-pink-500 text-gray-900 dark:text-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {generating ? (
               <>
@@ -240,34 +240,34 @@ export default function WebDescriptionsTab() {
 
           {/* Error */}
           {genError && (
-            <div className="bg-red-900/30 border border-red-700 rounded-xl p-4 text-sm text-red-300">
+            <div className="bg-red-900/30 border border-red-700 rounded-xl p-4 text-sm text-red-700 dark:text-red-300">
               {genError}
             </div>
           )}
 
           {/* Generated output */}
           {generated && (
-            <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 flex flex-col gap-3">
-              <p className="text-sm text-gray-200 leading-relaxed">{generated}</p>
+            <div className="bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-3">
+              <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed">{generated}</p>
 
               <div className="flex gap-2 flex-wrap">
                 <button
                   onClick={copy}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-gray-700 hover:bg-gray-600 text-white transition-colors"
+                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-gray-200 dark:bg-gray-700 hover:bg-gray-600 text-gray-900 dark:text-white transition-colors"
                 >
                   {copied ? "✓ Copied!" : "Copy"}
                 </button>
                 <button
                   onClick={generate}
                   disabled={generating}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-gray-700 hover:bg-gray-600 text-white transition-colors disabled:opacity-40"
+                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-gray-200 dark:bg-gray-700 hover:bg-gray-600 text-gray-900 dark:text-white transition-colors disabled:opacity-40"
                 >
                   ⟳ Regenerate
                 </button>
                 <button
                   onClick={save}
                   disabled={saving}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-pink-600 hover:bg-pink-500 text-white transition-colors disabled:opacity-40 ml-auto"
+                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-pink-600 hover:bg-pink-500 text-gray-900 dark:text-white transition-colors disabled:opacity-40 ml-auto"
                 >
                   {saving ? "Saving…" : "💾 Save"}
                 </button>
@@ -285,12 +285,12 @@ export default function WebDescriptionsTab() {
         {/* ── Right panel — saved descriptions ── */}
         <div className="w-1/2 flex flex-col min-h-0 overflow-y-auto p-6 gap-4">
           <div>
-            <h2 className="text-base font-bold text-white mb-1">Saved Descriptions</h2>
-            <p className="text-xs text-gray-400">One description per auction — saving again will overwrite.</p>
+            <h2 className="text-base font-bold text-gray-900 dark:text-white mb-1">Saved Descriptions</h2>
+            <p className="text-xs text-gray-600 dark:text-gray-400">One description per auction — saving again will overwrite.</p>
           </div>
 
           {loadingSaved ? (
-            <div className="text-center text-gray-500 text-sm py-10">Loading…</div>
+            <div className="text-center text-gray-600 dark:text-gray-500 text-sm py-10">Loading…</div>
           ) : saved.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-gray-600">
               <span className="text-4xl mb-3">📝</span>
@@ -300,11 +300,11 @@ export default function WebDescriptionsTab() {
           ) : (
             <div className="flex flex-col gap-3">
               {saved.map(d => (
-                <div key={d.id} className="bg-gray-900 border border-gray-700 rounded-xl p-4 flex flex-col gap-2">
+                <div key={d.id} className="bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-2">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <span className="font-mono font-bold text-pink-400 text-xs mr-2">{d.auctionCode}</span>
-                      <span className="text-white text-sm font-semibold">{d.auctionName}</span>
+                      <span className="text-gray-900 dark:text-white text-sm font-semibold">{d.auctionName}</span>
                     </div>
                     <div className="flex gap-2 shrink-0">
                       <button
@@ -312,7 +312,7 @@ export default function WebDescriptionsTab() {
                           navigator.clipboard.writeText(d.description)
                         }}
                         title="Copy"
-                        className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+                        className="text-xs px-2 py-1 rounded bg-gray-200 dark:bg-gray-700 hover:bg-gray-600 text-gray-600 dark:text-gray-300 transition-colors"
                       >
                         Copy
                       </button>
@@ -326,7 +326,7 @@ export default function WebDescriptionsTab() {
                           window.scrollTo({ top: 0, behavior: "smooth" })
                         }}
                         title="Load into generator"
-                        className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+                        className="text-xs px-2 py-1 rounded bg-gray-200 dark:bg-gray-700 hover:bg-gray-600 text-gray-600 dark:text-gray-300 transition-colors"
                       >
                         Edit
                       </button>
@@ -341,7 +341,7 @@ export default function WebDescriptionsTab() {
                     </div>
                   </div>
 
-                  <p className="text-xs text-gray-300 leading-relaxed">{d.description}</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">{d.description}</p>
 
                   <p className="text-xs text-gray-600">
                     Saved {new Date(d.updatedAt).toLocaleDateString("en-GB", {

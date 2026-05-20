@@ -43,10 +43,10 @@ const STATUS_COLOUR: Record<string, string> = {
   IN_PROGRESS:        "bg-amber-100 text-amber-700",
   AWAITING_RESPONSE:  "bg-purple-100 text-purple-700",
   RESOLVED:           "bg-green-100 text-green-700",
-  CLOSED:             "bg-gray-100 text-gray-600",
+  CLOSED:             "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400",
 }
 const PRIORITY_COLOUR: Record<string, string> = {
-  LOW:    "bg-gray-100 text-gray-600",
+  LOW:    "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400",
   MEDIUM: "bg-sky-100 text-sky-700",
   HIGH:   "bg-orange-100 text-orange-700",
   URGENT: "bg-red-100 text-red-700",
@@ -293,30 +293,30 @@ export default function TicketsPage() {
     <div className="p-8 max-w-5xl mx-auto">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <Link href="/hub" className="text-sm text-gray-500 hover:text-gray-700">← Hub</Link>
-          <h1 className="text-2xl font-bold text-gray-900 mt-1">Ticket System</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <Link href="/hub" className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:text-gray-300">← Hub</Link>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">Ticket System</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Log IT problems, app bugs and feature requests. Anyone can raise a ticket; the IT team works through them.
           </p>
         </div>
         <div className="shrink-0 flex items-center gap-2">
           <a
             href="/api/tickets/export"
-            className="text-sm text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-300 px-3 py-2 rounded-lg"
+            className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg"
             title="Download every ticket as a CSV"
           >
             📤 Export
           </a>
           <Link
             href="/tools/tickets/import"
-            className="text-sm text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-300 px-3 py-2 rounded-lg"
+            className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg"
             title="Bulk import tickets from a structured CSV (admin)"
           >
             📥 Import
           </Link>
           <button
             onClick={() => setShowManageCats(true)}
-            className="text-sm text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-300 px-3 py-2 rounded-lg"
+            className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg"
             title="Add, rename or deactivate ticket categories (admin)"
           >
             ⚙ Categories
@@ -357,22 +357,22 @@ export default function TicketsPage() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search title, description, resolution, raised-by…"
-          className="flex-1 min-w-[220px] text-sm border border-gray-200 rounded-md px-3 py-1.5"
+          className="flex-1 min-w-[220px] text-sm border border-gray-200 dark:border-gray-700 rounded-md px-3 py-1.5"
         />
-        <label className="text-xs text-gray-500">Category</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400">Category</label>
         <select
           value={categoryFilter}
           onChange={e => setCatFilter(e.target.value)}
-          className="text-sm border border-gray-200 rounded-md px-2 py-1.5"
+          className="text-sm border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1.5"
         >
           <option value="ALL">All</option>
           {categories.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
         </select>
-        <label className="text-xs text-gray-500">Priority</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400">Priority</label>
         <select
           value={priorityFilter}
           onChange={e => setPriFilter(e.target.value)}
-          className="text-sm border border-gray-200 rounded-md px-2 py-1.5"
+          className="text-sm border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1.5"
         >
           <option value="ALL">All</option>
           {PRIORITY_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
@@ -380,7 +380,7 @@ export default function TicketsPage() {
         {filtersActive && (
           <button
             onClick={clearFilters}
-            className="text-xs text-gray-500 hover:text-gray-900 hover:underline"
+            className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:text-white hover:underline"
           >
             Clear filters
           </button>
@@ -396,7 +396,7 @@ export default function TicketsPage() {
             className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
               statusFilter === s
                 ? "bg-gray-900 text-white"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200"
             }`}
           >
             {s.replace("_", " ")} <span className="opacity-60">({counts[s]})</span>
@@ -406,9 +406,9 @@ export default function TicketsPage() {
 
       {/* List */}
       {loading ? (
-        <div className="text-gray-500 text-sm">Loading…</div>
+        <div className="text-gray-500 dark:text-gray-400 text-sm">Loading…</div>
       ) : visible.length === 0 ? (
-        <div className="text-gray-500 text-sm bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+        <div className="text-gray-500 dark:text-gray-400 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-center">
           No tickets to show.
         </div>
       ) : (
@@ -416,7 +416,7 @@ export default function TicketsPage() {
           {visible.map(t => {
             const isOpen = openId === t.id
             return (
-              <div key={t.id} className={`bg-white border ${selectedIds.has(t.id) ? "border-rose-300 ring-1 ring-rose-200" : "border-gray-200"} rounded-xl overflow-hidden`}>
+              <div key={t.id} className={`bg-white dark:bg-gray-900 border ${selectedIds.has(t.id) ? "border-rose-300 ring-1 ring-rose-200" : "border-gray-200 dark:border-gray-700"} rounded-xl overflow-hidden`}>
                 <div className="flex items-start">
                   <label
                     className="pl-4 pt-5 cursor-pointer select-none"
@@ -430,26 +430,26 @@ export default function TicketsPage() {
                   </label>
                 <button
                   onClick={() => { const next = isOpen ? null : t.id; setOpenId(next); if (next) loadComments(next) }}
-                  className="flex-1 flex items-start gap-4 px-5 py-4 text-left hover:bg-gray-50"
+                  className="flex-1 flex items-start gap-4 px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-gray-900 text-sm">{t.title}</span>
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLOUR[t.status] ?? "bg-gray-100 text-gray-600"}`}>
+                      <span className="font-semibold text-gray-900 dark:text-white text-sm">{t.title}</span>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLOUR[t.status] ?? "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"}`}>
                         {t.status.replace("_", " ")}
                       </span>
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${PRIORITY_COLOUR[t.priority] ?? ""}`}>
                         {t.priority}
                       </span>
-                      <span className="text-xs text-gray-500">{categoryLabel(t.category)}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">{categoryLabel(t.category)}</span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       Raised by {t.createdByName} · {new Date(t.createdAt).toLocaleString("en-GB")}
                       {t.assignedToName && <> · assigned to <strong>{t.assignedToName}</strong></>}
                     </p>
                   </div>
                   <svg
-                    className={`w-4 h-4 text-gray-400 mt-1 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                    className={`w-4 h-4 text-gray-400 dark:text-gray-500 mt-1 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
                     fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -458,10 +458,10 @@ export default function TicketsPage() {
                 </div>
 
                 {isOpen && (
-                  <div className="border-t border-gray-100 px-5 py-4 space-y-4">
+                  <div className="border-t border-gray-100 dark:border-gray-800 px-5 py-4 space-y-4">
                     <div>
-                      <div className="text-xs font-semibold text-gray-500 uppercase mb-1">Description</div>
-                      <p className="text-sm text-gray-800 whitespace-pre-wrap">{t.description}</p>
+                      <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Description</div>
+                      <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{t.description}</p>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -470,7 +470,7 @@ export default function TicketsPage() {
                           value={t.status}
                           onChange={e => updateTicket(t.id, { status: e.target.value })}
                           disabled={saving}
-                          className="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5"
+                          className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1.5"
                         >
                           {STATUS_OPTIONS.map(s => (
                             <option key={s} value={s}>{s.replace("_", " ")}</option>
@@ -482,7 +482,7 @@ export default function TicketsPage() {
                           value={t.priority}
                           onChange={e => updateTicket(t.id, { priority: e.target.value })}
                           disabled={saving}
-                          className="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5"
+                          className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1.5"
                         >
                           {PRIORITY_OPTIONS.map(p => (
                             <option key={p} value={p}>{p}</option>
@@ -494,7 +494,7 @@ export default function TicketsPage() {
                           value={t.category}
                           onChange={e => updateTicket(t.id, { category: e.target.value })}
                           disabled={saving}
-                          className="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5"
+                          className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1.5"
                         >
                           {/* Keep the ticket's current value selectable even if it's been
                               deactivated or renamed since — otherwise the dropdown lies
@@ -516,7 +516,7 @@ export default function TicketsPage() {
                             if (v !== (t.assignedToName ?? "")) updateTicket(t.id, { assignedToName: v })
                           }}
                           placeholder="Name (blank = unassigned)"
-                          className="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5"
+                          className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1.5"
                         />
                       </Field>
                     </div>
@@ -530,32 +530,32 @@ export default function TicketsPage() {
                         }}
                         rows={2}
                         placeholder="Filled in when the ticket is resolved or closed."
-                        className="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5 resize-y"
+                        className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1.5 resize-y"
                       />
                     </Field>
 
                     {t.resolvedAt && (
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
                         Resolved {new Date(t.resolvedAt).toLocaleString("en-GB")}
                       </p>
                     )}
 
                     {/* Comments / updates */}
                     <div>
-                      <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Comments / updates</div>
+                      <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">Comments / updates</div>
                       {commentsLoading[t.id] ? (
-                        <p className="text-xs text-gray-400">Loading…</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500">Loading…</p>
                       ) : (comments[t.id] ?? []).length === 0 ? (
-                        <p className="text-xs text-gray-400">No comments yet.</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500">No comments yet.</p>
                       ) : (
                         <div className="space-y-2 mb-3">
                           {(comments[t.id] ?? []).map(c => (
-                            <div key={c.id} className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                            <div key={c.id} className="bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-800 rounded-lg px-3 py-2">
                               <div className="flex items-center gap-2 mb-0.5">
-                                <span className="text-xs font-semibold text-gray-700">{c.authorName}</span>
-                                <span className="text-xs text-gray-400">{new Date(c.createdAt).toLocaleString("en-GB")}</span>
+                                <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{c.authorName}</span>
+                                <span className="text-xs text-gray-400 dark:text-gray-500">{new Date(c.createdAt).toLocaleString("en-GB")}</span>
                               </div>
-                              <p className="text-sm text-gray-800 whitespace-pre-wrap">{c.body}</p>
+                              <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{c.body}</p>
                             </div>
                           ))}
                         </div>
@@ -567,7 +567,7 @@ export default function TicketsPage() {
                           onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) addComment(t.id) }}
                           rows={2}
                           placeholder="Add a comment or update… (Ctrl+Enter to submit)"
-                          className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 resize-none"
+                          className="flex-1 text-sm border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1.5 resize-none"
                         />
                         <button
                           onClick={() => addComment(t.id)}
@@ -599,9 +599,9 @@ export default function TicketsPage() {
       {/* Create modal */}
       {showCreate && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={() => setShow(false)}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-gray-100">
-              <h2 className="text-lg font-bold text-gray-900">New ticket</h2>
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">New ticket</h2>
             </div>
             <div className="px-6 py-4 space-y-4">
               <Field label="Title">
@@ -610,7 +610,7 @@ export default function TicketsPage() {
                   value={newTitle}
                   onChange={e => setNewTitle(e.target.value)}
                   placeholder="Short summary of the problem"
-                  className="w-full text-sm border border-gray-200 rounded-md px-3 py-2"
+                  className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2"
                   autoFocus
                 />
               </Field>
@@ -620,7 +620,7 @@ export default function TicketsPage() {
                   onChange={e => setNewDescription(e.target.value)}
                   rows={5}
                   placeholder="What were you doing? What went wrong? Any error messages?"
-                  className="w-full text-sm border border-gray-200 rounded-md px-3 py-2 resize-y"
+                  className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2 resize-y"
                 />
               </Field>
               <div className="grid grid-cols-2 gap-3">
@@ -628,7 +628,7 @@ export default function TicketsPage() {
                   <select
                     value={newPriority}
                     onChange={e => setNewPriority(e.target.value)}
-                    className="w-full text-sm border border-gray-200 rounded-md px-2 py-2"
+                    className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md px-2 py-2"
                   >
                     {PRIORITY_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
@@ -637,18 +637,18 @@ export default function TicketsPage() {
                   <select
                     value={newCategory}
                     onChange={e => setNewCategory(e.target.value)}
-                    className="w-full text-sm border border-gray-200 rounded-md px-2 py-2"
+                    className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md px-2 py-2"
                   >
                     {activeCategories.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
                   </select>
                 </Field>
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
+            <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex justify-end gap-2">
               <button
                 onClick={() => setShow(false)}
                 disabled={saving}
-                className="text-sm text-gray-600 hover:text-gray-900 px-4 py-2 rounded-lg"
+                className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white px-4 py-2 rounded-lg"
               >
                 Cancel
               </button>
@@ -747,10 +747,10 @@ function ManageCategoriesModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-bold text-gray-900">Manage ticket categories</h2>
-          <p className="text-xs text-gray-500 mt-1">
+      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Manage ticket categories</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
             Admin only. Renaming is safe — the underlying key stays the same. Deactivate a category
             to hide it from new tickets without breaking existing ones. Delete is only allowed
             when no tickets reference it.
@@ -759,10 +759,10 @@ function ManageCategoriesModal({
 
         <div className="px-6 py-4 flex-1 overflow-y-auto space-y-2">
           {categories.length === 0 ? (
-            <p className="text-sm text-gray-500 italic">No categories yet — add one below.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 italic">No categories yet — add one below.</p>
           ) : (
             categories.map(c => (
-              <div key={c.id} className={`flex items-center gap-2 border rounded-lg px-3 py-2 ${c.active ? "border-gray-200 bg-white" : "border-gray-200 bg-gray-50 opacity-70"}`}>
+              <div key={c.id} className={`flex items-center gap-2 border rounded-lg px-3 py-2 ${c.active ? "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900" : "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 opacity-70"}`}>
                 <input
                   type="text"
                   defaultValue={c.label}
@@ -770,17 +770,17 @@ function ManageCategoriesModal({
                     const v = e.target.value.trim()
                     if (v && v !== c.label) patch(c.id, { label: v })
                   }}
-                  className="flex-1 text-sm border border-transparent hover:border-gray-200 focus:border-gray-300 rounded px-2 py-1 outline-none bg-transparent"
+                  className="flex-1 text-sm border border-transparent hover:border-gray-200 dark:border-gray-700 focus:border-gray-300 dark:border-gray-600 rounded px-2 py-1 outline-none bg-transparent"
                   title="Click to rename"
                 />
-                <span className="text-xs text-gray-400 font-mono">{c.key}</span>
+                <span className="text-xs text-gray-400 dark:text-gray-500 font-mono">{c.key}</span>
                 <button
                   onClick={() => patch(c.id, { active: !c.active })}
                   disabled={saving}
                   className={`text-xs font-medium px-2 py-1 rounded-md ${
                     c.active
                       ? "bg-green-100 text-green-700 hover:bg-green-200"
-                      : "bg-gray-200 text-gray-600 hover:bg-gray-300"
+                      : "bg-gray-200 text-gray-600 dark:text-gray-400 hover:bg-gray-300"
                   }`}
                 >
                   {c.active ? "Active" : "Inactive"}
@@ -797,8 +797,8 @@ function ManageCategoriesModal({
           )}
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-100">
-          <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Add a category</div>
+        <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800">
+          <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">Add a category</div>
           <div className="flex gap-2">
             <input
               type="text"
@@ -806,7 +806,7 @@ function ManageCategoriesModal({
               onChange={e => setNewLabel(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") add() }}
               placeholder="e.g. Printer, Email, Phone"
-              className="flex-1 text-sm border border-gray-200 rounded-md px-3 py-2"
+              className="flex-1 text-sm border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2"
             />
             <button
               onClick={add}
@@ -818,8 +818,8 @@ function ManageCategoriesModal({
           </div>
         </div>
 
-        <div className="px-6 py-3 border-t border-gray-100 flex justify-end">
-          <button onClick={onClose} className="text-sm text-gray-600 hover:text-gray-900 px-4 py-2 rounded-lg">
+        <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-800 flex justify-end">
+          <button onClick={onClose} className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white px-4 py-2 rounded-lg">
             Done
           </button>
         </div>
@@ -831,7 +831,7 @@ function ManageCategoriesModal({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <div className="text-xs font-semibold text-gray-500 uppercase mb-1">{label}</div>
+      <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">{label}</div>
       {children}
     </label>
   )

@@ -45,7 +45,7 @@ export default function WarehouseLookupPage() {
   return (
     <div className="p-6 max-w-2xl space-y-6" style={{ fontFamily: "Arial, sans-serif" }}>
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Warehouse Lookup</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Warehouse Lookup</h1>
         <p className="text-gray-500 text-sm">Scan or type a location code to see what containers are there.</p>
       </div>
 
@@ -64,7 +64,7 @@ export default function WarehouseLookupPage() {
         {contents && (
           <div>
             <div className="flex items-center justify-between mb-3">
-              <p className="font-semibold text-gray-800">
+              <p className="font-semibold text-gray-800 dark:text-gray-100">
                 Location <span className="font-mono text-blue-700">{contents.code}</span>
               </p>
               <span className="wh-badge wh-badge-blue">{contents.items.length} container{contents.items.length !== 1 ? "s" : ""}</span>
@@ -72,7 +72,7 @@ export default function WarehouseLookupPage() {
             {contents.items.length === 0 ? (
               <p className="text-gray-400 text-sm py-4 text-center">This location is empty.</p>
             ) : (
-              <div className="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden">
+              <div className="divide-y divide-gray-100 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                 {contents.items.map((item: any) => (
                   <div key={item.container_id} className="px-4 py-3 flex items-center gap-4 hover:bg-gray-50">
                     <span className="font-mono font-bold text-sm w-24">{item.container_id}</span>

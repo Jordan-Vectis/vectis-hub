@@ -11,10 +11,10 @@ function StepHeader({ step }: { step: number }) {
       {STEPS.map((s, i) => (
         <div key={s} className="flex items-center gap-2">
           <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-            i < step ? "bg-green-500 text-white" : i === step ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-500"
+            i < step ? "bg-green-500 text-white" : i === step ? "bg-blue-600 text-white" : "bg-gray-200 dark:bg-gray-700 text-gray-500"
           }`}>{i < step ? "✓" : i + 1}</div>
           <span className={`text-sm font-medium ${i === step ? "text-blue-700" : "text-gray-400"}`}>{s}</span>
-          {i < STEPS.length - 1 && <div className="w-8 h-0.5 bg-gray-200 mx-1" />}
+          {i < STEPS.length - 1 && <div className="w-8 h-0.5 bg-gray-200 dark:bg-gray-700 mx-1" />}
         </div>
       ))}
     </div>
@@ -134,7 +134,7 @@ function CustomerStep({ onNext }: { onNext: (c: any) => void }) {
       )}
       {showCreate && (
         <div className="wh-card space-y-3">
-          <p className="font-semibold text-gray-800">New Customer</p>
+          <p className="font-semibold text-gray-800 dark:text-gray-100">New Customer</p>
           <div className="grid grid-cols-2 gap-3">
             <div><label className="wh-label">Salutation</label>
               <select className="wh-input" value={form.salutation} onChange={e => setForm({...form, salutation: e.target.value})}>
@@ -447,7 +447,7 @@ export default function InboundPage() {
 
   return (
     <div className="p-6 max-w-3xl" style={{ fontFamily: "Arial, sans-serif" }}>
-      <h1 className="text-2xl font-bold text-gray-900 mb-4">New Inbound</h1>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">New Inbound</h1>
       <StepHeader step={step} />
       <div className="wh-card">
         {step === 0 && <CustomerStep onNext={c => { setCustomer(c); setStep(1) }} />}

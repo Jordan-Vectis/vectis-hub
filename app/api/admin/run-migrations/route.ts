@@ -178,6 +178,44 @@ const MIGRATIONS = [
   `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "showScanTimer" BOOLEAN NOT NULL DEFAULT true`,
   `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "timerYellowMins" INTEGER NOT NULL DEFAULT 4`,
   `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "timerRedMins" INTEGER NOT NULL DEFAULT 10`,
+
+  // Document Storage — folders and files backed by Cloudflare R2
+  `CREATE TABLE IF NOT EXISTS "DocumentFolder" (
+    "id"        TEXT NOT NULL,
+    "name"      TEXT NOT NULL,
+    "parentId"  TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "DocumentFolder_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "DocumentFolder_parentId_fkey" FOREIGN KEY ("parentId")
+      REFERENCES "DocumentFolder"("id") ON DELETE SET NULL ON UPDATE CASCADE
+  )`,
+  `CREATE TABLE IF NOT EXISTS "DocumentFile" (
+    "id"         TEXT NOT NULL,
+    "name"       TEXT NOT NULL,
+    "key"        TEXT NOT NULL,
+    "size"       INTEGER NOT NULL,
+    "mimeType"   TEXT NOT NULL,
+    "folderId"   TEXT,
+    "uploadedBy" TEXT NOT NULL,
+    "createdAt"  TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "DocumentFile_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "DocumentFile_folderId_fkey" FOREIGN KEY ("folderId")
+      REFERENCES "DocumentFolder"("id") ON DELETE SET NULL ON UPDATE CASCADE
+  )`,
+
+  // 2026-04-29 — MacroFile: stores uploaded macro/instruction files for Auction AI
+  `CREATE TABLE IF NOT EXISTS "MacroFile" (
+    "id"          TEXT         NOT NULL,
+    "name"        TEXT         NOT NULL,
+    "filename"    TEXT         NOT NULL,
+    "description" TEXT,
+    "content"     BYTEA        NOT NULL,
+    "mimeType"    TEXT         NOT NULL DEFAULT 'text/plain',
+    "size"        INTEGER      NOT NULL,
+    "createdAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "MacroFile_pkey" PRIMARY KEY ("id")
+  )`,
 ]
 
 export async function POST() {

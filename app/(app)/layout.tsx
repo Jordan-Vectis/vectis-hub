@@ -20,11 +20,14 @@ export default async function AppLayout({
   return (
     <div className="flex flex-col h-full min-h-screen">
       <ImpersonationBanner />
-      <TopBar userName={effective?.user.name ?? session.user.name} />
+      <TopBar
+        userName={effective?.user.name ?? session.user.name}
+        isAdmin={session.user.role === "ADMIN"}
+      />
       <div className="flex flex-1 overflow-hidden">
         <CrmSidebar />
         <AdminSidebar />
-        <main className="flex-1 overflow-auto bg-gray-50">{children}</main>
+        <main className="flex-1 overflow-auto bg-gray-50 dark:bg-[#141416]">{children}</main>
       </div>
     </div>
   )

@@ -19,14 +19,14 @@ export default function DepartmentForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Department name</label>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Department name</label>
         <input
           name="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
           placeholder="e.g. Diecast"
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
       <button

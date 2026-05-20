@@ -51,14 +51,14 @@ export default function ITHelpPage() {
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <div className="mb-6">
-        <Link href="/hub" className="text-sm text-gray-500 hover:text-gray-700">← Hub</Link>
-        <h1 className="text-2xl font-bold text-gray-900 mt-1">IT Help</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <Link href="/hub" className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:text-gray-300">← Hub</Link>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">IT Help</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           Ask the chatbot for solutions to common IT problems, or browse and edit the knowledge base.
         </p>
       </div>
 
-      <div className="flex gap-1 border-b border-gray-200 mb-6">
+      <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 mb-6">
         {(["ask", "articles"] as const).map(t => (
           <button
             key={t}
@@ -66,7 +66,7 @@ export default function ITHelpPage() {
             className={`text-sm font-medium px-4 py-2 -mb-px border-b-2 transition-colors ${
               tab === t
                 ? "border-yellow-500 text-yellow-700"
-                : "border-transparent text-gray-500 hover:text-gray-800"
+                : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:text-gray-200"
             }`}
           >
             {t === "ask" ? "💡 Ask" : "📚 Knowledge Base"}
@@ -140,9 +140,9 @@ function AskTab() {
 
   return (
     <div>
-      <div className="bg-white border border-gray-200 rounded-xl p-4 min-h-[300px] flex flex-col gap-4 mb-3">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 min-h-[300px] flex flex-col gap-4 mb-3">
         {turns.length === 0 && !loading && (
-          <p className="text-sm text-gray-500 italic">
+          <p className="text-sm text-gray-500 dark:text-gray-400 italic">
             Ask something like &quot;printer in packing room isn&apos;t working&quot; or &quot;how do I reset my password&quot;.
           </p>
         )}
@@ -151,11 +151,11 @@ function AskTab() {
             <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
               t.role === "user"
                 ? "bg-yellow-600 text-white"
-                : "bg-gray-100 text-gray-900"
+                : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white"
             }`}>
               {t.text}
               {t.sources && t.sources.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-gray-300/40">
+                <div className="mt-3 pt-3 border-t border-gray-300 dark:border-gray-600/40">
                   <div className="text-xs font-semibold uppercase mb-1.5 opacity-70">Sources</div>
                   <ul className="space-y-1.5">
                     {t.sources.map((s, j) => (
@@ -173,7 +173,7 @@ function AskTab() {
         ))}
         {loading && (
           <div className="flex justify-start">
-            <div className="bg-gray-100 rounded-2xl px-4 py-2.5 text-sm text-gray-500 italic">Searching…</div>
+            <div className="bg-gray-100 dark:bg-gray-800 rounded-2xl px-4 py-2.5 text-sm text-gray-500 dark:text-gray-400 italic">Searching…</div>
           </div>
         )}
       </div>
@@ -188,7 +188,7 @@ function AskTab() {
           onChange={e => setQuestion(e.target.value)}
           placeholder="Ask a question…"
           disabled={loading}
-          className="flex-1 border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:border-yellow-400 outline-none"
+          className="flex-1 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2.5 text-sm focus:border-yellow-400 outline-none"
         />
         <button
           type="submit"
@@ -200,12 +200,12 @@ function AskTab() {
       </form>
 
       {/* Model picker */}
-      <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
+      <div className="mt-3 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
         <span>Model:</span>
         <select
           value={modelId}
           onChange={e => setModelId(e.target.value)}
-          className="border border-gray-200 rounded px-2 py-1 text-xs bg-white"
+          className="border border-gray-200 dark:border-gray-700 rounded px-2 py-1 text-xs bg-white dark:bg-gray-900"
         >
           {modelList.map(m => (
             <option key={m} value={m}>{m}{savedDefault === m ? " ★" : ""}</option>
@@ -223,7 +223,7 @@ function AskTab() {
           <button
             onClick={setAsDefault}
             title="Use this model whenever you open IT Help"
-            className="text-gray-500 hover:text-yellow-700"
+            className="text-gray-500 dark:text-gray-400 hover:text-yellow-700"
           >
             Set as default
           </button>
@@ -276,7 +276,7 @@ function ArticlesTab() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search articles…"
-          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm"
+          className="flex-1 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm"
         />
         <button
           onClick={() => setEditing("NEW")}
@@ -287,9 +287,9 @@ function ArticlesTab() {
       </div>
 
       {loading ? (
-        <div className="text-gray-500 text-sm">Loading…</div>
+        <div className="text-gray-500 dark:text-gray-400 text-sm">Loading…</div>
       ) : visible.length === 0 ? (
-        <div className="text-gray-500 text-sm bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+        <div className="text-gray-500 dark:text-gray-400 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-center">
           No articles yet. Click &quot;New article&quot; to write the first one.
         </div>
       ) : (
@@ -298,19 +298,19 @@ function ArticlesTab() {
             <button
               key={a.id}
               onClick={() => setEditing(a)}
-              className="bg-white border border-gray-200 rounded-lg px-4 py-3 text-left hover:bg-gray-50"
+              className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50"
             >
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-gray-900 text-sm">{a.title}</span>
+                <span className="font-semibold text-gray-900 dark:text-white text-sm">{a.title}</span>
                 <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
                   {CATEGORY_LABEL[a.category] ?? a.category}
                 </span>
                 {a.tags.slice(0, 4).map(t => (
-                  <span key={t} className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">#{t}</span>
+                  <span key={t} className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">#{t}</span>
                 ))}
               </div>
-              <p className="text-xs text-gray-500 mt-1 line-clamp-2">{a.body.slice(0, 180)}</p>
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{a.body.slice(0, 180)}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                 Updated {new Date(a.updatedAt).toLocaleDateString("en-GB")} by {a.updatedByName ?? a.createdByName}
               </p>
             </button>
@@ -391,69 +391,69 @@ function ArticleEditor({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-bold text-gray-900">
+      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">
             {article ? "Edit article" : "New article"}
           </h2>
         </div>
         <div className="px-6 py-4 space-y-4 overflow-y-auto flex-1">
           <label className="block">
-            <div className="text-xs font-semibold text-gray-500 uppercase mb-1">Title</div>
+            <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Title</div>
             <input
               type="text"
               value={title}
               onChange={e => setTitle(e.target.value)}
-              className="w-full text-sm border border-gray-200 rounded-md px-3 py-2"
+              className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2"
               autoFocus
             />
           </label>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <div className="text-xs font-semibold text-gray-500 uppercase mb-1">Category</div>
+              <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Category</div>
               <select
                 value={category}
                 onChange={e => setCategory(e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-md px-2 py-2"
+                className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md px-2 py-2"
               >
                 {CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
               </select>
             </label>
             <label className="block">
-              <div className="text-xs font-semibold text-gray-500 uppercase mb-1">
-                Tags <span className="font-normal text-gray-400">(comma-separated)</span>
+              <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
+                Tags <span className="font-normal text-gray-400 dark:text-gray-500">(comma-separated)</span>
               </div>
               <input
                 type="text"
                 value={tagsCsv}
                 onChange={e => setTagsCsv(e.target.value)}
                 placeholder="e.g. printer, packing, brother"
-                className="w-full text-sm border border-gray-200 rounded-md px-3 py-2"
+                className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2"
               />
             </label>
           </div>
           <label className="block">
-            <div className="text-xs font-semibold text-gray-500 uppercase mb-1">Body</div>
+            <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Body</div>
             <textarea
               value={body}
               onChange={e => setBody(e.target.value)}
               rows={14}
               placeholder="Write the solution / how-to here. Plain text or markdown."
-              className="w-full text-sm border border-gray-200 rounded-md px-3 py-2 font-mono resize-y"
+              className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2 font-mono resize-y"
             />
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
               The chatbot searches across title, tags and body when answering questions.
             </p>
           </label>
         </div>
-        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-2">
+        <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2">
           {article ? (
             <button onClick={remove} disabled={saving} className="text-sm text-red-600 hover:underline">
               Delete
             </button>
           ) : <span />}
           <div className="flex gap-2">
-            <button onClick={onClose} disabled={saving} className="text-sm text-gray-600 hover:text-gray-900 px-4 py-2 rounded-lg">
+            <button onClick={onClose} disabled={saving} className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white px-4 py-2 rounded-lg">
               Cancel
             </button>
             <button

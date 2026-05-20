@@ -22,14 +22,14 @@ export default function ITToolsPage() {
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <div className="mb-6">
-        <Link href="/hub" className="text-sm text-gray-500 hover:text-gray-700">← Hub</Link>
-        <h1 className="text-2xl font-bold text-gray-900 mt-1">IT Tools</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <Link href="/hub" className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:text-gray-300">← Hub</Link>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">IT Tools</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           Draft replies to customer emails using the knowledge base + past tickets, or copy from your library of pre-typed replies.
         </p>
       </div>
 
-      <div className="flex gap-1 border-b border-gray-200 mb-6">
+      <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 mb-6">
         {(["reply", "templates"] as const).map(t => (
           <button
             key={t}
@@ -37,7 +37,7 @@ export default function ITToolsPage() {
             className={`text-sm font-medium px-4 py-2 -mb-px border-b-2 transition-colors ${
               tab === t
                 ? "border-cyan-500 text-cyan-700"
-                : "border-transparent text-gray-500 hover:text-gray-800"
+                : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:text-gray-200"
             }`}
           >
             {t === "reply" ? "✍️ Draft Reply" : "📋 Templates"}
@@ -119,26 +119,26 @@ function DraftReplyTab() {
       )}
 
       <label className="block">
-        <div className="text-xs font-semibold text-gray-500 uppercase mb-1">Customer email</div>
+        <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Customer email</div>
         <textarea
           value={email}
           onChange={e => setEmail(e.target.value)}
           rows={10}
           placeholder="Paste the customer's email here…"
-          className="w-full text-sm border border-gray-200 rounded-md px-3 py-2 resize-y"
+          className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2 resize-y"
         />
       </label>
 
       <label className="block">
-        <div className="text-xs font-semibold text-gray-500 uppercase mb-1">
-          Extra context <span className="font-normal text-gray-400">(optional)</span>
+        <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
+          Extra context <span className="font-normal text-gray-400 dark:text-gray-500">(optional)</span>
         </div>
         <textarea
           value={notes}
           onChange={e => setNotes(e.target.value)}
           rows={3}
           placeholder="Anything the AI should know — e.g. 'customer is C218765', 'their account was suspended on the 3rd', etc."
-          className="w-full text-sm border border-gray-200 rounded-md px-3 py-2 resize-y"
+          className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2 resize-y"
         />
       </label>
 
@@ -150,19 +150,19 @@ function DraftReplyTab() {
         >
           {loading ? "Drafting…" : "✍️ Draft reply"}
         </button>
-        <span className="flex items-center gap-2 text-xs text-gray-500">
+        <span className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
           Model:
           <select
             value={modelId}
             onChange={e => setModelId(e.target.value)}
-            className="border border-gray-200 rounded px-2 py-1 text-xs bg-white"
+            className="border border-gray-200 dark:border-gray-700 rounded px-2 py-1 text-xs bg-white dark:bg-gray-900"
           >
             {modelList.map(m => <option key={m} value={m}>{m}{savedDefault === m ? " ★" : ""}</option>)}
           </select>
           {savedDefault === modelId ? (
             <button onClick={clearDefault} className="text-amber-600 hover:text-amber-700">★ Default · clear</button>
           ) : (
-            <button onClick={setAsDefault} className="text-gray-500 hover:text-cyan-700">Set as default</button>
+            <button onClick={setAsDefault} className="text-gray-500 dark:text-gray-400 hover:text-cyan-700">Set as default</button>
           )}
           <ModelPingTester
             models={modelList}
@@ -173,9 +173,9 @@ function DraftReplyTab() {
       </div>
 
       {reply && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-xs font-semibold text-gray-500 uppercase">Drafted reply</div>
+            <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Drafted reply</div>
             <button
               onClick={copyReply}
               className="text-xs bg-cyan-600 hover:bg-cyan-500 text-white font-semibold px-3 py-1 rounded-md"
@@ -187,18 +187,18 @@ function DraftReplyTab() {
             value={reply}
             onChange={e => setReply(e.target.value)}
             rows={Math.max(8, reply.split("\n").length + 1)}
-            className="w-full text-sm border border-gray-200 rounded-md px-3 py-2 resize-y font-mono"
+            className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2 resize-y font-mono"
           />
 
           {sources.length > 0 && (
-            <div className="mt-4 pt-3 border-t border-gray-100">
-              <div className="text-xs font-semibold text-gray-500 uppercase mb-1.5">Sources used</div>
+            <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800">
+              <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5">Sources used</div>
               <ul className="space-y-1.5">
                 {sources.map((s, i) => (
-                  <li key={s.id} className="text-xs text-gray-700">
+                  <li key={s.id} className="text-xs text-gray-700 dark:text-gray-300">
                     <span className="font-medium">{i + 1}. {s.title}</span>{" "}
-                    <span className="text-gray-500">({s.kind === "article" ? "article" : "resolved ticket"})</span>
-                    <div className="text-gray-500 mt-0.5">{s.snippet}</div>
+                    <span className="text-gray-500 dark:text-gray-400">({s.kind === "article" ? "article" : "resolved ticket"})</span>
+                    <div className="text-gray-500 dark:text-gray-400 mt-0.5">{s.snippet}</div>
                   </li>
                 ))}
               </ul>
@@ -264,7 +264,7 @@ function TemplatesTab() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search templates…"
-          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm"
+          className="flex-1 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm"
         />
         <button
           onClick={() => setEditing("NEW")}
@@ -275,21 +275,21 @@ function TemplatesTab() {
       </div>
 
       {loading ? (
-        <div className="text-gray-500 text-sm">Loading…</div>
+        <div className="text-gray-500 dark:text-gray-400 text-sm">Loading…</div>
       ) : visible.length === 0 ? (
-        <div className="text-gray-500 text-sm bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+        <div className="text-gray-500 dark:text-gray-400 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-center">
           No templates yet. Click &quot;New template&quot; to add your first reply.
         </div>
       ) : (
         <div className="space-y-6">
           {grouped.map(([cat, list]) => (
             <div key={cat}>
-              <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">{cat}</div>
+              <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2">{cat}</div>
               <div className="space-y-2">
                 {list.map(t => (
-                  <div key={t.id} className="bg-white border border-gray-200 rounded-lg p-4">
+                  <div key={t.id} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                     <div className="flex items-start justify-between gap-3 mb-2">
-                      <h3 className="font-semibold text-gray-900 text-sm">{t.name}</h3>
+                      <h3 className="font-semibold text-gray-900 dark:text-white text-sm">{t.name}</h3>
                       <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={() => copy(t)}
@@ -299,13 +299,13 @@ function TemplatesTab() {
                         </button>
                         <button
                           onClick={() => setEditing(t)}
-                          className="text-xs text-gray-500 hover:text-gray-900 hover:underline"
+                          className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:text-white hover:underline"
                         >
                           Edit
                         </button>
                       </div>
                     </div>
-                    <pre className="text-xs text-gray-700 whitespace-pre-wrap font-sans">{t.body}</pre>
+                    <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-sans">{t.body}</pre>
                   </div>
                 ))}
               </div>
@@ -375,52 +375,52 @@ function TemplateEditor({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-bold text-gray-900">{template ? "Edit template" : "New template"}</h2>
+      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">{template ? "Edit template" : "New template"}</h2>
         </div>
         <div className="px-6 py-4 space-y-4 overflow-y-auto flex-1">
           <label className="block">
-            <div className="text-xs font-semibold text-gray-500 uppercase mb-1">Name</div>
+            <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Name</div>
             <input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full text-sm border border-gray-200 rounded-md px-3 py-2"
+              className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2"
               autoFocus
               placeholder="e.g. Password reset instructions"
             />
           </label>
           <label className="block">
-            <div className="text-xs font-semibold text-gray-500 uppercase mb-1">Category</div>
+            <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Category</div>
             <input
               type="text"
               value={category}
               onChange={e => setCategory(e.target.value.toUpperCase().replace(/[^A-Z0-9]+/g, "_"))}
-              className="w-full text-sm border border-gray-200 rounded-md px-3 py-2 font-mono"
+              className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2 font-mono"
               placeholder="GENERAL"
             />
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
               Templates are grouped by category in the list. Free-form text — use whatever buckets suit you (e.g. PAYMENTS, ACCOUNTS, AUCTION).
             </p>
           </label>
           <label className="block">
-            <div className="text-xs font-semibold text-gray-500 uppercase mb-1">Body</div>
+            <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Body</div>
             <textarea
               value={body}
               onChange={e => setBody(e.target.value)}
               rows={14}
               placeholder="The full reply text — exactly as you want it pasted into your email."
-              className="w-full text-sm border border-gray-200 rounded-md px-3 py-2 font-mono resize-y"
+              className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2 font-mono resize-y"
             />
           </label>
         </div>
-        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-2">
+        <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2">
           {template ? (
             <button onClick={remove} disabled={saving} className="text-sm text-red-600 hover:underline">Delete</button>
           ) : <span />}
           <div className="flex gap-2">
-            <button onClick={onClose} disabled={saving} className="text-sm text-gray-600 hover:text-gray-900 px-4 py-2 rounded-lg">Cancel</button>
+            <button onClick={onClose} disabled={saving} className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white px-4 py-2 rounded-lg">Cancel</button>
             <button
               onClick={save}
               disabled={saving}
