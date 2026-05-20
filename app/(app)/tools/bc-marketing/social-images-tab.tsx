@@ -158,15 +158,15 @@ export default function SocialImagesTab() {
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
 
       {/* ── Top bar ── */}
-      <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-800 shrink-0 flex-wrap">
-        <h2 className="text-sm font-bold text-white">📸 Social Media Images</h2>
+      <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-200 dark:border-gray-800 shrink-0 flex-wrap">
+        <h2 className="text-sm font-bold text-gray-900 dark:text-white">📸 Social Media Images</h2>
 
         <input
           type="text"
           placeholder="Search images…"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-pink-500 w-48"
+          className="bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-pink-500 w-48"
         />
 
         {/* Tag filters */}
@@ -174,7 +174,7 @@ export default function SocialImagesTab() {
           <div className="flex gap-1.5 flex-wrap">
             <button
               onClick={() => setActiveTag(null)}
-              className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${!activeTag ? "bg-pink-600 text-white" : "bg-gray-800 text-gray-400 hover:text-white"}`}
+              className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${!activeTag ? "bg-pink-600 text-gray-900 dark:text-white" : "bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-white"}`}
             >
               All
             </button>
@@ -182,7 +182,7 @@ export default function SocialImagesTab() {
               <button
                 key={t}
                 onClick={() => setActiveTag(activeTag === t ? null : t)}
-                className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${activeTag === t ? "bg-pink-600 text-white" : "bg-gray-800 text-gray-400 hover:text-white"}`}
+                className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${activeTag === t ? "bg-pink-600 text-gray-900 dark:text-white" : "bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-white"}`}
               >
                 {t}
               </button>
@@ -196,9 +196,9 @@ export default function SocialImagesTab() {
       <div className="flex flex-1 min-h-0">
 
         {/* ── Upload panel ── */}
-        <div className="w-64 shrink-0 border-r border-gray-800 p-4 flex flex-col gap-4">
+        <div className="w-64 shrink-0 border-r border-gray-200 dark:border-gray-800 p-4 flex flex-col gap-4">
           <div>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Upload New Image</p>
+            <p className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-3">Upload New Image</p>
 
             {/* Drop zone */}
             <div
@@ -208,7 +208,7 @@ export default function SocialImagesTab() {
               onDrop={handleDrop}
               onClick={() => !uploading && fileInputRef.current?.click()}
               className={`rounded-xl border-2 border-dashed h-32 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors ${
-                dragOver ? "border-pink-500 bg-pink-900/20" : "border-gray-700 hover:border-pink-600 hover:bg-gray-900"
+                dragOver ? "border-pink-500 bg-pink-900/20" : "border-gray-300 dark:border-gray-700 hover:border-pink-600 hover:bg-gray-900"
               } ${uploading ? "opacity-50 cursor-wait" : ""}`}
             >
               <input
@@ -221,12 +221,12 @@ export default function SocialImagesTab() {
               {uploading ? (
                 <>
                   <span className="text-2xl animate-spin">⟳</span>
-                  <span className="text-xs text-gray-400">Uploading…</span>
+                  <span className="text-xs text-gray-600 dark:text-gray-400">Uploading…</span>
                 </>
               ) : (
                 <>
                   <span className="text-3xl">📷</span>
-                  <span className="text-xs text-gray-400 text-center px-2">Click or drag & drop<br/>JPG, PNG, WEBP, GIF</span>
+                  <span className="text-xs text-gray-600 dark:text-gray-400 text-center px-2">Click or drag & drop<br/>JPG, PNG, WEBP, GIF</span>
                   <span className="text-xs text-gray-700">Max 20MB</span>
                 </>
               )}
@@ -238,23 +238,23 @@ export default function SocialImagesTab() {
           {/* Pre-upload label + tags */}
           <div className="space-y-2">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Label <span className="text-gray-700">(optional)</span></label>
+              <label className="block text-xs text-gray-600 dark:text-gray-500 mb-1">Label <span className="text-gray-700">(optional)</span></label>
               <input
                 type="text"
                 placeholder="e.g. Transformers promo"
                 value={pendingLabel}
                 onChange={e => setPendingLabel(e.target.value)}
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-pink-500"
+                className="w-full bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-gray-900 dark:text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-pink-500"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tags <span className="text-gray-700">(comma separated)</span></label>
+              <label className="block text-xs text-gray-600 dark:text-gray-500 mb-1">Tags <span className="text-gray-700">(comma separated)</span></label>
               <input
                 type="text"
                 placeholder="e.g. star wars, promo, auction"
                 value={pendingTags}
                 onChange={e => setPendingTags(e.target.value)}
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-pink-500"
+                className="w-full bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-gray-900 dark:text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-pink-500"
               />
             </div>
           </div>
@@ -267,7 +267,7 @@ export default function SocialImagesTab() {
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-3 text-gray-700">
               <span className="text-5xl">🖼️</span>
-              <p className="text-sm font-medium text-gray-500">
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-500">
                 {images.length === 0 ? "No images uploaded yet." : "No images match your search."}
               </p>
             </div>
@@ -276,7 +276,7 @@ export default function SocialImagesTab() {
               {filtered.map(img => (
                 <div
                   key={img.id}
-                  className="group bg-gray-900 border border-gray-800 rounded-xl overflow-hidden flex flex-col"
+                  className="group bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden flex flex-col"
                 >
                   {/* Thumbnail */}
                   <div
@@ -290,7 +290,7 @@ export default function SocialImagesTab() {
                     />
                     {/* Hover overlay */}
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <span className="text-white text-xs font-medium">View</span>
+                      <span className="text-gray-900 dark:text-white text-xs font-medium">View</span>
                     </div>
                   </div>
 
@@ -303,27 +303,27 @@ export default function SocialImagesTab() {
                           value={editLabel}
                           onChange={e => setEditLabel(e.target.value)}
                           placeholder="Label"
-                          className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-pink-500"
+                          className="w-full bg-gray-800 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-pink-500"
                         />
                         <input
                           type="text"
                           value={editTags}
                           onChange={e => setEditTags(e.target.value)}
                           placeholder="Tags (comma separated)"
-                          className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-pink-500"
+                          className="w-full bg-gray-800 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-pink-500"
                         />
                         <div className="flex gap-1 mt-1">
-                          <button onClick={() => saveEdit(img.id)} disabled={saving} className="flex-1 text-xs py-1 rounded bg-pink-600 hover:bg-pink-500 text-white transition-colors disabled:opacity-40">
+                          <button onClick={() => saveEdit(img.id)} disabled={saving} className="flex-1 text-xs py-1 rounded bg-pink-600 hover:bg-pink-500 text-gray-900 dark:text-white transition-colors disabled:opacity-40">
                             {saving ? "…" : "Save"}
                           </button>
-                          <button onClick={() => setEditingId(null)} className="flex-1 text-xs py-1 rounded bg-gray-700 hover:bg-gray-600 text-white transition-colors">
+                          <button onClick={() => setEditingId(null)} className="flex-1 text-xs py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-900 dark:text-white transition-colors">
                             Cancel
                           </button>
                         </div>
                       </>
                     ) : (
                       <>
-                        <p className="text-xs text-white font-medium truncate" title={img.label ?? img.filename}>
+                        <p className="text-xs text-gray-900 dark:text-white font-medium truncate" title={img.label ?? img.filename}>
                           {img.label ?? img.filename}
                         </p>
                         {img.tags && (
@@ -343,13 +343,13 @@ export default function SocialImagesTab() {
                         <div className="flex gap-1 mt-1">
                           <button
                             onClick={() => copyKey(img)}
-                            className="flex-1 text-xs py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors"
+                            className="flex-1 text-xs py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors"
                           >
                             {copied === img.id ? "✓" : "Copy URL"}
                           </button>
                           <button
                             onClick={() => startEdit(img)}
-                            className="px-2 text-xs py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors"
+                            className="px-2 text-xs py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors"
                             title="Edit label/tags"
                           >
                             ✏️
@@ -380,7 +380,7 @@ export default function SocialImagesTab() {
           onClick={() => setLightbox(null)}
         >
           <div
-            className="bg-gray-900 border border-gray-700 rounded-2xl overflow-hidden max-w-3xl w-full max-h-[90vh] flex flex-col"
+            className="bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-2xl overflow-hidden max-w-3xl w-full max-h-[90vh] flex flex-col"
             onClick={e => e.stopPropagation()}
           >
             <div className="relative">
@@ -391,15 +391,15 @@ export default function SocialImagesTab() {
               />
               <button
                 onClick={() => setLightbox(null)}
-                className="absolute top-3 right-3 bg-black/70 hover:bg-black text-white rounded-full w-8 h-8 flex items-center justify-center font-bold transition-colors"
+                className="absolute top-3 right-3 bg-black/70 hover:bg-black text-gray-900 dark:text-white rounded-full w-8 h-8 flex items-center justify-center font-bold transition-colors"
               >
                 ✕
               </button>
             </div>
             <div className="p-4 flex items-center justify-between gap-4 flex-wrap">
               <div>
-                <p className="text-white font-semibold">{lightbox.label ?? lightbox.filename}</p>
-                <p className="text-xs text-gray-400 mt-0.5">
+                <p className="text-gray-900 dark:text-white font-semibold">{lightbox.label ?? lightbox.filename}</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
                   {lightbox.filename} · Uploaded {format(new Date(lightbox.createdAt), "d MMM yyyy")} by {lightbox.uploadedBy ?? "Unknown"}
                 </p>
                 {lightbox.tags && (
@@ -413,7 +413,7 @@ export default function SocialImagesTab() {
               <div className="flex gap-2">
                 <button
                   onClick={() => copyKey(lightbox)}
-                  className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium transition-colors"
+                  className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-900 dark:text-white text-sm font-medium transition-colors"
                 >
                   {copied === lightbox.id ? "✓ Copied!" : "Copy URL"}
                 </button>

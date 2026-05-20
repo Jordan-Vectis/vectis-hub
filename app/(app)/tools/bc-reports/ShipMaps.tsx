@@ -25,7 +25,7 @@ function Tooltip({ tip }: { tip: Tip | null }) {
   if (!tip) return null
   return (
     <div
-      className="fixed z-50 bg-[#0d0f1a] border border-gray-700 text-gray-200 text-xs px-2 py-1.5 rounded pointer-events-none shadow-lg"
+      className="fixed z-50 bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 text-xs px-2 py-1.5 rounded pointer-events-none shadow-lg"
       style={{ left: tip.x + 14, top: tip.y - 32 }}
     >
       {tip.text}
@@ -61,8 +61,8 @@ export function WorldMap({
   const pathGen    = geoPath(projection)
 
   return (
-    <div className="relative rounded border border-gray-800 bg-[#080a14]">
-      {!topo && <p className="text-gray-500 text-sm py-8 text-center">Loading map…</p>}
+    <div className="relative rounded border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#080a14]">
+      {!topo && <p className="text-gray-600 dark:text-gray-500 text-sm py-8 text-center">Loading map…</p>}
       {topo && (
         <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
           {(feature(topo, topo.objects.countries) as unknown as FeatureCollection).features.map((feat: any) => {
@@ -92,7 +92,7 @@ export function WorldMap({
         </svg>
       )}
       <Tooltip tip={tip} />
-      <div className="flex items-center gap-2 px-3 py-2 border-t border-gray-800">
+      <div className="flex items-center gap-2 px-3 py-2 border-t border-gray-200 dark:border-gray-800">
         <span className="text-gray-600 text-xs">Low</span>
         <div className="flex-1 h-2 rounded" style={{ background: "linear-gradient(to right, rgb(14,42,111), rgb(0,120,212))" }} />
         <span className="text-gray-600 text-xs">High</span>
@@ -231,14 +231,14 @@ export function UKMap({
   function onPointerUp() { dragRef.current = null }
 
   return (
-    <div className="relative rounded border border-gray-800 bg-[#080a14]" style={{ maxWidth: 520 }}>
+    <div className="relative rounded border border-gray-200 dark:border-gray-800 bg-[#080a14]" style={{ maxWidth: 520 }}>
       {/* Zoom controls */}
       <div className="absolute top-2 right-2 flex flex-col gap-1 z-10">
-        <button onClick={() => zoomBy(0.7)} className="w-7 h-7 bg-[#0d0f1a] border border-gray-700 text-gray-300 rounded text-sm hover:border-gray-500 hover:text-white">+</button>
-        <button onClick={() => zoomBy(1.4)} className="w-7 h-7 bg-[#0d0f1a] border border-gray-700 text-gray-300 rounded text-sm hover:border-gray-500 hover:text-white">−</button>
-        <button onClick={() => setVb({ x: 0, y: 0, w: W, h: H })} className="w-7 h-7 bg-[#0d0f1a] border border-gray-700 text-gray-500 rounded text-xs hover:border-gray-500 hover:text-white">⌂</button>
+        <button onClick={() => zoomBy(0.7)} className="w-7 h-7 bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded text-sm hover:border-gray-500 hover:text-white">+</button>
+        <button onClick={() => zoomBy(1.4)} className="w-7 h-7 bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded text-sm hover:border-gray-500 hover:text-white">−</button>
+        <button onClick={() => setVb({ x: 0, y: 0, w: W, h: H })} className="w-7 h-7 bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-500 rounded text-xs hover:border-gray-500 hover:text-white">⌂</button>
       </div>
-      {!topo && <p className="text-gray-500 text-sm py-8 text-center">Loading map…</p>}
+      {!topo && <p className="text-gray-600 dark:text-gray-500 text-sm py-8 text-center">Loading map…</p>}
       {topo && (
         <svg
           ref={svgRef}
@@ -288,7 +288,7 @@ export function UKMap({
       )}
       <Tooltip tip={tip} />
       {missed.length > 0 && (
-        <p className="text-xs text-gray-600 px-3 py-1.5 border-t border-gray-800">
+        <p className="text-xs text-gray-600 px-3 py-1.5 border-t border-gray-200 dark:border-gray-800">
           {missed.length} UK {missed.length === 1 ? "city" : "cities"} not plotted (unrecognised location)
         </p>
       )}
