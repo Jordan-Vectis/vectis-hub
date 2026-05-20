@@ -732,22 +732,55 @@ export default function LotWizardTab({
                   placeholder="Tote numbers (e.g. F001, F002)"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2AB4A6]" />
                 <textarea value={idleNotes} onChange={e => setIdleNotes(e.target.value)}
-                  placeholder="What were you doing? (optional)"
+                  placeholder="Any additional notes? (optional)"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2AB4A6] resize-none" rows={2} />
               </div>
             )}
 
-            {/* Other extra field */}
+            {/* Other — notes are mandatory */}
             {idleReason === "OTHER" && (
               <div className="mb-4">
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Reason <span className="text-red-500">*</span>
+                  <span className="font-normal text-gray-400 ml-1">required</span>
+                </label>
                 <textarea value={idleNotes} onChange={e => setIdleNotes(e.target.value)}
-                  placeholder="What were you doing?"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2AB4A6] resize-none" rows={3} />
+                  placeholder="You must explain what you were doing…"
+                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none resize-none transition-colors ${
+                    idleNotes.trim() ? "border-gray-200 focus:border-[#2AB4A6]" : "border-red-300 bg-red-50 focus:border-red-400"
+                  }`}
+                  rows={3} />
+                {!idleNotes.trim() && (
+                  <p className="text-xs text-red-500 mt-1">A note is required before you can continue.</p>
+                )}
+              </div>
+            )}
+
+            {/* Lunch Break — mandatory explanation if over 65 minutes */}
+            {idleReason === "LUNCH_BREAK" && idleSecs > 65 * 60 && (
+              <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3">
+                <p className="text-xs font-semibold text-amber-700 mb-1.5">
+                  ⚠️ Lunch break over 1 hour — please explain
+                </p>
+                <textarea value={idleNotes} onChange={e => setIdleNotes(e.target.value)}
+                  placeholder="Why did your lunch break exceed 1 hour?"
+                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none resize-none transition-colors ${
+                    idleNotes.trim() ? "border-amber-200 bg-white focus:border-[#2AB4A6]" : "border-red-300 bg-white focus:border-red-400"
+                  }`}
+                  rows={2} />
+                {!idleNotes.trim() && (
+                  <p className="text-xs text-red-500 mt-1">A reason is required before you can continue.</p>
+                )}
               </div>
             )}
 
             <button onClick={submitIdleLog}
-              disabled={!idleReason || idleSubmitting}
+              disabled={
+                !idleReason ||
+                idleSubmitting ||
+                (idleReason === "OTHER" && !idleNotes.trim()) ||
+                (idleReason === "LUNCH_BREAK" && idleSecs > 65 * 60 && !idleNotes.trim())
+              }
               className="w-full py-3 bg-[#2AB4A6] hover:bg-[#22a090] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors">
               {idleSubmitting ? "Saving…" : "Log & Continue"}
             </button>
