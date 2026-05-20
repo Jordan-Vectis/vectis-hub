@@ -3,7 +3,7 @@ import { auth } from "@/auth"
 import { redirect, notFound } from "next/navigation"
 import { format, subDays, subMonths, startOfDay } from "date-fns"
 import Link from "next/link"
-import { CollapsibleLotsTable, CollapsibleIdleTable } from "./collapsible-sections"
+import { CollapsibleLotsTable, CollapsibleIdleTable, TodayProductivityCard } from "./collapsible-sections"
 
 export const dynamic = "force-dynamic"
 
@@ -121,8 +121,11 @@ export default async function CataloguingUserReportPage({
   const fastest      = allDurations.length ? Math.min(...allDurations) : 0
   const slowest      = allDurations.length ? Math.max(...allDurations) : 0
 
-  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
-  const lotsToday  = logs.filter(l => l.savedAt >= todayStart).length
+  const todayStart     = new Date(); todayStart.setHours(0, 0, 0, 0)
+  const todayLogs      = logs.filter(l => l.savedAt >= todayStart)
+  const lotsToday      = todayLogs.length
+  const activeTimeToday = todayLogs.reduce((s, l) => s + l.durationMs, 0)
+  const todayIdleLogs  = idleLogs.filter(l => l.idleStartedAt >= todayStart)
 
   const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - 7); weekStart.setHours(0,0,0,0)
   const lotsThisWeek = logs.filter(l => l.savedAt >= weekStart).length
@@ -196,6 +199,19 @@ export default async function CataloguingUserReportPage({
           </div>
         </div>
       </div>
+
+      {/* Today's productivity — always shown regardless of range filter */}
+      <TodayProductivityCard
+        activeMs={activeTimeToday}
+        lotsCount={lotsToday}
+        idleSessions={todayIdleLogs.map(l => ({
+          reason:      l.reason,
+          durationMs:  l.idleDurationMs,
+          toteNumbers: l.toteNumbers,
+          notes:       l.notes,
+          startedAt:   l.idleStartedAt.toISOString(),
+        }))}
+      />
 
       {/* No data in range */}
       {logs.length === 0 && (

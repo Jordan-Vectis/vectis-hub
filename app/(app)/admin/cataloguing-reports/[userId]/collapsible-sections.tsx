@@ -11,7 +11,7 @@ function fmtDuration(ms: number | null | undefined): string {
   const h = Math.floor(totalSec / 3600)
   const m = Math.floor((totalSec % 3600) / 60)
   const s = totalSec % 60
-  if (h > 0) return `${h}h ${m}m ${s}s`
+  if (h > 0) return `${h}h ${m}m`
   if (m > 0) return `${m}m ${s}s`
   return `${s}s`
 }
@@ -63,6 +63,165 @@ function DateFilters({
       <span className="text-xs text-gray-400 ml-auto">
         {count !== total ? `${count} of ${total}` : count} record{count !== 1 ? "s" : ""}
       </span>
+    </div>
+  )
+}
+
+// ─── Today's Productivity Card ───────────────────────────────────────────────
+
+export type TodayIdleSession = {
+  reason:      string
+  durationMs:  number
+  toteNumbers: string | null
+  notes:       string | null
+  startedAt:   string
+}
+
+const REASON_CONFIG: Record<string, { label: string; colour: string; icon: string; idleColour: string }> = {
+  LOTTING_UP:  { label: "Lotting Up",  colour: "bg-blue-100 text-blue-700 border-blue-200",   icon: "📦", idleColour: "#3b82f6" },
+  LUNCH_BREAK: { label: "Lunch Break", colour: "bg-amber-100 text-amber-700 border-amber-200", icon: "🍽️", idleColour: "#f59e0b" },
+  OTHER:       { label: "Other",       colour: "bg-gray-100 text-gray-600 border-gray-200",    icon: "📝", idleColour: "#9ca3af" },
+}
+
+export function TodayProductivityCard({
+  activeMs,
+  lotsCount,
+  idleSessions,
+}: {
+  activeMs:      number
+  lotsCount:     number
+  idleSessions:  TodayIdleSession[]
+}) {
+  const totalIdleMs = idleSessions.reduce((s, l) => s + l.durationMs, 0)
+  const totalMs     = activeMs + totalIdleMs
+  const activePct   = totalMs > 0 ? (activeMs / totalMs) * 100 : 0
+  const idlePct     = 100 - activePct
+
+  // Group idle sessions by reason for the breakdown
+  const byReason = Object.entries(REASON_CONFIG).map(([key, cfg]) => {
+    const sessions = idleSessions.filter(s => s.reason === key)
+    const totalMs  = sessions.reduce((s, l) => s + l.durationMs, 0)
+    return { key, cfg, sessions, totalMs }
+  }).filter(r => r.sessions.length > 0)
+
+  const noData = activeMs === 0 && totalIdleMs === 0
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Today's Productivity</h2>
+          <p className="text-xs text-gray-400 mt-0.5">{format(new Date(), "EEEE d MMMM yyyy")}</p>
+        </div>
+        {!noData && (
+          <div className="flex items-center gap-4 text-xs text-gray-500">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500" />
+              Active cataloguing
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-orange-400" />
+              Idle time
+            </span>
+          </div>
+        )}
+      </div>
+
+      {noData ? (
+        <div className="px-5 py-8 text-center text-gray-400">
+          <p className="text-sm">No activity recorded today yet.</p>
+        </div>
+      ) : (
+        <div className="px-5 py-5 space-y-5">
+
+          {/* Split bar */}
+          <div className="space-y-2">
+            <div className="flex rounded-full overflow-hidden h-5 bg-gray-100">
+              {activePct > 0 && (
+                <div
+                  className="h-full bg-emerald-500 transition-all flex items-center justify-center"
+                  style={{ width: `${activePct}%` }}
+                >
+                  {activePct > 12 && (
+                    <span className="text-white text-xs font-bold">{Math.round(activePct)}%</span>
+                  )}
+                </div>
+              )}
+              {idlePct > 0 && (
+                <div
+                  className="h-full bg-orange-400 transition-all flex items-center justify-center"
+                  style={{ width: `${idlePct}%` }}
+                >
+                  {idlePct > 12 && (
+                    <span className="text-white text-xs font-bold">{Math.round(idlePct)}%</span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Totals row */}
+            <div className="flex gap-6">
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-bold text-emerald-600 font-mono">{fmtDuration(activeMs)}</span>
+                <span className="text-xs text-gray-400">on lots ({lotsCount} created)</span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-bold text-orange-500 font-mono">{fmtDuration(totalIdleMs)}</span>
+                <span className="text-xs text-gray-400">idle ({idleSessions.length} session{idleSessions.length !== 1 ? "s" : ""})</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Idle breakdown */}
+          {byReason.length > 0 && (
+            <div className="border-t border-gray-100 pt-4 space-y-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Idle Breakdown</p>
+              {byReason.map(({ key, cfg, sessions, totalMs: reasonMs }) => (
+                <div key={key} className="space-y-1.5">
+                  {/* Reason header */}
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold border ${cfg.colour}`}>
+                      {cfg.icon} {cfg.label}
+                    </span>
+                    <span className="font-mono font-bold text-sm text-gray-700">{fmtDuration(reasonMs)}</span>
+                    <span className="text-xs text-gray-400">
+                      ({sessions.length} session{sessions.length !== 1 ? "s" : ""})
+                    </span>
+                  </div>
+
+                  {/* Per-session detail */}
+                  <div className="ml-2 space-y-1">
+                    {sessions.map((s, i) => (
+                      <div key={i} className="flex items-start gap-3 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                        <span className="text-gray-400 font-mono whitespace-nowrap shrink-0">
+                          {format(new Date(s.startedAt), "HH:mm")}
+                        </span>
+                        <span className="font-mono font-semibold text-gray-700 whitespace-nowrap shrink-0">
+                          {fmtDuration(s.durationMs)}
+                        </span>
+                        {s.toteNumbers && (
+                          <span className="text-blue-600">
+                            Totes: <span className="font-mono font-semibold">{s.toteNumbers}</span>
+                          </span>
+                        )}
+                        {s.notes && (
+                          <span className="text-gray-500 italic truncate" title={s.notes}>
+                            "{s.notes}"
+                          </span>
+                        )}
+                        {!s.toteNumbers && !s.notes && (
+                          <span className="text-gray-300 italic">No details recorded</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -180,12 +339,6 @@ export function CollapsibleLotsTable({ logs }: { logs: SerialLotLog[] }) {
 
 // ─── Collapsible Idle Time Table ──────────────────────────────────────────────
 
-const REASON_LABEL: Record<string, { label: string; colour: string }> = {
-  LUNCH_BREAK: { label: "Lunch Break", colour: "bg-amber-50 text-amber-600 border-amber-100" },
-  LOTTING_UP:  { label: "Lotting Up",  colour: "bg-green-50 text-green-600 border-green-100"  },
-  OTHER:       { label: "Other",       colour: "bg-gray-100 text-gray-500 border-gray-200"    },
-}
-
 export function CollapsibleIdleTable({ logs }: { logs: SerialIdleLog[] }) {
   const [open, setOpen]         = useState(false)
   const [fromDate, setFromDate] = useState("")
@@ -256,7 +409,7 @@ export function CollapsibleIdleTable({ logs }: { logs: SerialIdleLog[] }) {
                     </td>
                   </tr>
                 ) : filtered.map(log => {
-                  const r = REASON_LABEL[log.reason] ?? { label: log.reason, colour: "bg-gray-100 text-gray-500 border-gray-200" }
+                  const r = REASON_CONFIG[log.reason] ?? { label: log.reason, colour: "bg-gray-100 text-gray-500 border-gray-200", icon: "❓", idleColour: "#9ca3af" }
                   return (
                     <tr key={log.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap font-mono">
