@@ -156,15 +156,15 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <h2 className="font-semibold text-gray-800 mb-1">{roleLabel}</h2>
-      <p className="text-sm text-gray-500 mb-5">Default app access for new {roleLabel} users.</p>
+    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+      <h2 className="font-semibold text-gray-800 dark:text-gray-200 mb-1">{roleLabel}</h2>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Default app access for new {roleLabel} users.</p>
 
       {/* ── All items grouped by section ── */}
       <div className="flex flex-col gap-6 mb-6">
         {sections.map(section => (
           <div key={section.key}>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">{section.label}</p>
+            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">{section.label}</p>
             <div className="flex flex-col gap-3">
               {section.items.map(item => (
                 <div key={item.key}>
@@ -174,7 +174,7 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
                       className={`w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
                         (item.type === "app" ? selectedApps.includes(item.key) : hubCards.includes(item.key))
                           ? "bg-blue-600 border-blue-600"
-                          : "border-gray-300 group-hover:border-blue-400"
+                          : "border-gray-300 dark:border-gray-600 group-hover:border-blue-400"
                       }`}
                     >
                       {(item.type === "app" ? selectedApps.includes(item.key) : hubCards.includes(item.key)) && (
@@ -183,18 +183,18 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
                         </svg>
                       )}
                     </div>
-                    <span className="text-sm text-gray-700 group-hover:text-gray-900 font-medium">
+                    <span className="text-sm text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:text-white font-medium">
                       {item.icon && <span className="mr-1">{item.icon}</span>}{item.label}
                     </span>
                   </label>
 
                   {item.type === "app" && item.key === "WAREHOUSE" && selectedApps.includes("WAREHOUSE") && (
                     <div className="ml-8 mt-2">
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Warehouse Role</label>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Warehouse Role</label>
                       <select
                         value={warehouseRole}
                         onChange={e => setWarehouseRole(e.target.value as WarehouseRole)}
-                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         {WAREHOUSE_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                       </select>
@@ -203,7 +203,7 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
 
                   {item.type === "app" && APP_SECTIONS[item.key as AppKey] && selectedApps.includes(item.key) && (
                     <div className="ml-8 mt-2">
-                      <p className="text-xs font-medium text-gray-500 mb-2">Visible sections</p>
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Visible sections</p>
                       <div className="flex flex-col gap-2">
                         {APP_SECTIONS[item.key as AppKey]!.map(s => {
                           const checked = (appSections[item.key] ?? []).includes(s.key)
@@ -212,7 +212,7 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
                               <div
                                 onClick={() => toggleSection(item.key, s.key)}
                                 className={`w-4 h-4 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
-                                  checked ? "bg-blue-500 border-blue-500" : "border-gray-300 group-hover:border-blue-400"
+                                  checked ? "bg-blue-50 dark:bg-blue-900/200 border-blue-500" : "border-gray-300 dark:border-gray-600 group-hover:border-blue-400"
                                 }`}
                               >
                                 {checked && (
@@ -221,7 +221,7 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
                                   </svg>
                                 )}
                               </div>
-                              <span className="text-xs text-gray-600 group-hover:text-gray-900">{s.label}</span>
+                              <span className="text-xs text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:text-white">{s.label}</span>
                             </label>
                           )
                         })}
@@ -250,11 +250,11 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
       </div>
 
       {/* ── Apply to existing users ── */}
-      <div className="border-t border-gray-100 pt-5">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Apply to Existing Users</p>
+      <div className="border-t border-gray-100 dark:border-gray-800 pt-5">
+        <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Apply to Existing Users</p>
 
         {roleUsers.length === 0 ? (
-          <p className="text-sm text-gray-400 italic">No {roleLabel} users yet.</p>
+          <p className="text-sm text-gray-400 dark:text-gray-500 italic">No {roleLabel} users yet.</p>
         ) : (
           <>
             <div className="flex gap-3 mb-4">
@@ -263,7 +263,7 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
                 className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                   applyMode === "all"
                     ? "bg-gray-800 text-white border-gray-800"
-                    : "border-gray-300 text-gray-600 hover:border-gray-400"
+                    : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-400"
                 }`}
               >
                 All {roleLabel} users ({roleUsers.length})
@@ -273,7 +273,7 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
                 className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                   applyMode === "pick"
                     ? "bg-gray-800 text-white border-gray-800"
-                    : "border-gray-300 text-gray-600 hover:border-gray-400"
+                    : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-400"
                 }`}
               >
                 Pick users
@@ -287,7 +287,7 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
                     <div
                       onClick={() => togglePickedUser(u.id)}
                       className={`w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
-                        pickedUsers.includes(u.id) ? "bg-blue-600 border-blue-600" : "border-gray-300 group-hover:border-blue-400"
+                        pickedUsers.includes(u.id) ? "bg-blue-600 border-blue-600" : "border-gray-300 dark:border-gray-600 group-hover:border-blue-400"
                       }`}
                     >
                       {pickedUsers.includes(u.id) && (
@@ -296,7 +296,7 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
                         </svg>
                       )}
                     </div>
-                    <span className="text-sm text-gray-700 group-hover:text-gray-900">{u.name}</span>
+                    <span className="text-sm text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:text-white">{u.name}</span>
                   </label>
                 ))}
               </div>
@@ -377,10 +377,10 @@ export default function RoleDefaultsForm({ allRoles, defaults, users }: Props) {
   return (
     <div className="flex flex-col gap-6">
       {/* Add-new toolbar */}
-      <div className="flex items-center justify-between bg-white rounded-xl border border-gray-200 p-4">
+      <div className="flex items-center justify-between bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
         <div>
-          <h2 className="font-semibold text-gray-800">{displayRoles.length} role{displayRoles.length === 1 ? "" : "s"}</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Click "+ Add role" to create a new one, then configure its permissions and save.</p>
+          <h2 className="font-semibold text-gray-800 dark:text-gray-200">{displayRoles.length} role{displayRoles.length === 1 ? "" : "s"}</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Click "+ Add role" to create a new one, then configure its permissions and save.</p>
         </div>
         <button
           onClick={() => { setShowAddDialog(true); setAddError(null); setNewRoleName("") }}
@@ -390,11 +390,11 @@ export default function RoleDefaultsForm({ allRoles, defaults, users }: Props) {
 
       {/* Add-role dialog */}
       {showAddDialog && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
-          <h3 className="font-semibold text-gray-800 mb-2">New role</h3>
-          <p className="text-xs text-gray-600 mb-3">
-            Enter a name like <code className="bg-white px-1 py-0.5 rounded text-[11px]">Warehouse Manager</code> or <code className="bg-white px-1 py-0.5 rounded text-[11px]">Junior Cataloguer</code>.
-            It'll be stored as upper-snake-case (<code className="bg-white px-1 py-0.5 rounded text-[11px]">WAREHOUSE_MANAGER</code>) to match the existing role keys.
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl p-5">
+          <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">New role</h3>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+            Enter a name like <code className="bg-white dark:bg-gray-900 px-1 py-0.5 rounded text-[11px]">Warehouse Manager</code> or <code className="bg-white dark:bg-gray-900 px-1 py-0.5 rounded text-[11px]">Junior Cataloguer</code>.
+            It'll be stored as upper-snake-case (<code className="bg-white dark:bg-gray-900 px-1 py-0.5 rounded text-[11px]">WAREHOUSE_MANAGER</code>) to match the existing role keys.
           </p>
           <div className="flex gap-2">
             <input
@@ -404,24 +404,24 @@ export default function RoleDefaultsForm({ allRoles, defaults, users }: Props) {
               onKeyDown={e => e.key === "Enter" && handleAdd()}
               placeholder="e.g. Warehouse Manager"
               autoFocus
-              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button onClick={handleAdd}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg">Add</button>
             <button onClick={() => setShowAddDialog(false)}
-              className="px-4 py-2 border border-gray-300 text-gray-600 text-sm rounded-lg hover:border-gray-400">Cancel</button>
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 text-sm rounded-lg hover:border-gray-400">Cancel</button>
           </div>
           {addError && <p className="text-xs text-red-600 mt-2">{addError}</p>}
         </div>
       )}
 
       {deleteMsg && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-amber-800 text-sm">{deleteMsg}</div>
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl px-4 py-3 text-amber-800 dark:text-amber-200 text-sm">{deleteMsg}</div>
       )}
 
       {/* Role panels */}
       {displayRoles.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500 text-sm">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-8 text-center text-gray-500 dark:text-gray-400 text-sm">
           No roles yet (besides ADMIN). Click "+ Add role" above to create one.
         </div>
       ) : displayRoles.map(roleKey => (

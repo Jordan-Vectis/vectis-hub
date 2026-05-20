@@ -37,50 +37,50 @@ export default function CreateUserForm({ departments, roles }: Props) {
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Full name</label>
+        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Full name</label>
         <input
           name="name"
           required
           onChange={(e) => setUsername(toUsername(e.target.value))}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Username</label>
+        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Username</label>
         <input
           name="username"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           placeholder="First.Last"
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
+        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
         <input
           name="email"
           type="email"
           required
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Password</label>
+        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
         <input
           name="password"
           type="password"
           required
           minLength={8}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Role</label>
+        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Role</label>
         <select
           name="role"
           value={role}
           onChange={(e) => setRole(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           {roles.map(r => (
             <option key={r} value={r}>{roleLabel(r)}</option>
@@ -89,10 +89,10 @@ export default function CreateUserForm({ departments, roles }: Props) {
       </div>
       {role === "CATALOGUER" && (
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Department</label>
+          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Department</label>
           <select
             name="departmentId"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">No department</option>
             {departments.map((d) => (

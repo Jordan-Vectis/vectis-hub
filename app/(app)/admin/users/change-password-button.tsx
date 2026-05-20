@@ -44,7 +44,7 @@ export default function ChangePasswordButton({ userId, userName }: { userId: str
       <div className="flex items-center gap-2">
         <button
           onClick={() => { setOpen(true); setSuccess(false) }}
-          className="text-blue-400 hover:text-blue-600 text-sm"
+          className="text-blue-400 hover:text-blue-600 dark:text-blue-400 text-sm"
         >
           Change password
         </button>
@@ -62,7 +62,7 @@ export default function ChangePasswordButton({ userId, userName }: { userId: str
         placeholder="New password"
         minLength={8}
         required
-        className="rounded border border-gray-300 px-2 py-1 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
       <input
         type="password"
@@ -70,7 +70,7 @@ export default function ChangePasswordButton({ userId, userName }: { userId: str
         onChange={(e) => setConfirm(e.target.value)}
         placeholder="Confirm password"
         required
-        className="rounded border border-gray-300 px-2 py-1 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
       {error && <span className="text-xs text-red-500">{error}</span>}
       <div className="flex gap-2">
@@ -84,7 +84,7 @@ export default function ChangePasswordButton({ userId, userName }: { userId: str
         <button
           type="button"
           onClick={() => { setOpen(false); setError(null) }}
-          className="text-xs text-gray-400 hover:text-gray-600"
+          className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:text-gray-400"
         >
           Cancel
         </button>
