@@ -207,7 +207,7 @@ export default function DevicesClient({ devices: initial, users }: Props) {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {devices.map(d => (
-                <tr key={d.id} className="hover:bg-gray-50 dark:bg-gray-800 transition-colors">
+                <tr key={d.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                   <td className="px-5 py-3 font-medium text-gray-900 dark:text-white">{d.name}</td>
                   <td className="px-5 py-3 text-gray-500 dark:text-gray-400">{d.deviceType}</td>
                   <td className="px-5 py-3 font-mono text-gray-600 dark:text-gray-400 text-xs">{d.serialNumber}</td>

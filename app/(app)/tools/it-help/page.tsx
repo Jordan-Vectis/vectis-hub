@@ -298,7 +298,7 @@ function ArticlesTab() {
             <button
               key={a.id}
               onClick={() => setEditing(a)}
-              className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3 text-left hover:bg-gray-50 dark:bg-gray-800"
+              className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50"
             >
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-semibold text-gray-900 dark:text-white text-sm">{a.title}</span>

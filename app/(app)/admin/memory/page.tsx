@@ -698,7 +698,7 @@ export default function MemoryPage() {
             <div key={entry.filename} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
               <button
                 onClick={() => setOpen(isOpen ? null : entry.filename)}
-                className="w-full flex items-start gap-4 px-5 py-4 text-left hover:bg-gray-50 dark:bg-gray-800 transition-colors"
+                className="w-full flex items-start gap-4 px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">

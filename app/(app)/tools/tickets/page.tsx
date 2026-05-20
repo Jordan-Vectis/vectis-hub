@@ -430,7 +430,7 @@ export default function TicketsPage() {
                   </label>
                 <button
                   onClick={() => { const next = isOpen ? null : t.id; setOpenId(next); if (next) loadComments(next) }}
-                  className="flex-1 flex items-start gap-4 px-5 py-4 text-left hover:bg-gray-50 dark:bg-gray-800"
+                  className="flex-1 flex items-start gap-4 px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
