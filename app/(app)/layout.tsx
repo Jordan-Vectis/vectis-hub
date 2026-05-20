@@ -24,7 +24,7 @@ export default async function AppLayout({
       <div className="flex flex-1 overflow-hidden">
         <CrmSidebar />
         <AdminSidebar />
-        <main className="flex-1 overflow-auto bg-gray-50">{children}</main>
+        <main className="flex-1 overflow-auto bg-gray-50 dark:bg-[#141416]">{children}</main>
       </div>
     </div>
   )
