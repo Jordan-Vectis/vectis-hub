@@ -1206,7 +1206,7 @@ function LocationHistoryTab() {
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                     {result.entries.map((e, i) => (
-                      <tr key={i} className={`hover:bg-[#0d0f1a] ${i === 0 ? "bg-blue-950/30" : ""}`}>
+                      <tr key={i} className={`hover:bg-gray-200 dark:hover:bg-[#0d0f1a] ${i === 0 ? "bg-blue-950/30" : ""}`}>
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-400 font-mono text-xs">{e.from || <span className="text-gray-600 dark:text-gray-400 italic">empty</span>}</td>
                         <td className="px-4 py-2 text-gray-900 dark:text-white font-mono text-xs font-semibold">{e.to || <span className="text-gray-600 dark:text-gray-400 italic">empty</span>}</td>
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{SALESPERSON_NAMES[e.changedBy] ?? e.changedBy}</td>
@@ -1282,7 +1282,7 @@ function LocationHistoryTab() {
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                           {similarResult.map((e, i) => (
-                            <tr key={i} className="hover:bg-[#0d0f1a]">
+                            <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
                               <td className="px-4 py-2 text-gray-900 dark:text-white font-mono text-xs">{e.itemKey}{e.itemKey2 ? ` · ${e.itemKey2}` : ""}</td>
                               <td className="px-4 py-2 text-gray-600 dark:text-gray-300 font-mono text-xs">{e.barcode ?? <span className="text-gray-600 dark:text-gray-400">—</span>}</td>
                               <td className="px-4 py-2">
@@ -2228,7 +2228,7 @@ function DbExplorerTab() {
             </thead>
             <tbody>
               {rows.map((row, i) => (
-                <tr key={i} className={i % 2 === 0 ? "bg-gray-100 dark:bg-gray-900" : "bg-gray-850"}>
+                <tr key={i} className={i % 2 === 0 ? "bg-gray-100 dark:bg-gray-900" : "bg-white dark:bg-gray-800"}>
                   {columns.map(c => (
                     <td key={c} className="px-3 py-1.5 text-gray-600 dark:text-gray-300 font-mono whitespace-nowrap border-r border-gray-200 dark:border-gray-800 last:border-0 max-w-xs truncate" title={String(row[c] ?? "")}>
                       {row[c] === null || row[c] === undefined ? <span className="text-gray-600 dark:text-gray-400">null</span> : String(row[c])}
