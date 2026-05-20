@@ -159,7 +159,7 @@ export default function ContentGeneratorTab() {
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
 
       {/* ── Content type picker ──────────────────────────────────────────── */}
-      <div className="bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl p-5 space-y-4">
+      <div className="bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl p-5 space-y-4">
         <h2 className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">What do you want to generate?</h2>
         <div className="space-y-3">
           {CONTENT_GROUPS.map(group => (
@@ -173,7 +173,7 @@ export default function ContentGeneratorTab() {
                     className={`text-left px-3 py-2 rounded-lg border text-xs transition-colors ${
                       contentType === t.value
                         ? "border-pink-500 bg-pink-900/30 text-pink-200"
-                        : "border-gray-300 dark:border-gray-700 bg-gray-800 text-gray-600 dark:text-gray-300 hover:border-gray-500"
+                        : "border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:border-gray-500"
                     }`}
                   >
                     <div className="font-semibold">{t.label}</div>
@@ -187,13 +187,13 @@ export default function ContentGeneratorTab() {
       </div>
 
       {/* ── Filters ──────────────────────────────────────────────────────── */}
-      <div className="bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl p-5 space-y-4">
+      <div className="bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl p-5 space-y-4">
         <h2 className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Filters</h2>
 
         {/* Mode — Sold vs Upcoming */}
         <div>
           <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1.5">Lot status</label>
-          <div className="inline-flex gap-1 bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-0.5">
+          <div className="inline-flex gap-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-0.5">
             <button
               onClick={() => setMode("sold")}
               className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
@@ -220,12 +220,12 @@ export default function ContentGeneratorTab() {
             <input type="text" value={keyword} onChange={e => setKeyword(e.target.value)}
               onKeyDown={e => e.key === "Enter" && findLots()}
               placeholder="e.g. Star Wars, Batman…"
-              className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-pink-500" />
+              className="w-full bg-white dark:bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-pink-500" />
           </div>
           <div>
             <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Category</label>
             <select value={category} onChange={e => setCategory(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-pink-500">
+              className="w-full bg-white dark:bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-pink-500">
               <option value="">All categories</option>
               {categories.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -234,12 +234,12 @@ export default function ContentGeneratorTab() {
             <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Month / Year</label>
             <div className="flex gap-2">
               <select value={month} onChange={e => setMonth(e.target.value)}
-                className="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-2 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-pink-500">
+                className="flex-1 bg-white dark:bg-gray-800 border border-gray-600 rounded-lg px-2 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-pink-500">
                 <option value="">Any</option>
                 {MONTHS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
               <select value={year} onChange={e => setYear(e.target.value)}
-                className="w-24 bg-gray-800 border border-gray-600 rounded-lg px-2 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-pink-500">
+                className="w-24 bg-white dark:bg-gray-800 border border-gray-600 rounded-lg px-2 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-pink-500">
                 <option value="">Any</option>
                 {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
@@ -252,7 +252,7 @@ export default function ContentGeneratorTab() {
             <select
               value={String(topN)}
               onChange={e => setTopN(e.target.value === "all" ? "all" : Number(e.target.value))}
-              className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-pink-500"
+              className="w-full bg-white dark:bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-pink-500"
             >
               {[5, 10, 15, 20, 25, 50, 100, 250].map(n => <option key={n} value={n}>Top {n}</option>)}
               <option value="all">Show all (no limit)</option>
@@ -267,7 +267,7 @@ export default function ContentGeneratorTab() {
             <button
               onClick={() => setSalesPickerOpen(o => !o)}
               type="button"
-              className="w-full text-left bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white hover:border-gray-500 focus:outline-none focus:border-pink-500 flex items-center justify-between gap-2"
+              className="w-full text-left bg-white dark:bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white hover:border-gray-500 focus:outline-none focus:border-pink-500 flex items-center justify-between gap-2"
             >
               <span className="truncate">
                 {selectedSales.length === 0
@@ -279,14 +279,14 @@ export default function ContentGeneratorTab() {
             </button>
 
             {salesPickerOpen && (
-              <div className="absolute z-20 mt-1 w-full bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg shadow-2xl max-h-96 overflow-hidden flex flex-col">
+              <div className="absolute z-20 mt-1 w-full bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg shadow-2xl max-h-96 overflow-hidden flex flex-col">
                 <div className="p-2 border-b border-gray-200 dark:border-gray-800 flex items-center gap-2">
                   <input
                     type="text"
                     value={salesSearch}
                     onChange={e => setSalesSearch(e.target.value)}
                     placeholder="Filter by name, code or date…"
-                    className="flex-1 bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md px-2 py-1.5 text-xs text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-pink-500"
+                    className="flex-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md px-2 py-1.5 text-xs text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-pink-500"
                     autoFocus
                   />
                   {selectedSales.length > 0 && (
@@ -318,7 +318,7 @@ export default function ContentGeneratorTab() {
                       const checked = selectedSales.includes(s.auctionCode)
                       return (
                         <label key={s.auctionCode}
-                          className={`flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-800 ${checked ? "bg-gray-800/50" : ""}`}>
+                          className={`flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 ${checked ? "bg-white dark:bg-gray-800/50" : ""}`}>
                           <input
                             type="checkbox"
                             checked={checked}
@@ -382,7 +382,7 @@ export default function ContentGeneratorTab() {
 
       {/* ── Lots Table ───────────────────────────────────────────────────── */}
       {lots !== null && (
-        <div className="bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl overflow-hidden">
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl overflow-hidden">
           <div className="px-5 py-3 border-b border-gray-300 dark:border-gray-700 flex items-center justify-between">
             <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">
               {lots.length === 0 ? "No lots found" : `${lots.length} lot${lots.length === 1 ? "" : "s"} found`}
@@ -410,7 +410,7 @@ export default function ContentGeneratorTab() {
                 </thead>
                 <tbody>
                   {lots.map((lot, i) => (
-                    <tr key={lot.uniqueId} className="border-b border-gray-200 dark:border-gray-800 hover:bg-gray-800/50">
+                    <tr key={lot.uniqueId} className="border-b border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800/50">
                       <td className="px-4 py-2 text-gray-600 dark:text-gray-500">{i + 1}</td>
                       <td className="px-4 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">{lot.currentLotNo ?? lot.lotNo ?? lot.uniqueId}</td>
                       <td className="px-4 py-2 text-gray-700 dark:text-gray-200 max-w-xs truncate">{lot.description ?? "—"}</td>
@@ -439,10 +439,10 @@ export default function ContentGeneratorTab() {
 
       {/* ── Generate ─────────────────────────────────────────────────────── */}
       {lots !== null && lots.length > 0 && (
-        <div className="bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl p-5 space-y-4">
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl p-5 space-y-4">
           <div className="flex items-center gap-3 flex-wrap">
             {/* Length selector */}
-            <div className="flex items-center gap-1 bg-gray-800 border border-gray-600 rounded-lg p-0.5">
+            <div className="flex items-center gap-1 bg-white dark:bg-gray-800 border border-gray-600 rounded-lg p-0.5">
               {(["short", "medium", "long", "max"] as const).map(l => (
                 <button
                   key={l}
@@ -464,7 +464,7 @@ export default function ContentGeneratorTab() {
 
             <div className="flex items-center gap-1.5">
               <select value={modelId} onChange={e => setModelId(e.target.value)}
-                className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-pink-500">
+                className="bg-white dark:bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-pink-500">
                 {modelList.map(m => <option key={m} value={m}>{m}{savedDefault === m ? " ★" : ""}</option>)}
               </select>
               {savedDefault === modelId ? (
@@ -498,21 +498,21 @@ export default function ContentGeneratorTab() {
 
       {/* ── Output ───────────────────────────────────────────────────────── */}
       {article && (
-        <div className="bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl overflow-hidden">
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl overflow-hidden">
           <div className="px-5 py-3 border-b border-gray-300 dark:border-gray-700 flex items-center justify-between gap-3 flex-wrap">
             <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">{selectedType?.label}</span>
             <div className="flex gap-2">
-              <button onClick={() => copyAs("plain")} className="text-xs bg-gray-700 hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-3 py-1.5 rounded-lg">{copied === "plain" ? "✓ Copied!" : "Copy as Plain Text"}</button>
-              <button onClick={() => copyAs("html")} className="text-xs bg-gray-700 hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-3 py-1.5 rounded-lg">{copied === "html" ? "✓ Copied!" : "Copy as HTML"}</button>
+              <button onClick={() => copyAs("plain")} className="text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-3 py-1.5 rounded-lg">{copied === "plain" ? "✓ Copied!" : "Copy as Plain Text"}</button>
+              <button onClick={() => copyAs("html")} className="text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-3 py-1.5 rounded-lg">{copied === "html" ? "✓ Copied!" : "Copy as HTML"}</button>
               <button onClick={generateArticle} disabled={loadingArticle} className="text-xs bg-pink-700 hover:bg-pink-600 disabled:opacity-50 text-gray-900 dark:text-white px-3 py-1.5 rounded-lg">Regenerate</button>
             </div>
           </div>
 
           {/* Save panel */}
-          <div className="px-5 py-3 border-b border-gray-300 dark:border-gray-700 bg-gray-800/40 flex items-center gap-3 flex-wrap">
+          <div className="px-5 py-3 border-b border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800/40 flex items-center gap-3 flex-wrap">
             <input type="text" value={saveTitle} onChange={e => setSaveTitle(e.target.value)}
               placeholder="Title for saved draft"
-              className="flex-1 min-w-[200px] bg-gray-800 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-pink-500" />
+              className="flex-1 min-w-[200px] bg-white dark:bg-gray-800 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-pink-500" />
             <button onClick={saveDraft} disabled={!saveTitle.trim()}
               className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-gray-900 dark:text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
               💾 Save to Drafts

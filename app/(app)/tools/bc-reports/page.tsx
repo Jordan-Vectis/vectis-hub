@@ -132,7 +132,7 @@ function DateRange({ from, to, onChange, onPreset }: {
             className={`flex-1 px-2 py-1.5 text-xs font-medium rounded border transition-colors ${
               from === p.from && to === p.to
                 ? "bg-[#0078D4] text-gray-900 dark:text-white border-[#0078D4]"
-                : "bg-[#0d0f1a] text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:border-gray-500 hover:text-gray-200"
+                : "bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:border-gray-500 hover:text-gray-200"
             }`}
           >
             {p.label}
@@ -145,7 +145,7 @@ function DateRange({ from, to, onChange, onPreset }: {
           <input
             type="date" value={from}
             onChange={(e) => onChange(e.target.value, to)}
-            className="w-full bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-blue-500"
+            className="w-full bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-blue-500"
           />
         </div>
         <div className="flex-1">
@@ -153,7 +153,7 @@ function DateRange({ from, to, onChange, onPreset }: {
           <input
             type="date" value={to}
             onChange={(e) => onChange(from, e.target.value)}
-            className="w-full bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-blue-500"
+            className="w-full bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-blue-500"
           />
         </div>
       </div>
@@ -171,7 +171,7 @@ function SubTabs({ tabs, active, onChange }: { tabs: string[]; active: string; o
           key={t}
           onClick={() => onChange(t)}
           className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
-            active === t ? "bg-[#0078D4] text-gray-900 dark:text-white" : "text-gray-600 dark:text-gray-400 hover:text-gray-200 bg-[#0d0f1a] border border-gray-300 dark:border-gray-700"
+            active === t ? "bg-[#0078D4] text-gray-900 dark:text-white" : "text-gray-600 dark:text-gray-400 hover:text-gray-200 bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700"
           }`}
         >
           {t}
@@ -244,7 +244,7 @@ function PackingSubNav({ active, onChange }: { active: string; onChange: (t: str
           className={`flex flex-col items-start gap-1.5 p-3 rounded-xl border text-left transition-all ${
             active === item.id
               ? "bg-blue-950/40 border-blue-600"
-              : "bg-[#0d0f1a] border-gray-200 dark:border-gray-800 hover:border-gray-600"
+              : "bg-gray-100 dark:bg-[#0d0f1a] border-gray-200 dark:border-gray-800 hover:border-gray-600"
           }`}
         >
           <svg
@@ -294,7 +294,7 @@ function ProgressBar({ done, total, label, unit }: { done: number; total: number
             : `${done.toLocaleString()} ${unit ?? "records"}…`}
         </span>
       </div>
-      <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+      <div className="h-1.5 bg-white dark:bg-gray-800 rounded-full overflow-hidden">
         <div
           className="h-full bg-[#0078D4] rounded-full transition-all duration-300"
           style={{ width: pct !== null ? `${pct}%` : "40%" }}
@@ -378,7 +378,7 @@ function CataloguingTab() {
       <DateRange from={from} to={to} onChange={handleDateChange} onPreset={handleDateChange} />
 
       {/* Counting-method explanation */}
-      <div className="mb-4 bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-4 py-3 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+      <div className="mb-4 bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-4 py-3 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
         <span className="text-gray-900 dark:text-white font-medium">Auction Line UniqueID</span> is the accurate measure — it counts only new lot insertions as recorded in BC, matching what BC itself reports.{" "}
         <span className="text-gray-900 dark:text-white font-medium">Internal Barcode</span> counts every change to the barcode field, which inflates figures due to double-scanning, corrections and re-entries. Use Auction Line for performance tracking and Internal Barcode only if you need to investigate scanning activity.
       </div>
@@ -386,7 +386,7 @@ function CataloguingTab() {
       {/* Counting-method toggle */}
       <div className="mb-4">
         <p className="text-xs text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">Counting method</p>
-        <div className="inline-flex gap-1 bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-0.5 flex-wrap">
+        <div className="inline-flex gap-1 bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-0.5 flex-wrap">
           <button
             onClick={() => setMode("uniqueid")}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
@@ -485,7 +485,7 @@ function CompareView({
     <div className={loading ? "opacity-40 pointer-events-none transition-opacity" : "transition-opacity"}>
       <MetaBar text={`${from} — ${to}  ·  ${totalBarcode.toLocaleString()} barcode events  ·  ${totalUniqueid.toLocaleString()} new lots  ·  ${totalGap.toLocaleString()} gap`} />
 
-      <div className="bg-gray-900/30 border border-gray-200 dark:border-gray-800 rounded-lg p-3 mb-4 text-xs text-gray-600 dark:text-gray-300">
+      <div className="bg-gray-100 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-800 rounded-lg p-3 mb-4 text-xs text-gray-600 dark:text-gray-300">
         <strong className="text-gray-900 dark:text-white">How to read this:</strong> "Barcode" counts every change to a lot's
         Internal Barcode (insertions + edits). "New lots" counts only Auction Line UniqueID Insertions.
         The <strong>Gap</strong> is Barcode − New lots — i.e. how many barcode edits a cataloguer made on top
@@ -494,7 +494,7 @@ function CompareView({
 
       <div className="overflow-x-auto border border-gray-200 dark:border-gray-800 rounded-lg">
         <table className="w-full text-sm">
-          <thead className="bg-gray-900 text-gray-600 dark:text-gray-400 text-xs">
+          <thead className="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-400 text-xs">
             <tr>
               <SortHeader label="User"             active={sortBy === "user"}     onClick={() => setSortBy("user")}     align="left" />
               <SortHeader label="Barcode (any)"    active={sortBy === "barcode"}  onClick={() => setSortBy("barcode")}  align="right" />
@@ -506,7 +506,7 @@ function CompareView({
           </thead>
           <tbody>
             {sorted.map(r => (
-              <tr key={r.user} className="border-t border-gray-200 dark:border-gray-800 hover:bg-gray-900/40">
+              <tr key={r.user} className="border-t border-gray-200 dark:border-gray-800 hover:bg-gray-200 dark:hover:bg-gray-900/40">
                 <td className="px-3 py-2 text-gray-700 dark:text-gray-200 font-mono">{r.user}</td>
                 <td className="px-3 py-2 text-right text-blue-700 dark:text-blue-300 font-semibold">{r.barcode.toLocaleString()}</td>
                 <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-500 text-xs">{r.barcodeAvg.toFixed(1)}</td>
@@ -519,7 +519,7 @@ function CompareView({
             ))}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-gray-300 dark:border-gray-700 bg-gray-900/60 font-bold text-gray-700 dark:text-gray-200">
+            <tr className="border-t-2 border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-900/60 font-bold text-gray-700 dark:text-gray-200">
               <td className="px-3 py-2">Total</td>
               <td className="px-3 py-2 text-right text-blue-200">{totalBarcode.toLocaleString()}</td>
               <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-500 text-xs">—</td>
@@ -774,7 +774,7 @@ function PackingTab() {
 
           {/* Match-quality panel — surfaces typos and missing packers */}
           {(data.meta.unmatched?.length || data.meta.merges?.length) ? (
-            <details className="mb-3 bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg">
+            <details className="mb-3 bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg">
               <summary className="px-3 py-2 cursor-pointer text-xs text-gray-600 dark:text-gray-400 hover:text-gray-200 select-none">
                 Name matching ·{" "}
                 {data.meta.merges?.length
@@ -827,19 +827,19 @@ function PackingTab() {
           {subTab === "Overview" && (
             <div className="space-y-5">
               <div className="grid grid-cols-4 gap-3">
-                <div className="bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-4">
+                <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-4">
                   <p className="text-xs text-gray-600 dark:text-gray-500 mb-1 uppercase tracking-wider">Total Lots Packed</p>
                   <p className="text-2xl font-bold text-gray-900 dark:text-white">{totalLotsPacked.toLocaleString()}</p>
                 </div>
-                <div className="bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-4">
+                <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-4">
                   <p className="text-xs text-gray-600 dark:text-gray-500 mb-1 uppercase tracking-wider">Avg Lots Per Day</p>
                   <p className="text-2xl font-bold text-gray-900 dark:text-white">{avgLotsPerDay.toLocaleString()}</p>
                 </div>
-                <div className="bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-4">
+                <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-4">
                   <p className="text-xs text-gray-600 dark:text-gray-500 mb-1 uppercase tracking-wider">Active Days</p>
                   <p className="text-2xl font-bold text-gray-900 dark:text-white">{timelineDates.length}</p>
                 </div>
-                <div className="bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-4">
+                <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-4">
                   <p className="text-xs text-gray-600 dark:text-gray-500 mb-1 uppercase tracking-wider">Lots Collected</p>
                   {collectedError ? (
                     <div className="mt-2">
@@ -857,13 +857,13 @@ function PackingTab() {
                   )}
                 </div>
               </div>
-              <div className="bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+              <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider">Lots Packed Over Time</p>
                   <div className="flex gap-1">
                     {(["daily", "weekly", "monthly"] as const).map(g => (
                       <button key={g} onClick={() => setChartGrouping(g)}
-                        className={`px-2 py-1 text-xs rounded transition-colors ${chartGrouping === g ? "bg-[#0078D4] text-gray-900 dark:text-white" : "bg-[#07070f] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:text-white"}`}>
+                        className={`px-2 py-1 text-xs rounded transition-colors ${chartGrouping === g ? "bg-[#0078D4] text-gray-900 dark:text-white" : "bg-white dark:bg-[#07070f] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:text-white"}`}>
                         {g.charAt(0).toUpperCase() + g.slice(1)}
                       </button>
                     ))}
@@ -908,7 +908,7 @@ function PackingTab() {
                 {/* Help modal */}
                 {capHelpOpen && (
                   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setCapHelpOpen(false)}>
-                    <div className="bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded-xl p-6 max-w-lg w-full mx-4 space-y-3" onClick={e => e.stopPropagation()}>
+                    <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded-xl p-6 max-w-lg w-full mx-4 space-y-3" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center justify-between mb-1">
                         <p className="text-sm font-semibold text-gray-900 dark:text-white">How the Capacity tab works</p>
                         <button onClick={() => setCapHelpOpen(false)} className="text-gray-600 dark:text-gray-500 hover:text-white text-lg leading-none">✕</button>
@@ -923,7 +923,7 @@ function PackingTab() {
                   </div>
                 )}
                 {/* Inputs */}
-                <div className="bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+                <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-xl p-4">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider">Assumptions</p>
                     <button onClick={() => setCapHelpOpen(true)} className="text-xs text-gray-600 dark:text-gray-500 hover:text-white border border-gray-300 dark:border-gray-700 hover:border-gray-500 rounded px-2 py-0.5 transition-colors">? Help</button>
@@ -957,12 +957,12 @@ function PackingTab() {
 
                 {/* Stats grid */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-4">
+                  <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-4">
                     <p className="text-xs text-gray-600 dark:text-gray-500 mb-1 uppercase tracking-wider">Modelled Throughput</p>
                     <p className="text-2xl font-bold text-gray-900 dark:text-white">{dailyThroughput}</p>
                     <p className="text-xs text-gray-600 mt-0.5">{perPersonRate.toFixed(1)} lots/person · observed avg: {avgLotsPerDay}/day</p>
                   </div>
-                  <div className="bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-4">
+                  <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-4">
                     <p className="text-xs text-gray-600 dark:text-gray-500 mb-1 uppercase tracking-wider">Effective Demand</p>
                     <p className="text-2xl font-bold text-gray-900 dark:text-white">{effectiveDemand.toFixed(0)}</p>
                     <p className="text-xs text-gray-600 mt-0.5">{dailyIncoming.toFixed(0)} incoming − {capCollectedPerDay} collected/day</p>
@@ -970,7 +970,7 @@ function PackingTab() {
                 </div>
 
                 {/* Staff to break even */}
-                <div className="bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+                <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-xl p-4">
                   <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-2">Staff needed to break even</p>
                   <p className="text-3xl font-bold text-gray-900 dark:text-white">{staffBreakEven ?? "—"}</p>
                   <p className="text-xs text-gray-600 mt-1">
@@ -982,7 +982,7 @@ function PackingTab() {
 
                 {/* Estimated catch-up */}
                 {capBacklog > 0 && (
-                  <div className="bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+                  <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-xl p-4">
                     <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-2">Estimated catch-up</p>
                     {daysToClean != null && catchupDate ? (
                       <>
@@ -998,7 +998,7 @@ function PackingTab() {
                 )}
 
                 {/* Monthly lots from receipt lines */}
-                <div className="bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+                <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-xl p-4">
                   <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-3">Lots by Month (Auction Lines · Last 3 Months + Current)</p>
                   {monthlyLotsError ? (
                     <div className="flex items-center gap-3">
@@ -1017,7 +1017,7 @@ function PackingTab() {
                         const [yr, mo] = month.split("-")
                         const label = new Date(Number(yr), Number(mo) - 1, 1).toLocaleString("en-GB", { month: "short", year: "numeric" })
                         return (
-                          <div key={month} className="bg-[#07070f] border border-gray-200 dark:border-gray-800 rounded-lg p-3 text-center">
+                          <div key={month} className="bg-white dark:bg-[#07070f] border border-gray-200 dark:border-gray-800 rounded-lg p-3 text-center">
                             <p className="text-xs text-gray-600 dark:text-gray-500 mb-2">{label}</p>
                             <p className="text-2xl font-bold text-gray-900 dark:text-white">{count.toLocaleString()}</p>
                             <p className="text-xs text-gray-600 mt-0.5">lots</p>
@@ -1040,7 +1040,7 @@ function PackingTab() {
                 </div>
 
                 {/* Collections by month — separate section */}
-                <div className="bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+                <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-xl p-4">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider">Lots Collected by Month (Change Log · Last 3 Months + Current)</p>
                     {!monthlyCollectedLoading && (
@@ -1074,7 +1074,7 @@ function PackingTab() {
                           const daysInMo = isCurrentMonth ? now.getDate() : new Date(Number(yr), Number(mo), 0).getDate()
                           const dailyAvg = daysInMo > 0 ? Math.round(count / daysInMo) : 0
                           return (
-                            <div key={month} className="bg-[#07070f] border border-gray-200 dark:border-gray-800 rounded-lg p-3 text-center">
+                            <div key={month} className="bg-white dark:bg-[#07070f] border border-gray-200 dark:border-gray-800 rounded-lg p-3 text-center">
                               <p className="text-xs text-gray-600 dark:text-gray-500 mb-2">{label}</p>
                               <p className="text-2xl font-bold text-green-400">{count.toLocaleString()}</p>
                               <p className="text-xs text-gray-600 mt-0.5">collected</p>
@@ -1105,7 +1105,7 @@ function PackingTab() {
               <div className="flex justify-end mb-3 gap-1">
                 {(["daily", "weekly", "monthly"] as const).map(g => (
                   <button key={g} onClick={() => setChartGrouping(g)}
-                    className={`px-2 py-1 text-xs rounded transition-colors ${chartGrouping === g ? "bg-[#0078D4] text-gray-900 dark:text-white" : "bg-[#07070f] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:text-white"}`}>
+                    className={`px-2 py-1 text-xs rounded transition-colors ${chartGrouping === g ? "bg-[#0078D4] text-gray-900 dark:text-white" : "bg-white dark:bg-[#07070f] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:text-white"}`}>
                     {g.charAt(0).toUpperCase() + g.slice(1)}
                   </button>
                 ))}
@@ -1132,7 +1132,7 @@ function PackingTab() {
             <>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800">
                 <table className="w-full text-sm">
-                  <thead className="bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase">
+                  <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase">
                     <tr>
                       <th className="px-4 py-2 text-left">Date</th>
                       <th className="px-4 py-2 text-left">Staff</th>
@@ -1140,9 +1140,9 @@ function PackingTab() {
                       <th className="px-4 py-2 text-right">Lot Count</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-800">
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                     {data.raw.map((r, i) => (
-                      <tr key={i} className="hover:bg-[#0d0f1a]">
+                      <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{r.date}</td>
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{r.staff}</td>
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-500">{r.docNo}</td>
@@ -1195,15 +1195,15 @@ function WarehouseTab() {
       {data && (
         <>
           <div className="grid grid-cols-3 gap-3 mb-4">
-            <div className="bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
+            <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
               <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Total Totes</p>
               <p className="text-xl font-bold text-gray-900 dark:text-white">{data.meta.total.toLocaleString()}</p>
             </div>
-            <div className="bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
+            <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
               <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Categories</p>
               <p className="text-xl font-bold text-gray-900 dark:text-white">{data.meta.categoryCount.toLocaleString()}</p>
             </div>
-            <div className="bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
+            <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
               <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Largest Category</p>
               <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{data.meta.largestCategory}</p>
             </div>
@@ -1216,7 +1216,7 @@ function WarehouseTab() {
               <p className="text-xs text-gray-600 dark:text-gray-500 mb-3">{data.raw.length.toLocaleString()} totes</p>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800">
                 <table className="w-full text-sm">
-                  <thead className="bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase">
+                  <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase">
                     <tr>
                       <th className="px-4 py-2 text-left">Barcode</th>
                       <th className="px-4 py-2 text-left">Category</th>
@@ -1224,9 +1224,9 @@ function WarehouseTab() {
                       <th className="px-4 py-2 text-left">Catalogued</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-800">
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                     {data.raw.map((r, i) => (
-                      <tr key={i} className="hover:bg-[#0d0f1a]">
+                      <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-500 font-mono text-xs">{r.barcode}</td>
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{r.category}</td>
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{r.cataloguer}</td>
@@ -1291,7 +1291,7 @@ function DataExplorerTab() {
           <select
             value={endpoint}
             onChange={(e) => setEndpoint(e.target.value)}
-            className="w-full bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-blue-500"
+            className="w-full bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-blue-500"
           >
             {Object.keys(ENDPOINTS).map((k) => <option key={k}>{k}</option>)}
           </select>
@@ -1301,7 +1301,7 @@ function DataExplorerTab() {
           <input
             type="text" value={filter} onChange={(e) => setFilter(e.target.value)}
             placeholder="e.g. Status eq 'Open'"
-            className="w-full bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-blue-500"
+            className="w-full bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-blue-500"
           />
         </div>
       </div>
@@ -1311,7 +1311,7 @@ function DataExplorerTab() {
         <input
           type="text" value={orderby} onChange={(e) => setOrderby(e.target.value)}
           placeholder="e.g. No desc"
-          className="w-full max-w-sm bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-blue-500"
+          className="w-full max-w-sm bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-blue-500"
         />
       </div>
 
@@ -1329,16 +1329,16 @@ function DataExplorerTab() {
           <p className="text-xs text-gray-600 dark:text-gray-500 mb-3">{rows.length.toLocaleString()} rows × {columns.length} columns</p>
           <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 520 }}>
             <table className="w-full text-xs">
-              <thead className="bg-[#0d0f1a] text-gray-600 dark:text-gray-500 uppercase sticky top-0">
+              <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 uppercase sticky top-0">
                 <tr>
                   {columns.map((c) => (
                     <th key={c} className="px-3 py-2 text-left whitespace-nowrap font-semibold tracking-wider">{c}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800">
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                 {rows.map((r, i) => (
-                  <tr key={i} className="hover:bg-[#0d0f1a]">
+                  <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
                     {columns.map((c) => (
                       <td key={c} className="px-3 py-1.5 text-gray-600 dark:text-gray-300 whitespace-nowrap">{String(r[c] ?? "")}</td>
                     ))}
@@ -1359,7 +1359,7 @@ function NumInput({ label, value, onChange }: { label: string; value: number; on
     <div>
       <label className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider block mb-1">{label}</label>
       <input type="number" value={value} onChange={e => onChange(Number(e.target.value))}
-        className="w-20 bg-[#07070f] border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-blue-500 text-right" />
+        className="w-20 bg-white dark:bg-[#07070f] border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-blue-500 text-right" />
     </div>
   )
 }
@@ -1368,7 +1368,7 @@ function ExportBtn({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="mt-3 flex items-center gap-1.5 px-3 py-1.5 bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 hover:border-gray-500 text-gray-600 dark:text-gray-300 hover:text-white text-xs font-medium rounded transition-colors"
+      className="mt-3 flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 hover:border-gray-500 text-gray-600 dark:text-gray-300 hover:text-white text-xs font-medium rounded transition-colors"
     >
       ⬇ Export to Excel
     </button>
@@ -1442,7 +1442,7 @@ function LocationHistoryTab() {
       <p className="text-gray-600 dark:text-gray-500 text-sm mb-5">Look up every location a tote or lot has ever been moved to via BC change logs.</p>
 
       {/* Input */}
-      <div className="bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded-xl p-5 max-w-lg space-y-4">
+      <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded-xl p-5 max-w-lg space-y-4">
 
         {/* Mode toggle */}
         <div className="flex gap-2">
@@ -1466,7 +1466,7 @@ function LocationHistoryTab() {
             onKeyDown={handleKey}
             placeholder={mode === "tote" ? "e.g. T000123" : "e.g. VEC-001234"}
             autoFocus
-            className="flex-1 bg-[#07070f] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+            className="flex-1 bg-white dark:bg-[#07070f] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
           />
           <button
             onClick={lookup}
@@ -1508,15 +1508,15 @@ function LocationHistoryTab() {
           </div>
 
           {result.entries.length === 0 ? (
-            <div className="bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded-xl p-6 text-center">
+            <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded-xl p-6 text-center">
               <p className="text-gray-600 dark:text-gray-500 text-sm">No location changes found in the BC change log.</p>
               <p className="text-gray-600 text-xs mt-1">The item may not have been moved, or the change log wasn't active when it was.</p>
             </div>
           ) : (
-            <div className="bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded-xl overflow-hidden">
+            <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded-xl overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 dark:border-gray-800 bg-[#07070f]">
+                  <tr className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#07070f]">
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-600 dark:text-gray-500 uppercase tracking-wide">Date / Time</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-600 dark:text-gray-500 uppercase tracking-wide">From</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-600 dark:text-gray-500 uppercase tracking-wide">To</th>
@@ -1525,7 +1525,7 @@ function LocationHistoryTab() {
                 </thead>
                 <tbody>
                   {result.entries.map((e, i) => (
-                    <tr key={i} className={`border-b border-gray-200 dark:border-gray-800/50 ${i % 2 === 0 ? "" : "bg-[#0a0c17]"}`}>
+                    <tr key={i} className={`border-b border-gray-200 dark:border-gray-800/50 ${i % 2 === 0 ? "" : "bg-gray-100 dark:bg-[#0a0c17]"}`}>
                       <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap">{formatDateTime(e.changedAt)}</td>
                       <td className="px-4 py-2.5">
                         {e.from
@@ -1591,15 +1591,15 @@ function ShippingTab() {
       {data && (
         <div className={loading ? "opacity-40 pointer-events-none transition-opacity" : "transition-opacity"}>
           <div className="grid grid-cols-3 gap-3 mb-4">
-            <div className="bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
+            <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
               <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Total Shipments</p>
               <p className="text-xl font-bold text-gray-900 dark:text-white">{data.meta.total.toLocaleString()}</p>
             </div>
-            <div className="bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
+            <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
               <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Countries</p>
               <p className="text-xl font-bold text-gray-900 dark:text-white">{data.meta.countries.toLocaleString()}</p>
             </div>
-            <div className="bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
+            <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
               <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Cities</p>
               <p className="text-xl font-bold text-gray-900 dark:text-white">{data.meta.cities.toLocaleString()}</p>
             </div>
@@ -1610,16 +1610,16 @@ function ShippingTab() {
             <>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 520 }}>
                 <table className="w-full text-sm">
-                  <thead className="bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">
+                  <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">
                     <tr>
                       <th className="px-4 py-2 text-left">Country</th>
                       <th className="px-4 py-2 text-right">Shipments</th>
                       <th className="px-4 py-2 text-right">%</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-800">
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                     {data.byCountry.map((r, i) => (
-                      <tr key={i} className="hover:bg-[#0d0f1a]">
+                      <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-300">
                           {COUNTRY_NAMES[r.country] ? `${COUNTRY_NAMES[r.country]} (${r.country})` : r.country}
                         </td>
@@ -1646,7 +1646,7 @@ function ShippingTab() {
             <>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 520 }}>
                 <table className="w-full text-sm">
-                  <thead className="bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">
+                  <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">
                     <tr>
                       <th className="px-4 py-2 text-left">City</th>
                       <th className="px-4 py-2 text-left">Country</th>
@@ -1654,9 +1654,9 @@ function ShippingTab() {
                       <th className="px-4 py-2 text-right">%</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-800">
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                     {data.byCity.map((r, i) => (
-                      <tr key={i} className="hover:bg-[#0d0f1a]">
+                      <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{r.city}</td>
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-500">
                           {COUNTRY_NAMES[r.country] ? `${COUNTRY_NAMES[r.country]} (${r.country})` : r.country}
@@ -1774,10 +1774,10 @@ export default function BCReportsPage() {
   }, [])
 
   return (
-    <div className="flex h-[calc(100vh-48px)] bg-[#07070f] text-gray-900 dark:text-white overflow-hidden">
+    <div className="flex h-[calc(100vh-48px)] bg-white dark:bg-[#07070f] text-gray-900 dark:text-white overflow-hidden">
 
       {/* ── Sidebar ── */}
-      <aside className="w-44 bg-[#0b0d14] border-r border-gray-200 dark:border-gray-800 flex flex-col flex-shrink-0">
+      <aside className="w-44 bg-gray-100 dark:bg-[#0b0d14] border-r border-gray-200 dark:border-gray-800 flex flex-col flex-shrink-0">
         {/* Logo */}
         <div className="px-4 py-5 border-b border-gray-200 dark:border-gray-800">
           <Logo variant="compact" />
@@ -1827,7 +1827,7 @@ export default function BCReportsPage() {
         )}
 
         {isConnected === false && (
-          <div className="bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded-xl p-6 max-w-sm">
+          <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded-xl p-6 max-w-sm">
             <h2 className="font-semibold text-gray-900 dark:text-white mb-1">Connect to Microsoft</h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
               Sign in with your Microsoft 365 account to access Business Central data.
@@ -1874,7 +1874,7 @@ type HeatData = {
 }
 
 function heatColour(count: number, max: number): string {
-  if (count === 0) return "bg-[#1a1d2e] border-gray-200 dark:border-gray-800 text-gray-600"
+  if (count === 0) return "bg-gray-50 dark:bg-[#1a1d2e] border-gray-200 dark:border-gray-800 text-gray-600"
   const ratio = count / Math.max(max, 1)
   if (ratio < 0.25) return "bg-emerald-950 border-emerald-800 text-emerald-700 dark:text-emerald-300"
   if (ratio < 0.5)  return "bg-yellow-950 border-yellow-700 text-yellow-700 dark:text-yellow-300"
@@ -1980,7 +1980,7 @@ function WarehouseHeatmapTab() {
       <div className="flex items-center gap-4 mb-4 text-xs text-gray-600 dark:text-gray-500">
         <span>Occupancy:</span>
         {[
-          { label: "Empty",  cls: "bg-[#1a1d2e] border-gray-300 dark:border-gray-700" },
+          { label: "Empty",  cls: "bg-gray-50 dark:bg-[#1a1d2e] border-gray-300 dark:border-gray-700" },
           { label: "Low",    cls: "bg-emerald-900 border-emerald-700" },
           { label: "Medium", cls: "bg-yellow-900 border-yellow-600" },
           { label: "High",   cls: "bg-orange-900 border-orange-600" },
@@ -2056,8 +2056,8 @@ function WarehouseHeatmapTab() {
           onClick={() => setSelected(selected?.code === "UNLOCATED" ? null : data.unlocated)}
           className={`mb-6 inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-sm transition-all ${
             selected?.code === "UNLOCATED"
-              ? "bg-gray-700 border-gray-500 text-gray-900 dark:text-white ring-2 ring-white/30"
-              : "bg-gray-900 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:text-white"
+              ? "bg-gray-200 dark:bg-gray-700 border-gray-500 text-gray-900 dark:text-white ring-2 ring-white/30"
+              : "bg-gray-100 dark:bg-gray-900 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:text-white"
           }`}
         >
           <span className="w-2 h-2 rounded-full bg-gray-500 inline-block" />
@@ -2067,7 +2067,7 @@ function WarehouseHeatmapTab() {
 
       {/* Drill-down panel */}
       {selected && (
-        <div className="bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded-xl p-5 mb-6">
+        <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded-xl p-5 mb-6">
           <div className="flex items-center justify-between mb-3">
             <div>
               <h3 className="text-gray-900 dark:text-white font-semibold text-base">
@@ -2089,13 +2089,13 @@ function WarehouseHeatmapTab() {
                   <th className="text-left pb-2">Description</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800/50">
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-800/50">
                 {selected.items.map(item => (
                   <tr key={item.id} className="text-gray-600 dark:text-gray-300 hover:bg-white/5">
                     <td className="py-1.5 pr-4 font-mono text-xs text-gray-600 dark:text-gray-400">{item.id}</td>
                     <td className="py-1.5 pr-4 text-xs">{item.category || "—"}</td>
                     <td className="py-1.5 pr-4">
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${item.catalogued ? "bg-emerald-900 text-emerald-700 dark:text-emerald-300" : "bg-gray-800 text-gray-600 dark:text-gray-400"}`}>
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${item.catalogued ? "bg-emerald-900 text-emerald-700 dark:text-emerald-300" : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400"}`}>
                         {item.catalogued ? "Yes" : "No"}
                       </span>
                     </td>
@@ -2119,7 +2119,7 @@ function WarehouseHeatmapTab() {
               .map(loc => (
                 <div key={loc.code} className="flex items-center gap-3">
                   <span className="text-xs text-gray-600 dark:text-gray-500 w-16 text-right shrink-0">{loc.code}</span>
-                  <div className="flex-1 bg-gray-800 rounded-full h-2 overflow-hidden">
+                  <div className="flex-1 bg-white dark:bg-gray-800 rounded-full h-2 overflow-hidden">
                     <div
                       className={`h-2 rounded-full transition-all ${
                         loc.total / max < 0.25 ? "bg-emerald-500" :

@@ -334,7 +334,7 @@ const PLATFORM_COLOURS: Record<string, string> = {
 }
 
 const STATUS_COLOURS: Record<string, string> = {
-  DRAFT:     "bg-gray-700 text-gray-600 dark:text-gray-300",
+  DRAFT:     "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300",
   SCHEDULED: "bg-amber-900/60 text-amber-300",
   POSTED:    "bg-green-900/60 text-green-300",
   FAILED:    "bg-red-900/60 text-red-400",
@@ -534,7 +534,7 @@ export default function SocialPostsTab() {
                 key={f}
                 onClick={() => setSidebarFilter(f)}
                 className={`px-2 py-0.5 rounded text-xs font-medium capitalize transition-colors ${
-                  sidebarFilter === f ? "bg-pink-600 text-gray-900 dark:text-white" : "bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-white"
+                  sidebarFilter === f ? "bg-pink-600 text-gray-900 dark:text-white" : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-white"
                 }`}
               >
                 {f}
@@ -551,7 +551,7 @@ export default function SocialPostsTab() {
               key={i}
               onClick={() => pickSpecialDate(sd)}
               className={`w-full text-left px-3 py-2 rounded-lg transition-colors group ${
-                specialDateTag === sd.tag ? "bg-pink-900/40 border border-pink-700/50" : "hover:bg-gray-800"
+                specialDateTag === sd.tag ? "bg-pink-900/40 border border-pink-700/50" : "hover:bg-gray-100 dark:hover:bg-gray-800"
               }`}
             >
               <div className="flex items-start gap-2">
@@ -631,7 +631,7 @@ export default function SocialPostsTab() {
                     placeholder="e.g. New Matchbox auction live, Transformers anniversary…"
                     value={context}
                     onChange={e => setContext(e.target.value)}
-                    className="flex-1 bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                    className="flex-1 bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-pink-500"
                   />
                   <button
                     onClick={generate}
@@ -652,7 +652,7 @@ export default function SocialPostsTab() {
                   value={copy}
                   onChange={e => setCopy(e.target.value)}
                   placeholder="Write your post here, or click Generate above…"
-                  className="w-full bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-pink-500 resize-none"
+                  className="w-full bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-pink-500 resize-none"
                 />
               </div>
 
@@ -664,7 +664,7 @@ export default function SocialPostsTab() {
                   value={hashtags}
                   onChange={e => setHashtags(e.target.value)}
                   placeholder="#VectisAuctions #ToyCollector #Diecast…"
-                  className="w-full bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-pink-400 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-pink-500 resize-none font-mono"
+                  className="w-full bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-pink-400 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-pink-500 resize-none font-mono"
                 />
               </div>
             </div>
@@ -684,7 +684,7 @@ export default function SocialPostsTab() {
 
                 {/* Upload area / preview */}
                 {imageUrl ? (
-                  <div className="relative rounded-lg overflow-hidden border border-gray-300 dark:border-gray-700 h-36 bg-gray-900">
+                  <div className="relative rounded-lg overflow-hidden border border-gray-300 dark:border-gray-700 h-36 bg-gray-100 dark:bg-gray-900">
                     <img src={imageUrl} alt="preview" className="h-full w-full object-cover" />
                     <button
                       onClick={() => { setImageUrl(""); setImageKey("") }}
@@ -725,13 +725,13 @@ export default function SocialPostsTab() {
                     type="date"
                     value={scheduledAt}
                     onChange={e => setScheduledAt(e.target.value)}
-                    className="flex-1 bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
+                    className="flex-1 bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
                   />
                   <input
                     type="time"
                     value={scheduledTime}
                     onChange={e => setScheduledTime(e.target.value)}
-                    className="w-24 bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
+                    className="w-24 bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
                   />
                 </div>
               </div>
@@ -744,7 +744,7 @@ export default function SocialPostsTab() {
                   placeholder="e.g. SW2024"
                   value={auctionCode}
                   onChange={e => setAuctionCode(e.target.value)}
-                  className="w-full bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  className="w-full bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-pink-500"
                 />
               </div>
 
@@ -774,7 +774,7 @@ export default function SocialPostsTab() {
         <div className="flex-1 p-5">
           <div className="flex items-center gap-4 mb-4">
             <h2 className="text-sm font-bold text-gray-900 dark:text-white">Post Queue</h2>
-            <div className="flex gap-1 bg-gray-900 rounded-lg p-0.5">
+            <div className="flex gap-1 bg-gray-100 dark:bg-gray-900 rounded-lg p-0.5">
               {(["SCHEDULED", "DRAFT", "POSTED"] as const).map(s => {
                 const count = posts.filter(p => p.status === s).length
                 return (
@@ -782,7 +782,7 @@ export default function SocialPostsTab() {
                     key={s}
                     onClick={() => setQueueTab(s)}
                     className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
-                      queueTab === s ? "bg-gray-700 text-gray-900 dark:text-white" : "text-gray-600 dark:text-gray-500 hover:text-white"
+                      queueTab === s ? "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white" : "text-gray-600 dark:text-gray-500 hover:text-white"
                     }`}
                   >
                     {s === "SCHEDULED" ? "📅" : s === "DRAFT" ? "📝" : "✅"} {s.charAt(0) + s.slice(1).toLowerCase()}
@@ -805,13 +805,13 @@ export default function SocialPostsTab() {
                 const sd = SPECIAL_DATES.find(s => s.tag === post.specialDateTag)
                 const isExpanded = expandedId === post.id
                 return (
-                  <div key={post.id} className="bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+                  <div key={post.id} className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
                     {/* Header row */}
                     <div className="flex items-center gap-3 px-4 py-3">
                       {/* Platform badges (may be multiple) */}
                       <div className="flex gap-1 shrink-0">
                         {post.platform.split(",").map(p => (
-                          <span key={p} className={`text-xs font-bold text-gray-900 dark:text-white px-2 py-0.5 rounded ${PLATFORM_COLOURS[p.trim()] ?? "bg-gray-700"}`}>
+                          <span key={p} className={`text-xs font-bold text-gray-900 dark:text-white px-2 py-0.5 rounded ${PLATFORM_COLOURS[p.trim()] ?? "bg-gray-200 dark:bg-gray-700"}`}>
                             {p.trim() === "FACEBOOK" ? "f" : "◎"}
                           </span>
                         ))}
@@ -886,7 +886,7 @@ export default function SocialPostsTab() {
                             onClick={() => {
                               navigator.clipboard.writeText(`${post.copy}\n\n${post.hashtags ?? ""}`.trim())
                             }}
-                            className="text-xs px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-900 dark:text-white transition-colors"
+                            className="text-xs px-3 py-1 rounded bg-gray-200 dark:bg-gray-700 hover:bg-gray-600 text-gray-900 dark:text-white transition-colors"
                           >
                             Copy post
                           </button>

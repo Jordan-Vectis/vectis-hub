@@ -110,7 +110,7 @@ export default function PasteGenerateTab() {
       </div>
 
       {/* ── Content type ────────────────────────────────────────────────── */}
-      <div className="bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl p-5 space-y-4">
+      <div className="bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl p-5 space-y-4">
         <h2 className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">What do you want to generate?</h2>
         <div className="space-y-3">
           {CONTENT_GROUPS.map(group => (
@@ -124,7 +124,7 @@ export default function PasteGenerateTab() {
                     className={`text-left px-3 py-2 rounded-lg border text-xs transition-colors ${
                       contentType === t.value
                         ? "border-pink-500 bg-pink-900/30 text-pink-200"
-                        : "border-gray-300 dark:border-gray-700 bg-gray-800 text-gray-600 dark:text-gray-300 hover:border-gray-500"
+                        : "border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:border-gray-500"
                     }`}
                   >
                     <div className="font-semibold">{t.label}</div>
@@ -138,7 +138,7 @@ export default function PasteGenerateTab() {
       </div>
 
       {/* ── Paste area ──────────────────────────────────────────────────── */}
-      <div className="bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl p-5 space-y-4">
+      <div className="bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl p-5 space-y-4">
         <div>
           <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">Paste lot details</label>
           <textarea
@@ -146,7 +146,7 @@ export default function PasteGenerateTab() {
             onChange={e => setPasted(e.target.value)}
             placeholder="Paste lot descriptions, prices, sale names — anything from the website. Plain text or HTML both work. The AI extracts what it needs."
             rows={14}
-            className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-200 font-mono focus:outline-none focus:border-pink-500 resize-y"
+            className="w-full bg-white dark:bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-200 font-mono focus:outline-none focus:border-pink-500 resize-y"
           />
           <p className="text-[11px] text-gray-600 dark:text-gray-500 mt-1">{pasted.length.toLocaleString()} characters · max 200,000</p>
         </div>
@@ -158,13 +158,13 @@ export default function PasteGenerateTab() {
             value={contextNote}
             onChange={e => setContextNote(e.target.value)}
             placeholder="e.g. 'These are highlights from our March 2026 Star Wars sale' or 'Vintage diecast spring auction preview'"
-            className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-pink-500"
+            className="w-full bg-white dark:bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-pink-500"
           />
         </div>
 
         <div className="flex items-center gap-3 flex-wrap pt-2">
           {/* Length selector */}
-          <div className="flex items-center gap-1 bg-gray-800 border border-gray-600 rounded-lg p-0.5">
+          <div className="flex items-center gap-1 bg-white dark:bg-gray-800 border border-gray-600 rounded-lg p-0.5">
             {(["short", "medium", "long", "max"] as const).map(l => (
               <button key={l} onClick={() => setLength(l)}
                 className={`px-3 py-1.5 text-xs rounded transition-colors capitalize ${
@@ -175,7 +175,7 @@ export default function PasteGenerateTab() {
 
           <div className="flex items-center gap-1.5">
             <select value={modelId} onChange={e => setModelId(e.target.value)}
-              className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-pink-500">
+              className="bg-white dark:bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-pink-500">
               {modelList.map(m => <option key={m} value={m}>{m}{savedDefault === m ? " ★" : ""}</option>)}
             </select>
             {savedDefault === modelId ? (
@@ -198,20 +198,20 @@ export default function PasteGenerateTab() {
 
       {/* ── Output ──────────────────────────────────────────────────────── */}
       {article && (
-        <div className="bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl overflow-hidden">
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl overflow-hidden">
           <div className="px-5 py-3 border-b border-gray-300 dark:border-gray-700 flex items-center justify-between gap-3 flex-wrap">
             <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">{selectedType?.label}</span>
             <div className="flex gap-2">
-              <button onClick={() => copyAs("plain")} className="text-xs bg-gray-700 hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-3 py-1.5 rounded-lg">{copied === "plain" ? "✓ Copied!" : "Copy as Plain Text"}</button>
-              <button onClick={() => copyAs("html")} className="text-xs bg-gray-700 hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-3 py-1.5 rounded-lg">{copied === "html" ? "✓ Copied!" : "Copy as HTML"}</button>
+              <button onClick={() => copyAs("plain")} className="text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-3 py-1.5 rounded-lg">{copied === "plain" ? "✓ Copied!" : "Copy as Plain Text"}</button>
+              <button onClick={() => copyAs("html")} className="text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-3 py-1.5 rounded-lg">{copied === "html" ? "✓ Copied!" : "Copy as HTML"}</button>
               <button onClick={generate} disabled={loading} className="text-xs bg-pink-700 hover:bg-pink-600 disabled:opacity-50 text-gray-900 dark:text-white px-3 py-1.5 rounded-lg">Regenerate</button>
             </div>
           </div>
 
-          <div className="px-5 py-3 border-b border-gray-300 dark:border-gray-700 bg-gray-800/40 flex items-center gap-3 flex-wrap">
+          <div className="px-5 py-3 border-b border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800/40 flex items-center gap-3 flex-wrap">
             <input type="text" value={saveTitle} onChange={e => setSaveTitle(e.target.value)}
               placeholder="Title for saved draft"
-              className="flex-1 min-w-[200px] bg-gray-800 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-pink-500" />
+              className="flex-1 min-w-[200px] bg-white dark:bg-gray-800 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-pink-500" />
             <button onClick={saveDraft} disabled={!saveTitle.trim()}
               className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-gray-900 dark:text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
               💾 Save to Drafts

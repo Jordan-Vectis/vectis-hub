@@ -231,12 +231,12 @@ export function UKMap({
   function onPointerUp() { dragRef.current = null }
 
   return (
-    <div className="relative rounded border border-gray-200 dark:border-gray-800 bg-[#080a14]" style={{ maxWidth: 520 }}>
+    <div className="relative rounded border border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-[#080a14]" style={{ maxWidth: 520 }}>
       {/* Zoom controls */}
       <div className="absolute top-2 right-2 flex flex-col gap-1 z-10">
-        <button onClick={() => zoomBy(0.7)} className="w-7 h-7 bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded text-sm hover:border-gray-500 hover:text-white">+</button>
-        <button onClick={() => zoomBy(1.4)} className="w-7 h-7 bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded text-sm hover:border-gray-500 hover:text-white">−</button>
-        <button onClick={() => setVb({ x: 0, y: 0, w: W, h: H })} className="w-7 h-7 bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-500 rounded text-xs hover:border-gray-500 hover:text-white">⌂</button>
+        <button onClick={() => zoomBy(0.7)} className="w-7 h-7 bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded text-sm hover:border-gray-500 hover:text-white">+</button>
+        <button onClick={() => zoomBy(1.4)} className="w-7 h-7 bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded text-sm hover:border-gray-500 hover:text-white">−</button>
+        <button onClick={() => setVb({ x: 0, y: 0, w: W, h: H })} className="w-7 h-7 bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-500 rounded text-xs hover:border-gray-500 hover:text-white">⌂</button>
       </div>
       {!topo && <p className="text-gray-600 dark:text-gray-500 text-sm py-8 text-center">Loading map…</p>}
       {topo && (

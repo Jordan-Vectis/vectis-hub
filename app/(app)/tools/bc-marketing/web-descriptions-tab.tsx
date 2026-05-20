@@ -177,9 +177,9 @@ export default function WebDescriptionsTab() {
               placeholder="Search by code or name..."
               value={auctionSearch}
               onChange={e => setAuctionSearch(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-pink-500 mb-2"
+              className="w-full bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-pink-500 mb-2"
             />
-            <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-300 dark:border-gray-700 divide-y divide-gray-800">
+            <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-300 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-800">
               {loadingAuctions ? (
                 <div className="px-4 py-6 text-center text-gray-600 dark:text-gray-500 text-xs">Loading auctions…</div>
               ) : filteredAuctions.length === 0 ? (
@@ -191,7 +191,7 @@ export default function WebDescriptionsTab() {
                   className={`w-full text-left px-4 py-2.5 transition-colors text-sm flex justify-between items-center ${
                     selectedId === a.id
                       ? "bg-pink-900/40 text-pink-300"
-                      : "hover:bg-gray-800 text-gray-600 dark:text-gray-300"
+                      : "hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300"
                   }`}
                 >
                   <span>
@@ -213,7 +213,7 @@ export default function WebDescriptionsTab() {
               <select
                 value={modelId}
                 onChange={e => setModelId(e.target.value)}
-                className="w-full bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
+                className="w-full bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
               >
                 {modelList.map(m => (
                   <option key={m} value={m}>{m}</option>
@@ -247,20 +247,20 @@ export default function WebDescriptionsTab() {
 
           {/* Generated output */}
           {generated && (
-            <div className="bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-3">
+            <div className="bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-3">
               <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed">{generated}</p>
 
               <div className="flex gap-2 flex-wrap">
                 <button
                   onClick={copy}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-gray-700 hover:bg-gray-600 text-gray-900 dark:text-white transition-colors"
+                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-gray-200 dark:bg-gray-700 hover:bg-gray-600 text-gray-900 dark:text-white transition-colors"
                 >
                   {copied ? "✓ Copied!" : "Copy"}
                 </button>
                 <button
                   onClick={generate}
                   disabled={generating}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-gray-700 hover:bg-gray-600 text-gray-900 dark:text-white transition-colors disabled:opacity-40"
+                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-gray-200 dark:bg-gray-700 hover:bg-gray-600 text-gray-900 dark:text-white transition-colors disabled:opacity-40"
                 >
                   ⟳ Regenerate
                 </button>
@@ -300,7 +300,7 @@ export default function WebDescriptionsTab() {
           ) : (
             <div className="flex flex-col gap-3">
               {saved.map(d => (
-                <div key={d.id} className="bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-2">
+                <div key={d.id} className="bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-2">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <span className="font-mono font-bold text-pink-400 text-xs mr-2">{d.auctionCode}</span>
@@ -312,7 +312,7 @@ export default function WebDescriptionsTab() {
                           navigator.clipboard.writeText(d.description)
                         }}
                         title="Copy"
-                        className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-600 dark:text-gray-300 transition-colors"
+                        className="text-xs px-2 py-1 rounded bg-gray-200 dark:bg-gray-700 hover:bg-gray-600 text-gray-600 dark:text-gray-300 transition-colors"
                       >
                         Copy
                       </button>
@@ -326,7 +326,7 @@ export default function WebDescriptionsTab() {
                           window.scrollTo({ top: 0, behavior: "smooth" })
                         }}
                         title="Load into generator"
-                        className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-600 dark:text-gray-300 transition-colors"
+                        className="text-xs px-2 py-1 rounded bg-gray-200 dark:bg-gray-700 hover:bg-gray-600 text-gray-600 dark:text-gray-300 transition-colors"
                       >
                         Edit
                       </button>
