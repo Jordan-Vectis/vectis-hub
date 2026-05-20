@@ -82,7 +82,7 @@ app.prepare().then(async () => {
     console.log(`> Vectis Hub ready on http://localhost:${port}`)
     console.log(`> Socket.IO live auction server active`)
 
-    // Background warehouse sync — runs every 20 minutes.
+    // Background warehouse sync — runs every 12 hours.
     // First run is delayed 2 minutes to let Next.js finish initialising.
     const SYNC_INTERVAL_MS = 12 * 60 * 60 * 1000
     const SYNC_INITIAL_DELAY_MS = 2 * 60 * 1000
@@ -102,5 +102,27 @@ app.prepare().then(async () => {
       runWarehouseSync()
       setInterval(runWarehouseSync, SYNC_INTERVAL_MS)
     }, SYNC_INITIAL_DELAY_MS)
+
+    // Daily database backup — runs once at midnight UTC, then every 24 hours.
+    function runDbBackup() {
+      const secret = process.env.CRON_SECRET
+      if (!secret) { console.warn('[cron] CRON_SECRET not set — skipping db backup') ; return }
+      console.log('[cron/db-backup] starting daily backup')
+      fetch(`http://localhost:${port}/api/cron/db-backup`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${secret}` },
+      })
+        .then(r => r.json())
+        .then(d => console.log('[cron/db-backup] complete:', d.filename, `(${d.sizeBytes} bytes)`))
+        .catch(e => console.warn('[cron/db-backup] error:', e.message))
+    }
+    const now = new Date()
+    const nextMidnightUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0))
+    const msUntilMidnight = nextMidnightUTC - now
+    console.log(`[cron/db-backup] next backup in ${Math.round(msUntilMidnight / 1000 / 60)} minutes`)
+    setTimeout(() => {
+      runDbBackup()
+      setInterval(runDbBackup, 24 * 60 * 60 * 1000)
+    }, msUntilMidnight)
   })
 })
