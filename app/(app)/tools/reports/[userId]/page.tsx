@@ -28,7 +28,7 @@ function avg(nums: number[]): number {
 function PctBar({ pct, colour }: { pct: number; colour: string }) {
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 bg-gray-800 rounded-full h-2 overflow-hidden">
+      <div className="flex-1 bg-gray-200 dark:bg-gray-800 rounded-full h-2 overflow-hidden">
         <div className="h-2 rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%`, background: colour }} />
       </div>
       <span className="text-xs text-gray-500 w-8 text-right">{Math.round(pct)}%</span>
@@ -163,17 +163,17 @@ export default async function ReportsUserPage({
       <div>
         <Link
           href="/tools/reports"
-          className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1 mb-4 transition-colors"
+          className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 flex items-center gap-1 mb-4 transition-colors"
         >
           ← Back to All Cataloguers
         </Link>
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold text-white">{userName}</h1>
-            <p className="text-sm text-gray-400 mt-1">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Individual cataloguing performance report
               {since && (
-                <> · <span className="font-medium text-gray-300">{rangeLabel}</span>
+                <> · <span className="font-medium text-gray-600 dark:text-gray-300">{rangeLabel}</span>
                   {" "}({format(since, "d MMM yyyy")} – today)
                 </>
               )}
@@ -189,7 +189,7 @@ export default async function ReportsUserPage({
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border ${
                   activeRange === r.key
                     ? "bg-[#2AB4A6] text-white border-[#2AB4A6]"
-                    : "bg-[#1C1C1E] text-gray-400 border-gray-700 hover:border-gray-500 hover:text-white"
+                    : "bg-white dark:bg-[#1C1C1E] text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-900 dark:hover:text-white"
                 }`}
               >
                 {r.label}
@@ -201,8 +201,8 @@ export default async function ReportsUserPage({
 
       {/* No data in range */}
       {logs.length === 0 && (
-        <div className="bg-[#1C1C1E] border border-gray-800 rounded-xl p-12 text-center">
-          <p className="text-lg font-semibold text-gray-300 mb-1">No lots in this period</p>
+        <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl p-12 text-center">
+          <p className="text-lg font-semibold text-gray-600 dark:text-gray-300 mb-1">No lots in this period</p>
           <p className="text-sm text-gray-500">Try selecting a wider time range.</p>
         </div>
       )}
@@ -220,18 +220,18 @@ export default async function ReportsUserPage({
               { label: "Research Time",  value: totalResearchMs ? fmtDuration(totalResearchMs) : "—",
                                          sub: `${researchLogs.length} session${researchLogs.length !== 1 ? "s" : ""}`,         colour: "text-amber-400" },
             ].map(card => (
-              <div key={card.label} className="bg-[#1C1C1E] border border-gray-800 rounded-xl p-5">
-                <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{card.label}</p>
+              <div key={card.label} className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl p-5">
+                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">{card.label}</p>
                 <p className={`text-3xl font-bold ${card.colour}`}>{card.value}</p>
-                <p className="text-xs text-gray-500 mt-1">{card.sub}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{card.sub}</p>
               </div>
             ))}
           </div>
 
           {/* Method breakdown + speed stats */}
           <div className="grid sm:grid-cols-2 gap-4">
-            <div className="bg-[#1C1C1E] border border-gray-800 rounded-xl p-5">
-              <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">Method Breakdown</h2>
+            <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl p-5">
+              <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">Method Breakdown</h2>
               <div className="space-y-4">
                 <div>
                   <div className="flex justify-between mb-1">
@@ -239,7 +239,7 @@ export default async function ReportsUserPage({
                     <span className="text-sm font-bold text-white">{wizardLogs.length} lots</span>
                   </div>
                   <PctBar pct={logs.length ? (wizardLogs.length / logs.length) * 100 : 0} colour="#3b82f6" />
-                  <p className="text-xs text-gray-500 mt-1">Avg {fmtDuration(wizardLogs.length ? avg(wizardLogs.map(l => l.durationMs)) : 0)}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Avg {fmtDuration(wizardLogs.length ? avg(wizardLogs.map(l => l.durationMs)) : 0)}</p>
                 </div>
                 <div>
                   <div className="flex justify-between mb-1">
@@ -247,21 +247,21 @@ export default async function ReportsUserPage({
                     <span className="text-sm font-bold text-white">{photoOnlyLogs.length} lots</span>
                   </div>
                   <PctBar pct={logs.length ? (photoOnlyLogs.length / logs.length) * 100 : 0} colour="#a855f7" />
-                  <p className="text-xs text-gray-500 mt-1">Avg {fmtDuration(photoOnlyLogs.length ? avg(photoOnlyLogs.map(l => l.durationMs)) : 0)}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Avg {fmtDuration(photoOnlyLogs.length ? avg(photoOnlyLogs.map(l => l.durationMs)) : 0)}</p>
                 </div>
               </div>
             </div>
 
-            <div className="bg-[#1C1C1E] border border-gray-800 rounded-xl p-5">
-              <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">Speed Stats</h2>
+            <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl p-5">
+              <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">Speed Stats</h2>
               <div className="space-y-3">
                 {[
                   { label: "Average", value: fmtDuration(overallAvg), colour: "text-white" },
                   { label: "Fastest", value: fmtDuration(fastest),    colour: "text-green-400" },
                   { label: "Slowest", value: fmtDuration(slowest),    colour: "text-red-400"   },
                 ].map(row => (
-                  <div key={row.label} className="flex justify-between items-center py-1 border-b border-gray-800 last:border-0">
-                    <span className="text-sm text-gray-500">{row.label}</span>
+                  <div key={row.label} className="flex justify-between items-center py-1 border-b border-gray-200 dark:border-gray-800 last:border-0">
+                    <span className="text-sm text-gray-600 dark:text-gray-500">{row.label}</span>
                     <span className={`font-mono font-bold text-sm ${row.colour}`}>{row.value}</span>
                   </div>
                 ))}
@@ -270,8 +270,8 @@ export default async function ReportsUserPage({
           </div>
 
           {/* Key Points */}
-          <div className="bg-[#1C1C1E] border border-gray-800 rounded-xl p-5">
-            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">
+          <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl p-5">
+            <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">
               Step 3 — Key Points &nbsp;
               <span className="font-normal normal-case text-gray-500">
                 (wizard only · {kpLogs.length} of {wizardLogs.length} lots tracked)
@@ -284,7 +284,7 @@ export default async function ReportsUserPage({
                 <div>
                   <p className="text-xs text-gray-500 mb-1">Average time on Key Points</p>
                   <p className="text-2xl font-bold text-white font-mono">{fmtDuration(kpAvg)}</p>
-                  {kpPct > 0 && <p className="text-xs text-gray-500 mt-1">{kpPct}% of total wizard time</p>}
+                  {kpPct > 0 && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{kpPct}% of total wizard time</p>}
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 mb-1">Fastest</p>
@@ -301,11 +301,11 @@ export default async function ReportsUserPage({
           {/* Per-auction */}
           {auctionStats.length > 0 && (
             <div>
-              <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">By Auction</h2>
-              <div className="bg-[#1C1C1E] border border-gray-800 rounded-xl overflow-hidden">
+              <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">By Auction</h2>
+              <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-gray-800 text-xs text-gray-500 uppercase tracking-wider">
+                    <tr className="border-b border-gray-200 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       <th className="text-left px-5 py-3">Auction</th>
                       <th className="text-right px-5 py-3">Lots</th>
                       <th className="text-right px-5 py-3">Avg Time</th>
@@ -315,13 +315,13 @@ export default async function ReportsUserPage({
                   </thead>
                   <tbody className="divide-y divide-gray-800">
                     {auctionStats.map(a => (
-                      <tr key={a.code} className="hover:bg-gray-900 transition-colors">
+                      <tr key={a.code} className="hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors">
                         <td className="px-5 py-3">
                           <span className="font-mono font-semibold text-white mr-2">{a.code}</span>
-                          <span className="text-gray-500">{a.name}</span>
+                          <span className="text-gray-500 dark:text-gray-400">{a.name}</span>
                         </td>
                         <td className="px-5 py-3 text-right font-bold text-white">{a.count}</td>
-                        <td className="px-5 py-3 text-right font-mono text-gray-300">{fmtDuration(a.avgMs)}</td>
+                        <td className="px-5 py-3 text-right font-mono text-gray-600 dark:text-gray-300">{fmtDuration(a.avgMs)}</td>
                         <td className="px-5 py-3 text-right font-mono text-green-400">{fmtDuration(Math.min(...a.durations))}</td>
                         <td className="px-5 py-3 text-right font-mono text-red-400">{fmtDuration(Math.max(...a.durations))}</td>
                       </tr>

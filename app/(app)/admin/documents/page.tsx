@@ -294,9 +294,9 @@ export default function DocumentsPage() {
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
 
       {/* ── Left sidebar ─────────────────────────────────────────────────── */}
-      <aside className="w-64 shrink-0 border-r border-gray-200 flex flex-col bg-white">
-        <div className="px-4 py-4 border-b border-gray-100">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Folders</h2>
+      <aside className="w-64 shrink-0 border-r border-gray-200 dark:border-gray-700 flex flex-col bg-white dark:bg-gray-900">
+        <div className="px-4 py-4 border-b border-gray-100 dark:border-gray-800">
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Folders</h2>
         </div>
 
         <nav className="flex-1 overflow-y-auto py-2">
@@ -306,7 +306,7 @@ export default function DocumentsPage() {
             className={`w-full flex items-center gap-2 px-4 py-2 text-sm text-left transition-colors ${
               selectedFolderId === null
                 ? "bg-slate-100 text-slate-800 font-semibold"
-                : "text-gray-600 hover:bg-gray-50"
+                : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:bg-gray-800"
             }`}
           >
             <span>📂</span>
@@ -325,7 +325,7 @@ export default function DocumentsPage() {
                 className={`flex-1 flex items-center gap-2 py-2 pr-2 text-sm text-left transition-colors truncate ${
                   selectedFolderId === folder.id
                     ? "text-slate-800 font-semibold"
-                    : "text-gray-600 hover:text-gray-900"
+                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white"
                 }`}
               >
                 <span>🗂️</span>
@@ -333,7 +333,7 @@ export default function DocumentsPage() {
               </button>
               <button
                 onClick={() => deleteFolder(folder.id, folder.name)}
-                className="opacity-0 group-hover:opacity-100 mr-3 text-gray-400 hover:text-red-500 text-xs transition-all leading-none"
+                className="opacity-0 group-hover:opacity-100 mr-3 text-gray-400 dark:text-gray-500 hover:text-red-500 text-xs transition-all leading-none"
                 title="Delete folder"
               >
                 ✕
@@ -343,7 +343,7 @@ export default function DocumentsPage() {
         </nav>
 
         {/* New folder input */}
-        <div className="px-3 py-3 border-t border-gray-100">
+        <div className="px-3 py-3 border-t border-gray-100 dark:border-gray-800">
           <div className="flex gap-1">
             <input
               type="text"
@@ -351,7 +351,7 @@ export default function DocumentsPage() {
               onChange={e => setNewFolderName(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") createFolder() }}
               placeholder="New folder…"
-              className="flex-1 min-w-0 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-slate-400"
+              className="flex-1 min-w-0 text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-slate-400"
             />
             <button
               onClick={createFolder}
@@ -366,15 +366,15 @@ export default function DocumentsPage() {
 
       {/* ── Main area ────────────────────────────────────────────────────── */}
       <main
-        className={`flex-1 flex flex-col overflow-hidden transition-colors ${isDragOver ? "bg-blue-50" : "bg-gray-50"}`}
+        className={`flex-1 flex flex-col overflow-hidden transition-colors ${isDragOver ? "bg-blue-50" : "bg-gray-50 dark:bg-gray-800"}`}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
       >
         {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between gap-4 shrink-0">
+        <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between gap-4 shrink-0">
           {/* Breadcrumb */}
-          <nav className="flex items-center gap-1 text-sm text-gray-500 min-w-0">
+          <nav className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 min-w-0">
             {breadcrumb.map((crumb, i) => (
               <span key={crumb.id ?? "root"} className="flex items-center gap-1 min-w-0">
                 {i > 0 && <span className="text-gray-300">/</span>}
@@ -386,7 +386,7 @@ export default function DocumentsPage() {
                     {crumb.name}
                   </button>
                 ) : (
-                  <span className="font-semibold text-gray-800 truncate">{crumb.name}</span>
+                  <span className="font-semibold text-gray-800 dark:text-gray-200 truncate">{crumb.name}</span>
                 )}
               </span>
             ))}
@@ -434,8 +434,8 @@ export default function DocumentsPage() {
           {uploading.length === 0 && files.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-center">
               <p className="text-5xl mb-4">📂</p>
-              <p className="text-lg font-semibold text-gray-500 mb-1">No files here yet</p>
-              <p className="text-sm text-gray-400">
+              <p className="text-lg font-semibold text-gray-500 dark:text-gray-400 mb-1">No files here yet</p>
+              <p className="text-sm text-gray-400 dark:text-gray-500">
                 Click &ldquo;Upload Files&rdquo; or drag and drop files onto this area.
               </p>
             </div>
@@ -446,13 +446,13 @@ export default function DocumentsPage() {
               {uploading.map(u => (
                 <div
                   key={u.tmpId}
-                  className={`bg-white border rounded-xl p-4 flex flex-col gap-2 ${
-                    u.progress === "error" ? "border-red-200 bg-red-50" : "border-gray-200 animate-pulse"
+                  className={`bg-white dark:bg-gray-900 border rounded-xl p-4 flex flex-col gap-2 ${
+                    u.progress === "error" ? "border-red-200 bg-red-50" : "border-gray-200 dark:border-gray-700 animate-pulse"
                   }`}
                 >
                   <div className={`h-10 w-10 rounded-lg ${u.progress === "error" ? "bg-red-200" : "bg-gray-200"}`} />
                   <div className="h-3 bg-gray-200 rounded w-3/4" />
-                  <div className="h-3 bg-gray-100 rounded w-1/2" />
+                  <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-1/2" />
                   <p className={`text-xs mt-1 ${u.progress === "error" ? "text-red-600" : "text-slate-500"}`}>
                     {u.progress === "uploading" && "Uploading…"}
                     {u.progress === "saving" && "Saving…"}
@@ -465,14 +465,14 @@ export default function DocumentsPage() {
               {files.map(file => (
                 <div
                   key={file.id}
-                  className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col gap-2 hover:border-slate-300 hover:shadow-sm transition-all group cursor-pointer"
+                  className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-2 hover:border-slate-300 hover:shadow-sm transition-all group cursor-pointer"
                   onClick={() => openFile(file.id)}
                 >
                   <div className="text-4xl leading-none">{fileIcon(file.mimeType)}</div>
-                  <p className="text-sm font-medium text-gray-800 truncate" title={file.name}>
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate" title={file.name}>
                     {file.name}
                   </p>
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-gray-400 dark:text-gray-500">
                     {formatBytes(file.size)} · {formatDate(file.createdAt)}
                   </p>
                   <button

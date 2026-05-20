@@ -630,19 +630,19 @@ function renderInline(text: string): React.ReactNode {
   const parts = text.split(/(\*\*[^*]+\*\*)/)
   return parts.map((part, i) =>
     part.startsWith("**") && part.endsWith("**")
-      ? <strong key={i} className="font-semibold text-gray-900">{part.slice(2, -2)}</strong>
+      ? <strong key={i} className="font-semibold text-gray-900 dark:text-white">{part.slice(2, -2)}</strong>
       : part
   )
 }
 
 function renderBody(body: string) {
   return body.split("\n").map((line, i) => {
-    if (line.startsWith("# "))   return <h2 key={i} className="text-base font-bold text-gray-900 mt-4 mb-1">{line.slice(2)}</h2>
-    if (line.startsWith("## "))  return <h3 key={i} className="text-sm font-semibold text-gray-800 mt-3 mb-1">{line.slice(3)}</h3>
-    if (line.startsWith("### ")) return <h4 key={i} className="text-sm font-medium text-gray-700 mt-2 mb-0.5">{line.slice(4)}</h4>
-    if (line.startsWith("- "))   return <p key={i} className="text-sm text-gray-700 leading-relaxed pl-3 before:content-['–'] before:mr-2 before:text-gray-400">{renderInline(line.slice(2))}</p>
+    if (line.startsWith("# "))   return <h2 key={i} className="text-base font-bold text-gray-900 dark:text-white mt-4 mb-1">{line.slice(2)}</h2>
+    if (line.startsWith("## "))  return <h3 key={i} className="text-sm font-semibold text-gray-800 dark:text-gray-200 mt-3 mb-1">{line.slice(3)}</h3>
+    if (line.startsWith("### ")) return <h4 key={i} className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-2 mb-0.5">{line.slice(4)}</h4>
+    if (line.startsWith("- "))   return <p key={i} className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed pl-3 before:content-['–'] before:mr-2 before:text-gray-400 dark:text-gray-500">{renderInline(line.slice(2))}</p>
     if (line.trim() === "")      return <div key={i} className="h-2" />
-    return <p key={i} className="text-sm text-gray-700 leading-relaxed">{renderInline(line)}</p>
+    return <p key={i} className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{renderInline(line)}</p>
   })
 }
 
@@ -677,12 +677,12 @@ export default function MemoryPage() {
     <div className="p-8 max-w-3xl">
       <div className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Claude Memory</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Claude Memory</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             What Claude remembers about you, this project, and how to work with you.
           </p>
         </div>
-        <label className="shrink-0 cursor-pointer text-sm text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-300 px-4 py-2 rounded-lg transition-colors">
+        <label className="shrink-0 cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:border-gray-600 px-4 py-2 rounded-lg transition-colors">
           Upload .md
           <input type="file" accept=".md" multiple onChange={handleUpload} className="hidden" />
         </label>
@@ -692,30 +692,30 @@ export default function MemoryPage() {
         {entries.map(entry => {
           const { meta, body } = parseFrontmatter(entry.content)
           const isOpen    = open === entry.filename
-          const typeClass = TYPE_COLOURS[meta.type ?? ""] ?? "bg-gray-100 text-gray-600"
+          const typeClass = TYPE_COLOURS[meta.type ?? ""] ?? "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
 
           return (
-            <div key={entry.filename} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div key={entry.filename} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
               <button
                 onClick={() => setOpen(isOpen ? null : entry.filename)}
-                className="w-full flex items-start gap-4 px-5 py-4 text-left hover:bg-gray-50 transition-colors"
+                className="w-full flex items-start gap-4 px-5 py-4 text-left hover:bg-gray-50 dark:bg-gray-800 transition-colors"
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-gray-900 text-sm">{meta.name ?? entry.filename}</span>
+                    <span className="font-medium text-gray-900 dark:text-white text-sm">{meta.name ?? entry.filename}</span>
                     {meta.type && (
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${typeClass}`}>
                         {meta.type}
                       </span>
                     )}
-                    <span className="text-xs text-gray-400 font-mono">{entry.filename}</span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500 font-mono">{entry.filename}</span>
                   </div>
                   {meta.description && (
-                    <p className="text-xs text-gray-500 mt-0.5">{meta.description}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{meta.description}</p>
                   )}
                 </div>
                 <svg
-                  className={`w-4 h-4 text-gray-400 mt-0.5 shrink-0 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                  className={`w-4 h-4 text-gray-400 dark:text-gray-500 mt-0.5 shrink-0 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
                   fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -723,7 +723,7 @@ export default function MemoryPage() {
               </button>
 
               {isOpen && (
-                <div className="border-t border-gray-100 px-5 py-4 space-y-1">
+                <div className="border-t border-gray-100 dark:border-gray-800 px-5 py-4 space-y-1">
                   {renderBody(body)}
                 </div>
               )}

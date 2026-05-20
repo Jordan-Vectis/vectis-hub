@@ -183,20 +183,20 @@ export default async function ReportsOverviewPage({
     <div className="min-h-full flex flex-col">
 
       {/* ── Page header ── */}
-      <div className="border-b border-gray-800 bg-[#1C1C1E] px-6 py-5">
+      <div className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E] px-6 py-5">
         <div className="max-w-7xl mx-auto">
-          <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
-            <Link href="/hub" className="hover:text-gray-300 transition-colors">Hub</Link>
+          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-3">
+            <Link href="/hub" className="hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Hub</Link>
             <span>/</span>
-            <span className="text-gray-300">Reports</span>
+            <span className="text-gray-700 dark:text-gray-300">Reports</span>
           </div>
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h1 className="text-xl font-bold text-white">Reports</h1>
-              <p className="text-sm text-gray-400 mt-0.5">Cataloguing performance — speed, output and team comparisons.</p>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white">Reports</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Cataloguing performance — speed, output and team comparisons.</p>
             </div>
             {/* Range pills */}
-            <div className="flex items-center gap-1 bg-[#141416] border border-gray-800 rounded-lg p-1">
+            <div className="flex items-center gap-1 bg-gray-100 dark:bg-[#141416] border border-gray-200 dark:border-gray-800 rounded-lg p-1">
               {RANGES.map(r => (
                 <Link
                   key={r.key}
@@ -204,7 +204,7 @@ export default async function ReportsOverviewPage({
                   className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap ${
                     activeRange === r.key
                       ? "bg-[#2AB4A6] text-white"
-                      : "text-gray-400 hover:text-white"
+                      : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
                   }`}
                 >
                   {r.label}
@@ -221,8 +221,8 @@ export default async function ReportsOverviewPage({
 
           {/* No data */}
           {logs.length === 0 && (
-            <div className="bg-[#1C1C1E] border border-gray-800 rounded-xl p-16 text-center">
-              <p className="text-lg font-semibold text-gray-300 mb-1">No data for this period</p>
+            <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl p-16 text-center">
+              <p className="text-lg font-semibold text-gray-600 dark:text-gray-300 mb-1">No data for this period</p>
               <p className="text-sm text-gray-500">Try selecting a wider time range above.</p>
             </div>
           )}
@@ -259,11 +259,11 @@ export default async function ReportsOverviewPage({
                 ].map(card => (
                   <div
                     key={card.label}
-                    className={`bg-[#1C1C1E] border border-gray-800 border-l-2 ${card.accent} rounded-xl px-5 py-4`}
+                    className={`bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 border-l-2 ${card.accent} rounded-xl px-5 py-4`}
                   >
-                    <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">{card.label}</p>
-                    <p className="text-3xl font-bold text-white tabular-nums">{card.value}</p>
-                    <p className="text-xs text-gray-500 mt-1.5">{card.sub}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{card.label}</p>
+                    <p className="text-3xl font-bold text-gray-900 dark:text-white tabular-nums">{card.value}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">{card.sub}</p>
                   </div>
                 ))}
               </div>
@@ -274,11 +274,11 @@ export default async function ReportsOverviewPage({
               {/* ── Per-cataloguer table ── */}
               {userStats.length > 0 && (
                 <div>
-                  <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Per Cataloguer</h2>
-                  <div className="bg-[#1C1C1E] border border-gray-800 rounded-xl overflow-x-auto">
+                  <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Per Cataloguer</h2>
+                  <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl overflow-x-auto">
                     <table className="w-full text-sm whitespace-nowrap">
                       <thead>
-                        <tr className="border-b border-gray-800 text-xs text-gray-500 uppercase tracking-wider">
+                        <tr className="border-b border-gray-200 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                           <th className="text-left px-5 py-3">Cataloguer</th>
                           <th className="text-right px-5 py-3">Total</th>
                           <th className="text-right px-5 py-3">Daily Avg</th>
@@ -290,31 +290,31 @@ export default async function ReportsOverviewPage({
                           <th className="text-right px-5 py-3">Research</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-800/60">
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-800/60">
                         {userStats.map((u, i) => (
-                          <tr key={u.userId} className="hover:bg-white/[0.03] transition-colors group">
+                          <tr key={u.userId} className="hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors group">
                             <td className="px-5 py-3.5">
                               <div className="flex items-center gap-2.5">
-                                <span className="text-xs text-gray-600 w-4 text-right tabular-nums">{i + 1}</span>
+                                <span className="text-xs text-gray-400 dark:text-gray-600 w-4 text-right tabular-nums">{i + 1}</span>
                                 <Link
                                   href={`/tools/reports/${encodeURIComponent(u.userId)}`}
-                                  className="font-semibold text-white group-hover:text-[#2AB4A6] transition-colors"
+                                  className="font-semibold text-gray-900 dark:text-white group-hover:text-[#2AB4A6] transition-colors"
                                 >
                                   {u.name}
                                 </Link>
                               </div>
                             </td>
-                            <td className="px-5 py-3.5 text-right font-bold text-white tabular-nums">{u.totalLots}</td>
-                            <td className="px-5 py-3.5 text-right text-gray-300 tabular-nums">{u.dailyAvg}</td>
-                            <td className="px-5 py-3.5 text-right text-gray-300 tabular-nums">{u.lotsToday}</td>
-                            <td className="px-5 py-3.5 text-right text-gray-300 tabular-nums">{u.lotsThisWeek}</td>
-                            <td className="px-5 py-3.5 text-right font-mono text-gray-300">{fmtDuration(u.avgMs)}</td>
+                            <td className="px-5 py-3.5 text-right font-bold text-gray-900 dark:text-white tabular-nums">{u.totalLots}</td>
+                            <td className="px-5 py-3.5 text-right text-gray-600 dark:text-gray-300 tabular-nums">{u.dailyAvg}</td>
+                            <td className="px-5 py-3.5 text-right text-gray-600 dark:text-gray-300 tabular-nums">{u.lotsToday}</td>
+                            <td className="px-5 py-3.5 text-right text-gray-600 dark:text-gray-300 tabular-nums">{u.lotsThisWeek}</td>
+                            <td className="px-5 py-3.5 text-right font-mono text-gray-600 dark:text-gray-300">{fmtDuration(u.avgMs)}</td>
                             <td className="px-5 py-3.5 text-right font-mono text-green-400">{fmtDuration(u.fastestMs)}</td>
                             <td className="px-5 py-3.5 text-right font-mono text-red-400">{fmtDuration(u.slowestMs)}</td>
                             <td className="px-5 py-3.5 text-right font-mono text-amber-400">
-                              {u.researchMs ? fmtDuration(u.researchMs) : <span className="text-gray-700">—</span>}
+                              {u.researchMs ? fmtDuration(u.researchMs) : <span className="text-gray-400 dark:text-gray-700">—</span>}
                               {u.researchSessions > 0 && (
-                                <span className="text-gray-600 text-xs ml-1">({u.researchSessions})</span>
+                                <span className="text-gray-500 dark:text-gray-600 text-xs ml-1">({u.researchSessions})</span>
                               )}
                             </td>
                           </tr>

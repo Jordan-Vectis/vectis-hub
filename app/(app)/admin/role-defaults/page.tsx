@@ -36,8 +36,8 @@ export default async function RoleDefaultsPage() {
   return (
     <div className="p-8 max-w-3xl">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Roles &amp; Defaults</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Roles &amp; Defaults</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           Add custom roles and set their default app access. Defaults are applied to new users automatically and can be pushed to existing users.
           ADMIN is a system role with full access and cannot be edited here.
         </p>
