@@ -707,38 +707,38 @@ export default function AuctionMonitorPage() {
   return (
     <div className="p-6 max-w-6xl" style={{ fontFamily: "Arial, sans-serif" }}>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Auction Monitor</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Auction Monitor</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           Watches a Vectis auction WebSocket feed for stalls, dropped connections and silent gaps.
         </p>
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 mb-6 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 w-fit">
         <button
           onClick={() => setActiveTab("live")}
-          className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === "live" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+          className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === "live" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}
         >
           🔴 Live Auction
         </button>
         <button
           onClick={() => setActiveTab("timed")}
-          className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === "timed" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+          className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === "timed" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}
         >
           ⏱ Timed Auction
         </button>
       </div>
 
       {/* Phone notifications — shared between both tabs */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 mb-6">
         <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
           <div>
-            <h3 className="text-sm font-semibold text-gray-700">📱 Phone notifications</h3>
-            <p className="text-[11px] text-gray-500 mt-0.5">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">📱 Phone notifications</h3>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
               Shared across both tabs. Install the free <a href="https://ntfy.sh" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">ntfy</a> app, subscribe to your topic, and alerts arrive instantly.
             </p>
           </div>
-          <label className="text-xs text-gray-600 flex items-center gap-1.5 cursor-pointer select-none">
+          <label className="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-1.5 cursor-pointer select-none">
             <input
               type="checkbox" checked={pushEnabled}
               onChange={e => { setPushEnabled(e.target.checked); localStorage.setItem("auction_monitor_push_enabled", e.target.checked ? "1" : "0") }}
@@ -749,20 +749,20 @@ export default function AuctionMonitorPage() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex-1 min-w-[200px]">
-            <label className="block text-[11px] text-gray-500 mb-1">ntfy topic</label>
+            <label className="block text-[11px] text-gray-500 dark:text-gray-400 mb-1">ntfy topic</label>
             <input
               type="text" value={ntfyTopic}
               onChange={e => { setNtfyTopic(e.target.value); localStorage.setItem("auction_monitor_ntfy_topic", e.target.value) }}
               placeholder="e.g. vectis-auction-alerts_JJ"
-              className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm font-mono bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
           <button onClick={sendTestNotification} disabled={!ntfyTopic.trim()} className="self-end bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-xs font-semibold px-3 py-1.5 rounded-lg">Send test</button>
-          {pushStatus && <span className="self-end text-xs text-gray-600">{pushStatus}</span>}
+          {pushStatus && <span className="self-end text-xs text-gray-600 dark:text-gray-400">{pushStatus}</span>}
         </div>
         <div className="mt-2 flex items-center justify-between">
-          <span className="text-[11px] text-gray-400">ntfy.sh free tier: 250 messages/day</span>
-          <span className={`text-xs font-mono font-semibold px-2 py-0.5 rounded border ${ntfySentCount >= 200 ? "bg-red-50 border-red-200 text-red-700" : ntfySentCount >= 150 ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-gray-100 border-gray-200 text-gray-600"}`}
+          <span className="text-[11px] text-gray-400 dark:text-gray-500">ntfy.sh free tier: 250 messages/day</span>
+          <span className={`text-xs font-mono font-semibold px-2 py-0.5 rounded border ${ntfySentCount >= 200 ? "bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-700 text-red-700 dark:text-red-400" : ntfySentCount >= 150 ? "bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-400" : "bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400"}`}
             title="Resets on page reload — ntfy.sh daily limit is 250 per IP">
             {ntfySentCount} / 250 sent this session
           </span>
@@ -773,18 +773,18 @@ export default function AuctionMonitorPage() {
       {activeTab === "live" && (
         <>
           {/* Controls */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6 flex items-end gap-3 flex-wrap">
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 mb-6 flex items-end gap-3 flex-wrap">
             <div className="flex-1 min-w-[200px]">
-              <label className="block text-xs font-medium text-gray-600 mb-1">Auction ID</label>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Auction ID</label>
               <input
                 type="text" value={auctionId}
                 onChange={e => setAuctionId(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !running) start() }}
                 placeholder="e.g. 1386"
                 disabled={running}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm font-mono bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-gray-700"
               />
-              <p className="text-[11px] text-gray-500 mt-1">
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
                 From the URL: <span className="font-mono">…com_bidstream&amp;id=</span><strong>1386</strong>
               </p>
             </div>
@@ -796,10 +796,10 @@ export default function AuctionMonitorPage() {
           </div>
 
           {/* Alert rules */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
-            <button onClick={() => setShowRuleSettings(s => !s)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 mb-6">
+            <button onClick={() => setShowRuleSettings(s => !s)} className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium">
               {showRuleSettings ? "▼ Hide alert rules" : "▶ Configure alert rules"}
-              <span className="ml-2 text-gray-500 font-normal">({Object.values(ruleEnabled).filter(Boolean).length} of {ALERT_RULES.length} enabled)</span>
+              <span className="ml-2 text-gray-500 dark:text-gray-400 font-normal">({Object.values(ruleEnabled).filter(Boolean).length} of {ALERT_RULES.length} enabled)</span>
             </button>
             {showRuleSettings && (
               <ul className="mt-3 space-y-2">
@@ -810,22 +810,22 @@ export default function AuctionMonitorPage() {
                     <li key={rule.id} className={`flex items-start gap-3 p-2.5 rounded-lg border ${enabled ? "border-emerald-200 bg-emerald-50/40" : "border-gray-200 bg-gray-50/40"}`}>
                       <input type="checkbox" checked={enabled} onChange={e => setRuleEnabledPersisted(rule.id, e.target.checked)} className="mt-1 w-4 h-4 accent-emerald-600 flex-shrink-0" />
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-800">{rule.label}</p>
-                        <p className="text-[11px] text-gray-500 mt-0.5">{rule.description}</p>
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{rule.label}</p>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">{rule.description}</p>
                       </div>
                       {rule.threshold && (
                         <div className="flex items-center gap-2 self-center">
                           <RuleCountdown msRemaining={liveRuleCountdownMs(rule.id)} />
-                          <span className="text-[11px] text-gray-500">{rule.threshold.label}</span>
+                          <span className="text-[11px] text-gray-500 dark:text-gray-400">{rule.threshold.label}</span>
                           <input
                             type="number" value={threshold ?? rule.threshold.default}
                             min={rule.threshold.min} max={rule.threshold.max}
                             onChange={e => setRuleThresholdPersisted(rule.id, Number(e.target.value))}
                             onBlur={e => setRuleThresholdPersisted(rule.id, Math.max(rule.threshold!.min, Math.min(rule.threshold!.max, Number(e.target.value) || rule.threshold!.default)))}
                             disabled={!enabled}
-                            className="w-20 text-xs border border-gray-300 rounded px-2 py-1 text-right disabled:bg-gray-100 disabled:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            className="w-20 text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-right bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-200 disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                           />
-                          {rule.threshold.suffix && <span className="text-[11px] text-gray-500">{rule.threshold.suffix}</span>}
+                          {rule.threshold.suffix && <span className="text-[11px] text-gray-500 dark:text-gray-400">{rule.threshold.suffix}</span>}
                         </div>
                       )}
                     </li>
@@ -836,10 +836,10 @@ export default function AuctionMonitorPage() {
           </div>
 
           {/* Status header */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5 mb-6">
             <div className="flex items-center gap-3 mb-4">
               <span className={`inline-block w-3 h-3 rounded-full ${bandStyle[healthBand]} ${running && healthBand !== "red" ? "animate-pulse" : ""}`} />
-              <h2 className="text-lg font-bold text-gray-900">{healthLabel}</h2>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">{healthLabel}</h2>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-sm">
               <Stat label="Connection"        value={connState} />
@@ -860,7 +860,7 @@ export default function AuctionMonitorPage() {
             )}
 
             {state.currentLotId !== null && (
-              <div className="mt-4 pt-4 border-t border-gray-100">
+              <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
                   <Stat label="Current lot"     value={state.currentLotNumber ? `Lot ${state.currentLotNumber}` : `#${state.currentLotId}`} />
                   <Stat label="Current bid"     value={state.currentBid  != null ? `£${state.currentBid.toLocaleString()}`  : "—"} />
@@ -887,23 +887,23 @@ export default function AuctionMonitorPage() {
 
           {/* Recent lots */}
           {state.recentLots.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
-              <div className="px-4 py-3 border-b border-gray-100">
-                <h3 className="text-sm font-semibold text-gray-700">Recent lots ({state.recentLots.length})</h3>
-                <p className="text-[11px] text-gray-500 mt-0.5">Newest first · {state.soldCount} sold · {state.passedCount} passed · £{state.sessionHammer.toLocaleString()} total hammer</p>
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
+              <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Recent lots ({state.recentLots.length})</h3>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Newest first · {state.soldCount} sold · {state.passedCount} passed · £{state.sessionHammer.toLocaleString()} total hammer</p>
               </div>
-              <ul className="divide-y divide-gray-100">
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
                 {state.recentLots.map((lot, i) => {
                   const isSold   = /sold/i.test(lot.outcome ?? "")
                   const isPassed = /pass|unsold|withdrawn/i.test(lot.outcome ?? "")
                   const badgeClass = isSold ? "bg-emerald-100 text-emerald-800 border-emerald-300" : isPassed ? "bg-gray-100 text-gray-700 border-gray-300" : "bg-blue-100 text-blue-700 border-blue-300"
                   return (
                     <li key={i} className="px-4 py-2.5 flex items-center gap-3 text-sm">
-                      <span className="font-mono font-semibold text-gray-700 min-w-[60px]">{lot.lotNumber ? `Lot ${lot.lotNumber}` : `#${lot.lotId}`}</span>
+                      <span className="font-mono font-semibold text-gray-700 dark:text-gray-300 min-w-[60px]">{lot.lotNumber ? `Lot ${lot.lotNumber}` : `#${lot.lotId}`}</span>
                       <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded uppercase tracking-wide ${badgeClass}`}>{lot.outcome ?? "?"}</span>
                       <span className="flex-1" />
-                      <span className="text-gray-600 font-mono">{lot.hammerPrice != null ? `£${lot.hammerPrice.toLocaleString()}` : "—"}</span>
-                      <span className="text-[11px] text-gray-400 min-w-[60px] text-right">{lot.at.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</span>
+                      <span className="text-gray-600 dark:text-gray-400 font-mono">{lot.hammerPrice != null ? `£${lot.hammerPrice.toLocaleString()}` : "—"}</span>
+                      <span className="text-[11px] text-gray-400 dark:text-gray-500 min-w-[60px] text-right">{lot.at.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</span>
                     </li>
                   )
                 })}
@@ -912,32 +912,32 @@ export default function AuctionMonitorPage() {
           )}
 
           {/* Message log */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-700">Message log ({log.length})</h3>
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Message log ({log.length})</h3>
               <div className="flex items-center gap-3">
-                <label className="text-xs text-gray-500 flex items-center gap-1.5 cursor-pointer">
+                <label className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5 cursor-pointer">
                   <input type="checkbox" checked={showRaw} onChange={e => setShowRaw(e.target.checked)} />
                   Show raw payload
                 </label>
                 <CopyAllButton log={log} />
-                <button onClick={() => setLog([])} className="text-xs text-gray-500 hover:text-red-600">Clear</button>
+                <button onClick={() => setLog([])} className="text-xs text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400">Clear</button>
               </div>
             </div>
             {log.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-gray-400">
+              <p className="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
                 {running ? "Waiting for messages from the auction…" : "Click Start to begin monitoring."}
               </p>
             ) : (
-              <ul className="divide-y divide-gray-100 max-h-[60vh] overflow-y-auto">
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800 max-h-[60vh] overflow-y-auto">
                 {log.map((m, i) => (
-                  <li key={i} className="px-4 py-2 text-xs hover:bg-gray-50">
+                  <li key={i} className="px-4 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-800">
                     <div className="flex items-baseline gap-3 mb-0.5">
-                      <span className="text-gray-400 font-mono shrink-0">{m.at.toLocaleTimeString("en-GB")}</span>
-                      <span className="text-gray-700 font-medium">{m.parsed ? describeMessage(m.parsed) : "(non-JSON)"}</span>
+                      <span className="text-gray-400 dark:text-gray-500 font-mono shrink-0">{m.at.toLocaleTimeString("en-GB")}</span>
+                      <span className="text-gray-700 dark:text-gray-300 font-medium">{m.parsed ? describeMessage(m.parsed) : "(non-JSON)"}</span>
                     </div>
                     {showRaw && (
-                      <pre className="bg-gray-50 border border-gray-100 rounded px-2 py-1 mt-1 font-mono text-[11px] text-gray-600 overflow-x-auto whitespace-pre-wrap break-all">
+                      <pre className="bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded px-2 py-1 mt-1 font-mono text-[11px] text-gray-600 dark:text-gray-400 overflow-x-auto whitespace-pre-wrap break-all">
                         {m.parsed ? JSON.stringify(m.parsed, null, 2) : m.raw}
                       </pre>
                     )}
@@ -953,9 +953,9 @@ export default function AuctionMonitorPage() {
       {activeTab === "timed" && (
         <>
           {/* Controls */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 mb-6">
             <div className="mb-4">
-              <label className="block text-xs font-medium text-gray-600 mb-1">Auction URL</label>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Auction URL</label>
               <input
                 type="text"
                 value={timedUrl}
@@ -968,25 +968,25 @@ export default function AuctionMonitorPage() {
                 onKeyDown={e => { if (e.key === "Enter" && !timedRunning && timedId.trim()) timedStart() }}
                 placeholder="https://www.vectis.co.uk/bidding/F067-...-timed-1399"
                 disabled={timedRunning}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-gray-700"
               />
-              <p className="text-[11px] text-gray-500 mt-1">
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
                 Paste the full bidding page URL — the ID is extracted automatically from the end of the slug.
               </p>
             </div>
             <div className="flex items-end gap-3 flex-wrap">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Extracted ID</label>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Extracted ID</label>
                 <input
                   type="text" value={timedId}
                   onChange={e => setTimedId(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter" && !timedRunning && timedId.trim()) timedStart() }}
                   placeholder="e.g. 1399"
                   disabled={timedRunning}
-                  className="w-32 rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                  className="w-32 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm font-mono bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-gray-700"
                 />
-                <p className="text-[11px] text-gray-400 mt-1 font-mono">
-                  wss://…/wss/<span className="font-bold text-gray-600">{timedId || "?"}</span>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 font-mono">
+                  wss://…/wss/<span className="font-bold text-gray-600 dark:text-gray-300">{timedId || "?"}</span>
                 </p>
               </div>
               {!timedRunning ? (
@@ -998,10 +998,10 @@ export default function AuctionMonitorPage() {
           </div>
 
           {/* Status header */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5 mb-6">
             <div className="flex items-center gap-3 mb-4">
               <span className={`inline-block w-3 h-3 rounded-full ${bandStyle[timedHealthBand]} ${timedRunning && timedHealthBand !== "red" ? "animate-pulse" : ""}`} />
-              <h2 className="text-lg font-bold text-gray-900">{timedHealthLabel}</h2>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">{timedHealthLabel}</h2>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-sm">
               <Stat label="Connection"        value={timedConnState} />
@@ -1013,14 +1013,14 @@ export default function AuctionMonitorPage() {
 
           {/* Discovery panel — appears once messages start coming in */}
           {timedCmdsSeen.length > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
-              <h3 className="text-sm font-semibold text-blue-800 mb-1">🔍 Event types seen on this connection</h3>
-              <p className="text-[11px] text-blue-600 mb-3">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl p-4 mb-6">
+              <h3 className="text-sm font-semibold text-blue-800 dark:text-blue-200 mb-1">🔍 Event types seen on this connection</h3>
+              <p className="text-[11px] text-blue-600 dark:text-blue-400 mb-3">
                 These are all the WebSocket command types received so far. Share these with the dev team to build proper timed-auction parsing.
               </p>
               <div className="flex flex-wrap gap-2">
                 {timedCmdsSeen.map(cmd => (
-                  <span key={cmd} className="bg-white border border-blue-300 text-blue-900 text-xs font-mono px-2.5 py-1 rounded">
+                  <span key={cmd} className="bg-white dark:bg-gray-800 border border-blue-300 dark:border-blue-600 text-blue-900 dark:text-blue-200 text-xs font-mono px-2.5 py-1 rounded">
                     {cmd}
                   </span>
                 ))}
@@ -1029,10 +1029,10 @@ export default function AuctionMonitorPage() {
           )}
 
           {/* Alert rules */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
-            <button onClick={() => setTimedShowRuleSettings(s => !s)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 mb-6">
+            <button onClick={() => setTimedShowRuleSettings(s => !s)} className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium">
               {timedShowRuleSettings ? "▼ Hide alert rules" : "▶ Configure alert rules"}
-              <span className="ml-2 text-gray-500 font-normal">({Object.values(timedRuleEnabled).filter(Boolean).length} of {TIMED_ALERT_RULES.length} enabled)</span>
+              <span className="ml-2 text-gray-500 dark:text-gray-400 font-normal">({Object.values(timedRuleEnabled).filter(Boolean).length} of {TIMED_ALERT_RULES.length} enabled)</span>
             </button>
             {timedShowRuleSettings && (
               <ul className="mt-3 space-y-2">
@@ -1043,22 +1043,22 @@ export default function AuctionMonitorPage() {
                     <li key={rule.id} className={`flex items-start gap-3 p-2.5 rounded-lg border ${enabled ? "border-emerald-200 bg-emerald-50/40" : "border-gray-200 bg-gray-50/40"}`}>
                       <input type="checkbox" checked={enabled} onChange={e => setTimedRuleEnabledPersisted(rule.id, e.target.checked)} className="mt-1 w-4 h-4 accent-emerald-600 flex-shrink-0" />
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-800">{rule.label}</p>
-                        <p className="text-[11px] text-gray-500 mt-0.5">{rule.description}</p>
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{rule.label}</p>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">{rule.description}</p>
                       </div>
                       {rule.threshold && (
                         <div className="flex items-center gap-2 self-center">
                           <RuleCountdown msRemaining={timedRuleCountdownMs(rule.id)} />
-                          <span className="text-[11px] text-gray-500">{rule.threshold.label}</span>
+                          <span className="text-[11px] text-gray-500 dark:text-gray-400">{rule.threshold.label}</span>
                           <input
                             type="number" value={threshold ?? rule.threshold.default}
                             min={rule.threshold.min} max={rule.threshold.max}
                             onChange={e => setTimedRuleThresholdPersisted(rule.id, Number(e.target.value))}
                             onBlur={e => setTimedRuleThresholdPersisted(rule.id, Math.max(rule.threshold!.min, Math.min(rule.threshold!.max, Number(e.target.value) || rule.threshold!.default)))}
                             disabled={!enabled}
-                            className="w-20 text-xs border border-gray-300 rounded px-2 py-1 text-right disabled:bg-gray-100 disabled:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            className="w-20 text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-right bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-200 disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                           />
-                          {rule.threshold.suffix && <span className="text-[11px] text-gray-500">{rule.threshold.suffix}</span>}
+                          {rule.threshold.suffix && <span className="text-[11px] text-gray-500 dark:text-gray-400">{rule.threshold.suffix}</span>}
                         </div>
                       )}
                     </li>
@@ -1069,32 +1069,32 @@ export default function AuctionMonitorPage() {
           </div>
 
           {/* Message log */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-700">Message log ({timedLog.length})</h3>
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Message log ({timedLog.length})</h3>
               <div className="flex items-center gap-3">
-                <label className="text-xs text-gray-500 flex items-center gap-1.5 cursor-pointer">
+                <label className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5 cursor-pointer">
                   <input type="checkbox" checked={timedShowRaw} onChange={e => setTimedShowRaw(e.target.checked)} />
                   Show raw payload
                 </label>
                 <CopyAllButton log={timedLog} />
-                <button onClick={() => setTimedLog([])} className="text-xs text-gray-500 hover:text-red-600">Clear</button>
+                <button onClick={() => setTimedLog([])} className="text-xs text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400">Clear</button>
               </div>
             </div>
             {timedLog.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-gray-400">
+              <p className="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
                 {timedRunning ? "Waiting for messages from the auction…" : "Click Start to begin monitoring."}
               </p>
             ) : (
-              <ul className="divide-y divide-gray-100 max-h-[60vh] overflow-y-auto">
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800 max-h-[60vh] overflow-y-auto">
                 {timedLog.map((m, i) => (
-                  <li key={i} className="px-4 py-2 text-xs hover:bg-gray-50">
+                  <li key={i} className="px-4 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-800">
                     <div className="flex items-baseline gap-3 mb-0.5">
-                      <span className="text-gray-400 font-mono shrink-0">{m.at.toLocaleTimeString("en-GB")}</span>
-                      <span className="text-gray-700 font-medium">{m.parsed ? describeMessage(m.parsed) : "(non-JSON)"}</span>
+                      <span className="text-gray-400 dark:text-gray-500 font-mono shrink-0">{m.at.toLocaleTimeString("en-GB")}</span>
+                      <span className="text-gray-700 dark:text-gray-300 font-medium">{m.parsed ? describeMessage(m.parsed) : "(non-JSON)"}</span>
                     </div>
                     {timedShowRaw && (
-                      <pre className="bg-gray-50 border border-gray-100 rounded px-2 py-1 mt-1 font-mono text-[11px] text-gray-600 overflow-x-auto whitespace-pre-wrap break-all">
+                      <pre className="bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded px-2 py-1 mt-1 font-mono text-[11px] text-gray-600 dark:text-gray-400 overflow-x-auto whitespace-pre-wrap break-all">
                         {m.parsed ? JSON.stringify(m.parsed, null, 2) : m.raw}
                       </pre>
                     )}
@@ -1132,7 +1132,7 @@ function CopyAllButton({ log }: { log: MsgEntry[] }) {
   }
   return (
     <button onClick={copy} disabled={log.length === 0}
-      className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-40 disabled:cursor-not-allowed"
+      className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 disabled:opacity-40 disabled:cursor-not-allowed"
       title={`Copy all ${log.length} message${log.length === 1 ? "" : "s"} to clipboard`}
     >
       {copied ? "✓ Copied" : `📋 Copy all (${log.length})`}
@@ -1166,8 +1166,8 @@ function RuleCountdown({ msRemaining }: { msRemaining: number | null }) {
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div>
-      <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">{label}</p>
-      <p className="text-sm text-gray-800 font-medium">{value}</p>
+      <p className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-0.5">{label}</p>
+      <p className="text-sm text-gray-800 dark:text-gray-200 font-medium">{value}</p>
     </div>
   )
 }

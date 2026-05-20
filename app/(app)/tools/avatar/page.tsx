@@ -580,11 +580,11 @@ export default function AvatarPage() {
   const isLive = status === "connected" || status === "speaking"
 
   return (
-    <div className="min-h-screen bg-[#1C1C1E] flex flex-col">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+    <div className="min-h-screen bg-gray-100 dark:bg-[#1C1C1E] flex flex-col">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E]">
         <div>
-          <h1 className="text-xl font-bold text-white tracking-tight">AI Presenter</h1>
-          <p className="text-xs text-gray-500 mt-0.5">Realistic avatar presenter for auction lot descriptions</p>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">AI Presenter</h1>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Realistic avatar presenter for auction lot descriptions</p>
         </div>
         <div className="flex items-center gap-2 text-xs">
           <span className={`w-2 h-2 rounded-full ${STATUS_DOT[status]}`} />
@@ -594,7 +594,7 @@ export default function AvatarPage() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Avatar panel */}
-        <div className="flex-1 flex items-center justify-center p-8 bg-[#111113]">
+        <div className="flex-1 flex items-center justify-center p-8 bg-gray-200 dark:bg-[#111113]">
           <div
             className={`relative w-full max-w-2xl rounded-2xl overflow-hidden transition-all duration-700 ${
               isLive ? "border-2 border-[#2AB4A6] shadow-[0_0_40px_rgba(42,180,166,0.25)]" : "border-2 border-gray-800"
@@ -607,7 +607,7 @@ export default function AvatarPage() {
             />
 
             {!isLive && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-[#0D0D0F]">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-gray-50 dark:bg-[#0D0D0F]">
                 {selectedPresenter && status === "idle" ? (
                   <img src={selectedPresenter.thumbnail_url} alt={selectedPresenter.name}
                     className="w-32 h-32 rounded-full object-cover border-2 border-gray-700 opacity-40" />
@@ -615,7 +615,7 @@ export default function AvatarPage() {
                   <div className={`w-28 h-28 rounded-full border-2 flex items-center justify-center ${
                     status === "connecting" ? "border-yellow-500/40 bg-yellow-500/5 animate-pulse"
                     : status === "error"   ? "border-red-500/40 bg-red-500/5"
-                    : "border-gray-700 bg-gray-800/30"}`}>
+                    : "border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800/30"}`}>
                     <span className="text-5xl">{status === "error" ? "⚠️" : "🎙️"}</span>
                   </div>
                 )}
@@ -654,12 +654,12 @@ export default function AvatarPage() {
         </div>
 
         {/* Controls */}
-        <div className="w-80 flex-shrink-0 border-l border-gray-800 bg-[#1C1C1E] flex flex-col p-5 gap-4 overflow-y-auto">
+        <div className="w-80 flex-shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E] flex flex-col p-5 gap-4 overflow-y-auto">
 
           {/* Presenter */}
-          <div className="bg-[#2C2C2E] rounded-xl p-4 border border-gray-800">
-            <h2 className="text-gray-400 text-xs font-semibold uppercase tracking-widest mb-3">Presenter</h2>
-            {loadingPresenters ? <p className="text-gray-600 text-xs text-center py-2">Loading…</p>
+          <div className="bg-gray-50 dark:bg-[#2C2C2E] rounded-xl p-4 border border-gray-200 dark:border-gray-800">
+            <h2 className="text-gray-600 dark:text-gray-400 text-xs font-semibold uppercase tracking-widest mb-3">Presenter</h2>
+            {loadingPresenters ? <p className="text-gray-500 dark:text-gray-600 text-xs text-center py-2">Loading…</p>
             : presenters.length === 0 ? <p className="text-red-400 text-xs">Could not load presenters</p>
             : (
               <div className="grid grid-cols-3 gap-2">
@@ -669,8 +669,8 @@ export default function AvatarPage() {
                     <button key={pid} onClick={() => handleSelectPresenter(p)} title={p.name}
                       className={`relative rounded-lg overflow-hidden aspect-square transition-all ${
                         selectedId === pid
-                          ? "ring-2 ring-[#2AB4A6] ring-offset-1 ring-offset-[#2C2C2E] opacity-100"
-                          : "ring-1 ring-gray-700 hover:ring-gray-500 opacity-50 hover:opacity-80"
+                          ? "ring-2 ring-[#2AB4A6] ring-offset-1 ring-offset-gray-50 dark:ring-offset-[#2C2C2E] opacity-100"
+                          : "ring-1 ring-gray-300 dark:ring-gray-700 hover:ring-gray-400 dark:hover:ring-gray-500 opacity-50 hover:opacity-80"
                       }`}>
                       <img src={p.thumbnail_url} alt={p.name} className="w-full h-full object-cover" />
                       {selectedId === pid && <div className="absolute inset-0 bg-[#2AB4A6]/10" />}
@@ -685,8 +685,8 @@ export default function AvatarPage() {
           </div>
 
           {/* Connection */}
-          <div className="bg-[#2C2C2E] rounded-xl p-4 border border-gray-800">
-            <h2 className="text-gray-400 text-xs font-semibold uppercase tracking-widest mb-3">Connection</h2>
+          <div className="bg-gray-50 dark:bg-[#2C2C2E] rounded-xl p-4 border border-gray-200 dark:border-gray-800">
+            <h2 className="text-gray-600 dark:text-gray-400 text-xs font-semibold uppercase tracking-widest mb-3">Connection</h2>
             {status === "idle" || status === "error" ? (
               <button
                 onClick={() => selectedPresenter && connect(selectedPresenter.presenter_id ?? selectedPresenter.id ?? "")}
@@ -695,7 +695,7 @@ export default function AvatarPage() {
               >Connect Avatar</button>
             ) : (
               <button onClick={disconnect}
-                className="w-full py-2.5 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-colors text-sm">
+                className="w-full py-2.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-white font-semibold rounded-lg transition-colors text-sm">
                 {status === "connecting" ? "Cancel" : "Disconnect"}
               </button>
             )}
@@ -703,9 +703,9 @@ export default function AvatarPage() {
           </div>
 
           {/* Auto-Read */}
-          <div className="bg-[#2C2C2E] rounded-xl p-4 border border-gray-800">
+          <div className="bg-gray-50 dark:bg-[#2C2C2E] rounded-xl p-4 border border-gray-200 dark:border-gray-800">
             <div className="flex items-center justify-between mb-1">
-              <h2 className="text-gray-400 text-xs font-semibold uppercase tracking-widest">Auto-Read</h2>
+              <h2 className="text-gray-600 dark:text-gray-400 text-xs font-semibold uppercase tracking-widest">Auto-Read</h2>
               {isWatching && (
                 <span className={`text-xs flex items-center gap-1 ${
                   readingStatus === "error" ? "text-red-400" :
@@ -717,7 +717,7 @@ export default function AvatarPage() {
                 </span>
               )}
             </div>
-            <p className="text-gray-600 text-xs mb-3 leading-relaxed">
+            <p className="text-gray-500 dark:text-gray-600 text-xs mb-3 leading-relaxed">
               Share the auction tab — avatar auto-speaks each new lot.
             </p>
             {!isWatching ? (
@@ -727,36 +727,36 @@ export default function AvatarPage() {
               </button>
             ) : (
               <button onClick={stopWatching}
-                className="w-full py-2.5 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-colors text-sm">
+                className="w-full py-2.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-white font-semibold rounded-lg transition-colors text-sm">
                 Stop Watching
               </button>
             )}
-            {!isLive && !isWatching && <p className="text-gray-600 text-xs text-center mt-2">Connect avatar first</p>}
+            {!isLive && !isWatching && <p className="text-gray-500 dark:text-gray-600 text-xs text-center mt-2">Connect avatar first</p>}
 
             {/* Debug panel — always visible when watching */}
             {isWatching && (
               <div className="mt-3 space-y-2">
                 {/* Live lot data */}
-                <div className="bg-[#111113] rounded-lg p-3 border border-gray-700 space-y-1">
+                <div className="bg-gray-100 dark:bg-[#111113] rounded-lg p-3 border border-gray-200 dark:border-gray-700 space-y-1">
                   <div className="flex justify-between text-xs">
-                    <span className="text-gray-500">Reads done</span>
-                    <span className="text-gray-300 font-mono">{readCount}</span>
+                    <span className="text-gray-500 dark:text-gray-400">Reads done</span>
+                    <span className="text-gray-700 dark:text-gray-300 font-mono">{readCount}</span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-gray-500">Lot seen</span>
-                    <span className="text-white font-bold">{watchedLot?.lotNumber ?? "—"}</span>
+                    <span className="text-gray-500 dark:text-gray-400">Lot seen</span>
+                    <span className="text-gray-900 dark:text-white font-bold">{watchedLot?.lotNumber ?? "—"}</span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-gray-500">Current bid</span>
-                    <span className="text-white">{watchedLot?.currentBid ?? "—"}</span>
+                    <span className="text-gray-500 dark:text-gray-400">Current bid</span>
+                    <span className="text-gray-900 dark:text-white">{watchedLot?.currentBid ?? "—"}</span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-gray-500">Asking bid</span>
+                    <span className="text-gray-500 dark:text-gray-400">Asking bid</span>
                     <span className="text-[#2AB4A6] font-medium">{watchedLot?.askingBid ?? "—"}</span>
                   </div>
                   {lastSpoke && (
                     <div className="flex justify-between text-xs pt-1 border-t border-gray-800">
-                      <span className="text-gray-500">Last spoke</span>
+                      <span className="text-gray-500 dark:text-gray-400">Last spoke</span>
                       <span className="text-green-400">{lastSpoke}</span>
                     </div>
                   )}
@@ -764,7 +764,7 @@ export default function AvatarPage() {
 
                 {/* Raw Gemini response */}
                 {lastReadRaw && (
-                  <p className="text-gray-600 text-[10px] font-mono break-all leading-relaxed">
+                  <p className="text-gray-500 dark:text-gray-600 text-[10px] font-mono break-all leading-relaxed">
                     Gemini: {lastReadRaw}
                   </p>
                 )}
@@ -778,9 +778,9 @@ export default function AvatarPage() {
           </div>
 
           {/* Live Feed */}
-          <div className="bg-[#2C2C2E] rounded-xl p-4 border border-gray-800">
+          <div className="bg-gray-50 dark:bg-[#2C2C2E] rounded-xl p-4 border border-gray-200 dark:border-gray-800">
             <div className="flex items-center justify-between mb-1">
-              <h2 className="text-gray-400 text-xs font-semibold uppercase tracking-widest">Live Feed</h2>
+              <h2 className="text-gray-600 dark:text-gray-400 text-xs font-semibold uppercase tracking-widest">Live Feed</h2>
               <span className={`text-xs flex items-center gap-1 ${
                 feedConnState === "open"       ? "text-[#2AB4A6]"  :
                 feedConnState === "connecting" ? "text-yellow-400" :
@@ -797,7 +797,7 @@ export default function AvatarPage() {
                  feedConnState === "closed"     ? "Reconnecting…"  : "Offline"}
               </span>
             </div>
-            <p className="text-gray-600 text-xs mb-3 leading-relaxed">
+            <p className="text-gray-500 dark:text-gray-600 text-xs mb-3 leading-relaxed">
               Connect directly to the auction WebSocket — avatar speaks each event automatically.
             </p>
 
@@ -808,7 +808,7 @@ export default function AvatarPage() {
               onKeyDown={e => { if (e.key === "Enter" && !feedRunning && feedAuctionId.trim()) setFeedRunning(true) }}
               placeholder="Auction ID e.g. 1386"
               disabled={feedRunning}
-              className="w-full mb-2 text-xs bg-[#111113] text-white border border-gray-700 rounded-md px-2 py-1.5 font-mono focus:border-[#2AB4A6] focus:outline-none disabled:opacity-50"
+              className="w-full mb-2 text-xs bg-gray-100 dark:bg-[#111113] text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1.5 font-mono focus:border-[#2AB4A6] focus:outline-none disabled:opacity-50"
             />
 
             {!feedRunning ? (
@@ -820,25 +820,25 @@ export default function AvatarPage() {
             ) : (
               <button
                 onClick={() => setFeedRunning(false)}
-                className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg text-xs transition-colors"
+                className="w-full py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-white font-semibold rounded-lg text-xs transition-colors"
               >Disconnect Feed</button>
             )}
 
             {!isLive && !feedRunning && (
-              <p className="text-gray-600 text-xs text-center mt-2">Connect avatar first</p>
+              <p className="text-gray-500 dark:text-gray-600 text-xs text-center mt-2">Connect avatar first</p>
             )}
             {feedRunning && feedCurrentLot && (
               <p className="text-[#2AB4A6] text-xs text-center mt-2 font-medium font-mono">Lot {feedCurrentLot}</p>
             )}
 
             {/* Event configuration */}
-            <div className="mt-3 pt-3 border-t border-gray-700">
+            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
               <button
                 onClick={() => setFeedShowCfg(s => !s)}
-                className="text-xs text-gray-500 hover:text-gray-300 w-full text-left flex items-center justify-between"
+                className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 w-full text-left flex items-center justify-between"
               >
                 <span>{feedShowCfg ? "▼" : "▶"} Configure events</span>
-                <span className="text-gray-600">
+                <span className="text-gray-500 dark:text-gray-600">
                   {FEED_EVENTS.filter(e => feedEventCfg[e.id]?.enabled ?? e.defaultOn).length}/{FEED_EVENTS.length} on
                 </span>
               </button>
@@ -849,7 +849,7 @@ export default function AvatarPage() {
                     const cfg = feedEventCfg[e.id]
                     const enabled = cfg?.enabled ?? e.defaultOn
                     return (
-                      <div key={e.id} className={`rounded-lg p-2.5 border ${enabled ? "border-gray-600 bg-[#111113]" : "border-gray-700 bg-[#0D0D0F] opacity-60"}`}>
+                      <div key={e.id} className={`rounded-lg p-2.5 border ${enabled ? "border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-[#111113]" : "border-gray-200 dark:border-gray-700 bg-white dark:bg-[#0D0D0F] opacity-60"}`}>
                         <div className="flex items-center gap-2 mb-1.5">
                           <input
                             type="checkbox"
@@ -857,7 +857,7 @@ export default function AvatarPage() {
                             onChange={ev => updateFeedCfg(e.id, { enabled: ev.target.checked })}
                             className="w-3.5 h-3.5 accent-[#2AB4A6] flex-shrink-0"
                           />
-                          <span className="text-xs text-gray-200 font-medium flex-1">{e.label}</span>
+                          <span className="text-xs text-gray-700 dark:text-gray-200 font-medium flex-1">{e.label}</span>
                           {e.hints && (
                             <span className="text-[10px] text-gray-600 font-mono">{e.hints}</span>
                           )}
@@ -867,7 +867,7 @@ export default function AvatarPage() {
                           value={cfg?.template ?? e.defaultTemplate}
                           onChange={ev => updateFeedCfg(e.id, { template: ev.target.value })}
                           disabled={!enabled}
-                          className="w-full text-[11px] bg-[#1C1C1E] text-gray-300 border border-gray-700 rounded px-2 py-1 font-mono disabled:opacity-40 focus:border-[#2AB4A6] focus:outline-none"
+                          className="w-full text-[11px] bg-white dark:bg-[#1C1C1E] text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 font-mono disabled:opacity-40 focus:border-[#2AB4A6] focus:outline-none"
                         />
                       </div>
                     )
@@ -878,7 +878,7 @@ export default function AvatarPage() {
                       setFeedEventCfg(d)
                       try { localStorage.setItem("avatar_feed_config", JSON.stringify(d)) } catch {}
                     }}
-                    className="text-[10px] text-gray-600 hover:text-gray-400 w-full text-right pt-1"
+                    className="text-[10px] text-gray-500 dark:text-gray-600 hover:text-gray-600 dark:hover:text-gray-400 w-full text-right pt-1"
                   >Reset to defaults</button>
                 </div>
               )}
@@ -886,14 +886,14 @@ export default function AvatarPage() {
           </div>
 
           {/* Manual Script */}
-          <div className="bg-[#2C2C2E] rounded-xl p-4 border border-gray-800 flex flex-col">
+          <div className="bg-gray-50 dark:bg-[#2C2C2E] rounded-xl p-4 border border-gray-200 dark:border-gray-800 flex flex-col">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-gray-400 text-xs font-semibold uppercase tracking-widest">Manual Script</h2>
-              <span className={`text-xs ${script.length > 3000 ? "text-red-400" : "text-gray-600"}`}>{script.length}</span>
+              <h2 className="text-gray-600 dark:text-gray-400 text-xs font-semibold uppercase tracking-widest">Manual Script</h2>
+              <span className={`text-xs ${script.length > 3000 ? "text-red-400" : "text-gray-500 dark:text-gray-600"}`}>{script.length}</span>
             </div>
             <textarea value={script} onChange={(e) => setScript(e.target.value)}
               placeholder="Or type a manual script and click Speak…"
-              className="min-h-[100px] bg-[#111113] text-white text-sm rounded-lg p-3 border border-gray-700 focus:border-[#2AB4A6] focus:outline-none resize-none placeholder-gray-700 leading-relaxed"
+              className="min-h-[100px] bg-gray-100 dark:bg-[#111113] text-gray-900 dark:text-white text-sm rounded-lg p-3 border border-gray-200 dark:border-gray-700 focus:border-[#2AB4A6] focus:outline-none resize-none placeholder-gray-400 dark:placeholder-gray-700 leading-relaxed"
               maxLength={5000} />
             <div className="mt-3 flex gap-2">
               <button onClick={speak} disabled={status !== "connected" || script.trim().length < 3}
@@ -902,7 +902,7 @@ export default function AvatarPage() {
                   ? <><span className="inline-block w-3 h-3 border-2 border-black border-t-transparent rounded-full animate-spin" />Speaking…</>
                   : "▶ Speak"}
               </button>
-              {script && <button onClick={() => setScript("")} className="px-3 text-gray-600 hover:text-gray-400 text-xs">Clear</button>}
+              {script && <button onClick={() => setScript("")} className="px-3 text-gray-500 dark:text-gray-600 hover:text-gray-700 dark:hover:text-gray-400 text-xs">Clear</button>}
             </div>
           </div>
         </div>
