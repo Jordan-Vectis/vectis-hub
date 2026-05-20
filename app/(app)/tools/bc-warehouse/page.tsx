@@ -765,7 +765,7 @@ function SaleChecklistTab() {
                         <th className="px-3 py-2 text-left">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-700">
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                       {items.map(item => (
                         <tr key={item.uniqueId} className={!item.location ? "bg-red-950/30" : ""}>
                           <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-300">{item.uniqueId}</td>
@@ -921,7 +921,7 @@ function SearchByLocationTab() {
                   <th className="px-4 py-2 text-left font-medium">State</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800/60">
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-800/60">
                 {totes.map(t => (
                   <tr key={t.toteNo} className="hover:bg-gray-800/40 transition-colors">
                     <td className="px-4 py-2.5 font-mono text-cyan-700 dark:text-cyan-300 font-semibold">{t.toteNo}</td>
@@ -962,7 +962,7 @@ function SearchByLocationTab() {
                   <th className="px-4 py-2 text-left font-medium">Tote / Bin</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800/60">
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-800/60">
                 {items.map(item => (
                   <tr key={item.uniqueId} className="hover:bg-gray-800/40 transition-colors">
                     <td className="px-4 py-2.5 font-mono text-gray-600 dark:text-gray-300">{item.uniqueId}</td>
@@ -1149,7 +1149,7 @@ function LocationHistoryTab() {
         <p className="text-gray-600 dark:text-gray-500 text-sm">Look up every location a tote or lot has ever been moved to via BC change logs.</p>
       </div>
 
-      <div className="bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded-xl p-5 max-w-lg space-y-4">
+      <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded-xl p-5 max-w-lg space-y-4">
         <div className="flex gap-2">
           {(["tote", "barcode"] as const).map(m => (
             <button key={m} onClick={() => { setMode(m); setResult(null); setError(null) }}
@@ -1163,7 +1163,7 @@ function LocationHistoryTab() {
         <div className="flex gap-2">
           <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && lookup()}
             placeholder={mode === "tote" ? "e.g. T000123" : "e.g. F037458"} autoFocus
-            className="flex-1 bg-[#07070f] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono" />
+            className="flex-1 bg-white dark:bg-[#07070f] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono" />
           <button onClick={lookup} disabled={loading || !input.trim()}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-gray-900 dark:text-white text-sm font-semibold rounded-lg transition-colors">
             {loading ? "Searching…" : "Look up"}
@@ -1188,7 +1188,7 @@ function LocationHistoryTab() {
           </div>
 
           {result.entries.length === 0 ? (
-            <div className="bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded-xl p-6 text-center">
+            <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded-xl p-6 text-center">
               <p className="text-gray-600 dark:text-gray-400 text-sm">No location changes found in the BC change log.</p>
               <p className="text-gray-600 dark:text-gray-400 text-xs mt-1">The item may not have been moved, or the change log wasn't active when it was.</p>
             </div>
@@ -1196,7 +1196,7 @@ function LocationHistoryTab() {
             <>
               <div className="overflow-x-auto rounded-xl border border-gray-300 dark:border-gray-700">
                 <table className="w-full text-sm">
-                  <thead className="bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase">
+                  <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase">
                     <tr>
                       <th className="px-4 py-2.5 text-left">From</th>
                       <th className="px-4 py-2.5 text-left">To</th>
@@ -1204,7 +1204,7 @@ function LocationHistoryTab() {
                       <th className="px-4 py-2.5 text-left">Date / Time</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-800">
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                     {result.entries.map((e, i) => (
                       <tr key={i} className={`hover:bg-[#0d0f1a] ${i === 0 ? "bg-blue-950/30" : ""}`}>
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-400 font-mono text-xs">{e.from || <span className="text-gray-600 dark:text-gray-400 italic">empty</span>}</td>
@@ -1280,7 +1280,7 @@ function LocationHistoryTab() {
                             <th className="px-4 py-2.5 text-left">Date / Time</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-800">
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                           {similarResult.map((e, i) => (
                             <tr key={i} className="hover:bg-[#0d0f1a]">
                               <td className="px-4 py-2 text-gray-900 dark:text-white font-mono text-xs">{e.itemKey}{e.itemKey2 ? ` · ${e.itemKey2}` : ""}</td>
@@ -1501,7 +1501,7 @@ function ToteDataTab() {
                       <th className="px-4 py-2 text-left font-medium">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-800/60">
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800/60">
                     {visibleTotes.map(t => (
                       <tr key={t.toteNo} className="hover:bg-gray-800/30 transition-colors">
                         <td className="px-4 py-2.5 font-mono text-cyan-700 dark:text-cyan-300 font-semibold">{t.toteNo}</td>
