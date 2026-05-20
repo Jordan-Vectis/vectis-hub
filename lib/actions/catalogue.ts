@@ -343,11 +343,13 @@ export async function fillLotsFromTotes(auctionId: string) {
   for (const lot of lots) {
     if (!lot.tote) continue
     const info = toteMap.get(lot.tote)
-    if (!info) continue
+    // Only skip if the tote lookup failed AND the lot has no receipt of its own.
+    // If the lot already has a receipt, we can still assign a uniqueId — don't skip it.
+    if (!info && !lot.receipt) continue
 
     // Work out the desired final state
-    const desiredVendor  = lot.vendor  || info.vendor
-    const desiredReceipt = lot.receipt || info.receipt || null
+    const desiredVendor  = lot.vendor  || info?.vendor  || null
+    const desiredReceipt = lot.receipt || info?.receipt || null
     // Preserve existing uniqueId if there is one; only generate when missing
     let desiredUniqueId = lot.receiptUniqueId ?? null
     if (!desiredUniqueId && desiredReceipt) {
