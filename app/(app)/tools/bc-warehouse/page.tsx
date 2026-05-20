@@ -2781,7 +2781,7 @@ const HOME_CARDS: {
     icon:        "🗺️",
     label:       "Location Heatmap",
     description: "Visual overview of all warehouse locations — see which areas are busy, empty, or holding totes at a glance.",
-    colour:      "border-blue-800/60 hover:shadow-blue-900/40",
+    colour:      "border-blue-400 dark:border-blue-800/60 hover:shadow-blue-900/40",
     btn:         "bg-blue-700 hover:bg-blue-600",
   },
   {
@@ -2789,7 +2789,7 @@ const HOME_CARDS: {
     icon:        "📋",
     label:       "Sale Checklist",
     description: "Review items assigned to upcoming auctions. Check warehouse locations, lot numbers and withdrawal flags before sale day.",
-    colour:      "border-violet-800/60 hover:shadow-violet-900/40",
+    colour:      "border-violet-400 dark:border-violet-800/60 hover:shadow-violet-900/40",
     btn:         "bg-violet-700 hover:bg-violet-600",
   },
   {
@@ -2797,7 +2797,7 @@ const HOME_CARDS: {
     icon:        "🔍",
     label:       "Search by Location",
     description: "Find everything stored in a specific bin, tote or warehouse location. Search by barcode or location code.",
-    colour:      "border-sky-800/60 hover:shadow-sky-900/40",
+    colour:      "border-sky-400 dark:border-sky-800/60 hover:shadow-sky-900/40",
     btn:         "bg-sky-700 hover:bg-sky-600",
   },
   {
@@ -2805,7 +2805,7 @@ const HOME_CARDS: {
     icon:        "📍",
     label:       "Location History",
     description: "Track the movement history of any tote or barcode — see every location change and who made it.",
-    colour:      "border-teal-800/60 hover:shadow-teal-900/40",
+    colour:      "border-teal-400 dark:border-teal-800/60 hover:shadow-teal-900/40",
     btn:         "bg-teal-700 hover:bg-teal-600",
   },
   {
@@ -2813,7 +2813,7 @@ const HOME_CARDS: {
     icon:        "📦",
     label:       "Tote Data",
     description: "Browse and search all active totes in the warehouse. View contents, receipts, vendors and current locations.",
-    colour:      "border-amber-800/60 hover:shadow-amber-900/40",
+    colour:      "border-amber-400 dark:border-amber-800/60 hover:shadow-amber-900/40",
     btn:         "bg-amber-700 hover:bg-amber-600",
   },
   {
@@ -2821,7 +2821,7 @@ const HOME_CARDS: {
     icon:        "🚚",
     label:       "Collections Due",
     description: "View lots ready for customer collection, grouped by auction. Print collection sheets and track what's been picked up.",
-    colour:      "border-orange-800/60 hover:shadow-orange-900/40",
+    colour:      "border-orange-400 dark:border-orange-800/60 hover:shadow-orange-900/40",
     btn:         "bg-orange-700 hover:bg-orange-600",
   },
   {
@@ -2829,7 +2829,7 @@ const HOME_CARDS: {
     icon:        "🏷️",
     label:       "Unsold Items",
     description: "Manage items that didn't sell at auction. Review, export or action unsold stock across all recent sales.",
-    colour:      "border-red-800/60 hover:shadow-red-900/40",
+    colour:      "border-red-400 dark:border-red-800/60 hover:shadow-red-900/40",
     btn:         "bg-red-700 hover:bg-red-600",
   },
   {
@@ -2837,7 +2837,7 @@ const HOME_CARDS: {
     icon:        "📄",
     label:       "Location Barcodes",
     description: "Generate printable barcode sheets for warehouse shelf labels. Type location codes, pick an arrow direction and download.",
-    colour:      "border-emerald-800/60 hover:shadow-emerald-900/40",
+    colour:      "border-emerald-400 dark:border-emerald-800/60 hover:shadow-emerald-900/40",
     btn:         "bg-emerald-700 hover:bg-emerald-600",
   },
   {
@@ -2845,7 +2845,7 @@ const HOME_CARDS: {
     icon:        "🔄",
     label:       "Data Sync",
     description: "Sync the latest stock, auction and tote data from Business Central. Check sync status and trigger manual refreshes.",
-    colour:      "border-gray-300 dark:border-gray-700/60 hover:shadow-gray-800/40",
+    colour:      "border-gray-300 dark:border-gray-400 dark:border-gray-700/60 hover:shadow-gray-800/40",
     btn:         "bg-gray-600 hover:bg-gray-500",
   },
   {
@@ -2853,7 +2853,7 @@ const HOME_CARDS: {
     icon:        "🔎",
     label:       "DB Explorer",
     description: "Query the raw warehouse database tables directly. For admin use — search items and totes by any field.",
-    colour:      "border-gray-300 dark:border-gray-700/60 hover:shadow-gray-800/40",
+    colour:      "border-gray-300 dark:border-gray-400 dark:border-gray-700/60 hover:shadow-gray-800/40",
     btn:         "bg-gray-600 hover:bg-gray-500",
   },
 ]
@@ -2927,7 +2927,7 @@ function WarehouseHomeTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
               onDragEnter={() => handleDragEnter(i)}
               onDragEnd={handleDragEnd}
               onDragOver={e => e.preventDefault()}
-              className={`relative bg-gray-900 border ${card.colour} rounded-xl p-6 flex flex-col
+              className={`relative bg-white dark:bg-gray-900 border ${card.colour} rounded-xl p-6 flex flex-col
                 transition-all duration-200
                 ${editOrder ? "cursor-grab active:cursor-grabbing hover:border-blue-500/60 select-none" : "hover:shadow-xl hover:-translate-y-0.5"}`}
             >
@@ -3198,7 +3198,7 @@ export default function BCWarehousePage() {
   ]
 
   return (
-    <div className="flex flex-col h-full bg-gray-950 text-gray-900 dark:text-white">
+    <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-white">
       {/* Tab bar — hidden on home screen */}
       {tab !== "home" && (
         <div className="flex gap-1 px-4 pt-3 border-b border-gray-200 dark:border-gray-800 shrink-0 overflow-x-auto">
