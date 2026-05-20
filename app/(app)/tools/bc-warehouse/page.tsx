@@ -249,7 +249,7 @@ function FirstSyncPanel({ onComplete }: { onComplete: () => void }) {
 
 // Traffic-light colours by item count
 function fillColor(total: number): { bg: string; ring: string; text: string } {
-  if (total === 0)  return { bg: "bg-gray-900",   ring: "ring-gray-800",   text: "text-gray-600" }
+  if (total === 0)  return { bg: "bg-gray-100 dark:bg-gray-900",   ring: "ring-gray-800",   text: "text-gray-600 dark:text-gray-400" }
   if (total <= 2)   return { bg: "bg-emerald-700/70", ring: "ring-emerald-500/40", text: "text-emerald-100" }
   if (total <= 5)   return { bg: "bg-yellow-600/70", ring: "ring-yellow-400/40", text: "text-yellow-50" }
   if (total <= 9)   return { bg: "bg-orange-600/80", ring: "ring-orange-400/50", text: "text-orange-50" }
@@ -399,20 +399,20 @@ function WarehouseHeatmapTab() {
                 className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
                   heatFilter === f
                     ? "bg-blue-600 border-blue-500 text-gray-900 dark:text-white"
-                    : "bg-gray-900 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500 hover:text-gray-200"
+                    : "bg-gray-100 dark:bg-gray-900 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500 hover:text-gray-200"
                 }`}
               >
                 {HEAT_FILTER_LABELS[f]}
               </button>
             ))}
 
-            <div className="h-4 w-px bg-gray-700 mx-1" />
+            <div className="h-4 w-px bg-gray-200 dark:bg-gray-700 mx-1" />
 
             {/* Auction filter */}
             <select
               value={auctionFilter}
               onChange={e => { setAuctionFilter(e.target.value); setSelected(null) }}
-              className="bg-gray-900 border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-full text-xs px-3 py-1 focus:outline-none focus:border-blue-500"
+              className="bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-full text-xs px-3 py-1 focus:outline-none focus:border-blue-500"
             >
               <option value="">All auctions</option>
               {(data.auctions ?? []).map(a => <option key={a} value={a}>{a}</option>)}
@@ -432,7 +432,7 @@ function WarehouseHeatmapTab() {
         {/* Legend */}
         <div className="flex items-center gap-3 mb-4 text-xs text-gray-600 dark:text-gray-400">
           <span className="text-gray-600 dark:text-gray-500 uppercase tracking-wider">Fill level:</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-gray-900 ring-1 ring-gray-800" /> Empty</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-gray-100 dark:bg-gray-900 ring-1 ring-gray-800" /> Empty</span>
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-700/70" /> 1–2</span>
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-yellow-600/70" /> 3–5</span>
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-orange-600/80" /> 6–9</span>
@@ -446,7 +446,7 @@ function WarehouseHeatmapTab() {
           <button
             onClick={() => selectLocation("")}
             className={`mb-4 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-              selected === "" ? "bg-blue-700 border-blue-500 text-gray-900 dark:text-white" : "bg-gray-900 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-500"
+              selected === "" ? "bg-blue-700 border-blue-500 text-gray-900 dark:text-white" : "bg-gray-100 dark:bg-gray-900 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-500"
             }`}
           >
             ⚠ Unlocated · {data.unlocated.toLocaleString()} items
@@ -463,7 +463,7 @@ function WarehouseHeatmapTab() {
             const totalCells = [...bays.values()].flat().length
 
             return (
-              <div key={aisle} className="bg-gray-900/40 rounded-lg border border-gray-200 dark:border-gray-800 p-3">
+              <div key={aisle} className="bg-gray-100 dark:bg-gray-900/40 rounded-lg border border-gray-200 dark:border-gray-800 p-3">
                 <div className="flex items-baseline justify-between mb-2">
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white font-mono">{aisle}</h3>
                   <span className="text-xs text-gray-600 dark:text-gray-500">
@@ -498,7 +498,7 @@ function WarehouseHeatmapTab() {
                       {/* Shelf rows */}
                       {shelfRows.map(shelfNum => (
                         <div key={shelfNum} className="flex items-center gap-1 mb-1 last:mb-0">
-                          <span className="text-[10px] font-mono text-gray-600 w-4 flex-shrink-0 text-right">{shelfNum}</span>
+                          <span className="text-[10px] font-mono text-gray-600 dark:text-gray-400 w-4 flex-shrink-0 text-right">{shelfNum}</span>
                           {bayNames.map(bay => {
                             const loc = lookup.get(bay)?.get(shelfNum)
                             if (!loc) {
@@ -548,7 +548,7 @@ function WarehouseHeatmapTab() {
 
           {/* Other (codes not matching aisle/bay/shelf pattern) */}
           {aisleFilter === "ALL" && other.length > 0 && (
-            <div className="bg-gray-900/40 rounded-lg border border-gray-200 dark:border-gray-800 p-3">
+            <div className="bg-gray-100 dark:bg-gray-900/40 rounded-lg border border-gray-200 dark:border-gray-800 p-3">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Other locations</h3>
               <div className="flex flex-wrap gap-1.5">
                 {other.filter(l => showEmpty || l.total > 0).map(loc => {
@@ -574,7 +574,7 @@ function WarehouseHeatmapTab() {
       </div>
 
       {/* Details panel */}
-      <div className="w-96 flex-shrink-0 border-l border-gray-200 dark:border-gray-800 overflow-y-auto p-4 bg-gray-950">
+      <div className="w-96 flex-shrink-0 border-l border-gray-200 dark:border-gray-800 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-950">
         {!selected && selected !== "" ? (
           <div className="text-gray-600 dark:text-gray-500 text-sm mt-8 text-center">Click a shelf to see its contents</div>
         ) : itemsLoading ? (
@@ -599,7 +599,7 @@ function WarehouseHeatmapTab() {
                 <div className="text-xs text-cyan-500 uppercase tracking-wider mb-1.5">Totes</div>
                 <div className="space-y-1.5">
                   {totes.map(tote => (
-                    <div key={tote.toteNo} className="bg-gray-800/80 rounded-lg px-3 py-2.5 text-xs border border-cyan-900/30">
+                    <div key={tote.toteNo} className="bg-white dark:bg-gray-800/80 rounded-lg px-3 py-2.5 text-xs border border-cyan-900/30">
                       <div className="flex items-center justify-between gap-2 mb-1">
                         <span className="font-mono text-cyan-700 dark:text-cyan-300 font-semibold">{tote.toteNo}</span>
                         {tote.catalogued != null && (
@@ -609,9 +609,9 @@ function WarehouseHeatmapTab() {
                         )}
                       </div>
                       <div className="space-y-0.5 text-gray-600 dark:text-gray-400">
-                        {tote.receiptNo   && <div><span className="text-gray-600">Receipt </span>{tote.receiptNo}</div>}
-                        {tote.vendorName  && <div><span className="text-gray-600">Vendor </span>{tote.vendorName}{tote.vendorNo ? ` (${tote.vendorNo})` : ""}</div>}
-                        {tote.status && tote.status !== "No Reserve" && <div><span className="text-gray-600">Status </span>{tote.status}</div>}
+                        {tote.receiptNo   && <div><span className="text-gray-600 dark:text-gray-400">Receipt </span>{tote.receiptNo}</div>}
+                        {tote.vendorName  && <div><span className="text-gray-600 dark:text-gray-400">Vendor </span>{tote.vendorName}{tote.vendorNo ? ` (${tote.vendorNo})` : ""}</div>}
+                        {tote.status && tote.status !== "No Reserve" && <div><span className="text-gray-600 dark:text-gray-400">Status </span>{tote.status}</div>}
                       </div>
                     </div>
                   ))}
@@ -625,7 +625,7 @@ function WarehouseHeatmapTab() {
                 <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1.5">Items</div>
                 <div className="space-y-1.5">
                   {items.map(item => (
-                    <div key={item.uniqueId} className="bg-gray-800 rounded-lg px-3 py-2.5 text-xs">
+                    <div key={item.uniqueId} className="bg-white dark:bg-gray-800 rounded-lg px-3 py-2.5 text-xs">
                       <div className="flex items-start justify-between gap-2 mb-1">
                         <div className="flex flex-wrap items-center gap-1">
                           <span className="font-mono text-gray-600 dark:text-gray-300">{item.uniqueId}</span>
@@ -644,12 +644,12 @@ function WarehouseHeatmapTab() {
                             {item.description}
                           </div>
                         )}
-                        {item.barcode     && <div><span className="text-gray-600">Barcode </span><span className="font-mono">{item.barcode}</span></div>}
-                        {(() => { const lot = item.currentLotNo ?? item.lotNo; return lot && lot !== "0" ? <div><span className="text-gray-600">Lot </span>{lot}</div> : null })()}
-                        {item.toteNo      && <div><span className="text-gray-600">Tote </span>{item.toteNo}</div>}
-                        {item.binCode     && <div><span className="text-gray-600">Bin </span>{item.binCode}</div>}
-                        {item.category    && <div><span className="text-gray-600">Category </span>{item.category}</div>}
-                        {item.locationScannedAt && <div><span className="text-gray-600">Scanned </span>{new Date(item.locationScannedAt).toLocaleDateString("en-GB")}</div>}
+                        {item.barcode     && <div><span className="text-gray-600 dark:text-gray-400">Barcode </span><span className="font-mono">{item.barcode}</span></div>}
+                        {(() => { const lot = item.currentLotNo ?? item.lotNo; return lot && lot !== "0" ? <div><span className="text-gray-600 dark:text-gray-400">Lot </span>{lot}</div> : null })()}
+                        {item.toteNo      && <div><span className="text-gray-600 dark:text-gray-400">Tote </span>{item.toteNo}</div>}
+                        {item.binCode     && <div><span className="text-gray-600 dark:text-gray-400">Bin </span>{item.binCode}</div>}
+                        {item.category    && <div><span className="text-gray-600 dark:text-gray-400">Category </span>{item.category}</div>}
+                        {item.locationScannedAt && <div><span className="text-gray-600 dark:text-gray-400">Scanned </span>{new Date(item.locationScannedAt).toLocaleDateString("en-GB")}</div>}
                       </div>
                     </div>
                   ))}
@@ -700,13 +700,13 @@ function SaleChecklistTab() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search auction code or name…"
-          className="flex-1 bg-gray-800 border border-gray-600 rounded px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+          className="flex-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
         />
         {(["all", "located", "missing"] as const).map(f => (
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded text-sm ${filter === f ? "bg-blue-600 text-gray-900 dark:text-white" : "bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-700"}`}
+            className={`px-3 py-1.5 rounded text-sm ${filter === f ? "bg-blue-600 text-gray-900 dark:text-white" : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-700"}`}
           >
             {f === "all" ? "All" : f === "located" ? "Located" : "Missing"}
           </button>
@@ -729,7 +729,7 @@ function SaleChecklistTab() {
           const missing = auction.items.length - located
 
           return (
-            <div key={auction.code} className="bg-gray-800 rounded-lg overflow-hidden">
+            <div key={auction.code} className="bg-white dark:bg-gray-800 rounded-lg overflow-hidden">
               <button
                 onClick={() => setExpanded(isOpen ? null : auction.code)}
                 className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-750 text-left"
@@ -754,7 +754,7 @@ function SaleChecklistTab() {
               {isOpen && (
                 <div className="border-t border-gray-300 dark:border-gray-700">
                   <table className="w-full text-xs">
-                    <thead className="bg-gray-900 text-gray-600 dark:text-gray-400">
+                    <thead className="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-400">
                       <tr>
                         <th className="px-3 py-2 text-left">Unique ID</th>
                         <th className="px-3 py-2 text-left">Barcode</th>
@@ -859,7 +859,7 @@ function SearchByLocationTab() {
             value={query}
             onChange={e => setQuery(e.target.value.toUpperCase())}
             placeholder={mode === "exact" ? "Location e.g. A2A1, barcode e.g. F066001, tote e.g. T001234…" : "Aisle e.g. A2, A10, BENCH…"}
-            className="flex-1 bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 font-mono"
+            className="flex-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 font-mono"
             autoFocus
           />
           <button
@@ -883,7 +883,7 @@ function SearchByLocationTab() {
       {/* Results */}
       <div className="flex-1 overflow-y-auto">
         {!searched && (
-          <div className="flex flex-col items-center justify-center h-full text-center text-gray-600 gap-2">
+          <div className="flex flex-col items-center justify-center h-full text-center text-gray-600 dark:text-gray-400 gap-2">
             <div className="text-4xl">📍</div>
             <div className="text-sm">
               {mode === "exact"
@@ -897,7 +897,7 @@ function SearchByLocationTab() {
         )}
 
         {searched && !loading && total === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center text-gray-600 gap-2">
+          <div className="flex flex-col items-center justify-center h-full text-center text-gray-600 dark:text-gray-400 gap-2">
             <div className="text-4xl">🔍</div>
             <div className="text-sm">Nothing found {mode === "aisle" ? "in aisle" : "at"} <span className="font-mono text-gray-600 dark:text-gray-400">"{searchedFor}"</span></div>
             {mode === "exact" && <div className="text-xs text-gray-700">Switch to "Whole aisle" to search all shelves in an aisle</div>}
@@ -907,11 +907,11 @@ function SearchByLocationTab() {
         {/* Totes section */}
         {totes.length > 0 && (
           <div className="border-b border-gray-200 dark:border-gray-800">
-            <div className="px-4 py-2 bg-gray-900/50 text-xs font-medium text-cyan-500 uppercase tracking-wider">
+            <div className="px-4 py-2 bg-gray-100 dark:bg-gray-900/50 text-xs font-medium text-cyan-500 uppercase tracking-wider">
               Totes · {totes.length.toLocaleString()}
             </div>
             <table className="w-full text-xs">
-              <thead className="bg-gray-900 text-gray-600 dark:text-gray-500 sticky top-0">
+              <thead className="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-500 sticky top-0">
                 <tr>
                   <th className="px-4 py-2 text-left font-medium">Tote No</th>
                   {mode === "aisle" && <th className="px-4 py-2 text-left font-medium">Location</th>}
@@ -946,11 +946,11 @@ function SearchByLocationTab() {
         {/* Items section */}
         {items.length > 0 && (
           <div>
-            <div className="px-4 py-2 bg-gray-900/50 text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+            <div className="px-4 py-2 bg-gray-100 dark:bg-gray-900/50 text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">
               Items · {items.length.toLocaleString()}
             </div>
             <table className="w-full text-xs">
-              <thead className="bg-gray-900 text-gray-600 dark:text-gray-500 sticky top-0">
+              <thead className="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-500 sticky top-0">
                 <tr>
                   <th className="px-4 py-2 text-left font-medium">Unique ID</th>
                   <th className="px-4 py-2 text-left font-medium">Barcode</th>
@@ -975,7 +975,7 @@ function SearchByLocationTab() {
                     <td className="px-4 py-2.5">
                       {item.auctionCode
                         ? <span className="bg-blue-900/60 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded font-mono">{item.auctionCode}</span>
-                        : <span className="text-gray-600">—</span>}
+                        : <span className="text-gray-600 dark:text-gray-400">—</span>}
                     </td>
                     <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400">{item.currentLotNo ?? item.lotNo ?? "—"}</td>
                     <td className="px-4 py-2.5 text-gray-600 dark:text-gray-500">{item.category ?? "—"}</td>
@@ -1169,7 +1169,7 @@ function LocationHistoryTab() {
             {loading ? "Searching…" : "Look up"}
           </button>
         </div>
-        {mode === "barcode" && <p className="text-xs text-gray-600">Barcode lookup does two BC queries: first finds the item key from the barcode, then fetches all location changes for that item.</p>}
+        {mode === "barcode" && <p className="text-xs text-gray-600 dark:text-gray-400">Barcode lookup does two BC queries: first finds the item key from the barcode, then fetches all location changes for that item.</p>}
       </div>
 
       {error && <p className="text-red-400 text-sm">{error}</p>}
@@ -1190,7 +1190,7 @@ function LocationHistoryTab() {
           {result.entries.length === 0 ? (
             <div className="bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded-xl p-6 text-center">
               <p className="text-gray-600 dark:text-gray-400 text-sm">No location changes found in the BC change log.</p>
-              <p className="text-gray-600 text-xs mt-1">The item may not have been moved, or the change log wasn't active when it was.</p>
+              <p className="text-gray-600 dark:text-gray-400 text-xs mt-1">The item may not have been moved, or the change log wasn't active when it was.</p>
             </div>
           ) : (
             <>
@@ -1207,8 +1207,8 @@ function LocationHistoryTab() {
                   <tbody className="divide-y divide-gray-800">
                     {result.entries.map((e, i) => (
                       <tr key={i} className={`hover:bg-[#0d0f1a] ${i === 0 ? "bg-blue-950/30" : ""}`}>
-                        <td className="px-4 py-2 text-gray-600 dark:text-gray-400 font-mono text-xs">{e.from || <span className="text-gray-600 italic">empty</span>}</td>
-                        <td className="px-4 py-2 text-gray-900 dark:text-white font-mono text-xs font-semibold">{e.to || <span className="text-gray-600 italic">empty</span>}</td>
+                        <td className="px-4 py-2 text-gray-600 dark:text-gray-400 font-mono text-xs">{e.from || <span className="text-gray-600 dark:text-gray-400 italic">empty</span>}</td>
+                        <td className="px-4 py-2 text-gray-900 dark:text-white font-mono text-xs font-semibold">{e.to || <span className="text-gray-600 dark:text-gray-400 italic">empty</span>}</td>
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{SALESPERSON_NAMES[e.changedBy] ?? e.changedBy}</td>
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-400 text-xs">{formatDateTime(e.changedAt)}</td>
                       </tr>
@@ -1227,7 +1227,7 @@ function LocationHistoryTab() {
                 {similarLoading && (
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-3">
-                      <div className="flex-1 bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                      <div className="flex-1 bg-white dark:bg-gray-800 rounded-full h-1.5 overflow-hidden">
                         <div
                           className="h-full bg-purple-500 rounded-full transition-all duration-1000 ease-out"
                           style={{ width: `${Math.min(similarElapsed * 1.8, 90)}%` }}
@@ -1260,7 +1260,7 @@ function LocationHistoryTab() {
                       <span className="text-gray-900 dark:text-white font-semibold">{similarResult.length}</span> change{similarResult.length !== 1 ? "s" : ""} found in that window
                     </p>
                     <button onClick={printSimilar}
-                      className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-900 dark:text-white text-xs font-semibold rounded-lg transition-colors">
+                      className="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-600 text-gray-900 dark:text-white text-xs font-semibold rounded-lg transition-colors">
                       🖨 Print Report
                     </button>
                   </div>
@@ -1284,14 +1284,14 @@ function LocationHistoryTab() {
                           {similarResult.map((e, i) => (
                             <tr key={i} className="hover:bg-[#0d0f1a]">
                               <td className="px-4 py-2 text-gray-900 dark:text-white font-mono text-xs">{e.itemKey}{e.itemKey2 ? ` · ${e.itemKey2}` : ""}</td>
-                              <td className="px-4 py-2 text-gray-600 dark:text-gray-300 font-mono text-xs">{e.barcode ?? <span className="text-gray-600">—</span>}</td>
+                              <td className="px-4 py-2 text-gray-600 dark:text-gray-300 font-mono text-xs">{e.barcode ?? <span className="text-gray-600 dark:text-gray-400">—</span>}</td>
                               <td className="px-4 py-2">
                                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${e.type === "tote" ? "bg-blue-900/50 text-blue-700 dark:text-blue-300" : "bg-emerald-900/50 text-emerald-700 dark:text-emerald-300"}`}>
                                   {e.type === "tote" ? "Tote" : "Item"}
                                 </span>
                               </td>
-                              <td className="px-4 py-2 text-gray-600 dark:text-gray-400 font-mono text-xs">{e.from || <span className="text-gray-600 italic">empty</span>}</td>
-                              <td className="px-4 py-2 text-gray-900 dark:text-white font-mono text-xs font-semibold">{e.to || <span className="text-gray-600 italic">empty</span>}</td>
+                              <td className="px-4 py-2 text-gray-600 dark:text-gray-400 font-mono text-xs">{e.from || <span className="text-gray-600 dark:text-gray-400 italic">empty</span>}</td>
+                              <td className="px-4 py-2 text-gray-900 dark:text-white font-mono text-xs font-semibold">{e.to || <span className="text-gray-600 dark:text-gray-400 italic">empty</span>}</td>
                               <td className="px-4 py-2 text-gray-600 dark:text-gray-300 text-xs">{SALESPERSON_NAMES[e.changedBy] ?? e.changedBy}</td>
                               <td className="px-4 py-2 text-gray-600 dark:text-gray-400 text-xs">{formatDateTime(e.changedAt)}</td>
                             </tr>
@@ -1323,7 +1323,7 @@ function HorizBar({ value, max, color = "bg-blue-500" }: { value: number; max: n
   const pct = max > 0 ? Math.max((value / max) * 100, 0.5) : 0
   return (
     <div className="flex items-center gap-3 min-w-0">
-      <div className="flex-1 bg-gray-800 rounded-sm h-5 overflow-hidden">
+      <div className="flex-1 bg-white dark:bg-gray-800 rounded-sm h-5 overflow-hidden">
         <div className={`${color} h-full rounded-sm transition-all`} style={{ width: `${pct}%` }} />
       </div>
       <span className="text-xs font-mono text-gray-600 dark:text-gray-300 w-10 text-right flex-shrink-0">{value.toLocaleString()}</span>
@@ -1388,21 +1388,21 @@ function ToteDataTab() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-3 gap-3 px-6 py-4 border-b border-gray-200 dark:border-gray-800">
-        <div className="bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-4 py-3">
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-4 py-3">
           <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Total Totes</div>
           <div className="text-2xl font-mono font-semibold text-gray-900 dark:text-white">{stats.total.toLocaleString()}</div>
-          <div className="text-xs text-gray-600 mt-0.5">
+          <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
             <span className="text-amber-400">{stats.active.toLocaleString()} active</span>
             {" · "}
             <span className="text-gray-600 dark:text-gray-500">{(stats.total - stats.active).toLocaleString()} done</span>
           </div>
         </div>
-        <div className="bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-4 py-3">
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-4 py-3">
           <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Categories</div>
           <div className="text-2xl font-mono font-semibold text-gray-900 dark:text-white">{byCategory.length}</div>
-          <div className="text-xs text-gray-600 mt-0.5">with active totes</div>
+          <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">with active totes</div>
         </div>
-        <div className="bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-4 py-3">
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-4 py-3">
           <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Largest Category</div>
           <div className="text-lg font-semibold text-gray-900 dark:text-white truncate">{largestCategory}</div>
           <div className="text-xs text-amber-400 mt-0.5">{byCategory[0]?.activeTotes.toLocaleString() ?? 0} active totes</div>
@@ -1421,7 +1421,7 @@ function ToteDataTab() {
             onClick={() => setView(t.id)}
             className={`px-4 py-2 text-sm rounded-t transition-colors ${
               view === t.id
-                ? "bg-gray-800 text-gray-900 dark:text-white border-b-2 border-blue-500"
+                ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-b-2 border-blue-500"
                 : "text-gray-600 dark:text-gray-400 hover:text-gray-200"
             }`}
           >
@@ -1437,7 +1437,7 @@ function ToteDataTab() {
         {view === "category" && (
           <div className="space-y-1.5 max-w-3xl">
             {byCategory.length === 0 && (
-              <div className="text-gray-600 text-sm">No active totes found</div>
+              <div className="text-gray-600 dark:text-gray-400 text-sm">No active totes found</div>
             )}
             {byCategory.map(row => (
               <div key={row.category} className="grid items-center gap-3" style={{ gridTemplateColumns: "180px 1fr" }}>
@@ -1446,7 +1446,7 @@ function ToteDataTab() {
               </div>
             ))}
             {/* x-axis ticks */}
-            <div className="grid gap-3 mt-2 text-xs text-gray-600" style={{ gridTemplateColumns: "180px 1fr" }}>
+            <div className="grid gap-3 mt-2 text-xs text-gray-600 dark:text-gray-400" style={{ gridTemplateColumns: "180px 1fr" }}>
               <div />
               <div className="flex justify-between pr-10">
                 <span>0</span>
@@ -1463,7 +1463,7 @@ function ToteDataTab() {
         {view === "location" && (
           <div className="space-y-1.5 max-w-3xl">
             {byLocation.length === 0 && (
-              <div className="text-gray-600 text-sm">No location data found</div>
+              <div className="text-gray-600 dark:text-gray-400 text-sm">No location data found</div>
             )}
             {byLocation.map(row => (
               <div key={row.location} className="grid items-center gap-3" style={{ gridTemplateColumns: "120px 1fr" }}>
@@ -1471,7 +1471,7 @@ function ToteDataTab() {
                 <HorizBar value={row.toteCount} max={maxLoc} color="bg-cyan-500" />
               </div>
             ))}
-            <div className="grid gap-3 mt-2 text-xs text-gray-600" style={{ gridTemplateColumns: "120px 1fr" }}>
+            <div className="grid gap-3 mt-2 text-xs text-gray-600 dark:text-gray-400" style={{ gridTemplateColumns: "120px 1fr" }}>
               <div />
               <div className="flex justify-between pr-10">
                 <span>0</span>
@@ -1488,11 +1488,11 @@ function ToteDataTab() {
         {view === "raw" && (
           <div className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
             {totes.length === 0 ? (
-              <div className="p-6 text-center text-gray-600 text-sm">No active totes found</div>
+              <div className="p-6 text-center text-gray-600 dark:text-gray-400 text-sm">No active totes found</div>
             ) : (
               <>
                 <table className="w-full text-xs">
-                  <thead className="bg-gray-900 text-gray-600 dark:text-gray-500 sticky top-0">
+                  <thead className="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-500 sticky top-0">
                     <tr>
                       <th className="px-4 py-2 text-left font-medium">Tote No</th>
                       <th className="px-4 py-2 text-left font-medium">Location</th>
@@ -1514,7 +1514,7 @@ function ToteDataTab() {
                   </tbody>
                 </table>
                 {totes.length > 150 && (
-                  <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-800 text-center bg-gray-900">
+                  <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-800 text-center bg-gray-100 dark:bg-gray-900">
                     <button
                       onClick={() => setShowAll(v => !v)}
                       className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
@@ -1648,7 +1648,7 @@ function CollectionsDueTab() {
       </div>
 
       {/* Filters */}
-      <div className="bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 space-y-3">
+      <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
           <div className="sm:col-span-2">
             <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Aisle prefixes</label>
@@ -1658,7 +1658,7 @@ function CollectionsDueTab() {
               onChange={e => setAislesText(e.target.value)}
               onKeyDown={e => e.key === "Enter" && search()}
               placeholder="e.g. A39, A40, A41"
-              className="w-full bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
             />
             <p className="text-[11px] text-gray-600 dark:text-gray-500 mt-1">
               Comma-separated prefixes — matches anything starting with these (e.g. A39 catches A39A1, A39B5, A39C3…).
@@ -1720,7 +1720,7 @@ function CollectionsDueTab() {
           {items.length > 0 && !groupByDocket && (
             <div className="overflow-auto border border-gray-200 dark:border-gray-800 rounded-lg">
               <table className="text-xs w-full">
-                <thead className="bg-gray-800 sticky top-0">
+                <thead className="bg-white dark:bg-gray-800 sticky top-0">
                   <tr className="text-left text-gray-600 dark:text-gray-400">
                     <th className="px-3 py-2">Location</th>
                     <th className="px-3 py-2">Barcode</th>
@@ -1746,7 +1746,7 @@ function CollectionsDueTab() {
             <div className="space-y-3">
               {grouped.map(g => (
                 <div key={g.collectionNo} className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
-                  <div className="bg-gray-800 px-3 py-2 flex items-center justify-between">
+                  <div className="bg-white dark:bg-gray-800 px-3 py-2 flex items-center justify-between">
                     <span className="font-mono text-emerald-400 text-sm">{g.collectionNo}</span>
                     <span className="text-xs text-gray-600 dark:text-gray-400">{g.items.length} item{g.items.length === 1 ? "" : "s"}</span>
                   </div>
@@ -1869,7 +1869,7 @@ function UnsoldItemsTab() {
       </div>
 
       {/* Filters */}
-      <div className="bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 space-y-3">
+      <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
           <div className="sm:col-span-2">
             <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Aisle prefixes</label>
@@ -1879,7 +1879,7 @@ function UnsoldItemsTab() {
               onChange={e => setAislesText(e.target.value)}
               onKeyDown={e => e.key === "Enter" && search()}
               placeholder="e.g. A50, A51, A52"
-              className="w-full bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
             />
             <p className="text-[11px] text-gray-600 dark:text-gray-500 mt-1">
               Comma-separated prefixes — matches anything starting with these (e.g. A50 catches A50A1, A50B5, A50C3…).
@@ -1941,7 +1941,7 @@ function UnsoldItemsTab() {
           {items.length > 0 && !groupByVendor && (
             <div className="overflow-auto border border-gray-200 dark:border-gray-800 rounded-lg">
               <table className="text-xs w-full">
-                <thead className="bg-gray-800 sticky top-0">
+                <thead className="bg-white dark:bg-gray-800 sticky top-0">
                   <tr className="text-left text-gray-600 dark:text-gray-400">
                     <th className="px-3 py-2">Location</th>
                     <th className="px-3 py-2">Barcode</th>
@@ -1969,7 +1969,7 @@ function UnsoldItemsTab() {
             <div className="space-y-3">
               {grouped.map(g => (
                 <div key={g.vendor} className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
-                  <div className="bg-gray-800 px-3 py-2 flex items-center justify-between">
+                  <div className="bg-white dark:bg-gray-800 px-3 py-2 flex items-center justify-between">
                     <span className="text-emerald-400 text-sm">{g.vendor}</span>
                     <span className="text-xs text-gray-600 dark:text-gray-400">{g.items.length} item{g.items.length === 1 ? "" : "s"}</span>
                   </div>
@@ -2107,7 +2107,7 @@ function DbExplorerTab() {
             onClick={refreshAuctionNames}
             disabled={refreshingNames}
             title="Re-pull all auction names from BC. Use this when a cached sale name in the DB looks stale."
-            className="text-xs bg-gray-800 hover:bg-gray-700 border border-gray-300 dark:border-gray-700 hover:border-gray-600 disabled:opacity-50 text-gray-700 dark:text-gray-200 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+            className="text-xs bg-white dark:bg-gray-800 hover:bg-gray-700 border border-gray-300 dark:border-gray-700 hover:border-gray-600 disabled:opacity-50 text-gray-700 dark:text-gray-200 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
           >
             {refreshingNames ? "Refreshing…" : "↻ Refresh auction names from BC"}
           </button>
@@ -2160,7 +2160,7 @@ function DbExplorerTab() {
               value={clearConfirmText}
               onChange={e => setClearConfirmText(e.target.value)}
               placeholder="DELETE"
-              className="w-full max-w-xs bg-gray-900 border border-red-900 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white font-mono focus:outline-none focus:border-red-500"
+              className="w-full max-w-xs bg-gray-100 dark:bg-gray-900 border border-red-900 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white font-mono focus:outline-none focus:border-red-500"
               autoFocus
             />
           </div>
@@ -2179,7 +2179,7 @@ function DbExplorerTab() {
             </button>
             <button
               onClick={() => { setClearOpen(false); setClearConfirmText(""); setClearMsg(null) }}
-              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs rounded-lg transition-colors"
+              className="px-4 py-2 bg-white dark:bg-gray-800 hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs rounded-lg transition-colors"
             >
               Cancel
             </button>
@@ -2192,19 +2192,19 @@ function DbExplorerTab() {
         <div className="flex rounded overflow-hidden border border-gray-300 dark:border-gray-700">
           {(["items","totes"] as const).map(t => (
             <button key={t} onClick={() => { setTable(t); setField(t === "items" ? "auctionCode" : "toteNo"); setRows([]); setCount(null) }}
-              className={`px-4 py-2 text-sm transition-colors ${table === t ? "bg-blue-600 text-gray-900 dark:text-white" : "bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-white"}`}>
+              className={`px-4 py-2 text-sm transition-colors ${table === t ? "bg-blue-600 text-gray-900 dark:text-white" : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-white"}`}>
               {t === "items" ? "Warehouse Items" : "Warehouse Totes"}
             </button>
           ))}
         </div>
         <select value={field} onChange={e => setField(e.target.value)}
-          className="bg-gray-800 border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-blue-500">
+          className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-blue-500">
           {fields.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
         </select>
         <input value={q} onChange={e => setQ(e.target.value)}
           onKeyDown={e => e.key === "Enter" && search()}
           placeholder="Search value (blank = all)"
-          className="flex-1 min-w-48 bg-gray-800 border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-blue-500 placeholder:text-gray-600" />
+          className="flex-1 min-w-48 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-blue-500 placeholder:text-gray-600" />
         <button onClick={search} disabled={loading}
           className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-gray-900 dark:text-white text-sm font-semibold rounded transition-colors">
           {loading ? "Loading…" : "Search"}
@@ -2219,7 +2219,7 @@ function DbExplorerTab() {
       {rows.length > 0 && (
         <div className="overflow-auto border border-gray-300 dark:border-gray-700 rounded-lg">
           <table className="text-xs w-full">
-            <thead className="bg-gray-800 sticky top-0">
+            <thead className="bg-white dark:bg-gray-800 sticky top-0">
               <tr>
                 {columns.map(c => (
                   <th key={c} className="px-3 py-2 text-left text-gray-600 dark:text-gray-300 font-mono whitespace-nowrap border-r border-gray-300 dark:border-gray-700 last:border-0">{c}</th>
@@ -2228,10 +2228,10 @@ function DbExplorerTab() {
             </thead>
             <tbody>
               {rows.map((row, i) => (
-                <tr key={i} className={i % 2 === 0 ? "bg-gray-900" : "bg-gray-850"}>
+                <tr key={i} className={i % 2 === 0 ? "bg-gray-100 dark:bg-gray-900" : "bg-gray-850"}>
                   {columns.map(c => (
                     <td key={c} className="px-3 py-1.5 text-gray-600 dark:text-gray-300 font-mono whitespace-nowrap border-r border-gray-200 dark:border-gray-800 last:border-0 max-w-xs truncate" title={String(row[c] ?? "")}>
-                      {row[c] === null || row[c] === undefined ? <span className="text-gray-600">null</span> : String(row[c])}
+                      {row[c] === null || row[c] === undefined ? <span className="text-gray-600 dark:text-gray-400">null</span> : String(row[c])}
                     </td>
                   ))}
                 </tr>
@@ -2510,14 +2510,14 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
 
       {/* Stats grid — each table card has its own re-sync buttons */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
-        <div className="bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3">
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3">
           <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Items in DB</div>
           <div className="text-2xl font-mono text-gray-900 dark:text-white">{liveCount.toLocaleString()}</div>
           <div className="text-xs text-gray-600 dark:text-gray-500 mt-1">{(status?.toteCount ?? 0).toLocaleString()} totes</div>
         </div>
 
         {/* Receipt Lines */}
-        <div className="bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3 flex flex-col">
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3 flex flex-col">
           <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Receipt Lines</div>
           <div className="text-sm text-gray-700 dark:text-gray-200">{fmtAge(status?.sources.receipt_lines?.completedAt)}</div>
           <div className="text-xs text-gray-600 dark:text-gray-500">{status?.sources.receipt_lines?.itemsProcessed?.toLocaleString() ?? 0} last run</div>
@@ -2545,7 +2545,7 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
         </div>
 
         {/* Auction Lines */}
-        <div className="bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3 flex flex-col">
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3 flex flex-col">
           <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Auction Lines</div>
           <div className="text-sm text-gray-700 dark:text-gray-200">{fmtAge(status?.sources.auction_lines?.completedAt)}</div>
           <div className="text-xs text-gray-600 dark:text-gray-500">{status?.sources.auction_lines?.itemsProcessed?.toLocaleString() ?? 0} last run</div>
@@ -2571,7 +2571,7 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
         </div>
 
         {/* Change Log */}
-        <div className="bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3 flex flex-col">
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3 flex flex-col">
           <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Change Log</div>
           <div className="text-sm text-gray-700 dark:text-gray-200">{fmtAge(status?.sources.changelog?.completedAt)}</div>
           <div className="text-xs text-gray-600 dark:text-gray-500">{status?.sources.changelog?.itemsProcessed?.toLocaleString() ?? 0} last run</div>
@@ -2597,7 +2597,7 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
         </div>
 
         {/* Totes — Totes_Excel (all) */}
-        <div className="bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3 flex flex-col">
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3 flex flex-col">
           <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Totes</div>
           <div className="text-sm text-gray-700 dark:text-gray-200">{fmtAge(status?.sources.totes?.completedAt)}</div>
           <div className="text-xs text-gray-600 dark:text-gray-500">{status?.sources.totes?.itemsProcessed?.toLocaleString() ?? 0} last run</div>
@@ -2624,7 +2624,7 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
         </div>
 
         {/* Active Totes — Receipt_Totes_Excel (enrichment) */}
-        <div className="bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3 flex flex-col">
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3 flex flex-col">
           <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Active Totes</div>
           <div className="text-sm text-gray-700 dark:text-gray-200">{fmtAge(status?.sources["totes-active"]?.completedAt)}</div>
           <div className="text-xs text-gray-600 dark:text-gray-500">{status?.sources["totes-active"]?.itemsProcessed?.toLocaleString() ?? 0} last run</div>
@@ -2717,7 +2717,7 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
         className="bg-black/50 border border-gray-200 dark:border-gray-800 rounded-lg p-3 font-mono text-xs h-96 overflow-y-auto"
       >
         {log.length === 0 ? (
-          <div className="text-gray-600 italic">No activity yet — click "Run sync now" to begin.</div>
+          <div className="text-gray-600 dark:text-gray-400 italic">No activity yet — click "Run sync now" to begin.</div>
         ) : (
           log.map((entry, i) => {
             const colour =
@@ -2727,7 +2727,7 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
                                         "text-gray-600 dark:text-gray-400"
             return (
               <div key={i} className={`${colour} leading-relaxed whitespace-pre-wrap`}>
-                <span className="text-gray-600">[{fmtTime(entry.time)}]</span> {entry.text}
+                <span className="text-gray-600 dark:text-gray-400">[{fmtTime(entry.time)}]</span> {entry.text}
               </div>
             )
           })
@@ -2746,7 +2746,7 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
         className="bg-black/50 border border-gray-200 dark:border-gray-800 rounded-lg p-3 font-mono text-[11px] h-56 overflow-y-auto"
       >
         {bcLog.length === 0 ? (
-          <div className="text-gray-600 italic">Each BC response logged here — page count, items returned, whether a nextLink was issued, and the tail of the skiptoken if present. If BC stops issuing nextLink before all rows are walked, that's how to spot it.</div>
+          <div className="text-gray-600 dark:text-gray-400 italic">Each BC response logged here — page count, items returned, whether a nextLink was issued, and the tail of the skiptoken if present. If BC stops issuing nextLink before all rows are walked, that's how to spot it.</div>
         ) : (
           bcLog.map((entry, i) => {
             const colour =
@@ -2756,7 +2756,7 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
                                         "text-cyan-700 dark:text-cyan-300"
             return (
               <div key={i} className={`${colour} leading-relaxed whitespace-pre-wrap break-all`}>
-                <span className="text-gray-600">[{fmtTime(entry.time)}]</span> {entry.text}
+                <span className="text-gray-600 dark:text-gray-400">[{fmtTime(entry.time)}]</span> {entry.text}
               </div>
             )
           })
@@ -2911,7 +2911,7 @@ function WarehouseHomeTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
               editOrder
                 ? "bg-blue-600 border-blue-500 text-gray-900 dark:text-white"
-                : "bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:text-white"
+                : "bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:text-white"
             }`}
           >
             {editOrder ? "✓ Done" : "⠿ Reorder"}
@@ -2941,7 +2941,7 @@ function WarehouseHomeTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
                 onClick={() => !editOrder && onNavigate(card.id)}
                 disabled={editOrder}
                 className={`w-full text-center text-sm font-semibold text-gray-900 dark:text-white py-2 px-4 rounded-lg transition-colors
-                  ${editOrder ? "opacity-40 cursor-not-allowed bg-gray-700" : card.btn}`}
+                  ${editOrder ? "opacity-40 cursor-not-allowed bg-gray-200 dark:bg-gray-700" : card.btn}`}
               >
                 Open {card.label} →
               </button>
@@ -3041,23 +3041,23 @@ function LocationBarcodesTab() {
           onChange={e => setLocationText(e.target.value)}
           placeholder={"SHELF-A1\nSHELF-A2\nSHELF-B1"}
           rows={10}
-          className="w-full rounded-lg bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white px-3 py-2 text-sm font-mono
+          className="w-full rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white px-3 py-2 text-sm font-mono
                      focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y placeholder:text-gray-600"
         />
 
         {/* Sequence autofill */}
         {seq && (
-          <div className="mt-2 flex items-center gap-2 bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2">
+          <div className="mt-2 flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2">
             <span className="text-xs text-gray-600 dark:text-gray-400 flex-1">
               Continue from <span className="text-gray-900 dark:text-white font-mono">{seq.prefix}{seq.num}</span>
             </span>
             {/* Up / Down toggle */}
-            <div className="flex rounded overflow-hidden border border-gray-600 text-xs">
+            <div className="flex rounded overflow-hidden border border-gray-300 dark:border-gray-600 text-xs">
               {(["up", "down"] as const).map(d => (
                 <button
                   key={d}
                   onClick={() => setFillDir(d)}
-                  className={`px-2 py-1 transition-colors ${fillDir === d ? "bg-blue-600 text-gray-900 dark:text-white" : "bg-gray-700 text-gray-600 dark:text-gray-400 hover:text-white"}`}
+                  className={`px-2 py-1 transition-colors ${fillDir === d ? "bg-blue-600 text-gray-900 dark:text-white" : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:text-white"}`}
                 >
                   {d === "up" ? "↑" : "↓"}
                 </button>
@@ -3070,7 +3070,7 @@ function LocationBarcodesTab() {
               max={100}
               value={fillCount}
               onChange={e => setFillCount(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
-              className="w-14 rounded bg-gray-700 border border-gray-600 text-gray-900 dark:text-white text-xs text-center px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-14 rounded bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-xs text-center px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
             <span className="text-xs text-gray-600 dark:text-gray-500">more</span>
             <button
@@ -3093,7 +3093,7 @@ function LocationBarcodesTab() {
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
                   arrow === opt
                     ? "bg-blue-600 border-blue-500 text-gray-900 dark:text-white"
-                    : "bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:text-white"
+                    : "bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:text-white"
                 }`}
               >
                 {opt === "none" ? "No arrow" : opt === "left" ? "← Left" : "→ Right"}
@@ -3209,14 +3209,14 @@ export default function BCWarehousePage() {
           >
             ⌂
           </button>
-          <div className="w-px bg-gray-700 my-1.5 shrink-0" />
+          <div className="w-px bg-gray-200 dark:bg-gray-700 my-1.5 shrink-0" />
           {tabs.map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
               className={`px-4 py-2 text-sm rounded-t transition-colors shrink-0 ${
                 tab === t.id
-                  ? "bg-gray-800 text-gray-900 dark:text-white border-b-2 border-blue-500"
+                  ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-b-2 border-blue-500"
                   : "text-gray-600 dark:text-gray-400 hover:text-gray-200"
               }`}
             >
