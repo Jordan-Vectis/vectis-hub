@@ -758,7 +758,7 @@ export default function LotWizardTab({
             <div className="text-center mb-5">
               <p className="text-xs font-bold uppercase tracking-widest text-gray-600 dark:text-gray-400 mb-1">Idle Reason</p>
               <p className="text-5xl font-mono font-bold text-gray-900">{fmtIdleDuration(idleSecs)}</p>
-              <p className="text-sm text-gray-600 dark:text-gray-500 mt-2">What were you doing?</p>
+
             </div>
 
             {/* Reason buttons */}
