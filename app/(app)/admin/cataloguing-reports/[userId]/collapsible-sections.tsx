@@ -79,9 +79,12 @@ export type TodayIdleSession = {
 }
 
 const REASON_CONFIG: Record<string, { label: string; colour: string; icon: string; idleColour: string }> = {
-  LOTTING_UP:  { label: "Lotting Up",  colour: "bg-blue-100 text-blue-700 border-blue-200",   icon: "📦", idleColour: "#3b82f6" },
-  LUNCH_BREAK: { label: "Lunch Break", colour: "bg-amber-100 text-amber-700 border-amber-200", icon: "🍽️", idleColour: "#f59e0b" },
-  OTHER:       { label: "Other",       colour: "bg-gray-100 text-gray-600 border-gray-200",    icon: "📝", idleColour: "#9ca3af" },
+  LOTTING_UP:               { label: "Lotting Up",        colour: "bg-blue-100 text-blue-700 border-blue-200",   icon: "📦", idleColour: "#3b82f6" },
+  LUNCH_BREAK:              { label: "Lunch Break",        colour: "bg-amber-100 text-amber-700 border-amber-200", icon: "🍽️", idleColour: "#f59e0b" },
+  CLERKING:                 { label: "Clerking",           colour: "bg-purple-100 text-purple-700 border-purple-200", icon: "🔨", idleColour: "#9333ea" },
+  DEALING_WITH_CUSTOMERS:   { label: "With Customers",     colour: "bg-green-100 text-green-700 border-green-200",   icon: "🤝", idleColour: "#22c55e" },
+  VALUATIONS:               { label: "Valuations",         colour: "bg-rose-100 text-rose-700 border-rose-200",      icon: "💰", idleColour: "#f43f5e" },
+  OTHER:                    { label: "Other",               colour: "bg-gray-100 text-gray-600 border-gray-200",    icon: "📝", idleColour: "#9ca3af" },
 }
 
 const WORK_START_HOUR = 9
@@ -425,7 +428,11 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
   const skipped  = filtered.filter(l => l.idleDurationMs > MAX_IDLE_MS)
   const counted  = filtered.filter(l => l.idleDurationMs <= MAX_IDLE_MS)
 
-  const totalIdleMs = counted.reduce((s, l) => s + l.idleDurationMs, 0)
+  const totalIdleMs   = counted.reduce((s, l) => s + l.idleDurationMs, 0)
+  const reasonCounts  = counted.reduce<Record<string, number>>((acc, l) => {
+    acc[l.reason] = (acc[l.reason] ?? 0) + 1
+    return acc
+  }, {})
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this idle time entry? This cannot be undone.")) return
@@ -476,9 +483,11 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
                 Total idle: <span className="font-bold">{fmtDuration(totalIdleMs)}</span>
               </span>
               <span className="text-orange-500">
-                {counted.filter(l => l.reason === "LUNCH_BREAK").length} lunch ·{" "}
-                {counted.filter(l => l.reason === "LOTTING_UP").length} lotting up ·{" "}
-                {counted.filter(l => l.reason === "OTHER").length} other
+                {Object.entries(reasonCounts).map(([reason, count], i, arr) => {
+                  const cfg = REASON_CONFIG[reason]
+                  const label = cfg?.label ?? reason.replace(/_/g, " ").toLowerCase()
+                  return `${count} ${label.toLowerCase()}${i < arr.length - 1 ? " · " : ""}`
+                }).join("")}
               </span>
               {skipped.length > 0 && (
                 <span className="text-gray-400 italic ml-auto">

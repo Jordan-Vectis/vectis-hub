@@ -439,7 +439,7 @@ export default function LotWizardTab({
   const idleStartedAtRef   = useRef<number>(0)
   const [idlePopup,        setIdlePopup]      = useState(false)
   const [idleSecs,         setIdleSecs]       = useState(0)
-  const [idleReason,       setIdleReason]     = useState<"LUNCH_BREAK"|"LOTTING_UP"|"OTHER"|null>(null)
+  const [idleReason,       setIdleReason]     = useState<"LUNCH_BREAK"|"LOTTING_UP"|"OTHER"|"CLERKING"|"DEALING_WITH_CUSTOMERS"|"VALUATIONS"|null>(null)
   const [idleTotes,        setIdleTotes]      = useState("")
   const [idleNotes,        setIdleNotes]      = useState("")
   const [idleSubmitting,   setIdleSubmitting] = useState(false)
@@ -764,9 +764,12 @@ export default function LotWizardTab({
             {/* Reason buttons */}
             <div className="grid grid-cols-3 gap-2 mb-4">
               {([
-                { key: "LUNCH_BREAK", label: "🍽️ Lunch Break" },
-                { key: "LOTTING_UP",  label: "📦 Lotting Up" },
-                { key: "OTHER",       label: "✏️ Other" },
+                { key: "LUNCH_BREAK",            label: "🍽️ Lunch Break" },
+                { key: "LOTTING_UP",             label: "📦 Lotting Up" },
+                { key: "CLERKING",               label: "🔨 Clerking" },
+                { key: "DEALING_WITH_CUSTOMERS", label: "🤝 Customers" },
+                { key: "VALUATIONS",             label: "💰 Valuations" },
+                { key: "OTHER",                  label: "✏️ Other" },
               ] as const).map(opt => (
                 <button key={opt.key} onClick={() => setIdleReason(opt.key)}
                   className={`py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
