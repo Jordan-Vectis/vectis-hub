@@ -362,42 +362,62 @@ For new lots, output exactly two lines and nothing else: one descriptive paragra
 EXAMPLES OF CORRECT OUTPUT:
 
 Example 1 — single model, boxed, Regular Wheels, collector livery:
-Matchbox Lesney 1-75 No.20 ERF 68G Truck, blue body with 'EVER READY for life' paper labels, grey plastic wheels, grey base; contained in original Type B picture box. Condition Excellent; Good box with light wear to edges.
+Matchbox Lesney 1-75 No.20A ERF 68G Truck, blue body with 'EVER READY for life' paper labels, grey plastic wheels with rounded axles, grey base; contained in original Type B2 Moko box. Condition Excellent; Good box with light wear to edges.
 Estimate: £40–£60
 
 Example 2 — single model, boxed, Regular Wheels, standard:
-Matchbox Lesney 1-75 No.46 Pickfords Removal Van, dark blue body, 'Pickfords' labels, grey plastic wheels, grey base; contained in original picture box. Condition Good Plus overall with minor chips; Good Plus box.
+Matchbox Lesney 1-75 No.46B Pickfords Removal Van, dark blue body, 'Pickfords' labels, grey plastic wheels with rounded axles, grey base; contained in original Type B4 Moko box. Condition Good Plus overall with minor chips; Good Plus box.
 Estimate: £20–£30
 
 Example 3 — BPW era model, pale colour variant, casting details noted, 'New Model' box:
-Matchbox Lesney 1-75 No.62 Mercury Cougar, pale yellow body, ivory interior, bare metal base, without windscreen wipers cast, without rear view mirror cast, chrome hubs with black plastic tyres; contained in original 'New Model' picture box. Condition Excellent with minor chips to front wings; Good box with some edge wear.
+Matchbox Lesney 1-75 No.62B Mercury Cougar, pale yellow body, ivory interior, bare metal base, without windscreen wipers cast, without rear view mirror cast, chrome hubs with black plastic tyres; contained in original 'New Model' picture box. Condition Excellent with minor chips to front wings; Good box with some edge wear.
 Estimate: £3,000–£4,000
 
 Example 4 — single model, boxed, Superfast:
-Matchbox Superfast No.5 Lotus Europa, metalflake blue body, orange interior, Superfast wheels; contained in original window box. Condition Excellent; Good Plus box with some edge wear.
+Matchbox Superfast No.5E Lotus Europa, metalflake blue body, orange interior, Superfast wheels; contained in original window box. Condition Excellent; Good Plus box with some edge wear.
 Estimate: £15–£20
 
 Example 5 — single model, unboxed:
-Matchbox Lesney 1-75 No.37 Coca-Cola Lorry, yellow body with 'Coca-Cola' labels, grey plastic wheels, grey base; unboxed. Condition Good overall with paint chips and general play wear.
+Matchbox Lesney 1-75 No.37A Karrier Bantam Coca-Cola Lorry, yellow body with 'Coca-Cola' labels, grey plastic wheels with rounded axles, grey base; unboxed. Condition Good overall with paint chips and general play wear.
 Estimate: £15–£25
 
 Example 6 — group lot:
-Matchbox Lesney 1-75 a group of diecast vehicles comprising No.5 London Bus (red), No.8 Caterpillar Tractor (yellow), No.25 Volkswagen 1200 Sedan (silver-grey), No.44 Rolls Royce Silver Cloud (silver); all unboxed. Condition Good to Excellent overall with varying play wear.
+Matchbox Lesney 1-75 a group of diecast vehicles comprising No.5A London Bus (red), No.8A Caterpillar Tractor (yellow), No.25B Volkswagen 1200 Sedan (silver-grey), No.44A Rolls Royce Silver Cloud (silver); all unboxed. Condition Good to Excellent overall with varying play wear.
 Estimate: £25–£35
 
+Example 7 — horse box with silver trim and Moko box:
+Matchbox Lesney 1-75 No.35A ERF Marshall Horse Box, red cab and chassis, tan body, silver trim, grey plastic wheels with rounded axles; contained in original Type B5 Moko box. Condition Excellent; Good box (slightly grubby).
+Estimate: £30–£50
+
 STRICT RULES (no exceptions):
-1. BRAND PREFIX: Use "Matchbox Lesney 1-75" for Regular Wheels era models (1953–1969) and "Matchbox Superfast" for models introduced 1969 onwards. Always state the model number as "No.X".
+1. BRAND PREFIX: Use "Matchbox Lesney 1-75" for Regular Wheels era models (1953–1969) and "Matchbox Superfast" for models introduced 1969 onwards. Always state the model number as "No.X" followed immediately by the casting suffix letter (A, B, C etc.) where identifiable from the reference table — e.g. "No.35A", "No.62B". The suffix letter distinguishes casting variants within the same slot number and is important for identification. If you cannot confidently identify the suffix from the reference table, omit it rather than guess.
 2. MODEL NAME: Use the reference table to confirm the correct name. Never invent or guess a model name.
 3. BODY COLOUR: Always state the actual body colour you can see — do not assume the standard colour. Colour variants of the same model can be worth vastly more. Named liveries (BP, Esso, Coca-Cola, Dunlop, Ever Ready, Matchbox Removals Service) must always be stated — these are collector-significant.
 4. INTERIOR & BASE: Always state the interior colour (ivory, red, orange, cream, white etc.) if visible. Always state the base colour/type if visible (bare metal base, grey base, black base etc.) — these details distinguish rare variants.
+   SILVER TRIM: Many early models have painted silver detail on the cab front — headlights, grille, and bumper. If silver paint is clearly visible on the cab face, state "silver trim" after the body colour. This is a production detail noted in Vectis catalogue style (e.g. "red cab, tan body, silver trim").
 5. WHEEL TYPE: Describe wheels precisely. For Regular Wheels models: "grey plastic wheels", "silver plastic wheels", "black plastic wheels", or "metal wheels" (earliest). When chrome hubs are visible, state "chrome hubs with black plastic tyres" — not just "black plastic wheels". For Superfast models: "Superfast wheels". Transition variants (Regular Wheels casting with Superfast wheels) are especially collectible — note them explicitly.
+   AXLE TYPE: After stating the wheel type, add the axle style when visible — "with rounded axles" (smooth rounded ends, earlier production) or "with crimped axles" (flanged/pinched ends, later production). Example: "grey plastic wheels with rounded axles". This is a production variant detail that Vectis cataloguers always note.
 6. CASTING FEATURES — examine every photo carefully for these specific details:
    WINDSCREEN WIPERS: Study the windscreen glass area in top-down or front-facing photos. If you see raised moulded lines or blade shapes cast into the glass = state "with windscreen wipers cast". If the glass area is completely plain and smooth with no raised castings at all = state "without windscreen wipers cast". Always state one or the other — never omit this.
    REAR VIEW MIRROR: Check the top of the windscreen frame or the dashboard area. If a small raised mirror casting protrudes = state "with rear view mirror cast". If that area is plain = state "without rear view mirror cast". Always state one or the other.
    TOW HOOK: Check the rear of the base in underside photos. If a tow hook protrudes = state "with tow hook". If absent = state "without tow hook".
-   OPENING FEATURES: Note if doors, bonnet, boot, or tailgate open.
+   OPENING FEATURES: Only state that a door, bonnet, boot, or tailgate opens if you can verify this from the photos or the reference table. Do not assume opening features based on the casting name alone — confirm before stating.
    The absence of wipers, mirrors, or hooks is often the defining feature of a rare high-value variant — never skip this check.
-7. BOX: Identify box type if possible — "original picture box", "original 'New Model' picture box" (yellow/blue box with 'New Model' flash on end flap), "original window box" (Superfast era). Grade box separately. Box grading: any visible edge wear or creasing = Good Plus at most; noticeable wear = Good; heavy wear = Fair. Only grade Excellent if the box looks crisp with minimal wear. Never invent box damage.
+7. BOX: Always identify the specific Moko or Lesney box type — never just write "original picture box". Use the type designations below. Grade box separately. Box grading: any visible edge wear or creasing = Good Plus at most; noticeable wear = Good; heavy wear = Fair. Only grade Excellent if the box looks crisp with minimal wear. Never invent box damage.
+
+   MOKO BOX TYPES (Regular Wheels era, c.1953–1960):
+   — Type A: Small dark blue or black box. "A Moko Lesney" or "A Moko Product" branding in white lettering. No illustration of the model — text only on the face. Earliest production (c.1953–1956). State as "original Type A Moko box".
+   — Type B picture boxes: Yellow face with a black line-art illustration of the model. Several sub-types exist, distinguished by their end panel design. Always identify the sub-type where possible and state it as e.g. "original Type B5 Moko box":
+     · B1: Plain yellow end panels, simple black text, no colour banding.
+     · B2: Yellow end panels with a small version of the model illustration and black text.
+     · B3: Yellow end panels with colour banding (typically a stripe of contrasting colour).
+     · B4: Yellow end panels, bolder black text, slightly evolved layout from B2/B3.
+     · B5: Deep maroon or wine-coloured end panels, with the model number and name in yellow type. This is the most distinctive sub-type — the dark end panels stand out clearly from the yellow face.
+   If you cannot distinguish the sub-type from the photos, state "original Type B Moko box" rather than guessing.
+
+   LATER BOX TYPES (from c.1958 onwards):
+   — 'New Model' picture box: Yellow and blue box with a 'New Model' flash on the end flap. State as "original 'New Model' picture box".
+   — Window box (Superfast era): State as "original window box".
 8. CONDITION: Grade model and box separately. Do not over-grade — any visible chips = Excellent at most, never Near Mint. Near Mint means absolutely no chips. Name chip locations only where clearly visible (e.g. "minor chips to front wings"). Do not mention chip locations you cannot actually see. Standard grades: Mint (perfect), Near Mint (no chips), Excellent (minor chips only), Good Plus (some chips/wear), Good (noticeable chips and play wear), Fair (heavy wear/damage).
 9. GROUPS: List each model by number with body colour in brackets, then one shared condition range at the end.
 10. ESTIMATE: Check Vectis, thesaleroom, and eBay sold. Named liveries and colour variants command significant premiums — research accordingly. Both figures on valid increment steps.
