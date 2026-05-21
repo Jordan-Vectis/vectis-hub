@@ -402,6 +402,9 @@ function PinBtn({ pinned, onPin, tablet }: { pinned: boolean; onPin: () => void;
   )
 }
 
+// localStorage key for idle-timer heartbeat (persists last-activity time across page closes)
+const IDLE_HEARTBEAT_KEY = "vectis_idle_last_activity"
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function LotWizardTab({
@@ -463,25 +466,67 @@ export default function LotWizardTab({
     return () => clearInterval(id)
   }, [timerActive, showScanTimer])
 
-  // Idle detection — check every 30 s; trigger popup after timerRedMins with no lot in progress.
-  // Only runs when showScanTimer is enabled.
+  // Idle detection — checks every 30 s.
+  // No free pass for staying on a lot page: lot open > threshold also fires the popup.
+  // Persists lastActivityRef to localStorage so page-close gaps are detected on return.
+  // Skips the popup silently if idle ≥ 8 h (went home / weekend).
   useEffect(() => {
     if (!showScanTimer) return
     const IDLE_THRESHOLD = timerRedSecs * 1000
+    const EIGHT_HOURS_MS = 8 * 60 * 60 * 1000
+
+    // On mount / effect re-run: restore last-activity from localStorage.
+    // If the stored timestamp predates our in-memory ref, the page was closed mid-idle;
+    // use the stored value so the gap counts towards the threshold.
+    try {
+      const stored = Number(localStorage.getItem(IDLE_HEARTBEAT_KEY) || 0)
+      if (stored > 0 && stored < lastActivityRef.current) lastActivityRef.current = stored
+    } catch { /* localStorage unavailable */ }
+
+    function firePopup(idleMs: number, idleStart: number) {
+      if (idleMs >= EIGHT_HOURS_MS) return  // went home / weekend — silent skip
+      idleStartedAtRef.current = idleStart
+      setIdleSecs(Math.floor(idleMs / 1000))
+      setIdleReason(null)
+      setIdleTotes("")
+      setIdleNotes("")
+      setIdlePopup(true)
+    }
+
+    function checkIdle() {
+      if (idlePopup) return
+      // Idle is measured from the later of: last lot saved OR when the current lot was opened.
+      // Staying on a lot page past the threshold DOES trigger the popup.
+      const lotStart  = barcodeStartedAt.current ?? 0
+      const idleStart = Math.max(lastActivityRef.current, lotStart)
+      const idleMs    = Date.now() - idleStart
+      if (idleMs >= IDLE_THRESHOLD) firePopup(idleMs, idleStart)
+    }
+
+    // Check immediately on mount / effect re-run (covers page-close + tab-switch return)
+    checkIdle()
+
+    // Poll every 30 s; also write heartbeat so page-close gaps are detected on return
     const id = setInterval(() => {
-      if (barcodeStartedAt.current) return            // actively working on a lot
-      if (idlePopup) return                           // popup already showing
-      const idle = Date.now() - lastActivityRef.current
-      if (idle >= IDLE_THRESHOLD) {
-        idleStartedAtRef.current = lastActivityRef.current
-        setIdleSecs(Math.floor(idle / 1000))
-        setIdleReason(null)
-        setIdleTotes("")
-        setIdleNotes("")
-        setIdlePopup(true)
-      }
+      try { localStorage.setItem(IDLE_HEARTBEAT_KEY, String(lastActivityRef.current)) } catch {}
+      checkIdle()
     }, 30_000)
-    return () => clearInterval(id)
+
+    // Tab-switch / page-restore detection
+    function onVisibility() {
+      if (document.visibilityState !== "visible") return
+      try {
+        const stored = Number(localStorage.getItem(IDLE_HEARTBEAT_KEY) || 0)
+        if (stored > 0 && stored < lastActivityRef.current) lastActivityRef.current = stored
+      } catch {}
+      checkIdle()
+    }
+    document.addEventListener("visibilitychange", onVisibility)
+
+    return () => {
+      clearInterval(id)
+      document.removeEventListener("visibilitychange", onVisibility)
+    }
   }, [idlePopup, showScanTimer, timerRedSecs])
 
   async function submitIdleLog() {
@@ -501,6 +546,7 @@ export default function LotWizardTab({
       })
     } catch { /* non-critical */ }
     lastActivityRef.current = Date.now()
+    try { localStorage.setItem(IDLE_HEARTBEAT_KEY, String(lastActivityRef.current)) } catch {}
     setIdlePopup(false)
     setIdleSubmitting(false)
   }
@@ -666,6 +712,7 @@ export default function LotWizardTab({
       keyPointsAccumMs.current = 0
       keyPointsEnteredAt.current = null
       lastActivityRef.current = Date.now()
+      try { localStorage.setItem(IDLE_HEARTBEAT_KEY, String(lastActivityRef.current)) } catch {}
       setTimerActive(false)
       setTimerSecs(0)
       const n = lotCount + 1
