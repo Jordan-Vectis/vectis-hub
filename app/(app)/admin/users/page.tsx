@@ -34,13 +34,13 @@ export default async function UsersPage() {
 
 
   return (
-    <div className="p-6">
+    <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Users</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Manage team access and roles</p>
       </div>
 
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden mb-6 max-w-3xl">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800">
@@ -77,7 +77,7 @@ export default async function UsersPage() {
         </table>
       </div>
 
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5 max-w-md">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5 max-w-lg">
         <h2 className="font-semibold text-gray-800 dark:text-gray-200 mb-4">Add User</h2>
         <CreateUserForm departments={departments} roles={roles} />
       </div>
