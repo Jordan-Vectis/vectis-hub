@@ -40,7 +40,10 @@ interface Lot {
   notes: string | null
   status: string
   imageUrls: string[]
+  createdAt: string   // ISO string
 }
+
+type SortKey = "lot-asc" | "newest" | "oldest"
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -175,13 +178,20 @@ export default function TabletTabs({ auction, lots, showScanTimer, timerYellowMi
 
 // ─── Manage lots — card list ──────────────────────────────────────────────────
 
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "lot-asc", label: "Lot No." },
+  { key: "newest",  label: "Newest"  },
+  { key: "oldest",  label: "Oldest"  },
+]
+
 function TabletManageLots({ lots, auctionId, onEdit, onDelete }: {
   lots: Lot[]
   auctionId: string
   onEdit: (id: string) => void
   onDelete: () => void
 }) {
-  const [search, setSearch] = useState("")
+  const [search,  setSearch]  = useState("")
+  const [sortKey, setSortKey] = useState<SortKey>("lot-asc")
   const [deleting, setDeleting] = useState<string | null>(null)
   const [pending, start] = useTransition()
 
@@ -196,13 +206,17 @@ function TabletManageLots({ lots, auctionId, onEdit, onDelete }: {
           (l.tote ?? "").toLowerCase().includes(q)
         )
       : lots
+
     return [...result].sort((a, b) => {
+      if (sortKey === "newest") return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      if (sortKey === "oldest") return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      // lot-asc: numeric then alpha
       const an = parseInt(a.lotNumber, 10)
       const bn = parseInt(b.lotNumber, 10)
       if (!isNaN(an) && !isNaN(bn)) return an - bn
       return a.lotNumber.localeCompare(b.lotNumber)
     })
-  }, [lots, search])
+  }, [lots, search, sortKey])
 
   async function handleDelete(lot: Lot) {
     if (!confirm(`Delete lot ${lot.lotNumber}?`)) return
@@ -226,7 +240,7 @@ function TabletManageLots({ lots, auctionId, onEdit, onDelete }: {
 
   return (
     <div className="p-4 space-y-3">
-      {/* Search */}
+      {/* Search + sort */}
       <input
         value={search}
         onChange={e => setSearch(e.target.value)}
@@ -234,9 +248,28 @@ function TabletManageLots({ lots, auctionId, onEdit, onDelete }: {
         className="w-full rounded-xl border border-gray-700 bg-[#2C2C2E] px-4 py-3 text-base text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]"
       />
 
-      {search && (
-        <p className="text-xs text-gray-500 px-1">{filtered.length} of {lots.length} lots</p>
-      )}
+      {/* Sort chips */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-600 font-medium shrink-0">Sort:</span>
+        {SORT_OPTIONS.map(opt => (
+          <button
+            key={opt.key}
+            type="button"
+            style={{ touchAction: "manipulation" }}
+            onClick={() => setSortKey(opt.key)}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-colors ${
+              sortKey === opt.key
+                ? "bg-[#2AB4A6] text-[#1C1C1E] border-[#2AB4A6]"
+                : "bg-[#2C2C2E] text-gray-400 border-gray-700 active:bg-[#3C3C3E]"
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+        {search && (
+          <span className="text-xs text-gray-500 ml-auto">{filtered.length} of {lots.length}</span>
+        )}
+      </div>
 
       {/* Lot cards */}
       {filtered.map(lot => (
