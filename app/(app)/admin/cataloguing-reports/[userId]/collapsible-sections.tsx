@@ -530,13 +530,8 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
                       <td className="px-5 py-3 text-xs text-gray-500 dark:text-gray-400 font-mono">
                         {log.toteNumbers || "—"}
                       </td>
-<<<<<<< Updated upstream
                       <td className="px-5 py-3 text-xs max-w-[260px]">
                         <NotesCell notes={log.notes} excluded={excluded} />
-=======
-                      <td className="px-5 py-3 text-xs text-gray-500 dark:text-gray-400 max-w-[200px] truncate" title={log.notes ?? ""}>
-                        {excluded ? <span className="italic">Excluded — over 10 hours</span> : (log.notes || "—")}
->>>>>>> Stashed changes
                       </td>
                       <td className="px-5 py-3 text-right font-mono font-bold text-orange-600">
                         {fmtDuration(log.idleDurationMs)}
