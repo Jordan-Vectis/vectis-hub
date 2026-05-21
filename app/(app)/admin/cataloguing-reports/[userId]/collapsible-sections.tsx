@@ -34,23 +34,23 @@ function DateFilters({
   count: number; total: number
 }) {
   return (
-    <div className="px-5 py-3 flex flex-wrap items-center gap-3 border-t border-gray-100 bg-gray-50/50">
+    <div className="px-5 py-3 flex flex-wrap items-center gap-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
       <div className="flex items-center gap-2">
-        <label className="text-xs text-gray-500 font-medium whitespace-nowrap">From</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">From</label>
         <input
           type="date"
           value={fromDate}
           onChange={e => setFromDate(e.target.value)}
-          className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-slate-300"
+          className="text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-slate-300"
         />
       </div>
       <div className="flex items-center gap-2">
-        <label className="text-xs text-gray-500 font-medium whitespace-nowrap">To</label>
+        <label className="text-xs text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">To</label>
         <input
           type="date"
           value={toDate}
           onChange={e => setToDate(e.target.value)}
-          className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-slate-300"
+          className="text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-slate-300"
         />
       </div>
       {(fromDate || toDate) && (
@@ -61,7 +61,7 @@ function DateFilters({
           Clear
         </button>
       )}
-      <span className="text-xs text-gray-400 ml-auto">
+      <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto">
         {count !== total ? `${count} of ${total}` : count} record{count !== 1 ? "s" : ""}
       </span>
     </div>
@@ -122,15 +122,15 @@ export function TodayProductivityCard({
   const noData = totalVisibleMs === 0 && activeMs === 0 && totalIdleMs === 0
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+      <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Today's Productivity</h2>
-          <p className="text-xs text-gray-400 mt-0.5">{format(new Date(), "EEEE d MMMM yyyy")}</p>
+          <h2 className="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider">Today's Productivity</h2>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{format(new Date(), "EEEE d MMMM yyyy")}</p>
         </div>
         {!noData && (
-          <div className="flex items-center gap-4 text-xs text-gray-500">
+          <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
             <span className="flex items-center gap-1.5">
               <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500" />
               Active cataloguing
@@ -161,7 +161,7 @@ export function TodayProductivityCard({
 
           {/* Split bar */}
           <div className="space-y-2">
-            <div className="flex rounded-full overflow-hidden h-5 bg-gray-100">
+            <div className="flex rounded-full overflow-hidden h-5 bg-gray-100 dark:bg-gray-700">
               {activePct > 0 && (
                 <div
                   className="h-full bg-emerald-500 transition-all flex items-center justify-center"
@@ -192,11 +192,11 @@ export function TodayProductivityCard({
             <div className="flex flex-wrap gap-x-6 gap-y-1">
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-bold text-emerald-600 font-mono">{fmtDuration(activeMs)}</span>
-                <span className="text-xs text-gray-400">on lots ({lotsCount} created)</span>
+                <span className="text-xs text-gray-400 dark:text-gray-500">on lots ({lotsCount} created)</span>
               </div>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-bold text-orange-500 font-mono">{fmtDuration(totalIdleMs)}</span>
-                <span className="text-xs text-gray-400">idle ({idleSessions.length} session{idleSessions.length !== 1 ? "s" : ""})</span>
+                <span className="text-xs text-gray-400 dark:text-gray-500">idle ({idleSessions.length} session{idleSessions.length !== 1 ? "s" : ""})</span>
               </div>
               {unaccountedMs > 0 && (
                 <div className="flex items-baseline gap-2">
@@ -219,8 +219,8 @@ export function TodayProductivityCard({
 
           {/* Idle breakdown */}
           {byReason.length > 0 && (
-            <div className="border-t border-gray-100 pt-4 space-y-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Idle Breakdown</p>
+            <div className="border-t border-gray-100 dark:border-gray-700 pt-4 space-y-3">
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Idle Breakdown</p>
               {byReason.map(({ key, cfg, sessions, totalMs: reasonMs }) => (
                 <div key={key} className="space-y-1.5">
                   {/* Reason header */}
@@ -228,8 +228,8 @@ export function TodayProductivityCard({
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold border ${cfg.colour}`}>
                       {cfg.icon} {cfg.label}
                     </span>
-                    <span className="font-mono font-bold text-sm text-gray-700">{fmtDuration(reasonMs)}</span>
-                    <span className="text-xs text-gray-400">
+                    <span className="font-mono font-bold text-sm text-gray-700 dark:text-gray-300">{fmtDuration(reasonMs)}</span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500">
                       ({sessions.length} session{sessions.length !== 1 ? "s" : ""})
                     </span>
                   </div>
@@ -237,11 +237,11 @@ export function TodayProductivityCard({
                   {/* Per-session detail */}
                   <div className="ml-2 space-y-1">
                     {sessions.map((s, i) => (
-                      <div key={i} className="flex items-start gap-3 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
-                        <span className="text-gray-400 font-mono whitespace-nowrap shrink-0">
+                      <div key={i} className="flex items-start gap-3 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2">
+                        <span className="text-gray-400 dark:text-gray-500 font-mono whitespace-nowrap shrink-0">
                           {format(new Date(s.startedAt), "HH:mm")}
                         </span>
-                        <span className="font-mono font-semibold text-gray-700 whitespace-nowrap shrink-0">
+                        <span className="font-mono font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap shrink-0">
                           {fmtDuration(s.durationMs)}
                         </span>
                         {s.toteNumbers && (
@@ -306,19 +306,19 @@ export function CollapsibleLotsTable({ logs }: { logs: SerialLotLog[] }) {
   )
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
       {/* Toggle header */}
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition-colors"
+        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
       >
-        <span className="text-sm font-bold text-gray-700 uppercase tracking-wider">
+        <span className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
           All Lots in Period
-          <span className="ml-2 font-normal normal-case text-gray-400 text-xs">
+          <span className="ml-2 font-normal normal-case text-gray-400 dark:text-gray-500 text-xs">
             ({logs.length} total)
           </span>
         </span>
-        <span className="text-gray-400 text-sm select-none">{open ? "▲ Collapse" : "▼ Expand"}</span>
+        <span className="text-gray-400 dark:text-gray-500 text-sm select-none">{open ? "▲ Collapse" : "▼ Expand"}</span>
       </button>
 
       {open && (
@@ -332,7 +332,7 @@ export function CollapsibleLotsTable({ logs }: { logs: SerialLotLog[] }) {
           <div className="overflow-y-auto max-h-[420px]">
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10">
-                <tr className="border-b border-gray-100 bg-gray-50 text-xs text-gray-400 uppercase tracking-wider">
+                <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                   <th className="text-left px-5 py-3">Date / Time</th>
                   <th className="text-left px-5 py-3">Auction</th>
                   <th className="text-left px-5 py-3">Lot / Barcode</th>
@@ -341,20 +341,20 @@ export function CollapsibleLotsTable({ logs }: { logs: SerialLotLog[] }) {
                   <th className="text-right px-5 py-3">Total Time</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-10 text-center text-gray-400 text-xs">
+                    <td colSpan={6} className="px-5 py-10 text-center text-gray-400 dark:text-gray-500 text-xs">
                       No lots match the selected date range.
                     </td>
                   </tr>
                 ) : filtered.map(log => (
-                  <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap font-mono">
+                  <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                    <td className="px-5 py-3 text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap font-mono">
                       {format(new Date(log.savedAt), "dd/MM/yyyy HH:mm:ss")}
                     </td>
-                    <td className="px-5 py-3 font-mono text-slate-600 text-xs">{log.auctionCode}</td>
-                    <td className="px-5 py-3 font-mono text-gray-500 text-xs">{log.lotNumber || "—"}</td>
+                    <td className="px-5 py-3 font-mono text-slate-600 dark:text-gray-300 text-xs">{log.auctionCode}</td>
+                    <td className="px-5 py-3 font-mono text-gray-500 dark:text-gray-400 text-xs">{log.lotNumber || "—"}</td>
                     <td className="px-5 py-3">
                       <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
                         log.method === "WIZARD"
@@ -364,10 +364,10 @@ export function CollapsibleLotsTable({ logs }: { logs: SerialLotLog[] }) {
                         {log.method === "WIZARD" ? "Wizard" : "Photo Only"}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-right font-mono text-gray-500 text-xs">
+                    <td className="px-5 py-3 text-right font-mono text-gray-500 dark:text-gray-400 text-xs">
                       {log.method === "WIZARD" ? fmtDuration(log.keyPointsMs) : "—"}
                     </td>
-                    <td className="px-5 py-3 text-right font-mono font-bold text-gray-700">
+                    <td className="px-5 py-3 text-right font-mono font-bold text-gray-700 dark:text-gray-200">
                       {fmtDuration(log.durationMs)}
                     </td>
                   </tr>
@@ -446,19 +446,19 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
       {/* Toggle header */}
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition-colors"
+        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
       >
-        <span className="text-sm font-bold text-gray-700 uppercase tracking-wider">
+        <span className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
           Idle Time
-          <span className="ml-2 font-normal normal-case text-gray-400 text-xs">
+          <span className="ml-2 font-normal normal-case text-gray-400 dark:text-gray-500 text-xs">
             ({logs.length} session{logs.length !== 1 ? "s" : ""})
           </span>
         </span>
-        <span className="text-gray-400 text-sm select-none">{open ? "▲ Collapse" : "▼ Expand"}</span>
+        <span className="text-gray-400 dark:text-gray-500 text-sm select-none">{open ? "▲ Collapse" : "▼ Expand"}</span>
       </button>
 
       {open && (
@@ -491,7 +491,7 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
           <div className="overflow-y-auto max-h-[420px]">
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10">
-                <tr className="border-b border-gray-100 bg-gray-50 text-xs text-gray-400 uppercase tracking-wider">
+                <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                   <th className="text-left px-5 py-3">Date / Time</th>
                   <th className="text-left px-5 py-3">Auction</th>
                   <th className="text-left px-5 py-3">Reason</th>
@@ -501,10 +501,10 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
                   <th className="px-5 py-3" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-5 py-10 text-center text-gray-400 text-xs">
+                    <td colSpan={7} className="px-5 py-10 text-center text-gray-400 dark:text-gray-500 text-xs">
                       No idle sessions match the selected date range.
                     </td>
                   </tr>
@@ -512,14 +512,14 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
                   const r        = REASON_CONFIG[log.reason] ?? { label: log.reason, colour: "bg-gray-100 text-gray-500 border-gray-200", icon: "❓", idleColour: "#9ca3af" }
                   const excluded = log.idleDurationMs > MAX_IDLE_MS
                   return (
-                    <tr key={log.id} className={`transition-colors ${excluded ? "opacity-40 bg-gray-50" : "hover:bg-gray-50"}`}>
-                      <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap font-mono">
+                    <tr key={log.id} className={`transition-colors ${excluded ? "opacity-40 bg-gray-50 dark:bg-gray-800" : "hover:bg-gray-50 dark:hover:bg-gray-800/50"}`}>
+                      <td className="px-5 py-3 text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap font-mono">
                         {format(new Date(log.idleStartedAt), "dd/MM/yyyy HH:mm:ss")}
                       </td>
                       <td className="px-5 py-3 text-xs">
-                        <span className="font-mono text-slate-600">{log.auctionCode}</span>
+                        <span className="font-mono text-slate-600 dark:text-gray-300">{log.auctionCode}</span>
                         {log.auctionName && (
-                          <span className="ml-1.5 text-gray-400">{log.auctionName}</span>
+                          <span className="ml-1.5 text-gray-400 dark:text-gray-500">{log.auctionName}</span>
                         )}
                       </td>
                       <td className="px-5 py-3">
@@ -527,11 +527,16 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
                           {r.label}
                         </span>
                       </td>
-                      <td className="px-5 py-3 text-xs text-gray-500 font-mono">
+                      <td className="px-5 py-3 text-xs text-gray-500 dark:text-gray-400 font-mono">
                         {log.toteNumbers || "—"}
                       </td>
+<<<<<<< Updated upstream
                       <td className="px-5 py-3 text-xs max-w-[260px]">
                         <NotesCell notes={log.notes} excluded={excluded} />
+=======
+                      <td className="px-5 py-3 text-xs text-gray-500 dark:text-gray-400 max-w-[200px] truncate" title={log.notes ?? ""}>
+                        {excluded ? <span className="italic">Excluded — over 10 hours</span> : (log.notes || "—")}
+>>>>>>> Stashed changes
                       </td>
                       <td className="px-5 py-3 text-right font-mono font-bold text-orange-600">
                         {fmtDuration(log.idleDurationMs)}
@@ -540,7 +545,7 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
                         <button
                           onClick={() => handleDelete(log.id)}
                           disabled={deleting === log.id}
-                          className="text-gray-300 hover:text-red-500 transition-colors disabled:opacity-50"
+                          className="text-gray-300 dark:text-gray-600 hover:text-red-500 transition-colors disabled:opacity-50"
                           title="Delete entry"
                         >
                           {deleting === log.id ? "…" : "✕"}
