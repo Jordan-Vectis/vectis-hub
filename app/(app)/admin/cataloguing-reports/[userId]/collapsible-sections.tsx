@@ -84,6 +84,9 @@ const REASON_CONFIG: Record<string, { label: string; colour: string; icon: strin
   OTHER:       { label: "Other",       colour: "bg-gray-100 text-gray-600 border-gray-200",    icon: "📝", idleColour: "#9ca3af" },
 }
 
+const WORK_START_HOUR = 9
+const WORK_DAY_MS     = 8 * 60 * 60 * 1000  // 9am–5pm
+
 export function TodayProductivityCard({
   activeMs,
   lotsCount,
@@ -94,9 +97,20 @@ export function TodayProductivityCard({
   idleSessions:  TodayIdleSession[]
 }) {
   const totalIdleMs = idleSessions.reduce((s, l) => s + l.durationMs, 0)
-  const totalMs     = activeMs + totalIdleMs
-  const activePct   = totalMs > 0 ? (activeMs / totalMs) * 100 : 0
-  const idlePct     = 100 - activePct
+
+  // Workday: 9am–5pm, Mon–Fri
+  const now        = new Date()
+  const workStart  = new Date(now); workStart.setHours(WORK_START_HOUR, 0, 0, 0)
+  const isWeekend  = now.getDay() === 0 || now.getDay() === 6
+  const expectedMs = isWeekend ? 0 : Math.max(0, Math.min(now.getTime() - workStart.getTime(), WORK_DAY_MS))
+
+  const totalTrackedMs = activeMs + totalIdleMs
+  const unaccountedMs  = Math.max(0, expectedMs - totalTrackedMs)
+  const totalVisibleMs = totalTrackedMs + unaccountedMs  // max(tracked, expected)
+
+  const activePct      = totalVisibleMs > 0 ? (activeMs       / totalVisibleMs) * 100 : 0
+  const idlePct        = totalVisibleMs > 0 ? (totalIdleMs    / totalVisibleMs) * 100 : 0
+  const unaccPct       = totalVisibleMs > 0 ? (unaccountedMs  / totalVisibleMs) * 100 : 0
 
   // Group idle sessions by reason for the breakdown
   const byReason = Object.entries(REASON_CONFIG).map(([key, cfg]) => {
@@ -105,12 +119,12 @@ export function TodayProductivityCard({
     return { key, cfg, sessions, totalMs }
   }).filter(r => r.sessions.length > 0)
 
-  const noData = activeMs === 0 && totalIdleMs === 0
+  const noData = totalVisibleMs === 0 && activeMs === 0 && totalIdleMs === 0
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
         <div>
           <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Today's Productivity</h2>
           <p className="text-xs text-gray-400 mt-0.5">{format(new Date(), "EEEE d MMMM yyyy")}</p>
@@ -125,6 +139,12 @@ export function TodayProductivityCard({
               <span className="inline-block w-2.5 h-2.5 rounded-full bg-orange-400" />
               Idle time
             </span>
+            {(unaccountedMs > 0 || expectedMs > 0) && (
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-gray-300" />
+                Unaccounted
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -132,6 +152,9 @@ export function TodayProductivityCard({
       {noData ? (
         <div className="px-5 py-8 text-center text-gray-400">
           <p className="text-sm">No activity recorded today yet.</p>
+          {!isWeekend && expectedMs === 0 && (
+            <p className="text-xs mt-1">Work day starts at 9:00am.</p>
+          )}
         </div>
       ) : (
         <div className="px-5 py-5 space-y-5">
@@ -144,9 +167,7 @@ export function TodayProductivityCard({
                   className="h-full bg-emerald-500 transition-all flex items-center justify-center"
                   style={{ width: `${activePct}%` }}
                 >
-                  {activePct > 12 && (
-                    <span className="text-white text-xs font-bold">{Math.round(activePct)}%</span>
-                  )}
+                  {activePct > 10 && <span className="text-white text-xs font-bold">{Math.round(activePct)}%</span>}
                 </div>
               )}
               {idlePct > 0 && (
@@ -154,15 +175,21 @@ export function TodayProductivityCard({
                   className="h-full bg-orange-400 transition-all flex items-center justify-center"
                   style={{ width: `${idlePct}%` }}
                 >
-                  {idlePct > 12 && (
-                    <span className="text-white text-xs font-bold">{Math.round(idlePct)}%</span>
-                  )}
+                  {idlePct > 10 && <span className="text-white text-xs font-bold">{Math.round(idlePct)}%</span>}
+                </div>
+              )}
+              {unaccPct > 0 && (
+                <div
+                  className="h-full bg-gray-300 transition-all flex items-center justify-center"
+                  style={{ width: `${unaccPct}%` }}
+                >
+                  {unaccPct > 10 && <span className="text-gray-600 text-xs font-bold">{Math.round(unaccPct)}%</span>}
                 </div>
               )}
             </div>
 
             {/* Totals row */}
-            <div className="flex gap-6">
+            <div className="flex flex-wrap gap-x-6 gap-y-1">
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-bold text-emerald-600 font-mono">{fmtDuration(activeMs)}</span>
                 <span className="text-xs text-gray-400">on lots ({lotsCount} created)</span>
@@ -171,7 +198,23 @@ export function TodayProductivityCard({
                 <span className="text-2xl font-bold text-orange-500 font-mono">{fmtDuration(totalIdleMs)}</span>
                 <span className="text-xs text-gray-400">idle ({idleSessions.length} session{idleSessions.length !== 1 ? "s" : ""})</span>
               </div>
+              {unaccountedMs > 0 && (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-bold text-gray-400 font-mono">{fmtDuration(unaccountedMs)}</span>
+                  <span className="text-xs text-gray-400">unaccounted</span>
+                </div>
+              )}
             </div>
+
+            {/* Expected workday context */}
+            {!isWeekend && expectedMs > 0 && (
+              <p className="text-xs text-gray-400">
+                Based on a 9am–5pm workday ·{" "}
+                <span className={totalTrackedMs >= expectedMs ? "text-emerald-600 font-semibold" : "text-gray-400"}>
+                  {Math.min(100, Math.round((totalTrackedMs / expectedMs) * 100))}% of expected time accounted for
+                </span>
+              </p>
+            )}
           </div>
 
           {/* Idle breakdown */}
@@ -525,12 +568,31 @@ export type DayStats = {
 }
 
 export function DailyComparisonTable({ days }: { days: DayStats[] }) {
-  const totalCatMs  = days.reduce((s, d) => s + d.cataloguingMs, 0)
-  const totalIdleMs = days.reduce((s, d) => s + d.idleMs, 0)
-  const totalMs     = totalCatMs + totalIdleMs
-  const overallActPct  = totalMs > 0 ? (totalCatMs  / totalMs) * 100 : 0
-  const overallIdlePct = totalMs > 0 ? (totalIdleMs / totalMs) * 100 : 0
-  const totalLots   = days.reduce((s, d) => s + d.lots, 0)
+  const todayStr   = format(new Date(), "yyyy-MM-dd")
+  const nowMs      = new Date().getTime()
+
+  function getExpectedMs(dateStr: string): number {
+    const d = new Date(dateStr + "T12:00:00")
+    if (d.getDay() === 0 || d.getDay() === 6) return 0  // weekend
+    if (dateStr === todayStr) {
+      const workStart = new Date(dateStr + "T09:00:00")
+      return Math.max(0, Math.min(nowMs - workStart.getTime(), WORK_DAY_MS))
+    }
+    return WORK_DAY_MS
+  }
+
+  const totalCatMs   = days.reduce((s, d) => s + d.cataloguingMs, 0)
+  const totalIdleMs  = days.reduce((s, d) => s + d.idleMs, 0)
+  const totalUnaccMs = days.reduce((s, d) => {
+    const exp = getExpectedMs(d.date)
+    return s + Math.max(0, exp - d.cataloguingMs - d.idleMs)
+  }, 0)
+  const totalExpectedMs  = totalCatMs + totalIdleMs + totalUnaccMs
+  const totalLots        = days.reduce((s, d) => s + d.lots, 0)
+
+  const overallActPct  = totalExpectedMs > 0 ? (totalCatMs   / totalExpectedMs) * 100 : 0
+  const overallIdlePct = totalExpectedMs > 0 ? (totalIdleMs  / totalExpectedMs) * 100 : 0
+  const overallUnacPct = totalExpectedMs > 0 ? (totalUnaccMs / totalExpectedMs) * 100 : 0
 
   return (
     <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
@@ -538,26 +600,31 @@ export function DailyComparisonTable({ days }: { days: DayStats[] }) {
       <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
         <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
           Daily Breakdown
-          <span className="ml-2 font-normal normal-case text-gray-400">— cataloguing vs idle per day</span>
+          <span className="ml-2 font-normal normal-case text-gray-400">— 9am–5pm weekday · cataloguing vs idle vs unaccounted</span>
         </h2>
 
-        {totalMs > 0 ? (
+        {totalExpectedMs > 0 || totalCatMs > 0 ? (
           <div className="space-y-2">
             {/* Overall split bar */}
             <div className="flex rounded-full overflow-hidden h-5 bg-gray-100 dark:bg-gray-800">
               {overallActPct > 0 && (
                 <div className="h-full bg-emerald-500 flex items-center justify-center transition-all" style={{ width: `${overallActPct}%` }}>
-                  {overallActPct > 10 && <span className="text-white text-xs font-bold">{Math.round(overallActPct)}%</span>}
+                  {overallActPct > 8 && <span className="text-white text-xs font-bold">{Math.round(overallActPct)}%</span>}
                 </div>
               )}
               {overallIdlePct > 0 && (
                 <div className="h-full bg-orange-400 flex items-center justify-center transition-all" style={{ width: `${overallIdlePct}%` }}>
-                  {overallIdlePct > 10 && <span className="text-white text-xs font-bold">{Math.round(overallIdlePct)}%</span>}
+                  {overallIdlePct > 8 && <span className="text-white text-xs font-bold">{Math.round(overallIdlePct)}%</span>}
+                </div>
+              )}
+              {overallUnacPct > 0 && (
+                <div className="h-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center transition-all" style={{ width: `${overallUnacPct}%` }}>
+                  {overallUnacPct > 8 && <span className="text-gray-700 dark:text-gray-300 text-xs font-bold">{Math.round(overallUnacPct)}%</span>}
                 </div>
               )}
             </div>
             {/* Totals */}
-            <div className="flex flex-wrap gap-6 text-xs">
+            <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
               <span className="flex items-center gap-1.5">
                 <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
                 <span className="font-bold text-emerald-600 font-mono">{fmtDuration(totalCatMs)}</span>
@@ -568,12 +635,11 @@ export function DailyComparisonTable({ days }: { days: DayStats[] }) {
                 <span className="font-bold text-orange-500 font-mono">{fmtDuration(totalIdleMs)}</span>
                 <span className="text-gray-400">idle · {Math.round(overallIdlePct)}%</span>
               </span>
-              {totalMs > 0 && (
-                <span className="ml-auto text-gray-400">
-                  {overallActPct >= overallIdlePct
-                    ? <span className="text-emerald-600 font-semibold">{Math.round(overallActPct - overallIdlePct)}% more cataloguing than idle</span>
-                    : <span className="text-orange-500 font-semibold">{Math.round(overallIdlePct - overallActPct)}% more idle than cataloguing</span>
-                  }
+              {totalUnaccMs > 0 && (
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />
+                  <span className="font-bold text-gray-400 font-mono">{fmtDuration(totalUnaccMs)}</span>
+                  <span className="text-gray-400">unaccounted · {Math.round(overallUnacPct)}%</span>
                 </span>
               )}
             </div>
@@ -594,22 +660,27 @@ export function DailyComparisonTable({ days }: { days: DayStats[] }) {
                 <th className="text-right px-5 py-3">Lots</th>
                 <th className="text-right px-5 py-3">Cataloguing</th>
                 <th className="text-right px-5 py-3">Idle</th>
+                <th className="text-right px-5 py-3">Unaccounted</th>
                 <th className="px-5 py-3 min-w-[120px]">Split</th>
-                <th className="text-right px-5 py-3">Active %</th>
-                <th className="text-right px-5 py-3">Diff</th>
+                <th className="text-right px-5 py-3">Accounted</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 dark:divide-gray-800/60">
               {days.map(day => {
-                const tracked   = day.cataloguingMs + day.idleMs
-                const actPct    = tracked > 0 ? (day.cataloguingMs / tracked) * 100 : 0
-                const idlePct   = 100 - actPct
-                const diff      = Math.abs(Math.round(actPct - idlePct))
-                const moreActive = actPct >= idlePct
+                const expectedMs   = getExpectedMs(day.date)
+                const unaccMs      = Math.max(0, expectedMs - day.cataloguingMs - day.idleMs)
+                const totalDayMs   = day.cataloguingMs + day.idleMs + unaccMs
+                const isWeekend    = new Date(day.date + "T12:00:00").getDay() === 0 || new Date(day.date + "T12:00:00").getDay() === 6
+                const catPct       = totalDayMs > 0 ? (day.cataloguingMs / totalDayMs) * 100 : 0
+                const idlPct       = totalDayMs > 0 ? (day.idleMs        / totalDayMs) * 100 : 0
+                const unacPct      = totalDayMs > 0 ? (unaccMs           / totalDayMs) * 100 : 0
+                const accountedPct = expectedMs > 0  ? Math.min(100, Math.round(((day.cataloguingMs + day.idleMs) / expectedMs) * 100)) : null
+
                 return (
-                  <tr key={day.date} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                  <tr key={day.date} className={`hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors ${isWeekend ? "opacity-60" : ""}`}>
                     <td className="px-5 py-3 text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap">
                       {format(new Date(day.date + "T12:00:00"), "EEE dd MMM yyyy")}
+                      {isWeekend && <span className="ml-1.5 text-gray-400 font-sans not-italic">(weekend)</span>}
                     </td>
                     <td className="px-5 py-3 text-right font-bold text-gray-800 dark:text-white tabular-nums">
                       {day.lots || <span className="text-gray-300 dark:text-gray-700">—</span>}
@@ -620,29 +691,24 @@ export function DailyComparisonTable({ days }: { days: DayStats[] }) {
                     <td className="px-5 py-3 text-right font-mono text-orange-500">
                       {day.idleMs > 0 ? fmtDuration(day.idleMs) : <span className="text-gray-300 dark:text-gray-700">—</span>}
                     </td>
+                    <td className="px-5 py-3 text-right font-mono text-gray-400">
+                      {isWeekend ? <span className="text-gray-300 dark:text-gray-700">—</span> : unaccMs > 0 ? fmtDuration(unaccMs) : <span className="text-emerald-500 font-semibold text-xs">✓ fully accounted</span>}
+                    </td>
                     <td className="px-5 py-3">
-                      {tracked > 0 ? (
+                      {totalDayMs > 0 ? (
                         <div className="flex rounded-full overflow-hidden h-3 bg-gray-100 dark:bg-gray-800 min-w-[80px]">
-                          {actPct  > 0 && <div className="h-full bg-emerald-500" style={{ width: `${actPct}%`  }} />}
-                          {idlePct > 0 && <div className="h-full bg-orange-400" style={{ width: `${idlePct}%` }} />}
+                          {catPct  > 0 && <div className="h-full bg-emerald-500" style={{ width: `${catPct}%`  }} />}
+                          {idlPct  > 0 && <div className="h-full bg-orange-400" style={{ width: `${idlPct}%`  }} />}
+                          {unacPct > 0 && <div className="h-full bg-gray-300 dark:bg-gray-600" style={{ width: `${unacPct}%` }} />}
                         </div>
                       ) : (
                         <div className="h-3 rounded-full bg-gray-100 dark:bg-gray-800" />
                       )}
                     </td>
                     <td className="px-5 py-3 text-right text-xs tabular-nums">
-                      {tracked > 0 ? (
-                        <span className={`font-bold ${actPct >= 50 ? "text-emerald-600" : "text-orange-500"}`}>
-                          {Math.round(actPct)}%
-                        </span>
-                      ) : (
-                        <span className="text-gray-300 dark:text-gray-700">—</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 text-right text-xs tabular-nums whitespace-nowrap">
-                      {tracked > 0 ? (
-                        <span className={moreActive ? "text-emerald-600" : "text-orange-500"}>
-                          {moreActive ? `+${diff}% cat` : `+${diff}% idle`}
+                      {accountedPct !== null ? (
+                        <span className={`font-bold ${accountedPct >= 80 ? "text-emerald-600" : accountedPct >= 50 ? "text-amber-500" : "text-red-400"}`}>
+                          {accountedPct}%
                         </span>
                       ) : (
                         <span className="text-gray-300 dark:text-gray-700">—</span>
