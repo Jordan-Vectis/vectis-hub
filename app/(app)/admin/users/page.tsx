@@ -32,6 +32,10 @@ export default async function UsersPage() {
     ...users.map(u => u.role),
   ])].sort((a, b) => a === "ADMIN" ? -1 : b === "ADMIN" ? 1 : a.localeCompare(b))
 
+  // Group users by role, in the same order as the roles array
+  const usersByRole = roles
+    .map(role => ({ role, members: users.filter(u => u.role === role) }))
+    .filter(g => g.members.length > 0)
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -40,41 +44,45 @@ export default async function UsersPage() {
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Manage team access and roles</p>
       </div>
 
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800">
-              <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Name</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Username</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Email</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Role</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Department</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((user) => {
-              const { label, color } = roleLabels[user.role] ?? { label: user.role, color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300" }
-              return (
-                <tr key={user.id} className="border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                  <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">{user.name}</td>
-                  <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{user.username ?? <span className="text-gray-300">—</span>}</td>
-                  <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{user.email}</td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${color}`}>{label}</span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{user.department?.name ?? "—"}</td>
-                  <td className="px-4 py-3 text-right">
-                    <Link href={`/admin/users/${user.id}`}
-                      className="text-sm text-blue-600 hover:text-blue-800 font-medium">
-                      Edit →
-                    </Link>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+      <div className="space-y-6 mb-6">
+        {usersByRole.map(({ role, members }) => {
+          const { label, color } = roleLabels[role] ?? { label: role, color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300" }
+          return (
+            <div key={role} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+              {/* Group header */}
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800">
+                <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${color}`}>{label}</span>
+                <span className="text-xs text-gray-400 dark:text-gray-500">{members.length} {members.length === 1 ? "user" : "users"}</span>
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 dark:border-gray-800">
+                    <th className="text-left px-4 py-2.5 font-medium text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wide">Name</th>
+                    <th className="text-left px-4 py-2.5 font-medium text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wide">Username</th>
+                    <th className="text-left px-4 py-2.5 font-medium text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wide">Email</th>
+                    <th className="text-left px-4 py-2.5 font-medium text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wide">Department</th>
+                    <th className="px-4 py-2.5" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {members.map((user) => (
+                    <tr key={user.id} className="border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                      <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">{user.name}</td>
+                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{user.username ?? <span className="text-gray-300 dark:text-gray-600">—</span>}</td>
+                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{user.email}</td>
+                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{user.department?.name ?? "—"}</td>
+                      <td className="px-4 py-3 text-right">
+                        <Link href={`/admin/users/${user.id}`} className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium">
+                          Edit →
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        })}
       </div>
 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5 max-w-lg">
