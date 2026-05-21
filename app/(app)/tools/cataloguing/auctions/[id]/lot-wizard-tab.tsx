@@ -551,6 +551,13 @@ export default function LotWizardTab({
     setIdleSubmitting(false)
   }
 
+  // Keep idleSecs ticking while the popup is open — can't exploit it by leaving it up
+  useEffect(() => {
+    if (!idlePopup) return
+    const id = setInterval(() => setIdleSecs(s => s + 1), 1000)
+    return () => clearInterval(id)
+  }, [idlePopup])
+
   // Track time spent on Key Points (step 3)
   useEffect(() => {
     if (step === 3) {
@@ -749,7 +756,7 @@ export default function LotWizardTab({
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
             <div className="text-center mb-5">
-              <p className="text-xs font-bold uppercase tracking-widest text-gray-600 dark:text-gray-400 mb-1">Idle Timer</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-gray-600 dark:text-gray-400 mb-1">Idle Reason</p>
               <p className="text-5xl font-mono font-bold text-gray-900">{fmtIdleDuration(idleSecs)}</p>
               <p className="text-sm text-gray-600 dark:text-gray-500 mt-2">You haven't catalogued a lot for a while.<br/>What were you doing?</p>
             </div>
