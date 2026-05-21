@@ -216,7 +216,7 @@ export default async function ReportsOverviewPage({
       </div>
 
       {/* ── Body ── */}
-      <div className="flex-1 px-6 py-8">
+      <div className="flex-1 bg-gray-50 dark:bg-[#141416] px-6 py-8">
         <div className="max-w-7xl mx-auto space-y-8">
 
           {/* No data */}
