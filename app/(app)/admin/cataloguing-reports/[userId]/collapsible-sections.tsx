@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react"
 import { format } from "date-fns"
+import { useRouter } from "next/navigation"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -206,7 +207,7 @@ export function TodayProductivityCard({
                           </span>
                         )}
                         {s.notes && (
-                          <span className="text-gray-500 italic truncate" title={s.notes}>
+                          <span className="text-gray-500 italic break-words">
                             "{s.notes}"
                           </span>
                         )}
@@ -337,6 +338,31 @@ export function CollapsibleLotsTable({ logs }: { logs: SerialLotLog[] }) {
   )
 }
 
+// ─── Expandable Notes Cell ────────────────────────────────────────────────────
+
+function NotesCell({ notes, excluded }: { notes: string | null; excluded: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+  if (excluded) return <span className="italic text-gray-400">Excluded — over 10 hours</span>
+  if (!notes) return <span className="text-gray-300">—</span>
+  const LIMIT = 80
+  const isLong = notes.length > LIMIT
+  return (
+    <span>
+      <span className="text-gray-500">
+        &ldquo;{expanded || !isLong ? notes : `${notes.slice(0, LIMIT)}…`}&rdquo;
+      </span>
+      {isLong && (
+        <button
+          onClick={e => { e.stopPropagation(); setExpanded(v => !v) }}
+          className="ml-1 text-[#2AB4A6] hover:text-[#25a396] text-xs underline whitespace-nowrap"
+        >
+          {expanded ? "less" : "more"}
+        </button>
+      )}
+    </span>
+  )
+}
+
 // ─── Collapsible Idle Time Table ──────────────────────────────────────────────
 
 export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLog[] }) {
@@ -461,8 +487,8 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
                       <td className="px-5 py-3 text-xs text-gray-500 font-mono">
                         {log.toteNumbers || "—"}
                       </td>
-                      <td className="px-5 py-3 text-xs text-gray-500 max-w-[200px] truncate" title={log.notes ?? ""}>
-                        {excluded ? <span className="italic">Excluded — over 10 hours</span> : (log.notes || "—")}
+                      <td className="px-5 py-3 text-xs max-w-[260px]">
+                        <NotesCell notes={log.notes} excluded={excluded} />
                       </td>
                       <td className="px-5 py-3 text-right font-mono font-bold text-orange-600">
                         {fmtDuration(log.idleDurationMs)}
@@ -484,6 +510,217 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
             </table>
           </div>
         </>
+      )}
+    </div>
+  )
+}
+
+// ─── Daily Comparison Table ───────────────────────────────────────────────────
+
+export type DayStats = {
+  date: string          // "yyyy-MM-dd"
+  lots: number
+  cataloguingMs: number
+  idleMs: number
+}
+
+export function DailyComparisonTable({ days }: { days: DayStats[] }) {
+  const totalCatMs  = days.reduce((s, d) => s + d.cataloguingMs, 0)
+  const totalIdleMs = days.reduce((s, d) => s + d.idleMs, 0)
+  const totalMs     = totalCatMs + totalIdleMs
+  const overallActPct  = totalMs > 0 ? (totalCatMs  / totalMs) * 100 : 0
+  const overallIdlePct = totalMs > 0 ? (totalIdleMs / totalMs) * 100 : 0
+  const totalLots   = days.reduce((s, d) => s + d.lots, 0)
+
+  return (
+    <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+      {/* Header + overall summary */}
+      <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+        <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+          Daily Breakdown
+          <span className="ml-2 font-normal normal-case text-gray-400">— cataloguing vs idle per day</span>
+        </h2>
+
+        {totalMs > 0 ? (
+          <div className="space-y-2">
+            {/* Overall split bar */}
+            <div className="flex rounded-full overflow-hidden h-5 bg-gray-100 dark:bg-gray-800">
+              {overallActPct > 0 && (
+                <div className="h-full bg-emerald-500 flex items-center justify-center transition-all" style={{ width: `${overallActPct}%` }}>
+                  {overallActPct > 10 && <span className="text-white text-xs font-bold">{Math.round(overallActPct)}%</span>}
+                </div>
+              )}
+              {overallIdlePct > 0 && (
+                <div className="h-full bg-orange-400 flex items-center justify-center transition-all" style={{ width: `${overallIdlePct}%` }}>
+                  {overallIdlePct > 10 && <span className="text-white text-xs font-bold">{Math.round(overallIdlePct)}%</span>}
+                </div>
+              )}
+            </div>
+            {/* Totals */}
+            <div className="flex flex-wrap gap-6 text-xs">
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                <span className="font-bold text-emerald-600 font-mono">{fmtDuration(totalCatMs)}</span>
+                <span className="text-gray-400">cataloguing · {Math.round(overallActPct)}% · {totalLots} lots</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-orange-400 shrink-0" />
+                <span className="font-bold text-orange-500 font-mono">{fmtDuration(totalIdleMs)}</span>
+                <span className="text-gray-400">idle · {Math.round(overallIdlePct)}%</span>
+              </span>
+              {totalMs > 0 && (
+                <span className="ml-auto text-gray-400">
+                  {overallActPct >= overallIdlePct
+                    ? <span className="text-emerald-600 font-semibold">{Math.round(overallActPct - overallIdlePct)}% more cataloguing than idle</span>
+                    : <span className="text-orange-500 font-semibold">{Math.round(overallIdlePct - overallActPct)}% more idle than cataloguing</span>
+                  }
+                </span>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400">No tracked time data in this period.</p>
+        )}
+      </div>
+
+      {days.length === 0 ? (
+        <p className="px-5 py-8 text-center text-gray-400 text-sm">No days with recorded activity in this period.</p>
+      ) : (
+        <div className="overflow-y-auto max-h-[520px]">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-[#141416] text-xs text-gray-400 uppercase tracking-wider">
+                <th className="text-left px-5 py-3">Date</th>
+                <th className="text-right px-5 py-3">Lots</th>
+                <th className="text-right px-5 py-3">Cataloguing</th>
+                <th className="text-right px-5 py-3">Idle</th>
+                <th className="px-5 py-3 min-w-[120px]">Split</th>
+                <th className="text-right px-5 py-3">Active %</th>
+                <th className="text-right px-5 py-3">Diff</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50 dark:divide-gray-800/60">
+              {days.map(day => {
+                const tracked   = day.cataloguingMs + day.idleMs
+                const actPct    = tracked > 0 ? (day.cataloguingMs / tracked) * 100 : 0
+                const idlePct   = 100 - actPct
+                const diff      = Math.abs(Math.round(actPct - idlePct))
+                const moreActive = actPct >= idlePct
+                return (
+                  <tr key={day.date} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                    <td className="px-5 py-3 text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                      {format(new Date(day.date + "T12:00:00"), "EEE dd MMM yyyy")}
+                    </td>
+                    <td className="px-5 py-3 text-right font-bold text-gray-800 dark:text-white tabular-nums">
+                      {day.lots || <span className="text-gray-300 dark:text-gray-700">—</span>}
+                    </td>
+                    <td className="px-5 py-3 text-right font-mono text-emerald-600">
+                      {day.cataloguingMs > 0 ? fmtDuration(day.cataloguingMs) : <span className="text-gray-300 dark:text-gray-700">—</span>}
+                    </td>
+                    <td className="px-5 py-3 text-right font-mono text-orange-500">
+                      {day.idleMs > 0 ? fmtDuration(day.idleMs) : <span className="text-gray-300 dark:text-gray-700">—</span>}
+                    </td>
+                    <td className="px-5 py-3">
+                      {tracked > 0 ? (
+                        <div className="flex rounded-full overflow-hidden h-3 bg-gray-100 dark:bg-gray-800 min-w-[80px]">
+                          {actPct  > 0 && <div className="h-full bg-emerald-500" style={{ width: `${actPct}%`  }} />}
+                          {idlePct > 0 && <div className="h-full bg-orange-400" style={{ width: `${idlePct}%` }} />}
+                        </div>
+                      ) : (
+                        <div className="h-3 rounded-full bg-gray-100 dark:bg-gray-800" />
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-right text-xs tabular-nums">
+                      {tracked > 0 ? (
+                        <span className={`font-bold ${actPct >= 50 ? "text-emerald-600" : "text-orange-500"}`}>
+                          {Math.round(actPct)}%
+                        </span>
+                      ) : (
+                        <span className="text-gray-300 dark:text-gray-700">—</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-right text-xs tabular-nums whitespace-nowrap">
+                      {tracked > 0 ? (
+                        <span className={moreActive ? "text-emerald-600" : "text-orange-500"}>
+                          {moreActive ? `+${diff}% cat` : `+${diff}% idle`}
+                        </span>
+                      ) : (
+                        <span className="text-gray-300 dark:text-gray-700">—</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Custom Date Range Picker ─────────────────────────────────────────────────
+
+export function CustomRangePicker({
+  userId,
+  currentFrom,
+  currentTo,
+}: {
+  userId:      string
+  currentFrom: string
+  currentTo:   string
+}) {
+  const router   = useRouter()
+  const [from, setFrom] = useState(currentFrom)
+  const [to,   setTo  ] = useState(currentTo)
+  const isActive = !!(currentFrom || currentTo)
+
+  function apply() {
+    const params = new URLSearchParams()
+    if (from) params.set("from", from)
+    if (to)   params.set("to",   to)
+    router.push(`/tools/reports/${encodeURIComponent(userId)}?${params.toString()}`)
+  }
+
+  function clearCustom() {
+    setFrom("")
+    setTo("")
+    router.push(`/tools/reports/${encodeURIComponent(userId)}?range=30d`)
+  }
+
+  return (
+    <div className={`flex flex-wrap items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+      isActive
+        ? "border-[#2AB4A6] bg-[#2AB4A6]/10"
+        : "border-gray-700 hover:border-gray-500"
+    }`}>
+      <span className="text-xs text-gray-400 whitespace-nowrap font-medium">Custom:</span>
+      <input
+        type="date"
+        value={from}
+        onChange={e => setFrom(e.target.value)}
+        className="text-xs bg-transparent border border-gray-700 rounded px-2 py-1 text-gray-300 focus:outline-none focus:border-[#2AB4A6] [color-scheme:dark]"
+      />
+      <span className="text-xs text-gray-500">→</span>
+      <input
+        type="date"
+        value={to}
+        onChange={e => setTo(e.target.value)}
+        className="text-xs bg-transparent border border-gray-700 rounded px-2 py-1 text-gray-300 focus:outline-none focus:border-[#2AB4A6] [color-scheme:dark]"
+      />
+      <button
+        onClick={apply}
+        className="text-xs px-2.5 py-1 bg-[#2AB4A6] text-white rounded hover:bg-[#25a396] transition-colors font-semibold"
+      >
+        Apply
+      </button>
+      {isActive && (
+        <button
+          onClick={clearCustom}
+          className="text-xs text-red-400 hover:text-red-300 transition-colors font-medium"
+        >
+          Clear
+        </button>
       )}
     </div>
   )
