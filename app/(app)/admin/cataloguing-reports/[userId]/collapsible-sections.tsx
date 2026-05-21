@@ -791,3 +791,180 @@ export function CustomRangePicker({
     </div>
   )
 }
+
+// ─── Today's Timeline ─────────────────────────────────────────────────────────
+
+export type TodayLot = {
+  savedAt:    string   // ISO string
+  durationMs: number
+  method:     string
+  lotNumber:  string | null
+}
+
+export function TodayTimeline({
+  lots,
+  idleSessions,
+}: {
+  lots:         TodayLot[]
+  idleSessions: TodayIdleSession[]
+}) {
+  const now         = new Date()
+  const todayStr    = format(now, "yyyy-MM-dd")
+  const workStartMs = new Date(`${todayStr}T09:00:00`).getTime()
+  const workEndMs   = new Date(`${todayStr}T17:00:00`).getTime()
+  const totalWorkMs = workEndMs - workStartMs        // 8 hours
+  const isWeekend   = now.getDay() === 0 || now.getDay() === 6
+  const nowMs       = now.getTime()
+  const isInWork    = nowMs >= workStartMs && nowMs <= workEndMs
+  const nowPct      = Math.max(0, Math.min(100, ((nowMs - workStartMs) / totalWorkMs) * 100))
+
+  function toPct(ms: number) {
+    return Math.max(0, Math.min(100, ((ms - workStartMs) / totalWorkMs) * 100))
+  }
+  function toWidthPct(durationMs: number) {
+    return Math.max(0.5, (durationMs / totalWorkMs) * 100)
+  }
+
+  const hourLabels = [
+    { label: "9am",  pct: 0     },
+    { label: "10am", pct: 12.5  },
+    { label: "11am", pct: 25    },
+    { label: "12pm", pct: 37.5  },
+    { label: "1pm",  pct: 50    },
+    { label: "2pm",  pct: 62.5  },
+    { label: "3pm",  pct: 75    },
+    { label: "4pm",  pct: 87.5  },
+    { label: "5pm",  pct: 100   },
+  ]
+
+  const hasWizard    = lots.some(l => l.method === "WIZARD")
+  const hasPhotoOnly = lots.some(l => l.method !== "WIZARD")
+  const hasIdle      = idleSessions.length > 0
+
+  return (
+    <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+        <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+          Today's Timeline
+          <span className="ml-2 font-normal normal-case text-gray-400">9:00am – 5:00pm workday</span>
+        </h2>
+      </div>
+
+      <div className="px-5 py-5">
+        {isWeekend ? (
+          <p className="text-sm text-gray-400 text-center py-3">No working day today (weekend).</p>
+        ) : (
+          <div className="space-y-1">
+
+            {/* Tick lines behind the track */}
+            <div className="relative">
+              {/* Hour tick marks */}
+              <div className="absolute inset-0 flex">
+                {hourLabels.map(({ pct }) => (
+                  <div
+                    key={pct}
+                    className="absolute top-0 bottom-0 w-px bg-gray-200 dark:bg-gray-700/60"
+                    style={{ left: `${pct}%` }}
+                  />
+                ))}
+              </div>
+
+              {/* Main track */}
+              <div className="relative h-12 bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden">
+
+                {/* Idle sessions — orange bars */}
+                {idleSessions.map((session, i) => {
+                  const startMs = new Date(session.startedAt).getTime()
+                  const left    = toPct(startMs)
+                  const width   = Math.min(toWidthPct(session.durationMs), 100 - left)
+                  if (left >= 100 || width <= 0) return null
+                  const cfg = REASON_CONFIG[session.reason]
+                  return (
+                    <div
+                      key={i}
+                      className="absolute top-0 h-full bg-orange-400/75 hover:bg-orange-400 transition-colors cursor-default"
+                      style={{ left: `${left}%`, width: `${width}%` }}
+                      title={`${cfg?.label ?? session.reason} · ${fmtDuration(session.durationMs)} · from ${format(new Date(session.startedAt), "HH:mm")}${session.notes ? ` · "${session.notes}"` : ""}`}
+                    />
+                  )
+                })}
+
+                {/* Lot marks — vertical lines at creation time */}
+                {lots.map((lot, i) => {
+                  const left = toPct(new Date(lot.savedAt).getTime())
+                  if (left < 0 || left > 100) return null
+                  const isWizard = lot.method === "WIZARD"
+                  return (
+                    <div
+                      key={i}
+                      className={`absolute top-0 h-full w-[3px] opacity-90 hover:opacity-100 transition-opacity cursor-default ${isWizard ? "bg-emerald-500" : "bg-purple-500"}`}
+                      style={{ left: `${left}%` }}
+                      title={`Lot ${lot.lotNumber || "—"} · ${isWizard ? "Wizard" : "Photo Only"} · ${fmtDuration(lot.durationMs)} · saved ${format(new Date(lot.savedAt), "HH:mm:ss")}`}
+                    />
+                  )
+                })}
+
+                {/* Now indicator */}
+                {isInWork && (
+                  <div
+                    className="absolute top-0 h-full w-[2px] bg-white/90 z-10 shadow-sm"
+                    style={{ left: `${nowPct}%` }}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Hour labels */}
+            <div className="relative h-5 mt-0.5">
+              {hourLabels.map(({ label, pct }) => (
+                <span
+                  key={label}
+                  className={`absolute text-[10px] text-gray-400 whitespace-nowrap ${pct === 0 ? "" : pct === 100 ? "-translate-x-full" : "-translate-x-1/2"}`}
+                  style={{ left: `${pct}%` }}
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+
+            {/* Legend */}
+            <div className="flex flex-wrap gap-x-5 gap-y-1 pt-2 text-xs text-gray-500 dark:text-gray-400">
+              {hasWizard && (
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-[3px] h-3.5 bg-emerald-500 rounded-full" />
+                  Wizard lot
+                </span>
+              )}
+              {hasPhotoOnly && (
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-[3px] h-3.5 bg-purple-500 rounded-full" />
+                  Photo Only lot
+                </span>
+              )}
+              {hasIdle && (
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-4 h-3 rounded-sm bg-orange-400/75" />
+                  Idle
+                </span>
+              )}
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-4 h-3 rounded-sm bg-gray-200 dark:bg-gray-700" />
+                Unaccounted
+              </span>
+              {isInWork && (
+                <span className="flex items-center gap-1.5 ml-auto">
+                  <span className="inline-block w-[2px] h-3.5 bg-white/90 border border-gray-300 dark:border-gray-600 rounded-full" />
+                  <span className="text-gray-400">Now — {format(now, "HH:mm")}</span>
+                </span>
+              )}
+            </div>
+
+            {lots.length === 0 && idleSessions.length === 0 && (
+              <p className="text-xs text-gray-400 text-center pt-1">No lots or idle sessions recorded yet today.</p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

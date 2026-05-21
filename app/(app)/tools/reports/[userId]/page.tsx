@@ -7,6 +7,7 @@ import {
   CollapsibleLotsTable,
   CollapsibleIdleTable,
   TodayProductivityCard,
+  TodayTimeline,
   DailyComparisonTable,
   CustomRangePicker,
   type DayStats,
@@ -273,6 +274,23 @@ export default async function ReportsUserPage({
         }))}
       />
 
+      {/* Today's timeline — visual 9am–5pm activity map */}
+      <TodayTimeline
+        lots={todayLogs.map(l => ({
+          savedAt:    l.savedAt.toISOString(),
+          durationMs: l.durationMs,
+          method:     l.method,
+          lotNumber:  l.lotNumber,
+        }))}
+        idleSessions={todayIdleLogs.map(l => ({
+          startedAt:   l.idleStartedAt.toISOString(),
+          durationMs:  l.idleDurationMs,
+          reason:      l.reason,
+          toteNumbers: l.toteNumbers,
+          notes:       l.notes,
+        }))}
+      />
+
       {/* No data in range */}
       {logs.length === 0 && idleLogs.length === 0 && (
         <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl p-12 text-center">
@@ -286,13 +304,13 @@ export default async function ReportsUserPage({
           {/* Summary cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             {[
-              { label: "Lots in Range",  value: logs.length.toLocaleString(),                   sub: rangeLabel,                       colour: "text-white" },
-              { label: "Avg Time / Lot", value: fmtDuration(overallAvg),                        sub: "all methods",                    colour: "text-white" },
-              { label: "Daily Average",  value: dailyAvg.toLocaleString(),                       sub: completedDays.size > 0 ? `${completedDays.size} full day${completedDays.size === 1 ? "" : "s"}` : "today only", colour: "text-white" },
-              { label: "Lots Today",     value: lotsToday.toLocaleString(),                      sub: format(new Date(), "d MMM yyyy"), colour: "text-white" },
-              { label: "This Week",      value: lotsThisWeek.toLocaleString(),                   sub: "last 7 days",                    colour: "text-white" },
+              { label: "Lots in Range",  value: logs.length.toLocaleString(),                   sub: rangeLabel,                       colour: "text-gray-900 dark:text-white" },
+              { label: "Avg Time / Lot", value: fmtDuration(overallAvg),                        sub: "all methods",                    colour: "text-gray-900 dark:text-white" },
+              { label: "Daily Average",  value: dailyAvg.toLocaleString(),                       sub: completedDays.size > 0 ? `${completedDays.size} full day${completedDays.size === 1 ? "" : "s"}` : "today only", colour: "text-gray-900 dark:text-white" },
+              { label: "Lots Today",     value: lotsToday.toLocaleString(),                      sub: format(new Date(), "d MMM yyyy"), colour: "text-gray-900 dark:text-white" },
+              { label: "This Week",      value: lotsThisWeek.toLocaleString(),                   sub: "last 7 days",                    colour: "text-gray-900 dark:text-white" },
               { label: "Research Time",  value: totalResearchMs ? fmtDuration(totalResearchMs) : "—",
-                                         sub: `${researchLogs.length} session${researchLogs.length !== 1 ? "s" : ""}`, colour: "text-amber-400" },
+                                         sub: `${researchLogs.length} session${researchLogs.length !== 1 ? "s" : ""}`, colour: "text-amber-500" },
             ].map(card => (
               <div key={card.label} className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl p-5">
                 <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">{card.label}</p>
