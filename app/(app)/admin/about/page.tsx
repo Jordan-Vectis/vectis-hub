@@ -1147,8 +1147,8 @@ export default function AboutPage() {
   return (
     <div className="p-8 max-w-4xl">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">About — How the App Works</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">About — How the App Works</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           Documentation for every section — what it does, what it relies on, and the rules that must be followed.
         </p>
       </div>
@@ -1159,10 +1159,10 @@ export default function AboutPage() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search apps, rules, dependencies…"
-          className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+          className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
         />
-        <button onClick={expandAll}   className="text-xs text-gray-500 hover:text-gray-700 px-3 py-2 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">Expand all</button>
-        <button onClick={collapseAll} className="text-xs text-gray-500 hover:text-gray-700 px-3 py-2 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">Collapse all</button>
+        <button onClick={expandAll}   className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-gray-300 dark:hover:border-gray-600 transition-colors">Expand all</button>
+        <button onClick={collapseAll} className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-gray-300 dark:hover:border-gray-600 transition-colors">Collapse all</button>
       </div>
 
       <div className="flex flex-col gap-3">
@@ -1173,33 +1173,33 @@ export default function AboutPage() {
         {filtered.map(app => {
           const open = openKeys.has(app.key)
           return (
-            <div key={app.key} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div key={app.key} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
               <button
                 onClick={() => toggle(app.key)}
-                className="w-full flex items-center gap-4 px-6 py-4 text-left hover:bg-gray-50 transition-colors"
+                className="w-full flex items-center gap-4 px-6 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
               >
                 <span className="text-2xl">{app.icon}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3">
-                    <span className="font-semibold text-gray-900">{app.name}</span>
-                    <span className="text-xs text-gray-400 font-mono">{app.path}</span>
+                    <span className="font-semibold text-gray-900 dark:text-gray-100">{app.name}</span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500 font-mono">{app.path}</span>
                   </div>
-                  <p className="text-sm text-gray-500 mt-0.5 leading-snug line-clamp-2">{app.overview}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 leading-snug line-clamp-2">{app.overview}</p>
                 </div>
                 <Chevron open={open} />
               </button>
 
               {open && (
-                <div className="border-t border-gray-100 px-6 py-5 space-y-6">
+                <div className="border-t border-gray-100 dark:border-gray-700 px-6 py-5 space-y-6">
 
                   {app.howItWorks.map(section => (
                     <div key={section.label}>
-                      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">{section.label}</h3>
+                      <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">{section.label}</h3>
                       <ul className="space-y-2">
                         {section.items.map((item, i) => (
                           <li key={i} className="flex gap-3 text-sm text-gray-700">
-                            <span className="text-gray-300 mt-0.5 shrink-0">–</span>
-                            <span className="leading-relaxed">{item}</span>
+                            <span className="text-gray-300 dark:text-gray-600 mt-0.5 shrink-0">–</span>
+                            <span className="leading-relaxed text-gray-700 dark:text-gray-300">{item}</span>
                           </li>
                         ))}
                       </ul>
@@ -1212,7 +1212,7 @@ export default function AboutPage() {
                       {app.dependsOn.map((dep, i) => (
                         <li key={i} className="flex gap-3 text-sm">
                           <span className="text-blue-400 mt-0.5 shrink-0">◆</span>
-                          <span className="text-gray-700 leading-relaxed">{dep}</span>
+                          <span className="text-gray-700 dark:text-gray-300 leading-relaxed">{dep}</span>
                         </li>
                       ))}
                     </ul>
@@ -1225,7 +1225,7 @@ export default function AboutPage() {
                         {app.rules.map((rule, i) => (
                           <li key={i} className="flex gap-3 text-sm">
                             <span className="text-amber-400 mt-0.5 shrink-0">▲</span>
-                            <span className="text-gray-700 leading-relaxed">{rule}</span>
+                            <span className="text-gray-700 dark:text-gray-300 leading-relaxed">{rule}</span>
                           </li>
                         ))}
                       </ul>

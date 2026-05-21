@@ -76,8 +76,8 @@ export default function HomeCardsPage() {
     <div className="p-8 max-w-3xl">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Home Page Cards</h1>
-          <p className="text-sm text-gray-500 mt-1">Drag to reorder · toggle visibility and featured · customise labels</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Home Page Cards</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Drag to reorder · toggle visibility and featured · customise labels</p>
         </div>
         <button
           onClick={save}
@@ -96,8 +96,8 @@ export default function HomeCardsPage() {
             onDragStart={() => handleDragStart(card.key)}
             onDragOver={e => handleDragOver(e, card.key)}
             onDragEnd={() => { dragKey.current = null }}
-            className={`bg-white border rounded-xl p-4 transition-all ${
-              card.visible ? "border-gray-200" : "border-dashed border-gray-300 opacity-50"
+            className={`bg-white dark:bg-gray-900 border rounded-xl p-4 transition-all ${
+              card.visible ? "border-gray-200 dark:border-gray-700" : "border-dashed border-gray-300 dark:border-gray-600 opacity-50"
             }`}
           >
             <div className="flex items-start gap-3">
@@ -117,16 +117,16 @@ export default function HomeCardsPage() {
                     value={card.label ?? ""}
                     onChange={e => update(card.key, { label: e.target.value || null })}
                     placeholder={card.defaultLabel}
-                    className="flex-1 text-sm font-semibold border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-slate-400 placeholder:text-gray-400 placeholder:font-normal"
+                    className="flex-1 text-sm font-semibold border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-slate-400 placeholder:text-gray-400 placeholder:font-normal"
                   />
-                  <span className="text-xs text-gray-400 whitespace-nowrap">default: {card.defaultLabel}</span>
+                  <span className="text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">default: {card.defaultLabel}</span>
                 </div>
                 <textarea
                   value={card.description ?? ""}
                   onChange={e => update(card.key, { description: e.target.value || null })}
                   placeholder={card.defaultDescription}
                   rows={2}
-                  className="w-full text-sm border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-slate-400 resize-none placeholder:text-gray-400 leading-relaxed"
+                  className="w-full text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-slate-400 resize-none placeholder:text-gray-400 leading-relaxed"
                 />
               </div>
 
@@ -154,7 +154,7 @@ export default function HomeCardsPage() {
         ))}
       </div>
 
-      <p className="text-xs text-gray-400 mt-4">
+      <p className="text-xs text-gray-400 dark:text-gray-500 mt-4">
         Leave label/description blank to use the default text. Hidden cards won't appear for any user. Featured cards appear first with a star badge.
       </p>
     </div>

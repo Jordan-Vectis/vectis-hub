@@ -60,7 +60,7 @@ function RecordViewer({ record }: { record: any }) {
         {open ? "Hide record" : "Show full record"}
       </button>
       {open && (
-        <pre className="mt-2 text-xs bg-gray-50 border border-gray-200 rounded p-2 overflow-x-auto max-w-xs whitespace-pre-wrap break-all">
+        <pre className="mt-2 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded p-2 overflow-x-auto max-w-xs whitespace-pre-wrap break-all">
           {JSON.stringify(record, null, 2)}
         </pre>
       )}
@@ -268,8 +268,8 @@ export default function BackupPage() {
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Database Backup</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Database Backup</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           Daily JSON exports of the entire database, stored in Cloudflare R2.
           The last 30 backups are retained automatically.
         </p>
@@ -294,27 +294,27 @@ export default function BackupPage() {
           { label: "Last Backup Size", value: latest ? formatBytes(latest.sizeBytes) : "—" },
           { label: "Total Backups",    value: loading ? "…" : String(files.length) },
         ].map(card => (
-          <div key={card.label} className="bg-white border border-gray-200 rounded-xl px-5 py-4">
-            <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">{card.label}</p>
-            <p className="text-lg font-bold text-slate-800">{card.value}</p>
+          <div key={card.label} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-5 py-4">
+            <p className="text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">{card.label}</p>
+            <p className="text-lg font-bold text-slate-800 dark:text-gray-100">{card.value}</p>
           </div>
         ))}
       </div>
 
       {/* ── Schedule info ───────────────────────────────────────────────────── */}
-      <div className="bg-white border border-gray-200 rounded-xl px-5 py-4 text-sm text-gray-500">
-        <span className="text-gray-700 font-semibold">Scheduled:</span> daily at midnight UTC via{" "}
-        <code className="text-xs bg-gray-100 px-1 py-0.5 rounded font-mono">/api/cron/db-backup</code>
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-5 py-4 text-sm text-gray-500 dark:text-gray-400">
+        <span className="text-gray-700 dark:text-gray-200 font-semibold">Scheduled:</span> daily at midnight UTC via{" "}
+        <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded font-mono">/api/cron/db-backup</code>
         {" "}— always backs up all sections.
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════════
           Create Backup
       ════════════════════════════════════════════════════════════════════════ */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-5">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6 space-y-5">
         <div>
-          <h2 className="text-base font-bold text-gray-900">Create Backup</h2>
-          <p className="text-sm text-gray-500 mt-1">
+          <h2 className="text-base font-bold text-gray-900 dark:text-white">Create Backup</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Choose which sections to include, then run the backup. The scheduled midnight backup always includes everything.
           </p>
         </div>
@@ -322,7 +322,7 @@ export default function BackupPage() {
         {/* Section checkboxes */}
         <div className="space-y-2">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Sections to include</span>
+            <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Sections to include</span>
             <div className="flex gap-3">
               <button
                 onClick={() => setSelectedSections(ALL_SECTION_KEYS)}
@@ -350,8 +350,8 @@ export default function BackupPage() {
                   key={key}
                   className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                     checked
-                      ? "bg-blue-50 border-blue-200"
-                      : "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                      ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700"
+                      : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700"
                   }`}
                 >
                   <input
@@ -361,9 +361,9 @@ export default function BackupPage() {
                     className="mt-0.5 accent-blue-600 shrink-0"
                   />
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-800">{section.label}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{section.description}</p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">{section.tables.length} table{section.tables.length !== 1 ? "s" : ""}</p>
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{section.label}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{section.description}</p>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{section.tables.length} table{section.tables.length !== 1 ? "s" : ""}</p>
                   </div>
                 </label>
               )
@@ -387,36 +387,36 @@ export default function BackupPage() {
 
       {/* ── File list ───────────────────────────────────────────────────────── */}
       <div>
-        <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-3">Stored Backups</h2>
+        <h2 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-3">Stored Backups</h2>
 
         {loading && (
-          <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-400 text-sm">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-10 text-center text-gray-400 dark:text-gray-500 text-sm">
             Loading…
           </div>
         )}
 
         {!loading && files.length === 0 && (
-          <div className="bg-white border border-gray-200 rounded-xl p-16 text-center">
-            <p className="text-lg font-semibold text-gray-500 mb-1">No backups yet</p>
-            <p className="text-sm text-gray-400">Click &ldquo;Run full backup&rdquo; to create the first one.</p>
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-16 text-center">
+            <p className="text-lg font-semibold text-gray-500 dark:text-gray-400 mb-1">No backups yet</p>
+            <p className="text-sm text-gray-400 dark:text-gray-500">Click &ldquo;Run full backup&rdquo; to create the first one.</p>
           </div>
         )}
 
         {!loading && files.length > 0 && (
-          <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-x-auto">
             <table className="w-full text-sm whitespace-nowrap">
               <thead>
-                <tr className="border-b border-gray-100 bg-gray-50 text-xs text-gray-400 uppercase tracking-wider">
+                <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                   <th className="text-left px-5 py-3">Filename</th>
                   <th className="text-right px-5 py-3">Size</th>
                   <th className="text-right px-5 py-3">Date</th>
                   <th className="px-5 py-3"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {files.map((f, i) => (
-                  <tr key={f.key} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-5 py-3.5 font-mono text-gray-600 text-xs">
+                  <tr key={f.key} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                    <td className="px-5 py-3.5 font-mono text-gray-600 dark:text-gray-300 text-xs">
                       {i === 0 && (
                         <span className="inline-block mr-2 px-1.5 py-0.5 bg-blue-50 text-blue-600 text-[10px] rounded font-sans font-semibold uppercase tracking-wide border border-blue-100">
                           Latest
@@ -429,8 +429,8 @@ export default function BackupPage() {
                       )}
                       {f.key}
                     </td>
-                    <td className="px-5 py-3.5 text-right text-gray-500 tabular-nums">{formatBytes(f.sizeBytes)}</td>
-                    <td className="px-5 py-3.5 text-right text-gray-500 tabular-nums">{formatDate(f.lastModified)}</td>
+                    <td className="px-5 py-3.5 text-right text-gray-500 dark:text-gray-400 tabular-nums">{formatBytes(f.sizeBytes)}</td>
+                    <td className="px-5 py-3.5 text-right text-gray-500 dark:text-gray-400 tabular-nums">{formatDate(f.lastModified)}</td>
                     <td className="px-5 py-3.5 text-right">
                       <button
                         onClick={() => handleDelete(f.key)}
@@ -451,10 +451,10 @@ export default function BackupPage() {
       {/* ═══════════════════════════════════════════════════════════════════════
           Full Restore
       ════════════════════════════════════════════════════════════════════════ */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-5">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6 space-y-5">
         <div>
-          <h2 className="text-base font-bold text-gray-900">Full Restore</h2>
-          <p className="text-sm text-gray-500 mt-1">
+          <h2 className="text-base font-bold text-gray-900 dark:text-white">Full Restore</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Upsert every record from a backup file into the current database. Records created
             after the backup date will not be affected.
           </p>
@@ -462,13 +462,13 @@ export default function BackupPage() {
 
         {/* Backup selector */}
         <div className="space-y-1">
-          <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide">
+          <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
             Backup file
           </label>
           <select
             value={restoreKey}
             onChange={e => { setRestoreKey(e.target.value); setRestoreResult(null); setRestoreError(null) }}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">— Select a backup —</option>
             {files.map(f => (
@@ -489,7 +489,7 @@ export default function BackupPage() {
 
         {/* Confirmation input */}
         <div className="space-y-1">
-          <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide">
+          <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
             Type CONFIRM to enable restore
           </label>
           <input
@@ -497,7 +497,7 @@ export default function BackupPage() {
             value={restoreConfirm}
             onChange={e => setRestoreConfirm(e.target.value)}
             placeholder="CONFIRM"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
@@ -517,7 +517,7 @@ export default function BackupPage() {
               <span>{restoreMessage}</span>
               <span className="font-mono font-semibold">{restorePct}%</span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
               <div
                 className="h-3 rounded-full bg-blue-500 transition-all duration-300"
                 style={{ width: `${restorePct}%` }}
@@ -541,10 +541,10 @@ export default function BackupPage() {
       {/* ═══════════════════════════════════════════════════════════════════════
           Record Lookup
       ════════════════════════════════════════════════════════════════════════ */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-5">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-6 space-y-5">
         <div>
-          <h2 className="text-base font-bold text-gray-900">Record Lookup</h2>
-          <p className="text-sm text-gray-500 mt-1">
+          <h2 className="text-base font-bold text-gray-900 dark:text-white">Record Lookup</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Search across all tables in a backup file for any record containing a specific value.
           </p>
         </div>
@@ -552,13 +552,13 @@ export default function BackupPage() {
         <div className="grid sm:grid-cols-2 gap-4">
           {/* Backup selector */}
           <div className="space-y-1">
-            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide">
+            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
               Backup file
             </label>
             <select
               value={lookupKey}
               onChange={e => { setLookupKey(e.target.value); setSearchResults(null); setSearchError(null) }}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">— Select a backup —</option>
               {files.map(f => (
@@ -571,7 +571,7 @@ export default function BackupPage() {
 
           {/* Search term */}
           <div className="space-y-1">
-            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide">
+            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
               Search term
             </label>
             <input
@@ -580,7 +580,7 @@ export default function BackupPage() {
               onChange={e => setLookupSearch(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") handleSearch() }}
               placeholder="e.g. john@example.com"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
         </div>
@@ -602,17 +602,17 @@ export default function BackupPage() {
         {searchResults !== null && (
           <div>
             {searchResults.length === 0 ? (
-              <div className="bg-gray-50 border border-gray-200 rounded-lg px-5 py-8 text-center">
-                <p className="text-sm font-semibold text-gray-500">No records found</p>
-                <p className="text-xs text-gray-400 mt-1">No string field in any table matched &ldquo;{lookupSearch}&rdquo;.</p>
+              <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-5 py-8 text-center">
+                <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">No records found</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">No string field in any table matched &ldquo;{lookupSearch}&rdquo;.</p>
               </div>
             ) : (
               <div>
-                <p className="text-xs text-gray-400 mb-3">{searchResults.length} result(s) found</p>
-                <div className="border border-gray-200 rounded-xl overflow-x-auto">
+                <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">{searchResults.length} result(s) found</p>
+                <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-gray-100 bg-gray-50 text-xs text-gray-400 uppercase tracking-wider">
+                      <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                         <th className="text-left px-4 py-3">Table</th>
                         <th className="text-left px-4 py-3">Field matched</th>
                         <th className="text-left px-4 py-3">Value</th>
@@ -620,15 +620,15 @@ export default function BackupPage() {
                         <th className="px-4 py-3"></th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50">
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                       {searchResults.map((result, i) => {
                         const recordId = result.record?.id ?? result.record?.key ?? result.record?.filename ?? String(i)
                         const msg = recordRestoreMsg[recordId]
                         return (
-                          <tr key={i} className="hover:bg-gray-50 transition-colors align-top">
-                            <td className="px-4 py-3 font-mono text-xs text-gray-600 whitespace-nowrap">{result.table}</td>
-                            <td className="px-4 py-3 font-mono text-xs text-gray-600 whitespace-nowrap">{result.matchedField}</td>
-                            <td className="px-4 py-3 text-xs text-gray-800 max-w-xs truncate" title={result.matchedValue}>
+                          <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors align-top">
+                            <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">{result.table}</td>
+                            <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">{result.matchedField}</td>
+                            <td className="px-4 py-3 text-xs text-gray-800 dark:text-gray-200 max-w-xs truncate" title={result.matchedValue}>
                               {result.matchedValue}
                             </td>
                             <td className="px-4 py-3">

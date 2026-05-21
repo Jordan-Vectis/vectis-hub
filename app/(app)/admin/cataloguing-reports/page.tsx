@@ -55,10 +55,10 @@ export default async function CataloguingReportsPage() {
     return (
       <div className="p-8 max-w-3xl">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Cataloguing Reports</h1>
-          <p className="text-sm text-gray-500 mt-1">Time-per-lot reports across all cataloguers.</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Cataloguing Reports</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Time-per-lot reports across all cataloguers.</p>
         </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-400">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-10 text-center text-gray-400 dark:text-gray-500">
           <p className="text-lg font-semibold mb-1">No data yet</p>
           <p className="text-sm">Timing is captured automatically once lots are added via the wizard or photo-only flow.</p>
         </div>
@@ -135,8 +135,8 @@ export default async function CataloguingReportsPage() {
 
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Cataloguing Reports</h1>
-        <p className="text-sm text-gray-500 mt-1">Time tracked per lot — from barcode entry to save. Admin only.</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Cataloguing Reports</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Time tracked per lot — from barcode entry to save. Admin only.</p>
       </div>
 
       {/* Summary cards */}
@@ -147,21 +147,21 @@ export default async function CataloguingReportsPage() {
           { label: "Fastest Lot",        value: fmtDuration(overallMin),       sub: "record" },
           { label: "Lots Today",         value: lotsToday.toLocaleString(),    sub: format(new Date(), "d MMM yyyy") },
         ].map(card => (
-          <div key={card.label} className="bg-white border border-gray-200 rounded-xl p-5">
-            <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">{card.label}</p>
-            <p className="text-3xl font-bold text-slate-800">{card.value}</p>
-            <p className="text-xs text-gray-400 mt-1">{card.sub}</p>
+          <div key={card.label} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
+            <p className="text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">{card.label}</p>
+            <p className="text-3xl font-bold text-slate-800 dark:text-gray-100">{card.value}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{card.sub}</p>
           </div>
         ))}
       </div>
 
       {/* Per-cataloguer table */}
       <div>
-        <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-3">Per Cataloguer</h2>
+        <h2 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-3">Per Cataloguer</h2>
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50 text-xs text-gray-400 uppercase tracking-wider">
+              <tr className="border-b border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                 <th className="text-left px-5 py-3">Cataloguer</th>
                 <th className="text-right px-5 py-3">Total Lots</th>
                 <th className="text-right px-5 py-3">Wizard</th>
@@ -174,21 +174,21 @@ export default async function CataloguingReportsPage() {
                 <th className="text-right px-5 py-3">Research Time</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {userStats.map(u => (
-                <tr key={u.userId} className="hover:bg-gray-50 transition-colors">
+                <tr key={u.userId} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                   <td className="px-5 py-3">
                     <Link href={`/admin/cataloguing-reports/${encodeURIComponent(u.userId)}`}
-                      className="font-semibold text-slate-700 hover:text-blue-600 hover:underline transition-colors">
+                      className="font-semibold text-slate-700 dark:text-gray-200 hover:text-blue-600 hover:underline transition-colors">
                       {u.name}
                     </Link>
                   </td>
-                  <td className="px-5 py-3 text-right font-bold text-slate-700">{u.totalLots}</td>
-                  <td className="px-5 py-3 text-right text-gray-500">{u.wizardLots}</td>
-                  <td className="px-5 py-3 text-right text-gray-500">{u.photoOnlyLots}</td>
-                  <td className="px-5 py-3 text-right font-mono text-gray-700">{fmtDuration(u.avgMs)}</td>
-                  <td className="px-5 py-3 text-right font-mono text-gray-500">{u.wizardLots    ? fmtDuration(u.wizardAvgMs) : "—"}</td>
-                  <td className="px-5 py-3 text-right font-mono text-gray-500">{u.photoOnlyLots ? fmtDuration(u.photoAvgMs)  : "—"}</td>
+                  <td className="px-5 py-3 text-right font-bold text-slate-700 dark:text-gray-200">{u.totalLots}</td>
+                  <td className="px-5 py-3 text-right text-gray-500 dark:text-gray-400">{u.wizardLots}</td>
+                  <td className="px-5 py-3 text-right text-gray-500 dark:text-gray-400">{u.photoOnlyLots}</td>
+                  <td className="px-5 py-3 text-right font-mono text-gray-700 dark:text-gray-300">{fmtDuration(u.avgMs)}</td>
+                  <td className="px-5 py-3 text-right font-mono text-gray-500 dark:text-gray-400">{u.wizardLots    ? fmtDuration(u.wizardAvgMs) : "—"}</td>
+                  <td className="px-5 py-3 text-right font-mono text-gray-500 dark:text-gray-400">{u.photoOnlyLots ? fmtDuration(u.photoAvgMs)  : "—"}</td>
                   <td className="px-5 py-3 text-right font-mono text-green-600 font-semibold">{fmtDuration(u.fastestMs)}</td>
                   <td className="px-5 py-3 text-right font-mono text-red-500">{fmtDuration(u.slowestMs)}</td>
                   <td className="px-5 py-3 text-right font-mono text-amber-600">
@@ -207,25 +207,25 @@ export default async function CataloguingReportsPage() {
       {/* Per-auction breakdown */}
       {auctionStats.length > 0 && (
         <div>
-          <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-3">By Auction (Top 10)</h2>
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <h2 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-3">By Auction (Top 10)</h2>
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100 bg-gray-50 text-xs text-gray-400 uppercase tracking-wider">
+                <tr className="border-b border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                   <th className="text-left px-5 py-3">Auction</th>
                   <th className="text-right px-5 py-3">Lots Logged</th>
                   <th className="text-right px-5 py-3">Avg Time</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {auctionStats.map(a => (
-                  <tr key={a.id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={a.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                     <td className="px-5 py-3">
-                      <span className="font-mono font-semibold text-slate-700 mr-2">{a.code}</span>
-                      <span className="text-gray-500">{a.name}</span>
+                      <span className="font-mono font-semibold text-slate-700 dark:text-gray-200 mr-2">{a.code}</span>
+                      <span className="text-gray-500 dark:text-gray-400">{a.name}</span>
                     </td>
-                    <td className="px-5 py-3 text-right font-bold text-gray-700">{a.total}</td>
-                    <td className="px-5 py-3 text-right font-mono text-gray-600">{fmtDuration(a.avgMs)}</td>
+                    <td className="px-5 py-3 text-right font-bold text-gray-700 dark:text-gray-200">{a.total}</td>
+                    <td className="px-5 py-3 text-right font-mono text-gray-600 dark:text-gray-300">{fmtDuration(a.avgMs)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -237,23 +237,23 @@ export default async function CataloguingReportsPage() {
       {/* Research time summary */}
       {researchLogs.length > 0 && (
         <div>
-          <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-3">Research Time (last 30 sessions)</h2>
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <h2 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-3">Research Time (last 30 sessions)</h2>
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100 bg-gray-50 text-xs text-gray-400 uppercase tracking-wider">
+                <tr className="border-b border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                   <th className="text-left px-5 py-3">Date / Time</th>
                   <th className="text-left px-5 py-3">Cataloguer</th>
                   <th className="text-right px-5 py-3">Active Research Time</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {researchLogs.slice(0, 30).map(r => (
-                  <tr key={r.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap font-mono">
+                  <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                    <td className="px-5 py-3 text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap font-mono">
                       {format(r.savedAt, "dd/MM/yyyy HH:mm")}
                     </td>
-                    <td className="px-5 py-3 font-medium text-gray-700">{r.userName}</td>
+                    <td className="px-5 py-3 font-medium text-gray-700 dark:text-gray-300">{r.userName}</td>
                     <td className="px-5 py-3 text-right font-mono font-bold text-amber-600">
                       {fmtDuration(r.durationMs)}
                     </td>
@@ -267,11 +267,11 @@ export default async function CataloguingReportsPage() {
 
       {/* Recent activity */}
       <div>
-        <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-3">Recent Activity (last 50 lots)</h2>
+        <h2 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-3">Recent Activity (last 50 lots)</h2>
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50 text-xs text-gray-400 uppercase tracking-wider">
+              <tr className="border-b border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                 <th className="text-left px-5 py-3">Date / Time</th>
                 <th className="text-left px-5 py-3">Cataloguer</th>
                 <th className="text-left px-5 py-3">Auction</th>
@@ -280,15 +280,15 @@ export default async function CataloguingReportsPage() {
                 <th className="text-right px-5 py-3">Duration</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {recentLogs.map(log => (
-                <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap font-mono">
+                <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                  <td className="px-5 py-3 text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap font-mono">
                     {format(log.savedAt, "dd/MM/yyyy HH:mm:ss")}
                   </td>
-                  <td className="px-5 py-3 font-medium text-gray-700">{log.userName}</td>
-                  <td className="px-5 py-3 font-mono text-slate-600">{log.auction.code}</td>
-                  <td className="px-5 py-3 font-mono text-gray-500 text-xs">{log.lotNumber || "—"}</td>
+                  <td className="px-5 py-3 font-medium text-gray-700 dark:text-gray-300">{log.userName}</td>
+                  <td className="px-5 py-3 font-mono text-slate-600 dark:text-gray-300">{log.auction.code}</td>
+                  <td className="px-5 py-3 font-mono text-gray-500 dark:text-gray-400 text-xs">{log.lotNumber || "—"}</td>
                   <td className="px-5 py-3">
                     <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
                       log.method === "WIZARD"
@@ -298,7 +298,7 @@ export default async function CataloguingReportsPage() {
                       {log.method === "WIZARD" ? "Wizard" : "Photo Only"}
                     </span>
                   </td>
-                  <td className="px-5 py-3 text-right font-mono font-bold text-gray-700">
+                  <td className="px-5 py-3 text-right font-mono font-bold text-gray-700 dark:text-gray-200">
                     {fmtDuration(log.durationMs)}
                   </td>
                 </tr>
