@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import CataloguingSidebar from "@/components/cataloguing-sidebar"
+import DeployBanner from "@/components/deploy-banner"
 
 export default function CataloguingShell({ children, allowedSidebarItems }: { children: React.ReactNode; allowedSidebarItems?: string[] }) {
   const [open, setOpen] = useState(false)
@@ -41,6 +42,7 @@ export default function CataloguingShell({ children, allowedSidebarItems }: { ch
           </button>
           <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Cataloguing</span>
         </div>
+        <DeployBanner />
         {children}
       </div>
     </div>
