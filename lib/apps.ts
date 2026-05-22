@@ -1,9 +1,10 @@
-export type AppKey = "CRM" | "AUCTION_AI" | "CATALOGUING" | "BC_REPORTS" | "SALEROOM_TRAINER" | "WAREHOUSE" | "AUCTION_CONTROLLER" | "BC_WAREHOUSE" | "AI_PRESENTER" | "BC_MARKETING"
+export type AppKey = "CRM" | "AUCTION_AI" | "CATALOGUING" | "REPORTS" | "BC_REPORTS" | "SALEROOM_TRAINER" | "WAREHOUSE" | "AUCTION_CONTROLLER" | "BC_WAREHOUSE" | "AI_PRESENTER" | "BC_MARKETING"
 
 export const ALL_APPS: { key: AppKey; label: string }[] = [
   { key: "CRM",                label: "CRM" },
   { key: "AUCTION_AI",         label: "Auction AI" },
   { key: "CATALOGUING",        label: "Cataloguing" },
+  { key: "REPORTS",            label: "Reports" },
   { key: "BC_REPORTS",         label: "BC Reports" },
   { key: "SALEROOM_TRAINER",   label: "Saleroom Trainer" },
   { key: "WAREHOUSE",          label: "Warehouse" },

@@ -89,8 +89,8 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-teal-400",
     btnBg:              "bg-teal-600 hover:bg-teal-500",
     glow:               "hover:shadow-teal-900/40",
-    group:              "IT_ADMIN",
-    // no appKey — admin-only
+    group:              "CATALOGUING_AI",
+    appKey:             "REPORTS",
   },
   {
     key:                "BC_REPORTS",
