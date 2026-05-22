@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Auto Clerk — Controls</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #0d1117;
+  color: white;
+  min-height: 100vh;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── HEADER ── */
+#header {
+  background: #0f1621;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+#header h1 { font-size: 14px; font-weight: 700; }
+#header p  { font-size: 11px; color: #64748b; margin-top: 2px; }
+
+/* ── STATE BAR ── */
+#state-bar {
+  background: #161b2e;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.sbar-item { display: flex; flex-direction: column; gap: 2px; }
+.sbar-lbl  { font-size: 10px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.sbar-val  { font-size: 15px; font-weight: 800; color: white; }
+.sbar-sep  { width: 1px; height: 32px; background: rgba(255,255,255,0.08); }
+#state-badge {
+  padding: 3px 10px; border-radius: 10px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
+  background: #374151;
+}
+.ss-bidding { background: #15803d !important; }
+.ss-fw      { background: #c2410c !important; }
+.ss-sold    { background: #1d4ed8 !important; }
+.ss-idle    { background: #374151 !important; }
+
+/* ── CONTENT ── */
+#content {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 560px;
+}
+
+/* ── CARD ── */
+.card {
+  background: #161b2e;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.card-head {
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+.card-head h2 { font-size: 12px; font-weight: 700; color: white; }
+.card-head p  { font-size: 11px; color: #64748b; margin-top: 2px; }
+.card-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+
+/* ── BIG BID BUTTONS ── */
+.bid-btn {
+  width: 100%;
+  padding: 12px 16px;
+  border: none; border-radius: 8px;
+  font-size: 13px; font-weight: 700;
+  cursor: pointer; text-align: left;
+  display: flex; align-items: center; justify-content: space-between;
+  transition: filter 0.15s;
+  color: white;
+}
+.bid-btn:hover:not(:disabled) { filter: brightness(1.12); }
+.bid-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.bid-btn .label { font-size: 11px; font-weight: 600; opacity: 0.75; margin-top: 2px; }
+.bid-btn-left { display: flex; flex-direction: column; }
+.bid-btn-amt  { font-size: 18px; font-weight: 900; }
+
+.btn-vectis   { background: linear-gradient(135deg, #1d4ed8, #2563eb); }
+.btn-saleroom { background: linear-gradient(135deg, #16a34a, #15803d); }
+.btn-room-bp  { background: linear-gradient(135deg, #374151, #4b5563); }
+.btn-room-sr  { background: linear-gradient(135deg, #1e3a8a, #1d4ed8); }
+.btn-bang     { background: linear-gradient(135deg, #1f2937, #374151); border: 1px solid rgba(255,255,255,0.15) !important; }
+
+/* ── CUSTOM BID ── */
+.custom-row {
+  display: flex; gap: 8px; align-items: center;
+}
+.inp-wrap {
+  display: flex; align-items: center;
+  background: #0d1117;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 7px;
+  flex: 1;
+}
+.inp-pound { padding: 7px 8px; color: #64748b; font-size: 14px; font-weight: 700; }
+.inp-field {
+  border: none; background: transparent; color: white;
+  font-size: 14px; font-weight: 700; width: 80px;
+  padding: 7px 4px; outline: none;
+}
+.src-select {
+  background: #1e293b; border: 1px solid rgba(255,255,255,0.15);
+  color: white; border-radius: 7px; padding: 7px 10px;
+  font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.go-btn {
+  padding: 7px 16px; border-radius: 7px; border: none;
+  background: #7c3aed; color: white;
+  font-size: 12px; font-weight: 700; cursor: pointer;
+  white-space: nowrap;
+}
+.go-btn:hover { background: #6d28d9; }
+.go-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* ── TIMING BUTTONS ── */
+.timing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.t-btn {
+  padding: 10px 14px; border: none; border-radius: 8px;
+  font-size: 12px; font-weight: 700; cursor: pointer; color: white;
+  display: flex; align-items: center; gap: 6px;
+  transition: filter 0.15s;
+}
+.t-btn:hover:not(:disabled) { filter: brightness(1.12); }
+.t-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.t-fw     { background: #c2410c; }
+.t-hammer { background: #dc2626; }
+
+/* ── SIM CONTROLS ── */
+.sim-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.s-btn {
+  padding: 8px 10px; border: none; border-radius: 8px;
+  font-size: 11px; font-weight: 700; cursor: pointer; color: white;
+  transition: filter 0.15s;
+}
+.s-btn:hover:not(:disabled) { filter: brightness(1.12); }
+.s-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.s-start  { background: #16a34a; }
+.s-stop   { background: #374151; }
+.s-skip   { background: #1d4ed8; }
+.s-reset  { background: #1f2937; border: 1px solid rgba(255,255,255,0.15); }
+.s-pause  { background: #d97706; }
+.s-resume { background: #059669; }
+
+/* ── MANUAL MODE TOGGLE ── */
+.mode-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px;
+  background: rgba(245,158,11,0.1);
+  border: 1px solid rgba(245,158,11,0.2);
+  border-radius: 8px;
+}
+.mode-row label { font-size: 12px; font-weight: 600; color: #fcd34d; flex: 1; }
+.mode-row span  { font-size: 11px; color: #94a3b8; }
+.toggle {
+  width: 38px; height: 22px; background: #374151;
+  border-radius: 11px; position: relative; cursor: pointer;
+  border: none; transition: background 0.2s; flex-shrink: 0;
+}
+.toggle::after {
+  content: ''; position: absolute; top: 3px; left: 3px;
+  width: 16px; height: 16px; border-radius: 50%; background: white;
+  transition: transform 0.2s;
+}
+.toggle.on { background: #d97706; }
+.toggle.on::after { transform: translateX(16px); }
+
+/* ── LOG ── */
+#log-box {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+  padding: 8px 10px;
+  height: 100px;
+  overflow-y: auto;
+  font-size: 11px;
+  color: #64748b;
+  font-family: ui-monospace, monospace;
+}
+.log-line { color: #94a3b8; line-height: 1.6; }
+.log-line span { color: #475569; margin-right: 6px; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div>
+    <h1>🕹 Auto Clerk — Manual Controls</h1>
+    <p>Inject bids and events as if you were the customer or the auctioneer</p>
+  </div>
+</div>
+
+<!-- STATE BAR -->
+<div id="state-bar">
+  <div class="sbar-item">
+    <div class="sbar-lbl">Lot</div>
+    <div class="sbar-val" id="s-lot">—</div>
+  </div>
+  <div class="sbar-sep"></div>
+  <div class="sbar-item">
+    <div class="sbar-lbl">Current bid</div>
+    <div class="sbar-val" id="s-bid">£—</div>
+  </div>
+  <div class="sbar-sep"></div>
+  <div class="sbar-item">
+    <div class="sbar-lbl">Next increment</div>
+    <div class="sbar-val" id="s-next">£—</div>
+  </div>
+  <div class="sbar-sep"></div>
+  <div class="sbar-item">
+    <div class="sbar-lbl">State</div>
+    <div id="state-badge" class="ss-idle">Idle</div>
+  </div>
+</div>
+
+<div id="content">
+
+  <!-- ── INJECT A BID ── -->
+  <div class="card">
+    <div class="card-head">
+      <h2>Inject a bid</h2>
+      <p>Place the next increment as a specific type of bidder</p>
+    </div>
+    <div class="card-body">
+
+      <button class="bid-btn btn-vectis" id="btn-vectis" onclick="injectBid('Vectis Auto')" disabled>
+        <div class="bid-btn-left">
+          <div>💻 Bid as Vectis Auto (online bidder)</div>
+          <div class="label">Goes into Bidpath → mirrored to Saleroom as Room</div>
+        </div>
+        <div class="bid-btn-amt" id="next-vectis">£—</div>
+      </button>
+
+      <button class="bid-btn btn-saleroom" id="btn-saleroom-bid" onclick="injectBid('Saleroom')" disabled>
+        <div class="bid-btn-left">
+          <div>🌐 Bid as Saleroom.com customer (online bidder)</div>
+          <div class="label">Goes into Bidpath → mirrored to Saleroom as Online</div>
+        </div>
+        <div class="bid-btn-amt" id="next-saleroom">£—</div>
+      </button>
+
+      <!-- Custom amount -->
+      <div class="custom-row">
+        <div class="inp-wrap">
+          <span class="inp-pound">£</span>
+          <input class="inp-field" id="custom-amt" type="number" placeholder="amount" min="1">
+        </div>
+        <select class="src-select" id="custom-src">
+          <option value="Vectis Auto">Vectis Auto</option>
+          <option value="Saleroom">Saleroom.com</option>
+        </select>
+        <button class="go-btn" id="btn-custom" onclick="injectCustom()" disabled>Place bid</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── ROOM / BANG ── -->
+  <div class="card">
+    <div class="card-head">
+      <h2>Room bids &amp; bidder changes</h2>
+      <p>Simulate room activity or drop a bidder without changing the price</p>
+    </div>
+    <div class="card-body">
+
+      <button class="bid-btn btn-room-sr" id="btn-room-sr" onclick="roomSaleroom()" disabled>
+        <div class="bid-btn-left">
+          <div>🏠 Room bid on Saleroom</div>
+          <div class="label">Keeps current price — attributes to room bidder on Saleroom</div>
+        </div>
+        <div class="bid-btn-amt" id="room-sr-amt">£—</div>
+      </button>
+
+      <button class="bid-btn btn-bang" id="btn-bang-sr" onclick="bangSaleroom()" disabled>
+        <div class="bid-btn-left">
+          <div>❗ Drop Saleroom bidder (keep price)</div>
+          <div class="label">Equivalent to pressing ! on Bidpath for the Saleroom source</div>
+        </div>
+        <div class="bid-btn-amt" id="bang-sr-amt">£—</div>
+      </button>
+
+    </div>
+  </div>
+
+  <!-- ── TIMING ── -->
+  <div class="card">
+    <div class="card-head">
+      <h2>Force timing events</h2>
+      <p>Trigger Fair Warning or Hammer without waiting for the silence timer</p>
+    </div>
+    <div class="card-body">
+      <div class="timing-grid">
+        <button class="t-btn t-fw" id="btn-fw" onclick="forceFW()" disabled>
+          ⚠️ Fair Warning now
+        </button>
+        <button class="t-btn t-hammer" id="btn-hammer" onclick="forceHammer()" disabled>
+          🔨 Hammer now
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SIM CONTROLS ── -->
+  <div class="card">
+    <div class="card-head">
+      <h2>Simulation controls</h2>
+      <p>Control the auto-bid simulation running on Bidpath</p>
+    </div>
+    <div class="card-body">
+
+      <!-- Manual mode toggle -->
+      <div class="mode-row">
+        <label for="manual-toggle">Manual mode — pause auto-bids</label>
+        <span id="mode-label">Auto-bids running</span>
+        <button class="toggle" id="manual-toggle" onclick="toggleManual()"></button>
+      </div>
+
+      <div class="sim-grid">
+        <button class="s-btn s-start"  onclick="send('cmd_start')">▶ Start</button>
+        <button class="s-btn s-stop"   onclick="send('cmd_stop')">⏹ Stop</button>
+        <button class="s-btn s-skip"   onclick="send('cmd_skip')">⏭ Skip lot</button>
+        <button class="s-btn s-reset"  onclick="send('cmd_reset')" style="grid-column:1/span 3">🔄 Reset both panels</button>
+      </div>
+
+      <!-- Log -->
+      <div id="log-box"><div class="log-line">Waiting for activity…</div></div>
+    </div>
+  </div>
+
+</div><!-- end content -->
+
+<script>
+/* ─── INCREMENT TABLE ─── */
+const INC = [
+  {from:0,    to:50,       inc:5},
+  {from:50,   to:200,      inc:10},
+  {from:200,  to:700,      inc:20},
+  {from:700,  to:1000,     inc:50},
+  {from:1000, to:3000,     inc:100},
+  {from:3000, to:7000,     inc:200},
+  {from:7000, to:Infinity, inc:500},
+];
+function getInc(b){ for(const r of INC) if(b>=r.from && b<r.to) return r.inc; return 500; }
+function nextBid(b){ return b + getInc(b); }
+function fmt(n){ return '£' + Number(n).toLocaleString('en-GB'); }
+function ts(){
+  return new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+
+/* ─── STATE ─── */
+let ST = { lot:'—', bid:0, state:'idle', manualMode:false };
+
+/* ─── BROADCAST ─── */
+const CH = new BroadcastChannel('vectis-auto-clerk');
+
+CH.onmessage = function(e){
+  const msg = e.data;
+
+  if(msg.type === 'bp_lot'){
+    ST.lot = msg.number; ST.bid = msg.start || 0;
+    updateState();
+    addLog('Lot '+msg.number+' started — '+msg.title.slice(0,40));
+  }
+
+  if(msg.type === 'bp_bid'){
+    ST.bid = msg.amount;
+    updateState();
+  }
+
+  if(msg.type === 'bp_state'){
+    ST.state = msg.state;
+    updateState();
+  }
+
+  if(msg.type === 'bp_hammer'){
+    addLog(msg.sold ? '🔨 Hammered at '+fmt(msg.amount) : '🚫 Passed');
+  }
+
+  if(msg.type === 'bp_fw'){
+    addLog('⚠️ Fair Warning at '+fmt(msg.amount));
+  }
+
+  if(msg.type === 'cmd_reset'){
+    ST = { lot:'—', bid:0, state:'idle', manualMode:ST.manualMode };
+    updateState();
+    addLog('🔄 Reset');
+  }
+};
+
+function send(type, extra){
+  CH.postMessage({ type, ...extra });
+}
+
+/* ─── UPDATE UI ─── */
+function updateState(){
+  const next = ST.bid > 0 ? nextBid(ST.bid) : '—';
+  const nextFmt = next === '—' ? '£—' : fmt(next);
+  const bidFmt  = ST.bid > 0 ? fmt(ST.bid) : '£—';
+  const inBid   = ST.state === 'bidding' || ST.state === 'fair_warning';
+
+  document.getElementById('s-lot').textContent  = ST.lot;
+  document.getElementById('s-bid').textContent  = bidFmt;
+  document.getElementById('s-next').textContent = nextFmt;
+
+  const badge = document.getElementById('state-badge');
+  const names = { idle:'Idle', bidding:'Bidding', fair_warning:'Fair Warning', sold:'Sold', passed:'Passed', done:'Done' };
+  const clses = { idle:'ss-idle', bidding:'ss-bidding', fair_warning:'ss-fw', sold:'ss-sold', passed:'ss-idle', done:'ss-idle' };
+  badge.textContent = names[ST.state] || ST.state;
+  badge.className   = clses[ST.state] || 'ss-idle';
+
+  // Next-increment displays
+  document.getElementById('next-vectis').textContent   = nextFmt;
+  document.getElementById('next-saleroom').textContent = nextFmt;
+  document.getElementById('room-sr-amt').textContent   = bidFmt;
+  document.getElementById('bang-sr-amt').textContent   = bidFmt;
+
+  // Enable/disable buttons
+  const canBid    = inBid && ST.bid > 0;
+  const canFW     = ST.state === 'bidding';
+  const canHammer = ST.state === 'fair_warning';
+
+  document.getElementById('btn-vectis').disabled     = !canBid;
+  document.getElementById('btn-saleroom-bid').disabled = !canBid;
+  document.getElementById('btn-custom').disabled     = !inBid;
+  document.getElementById('btn-room-sr').disabled    = !inBid;
+  document.getElementById('btn-bang-sr').disabled    = !canBid;
+  document.getElementById('btn-fw').disabled         = !canFW;
+  document.getElementById('btn-hammer').disabled     = !canHammer;
+}
+
+/* ─── ACTIONS ─── */
+function injectBid(source){
+  const amount = nextBid(ST.bid);
+  send('cmd_inject_bid', { source, amount });
+  addLog('Injected '+source+' bid: '+fmt(amount));
+}
+
+function injectCustom(){
+  const val = parseInt(document.getElementById('custom-amt').value, 10);
+  if(!val || val <= 0){ addLog('⚠️ Enter a valid amount'); return; }
+  const source = document.getElementById('custom-src').value;
+  send('cmd_inject_bid', { source, amount: val });
+  addLog('Custom bid: '+fmt(val)+' as '+source);
+}
+
+function roomSaleroom(){
+  send('cmd_room');
+  addLog('Room bid sent to Saleroom at '+fmt(ST.bid));
+}
+
+function bangSaleroom(){
+  // Tells Bidpath to do a bang on the Saleroom source (drops bidder, keeps price)
+  send('cmd_inject_bang', { source:'Saleroom' });
+  addLog('! sent to Bidpath — Saleroom bidder dropped at '+fmt(ST.bid));
+}
+
+function forceFW(){
+  send('cmd_fw');
+  addLog('⚠️ Fair Warning forced');
+}
+
+function forceHammer(){
+  send('cmd_hammer');
+  addLog('🔨 Hammer forced');
+}
+
+let manualOn = false;
+function toggleManual(){
+  manualOn = !manualOn;
+  const tog = document.getElementById('manual-toggle');
+  const lbl = document.getElementById('mode-label');
+  tog.classList.toggle('on', manualOn);
+  lbl.textContent = manualOn ? 'Auto-bids paused' : 'Auto-bids running';
+  send(manualOn ? 'cmd_pause_sim' : 'cmd_resume_sim');
+  addLog(manualOn ? 'Manual mode ON — auto-bids paused' : 'Manual mode OFF — auto-bids resumed');
+}
+
+/* ─── LOG ─── */
+function addLog(msg){
+  const box = document.getElementById('log-box');
+  // Remove empty state line
+  if(box.children.length === 1 && box.children[0].textContent === 'Waiting for activity…'){
+    box.innerHTML = '';
+  }
+  const div = document.createElement('div');
+  div.className = 'log-line';
+  div.innerHTML = '<span>'+ts()+'</span>'+msg;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+updateState();
+setTimeout(function(){ CH.postMessage({ type:'controls_hello' }); }, 200);
+</script>
+</body>
+</html>

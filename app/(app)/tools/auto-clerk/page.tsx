@@ -215,18 +215,33 @@ export default function AutoClerkPage() {
         </a>
 
         <a href="/auto-clerk-commentary.html" target="_blank" rel="noopener noreferrer"
-          className="block bg-gray-100 hover:bg-gray-200 dark:bg-[#1C1C1E] dark:hover:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl p-6 transition-colors group sm:col-span-2">
+          className="block bg-gray-100 hover:bg-gray-200 dark:bg-[#1C1C1E] dark:hover:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl p-6 transition-colors group">
           <div className="flex items-center gap-3 mb-3">
             <span className="text-2xl">🎙</span>
             <div>
               <p className="font-bold text-gray-900 dark:text-white text-base">Commentary Feed</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Optional — any spare monitor or tab</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Optional — any spare tab</p>
             </div>
           </div>
           <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-            Passive observer — explains every coordinator decision in plain English as it happens. No interaction needed.
+            Explains every coordinator decision in plain English as it happens. Passive — no interaction needed.
           </p>
           <p className="text-xs text-[#a78bfa] mt-4 group-hover:underline">Open in new tab →</p>
+        </a>
+
+        <a href="/auto-clerk-controls.html" target="_blank" rel="noopener noreferrer"
+          className="block bg-gray-100 hover:bg-gray-200 dark:bg-[#1C1C1E] dark:hover:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl p-6 transition-colors group">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-2xl">🕹</span>
+            <div>
+              <p className="font-bold text-gray-900 dark:text-white text-base">Manual Controls</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Optional — any spare tab</p>
+            </div>
+          </div>
+          <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+            Inject bids as Vectis Auto or Saleroom.com, force Fair Warning or Hammer, pause auto-bids for manual testing.
+          </p>
+          <p className="text-xs text-[#f97316] mt-4 group-hover:underline">Open in new tab →</p>
         </a>
 
       </div>

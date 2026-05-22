@@ -459,7 +459,7 @@ let sim = {
   lotIdx:0, currentBid:0,
   lastBidAt:null, bidsLeft:0,
   bidTimer:null, advTimer:null,
-  sold:{},
+  sold:{}, paused:false,
 };
 const CFG = { speedX:1 };
 
@@ -467,11 +467,34 @@ const CFG = { speedX:1 };
 const CH = new BroadcastChannel('vectis-auto-clerk');
 CH.onmessage = function(e){
   const msg = e.data;
-  if(msg.type === 'cmd_reset')  { resetSim(); }
-  if(msg.type === 'cmd_start')  { if(!sim.running) startSim(); }
-  if(msg.type === 'cmd_stop')   { if(sim.running)  stopSim(); }
-  if(msg.type === 'cmd_fw')     { manualFW(); }
-  if(msg.type === 'cmd_hammer') { manualHammer(); }
+  if(msg.type === 'cmd_reset')      { resetSim(); }
+  if(msg.type === 'cmd_start')      { if(!sim.running) startSim(); }
+  if(msg.type === 'cmd_stop')       { if(sim.running)  stopSim(); }
+  if(msg.type === 'cmd_skip')       { if(sim.running)  skipLot(); }
+  if(msg.type === 'cmd_fw')         { manualFW(); }
+  if(msg.type === 'cmd_hammer')     { manualHammer(); }
+  if(msg.type === 'cmd_pause_sim')  { sim.paused = true; if(sim.bidTimer){ clearTimeout(sim.bidTimer); sim.bidTimer = null; } }
+  if(msg.type === 'cmd_resume_sim') { sim.paused = false; if(sim.state === 'bidding') scheduleNextBid(); }
+
+  // Manual bid injection from control panel
+  if(msg.type === 'cmd_inject_bid'){
+    if(sim.state === 'bidding' || sim.state === 'fair_warning'){
+      const amount = msg.amount || nextBid(sim.currentBid);
+      const source = msg.source || 'Vectis Auto';
+      if(sim.state === 'fair_warning'){
+        setSimState('bidding');
+        document.getElementById('fw-btn').classList.remove('active');
+      }
+      placeBid(amount, source);
+    }
+  }
+
+  // Drop bidder on a source (keeps amount, removes bidder) — ! button equivalent
+  if(msg.type === 'cmd_inject_bang'){
+    if(sim.state === 'bidding' || sim.state === 'fair_warning'){
+      bangSource(msg.source || 'Saleroom');
+    }
+  }
   if(msg.type === 'coordinator_hello'){
     document.getElementById('coord-status').textContent = 'Coordinator: connected ✓';
     document.getElementById('coord-status').style.color = '#4ade80';
@@ -537,7 +560,7 @@ function renderStrip(){
 function resetSim(){
   clearTimers();
   sim.running = false; sim.state = 'idle'; sim.lotIdx = 0;
-  sim.currentBid = 0; sim.lastBidAt = null; sim.bidsLeft = 0; sim.sold = {};
+  sim.currentBid = 0; sim.lastBidAt = null; sim.bidsLeft = 0; sim.sold = {}; sim.paused = false;
   setSimState('idle');
   document.getElementById('lot-title').textContent     = 'Waiting to start…';
   document.getElementById('lot-title').dataset.lotNumber = '';
@@ -611,9 +634,10 @@ function startLot(idx){
 function scheduleNextBid(){
   if(sim.bidTimer) clearTimeout(sim.bidTimer);
   if(sim.bidsLeft <= 0) return; // stop — coordinator handles silence/FW/hammer
+  if(sim.paused) return;        // manual mode — wait for resume
   const delay = (2000 + Math.random() * 4000) / CFG.speedX;
   sim.bidTimer = setTimeout(function(){
-    if(!sim.running || sim.state !== 'bidding') return;
+    if(!sim.running || sim.state !== 'bidding' || sim.paused) return;
 
     // Randomly pick bid source: 60% Vectis Auto, 40% Saleroom
     const source = Math.random() < 0.6 ? 'Vectis Auto' : 'Saleroom';
