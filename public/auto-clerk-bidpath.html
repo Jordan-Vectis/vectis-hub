@@ -498,7 +498,7 @@ CH.onmessage = function(e){
   if(msg.type === 'coordinator_hello'){
     document.getElementById('coord-status').textContent = 'Coordinator: connected ✓';
     document.getElementById('coord-status').style.color = '#4ade80';
-    CH.postMessage({ type:'bidpath_hello' });
+    // No reply — Bidpath already announces itself on page load, replying here causes a ping-pong loop
   }
 };
 function broadcast(msg){ CH.postMessage(msg); }
