@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Auto Clerk — Dashboard</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%; overflow: hidden;
+  background: #020408;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── HEADER ── */
+#hdr {
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  background: #0f1621;
+  border-bottom: 2px solid #0d1117;
+  flex-shrink: 0;
+}
+
+#hdr-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: white;
+  white-space: nowrap;
+}
+
+#hdr-sep { width: 1px; height: 20px; background: rgba(255,255,255,0.1); }
+
+#hdr-status {
+  font-size: 11px;
+  color: #475569;
+  flex: 1;
+}
+
+#conn-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: #1e293b;
+  color: #64748b;
+  white-space: nowrap;
+}
+#conn-badge.ok { background: #14532d; color: #4ade80; }
+
+.hbtn {
+  padding: 4px 14px;
+  border-radius: 6px;
+  border: none;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: filter 0.15s;
+}
+.hbtn:hover:not(:disabled) { filter: brightness(1.12); }
+.hbtn:disabled { opacity: 0.35; cursor: not-allowed; }
+.hbtn-start { background: #16a34a; color: white; }
+.hbtn-stop  { background: #dc2626; color: white; }
+.hbtn-reset { background: #1e293b; color: #94a3b8; border: 1px solid rgba(255,255,255,0.1); }
+
+/* ── GRID ── */
+#grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+  background: #020408;
+  /* Fill remaining height after header */
+  height: calc(100vh - 42px);
+}
+
+.cell {
+  position: relative;
+  overflow: hidden;
+  background: #0d1117;
+}
+
+.cell-label {
+  position: absolute;
+  top: 6px; left: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: rgba(255,255,255,0.25);
+  pointer-events: none;
+  z-index: 10;
+}
+
+iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+/* ── LOG PILL ── */
+#log-pill {
+  position: fixed;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15,22,33,0.92);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 11px;
+  color: #94a3b8;
+  font-family: ui-monospace, monospace;
+  max-width: 480px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+  z-index: 100;
+}
+#log-pill.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<div id="hdr">
+  <div id="hdr-title">🤖 Auto Clerk</div>
+  <div id="hdr-sep"></div>
+  <div id="hdr-status">Press Start to begin</div>
+  <div id="conn-badge">● Waiting</div>
+  <button class="hbtn hbtn-reset" onclick="doReset()">🔄 Reset</button>
+  <button class="hbtn hbtn-start" id="btn-start" onclick="doStart()">▶ Start</button>
+  <button class="hbtn hbtn-stop"  id="btn-stop"  onclick="doStop()" disabled>⏹ Stop</button>
+</div>
+
+<!-- ── GRID ── -->
+<div id="grid">
+  <div class="cell">
+    <div class="cell-label">Bidpath</div>
+    <iframe src="/auto-clerk-bidpath.html"     id="fr-bidpath"     title="Bidpath"></iframe>
+  </div>
+  <div class="cell">
+    <div class="cell-label">Saleroom</div>
+    <iframe src="/auto-clerk-saleroom.html"    id="fr-saleroom"    title="Saleroom"></iframe>
+  </div>
+  <div class="cell">
+    <div class="cell-label">Controls</div>
+    <iframe src="/auto-clerk-controls.html"    id="fr-controls"    title="Controls"></iframe>
+  </div>
+  <div class="cell">
+    <div class="cell-label">Commentary</div>
+    <iframe src="/auto-clerk-commentary.html"  id="fr-commentary"  title="Commentary"></iframe>
+  </div>
+</div>
+
+<!-- floating log pill -->
+<div id="log-pill"></div>
+
+<script>
+/* ════════════════════════════════════════════════════════
+   COORDINATOR — same logic as page.tsx, plain JS
+   ════════════════════════════════════════════════════════ */
+
+const SILENCE_BEFORE_FW_MS     = 10_000
+const SILENCE_BEFORE_HAMMER_MS = 10_000
+
+let ch        = null
+let timer     = null
+let running   = false
+let logPillTO = null
+
+const S = {
+  bidpathBid:  0,
+  saleroomBid: 0,
+  lastBidMs:   0,
+  fwIssued:    false,
+  fwIssuedAt:  0,
+  simState:    'idle',
+}
+
+function showPill(msg){
+  const pill = document.getElementById('log-pill')
+  pill.textContent = msg
+  pill.classList.add('show')
+  clearTimeout(logPillTO)
+  logPillTO = setTimeout(() => pill.classList.remove('show'), 3500)
+}
+
+function setStatus(msg){ document.getElementById('hdr-status').textContent = msg }
+
+function doStart(){
+  if(running) return
+
+  ch = new BroadcastChannel('vectis-auto-clerk')
+
+  // Reset coordinator state
+  S.bidpathBid = 0; S.saleroomBid = 0; S.lastBidMs = 0
+  S.fwIssued = false; S.fwIssuedAt = 0; S.simState = 'idle'
+
+  ch.onmessage = function(e){
+    const msg = e.data
+
+    if(msg.type === 'bidpath_hello'){
+      document.getElementById('conn-badge').textContent = '● Connected'
+      document.getElementById('conn-badge').className   = 'ok'
+      setStatus('Bidpath connected — auction running')
+      ch.postMessage({ type:'coordinator_hello' })
+    }
+
+    if(msg.type === 'bp_lot'){
+      S.bidpathBid  = msg.start || 0
+      S.saleroomBid = 0
+      S.lastBidMs   = Date.now()
+      S.fwIssued    = false
+      showPill('Lot '+msg.number+' — '+msg.title.slice(0,50))
+      setStatus('Lot '+msg.number+' — '+msg.title.slice(0,50))
+    }
+
+    if(msg.type === 'bp_bid'){
+      S.lastBidMs  = msg.ms || Date.now()
+      S.fwIssued   = false
+      S.bidpathBid = msg.amount
+      if(msg.amount > S.saleroomBid){
+        ch.postMessage({ type:'cmd_bid', amount:msg.amount, source:msg.source })
+        S.saleroomBid = msg.amount
+      }
+    }
+
+    if(msg.type === 'bp_state'){
+      S.simState   = msg.state
+      S.bidpathBid = msg.bid || S.bidpathBid
+    }
+
+    if(msg.type === 'sr_bid'){
+      S.saleroomBid = msg.amount
+    }
+
+    if(msg.type === 'sr_room_bid'){
+      showPill('Saleroom room bid £'+msg.amount+' — Bidpath operator: press ! to drop bidder')
+    }
+
+    if(msg.type === 'sim_ended'){
+      showPill('Simulation complete')
+      setStatus('Simulation complete')
+      doStop()
+    }
+  }
+
+  // Silence detection — every 500ms
+  timer = setInterval(function(){
+    if(S.simState !== 'bidding' && S.simState !== 'fair_warning') return
+    if(S.lastBidMs === 0) return
+
+    const now     = Date.now()
+    const silence = now - S.lastBidMs
+
+    if(S.simState === 'bidding' && !S.fwIssued && silence >= SILENCE_BEFORE_FW_MS){
+      showPill('⚠️ 10s silence — Fair Warning on both panels')
+      ch.postMessage({ type:'cmd_fw' })
+      S.fwIssued   = true
+      S.fwIssuedAt = now
+    }
+
+    if(S.fwIssued && (now - S.fwIssuedAt) >= SILENCE_BEFORE_HAMMER_MS){
+      const amount = S.bidpathBid
+      showPill('🔨 Hammering at £'+amount.toLocaleString())
+      ch.postMessage({ type:'cmd_hammer' })
+      setTimeout(function(){
+        ch.postMessage({ type:'cmd_sell', amount })
+        setTimeout(function(){
+          ch.postMessage({ type:'cmd_next' })
+        }, 600)
+      }, 800)
+      S.fwIssued    = false
+      S.saleroomBid = 0
+      S.lastBidMs   = now
+    }
+  }, 500)
+
+  // Reset both panels, then start after a short delay
+  ch.postMessage({ type:'cmd_reset' })
+  ch.postMessage({ type:'coordinator_hello' })
+  setTimeout(function(){
+    ch.postMessage({ type:'cmd_start' })
+    showPill('▶ Started')
+  }, 600)
+
+  running = true
+  document.getElementById('btn-start').disabled = true
+  document.getElementById('btn-stop').disabled  = false
+  setStatus('Starting…')
+}
+
+function doStop(){
+  if(timer){ clearInterval(timer); timer = null }
+  if(ch)   { ch.close(); ch = null }
+  running = false
+  document.getElementById('btn-start').disabled = false
+  document.getElementById('btn-stop').disabled  = true
+  document.getElementById('conn-badge').textContent = '● Waiting'
+  document.getElementById('conn-badge').className   = ''
+  setStatus('Stopped — press Start to run again')
+}
+
+function doReset(){
+  // Resets without starting — useful to resync panels
+  const tmp = new BroadcastChannel('vectis-auto-clerk')
+  tmp.postMessage({ type:'cmd_reset' })
+  showPill('🔄 Both panels reset')
+  setTimeout(() => tmp.close(), 500)
+}
+</script>
+</body>
+</html>

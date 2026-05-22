@@ -177,9 +177,20 @@ export default function AutoClerkPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Auto Clerk</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Open both panels in separate windows — ideally on separate monitors. Then press Start below.
+          Open the dashboard for all 4 panels in one window, or open them individually below.
         </p>
       </div>
+
+      {/* Dashboard shortcut */}
+      <a href="/auto-clerk-dashboard.html" target="_blank" rel="noopener noreferrer"
+        className="flex items-center gap-4 bg-gradient-to-r from-[#1d4ed8] to-[#1e3a8a] hover:from-[#2563eb] hover:to-[#1d4ed8] rounded-xl p-5 transition-all group">
+        <span className="text-3xl">🖥</span>
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-white text-base">Open Dashboard</p>
+          <p className="text-sm text-blue-200 mt-0.5">All 4 panels in a single window — Bidpath, Saleroom, Controls &amp; Commentary</p>
+        </div>
+        <span className="text-blue-200 text-sm group-hover:translate-x-1 transition-transform">→</span>
+      </a>
 
       {/* Open panels */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
