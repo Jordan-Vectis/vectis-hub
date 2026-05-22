@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useTransition, useRef } from "react"
 import Image from "next/image"
@@ -450,7 +450,7 @@ export default function BannerManager({ initialSlides }: { initialSlides: Slide[
             <div className="flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-100">
               <button
                 onClick={() => { setEditing(null); setForm(DEFAULT_FORM) }}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:hover:text-white transition-colors"
               >
                 Cancel
               </button>

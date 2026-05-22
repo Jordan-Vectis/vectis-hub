@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
@@ -302,21 +302,21 @@ export default function TicketsPage() {
         <div className="shrink-0 flex items-center gap-2">
           <a
             href="/api/tickets/export"
-            className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg"
+            className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white dark:text-white border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg"
             title="Download every ticket as a CSV"
           >
             📤 Export
           </a>
           <Link
             href="/tools/tickets/import"
-            className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg"
+            className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white dark:text-white border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg"
             title="Bulk import tickets from a structured CSV (admin)"
           >
             📥 Import
           </Link>
           <button
             onClick={() => setShowManageCats(true)}
-            className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg"
+            className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white dark:text-white border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg"
             title="Add, rename or deactivate ticket categories (admin)"
           >
             ⚙ Categories
@@ -380,7 +380,7 @@ export default function TicketsPage() {
         {filtersActive && (
           <button
             onClick={clearFilters}
-            className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:text-white hover:underline"
+            className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white dark:text-white hover:underline"
           >
             Clear filters
           </button>
@@ -648,7 +648,7 @@ export default function TicketsPage() {
               <button
                 onClick={() => setShow(false)}
                 disabled={saving}
-                className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white px-4 py-2 rounded-lg"
+                className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white dark:text-white px-4 py-2 rounded-lg"
               >
                 Cancel
               </button>
@@ -819,7 +819,7 @@ function ManageCategoriesModal({
         </div>
 
         <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-800 flex justify-end">
-          <button onClick={onClose} className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white px-4 py-2 rounded-lg">
+          <button onClick={onClose} className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white dark:text-white px-4 py-2 rounded-lg">
             Done
           </button>
         </div>

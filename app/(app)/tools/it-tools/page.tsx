@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
@@ -37,7 +37,7 @@ export default function ITToolsPage() {
             className={`text-sm font-medium px-4 py-2 -mb-px border-b-2 transition-colors ${
               tab === t
                 ? "border-cyan-500 text-cyan-700"
-                : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:text-gray-200"
+                : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 dark:text-gray-200"
             }`}
           >
             {t === "reply" ? "✍️ Draft Reply" : "📋 Templates"}
@@ -299,7 +299,7 @@ function TemplatesTab() {
                         </button>
                         <button
                           onClick={() => setEditing(t)}
-                          className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:text-white hover:underline"
+                          className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white dark:text-white hover:underline"
                         >
                           Edit
                         </button>
@@ -420,7 +420,7 @@ function TemplateEditor({
             <button onClick={remove} disabled={saving} className="text-sm text-red-600 hover:underline">Delete</button>
           ) : <span />}
           <div className="flex gap-2">
-            <button onClick={onClose} disabled={saving} className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white px-4 py-2 rounded-lg">Cancel</button>
+            <button onClick={onClose} disabled={saving} className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white dark:text-white px-4 py-2 rounded-lg">Cancel</button>
             <button
               onClick={save}
               disabled={saving}

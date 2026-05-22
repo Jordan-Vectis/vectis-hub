@@ -265,7 +265,7 @@ export default function EditUserForm({ userId, name, email, username, role, depa
                               </svg>
                             )}
                           </div>
-                          <span className="text-sm text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:text-white font-medium">
+                          <span className="text-sm text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white font-medium">
                             {item.icon && <span className="mr-1">{item.icon}</span>}{item.label}
                           </span>
                         </label>
@@ -308,7 +308,7 @@ export default function EditUserForm({ userId, name, email, username, role, depa
                                         </svg>
                                       )}
                                     </div>
-                                    <span className="text-xs text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:text-white">{s.label}</span>
+                                    <span className="text-xs text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white">{s.label}</span>
                                   </label>
                                 )
                               })}

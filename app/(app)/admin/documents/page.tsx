@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useState, useRef, useCallback, DragEvent } from "react"
 
@@ -325,7 +325,7 @@ export default function DocumentsPage() {
                 className={`flex-1 flex items-center gap-2 py-2 pr-2 text-sm text-left transition-colors truncate ${
                   selectedFolderId === folder.id
                     ? "text-slate-800 font-semibold"
-                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white"
+                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white dark:text-white"
                 }`}
               >
                 <span>🗂️</span>

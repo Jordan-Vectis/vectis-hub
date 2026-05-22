@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
@@ -183,7 +183,7 @@ export default function PackingPage() {
         <div className="flex items-center gap-3">
           <Link
             href="/tools/packing/packers"
-            className="text-sm text-gray-600 hover:text-gray-900 border border-gray-300 dark:border-gray-600 hover:border-gray-400 px-3 py-2 rounded-lg transition-colors"
+            className="text-sm text-gray-600 hover:text-gray-900 dark:hover:text-white border border-gray-300 dark:border-gray-600 hover:border-gray-400 px-3 py-2 rounded-lg transition-colors"
           >
             👥 Packer Barcodes
           </Link>

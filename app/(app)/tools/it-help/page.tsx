@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
@@ -66,7 +66,7 @@ export default function ITHelpPage() {
             className={`text-sm font-medium px-4 py-2 -mb-px border-b-2 transition-colors ${
               tab === t
                 ? "border-yellow-500 text-yellow-700"
-                : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:text-gray-200"
+                : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 dark:text-gray-200"
             }`}
           >
             {t === "ask" ? "💡 Ask" : "📚 Knowledge Base"}
@@ -453,7 +453,7 @@ function ArticleEditor({
             </button>
           ) : <span />}
           <div className="flex gap-2">
-            <button onClick={onClose} disabled={saving} className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white px-4 py-2 rounded-lg">
+            <button onClick={onClose} disabled={saving} className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white dark:text-white px-4 py-2 rounded-lg">
               Cancel
             </button>
             <button

@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
 
@@ -219,7 +219,7 @@ function FirstSyncPanel({ onComplete }: { onComplete: () => void }) {
           <p className="text-xs text-gray-600 dark:text-gray-500">Do not close this tab — this may take a few minutes</p>
           <button
             onClick={() => { abortRef.current = true; setPhase("error"); setError("Cancelled") }}
-            className="text-xs text-gray-600 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-300"
+            className="text-xs text-gray-600 dark:text-gray-500 hover:text-gray-900 dark:hover:text-white dark:hover:text-gray-300"
           >
             Cancel
           </button>

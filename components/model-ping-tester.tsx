@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useRef, useState } from "react"
 
@@ -87,7 +87,7 @@ export default function ModelPingTester({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-xs text-gray-500 hover:text-gray-900 hover:underline"
+        className="text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white hover:underline"
         title="Ping each model and report latency"
       >
         {triggerLabel}
@@ -161,7 +161,7 @@ export default function ModelPingTester({
               <button
                 onClick={() => setOpen(false)}
                 disabled={busy}
-                className="text-sm text-gray-600 hover:text-gray-900 px-4 py-2 rounded-lg"
+                className="text-sm text-gray-600 hover:text-gray-900 dark:hover:text-white px-4 py-2 rounded-lg"
               >
                 Close
               </button>

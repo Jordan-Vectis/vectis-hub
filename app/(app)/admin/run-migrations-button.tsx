@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useTransition } from "react"
 
@@ -21,7 +21,7 @@ export default function RunMigrationsButton() {
       <button
         onClick={run}
         disabled={pending}
-        className="px-4 py-2 text-sm font-medium border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-400 hover:text-gray-800 dark:text-gray-200 rounded-lg transition-colors disabled:opacity-50"
+        className="px-4 py-2 text-sm font-medium border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-400 hover:text-gray-800 dark:hover:text-gray-100 dark:text-gray-200 rounded-lg transition-colors disabled:opacity-50"
       >
         {pending ? "Running…" : "Run Migrations"}
       </button>
