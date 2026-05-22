@@ -2,304 +2,346 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Bidpath Clerk — Auto Clerk Sim</title>
+<title>Bidpath — Auto Clerk Sim</title>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-  background: #f0f0f0;
-  color: #111;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #0d1117;
+  color: white;
   height: 100vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   font-size: 13px;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ── SIM CONTROLS BAR ── */
+/* ── SHARED ── */
+.card {
+  background: #161b2e;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+}
+.label { color: #94a3b8; font-size: 11px; font-weight: 600; }
+.mono  { font-family: ui-monospace, monospace; }
+
+/* ── SIM BAR ── */
 #sim-bar {
-  background: #1a237e;
-  color: white;
-  padding: 5px 12px;
+  background: #0f1621;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding: 6px 12px;
   display: flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
   font-size: 12px;
 }
-#sim-bar strong { color: #90caf9; }
 .sbtn {
   padding: 3px 12px;
-  border-radius: 4px;
-  border: 1px solid rgba(255,255,255,0.3);
-  background: rgba(255,255,255,0.15);
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.08);
   color: white;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
+  transition: background 0.15s;
 }
-.sbtn:hover:not(:disabled) { background: rgba(255,255,255,0.25); }
-.sbtn:disabled { opacity: 0.4; cursor: default; }
-.sbtn.go  { background: #2e7d32; border-color: #2e7d32; }
-.sbtn.go:hover { background: #1b5e20; }
-.sbtn.stp { background: #b71c1c; border-color: #b71c1c; }
-.sbtn.stp:hover { background: #7f0000; }
-.sbtn.spd.sel { background: #0277bd; border-color: #0277bd; }
-.sim-spacer { flex: 1; }
-#sim-state-badge {
-  padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 1px;
+.sbtn:hover:not(:disabled) { background: rgba(255,255,255,0.18); }
+.sbtn:disabled { opacity: 0.35; cursor: default; }
+.sbtn.go  { background: #16a34a; border-color: #16a34a; }
+.sbtn.go:hover  { background: #15803d; }
+.sbtn.stp { background: #dc2626; border-color: #dc2626; }
+.sbtn.stp:hover { background: #b91c1c; }
+.sbtn.spd.sel { background: #1d4ed8; border-color: #1d4ed8; }
+#sim-badge {
+  padding: 2px 10px; border-radius: 10px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
 }
-.ss-idle    { background: #424242; }
-.ss-bidding { background: #2e7d32; }
-.ss-fw      { background: #e65100; }
-.ss-sold    { background: #0277bd; }
-.ss-passed  { background: #6a1b9a; }
+.ss-idle    { background: #374151; }
+.ss-bidding { background: #15803d; }
+.ss-fw      { background: #c2410c; animation: fwpulse 0.7s infinite alternate; }
+.ss-sold    { background: #1d4ed8; }
+.ss-passed  { background: #6d28d9; }
+@keyframes fwpulse { from { filter: brightness(1); } to { filter: brightness(1.25); } }
 
 /* ── TOP LOT BAR ── */
-#top-bar {
-  background: white;
-  border-bottom: 1px solid #ddd;
-  padding: 6px 12px;
+#lot-bar {
+  background: #161b2e;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding: 8px 14px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-shrink: 0;
 }
 #lot-thumb {
   width: 56px; height: 56px;
-  background: #e0e0e0;
-  border: 1px solid #ccc;
-  border-radius: 2px;
+  background: #0d1117;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 24px;
-  flex-shrink: 0;
+  font-size: 26px; flex-shrink: 0;
 }
 #lot-info { flex: 1; min-width: 0; }
 #lot-title {
-  font-size: 14px; font-weight: 700; color: #111;
+  font-size: 14px; font-weight: 700; color: white;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-#lot-group { font-size: 12px; color: #555; }
-#lot-guide { font-size: 11px; color: #888; margin-top: 1px; }
-#top-controls { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
-.tc-btn {
-  padding: 6px 14px;
-  border: none; border-radius: 3px;
-  font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;
+#lot-sub { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+#lot-bar-btns { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.lbb {
+  padding: 6px 14px; border: none; border-radius: 8px;
+  font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: filter 0.15s;
 }
-.tc-close    { background: #c62828; color: white; }
-.tc-pause    { background: #1565c0; color: white; }
-.tc-withdraw { background: #2e7d32; color: white; }
+.lbb:hover { filter: brightness(1.1); }
+.lbb-close    { background: #dc2626; color: white; }
+.lbb-pause    { background: #d97706; color: white; }
+.lbb-withdraw { background: #374151; color: #d1d5db; }
 #hovering-box {
-  background: #283593; color: white;
-  padding: 4px 14px; border-radius: 3px;
-  text-align: center; min-width: 70px;
+  background: #1e3a8a; color: white;
+  padding: 4px 12px; border-radius: 8px;
+  text-align: center; min-width: 64px;
   font-size: 11px; font-weight: 600;
 }
-#hovering-count { font-size: 20px; font-weight: 900; display: block; line-height: 1; }
+#hovering-count { font-size: 22px; font-weight: 900; display: block; line-height: 1.1; }
 
-/* ── CURRENT BID BAR ── */
+/* ── BID BAR ── */
 #bid-bar {
-  background: #1a237e; color: white;
-  padding: 6px 12px;
+  background: #1a2234;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding: 8px 14px;
   display: flex; align-items: center; justify-content: space-between;
   flex-shrink: 0;
 }
-#current-bid-label { font-size: 13px; }
-#current-bid { font-size: 26px; font-weight: 900; margin-left: 6px; }
-#bid-bar-btns { display: flex; gap: 6px; }
-.bb-pass { background: #e64a19; color: white; border: none; border-radius: 3px; padding: 6px 18px; font-size: 12px; font-weight: 700; cursor: pointer; }
-.bb-undo { background: #1565c0; color: white; border: none; border-radius: 3px; padding: 6px 18px; font-size: 12px; font-weight: 700; cursor: pointer; }
+#bid-label { color: #94a3b8; font-size: 13px; }
+#current-bid { font-size: 30px; font-weight: 900; margin-left: 8px; }
+.bb-btn {
+  padding: 6px 18px; border: none; border-radius: 8px;
+  font-size: 12px; font-weight: 700; cursor: pointer; transition: filter 0.15s;
+}
+.bb-btn:hover { filter: brightness(1.15); }
+.bb-pass { background: #374151; color: #d1d5db; }
+.bb-undo { background: #1e3a8a; color: white; }
 
-/* ── ASKING BID ROW ── */
+/* ── ASK ROW ── */
 #ask-row {
-  background: white; border-bottom: 1px solid #ddd;
-  padding: 5px 12px;
+  background: #0f1621;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding: 6px 14px;
   display: flex; align-items: center; gap: 16px;
   flex-shrink: 0;
 }
-.ask-section { display: flex; align-items: center; gap: 6px; }
-.ask-label   { font-size: 12px; font-weight: 600; color: #333; white-space: nowrap; }
-.ask-input-wrap { display: flex; align-items: center; border: 1px solid #bbb; background: white; }
-.ask-input-wrap span { padding: 3px 4px; color: #555; font-size: 13px; }
-.ask-input-inner { border: none; width: 70px; padding: 3px 4px; font-size: 13px; font-weight: 600; outline: none; }
-.ag-btn { padding: 4px 12px; border: none; border-radius: 2px; font-size: 12px; font-weight: 700; cursor: pointer; }
-.ag-set   { background: #388e3c; color: white; }
-.ag-reset { background: #1565c0; color: white; }
-.ag-sep   { width: 1px; height: 20px; background: #ddd; }
+.ask-lbl { color: #94a3b8; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.ask-wrap {
+  display: flex; align-items: center;
+  background: #0d1117; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
+}
+.ask-pound { padding: 4px 6px; color: #94a3b8; font-size: 13px; }
+.ask-inp   { border: none; background: transparent; color: white; font-size: 13px; font-weight: 600; width: 70px; padding: 4px 4px; outline: none; }
+.ask-btn {
+  padding: 4px 12px; border: none; border-radius: 5px;
+  font-size: 12px; font-weight: 700; cursor: pointer;
+}
+.ask-set   { background: #15803d; color: white; }
+.ask-reset { background: #1d4ed8; color: white; }
+.ask-sep   { width: 1px; height: 22px; background: rgba(255,255,255,0.1); }
 
-/* ── MAIN AREA ── */
-#main { display: flex; flex: 1; min-height: 0; background: white; }
+/* ── MAIN ── */
+#main { display: flex; flex: 1; min-height: 0; }
 
-/* ── LEFT 3-COLUMN GRID ── */
+/* ── LEFT ── */
 #left {
   flex: 1; display: flex; flex-direction: column; min-width: 0;
-  border-right: 1px solid #ddd;
+  border-right: 1px solid rgba(255,255,255,0.07);
+  overflow: hidden;
 }
+
 #btn-grid {
   display: grid; grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px; border-bottom: 1px solid #ddd;
-  flex-shrink: 0; padding: 8px;
+  gap: 10px; padding: 10px; flex-shrink: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
 }
-.grid-title { font-size: 11px; font-weight: 700; color: #333; margin-bottom: 5px; }
+
+.grid-hdr { color: #64748b; font-size: 11px; font-weight: 700; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+/* Amount buttons */
 .amt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
 .amt-btn {
-  background: #283593; color: white; border: none; border-radius: 2px;
-  padding: 5px 4px; font-size: 11px; font-weight: 700; cursor: pointer; text-align: center;
+  background: #1e293b;
+  color: #94a3b8;
+  border: none; border-radius: 5px;
+  padding: 5px 4px; font-size: 11px; font-weight: 700;
+  cursor: pointer; text-align: center; font-family: ui-monospace, monospace;
+  transition: all 0.12s;
 }
-.amt-btn:hover { background: #1a237e; }
+.amt-btn:hover { background: #1e3a8a; color: white; }
 
-.source-col { display: flex; flex-direction: column; gap: 4px; }
+/* Source buttons column */
+.src-col { display: flex; flex-direction: column; gap: 4px; }
 .src-row { display: flex; gap: 3px; }
 .src-btn {
-  flex: 1; border: none; border-radius: 2px;
-  padding: 7px 6px; font-size: 11px; font-weight: 700;
-  cursor: pointer; color: white; text-align: left;
+  flex: 1; border: none; border-radius: 6px;
+  padding: 8px 8px; font-size: 11px; font-weight: 700;
+  cursor: pointer; color: white; text-align: left; transition: filter 0.15s;
 }
-.src-room      { background: #558b2f; }
-.src-phone     { background: #00695c; }
-.src-invaluable { background: #b71c1c; }
-.src-saleroom  { background: #212121; }
-/* The ! button — keeps current amount, changes attribution */
+.src-btn:hover { filter: brightness(1.15); }
+.src-room      { background: #1d4ed8; }
+.src-phone     { background: #4338ca; }
+.src-invaluable { background: #7c3aed; }
+.src-saleroom  { background: #374151; }
+/* ! button — keeps amount, removes bidder */
 .src-bang {
-  width: 26px; flex-shrink: 0;
-  background: #424242; color: white; border: none; border-radius: 2px;
-  font-size: 12px; font-weight: 900; cursor: pointer;
+  width: 28px; flex-shrink: 0;
+  background: #1f2937; color: #9ca3af; border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px; font-size: 13px; font-weight: 900; cursor: pointer;
+  transition: all 0.12s; display: flex; align-items: center; justify-content: center;
 }
-.src-bang:hover { background: #616161; }
+.src-bang:hover { background: #374151; color: white; }
 
+/* Action buttons */
 #fw-btn {
-  background: #ef5350; color: white; border: none; border-radius: 2px;
+  background: #dc2626; color: white; border: none; border-radius: 6px;
   padding: 10px; font-size: 13px; font-weight: 800; cursor: pointer;
-  text-align: center; transition: background 0.2s;
+  text-align: center; transition: all 0.2s; width: 100%;
 }
-#fw-btn.active { background: #e65100; animation: fwpulse 0.6s infinite alternate; }
-@keyframes fwpulse { from { filter: brightness(1); } to { filter: brightness(1.2); } }
-
+#fw-btn.active { background: #b91c1c; animation: fwpulse 0.7s infinite alternate; }
 #hammer-btn {
-  background: #2e7d32; color: white; border: none; border-radius: 2px;
+  background: #15803d; color: white; border: none; border-radius: 6px;
   padding: 10px; font-size: 14px; font-weight: 800; cursor: pointer;
-  text-align: center; transition: all 0.15s;
+  text-align: center; transition: all 0.15s; width: 100%;
 }
-#hammer-btn.flash { background: #1b5e20; transform: scale(1.02); }
-
+#hammer-btn.flash { background: #166534; transform: scale(1.02); }
 #bid-quicker-btn {
-  background: #1a237e; color: white; border: none; border-radius: 2px;
-  padding: 8px; font-size: 12px; font-weight: 800; cursor: pointer; text-align: center;
+  background: #1e3a8a; color: white; border: none; border-radius: 6px;
+  padding: 8px; font-size: 12px; font-weight: 700; cursor: pointer;
+  text-align: center; width: 100%;
 }
 
 /* ── RIGHT PANEL ── */
 #right {
-  width: 310px; flex-shrink: 0;
-  display: flex; flex-direction: column; border-left: 1px solid #ddd;
+  width: 300px; flex-shrink: 0;
+  display: flex; flex-direction: column;
+  border-left: 1px solid rgba(255,255,255,0.07);
 }
-.rp-header {
+.rp-head {
   display: grid; grid-template-columns: 1fr 1fr 1fr;
-  background: white; border-bottom: 1px solid #ccc;
-  font-size: 12px; font-weight: 700; color: #333;
-  padding: 4px 0; flex-shrink: 0;
+  background: #0f1621;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  font-size: 11px; font-weight: 700; color: #64748b;
+  padding: 6px 0; flex-shrink: 0;
 }
-.rp-header span { padding: 2px 8px; }
+.rp-head span { padding: 0 8px; }
 .bid-list { flex: 1; overflow-y: auto; min-height: 0; }
-.bid-row { display: grid; grid-template-columns: 1fr 1fr 1fr; border-bottom: 1px solid #e0e0e0; font-size: 12px; }
-.bid-row span { padding: 5px 8px; }
-.bid-row.winner { background: #4caf50; color: white; font-weight: 700; }
-.bid-row.winner .bid-type-tag { background: #1565c0; border-radius: 2px; padding: 2px 6px; font-size: 11px; display: inline-block; }
-.bid-row .saleroom-tag { background: #212121; color: white; border-radius: 2px; padding: 2px 6px; font-size: 11px; display: inline-block; }
-.rp-divider { border-top: 2px solid #ddd; flex-shrink: 0; }
-.auto-bid-section { flex: 0 0 auto; min-height: 60px; }
-.auto-bid-empty { font-size: 11px; color: #888; padding: 8px; font-style: italic; }
+.bid-row {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  font-size: 11px;
+}
+.bid-row span { padding: 6px 8px; color: #94a3b8; }
+.bid-row.winner span { color: white; font-weight: 700; }
+.bid-row.winner { background: rgba(37,99,235,0.2); }
+.bid-row.winner span:last-child { color: #60a5fa; }
+.bid-row.saleroom-win { background: rgba(55,65,81,0.4); }
+.bid-row.saleroom-win span { color: #d1d5db; font-weight: 700; }
+.bid-row.saleroom-win span:last-child { color: #9ca3af; }
+.rp-divider { border-top: 1px solid rgba(255,255,255,0.08); flex-shrink: 0; }
+.auto-bids { flex: 0 0 auto; min-height: 50px; }
+.auto-empty { font-size: 11px; color: #475569; padding: 10px; font-style: italic; }
 
 /* ── LOT STRIP ── */
 #lot-strip {
-  background: white; border-top: 1px solid #ddd;
+  background: #0f1621;
+  border-top: 1px solid rgba(255,255,255,0.07);
   display: flex; overflow-x: auto; flex-shrink: 0;
-  height: 100px; align-items: center; padding: 4px 8px; gap: 4px;
+  height: 96px; align-items: center; padding: 4px 8px; gap: 4px;
 }
-.strip-lot { flex-shrink: 0; width: 70px; text-align: center; cursor: pointer; position: relative; }
+.strip-lot { flex-shrink: 0; width: 70px; text-align: center; cursor: pointer; }
 .strip-thumb {
-  width: 70px; height: 65px; background: #e0e0e0;
-  border: 2px solid transparent;
+  width: 70px; height: 64px;
+  background: #1e293b;
+  border: 2px solid transparent; border-radius: 6px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 20px; position: relative; overflow: hidden;
+  font-size: 22px; position: relative; overflow: hidden;
+  transition: border-color 0.15s;
 }
-.strip-lot.cur .strip-thumb { border-color: #1565c0; }
-.strip-lot.sold .strip-thumb { opacity: 0.7; }
+.strip-lot.cur  .strip-thumb { border-color: #3b82f6; }
+.strip-lot.sold .strip-thumb { opacity: 0.5; }
 .sold-ribbon {
-  position: absolute; top: 6px; left: -14px;
-  background: #c62828; color: white; font-size: 7px; font-weight: 700;
+  position: absolute; top: 7px; left: -14px;
+  background: #dc2626; color: white; font-size: 7px; font-weight: 700;
   padding: 2px 14px; transform: rotate(-40deg); white-space: nowrap;
 }
-.strip-num  { font-size: 10px; font-weight: 700; color: #333; margin-top: 2px; }
-.strip-desc { font-size: 9px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 70px; }
+.strip-num  { font-size: 10px; font-weight: 700; color: #94a3b8; margin-top: 3px; }
+.strip-desc { font-size: 9px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 70px; }
 </style>
 </head>
 <body>
 
-<!-- ═══ SIM CONTROLS ═══ -->
+<!-- ═══ SIM BAR ═══ -->
 <div id="sim-bar">
-  <strong>SIM</strong>
+  <span style="color:#60a5fa;font-weight:700;font-size:11px">SIM</span>
   <button class="sbtn go"  id="btn-start" onclick="startSim()">▶ Start</button>
   <button class="sbtn stp" id="btn-stop"  onclick="stopSim()"  disabled>⏹ Stop</button>
   <button class="sbtn"     id="btn-skip"  onclick="skipLot()"  disabled>⏭ Skip Lot</button>
-  <span style="color:#90caf9;font-size:11px;margin-left:4px">Speed:</span>
+  <span style="color:#64748b;font-size:11px;margin-left:4px">Speed:</span>
   <button class="sbtn spd sel" id="spd1" onclick="setSpeed(1)">1×</button>
   <button class="sbtn spd"     id="spd2" onclick="setSpeed(2)">2×</button>
   <button class="sbtn spd"     id="spd5" onclick="setSpeed(5)">5×</button>
-  <div class="sim-spacer"></div>
-  <div id="sim-state-badge" class="ss-idle" data-state="idle">Idle</div>
-  <span id="coordinator-status" style="font-size:11px;color:#90caf9;margin-left:8px">Coordinator: waiting…</span>
+  <div style="flex:1"></div>
+  <div id="sim-badge" class="ss-idle" data-state="idle">Idle</div>
+  <span id="coord-status" style="font-size:11px;color:#475569;margin-left:10px">Coordinator: waiting…</span>
 </div>
 
 <!-- ═══ TOP LOT BAR ═══ -->
-<div id="top-bar">
+<div id="lot-bar">
   <div id="lot-thumb">📦</div>
   <div id="lot-info">
     <div id="lot-title" data-lot-number="">Waiting to start…</div>
-    <div id="lot-group">Auto Clerk — Simulation</div>
-    <div id="lot-guide">Guide Price: —</div>
+    <div id="lot-sub">Guide: — &nbsp;|&nbsp; Auto Clerk Simulation</div>
   </div>
-  <div id="top-controls">
-    <button class="tc-btn tc-close">Close Auction</button>
-    <button class="tc-btn tc-pause">⏸ Pause Auction</button>
-    <button class="tc-btn tc-withdraw">Withdraw Lot</button>
+  <div id="lot-bar-btns">
+    <button class="lbb lbb-close">Close Auction</button>
+    <button class="lbb lbb-pause">⏸ Pause</button>
+    <button class="lbb lbb-withdraw">Withdraw Lot</button>
     <div id="hovering-box">Hovering<span id="hovering-count">0</span></div>
   </div>
 </div>
 
-<!-- ═══ CURRENT BID BAR ═══ -->
+<!-- ═══ BID BAR ═══ -->
 <div id="bid-bar">
   <div>
-    <span id="current-bid-label">Current Bid:</span>
+    <span id="bid-label">Current Bid:</span>
     <span id="current-bid" data-current-bid="0" data-last-bid-ms="0">£—</span>
   </div>
-  <div id="bid-bar-btns">
-    <button class="bb-pass">Pass Lot</button>
-    <button class="bb-undo">Undo Bid</button>
+  <div style="display:flex;gap:8px">
+    <button class="bb-btn bb-pass">Pass Lot</button>
+    <button class="bb-btn bb-undo">Undo Bid</button>
   </div>
 </div>
 
-<!-- ═══ ASKING BID ROW ═══ -->
+<!-- ═══ ASK ROW ═══ -->
 <div id="ask-row">
-  <div class="ask-section">
-    <span class="ask-label">Asking Bid</span>
-    <div class="ask-input-wrap">
-      <span>£</span>
-      <input type="text" class="ask-input-inner" id="asking-input" placeholder="0">
+  <div style="display:flex;align-items:center;gap:8px">
+    <span class="ask-lbl">Asking Bid</span>
+    <div class="ask-wrap">
+      <span class="ask-pound">£</span>
+      <input class="ask-inp" id="asking-inp" type="text" placeholder="0">
     </div>
-    <button class="ag-btn ag-set">SET</button>
-    <button class="ag-btn ag-reset">RESET</button>
+    <button class="ask-btn ask-set">SET</button>
+    <button class="ask-btn ask-reset">RESET</button>
   </div>
-  <div class="ag-sep"></div>
-  <div class="ask-section">
-    <span class="ask-label">Set Increment</span>
-    <button class="ag-btn ag-set" style="padding:4px 10px">Set</button>
-    <button class="ag-btn ag-reset" style="padding:4px 8px">↺</button>
+  <div class="ask-sep"></div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <span class="ask-lbl">Set Increment</span>
+    <button class="ask-btn ask-set" style="padding:4px 10px">Set</button>
+    <button class="ask-btn ask-reset" style="padding:4px 8px">↺</button>
   </div>
 </div>
 
-<!-- ═══ MAIN AREA ═══ -->
+<!-- ═══ MAIN ═══ -->
 <div id="main">
 
   <!-- LEFT -->
@@ -307,69 +349,79 @@ body {
     <div id="btn-grid">
 
       <!-- Set Asking Bid -->
-      <div class="grid-section">
-        <div class="grid-title">Set Asking Bid</div>
+      <div>
+        <div class="grid-hdr">Set Asking Bid</div>
         <div class="amt-grid" id="ask-grid"></div>
       </div>
 
       <!-- Set Increment -->
-      <div class="grid-section">
-        <div class="grid-title">Set Increment</div>
+      <div>
+        <div class="grid-hdr">Set Increment</div>
         <div class="amt-grid" id="inc-grid"></div>
       </div>
 
       <!-- Bid Sources + Actions -->
-      <div class="grid-section">
-        <div class="source-col">
-          <!-- Source buttons: main button steps bid UP, ! keeps same amount -->
+      <div>
+        <div class="grid-hdr">Bid Source</div>
+        <div class="src-col">
+
+          <!-- Room -->
           <div class="src-row">
-            <button class="src-btn src-room"        id="src-room">Room: <span class="src-amt">£—</span></button>
-            <button class="src-bang" title="Keep amount, remove bidder" onclick="bangSource('room')">!</button>
+            <button class="src-btn src-room" id="src-room">Room: <span id="src-room-amt">£—</span></button>
+            <button class="src-bang" title="Keep amount, remove bidder" onclick="bangSource('Room')">!</button>
           </div>
+
+          <!-- Telephone -->
           <div class="src-row">
-            <button class="src-btn src-phone"       id="src-phone">Telephone: <span class="src-amt">£—</span></button>
-            <button class="src-bang" title="Keep amount, remove bidder" onclick="bangSource('phone')">!</button>
+            <button class="src-btn src-phone" id="src-phone">Telephone: <span id="src-phone-amt">£—</span></button>
+            <button class="src-bang" title="Keep amount, remove bidder" onclick="bangSource('Telephone')">!</button>
           </div>
+
+          <!-- Invaluable -->
           <div class="src-row">
-            <button class="src-btn src-invaluable"  id="src-invaluable">Invaluable: <span class="src-amt">£—</span></button>
-            <button class="src-bang" title="Keep amount, remove bidder" onclick="bangSource('invaluable')">!</button>
+            <button class="src-btn src-invaluable" id="src-invaluable">Invaluable: <span id="src-invaluable-amt">£—</span></button>
+            <button class="src-bang" title="Keep amount, remove bidder" onclick="bangSource('Invaluable')">!</button>
           </div>
+
+          <!-- Saleroom — steps bid UP when Saleroom.com has a higher bid -->
           <div class="src-row">
-            <!-- Saleroom button: steps bid UP (mirrors a bid that came in on Saleroom platform) -->
-            <button class="src-btn src-saleroom"    id="src-saleroom" onclick="saleroomBid()">Saleroom: <span id="src-saleroom-amt">£—</span></button>
-            <!-- ! = keep same amount, just change attribution -->
-            <button class="src-bang" title="Keep amount, remove bidder" onclick="bangSource('saleroom')">!</button>
+            <button class="src-btn src-saleroom" id="src-saleroom" onclick="saleroomSourceBid()">
+              Saleroom: <span id="src-saleroom-amt">£—</span>
+            </button>
+            <!-- ! = keeps same amount, drops the Saleroom bidder -->
+            <button class="src-bang" title="Keep amount, remove Saleroom bidder" onclick="bangSource('Saleroom')">!</button>
           </div>
-          <button id="fw-btn"         onclick="manualFW()">Fair Warning</button>
-          <button id="hammer-btn"     onclick="manualHammer()">Hammer: (£—)</button>
+
+          <button id="fw-btn" onclick="manualFW()">Fair Warning</button>
+          <button id="hammer-btn" onclick="manualHammer()">Hammer: (£—)</button>
           <button id="bid-quicker-btn">Bid Quicker!</button>
         </div>
       </div>
 
-    </div>
+    </div><!-- end btn-grid -->
 
-    <!-- Lot strip -->
-    <div style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;">
+    <!-- Lot strip at bottom -->
+    <div style="flex:1;min-height:0;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden">
       <div id="lot-strip"></div>
     </div>
   </div>
 
   <!-- RIGHT PANEL -->
   <div id="right">
-    <div class="rp-header">
-      <span>User</span><span>Bid Amount</span><span>Bid Type</span>
+    <div class="rp-head">
+      <span>User</span><span>Amount</span><span>Source</span>
     </div>
     <div class="bid-list" id="bid-list"></div>
     <div class="rp-divider"></div>
-    <div class="rp-header">
-      <span style="grid-column:1/3">User</span><span>Auto Bid Amount</span>
+    <div class="rp-head" style="grid-template-columns:1fr 1fr">
+      <span>User</span><span>Auto Bid Max</span>
     </div>
-    <div class="auto-bid-section">
-      <div class="auto-bid-empty">No auto-bids for this lot.</div>
+    <div class="auto-bids">
+      <div class="auto-empty">No auto-bids for this lot.</div>
     </div>
   </div>
 
-</div>
+</div><!-- end #main -->
 
 <script>
 /* ─── INCREMENT TABLE ─── */
@@ -401,85 +453,70 @@ const LOTS = [
   { number:'517', title:'Triang Minic Push & Go Police Car — original key and box',                guide:'£25–40',  start:25  },
 ];
 
-/* ─── SIMULATION STATE ─── */
+/* ─── STATE ─── */
 let sim = {
-  running: false, state: 'idle',
-  lotIdx: 0, currentBid: 0, askingBid: 0,
-  lastBidAt: null, bidsLeft: 0, bidTimer: null, advTimer: null,
-  sold: {},
+  running:false, state:'idle',
+  lotIdx:0, currentBid:0,
+  lastBidAt:null, bidsLeft:0,
+  bidTimer:null, advTimer:null,
+  sold:{},
 };
-const CFG = { speedX: 1 };
+const CFG = { speedX:1 };
 
 /* ─── BROADCAST CHANNEL ─── */
-// Bidpath broadcasts STATE to the coordinator (launcher page)
-// Coordinator sends COMMANDS back (cmd_start, cmd_fw, cmd_hammer)
 const CH = new BroadcastChannel('vectis-auto-clerk');
-
 CH.onmessage = function(e){
   const msg = e.data;
   if(msg.type === 'cmd_start')  { if(!sim.running) startSim(); }
   if(msg.type === 'cmd_stop')   { if(sim.running)  stopSim(); }
   if(msg.type === 'cmd_fw')     { manualFW(); }
   if(msg.type === 'cmd_hammer') { manualHammer(); }
-  if(msg.type === 'coordinator_hello') {
-    document.getElementById('coordinator-status').textContent = 'Coordinator: connected ✓';
-    document.getElementById('coordinator-status').style.color = '#a5d6a7';
-    CH.postMessage({ type: 'bidpath_hello' });
+  if(msg.type === 'coordinator_hello'){
+    document.getElementById('coord-status').textContent = 'Coordinator: connected ✓';
+    document.getElementById('coord-status').style.color = '#4ade80';
+    CH.postMessage({ type:'bidpath_hello' });
   }
 };
-
 function broadcast(msg){ CH.postMessage(msg); }
 
-/* ─── SIM CONTROLS ─── */
+/* ─── SIM SPEED ─── */
 function setSpeed(x){
   CFG.speedX = x;
   ['1','2','5'].forEach(n => document.getElementById('spd'+n).classList.toggle('sel', String(x)===n));
 }
 
-function manualFW(){
-  if(sim.state === 'bidding') triggerFW();
-}
+/* ─── MANUAL BUTTONS ─── */
+function manualFW()     { if(sim.state === 'bidding') triggerFW(); }
+function manualHammer() { if(sim.state === 'fair_warning') triggerHammer(); }
 
-function manualHammer(){
-  if(sim.state === 'fair_warning') triggerHammer();
-}
-
-/* Saleroom source button — steps bid UP (mirrors a bid that came in on Saleroom.com) */
-function saleroomBid(){
+/* Saleroom source button — steps bid UP (a bid came in on Saleroom.com) */
+function saleroomSourceBid(){
   if(sim.state !== 'bidding' && sim.state !== 'fair_warning') return;
   const newBid = nextBid(sim.currentBid);
-  sim.currentBid = newBid;
-  sim.askingBid  = nextBid(newBid);
-  sim.lastBidAt  = Date.now();
+  placeBid(newBid, 'Saleroom');
   if(sim.state === 'fair_warning'){
     setSimState('bidding');
     document.getElementById('fw-btn').classList.remove('active');
   }
-  updateBidDisplay(newBid);
-  addBidRow({ user:'SR', amount:newBid, type:'Saleroom', winner:true });
-  updateSourceAmts(sim.askingBid);
-  broadcastBid(newBid, 'saleroom');
 }
 
-/* ! button — keeps same amount, just changes attribution */
+/* ! button — keeps same amount, removes the specific bidder from that source */
 function bangSource(source){
   if(sim.state !== 'bidding' && sim.state !== 'fair_warning') return;
-  // Keeps current bid amount but re-attributes to this source
-  addBidRow({ user: source.toUpperCase(), amount: sim.currentBid, type: source, winner: true });
+  // Same amount, just re-attributes to this source (bidder dropped)
+  addBidRow({ user:'—', amount:sim.currentBid, source:source+' (!)' , winner:true, isSaleroom: source==='Saleroom' });
   sim.lastBidAt = Date.now();
-  broadcastBid(sim.currentBid, source + '_bang');
+  broadcast({ type:'bp_bid', amount:sim.currentBid, source:source+'_bang', ms:Date.now() });
 }
 
-/* ─── BUILD QUICK GRIDS ─── */
+/* ─── BUILD GRIDS ─── */
 function buildGrids(){
   const askAmts = [30,40,70,120,220,520,1020,2020,5020,10020];
   const incAmts = [5,10,20,50,100,200,500,1000,2000,5000,10000,20000,50000];
-  document.getElementById('ask-grid').innerHTML = askAmts.map(a =>
-    '<button class="amt-btn">'+fmt(a)+'</button>'
-  ).join('');
-  document.getElementById('inc-grid').innerHTML = incAmts.map(a =>
-    '<button class="amt-btn">'+fmt(a)+'</button>'
-  ).join('');
+  document.getElementById('ask-grid').innerHTML =
+    askAmts.map(a => '<button class="amt-btn">'+fmt(a)+'</button>').join('');
+  document.getElementById('inc-grid').innerHTML =
+    incAmts.map(a => '<button class="amt-btn">'+fmt(a)+'</button>').join('');
 }
 
 /* ─── LOT STRIP ─── */
@@ -504,24 +541,18 @@ function startSim(){
   startLot(0);
   broadcast({ type:'sim_started' });
 }
-
 function stopSim(){
-  sim.running = false;
-  clearTimers();
-  setSimState('idle');
+  sim.running = false; clearTimers(); setSimState('idle');
   document.getElementById('btn-start').disabled = false;
   document.getElementById('btn-stop').disabled  = true;
   document.getElementById('btn-skip').disabled  = true;
   broadcast({ type:'sim_stopped' });
 }
-
 function skipLot(){
   clearTimers();
   const next = sim.lotIdx + 1;
-  if(next >= LOTS.length){ endSim(); }
-  else { startLot(next); }
+  if(next >= LOTS.length) endSim(); else startLot(next);
 }
-
 function clearTimers(){
   if(sim.bidTimer) clearTimeout(sim.bidTimer);
   if(sim.advTimer) clearTimeout(sim.advTimer);
@@ -530,57 +561,59 @@ function clearTimers(){
 function startLot(idx){
   clearTimers();
   const lot = LOTS[idx];
-  sim.lotIdx     = idx;
+  sim.lotIdx    = idx;
   sim.currentBid = lot.start;
-  sim.askingBid  = nextBid(lot.start);
   sim.lastBidAt  = Date.now();
   sim.bidsLeft   = 2 + Math.floor(Math.random() * 6); // 2–7 bids then stop
 
   setSimState('bidding');
-  updateLotDisplay(lot);
-  updateBidDisplay(lot.start);
-  updateBidList([{ user:'—', amount: lot.start, type:'Opening', winner:false }]);
-  renderStrip();
 
+  document.getElementById('lot-title').textContent  = 'Lot #'+lot.number+' — '+lot.title;
+  document.getElementById('lot-title').dataset.lotNumber = lot.number;
+  document.getElementById('lot-thumb').textContent  = EMOJIS[idx % EMOJIS.length];
+  document.getElementById('lot-sub').textContent    = 'Guide: '+lot.guide+' | Auto Clerk Simulation';
   document.getElementById('fw-btn').classList.remove('active');
   document.getElementById('hammer-btn').textContent = 'Hammer: ('+fmt(lot.start)+')';
   document.getElementById('hammer-btn').classList.remove('flash');
 
-  // Broadcast lot start to coordinator
-  broadcast({ type:'bp_lot', number:lot.number, title:lot.title, estimate:lot.guide, start:lot.start });
-  broadcastBid(lot.start, 'opening');
+  updateBidDisplay(lot.start);
+  updateBidList([{ user:'Opening', amount:lot.start, source:'—', winner:false }]);
+  renderStrip();
 
+  broadcast({ type:'bp_lot', number:lot.number, title:lot.title, estimate:lot.guide, start:lot.start });
+  broadcastBid(lot.start, 'Opening');
   scheduleNextBid();
 }
 
 function scheduleNextBid(){
   if(sim.bidTimer) clearTimeout(sim.bidTimer);
-  if(sim.bidsLeft <= 0) return; // stop — wait for coordinator to FW/hammer
+  if(sim.bidsLeft <= 0) return; // stop — coordinator handles silence/FW/hammer
   const delay = (2000 + Math.random() * 4000) / CFG.speedX;
   sim.bidTimer = setTimeout(function(){
-    if(!sim.running) return;
-    if(sim.state !== 'bidding') return;
+    if(!sim.running || sim.state !== 'bidding') return;
 
+    // Randomly pick bid source: 60% Vectis Auto, 40% Saleroom
+    const source = Math.random() < 0.6 ? 'Vectis Auto' : 'Saleroom';
     const newBid = nextBid(sim.currentBid);
-    sim.currentBid = newBid;
-    sim.askingBid  = nextBid(newBid);
-    sim.lastBidAt  = Date.now();
-
-    updateBidDisplay(newBid);
-    addBidRow({ user:'C'+Math.floor(1000+Math.random()*9000), amount:newBid, type:'Vectis Live', winner:true });
-    updateSourceAmts(sim.askingBid);
-    broadcastBid(newBid, 'bidpath');
+    placeBid(newBid, source);
 
     sim.bidsLeft--;
     scheduleNextBid();
   }, delay);
 }
 
+function placeBid(amount, source){
+  sim.currentBid = amount;
+  sim.lastBidAt  = Date.now();
+  updateBidDisplay(amount);
+  addBidRow({ user:'—', amount, source, winner:true, isSaleroom: source==='Saleroom' });
+  updateSourceAmts(nextBid(amount));
+  broadcastBid(amount, source);
+}
+
 function broadcastBid(amount, source){
   const ms = Date.now();
-  // Update data attribute for Playwright to read
-  const el = document.getElementById('current-bid');
-  el.dataset.lastBidMs = ms;
+  document.getElementById('current-bid').dataset.lastBidMs = ms;
   broadcast({ type:'bp_bid', amount, source, ms });
 }
 
@@ -597,51 +630,39 @@ function triggerHammer(){
   const lot  = LOTS[sim.lotIdx];
   const bid  = sim.currentBid;
   const sold = bid > 0;
-
   sim.sold[lot.number] = sold ? bid : null;
   setSimState(sold ? 'sold' : 'passed');
   document.getElementById('fw-btn').classList.remove('active');
   document.getElementById('hammer-btn').textContent = sold ? '🔨 SOLD — '+fmt(bid) : 'PASSED';
   document.getElementById('hammer-btn').classList.add('flash');
   renderStrip();
-
-  broadcast({ type: 'bp_hammer', sold, amount: bid });
-
+  broadcast({ type:'bp_hammer', sold, amount:bid });
   sim.advTimer = setTimeout(function(){
     if(!sim.running) return;
     document.getElementById('hammer-btn').classList.remove('flash');
     const next = sim.lotIdx + 1;
-    if(next >= LOTS.length) endSim();
-    else startLot(next);
+    if(next >= LOTS.length) endSim(); else startLot(next);
   }, 3000 / CFG.speedX);
 }
 
 function endSim(){
-  setSimState('done');
-  sim.running = false;
+  setSimState('done'); sim.running = false;
   document.getElementById('btn-start').disabled = false;
   document.getElementById('btn-stop').disabled  = true;
   document.getElementById('btn-skip').disabled  = true;
   broadcast({ type:'sim_ended' });
 }
 
-/* ─── DISPLAY HELPERS ─── */
+/* ─── DISPLAY ─── */
 function setSimState(s){
   sim.state = s;
-  const el    = document.getElementById('sim-state-badge');
+  const el  = document.getElementById('sim-badge');
   const names = { idle:'Idle', bidding:'Bidding', fair_warning:'Fair Warning', sold:'Sold', passed:'Passed', done:'Done' };
   const cls   = { idle:'ss-idle', bidding:'ss-bidding', fair_warning:'ss-fw', sold:'ss-sold', passed:'ss-passed', done:'ss-idle' };
   el.textContent   = names[s] || s;
   el.className     = cls[s]   || 'ss-idle';
   el.dataset.state = s;
   broadcast({ type:'bp_state', state:s, bid:sim.currentBid });
-}
-
-function updateLotDisplay(lot){
-  document.getElementById('lot-thumb').textContent = EMOJIS[sim.lotIdx % EMOJIS.length];
-  document.getElementById('lot-title').textContent = 'Lot #'+lot.number+' — '+lot.title;
-  document.getElementById('lot-title').dataset.lotNumber = lot.number;
-  document.getElementById('lot-guide').textContent = 'Guide Price: '+lot.guide;
 }
 
 function updateBidDisplay(bid){
@@ -653,11 +674,14 @@ function updateBidDisplay(bid){
 }
 
 function updateSourceAmts(ask){
-  document.querySelectorAll('.src-amt').forEach(el => el.textContent = fmt(ask));
-  document.getElementById('src-saleroom-amt').textContent = fmt(ask);
-  document.getElementById('asking-input').value = ask;
+  ['room','phone','invaluable','saleroom'].forEach(id => {
+    const el = document.getElementById('src-'+id+'-amt');
+    if(el) el.textContent = fmt(ask);
+  });
+  document.getElementById('asking-inp').value = ask;
 }
 
+/* ─── BID LIST ─── */
 let bidRows = [];
 function updateBidList(rows){ bidRows = rows; renderBidList(); }
 function addBidRow(row){
@@ -667,15 +691,17 @@ function addBidRow(row){
   renderBidList();
 }
 function renderBidList(){
-  document.getElementById('bid-list').innerHTML = bidRows.map(r =>
-    '<div class="bid-row'+(r.winner?' winner':'')+'">'+
-    '<span>'+(r.user||'—')+'</span>'+
-    '<span>'+fmt(r.amount)+'</span>'+
-    '<span>'+(r.winner
-      ? '<span class="bid-type-tag">'+r.type+'</span>'
-      : '<span class="saleroom-tag">'+r.type+'</span>')+'</span>'+
-    '</div>'
-  ).join('');
+  document.getElementById('bid-list').innerHTML = bidRows.map(r => {
+    // Colour coding: Vectis Auto = blue tint, Saleroom = grey tint, others = plain
+    const cls = r.winner
+      ? (r.isSaleroom ? 'bid-row saleroom-win' : 'bid-row winner')
+      : 'bid-row';
+    return '<div class="'+cls+'">' +
+      '<span>'+(r.user||'—')+'</span>' +
+      '<span style="font-weight:700">'+fmt(r.amount)+'</span>' +
+      '<span>'+r.source+'</span>' +
+      '</div>';
+  }).join('');
 }
 
 /* ─── INIT ─── */
