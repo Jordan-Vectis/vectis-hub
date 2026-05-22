@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bidpath — Auto Clerk</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #0d1117;
+  color: #e6edf3;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+}
+
+/* ── HEADER ── */
+#header {
+  background: #0f1624;
+  border-bottom: 1px solid #21262d;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+#header .logo {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #58a6ff;
+  font-style: italic;
+}
+#state-display {
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.s-idle    { background: #21262d; color: #8b949e; }
+.s-bidding { background: #1f4e2c; color: #3fb950; }
+.s-fw      { background: #4d2000; color: #e3b341; }
+.s-sold    { background: #0d2d6b; color: #58a6ff; }
+.s-passed  { background: #2d1f3d; color: #bc8cff; }
+
+/* ── CONTROLS ── */
+#controls {
+  background: #161b22;
+  border-bottom: 1px solid #21262d;
+  padding: 6px 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.cbtn {
+  padding: 4px 12px;
+  border-radius: 5px;
+  border: 1px solid #30363d;
+  background: #21262d;
+  color: #c9d1d9;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cbtn:hover:not(:disabled) { background: #30363d; }
+.cbtn:disabled { opacity: 0.4; cursor: default; }
+.cbtn.go  { border-color: #238636; color: #3fb950; }
+.cbtn.go:hover:not(:disabled) { background: #238636; color: white; }
+.cbtn.stp { border-color: #da3633; color: #f85149; }
+.cbtn.stp:hover:not(:disabled) { background: #da3633; color: white; }
+.cbtn.spd.sel { background: #1f6feb; border-color: #1f6feb; color: white; }
+.sep { width: 1px; height: 16px; background: #21262d; margin: 0 4px; }
+.ctrl-lbl { font-size: 11px; color: #8b949e; }
+.spacer { flex: 1; }
+#saleroom-conn { font-size: 11px; color: #8b949e; }
+#saleroom-conn.ok { color: #3fb950; }
+
+/* ── MAIN ── */
+#main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── LEFT PANEL ── */
+#left {
+  width: 300px;
+  flex-shrink: 0;
+  border-right: 1px solid #21262d;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.panel-section {
+  padding: 14px 16px;
+  border-bottom: 1px solid #21262d;
+}
+.sect-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: #8b949e;
+  margin-bottom: 6px;
+}
+#lot-number-display {
+  font-size: 52px;
+  font-weight: 900;
+  color: #58a6ff;
+  line-height: 1;
+}
+#lot-title-display {
+  font-size: 12px;
+  color: #8b949e;
+  line-height: 1.4;
+  margin-top: 6px;
+}
+#lot-est-display {
+  font-size: 11px;
+  color: #6e7681;
+  margin-top: 4px;
+}
+
+/* Current bid */
+#bid-area {
+  text-align: center;
+}
+#bid-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: #8b949e; }
+#current-bid {
+  font-size: 56px;
+  font-weight: 900;
+  color: #e3b341;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+#ask-row { display: flex; justify-content: center; gap: 8px; align-items: baseline; margin-top: 4px; }
+#ask-lbl { font-size: 10px; color: #8b949e; }
+#next-ask { font-size: 20px; font-weight: 700; color: #3fb950; }
+
+/* Silence bar */
+#silence-area { }
+#sil-row { display: flex; justify-content: space-between; font-size: 10px; color: #8b949e; margin-bottom: 5px; }
+#sil-outer { height: 5px; background: #21262d; border-radius: 3px; overflow: hidden; }
+#sil-bar { height: 100%; width: 0; background: #e3b341; border-radius: 3px; transition: width 0.1s linear; }
+
+/* FW indicator */
+#fw-box {
+  display: none;
+  background: #2d1600;
+  border: 2px solid #e3b341;
+  border-radius: 6px;
+  padding: 10px 16px;
+  text-align: center;
+}
+#fw-box.show { display: block; }
+#fw-title { font-size: 16px; font-weight: 900; color: #e3b341; letter-spacing: 2px; }
+#fw-sub { font-size: 11px; color: #f0883e; margin-top: 3px; }
+
+/* Lot count */
+#lot-progress { text-align: center; font-size: 11px; color: #8b949e; }
+#lot-progress strong { color: #c9d1d9; }
+
+/* ── RIGHT PANEL ── */
+#right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+#feed-hdr {
+  padding: 10px 16px;
+  border-bottom: 1px solid #21262d;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+#feed-hdr h2 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #8b949e; }
+#feed-cols {
+  display: grid;
+  grid-template-columns: 75px 90px 1fr 90px;
+  padding: 4px 16px;
+  border-bottom: 1px solid #21262d;
+  font-size: 10px;
+  color: #6e7681;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  flex-shrink: 0;
+}
+#feed { flex: 1; overflow-y: auto; font-family: "SF Mono", "Fira Code", monospace; }
+
+.frow {
+  display: grid;
+  grid-template-columns: 75px 90px 1fr 90px;
+  padding: 5px 16px;
+  font-size: 12px;
+  border-bottom: 1px solid #161b22;
+}
+.frow:first-child { animation: rowIn 0.2s; }
+@keyframes rowIn { from { background: #1f2937; } }
+.ftime { color: #6e7681; }
+.famount { font-weight: 700; color: #e3b341; }
+.flabel { color: #8b949e; }
+.fstate { font-size: 10px; text-align: right; }
+
+.frow.open .famount { color: #3fb950; }
+.frow.open .flabel { color: #3fb950; }
+.frow.fw   { background: #1a0e00; }
+.frow.fw .famount { color: #e3b341; }
+.frow.fw .flabel  { color: #e3b341; font-weight: 700; }
+.frow.fwr  { background: #0d1a0d; }
+.frow.fwr .flabel { color: #3fb950; }
+.frow.sold { background: #091d3e; }
+.frow.sold .famount { color: #58a6ff; }
+.frow.sold .flabel  { color: #58a6ff; font-weight: 700; }
+.frow.passed .flabel { color: #f85149; }
+.frow.info .famount { color: transparent; }
+.frow.info .flabel  { color: #6e7681; font-style: italic; }
+
+/* Footer */
+#footer {
+  padding: 4px 16px;
+  border-top: 1px solid #21262d;
+  font-size: 10px;
+  color: #484f58;
+  flex-shrink: 0;
+  display: flex;
+  gap: 16px;
+}
+#footer code { background: #161b22; padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div class="logo">bidpath</div>
+  <div id="state-display" class="s-idle" data-state="idle">Idle</div>
+  <div class="spacer"></div>
+  <div id="saleroom-conn">● Saleroom: not connected</div>
+</div>
+
+<div id="controls">
+  <button class="cbtn go"  id="btn-start" onclick="startSim()">▶ Start</button>
+  <button class="cbtn stp" id="btn-stop"  onclick="stopSim()"  disabled>⏹ Stop</button>
+  <button class="cbtn"     id="btn-skip"  onclick="skipLot()"  disabled>⏭ Skip Lot</button>
+  <div class="sep"></div>
+  <span class="ctrl-lbl">Speed</span>
+  <button class="cbtn spd sel" id="spd1" onclick="setSpeed(1)">1×</button>
+  <button class="cbtn spd"     id="spd2" onclick="setSpeed(2)">2×</button>
+  <button class="cbtn spd"     id="spd5" onclick="setSpeed(5)">5×</button>
+  <div class="sep"></div>
+  <span class="ctrl-lbl" id="settings-display">FW: 8s &nbsp;|&nbsp; Hammer: 5s &nbsp;|&nbsp; Reset on bid: yes</span>
+</div>
+
+<div id="main">
+
+  <!-- LEFT -->
+  <div id="left">
+
+    <div class="panel-section">
+      <div class="sect-label">Current Lot</div>
+      <div id="lot-number-display" data-lot-number="—">—</div>
+      <div id="lot-title-display">Waiting to start…</div>
+      <div id="lot-est-display"></div>
+    </div>
+
+    <div class="panel-section" id="bid-area">
+      <div id="bid-lbl">Current Bid</div>
+      <div id="current-bid" data-current-bid="0">—</div>
+      <div id="ask-row">
+        <span id="ask-lbl">Next ask</span>
+        <span id="next-ask">—</span>
+      </div>
+    </div>
+
+    <div class="panel-section" id="silence-area">
+      <div id="sil-row">
+        <span>Silence</span>
+        <span id="sil-secs">0.0s</span>
+      </div>
+      <div id="sil-outer"><div id="sil-bar"></div></div>
+    </div>
+
+    <div class="panel-section">
+      <div id="fw-box">
+        <div id="fw-title">⚖ FAIR WARNING</div>
+        <div id="fw-sub">Hammering in <span id="fw-countdown">—</span></div>
+      </div>
+    </div>
+
+    <div class="panel-section" style="flex:1;display:flex;align-items:flex-end">
+      <div id="lot-progress"></div>
+    </div>
+
+  </div>
+
+  <!-- RIGHT -->
+  <div id="right">
+    <div id="feed-hdr">
+      <h2>Bid Feed</h2>
+    </div>
+    <div id="feed-cols">
+      <span>Time</span><span>Amount</span><span>Event</span><span>State</span>
+    </div>
+    <div id="feed"></div>
+  </div>
+
+</div>
+
+<div id="footer">
+  <span>Playwright: read <code>#state-display[data-state]</code> · <code>#current-bid[data-current-bid]</code> · <code>#lot-number-display[data-lot-number]</code></span>
+</div>
+
+<script>
+/* ─── INCREMENT TABLE ─── */
+const INC = [
+  {from:0,    to:50,       inc:5},
+  {from:50,   to:200,      inc:10},
+  {from:200,  to:700,      inc:20},
+  {from:700,  to:1000,     inc:50},
+  {from:1000, to:3000,     inc:100},
+  {from:3000, to:7000,     inc:200},
+  {from:7000, to:Infinity, inc:500},
+];
+function getInc(b){ for(const r of INC) if(b>=r.from && b<r.to) return r.inc; return 500; }
+function nextBid(b){ return b + getInc(b); }
+function fmt(n){ return '£' + n.toLocaleString('en-GB'); }
+function ftime(d){ return d.toTimeString().slice(0,8); }
+
+/* ─── LOTS ─── */
+const LOTS = [
+  { number:'1',  title:'Corgi Toys 267 Batmobile — red interior, black body, original box',   start:30,  est:'£30–£50'  },
+  { number:'2',  title:'Matchbox Models of Yesteryear Y-5 1927 Talbot Van — boxed',           start:15,  est:'£15–£25'  },
+  { number:'3',  title:'Dinky Toys 521 Bedford Articulated Lorry — with original box',        start:20,  est:'£20–£35'  },
+  { number:'4',  title:'Hornby Dublo Class 8F 2-8-0 Locomotive and tender — boxed',           start:50,  est:'£50–£80'  },
+  { number:'5',  title:'Britains Farm Set — tractor, plough and figures',                     start:8,   est:'£8–£15'   },
+  { number:'6',  title:'Corgi Toys 497 The Man From U.N.C.L.E. Car — boxed',                 start:40,  est:'£40–£70'  },
+  { number:'7',  title:'Scalextric Formula 1 Twin-Track Racing Set — C74',                    start:60,  est:'£60–£100' },
+  { number:'8',  title:'Airfix 1:72 Spitfire MkIa — sealed box, unbuilt',                    start:5,   est:'£5–£10'   },
+  { number:'9',  title:'Dinky Toys 100 Lady Penelope\'s FAB 1 — pink, boxed',                start:80,  est:'£80–£120' },
+  { number:'10', title:'Triang Minic Push & Go Police Car — original key and box',            start:25,  est:'£25–£40'  },
+];
+
+/* ─── SETTINGS ─── */
+const CFG = { silenceSecs: 8, fwHammerSecs: 5, resetOnBid: true, speedX: 1 };
+
+/* ─── STATE ─── */
+let sim = {
+  running: false,
+  state: 'idle',       // idle | bidding | fair_warning | sold | passed | done
+  lotIdx: 0,
+  currentBid: 0,
+  lastBidAt: null,
+  fwStartAt: null,
+  bidsLeft: 0,
+  bidTimer: null,
+  advTimer: null,
+};
+
+/* ─── BROADCAST CHANNEL ─── */
+const CH = new BroadcastChannel('vectis-auto-clerk');
+CH.onmessage = function(e){
+  if(e.data.type === 'saleroom_hello'){
+    document.getElementById('saleroom-conn').textContent = '● Saleroom: connected';
+    document.getElementById('saleroom-conn').classList.add('ok');
+  }
+};
+function broadcast(msg){ CH.postMessage(msg); }
+
+/* ─── CLOCK TICK ─── */
+let tickInterval = null;
+function startTick(){
+  if(tickInterval) clearInterval(tickInterval);
+  tickInterval = setInterval(tick, 100);
+}
+function tick(){
+  if(!sim.running) return;
+  const now = Date.now();
+  const speed = CFG.speedX;
+
+  if(sim.lastBidAt && (sim.state === 'bidding' || sim.state === 'fair_warning')){
+    const silence = (now - sim.lastBidAt) * speed;
+    const sil = (silence/1000).toFixed(1);
+    document.getElementById('sil-secs').textContent = sil + 's';
+    const pct = Math.min(silence / (CFG.silenceSecs * 1000) * 100, 100);
+    document.getElementById('sil-bar').style.width = pct + '%';
+
+    if(sim.state === 'bidding' && silence >= CFG.silenceSecs * 1000){
+      triggerFW();
+    }
+  }
+
+  if(sim.state === 'fair_warning' && sim.fwStartAt){
+    const fwEl = (now - sim.fwStartAt) * speed;
+    const rem = Math.max(0, CFG.fwHammerSecs - fwEl/1000).toFixed(1);
+    document.getElementById('fw-countdown').textContent = rem + 's';
+    if(fwEl >= CFG.fwHammerSecs * 1000){
+      triggerHammer();
+    }
+  }
+}
+
+/* ─── SIMULATION ─── */
+function startSim(){
+  sim.running = true;
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('btn-stop').disabled  = false;
+  document.getElementById('btn-skip').disabled  = false;
+  startTick();
+  startLot(0);
+}
+
+function stopSim(){
+  sim.running = false;
+  clearTimers();
+  setSimState('idle');
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('btn-stop').disabled  = true;
+  document.getElementById('btn-skip').disabled  = true;
+  document.getElementById('sil-secs').textContent = '0.0s';
+  document.getElementById('sil-bar').style.width = '0';
+}
+
+function skipLot(){
+  clearTimers();
+  const next = sim.lotIdx + 1;
+  if(next >= LOTS.length){ setSimState('done'); endSim(); }
+  else { startLot(next); }
+}
+
+function clearTimers(){
+  if(sim.bidTimer) clearTimeout(sim.bidTimer);
+  if(sim.advTimer) clearTimeout(sim.advTimer);
+  sim.bidTimer = null; sim.advTimer = null;
+}
+
+function setSpeed(x){
+  CFG.speedX = x;
+  ['1','2','5'].forEach(n => {
+    document.getElementById('spd'+n).classList.toggle('sel', String(x)===n);
+  });
+}
+
+function startLot(idx){
+  clearTimers();
+  const lot = LOTS[idx];
+  sim.lotIdx       = idx;
+  sim.currentBid   = lot.start;
+  sim.lastBidAt    = Date.now();
+  sim.fwStartAt    = null;
+  sim.bidsLeft     = 2 + Math.floor(Math.random() * 7);
+
+  setSimState('bidding');
+  updateLotDisplay(lot);
+  updateBidDisplay(lot.start);
+
+  // Reset silence bar
+  document.getElementById('sil-secs').textContent = '0.0s';
+  document.getElementById('sil-bar').style.width = '0';
+
+  addFeedRow('open', ftime(new Date()), lot.start, 'Opening bid — ' + lot.title.slice(0,50), 'OPEN');
+  document.getElementById('lot-progress').innerHTML =
+    '<strong>Lot ' + (idx+1) + '</strong> of ' + LOTS.length;
+
+  broadcast({ type:'lot_change', number:lot.number, title:lot.title, estimate:lot.est, start:lot.start });
+
+  scheduleNextBid();
+}
+
+function scheduleNextBid(){
+  if(sim.bidTimer) clearTimeout(sim.bidTimer);
+  if(sim.bidsLeft <= 0) return;
+  const delay = (1500 + Math.random() * 4000) / CFG.speedX;
+  sim.bidTimer = setTimeout(function(){
+    if(!sim.running) return;
+    const s = sim.state;
+    if(s !== 'bidding' && !(s === 'fair_warning' && CFG.resetOnBid)) return;
+
+    const newBid = sim.currentBid + getInc(sim.currentBid);
+    sim.currentBid = newBid;
+    sim.lastBidAt  = Date.now();
+
+    if(s === 'fair_warning'){
+      // Reset FW
+      sim.fwStartAt = null;
+      setSimState('bidding');
+      addFeedRow('fwr', ftime(new Date()), newBid, '↩ Fair warning reset — new bid', 'BIDDING');
+    }
+
+    addFeedRow('bid', ftime(new Date()), newBid, 'BSC Online', 'BIDDING');
+    updateBidDisplay(newBid);
+    broadcast({ type:'bid', amount:newBid, bidderId:'BSC', bidderName:'Online' });
+
+    sim.bidsLeft--;
+    scheduleNextBid();
+  }, delay);
+}
+
+function triggerFW(){
+  if(sim.state !== 'bidding') return;
+  sim.fwStartAt = Date.now();
+  setSimState('fair_warning');
+  addFeedRow('fw', ftime(new Date()), sim.currentBid, '⚖ Fair warning called', 'FAIR WARNING');
+  broadcast({ type:'fair_warning', amount:sim.currentBid });
+}
+
+function triggerHammer(){
+  if(sim.state !== 'fair_warning') return;
+  const lot  = LOTS[sim.lotIdx];
+  const bid  = sim.currentBid;
+  const sold = bid > 0;
+
+  setSimState(sold ? 'sold' : 'passed');
+  if(sold){
+    addFeedRow('sold',   ftime(new Date()), bid, '🔨 SOLD — ' + fmt(bid), 'SOLD');
+    broadcast({ type:'sold', amount:bid });
+  } else {
+    addFeedRow('passed', ftime(new Date()), 0,   '↩ Lot passed / no sale', 'PASSED');
+    broadcast({ type:'passed' });
+  }
+
+  // Advance after pause
+  const delay = 3000 / CFG.speedX;
+  sim.advTimer = setTimeout(function(){
+    if(!sim.running) return;
+    const next = sim.lotIdx + 1;
+    if(next >= LOTS.length){ endSim(); }
+    else { startLot(next); }
+  }, delay);
+}
+
+function endSim(){
+  setSimState('done');
+  sim.running = false;
+  clearInterval(tickInterval);
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('btn-stop').disabled  = true;
+  document.getElementById('btn-skip').disabled  = true;
+  addFeedRow('info', ftime(new Date()), 0, 'Auction complete — all lots processed', '');
+  broadcast({ type:'auction_end' });
+}
+
+/* ─── DISPLAY HELPERS ─── */
+function setSimState(s){
+  sim.state = s;
+  const el    = document.getElementById('state-display');
+  const fw    = document.getElementById('fw-box');
+  const sbar  = document.getElementById('sil-bar');
+  const names = { idle:'Idle', bidding:'Bidding', fair_warning:'Fair Warning', sold:'Sold', passed:'Passed', done:'Done' };
+  const cls   = { idle:'s-idle', bidding:'s-bidding', fair_warning:'s-fw', sold:'s-sold', passed:'s-passed', done:'s-idle' };
+  el.textContent  = names[s] || s;
+  el.className    = cls[s] || 's-idle';
+  el.dataset.state = s;
+  fw.classList.toggle('show', s === 'fair_warning');
+  if(s !== 'bidding' && s !== 'fair_warning'){
+    sbar.style.width = '0';
+    document.getElementById('sil-secs').textContent = '0.0s';
+  }
+}
+
+function updateLotDisplay(lot){
+  document.getElementById('lot-number-display').textContent = lot.number;
+  document.getElementById('lot-number-display').dataset.lotNumber = lot.number;
+  document.getElementById('lot-title-display').textContent = lot.title;
+  document.getElementById('lot-est-display').textContent = lot.est;
+}
+
+function updateBidDisplay(bid){
+  document.getElementById('current-bid').textContent = fmt(bid);
+  document.getElementById('current-bid').dataset.currentBid = bid;
+  const next = nextBid(bid);
+  document.getElementById('next-ask').textContent = fmt(next);
+}
+
+function addFeedRow(cls, time, amount, label, state){
+  const feed = document.getElementById('feed');
+  const div  = document.createElement('div');
+  div.className = 'frow ' + cls;
+  div.innerHTML =
+    '<span class="ftime">' + time + '</span>' +
+    '<span class="famount">' + (amount > 0 ? fmt(amount) : '') + '</span>' +
+    '<span class="flabel">' + label + '</span>' +
+    '<span class="fstate">' + state + '</span>';
+  feed.insertBefore(div, feed.firstChild);
+}
+
+/* ─── SETTINGS DISPLAY ─── */
+document.getElementById('settings-display').textContent =
+  'FW: ' + CFG.silenceSecs + 's  |  Hammer: ' + CFG.fwHammerSecs + 's  |  Reset on bid: ' + (CFG.resetOnBid ? 'yes' : 'no');
+
+/* ─── PING SALEROOM ON LOAD ─── */
+setTimeout(function(){ broadcast({ type:'bidpath_hello' }); }, 500);
+</script>
+</body>
+</html>

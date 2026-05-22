@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Saleroom — Auto Clerk</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  -webkit-font-smoothing: antialiased;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  background: rgb(230,230,230);
+  color: black;
+  font-size: 2vmin;
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* ── BUTTONS ── */
+.btn {
+  background: linear-gradient(white, rgb(230,230,230));
+  border: 1px solid rgb(179,179,179);
+  border-radius: 5px;
+  box-shadow: black 0.25vh 0.25vh 0.5vh -0.5vh;
+  margin: 1px;
+  padding: 2px 10px;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+  width: 7vw;
+}
+.btn:hover { filter: brightness(0.96); }
+.btn:active { filter: brightness(0.91); }
+.btn:disabled { color: rgb(179,179,179); background: rgb(246,246,246); box-shadow: none; cursor: default; }
+.btn:focus { outline: rgb(77,144,254) auto 5px; outline-offset: -2px; }
+
+/* ── CARD ── */
+.card {
+  background-color: white;
+  border: 1px solid rgb(179,179,179);
+  border-radius: 5px;
+  box-shadow: black 0.5vh 0.5vh 1vh -1vh;
+  padding: 1vh;
+  width: 100%;
+}
+
+/* ── HRs ── */
+.tbl-hr { border-top: 1px solid rgb(204,204,204); border-bottom: 0; margin: 0; }
+.row-hr  { border-top: 1px solid rgb(219,219,219); border-bottom: 0; margin: 0; }
+
+/* ── STATUS BAR (replaces trainer guidance bar) ── */
+#sbar {
+  background: #1c3a5c; color: white;
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 10px; min-height: 28px; flex-shrink: 0;
+  border-bottom: 2px solid #0d2035;
+  font-size: 1.8vmin;
+}
+#sbar-label { font-weight: bold; white-space: nowrap; }
+#sbar-text  { flex: 1; }
+#conn-indicator { font-size: 1.5vmin; padding: 2px 8px; border-radius: 3px; white-space: nowrap; }
+.conn-waiting { background: #2d3748; color: #a0aec0; }
+.conn-ok      { background: #276749; color: #68d391; }
+
+/* ── WRAPPER / MAIN ── */
+#wrapper { display: flex; flex-direction: column; height: 100vh; }
+#main {
+  display: flex;
+  gap: 1vh;
+  flex: 1;
+  padding: 2vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── LEFT: AUCTION GRID ── */
+#auction {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  grid-template-rows: 1fr 2fr 1fr;
+  gap: 1vh;
+  flex: 2;
+  min-height: 0;
+}
+#cell-curlot   { grid-column: 1 / span 3; min-height: 0; display: flex; flex-direction: column; }
+#cell-bidlog   { grid-column: 4 / span 3; min-height: 0; display: flex; flex-direction: column; }
+#cell-controls { grid-column: 1 / span 6; min-height: 0; display: flex; flex-direction: column; }
+#cell-chat     { grid-column: 1 / span 6; min-height: 0; display: flex; flex-direction: column; }
+
+/* ── CURRENT LOT ── */
+#cell-curlot .card {
+  flex: 1; display: flex; flex-direction: column; padding: 0.5vh; min-height: 0;
+}
+.curlot-top {
+  display: grid;
+  grid-template: "image info" 1fr "desc desc" 1fr / 1fr 1fr;
+  gap: 0.5vh; flex: 1; min-height: 0;
+}
+.curlot-img {
+  grid-area: image;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 4vmin; background: #f5f5f5;
+  border: 1px solid rgb(179,179,179); overflow: hidden;
+}
+.curlot-info {
+  grid-area: info;
+  display: flex; flex-direction: column; justify-content: center;
+  font-size: 1.9vmin; line-height: 1.5; overflow: hidden;
+}
+.curlot-desc {
+  grid-area: desc;
+  font-size: 1.7vmin; line-height: 1.35;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.action-row {
+  display: flex; border-top: 1px solid rgb(179,179,179); margin-top: 0.5vh; flex-shrink: 0;
+}
+.action-row .btn {
+  flex: 1; border-radius: 0; margin: 0; width: auto;
+  border-top: none; border-bottom: none; border-right: none;
+  border-left: 1px solid rgb(179,179,179);
+  padding: 0.6vmin 2px;
+}
+.action-row .btn:first-child { border-left: none; }
+
+/* ── BID LOG ── */
+#cell-bidlog .card {
+  flex: 1; padding: 0; display: flex; flex-direction: column; min-height: 0;
+}
+.blog-head {
+  display: grid; grid-template-columns: 33% 33% 34%;
+  font-weight: bold; font-size: 1.8vmin;
+  box-shadow: black 0px 0.5vh 1vh -1vh; flex-shrink: 0;
+  padding: 2px 0;
+}
+.blog-head span { overflow: hidden; padding: 0 0 0 10px; white-space: nowrap; }
+.blog-body { flex: 1; overflow-y: auto; font-size: 1.5vmin; }
+.blog-row {
+  display: grid; grid-template-columns: 33% 33% 34%;
+  padding: 1px 0; white-space: nowrap;
+}
+.blog-row span { overflow: hidden; padding: 0 0 0 10px; text-overflow: ellipsis; }
+.blog-row.cur  { background: rgb(93,173,236); }
+.blog-row.sold { background: #d0f5d0; font-weight: bold; }
+.blog-row.room { background: #ede; }
+@keyframes rowflash { from { background: #ffffc0; } }
+.blog-row.new  { animation: rowflash 0.4s; }
+
+/* ── CONTROLS ── */
+#cell-controls .card {
+  flex: 1; padding: 0.5vh 1vh; min-height: 0; display: flex; flex-direction: column; gap: 0.5vh;
+}
+.ctrl-grid {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: 1fr;
+  gap: 0.5vh 1.5vh;
+  flex: 1; min-height: 0;
+}
+.ctrl-left {
+  display: flex; flex-direction: column; gap: 0.4vh; align-self: start;
+}
+.ctrl-left .btn { width: 9vw; padding: 0.5vmin 0.5vw; font-size: 1.9vmin; }
+
+.ctrl-center {
+  display: flex; flex-direction: column; gap: 0.4vh;
+  align-self: stretch; min-height: 0; overflow: hidden;
+}
+.prov-row { display: flex; align-items: center; gap: 4px; font-size: 1.7vmin; white-space: nowrap; }
+.ha-row   { display: flex; align-items: center; gap: 4px; }
+.ha-lbl   { font-weight: bold; font-size: 1.9vmin; width: 1.4vw; }
+.h-field  {
+  width: 6vw; text-align: right; font-family: inherit;
+  font-size: inherit; font-weight: bold;
+  border: 1px solid rgb(153,153,153); padding: 0 2px;
+}
+.amt-disp {
+  min-width: 6vw; text-align: right; font-weight: bold; font-size: 2.2vmin;
+  border: 1px solid rgb(153,153,153); padding: 0 3px; background: white;
+  transition: background 0.3s; display: inline-block;
+}
+.amt-disp.lit { background: #c8eeff; }
+.bid-override {
+  width: 4vw; text-align: right; font-family: inherit;
+  font-size: inherit; font-weight: bold;
+  border: 1px solid rgb(153,153,153); padding: 0 2px;
+}
+.stepper { display: flex; gap: 1px; }
+.stepper .btn { width: auto; min-width: 3vw; padding: 0.2vmin 0.6vw; font-size: 1.8vmin; }
+
+.inc-scroll {
+  flex: 1; overflow-x: hidden; overflow-y: scroll; min-height: 0;
+  border: 1px solid rgb(200,200,200); background: white;
+}
+.inc-tbl { width: 100%; border-collapse: collapse; font-size: 1.6vmin; }
+.inc-tbl td { padding: 0 6px; text-align: right; line-height: 1.65; white-space: nowrap; border: none; color: #222; }
+.inc-tbl tr.hi td { background: rgb(173,216,230); }
+.inc-tbl tr.lon td { background: #c55; color: white; font-weight: bold; text-align: center; white-space: nowrap; }
+.man-chk { font-size: 1.6vmin; flex-shrink: 0; }
+
+.notif-bar {
+  border: 1px solid rgb(176,176,176); background: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.5vmin; font-weight: bold; transition: background 0.2s;
+  padding: 1px 0; flex-shrink: 0;
+}
+.notif-bar.ng { background: #4caf50; color: white; }
+.notif-bar.nr { background: #f44336; color: white; }
+.notif-bar.np { background: #e91e63; color: white; }
+
+.ctrl-right { display: flex; flex-direction: column; gap: 0.4vh; align-self: start; }
+.ctrl-right .btn { width: 9vw; padding: 0.5vmin 0.5vw; font-size: 1.9vmin; }
+
+/* FW highlight on button */
+#bFW.active-fw {
+  background: linear-gradient(#ffe066, #ffbb00);
+  border-color: #cc8800;
+  animation: fwpulse 0.8s infinite alternate;
+}
+@keyframes fwpulse { from { filter: brightness(1); } to { filter: brightness(1.12); } }
+
+/* ── CHAT ── */
+#cell-chat .card {
+  flex: 1; padding: 0; display: grid;
+  grid-template-columns: 1fr auto; min-height: 0; overflow: hidden;
+}
+.chat-left { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid rgb(179,179,179); }
+.ann-list  { list-style-type: none; line-height: 3.7vmin; white-space: nowrap; padding-inline-start: 0; margin: 0; overflow-y: auto; flex: 1; }
+.ann-item  { padding-left: 1vh; padding-right: 1vh; background: white; }
+.ann-item:hover { background: lightblue; }
+.chat-foot { display: flex; padding: 0.5vh; border-top: 1px solid rgb(179,179,179); gap: 0.5vh; background: white; position: relative; flex-shrink: 0; }
+.chat-inp  { flex: 1; font-family: inherit; font-size: inherit; border: none; }
+.chat-inp:focus { outline: none; }
+.chat-right { display: flex; flex-direction: column; justify-content: space-between; padding: 0.5vh; gap: 0.5vh; }
+.chat-right .btn { width: auto; padding: 2px 10px; }
+
+/* ── RIGHT: TABBED CONSOLES ── */
+#consoles { display: flex; flex-direction: column; flex: 3; min-height: 0; }
+
+.tab-row { display: flex; align-items: stretch; flex-shrink: 0; }
+.tab-active {
+  font-family: inherit; font-weight: 600; background: none; margin: 0;
+  font-size: 1em; cursor: pointer;
+  padding: calc(0.45vh) calc(-0.3vh + 0.8vw) 2vh;
+  outline: 0;
+  border-top: 0.3vh solid rgb(191,191,191);
+  border-right: 0.3vh solid rgb(191,191,191);
+  border-left: 0.3vh solid rgb(191,191,191);
+  border-bottom: none; white-space: nowrap;
+}
+.tab-inactive {
+  font-family: inherit; font-weight: 600; background: none;
+  border-top: none; border-right: none; border-left: none;
+  margin: 0; padding: 0.75vh 0.8vw 2vh;
+  border-bottom: 0.3vh solid rgb(191,191,191);
+  font-size: 1em; cursor: pointer; white-space: nowrap;
+}
+.tab-filler { flex: 1; border-bottom: 0.3vh solid rgb(191,191,191); }
+.logo {
+  background: #111; color: white; font-style: italic; font-weight: bold;
+  letter-spacing: 2px; padding: 0.5vh 1.5vw;
+  display: flex; align-items: center; white-space: nowrap;
+  border-bottom: 0.3vh solid rgb(191,191,191);
+}
+
+.tab-content {
+  border-right: 0.3vh solid rgb(191,191,191);
+  border-bottom: 0.3vh solid rgb(191,191,191);
+  border-left: 0.3vh solid rgb(191,191,191);
+  border-top: none;
+  flex: 1; padding: 1.5vh;
+  box-shadow: black 0.5vh 0.5vh 1vh -1vh;
+  display: grid;
+  grid-template-areas: "findrow" "lotlist" "selected";
+  grid-template-rows: auto 6fr 4fr;
+  gap: 1.5vh; min-height: 0; overflow: hidden;
+}
+
+.find-row { grid-area: findrow; display: flex; justify-content: flex-end; align-items: center; gap: 1vh; }
+.find-lbl { font-size: 2.2vh; white-space: nowrap; }
+.find-inp { font-family: inherit; font-size: 1em; border: 1px solid rgb(153,153,153); padding: 0.5vh; font-weight: bold; min-width: 5vw; max-width: 6vw; }
+
+.lot-list-area { grid-area: lotlist; display: flex; flex-direction: column; min-height: 0; }
+.lot-list-card {
+  background-color: white; border: 1px solid rgb(179,179,179);
+  border-radius: 5px; box-shadow: black 0.5vh 0.5vh 1vh -1vh;
+  width: 100%; flex: 1; min-height: 0;
+  display: grid; grid-template-rows: auto 1fr;
+  list-style-type: none; user-select: none; overflow: hidden;
+}
+.ll-head-shadow { box-shadow: black 0px 0.5vh 1vh -1vh; }
+.ll-body { overflow-y: auto; font-size: 1.7vmin; }
+.ll-row { display: grid; grid-template-columns: 16vmin 1fr; height: 48px; cursor: pointer; }
+.ll-row:hover .ll-highlight { border-top-color: lightblue; background: lightblue; }
+.ll-row.cur .ll-highlight { background: rgb(93,173,236); border-top: 1px solid rgb(93,173,236); border-bottom: 1px solid rgb(93,173,236); }
+.ll-highlight { display: contents; }
+.ll-left { display: grid; grid-template-columns: 1fr auto; overflow: hidden; padding: 4px 6px 4px 8px; align-items: start; }
+.ll-num  { font-size: 1.7vmin; font-weight: normal; }
+.ll-dot  { color: rgb(255,51,85); font-size: 1.4vmin; }
+.ll-right { overflow: hidden; display: flex; flex-direction: column; justify-content: center; padding: 3px 6px; }
+.ll-status { display: flex; justify-content: flex-end; gap: 8px; font-weight: 600; font-size: 1.6vmin; }
+.ll-desc   { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1.6vmin; }
+.ll-row-border { border-top: 1px solid white; border-bottom: 1px solid rgb(219,219,219); display: contents; }
+
+.selected-area { grid-area: selected; min-height: 0; display: flex; flex-direction: column; }
+.selected-card {
+  background-color: white; border: 1px solid rgb(179,179,179);
+  border-radius: 5px; box-shadow: black 0.5vh 0.5vh 1vh -1vh;
+  padding: 1vh; flex: 1; min-height: 0;
+  display: grid;
+  grid-template: "img controls" auto "img table" 1fr / 1fr 1fr;
+  gap: 1.5vh;
+}
+.sel-img { grid-area: img; display: flex; align-items: center; justify-content: center; font-size: 6vmin; background: #f5f5f5; border: 1px solid rgb(179,179,179); }
+.sel-controls { grid-area: controls; display: flex; gap: 0.5vh; align-items: flex-start; }
+.sel-controls .btn { flex: 1; width: auto; padding: 2px 4px; font-size: 1.7vmin; }
+.sel-table { grid-area: table; min-height: 0; display: flex; flex-direction: column; gap: 0.5vh; }
+.sel-tbl-card { background-color: white; border: 1px solid rgb(179,179,179); border-radius: 5px; box-shadow: black 0.5vh 0.5vh 1vh -1vh; flex: 1; min-height: 0; display: grid; grid-template-rows: auto 1fr; overflow: hidden; }
+.sel-tbl-head { display: grid; grid-template-columns: 33% 33% 34%; font-weight: bold; font-size: 1.8vmin; box-shadow: black 0px 0.5vh 1vh -1vh; padding: 2px 0; }
+.sel-tbl-head span { overflow: hidden; padding: 0 0 0 10px; white-space: nowrap; }
+.sel-tbl-body { overflow-y: auto; font-size: 1.5vmin; }
+.bid-notif { height: 3vh; border: 1px solid rgb(176,176,176); background: white; display: flex; align-items: center; justify-content: center; font-size: 1.5vmin; font-weight: bold; transition: background 0.2s; }
+.bid-notif.ng { background: #4caf50; color: white; }
+.bid-notif.nr { background: #f44336; color: white; }
+.bid-notif.np { background: #e91e63; color: white; }
+</style>
+</head>
+<body>
+
+<div id="wrapper">
+
+<!-- ═══ STATUS BAR ═══ -->
+<div id="sbar">
+  <span id="sbar-label" style="color:#4ade80">AUTO CLERK:</span>
+  <span id="sbar-text">Waiting for Bidpath to start…</span>
+  <div id="conn-indicator" class="conn-waiting">● Bidpath: waiting</div>
+</div>
+
+<!-- ═══ MAIN ═══ -->
+<div id="main">
+
+<!-- ══════════════════════════════
+     LEFT — AUCTION
+══════════════════════════════ -->
+<div id="auction">
+
+  <!-- Current Lot -->
+  <div id="cell-curlot">
+    <div class="card">
+      <div class="curlot-top">
+        <div class="curlot-img" id="limg">📦</div>
+        <div class="curlot-info">
+          <p><b id="lnum">Lot: —</b></p>
+          <p id="lest">Est:</p>
+          <p id="lest2">—</p>
+        </div>
+        <div class="curlot-desc" id="ldesc">Waiting for auction to start…</div>
+      </div>
+      <div class="action-row">
+        <button class="btn" id="btn-sell" onclick="act('sell')">Sell</button>
+        <button class="btn" id="btn-pass" onclick="act('pass')">Pass</button>
+        <button class="btn" id="btn-undo" onclick="act('undo')">Undo</button>
+        <button class="btn" id="btn-offer" onclick="act('offer')">Offer</button>
+        <button class="btn" id="btn-next" onclick="act('next')">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bid Log -->
+  <div id="cell-bidlog">
+    <div class="card">
+      <div class="blog-head">
+        <span>Buyer ID</span><span>Hammer</span><span>Name</span>
+      </div>
+      <hr class="tbl-hr">
+      <div class="blog-body" id="log"></div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div id="cell-controls">
+    <div class="card">
+      <div class="ctrl-grid">
+
+        <!-- Left buttons -->
+        <div class="ctrl-left">
+          <button class="btn" id="bFW"   onclick="act('fairwarn')">Fair warn</button>
+          <button class="btn" id="bBid"  onclick="act('bid')">Bid</button>
+          <button class="btn"            onclick="act('undo')">Undo</button>
+          <button class="btn" id="bRoom" onclick="act('room')">Room</button>
+          <button class="btn" style="margin-top:0.5vh">AV Check</button>
+        </div>
+
+        <!-- Centre: H / A / increments / notif -->
+        <div class="ctrl-center">
+          <div class="prov-row">
+            <input type="checkbox" id="chkProv">
+            <label for="chkProv">Provisional</label>
+          </div>
+          <div class="ha-row">
+            <span class="ha-lbl">H</span>
+            <input type="text" id="fH" value="0" class="h-field"
+              oninput="onHInput(this.value)"
+              onkeydown="if(event.key==='Enter'){doSell();event.preventDefault();}">
+          </div>
+          <div class="ha-row">
+            <span class="ha-lbl">A</span>
+            <span class="amt-disp" id="amt">0</span>
+            <input type="text" id="bidOverride" class="bid-override" placeholder=""
+              oninput="overrideInput(this.value)"
+              onkeydown="if(event.key==='Enter'){if(this.value.trim()){overrideEnter();}else{act('bid');}event.preventDefault();}">
+            <div class="stepper">
+              <button class="btn" onclick="act('minus')">−</button>
+              <button class="btn" onclick="act('plus')">+</button>
+            </div>
+          </div>
+          <div class="inc-scroll">
+            <table class="inc-tbl" id="itbl">
+              <colgroup><col></colgroup>
+              <tbody id="itbl-body"></tbody>
+            </table>
+          </div>
+          <div class="man-chk"><label><input type="checkbox"> Manual increments</label></div>
+          <div class="notif-bar" id="notif">Bidding Notification Box</div>
+        </div>
+
+        <!-- Right: Pause + Once -->
+        <div class="ctrl-right">
+          <button class="btn" id="bPause" onclick="act('pause')">⏸ Pause</button>
+          <button class="btn" id="bOnce"  onclick="act('once')">Once...</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Chat / Announcements -->
+  <div id="cell-chat">
+    <div class="card">
+      <div class="chat-left">
+        <ul class="ann-list" id="chat">
+          <li class="ann-item">Auction starting shortly — bids will appear automatically.</li>
+        </ul>
+        <div class="chat-foot">
+          <input type="text" id="cin" class="chat-inp" placeholder="">
+          <button class="btn" onclick="sendChat()" style="width:auto;padding:2px 10px">Add</button>
+        </div>
+      </div>
+      <div class="chat-right">
+        <button class="btn">Alert</button>
+        <button class="btn" onclick="sendChat()">Send</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end #auction -->
+
+<!-- ══════════════════════════════
+     RIGHT — CONSOLES
+══════════════════════════════ -->
+<div id="consoles">
+  <div class="tab-row">
+    <button class="tab-active">Lots</button>
+    <button class="tab-inactive">Bidders</button>
+    <button class="tab-inactive">Increments</button>
+    <button class="tab-inactive">Media</button>
+    <button class="tab-inactive">Support</button>
+    <button class="tab-inactive">Displays</button>
+    <button class="tab-inactive">Settings</button>
+    <div class="tab-filler"></div>
+    <div class="logo">the saleroom</div>
+  </div>
+
+  <div class="tab-content">
+    <div class="find-row">
+      <span class="find-lbl">Find lot:</span>
+      <input type="text" id="findl" class="find-inp" oninput="renderLL()">
+    </div>
+    <div class="lot-list-area">
+      <div class="lot-list-card">
+        <div class="ll-head-shadow"><hr class="tbl-hr"></div>
+        <div class="ll-body" id="ll"></div>
+      </div>
+    </div>
+    <div class="selected-area">
+      <div class="selected-card">
+        <div class="sel-img" id="rphoto"><span id="rphoto-e">📦</span></div>
+        <div class="sel-controls">
+          <button class="btn" disabled>History</button>
+          <button class="btn">New lot</button>
+          <button class="btn">Edit lot</button>
+        </div>
+        <div class="sel-table">
+          <div class="sel-tbl-card">
+            <div class="sel-tbl-head">
+              <span>Buyer ID</span><span>Hammer</span><span>Name</span>
+            </div>
+            <hr class="tbl-hr">
+            <div class="sel-tbl-body" id="rlog"></div>
+          </div>
+          <div class="bid-notif" id="bnotif">&nbsp;</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div><!-- end #consoles -->
+
+</div><!-- end #main -->
+</div><!-- end #wrapper -->
+
+<script>
+/* ─── INCREMENT TABLE ─── */
+const INC_TABLE = [
+  {from:0,    to:50,       inc:5},
+  {from:50,   to:100,      inc:10},
+  {from:100,  to:200,      inc:10},
+  {from:200,  to:500,      inc:20},
+  {from:500,  to:1000,     inc:50},
+  {from:1000, to:2000,     inc:100},
+  {from:2000, to:5000,     inc:200},
+  {from:5000, to:Infinity, inc:500},
+];
+function getInc(b){ for(const r of INC_TABLE) if(b>=r.from&&b<r.to) return r.inc; return 500; }
+function nextBid(b){ return b + getInc(b); }
+function fmt(n){ return '£' + Number(n).toLocaleString('en-GB'); }
+
+function buildIncTable(){
+  const MAX = 20000;
+  const tbody = document.getElementById('itbl-body');
+  const rows = [];
+  for(const band of INC_TABLE){
+    const ceiling = Math.min(band.to === Infinity ? MAX : band.to, MAX);
+    for(let v = band.from + band.inc; v <= ceiling; v += band.inc){
+      rows.push('<tr data-bid="'+v+'" style="cursor:pointer"><td>£'+v.toLocaleString()+'</td></tr>');
+    }
+    if(ceiling >= MAX) break;
+  }
+  rows.push('<tr class="lon"><td>London Bidding</td></tr>');
+  tbody.innerHTML = rows.join('');
+  tbody.addEventListener('click', function(e){
+    const row = e.target.closest('tr[data-bid]');
+    if(!row) return;
+    const v = parseInt(row.dataset.bid, 10);
+    if(isNaN(v)) return;
+    S.bid = v; S.hi = v; S.lbdr = 'ROOM'; S.lname = 'ROOM';
+    addLog('ROOM', v, 'ROOM', 'room');
+    setNotif(''); setAmt(v); hiInc(v);
+    setTimeout(focusOverride, 50);
+  });
+}
+
+/* ─── LOT DATA (populated from Bidpath) ─── */
+let LOTS = [];
+let S = {
+  li: 0, bid: 0, hi: 0, lbdr: '', lname: '',
+  log: [], sold: {}, once: 0
+};
+
+/* ─── BROADCAST CHANNEL ─── */
+const CH = new BroadcastChannel('vectis-auto-clerk');
+
+CH.onmessage = function(e){
+  const msg = e.data;
+
+  if(msg.type === 'bidpath_hello'){
+    document.getElementById('conn-indicator').textContent = '● Bidpath: connected';
+    document.getElementById('conn-indicator').className = 'conn-indicator conn-ok';
+    CH.postMessage({ type: 'saleroom_hello' });
+  }
+
+  if(msg.type === 'lot_change'){
+    onLotChange(msg);
+  }
+
+  if(msg.type === 'bid'){
+    onBidArrived(msg);
+  }
+
+  if(msg.type === 'fair_warning'){
+    onFairWarning(msg);
+  }
+
+  if(msg.type === 'sold'){
+    // Bidpath says sold — auto-fill H field for the clerk
+    document.getElementById('fH').value = msg.amount;
+    onHInput(String(msg.amount));
+    setSbarText('🔨 Lot sold at ' + fmt(msg.amount) + ' — enter hammer and click Sell');
+  }
+
+  if(msg.type === 'passed'){
+    setSbarText('Lot passed with no sale — click Pass to confirm');
+  }
+
+  if(msg.type === 'auction_end'){
+    setSbarText('Auction complete — all lots processed.');
+  }
+};
+
+function onLotChange(msg){
+  // Add to lots list if not already there
+  const exists = LOTS.find(l => l.number === msg.number);
+  if(!exists){
+    LOTS.push({ number: msg.number, title: msg.title, est: msg.estimate, start: msg.start });
+  }
+  S.li = LOTS.findIndex(l => l.number === msg.number);
+  if(S.li < 0) S.li = LOTS.length - 1;
+  S.bid = msg.start; S.hi = msg.start; S.log = []; S.lbdr = 'ONLINE'; S.lname = 'Online';
+
+  // Update display
+  document.getElementById('lnum').textContent  = 'Lot: ' + msg.number;
+  document.getElementById('lest2').textContent = msg.estimate || '—';
+  document.getElementById('ldesc').textContent = msg.title;
+  document.getElementById('fH').value          = '0';
+  clearLogs();
+  setNotif('');
+  setAmt(msg.start);
+  hiInc(msg.start);
+  document.getElementById('bFW').classList.remove('active-fw');
+  renderLL();
+  setSbarText('Lot ' + msg.number + ' open — ' + msg.title.slice(0, 60));
+  setTimeout(focusOverride, 100);
+}
+
+function onBidArrived(msg){
+  S.bid = msg.amount; S.hi = msg.amount;
+  S.lbdr = msg.bidderId || 'ONLINE'; S.lname = msg.bidderName || 'Online';
+  addLog(S.lbdr, msg.amount, S.lname, '');
+  setNotif('ng');
+  setAmt(msg.amount);
+  hiInc(msg.amount);
+  setTimeout(function(){ setNotif(''); }, 2000);
+  setSbarText('Bid received: ' + fmt(msg.amount) + ' — ' + S.lname);
+}
+
+function onFairWarning(msg){
+  document.getElementById('bFW').classList.add('active-fw');
+  addChat('⚠️ Fair Warning — lot about to close!');
+  setSbarText('⚖ FAIR WARNING — click Fair warn if not already done, then Sell at ' + fmt(msg.amount));
+}
+
+/* ─── ACTIONS ─── */
+function act(a){
+  if(a === 'fairwarn'){
+    document.getElementById('bFW').classList.toggle('active-fw');
+    addChat('⚠️ Fair Warning — lot about to close!');
+    CH.postMessage({ type: 'fw_clicked' });
+    setSbarText('Fair warning sent');
+  } else if(a === 'sell'){
+    doSell();
+  } else if(a === 'pass'){
+    const lot = LOTS[S.li] || {};
+    addLog('—', '—', 'NO SALE', '');
+    S.sold[lot.number] = null;
+    renderLL();
+    document.getElementById('bFW').classList.remove('active-fw');
+    CH.postMessage({ type: 'pass_clicked' });
+    setSbarText('Lot ' + (lot.number || '—') + ' passed — no sale. Click Next for next lot.');
+  } else if(a === 'next'){
+    S.li = Math.min(S.li + 1, LOTS.length - 1);
+    const lot = LOTS[S.li];
+    if(lot){
+      document.getElementById('lnum').textContent  = 'Lot: ' + lot.number;
+      document.getElementById('lest2').textContent = lot.est || '—';
+      document.getElementById('ldesc').textContent = lot.title;
+      clearLogs(); setAmt(lot.start || 0); setNotif('');
+      document.getElementById('fH').value = '0';
+      document.getElementById('bFW').classList.remove('active-fw');
+      renderLL();
+    }
+    CH.postMessage({ type: 'next_clicked' });
+  } else if(a === 'bid'){
+    const amount = nextBid(S.hi);
+    S.bid = amount; S.hi = amount; S.lbdr = 'ROOM'; S.lname = 'ROOM';
+    addLog('ROOM', amount, 'ROOM', 'room');
+    setNotif(''); setAmt(amount); hiInc(amount);
+    setTimeout(focusOverride, 50);
+  } else if(a === 'room'){
+    S.lbdr = 'ROOM'; S.lname = 'ROOM';
+    addLog('ROOM', S.hi, 'ROOM', 'room');
+    setNotif('');
+  } else if(a === 'undo'){
+    if(S.log.length > 0){
+      S.log.pop(); renderLogFull();
+      const prev = S.log.length > 0 && typeof S.log[S.log.length-1].a === 'number' ? S.log[S.log.length-1].a : 0;
+      S.bid = prev; setAmt(prev); hiInc(prev);
+    }
+  } else if(a === 'once'){
+    S.once = (S.once % 3) + 1;
+    const btn = document.getElementById('bOnce');
+    const labels = ['Once...','Twice...','Final!'];
+    const bgs    = ['#ffe0b2','#fb8c00','#d32f2f'];
+    const fgs    = ['#111','white','white'];
+    btn.textContent = labels[S.once-1]; btn.style.background = bgs[S.once-1]; btn.style.color = fgs[S.once-1];
+    if(S.once === 3) setTimeout(resetOnce, 3500);
+  } else if(a === 'pause'){
+    const btn = document.getElementById('bPause');
+    const paused = btn.textContent.includes('Pause');
+    btn.textContent = paused ? '▶ Resume' : '⏸ Pause';
+    btn.style.background = paused ? '#e65100' : '';
+  } else if(a === 'minus'){
+    S.bid = Math.max(0, S.bid - getInc(S.bid)); setAmt(S.bid); hiInc(S.bid);
+  } else if(a === 'plus'){
+    S.bid = nextBid(S.bid); setAmt(S.bid); hiInc(S.bid);
+  } else if(a === 'offer'){
+    // No-op for now
+  }
+}
+
+function doSell(){
+  const hVal   = parseInt(document.getElementById('fH').value, 10);
+  const amount = (!isNaN(hVal) && hVal > 0) ? hVal : S.hi;
+  const lot    = LOTS[S.li] || {};
+  S.sold[lot.number] = amount;
+  addLog(S.lbdr, amount, S.lname, 'sold');
+  document.getElementById('fH').value = String(amount);
+  document.getElementById('bFW').classList.remove('active-fw');
+  renderLL();
+  CH.postMessage({ type: 'sell_clicked', amount });
+  setSbarText('🔨 SOLD — Lot ' + (lot.number || '—') + ' at ' + fmt(amount) + ' to ' + S.lname);
+}
+
+function onHInput(v){
+  const n = parseInt(v, 10);
+  if(!isNaN(n) && n > 0) document.getElementById('amt').textContent = n;
+}
+
+function overrideInput(v){
+  const n = parseInt(v, 10);
+  if(!isNaN(n) && n > 0) document.getElementById('amt').textContent = n;
+}
+
+function overrideEnter(){
+  const el = document.getElementById('bidOverride');
+  const v  = parseInt(el.value, 10);
+  if(isNaN(v) || v <= 0){ focusOverride(); return; }
+  el.value = '';
+  S.bid = v; S.hi = v; S.lbdr = 'ROOM'; S.lname = 'ROOM';
+  addLog('ROOM', v, 'ROOM', 'room');
+  setNotif(''); setAmt(v); hiInc(v);
+  setTimeout(focusOverride, 50);
+}
+
+function focusOverride(){
+  const el = document.getElementById('bidOverride');
+  if(el){ el.focus(); el.select(); }
+}
+
+/* ─── LOG HELPERS ─── */
+function addLog(b, a, n, cls){
+  S.log.push({b, a, n, cls}); renderLogFull();
+}
+
+function renderLogFull(){
+  const rows = [...S.log].reverse();
+  const html = rows.map((r, i) => {
+    const aStr  = typeof r.a === 'number' ? r.a : r.a;
+    const isTop = i === 0;
+    return '<div class="blog-row ' + r.cls + (isTop ? ' cur' : '') + (isTop ? ' new' : '') + '">' +
+      '<span>' + r.b + '</span><span>' + aStr + '</span><span>' + r.n + '</span></div>' +
+      '<hr class="row-hr">';
+  }).join('');
+  document.getElementById('log').innerHTML  = html;
+  document.getElementById('rlog').innerHTML = html;
+}
+
+function clearLogs(){
+  S.log = [];
+  document.getElementById('log').innerHTML  = '';
+  document.getElementById('rlog').innerHTML = '';
+}
+
+function setNotif(cls){
+  const bar = document.getElementById('notif');
+  const big = document.getElementById('bnotif');
+  bar.className = 'notif-bar'; big.className = 'bid-notif';
+  if(cls === 'ng'){
+    bar.classList.add('ng'); bar.textContent = '● BID RECEIVED';
+    big.classList.add('ng'); big.textContent = '● BID RECEIVED';
+  } else if(cls === 'nr'){
+    bar.classList.add('nr'); bar.textContent = '● ROOM BID';
+    big.classList.add('nr'); big.textContent = '● ROOM BID';
+  } else {
+    bar.textContent = 'Bidding Notification Box';
+    big.textContent = '';
+  }
+}
+
+function setAmt(v){
+  const el = document.getElementById('amt');
+  el.textContent = v > 0 ? v : '0';
+  el.classList.add('lit');
+  setTimeout(function(){ el.classList.remove('lit'); }, 600);
+}
+
+function hiInc(bid){
+  document.querySelectorAll('#itbl-body tr').forEach(r => r.classList.remove('hi'));
+  const next   = nextBid(bid);
+  const target = document.querySelector('#itbl-body tr[data-bid="' + next + '"]');
+  if(target){ target.classList.add('hi'); target.scrollIntoView({block:'nearest'}); }
+}
+
+function resetOnce(){
+  S.once = 0;
+  const b = document.getElementById('bOnce');
+  b.textContent = 'Once...'; b.style.background = ''; b.style.color = '';
+}
+
+function addChat(m){
+  const c  = document.getElementById('chat');
+  const li = document.createElement('li');
+  li.className = 'ann-item';
+  li.textContent = m;
+  li.style.cssText = 'color:#c00;font-weight:bold';
+  c.appendChild(li);
+  c.scrollTop = c.scrollHeight;
+}
+
+function sendChat(){
+  const i = document.getElementById('cin');
+  if(i.value.trim()){ addChat(i.value.trim()); i.value = ''; }
+}
+
+function setSbarText(t){
+  document.getElementById('sbar-text').textContent = t;
+}
+
+/* ─── LOT LIST ─── */
+function renderLL(){
+  const f   = (document.getElementById('findl').value || '').toLowerCase();
+  const cur = LOTS[S.li];
+  document.getElementById('ll').innerHTML = LOTS
+    .filter(l => !f || String(l.number).includes(f) || l.title.toLowerCase().includes(f))
+    .map(l => {
+      const isCur  = cur && l.number === cur.number;
+      const hammer = S.sold[l.number] !== undefined ? S.sold[l.number] : null;
+      const status = hammer !== null
+        ? '<div class="ll-status"><span>Online</span><span>' + hammer + '.00</span></div>'
+        : '<div class="ll-status"></div>';
+      return '<div class="ll-row' + (isCur ? ' cur' : '') + '">' +
+        '<div class="ll-left"><span class="ll-num">' + l.number + '</span><span class="ll-dot">●</span></div>' +
+        '<div class="ll-right">' + status +
+        '<div class="ll-desc">' + l.title + '</div></div></div><hr class="row-hr">';
+    }).join('');
+  setTimeout(function(){
+    const curEl = document.querySelector('.ll-row.cur');
+    if(curEl) curEl.scrollIntoView({block:'nearest'});
+  }, 50);
+}
+
+/* ─── KEY BINDING: digits → bid override ─── */
+document.addEventListener('keydown', function(e){
+  const el = document.getElementById('bidOverride');
+  if(!el || document.activeElement === el) return;
+  if(e.ctrlKey || e.altKey || e.metaKey) return;
+  if(/^\d$/.test(e.key) || e.key === 'Backspace'){
+    el.focus();
+    if(/^\d$/.test(e.key)) el.setSelectionRange(el.value.length, el.value.length);
+  }
+});
+
+/* ─── INIT ─── */
+buildIncTable();
+renderLL();
+
+// Ping Bidpath on load
+setTimeout(function(){ CH.postMessage({ type: 'saleroom_hello' }); }, 300);
+</script>
+</body>
+</html>
