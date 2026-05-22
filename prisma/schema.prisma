@@ -260,6 +260,10 @@ model CatalogueAuction {
   locked      Boolean        @default(false)
   finished    Boolean        @default(false)
   complete    Boolean        @default(false)
+  catalogued  Boolean        @default(false)
+  addedToBC   Boolean        @default(false)
+  photography Boolean        @default(false)
+  aiRan       Boolean        @default(false)
   published   Boolean        @default(false)
   notes       String?
   createdAt   DateTime       @default(now())

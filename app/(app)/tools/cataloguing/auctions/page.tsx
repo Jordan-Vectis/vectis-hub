@@ -66,9 +66,11 @@ export default async function AuctionsPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Date</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Type</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Lots</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Locked</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Finished</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Complete</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Catalogued</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Added to BC</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Photography</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Ran through AI</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Complete</th>
               </tr>
             </thead>
             <tbody>
@@ -93,27 +95,13 @@ export default async function AuctionsPage() {
                   </td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{auction.auctionType}</td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{auction._count.lots}</td>
-                  <td className="px-4 py-3 text-center">
-                    {auction.locked ? (
-                      <span className="text-green-400 font-bold">✓</span>
-                    ) : (
-                      <span className="text-gray-600">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {auction.finished ? (
-                      <span className="text-green-400 font-bold">✓</span>
-                    ) : (
-                      <span className="text-gray-600">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {auction.complete ? (
-                      <span className="text-green-400 font-bold">✓</span>
-                    ) : (
-                      <span className="text-gray-600">—</span>
-                    )}
-                  </td>
+                  {(["catalogued","addedToBC","photography","aiRan","complete"] as const).map(f => (
+                    <td key={f} className="px-4 py-3 text-center">
+                      {(auction as any)[f]
+                        ? <span className="text-green-400 font-bold">✓</span>
+                        : <span className="text-gray-600">—</span>}
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>

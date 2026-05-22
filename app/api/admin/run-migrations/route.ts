@@ -204,6 +204,12 @@ const MIGRATIONS = [
       REFERENCES "DocumentFolder"("id") ON DELETE SET NULL ON UPDATE CASCADE
   )`,
 
+  // 2026-05-22 — Auction stage flags replacing Locked/Finished
+  `ALTER TABLE "CatalogueAuction" ADD COLUMN IF NOT EXISTS "catalogued"  BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE "CatalogueAuction" ADD COLUMN IF NOT EXISTS "addedToBC"   BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE "CatalogueAuction" ADD COLUMN IF NOT EXISTS "photography" BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE "CatalogueAuction" ADD COLUMN IF NOT EXISTS "aiRan"       BOOLEAN NOT NULL DEFAULT FALSE`,
+
   // 2026-04-29 — MacroFile: stores uploaded macro/instruction files for Auction AI
   `CREATE TABLE IF NOT EXISTS "MacroFile" (
     "id"          TEXT         NOT NULL,

@@ -21,6 +21,7 @@ interface Auction {
   id: string; code: string; name: string; auctionDate: Date | null
   auctionType: string; eventName: string | null; notes: string | null
   locked: boolean; finished: boolean; complete: boolean; published: boolean
+  catalogued: boolean; addedToBC: boolean; photography: boolean; aiRan: boolean
 }
 
 interface Lot {
@@ -460,9 +461,11 @@ export default function AuctionTabs({ auction, lots, userId, userName, showScanT
         <span className="text-gray-700">/</span>
         <span className="font-mono font-bold text-[#2AB4A6]">{auction.code}</span>
         <span className="text-gray-600 dark:text-gray-300 font-medium">{auction.name}</span>
-        {auction.locked   && <span className="text-xs px-2 py-0.5 rounded-full bg-blue-900/50 text-blue-300">Locked</span>}
-        {auction.finished && <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-900/50 text-yellow-300">Finished</span>}
-        {auction.complete && <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/50 text-green-300">Complete</span>}
+        {auction.catalogued  && <span className="text-xs px-2 py-0.5 rounded-full bg-blue-900/50 text-blue-300">Catalogued</span>}
+        {auction.addedToBC   && <span className="text-xs px-2 py-0.5 rounded-full bg-orange-900/50 text-orange-300">Added to BC</span>}
+        {auction.photography && <span className="text-xs px-2 py-0.5 rounded-full bg-purple-900/50 text-purple-300">Photography</span>}
+        {auction.aiRan       && <span className="text-xs px-2 py-0.5 rounded-full bg-pink-900/50 text-pink-300">Ran through AI</span>}
+        {auction.complete    && <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/50 text-green-300">Complete</span>}
         {published && <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-900/50 text-emerald-300">● Live on Site</span>}
 
         <div className="ml-auto flex items-center gap-2">
@@ -675,13 +678,19 @@ function SettingsTab({ auction }: { auction: Auction }) {
             className={`${input} resize-none`} />
         </div>
 
-        <div className="flex gap-6">
-          {["locked","finished","complete"].map(f => (
+        <div className="flex flex-wrap gap-6">
+          {([
+            ["catalogued",  "Catalogued"],
+            ["addedToBC",   "Added to BC"],
+            ["photography", "Photography"],
+            ["aiRan",       "Ran through AI"],
+            ["complete",    "Complete"],
+          ] as const).map(([f, label]) => (
             <label key={f} className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" name={f} value="true"
                 defaultChecked={(auction as any)[f]}
                 className="w-4 h-4 rounded border-gray-600 accent-[#2AB4A6]" />
-              <span className="text-sm text-gray-600 dark:text-gray-400 capitalize">{f}</span>
+              <span className="text-sm text-gray-600 dark:text-gray-400">{label}</span>
             </label>
           ))}
         </div>

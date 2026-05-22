@@ -88,10 +88,14 @@ export default async function AuctionDetailPage({
           auctionType: auction.auctionType,
           eventName: auction.eventName,
           notes: auction.notes,
-          locked: auction.locked,
-          finished: auction.finished,
-          complete: auction.complete,
-          published: auction.published,
+          locked:      auction.locked,
+          finished:    auction.finished,
+          complete:    auction.complete,
+          published:   auction.published,
+          catalogued:  auction.catalogued,
+          addedToBC:   auction.addedToBC,
+          photography: auction.photography,
+          aiRan:       auction.aiRan,
         }}
         lots={auction.lots.map(l => ({
           id: l.id,

@@ -31,12 +31,16 @@ export async function updateAuction(id: string, formData: FormData) {
   const auctionDate = formData.get("auctionDate") as string
   const auctionType = formData.get("auctionType") as string
   const eventName = formData.get("eventName") as string
-  const locked = formData.get("locked") === "true"
-  const finished = formData.get("finished") === "true"
-  const complete = formData.get("complete") === "true"
+  const locked      = formData.get("locked")      === "true"
+  const finished    = formData.get("finished")    === "true"
+  const complete    = formData.get("complete")    === "true"
+  const catalogued  = formData.get("catalogued")  === "true"
+  const addedToBC   = formData.get("addedToBC")   === "true"
+  const photography = formData.get("photography") === "true"
+  const aiRan       = formData.get("aiRan")       === "true"
   await prisma.catalogueAuction.update({
     where: { id },
-    data: { code, name, auctionDate: auctionDate ? new Date(auctionDate) : null, auctionType: auctionType || "GENERAL", eventName: eventName || null, locked, finished, complete }
+    data: { code, name, auctionDate: auctionDate ? new Date(auctionDate) : null, auctionType: auctionType || "GENERAL", eventName: eventName || null, locked, finished, complete, catalogued, addedToBC, photography, aiRan }
   })
   revalidatePath("/tools/cataloguing/auctions")
   revalidatePath(`/tools/cataloguing/auctions/${id}`)
