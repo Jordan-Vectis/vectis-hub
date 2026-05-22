@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from "react"
 
 const POLL_INTERVAL_MS = 30_000 // 30 seconds
+const STORAGE_KEY = "deploy_banner_dismissed_v"
 
 export default function DeployBanner() {
   const [show, setShow] = useState(false)
-  const baselineRef = useRef<string | null>(null)
+  const baselineRef   = useRef<string | null>(null)
+  const newVersionRef = useRef<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -30,7 +32,12 @@ export default function DeployBanner() {
       if (cancelled || !baselineRef.current) return
       const v = await fetchVersion()
       if (!cancelled && v && v !== baselineRef.current) {
-        setShow(true)
+        // Only show if the user hasn't already dismissed this exact version
+        const dismissed = localStorage.getItem(STORAGE_KEY)
+        if (dismissed !== v) {
+          newVersionRef.current = v
+          setShow(true)
+        }
       }
     }
 
@@ -42,6 +49,14 @@ export default function DeployBanner() {
     }
   }, [])
 
+  function dismiss() {
+    // Remember this version so the banner doesn't reappear after navigation
+    if (newVersionRef.current) {
+      localStorage.setItem(STORAGE_KEY, newVersionRef.current)
+    }
+    setShow(false)
+  }
+
   if (!show) return null
 
   return (
@@ -52,7 +67,7 @@ export default function DeployBanner() {
         Please check all your lots are fully saved before continuing — unsaved changes may have been lost during the update.
       </p>
       <button
-        onClick={() => setShow(false)}
+        onClick={dismiss}
         className="flex-shrink-0 ml-2 rounded px-2 py-0.5 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white transition-colors"
       >
         Dismiss
