@@ -6,18 +6,6 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 
 const MAX_SIZE = 100 * 1024 * 1024 // 100 MB
 
-const ALLOWED_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/jpg",
-  "image/gif",
-  "image/webp",
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "text/plain",
-]
-
 // POST /api/documents/upload-url — generate a presigned PUT URL
 export async function POST(req: NextRequest) {
   try {
@@ -25,10 +13,6 @@ export async function POST(req: NextRequest) {
     if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
     const { filename, contentType, size } = await req.json()
-
-    if (!ALLOWED_TYPES.includes(contentType)) {
-      return NextResponse.json({ error: "File type not allowed" }, { status: 400 })
-    }
 
     if (size > MAX_SIZE) {
       return NextResponse.json({ error: "File too large (max 100 MB)" }, { status: 400 })

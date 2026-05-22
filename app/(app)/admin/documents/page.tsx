@@ -406,7 +406,6 @@ export default function DocumentsPage() {
               ref={fileInputRef}
               type="file"
               multiple
-              accept="image/*,.pdf,.doc,.docx,.txt"
               className="hidden"
               onChange={e => handleFiles(e.target.files)}
             />
