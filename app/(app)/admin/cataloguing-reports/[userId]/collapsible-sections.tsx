@@ -1,8 +1,10 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { format } from "date-fns"
 import { useRouter } from "next/navigation"
+import { DEFAULT_REASONS } from "@/lib/idle-timer-config"
+import type { IdleReason } from "@/lib/idle-timer-config"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -78,13 +80,20 @@ export type TodayIdleSession = {
   startedAt:   string
 }
 
-const REASON_CONFIG: Record<string, { label: string; colour: string; icon: string; idleColour: string }> = {
-  LOTTING_UP:               { label: "Lotting Up",        colour: "bg-blue-100 text-blue-700 border-blue-200",   icon: "📦", idleColour: "#3b82f6" },
-  LUNCH_BREAK:              { label: "Lunch Break",        colour: "bg-amber-100 text-amber-700 border-amber-200", icon: "🍽️", idleColour: "#f59e0b" },
-  CLERKING:                 { label: "Clerking",           colour: "bg-purple-100 text-purple-700 border-purple-200", icon: "🔨", idleColour: "#9333ea" },
-  DEALING_WITH_CUSTOMERS:   { label: "With Customers",     colour: "bg-green-100 text-green-700 border-green-200",   icon: "🤝", idleColour: "#22c55e" },
-  VALUATIONS:               { label: "Valuations",         colour: "bg-rose-100 text-rose-700 border-rose-200",      icon: "💰", idleColour: "#f43f5e" },
-  OTHER:                    { label: "Other",               colour: "bg-gray-100 text-gray-600 border-gray-200",    icon: "📝", idleColour: "#9ca3af" },
+// Built at module load from defaults; refreshed per-component via useIdleReasons()
+function buildReasonConfig(reasons: IdleReason[]): Record<string, IdleReason> {
+  return Object.fromEntries(reasons.map(r => [r.key, r]))
+}
+
+function useIdleReasons() {
+  const [reasons, setReasons] = useState<IdleReason[]>(DEFAULT_REASONS)
+  useEffect(() => {
+    fetch("/api/admin/idle-timer-config")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.reasons?.length) setReasons(d.reasons) })
+      .catch(() => {})
+  }, [])
+  return reasons
 }
 
 const WORK_START_HOUR = 9
@@ -99,6 +108,7 @@ export function TodayProductivityCard({
   lotsCount:     number
   idleSessions:  TodayIdleSession[]
 }) {
+  const reasonConfig = buildReasonConfig(useIdleReasons())
   const totalIdleMs = idleSessions.reduce((s, l) => s + l.durationMs, 0)
 
   // Workday: 9am–5pm, Mon–Fri
@@ -116,7 +126,7 @@ export function TodayProductivityCard({
   const unaccPct       = totalVisibleMs > 0 ? (unaccountedMs  / totalVisibleMs) * 100 : 0
 
   // Group idle sessions by reason for the breakdown
-  const byReason = Object.entries(REASON_CONFIG).map(([key, cfg]) => {
+  const byReason = Object.entries(reasonConfig).map(([key, cfg]) => {
     const sessions = idleSessions.filter(s => s.reason === key)
     const totalMs  = sessions.reduce((s, l) => s + l.durationMs, 0)
     return { key, cfg, sessions, totalMs }
@@ -412,6 +422,7 @@ function NotesCell({ notes, excluded }: { notes: string | null; excluded: boolea
 // ─── Collapsible Idle Time Table ──────────────────────────────────────────────
 
 export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLog[] }) {
+  const reasonConfig            = buildReasonConfig(useIdleReasons())
   const [open, setOpen]         = useState(false)
   const [fromDate, setFromDate] = useState("")
   const [toDate, setToDate]     = useState("")
@@ -484,7 +495,7 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
               </span>
               <span className="text-orange-500">
                 {Object.entries(reasonCounts).map(([reason, count], i, arr) => {
-                  const cfg = REASON_CONFIG[reason]
+                  const cfg = reasonConfig[reason]
                   const label = cfg?.label ?? reason.replace(/_/g, " ").toLowerCase()
                   return `${count} ${label.toLowerCase()}${i < arr.length - 1 ? " · " : ""}`
                 }).join("")}
@@ -518,7 +529,7 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
                     </td>
                   </tr>
                 ) : filtered.map(log => {
-                  const r        = REASON_CONFIG[log.reason] ?? { label: log.reason, colour: "bg-gray-100 text-gray-500 border-gray-200", icon: "❓", idleColour: "#9ca3af" }
+                  const r        = reasonConfig[log.reason] ?? { label: log.reason, colour: "bg-gray-100 text-gray-500 border-gray-200", icon: "❓", idleColour: "#9ca3af" }
                   const excluded = log.idleDurationMs > MAX_IDLE_MS
                   return (
                     <tr key={log.id} className={`transition-colors ${excluded ? "opacity-40 bg-gray-50 dark:bg-gray-800" : "hover:bg-gray-50 dark:hover:bg-gray-800/50"}`}>
@@ -817,6 +828,7 @@ export function TodayTimeline({
   lots:         TodayLot[]
   idleSessions: TodayIdleSession[]
 }) {
+  const reasonConfig = buildReasonConfig(useIdleReasons())
   const now         = new Date()
   const todayStr    = format(now, "yyyy-MM-dd")
   const workStartMs = new Date(`${todayStr}T09:00:00`).getTime()
@@ -887,7 +899,7 @@ export function TodayTimeline({
                   const left    = toPct(startMs)
                   const width   = Math.min(toWidthPct(session.durationMs), 100 - left)
                   if (left >= 100 || width <= 0) return null
-                  const cfg = REASON_CONFIG[session.reason]
+                  const cfg = reasonConfig[session.reason]
                   return (
                     <div
                       key={i}

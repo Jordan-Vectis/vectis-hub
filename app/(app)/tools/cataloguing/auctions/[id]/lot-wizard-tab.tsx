@@ -2,6 +2,8 @@
 
 import { useState, useTransition, useRef, useEffect } from "react"
 import { createLot } from "@/lib/actions/catalogue"
+import { DEFAULT_REASONS } from "@/lib/idle-timer-config"
+import type { IdleReason } from "@/lib/idle-timer-config"
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -439,10 +441,11 @@ export default function LotWizardTab({
   const idleStartedAtRef   = useRef<number>(0)
   const [idlePopup,        setIdlePopup]      = useState(false)
   const [idleSecs,         setIdleSecs]       = useState(0)
-  const [idleReason,       setIdleReason]     = useState<"LUNCH_BREAK"|"LOTTING_UP"|"OTHER"|"CLERKING"|"DEALING_WITH_CUSTOMERS"|"VALUATIONS"|null>(null)
+  const [idleReason,       setIdleReason]     = useState<string | null>(null)
   const [idleTotes,        setIdleTotes]      = useState("")
   const [idleNotes,        setIdleNotes]      = useState("")
   const [idleSubmitting,   setIdleSubmitting] = useState(false)
+  const [idleReasons,      setIdleReasons]    = useState<IdleReason[]>(DEFAULT_REASONS)
 
   // Live timer display
   const [timerActive, setTimerActive] = useState(false)
@@ -457,6 +460,14 @@ export default function LotWizardTab({
   const [tote,        setTote]        = useState("")
   const [receipt,     setReceipt]     = useState("")
   const [barcode,     setBarcode]     = useState("")
+
+  // Load admin-configured reasons (falls back to defaults if unavailable)
+  useEffect(() => {
+    fetch("/api/admin/idle-timer-config")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.reasons?.length) setIdleReasons(d.reasons) })
+      .catch(() => { /* stay on defaults */ })
+  }, [])
 
   useEffect(() => {
     if (!timerActive || !showScanTimer) return
@@ -761,59 +772,31 @@ export default function LotWizardTab({
 
             </div>
 
-            {/* Reason buttons */}
+            {/* Reason buttons — loaded from admin config */}
             <div className="grid grid-cols-3 gap-2 mb-4">
-              {([
-                { key: "LUNCH_BREAK",            label: "🍽️ Lunch Break" },
-                { key: "LOTTING_UP",             label: "📦 Lotting Up" },
-                { key: "CLERKING",               label: "🔨 Clerking" },
-                { key: "DEALING_WITH_CUSTOMERS", label: "🤝 Customers" },
-                { key: "VALUATIONS",             label: "💰 Valuations" },
-                { key: "OTHER",                  label: "✏️ Other" },
-              ] as const).map(opt => (
-                <button key={opt.key} onClick={() => setIdleReason(opt.key)}
+              {idleReasons.map(opt => (
+                <button key={opt.key}
+                  onClick={() => { setIdleReason(opt.key); setIdleNotes(""); setIdleTotes("") }}
                   className={`py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
                     idleReason === opt.key
                       ? "border-[#2AB4A6] bg-[#2AB4A6]/10 text-[#1a8a80]"
                       : "border-gray-200 text-gray-600 hover:border-gray-300"
                   }`}>
-                  {opt.label}
+                  {opt.icon} {opt.label}
                 </button>
               ))}
             </div>
 
-            {/* Lotting Up extra fields */}
+            {/* Lotting Up — tote numbers field (always shown for this reason) */}
             {idleReason === "LOTTING_UP" && (
               <div className="space-y-2 mb-4">
                 <input value={idleTotes} onChange={e => setIdleTotes(e.target.value)}
                   placeholder="Tote numbers (e.g. F001, F002)"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2AB4A6]" />
-                <textarea value={idleNotes} onChange={e => setIdleNotes(e.target.value)}
-                  placeholder="Any additional notes? (optional)"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#2AB4A6] resize-none" rows={2} />
               </div>
             )}
 
-            {/* Other — notes are mandatory */}
-            {idleReason === "OTHER" && (
-              <div className="mb-4">
-                <label className="block text-xs font-semibold text-gray-600 mb-1">
-                  Reason <span className="text-red-500">*</span>
-                  <span className="font-normal text-gray-400 ml-1">required</span>
-                </label>
-                <textarea value={idleNotes} onChange={e => setIdleNotes(e.target.value)}
-                  placeholder="You must explain what you were doing…"
-                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none resize-none transition-colors ${
-                    idleNotes.trim() ? "border-gray-200 focus:border-[#2AB4A6]" : "border-red-300 bg-red-50 focus:border-red-400"
-                  }`}
-                  rows={3} />
-                {!idleNotes.trim() && (
-                  <p className="text-xs text-red-500 mt-1">A note is required before you can continue.</p>
-                )}
-              </div>
-            )}
-
-            {/* Lunch Break — mandatory explanation if over 65 minutes */}
+            {/* Lunch Break — mandatory note if over 65 minutes */}
             {idleReason === "LUNCH_BREAK" && idleSecs > 65 * 60 && (
               <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3">
                 <p className="text-xs font-semibold text-amber-700 mb-1.5">
@@ -831,16 +814,41 @@ export default function LotWizardTab({
               </div>
             )}
 
-            <button onClick={submitIdleLog}
-              disabled={
-                !idleReason ||
-                idleSubmitting ||
-                (idleReason === "OTHER" && !idleNotes.trim()) ||
-                (idleReason === "LUNCH_BREAK" && idleSecs > 65 * 60 && !idleNotes.trim())
-              }
-              className="w-full py-3 bg-[#2AB4A6] hover:bg-[#22a090] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors">
-              {idleSubmitting ? "Saving…" : "Log & Continue"}
-            </button>
+            {/* requiresNotes reasons — mandatory text field */}
+            {(() => {
+              const cfg = idleReasons.find(r => r.key === idleReason)
+              if (!cfg?.requiresNotes || idleReason === "LUNCH_BREAK") return null
+              return (
+                <div className="mb-4">
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Note <span className="text-red-500">*</span>
+                    <span className="font-normal text-gray-400 ml-1">required</span>
+                  </label>
+                  <textarea value={idleNotes} onChange={e => setIdleNotes(e.target.value)}
+                    placeholder="Please explain what you were doing…"
+                    className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none resize-none transition-colors ${
+                      idleNotes.trim() ? "border-gray-200 focus:border-[#2AB4A6]" : "border-red-300 bg-red-50 focus:border-red-400"
+                    }`}
+                    rows={3} />
+                  {!idleNotes.trim() && (
+                    <p className="text-xs text-red-500 mt-1">A note is required before you can continue.</p>
+                  )}
+                </div>
+              )
+            })()}
+
+            {(() => {
+              const cfg       = idleReasons.find(r => r.key === idleReason)
+              const needsNote = (cfg?.requiresNotes && !idleNotes.trim()) ||
+                                (idleReason === "LUNCH_BREAK" && idleSecs > 65 * 60 && !idleNotes.trim())
+              return (
+                <button onClick={submitIdleLog}
+                  disabled={!idleReason || idleSubmitting || needsNote}
+                  className="w-full py-3 bg-[#2AB4A6] hover:bg-[#22a090] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors">
+                  {idleSubmitting ? "Saving…" : "Log & Continue"}
+                </button>
+              )
+            })()}
           </div>
         </div>
       )}

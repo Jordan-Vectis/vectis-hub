@@ -41,6 +41,12 @@ const sections = [
     icon:        "📱",
   },
   {
+    href:        "/admin/idle-timer",
+    label:       "Idle Timer",
+    description: "Configure the idle popup — add or remove reasons, change wording, set timing thresholds.",
+    icon:        "⏱️",
+  },
+  {
     href:        "/admin/backup",
     label:       "Database Backup",
     description: "View stored database backups, check when the last backup ran, and trigger a manual backup.",

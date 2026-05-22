@@ -400,6 +400,16 @@ model AppCard {
   description String?
 }
 
+// Singleton (id = "global") — stores idle-timer global defaults and the
+// admin-managed reasons list. Created on first GET if absent.
+model IdleTimerConfig {
+  id          String   @id @default("global")
+  yellowMins  Int      @default(4)
+  redMins     Int      @default(10)
+  reasons     Json     @default("[]")   // IdleReason[]
+  updatedAt   DateTime @updatedAt
+}
+
 model RoleDefault {
   role           String   @id  // "COLLECTIONS" | "CATALOGUER"
   allowedApps    String[] @default([])
