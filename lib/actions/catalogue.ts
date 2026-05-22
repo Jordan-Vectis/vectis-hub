@@ -54,9 +54,10 @@ export async function deleteAuction(id: string) {
 
 export async function generateTitlesFromDescriptions(auctionId: string, lotIds: string[]) {
   await requireCataloguer()
-  const lots = await prisma.catalogueLot.findMany({ where: { id: { in: lotIds } }, select: { id: true, keyPoints: true } })
+  const lots = await prisma.catalogueLot.findMany({ where: { id: { in: lotIds } }, select: { id: true, description: true } })
   await Promise.all(lots.map(l => {
-    const title = l.keyPoints.trim().slice(0, 83).trimEnd()
+    const firstLine = (l.description ?? "").split(/\.\s|\n/)[0].trim()
+    const title = firstLine.slice(0, 83).trimEnd()
     if (!title) return Promise.resolve()
     return prisma.catalogueLot.update({ where: { id: l.id }, data: { title } })
   }))
