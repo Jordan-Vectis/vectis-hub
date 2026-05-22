@@ -41,7 +41,15 @@ export default function AutoClerkPage() {
   const startCoordinator = useCallback(() => {
     const ch = new BroadcastChannel('vectis-auto-clerk')
     chRef.current = ch
+
+    // Reset coordinator state
     const s = state.current
+    s.bidpathBid  = 0
+    s.saleroomBid = 0
+    s.lastBidMs   = 0
+    s.fwIssued    = false
+    s.fwIssuedAt  = 0
+    s.simState    = 'idle'
 
     ch.onmessage = (e) => {
       const msg = e.data
@@ -141,12 +149,17 @@ export default function AutoClerkPage() {
       }
     }, 500)
 
-    // Tell Bidpath to start the simulation
-    ch.postMessage({ type: 'cmd_start' })
+    // Reset both panels to clean state first, then start after a short delay
+    ch.postMessage({ type: 'cmd_reset' })
     ch.postMessage({ type: 'coordinator_hello' })
+    addLog('Resetting both panels…')
+
+    setTimeout(() => {
+      ch.postMessage({ type: 'cmd_start' })
+      addLog('Auto Clerk started — sending start to Bidpath…')
+    }, 600)
 
     setRunning(true)
-    addLog('Auto Clerk started — sending start to Bidpath…')
   }, [stopCoordinator])
 
   // Cleanup on unmount

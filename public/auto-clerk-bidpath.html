@@ -467,6 +467,7 @@ const CFG = { speedX:1 };
 const CH = new BroadcastChannel('vectis-auto-clerk');
 CH.onmessage = function(e){
   const msg = e.data;
+  if(msg.type === 'cmd_reset')  { resetSim(); }
   if(msg.type === 'cmd_start')  { if(!sim.running) startSim(); }
   if(msg.type === 'cmd_stop')   { if(sim.running)  stopSim(); }
   if(msg.type === 'cmd_fw')     { manualFW(); }
@@ -533,6 +534,28 @@ function renderStrip(){
 }
 
 /* ─── SIMULATION ─── */
+function resetSim(){
+  clearTimers();
+  sim.running = false; sim.state = 'idle'; sim.lotIdx = 0;
+  sim.currentBid = 0; sim.lastBidAt = null; sim.bidsLeft = 0; sim.sold = {};
+  setSimState('idle');
+  document.getElementById('lot-title').textContent     = 'Waiting to start…';
+  document.getElementById('lot-title').dataset.lotNumber = '';
+  document.getElementById('lot-thumb').textContent     = '📦';
+  document.getElementById('lot-sub').textContent       = 'Guide: — | Auto Clerk Simulation';
+  document.getElementById('fw-btn').classList.remove('active');
+  document.getElementById('hammer-btn').textContent    = 'Hammer: (£—)';
+  document.getElementById('hammer-btn').classList.remove('flash');
+  document.getElementById('current-bid').textContent   = '£—';
+  document.getElementById('current-bid').dataset.currentBid = '0';
+  document.getElementById('current-bid').dataset.lastBidMs  = '0';
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('btn-stop').disabled  = true;
+  document.getElementById('btn-skip').disabled  = true;
+  updateBidList([]);
+  renderStrip();
+}
+
 function startSim(){
   sim.running = true; sim.sold = {};
   document.getElementById('btn-start').disabled = true;

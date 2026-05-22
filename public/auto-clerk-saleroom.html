@@ -384,6 +384,21 @@ const CH = new BroadcastChannel('vectis-auto-clerk');
 CH.onmessage = function(e){
   const msg = e.data;
 
+  // Reset — snap back to clean state before a new run
+  if(msg.type === 'cmd_reset'){
+    S = { li:0, bid:0, hi:0, lbdr:'', lname:'', log:[], sold:{}, once:0 };
+    clearLogs(); setNotif(''); setAmt(0);
+    document.getElementById('lnum').textContent  = 'Lot: —';
+    document.getElementById('lest2').textContent = '—';
+    document.getElementById('ldesc').textContent = 'Waiting for auction to start…';
+    document.getElementById('fH').value = '0';
+    document.getElementById('bFW').classList.remove('active-fw');
+    document.getElementById('sr-state').dataset.currentBid = '0';
+    document.getElementById('sr-state').dataset.lotNumber  = '';
+    renderLL();
+    setSbarText('Reset — waiting for auction to start');
+  }
+
   // Coordinator / Playwright connected
   if(msg.type === 'bidpath_hello' || msg.type === 'coordinator_hello'){
     document.getElementById('conn-indicator').textContent = '● Coordinator: connected';
