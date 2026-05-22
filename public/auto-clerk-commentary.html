@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Auto Clerk — Commentary</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #0d1117;
+  color: white;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── HEADER ── */
+#header {
+  background: #0f1621;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+#header h1 {
+  font-size: 14px;
+  font-weight: 700;
+  color: white;
+}
+#header p {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+}
+#status-dot {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-weight: 700;
+  background: #1e293b;
+  color: #64748b;
+}
+#status-dot.live { background: #14532d; color: #4ade80; }
+
+#clear-btn {
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+#clear-btn:hover { background: rgba(255,255,255,0.12); color: white; }
+
+/* ── LEGEND ── */
+#legend {
+  background: #0f1621;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding: 6px 16px;
+  display: flex;
+  gap: 16px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.leg { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #64748b; }
+.leg-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── FEED ── */
+#feed {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.entry {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  animation: fadein 0.25s ease;
+}
+@keyframes fadein { from { opacity: 0; transform: translateY(4px); } }
+
+.entry-time {
+  font-size: 10px;
+  color: #475569;
+  font-family: ui-monospace, monospace;
+  flex-shrink: 0;
+  padding-top: 1px;
+  width: 56px;
+}
+
+.entry-icon { font-size: 14px; flex-shrink: 0; width: 20px; text-align: center; }
+
+.entry-body { flex: 1; min-width: 0; }
+.entry-title { font-size: 12px; font-weight: 700; line-height: 1.4; }
+.entry-why   { font-size: 11px; color: #94a3b8; margin-top: 2px; line-height: 1.4; }
+
+/* Colour variants */
+.entry.bid      { background: rgba(37,99,235,0.12);  border-color: rgba(37,99,235,0.2);  }
+.entry.bid .entry-title { color: #93c5fd; }
+
+.entry.online   { background: rgba(22,163,74,0.12);  border-color: rgba(22,163,74,0.2);  }
+.entry.online .entry-title { color: #86efac; }
+
+.entry.room     { background: rgba(71,85,105,0.25);  border-color: rgba(71,85,105,0.3);  }
+.entry.room .entry-title { color: #cbd5e1; }
+
+.entry.cmd      { background: rgba(234,179,8,0.1);   border-color: rgba(234,179,8,0.18); }
+.entry.cmd .entry-title { color: #fde68a; }
+
+.entry.fw       { background: rgba(194,65,12,0.2);   border-color: rgba(234,88,12,0.3);  }
+.entry.fw .entry-title { color: #fb923c; }
+
+.entry.hammer   { background: rgba(220,38,38,0.2);   border-color: rgba(220,38,38,0.3);  }
+.entry.hammer .entry-title { color: #fca5a5; }
+
+.entry.sold     { background: rgba(22,163,74,0.2);   border-color: rgba(22,163,74,0.3);  }
+.entry.sold .entry-title { color: #4ade80; }
+
+.entry.lot      { background: rgba(139,92,246,0.15); border-color: rgba(139,92,246,0.25); }
+.entry.lot .entry-title { color: #c4b5fd; }
+
+.entry.system   { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.08); }
+.entry.system .entry-title { color: #94a3b8; }
+
+.entry.silence  { background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.2); }
+.entry.silence .entry-title { color: #fcd34d; }
+
+/* ── EMPTY STATE ── */
+#empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #374151;
+  gap: 8px;
+}
+#empty .big { font-size: 40px; }
+#empty p { font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div>
+    <h1>🎙 Auto Clerk Commentary</h1>
+    <p>Live explanation of coordinator logic — open alongside Bidpath and Saleroom panels</p>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <div id="status-dot">● Waiting for activity…</div>
+    <button id="clear-btn" onclick="clearFeed()">Clear</button>
+  </div>
+</div>
+
+<div id="legend">
+  <div class="leg"><div class="leg-dot" style="background:#3b82f6"></div> Bidpath bid (Vectis Auto)</div>
+  <div class="leg"><div class="leg-dot" style="background:#22c55e"></div> Saleroom.com online bid</div>
+  <div class="leg"><div class="leg-dot" style="background:#64748b"></div> Room bid</div>
+  <div class="leg"><div class="leg-dot" style="background:#eab308"></div> Coordinator command</div>
+  <div class="leg"><div class="leg-dot" style="background:#f97316"></div> Fair Warning</div>
+  <div class="leg"><div class="leg-dot" style="background:#ef4444"></div> Hammer</div>
+  <div class="leg"><div class="leg-dot" style="background:#8b5cf6"></div> Lot change</div>
+</div>
+
+<div id="feed">
+  <div id="empty">
+    <div class="big">📡</div>
+    <p>Waiting for the coordinator to start…</p>
+    <p style="font-size:11px;color:#1f2937">Open the Auto Clerk page and press Start</p>
+  </div>
+</div>
+
+<script>
+const CH = new BroadcastChannel('vectis-auto-clerk');
+let hasEntries = false;
+
+function fmt(n){ return '£' + Number(n).toLocaleString('en-GB'); }
+function now(){
+  return new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+
+function addEntry(cls, icon, title, why){
+  if(!hasEntries){
+    document.getElementById('empty').remove();
+    hasEntries = true;
+  }
+  const feed = document.getElementById('feed');
+  const el   = document.createElement('div');
+  el.className = 'entry ' + cls;
+  el.innerHTML =
+    '<div class="entry-time">'+now()+'</div>' +
+    '<div class="entry-icon">'+icon+'</div>' +
+    '<div class="entry-body">' +
+      '<div class="entry-title">'+title+'</div>' +
+      (why ? '<div class="entry-why">'+why+'</div>' : '') +
+    '</div>';
+  feed.appendChild(el);
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function clearFeed(){
+  document.getElementById('feed').innerHTML = '';
+  hasEntries = false;
+  document.getElementById('feed').innerHTML =
+    '<div id="empty" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#374151;gap:8px">'+
+    '<div class="big">📡</div><p style="font-size:13px">Feed cleared — waiting for activity…</p></div>';
+}
+
+CH.onmessage = function(e){
+  const msg = e.data;
+  const dot = document.getElementById('status-dot');
+  dot.textContent = '● Live';
+  dot.className   = 'live';
+
+  // ── LOT ──
+  if(msg.type === 'bp_lot'){
+    addEntry('lot', '🎯', 'New lot: #'+msg.number+' — '+msg.title,
+      'Bidpath started this lot at '+fmt(msg.start)+'. Guide: '+msg.estimate+'. '+
+      'Both panels will reset their bid state. Coordinator silence timer resets.');
+  }
+
+  // ── BIDS ──
+  if(msg.type === 'bp_bid'){
+    if(msg.source === 'Saleroom'){
+      addEntry('online', '🌐', 'Saleroom.com online bid: '+fmt(msg.amount),
+        'A real saleroom.com customer placed this bid on the Saleroom platform. '+
+        'Coordinator will mirror it to Saleroom as "Online" — the saleroom.com customer stays attached. '+
+        'Silence timer resets.');
+    } else if(msg.source === 'Opening' || msg.source === '—'){
+      addEntry('system', '📋', 'Opening bid set: '+fmt(msg.amount),
+        'Lot opening price — no bidder yet. Coordinator is now watching for silence.');
+    } else if(msg.source && msg.source.includes('_bang')){
+      const src = msg.source.replace('_bang','');
+      addEntry('room', '❗', src+' bidder dropped — amount stays at '+fmt(msg.amount),
+        'The ! button was pressed on Bidpath for the '+src+' source. '+
+        'This keeps the bid at '+fmt(msg.amount)+' but removes that bidder from the lot. '+
+        'Useful when the same amount is bid on two platforms simultaneously.');
+    } else {
+      addEntry('bid', '💻', 'Vectis Auto online bid: '+fmt(msg.amount),
+        'A Vectis/Bidpath online bidder placed this bid. '+
+        'Coordinator will mirror it to Saleroom — since there is no saleroom.com bidder, '+
+        'Saleroom will show it as "Room" (operator stepped up the bid). '+
+        'Silence timer resets.');
+    }
+  }
+
+  // ── COMMANDS OUT ──
+  if(msg.type === 'cmd_bid'){
+    const isOnline = msg.source === 'Saleroom';
+    if(isOnline){
+      addEntry('cmd', '→', 'CMD → Saleroom: register Online bid at '+fmt(msg.amount),
+        'Saleroom.com customer bid is being registered on Saleroom. '+
+        'Saleroom will show this as "Online" in its bid feed.');
+    } else {
+      addEntry('cmd', '→', 'CMD → Saleroom: register Room bid at '+fmt(msg.amount),
+        'Vectis Auto bidder is being mirrored to Saleroom. '+
+        'Because there is no saleroom.com bidder, Saleroom shows it as "Room". '+
+        'The operator on Saleroom effectively clicks Bid to keep pace.');
+    }
+  }
+
+  if(msg.type === 'cmd_fw'){
+    addEntry('fw', '⚠️', 'CMD → Both panels: Fair Warning',
+      '10 seconds have passed since the last bid. '+
+      'Fair Warning is now issued on both Bidpath and Saleroom simultaneously. '+
+      'The 10-second hammer countdown now begins.');
+  }
+
+  if(msg.type === 'cmd_hammer'){
+    addEntry('hammer', '🔨', 'CMD → Bidpath: Hammer',
+      '10 seconds have passed since Fair Warning with no new bids. '+
+      'Bidpath is told to hammer — the lot is sold. '+
+      'Saleroom sell + next commands will follow in ~1.4 seconds.');
+  }
+
+  if(msg.type === 'cmd_sell'){
+    addEntry('sold', '💰', 'CMD → Saleroom: Sell at '+fmt(msg.amount),
+      'Saleroom H field is being filled with '+fmt(msg.amount)+' and Sell is clicked. '+
+      'This closes the lot on Saleroom at the same hammer price as Bidpath.');
+  }
+
+  if(msg.type === 'cmd_next'){
+    addEntry('lot', '⏭', 'CMD → Saleroom: Next lot',
+      'Saleroom is advancing to the next lot. '+
+      'Bidpath will automatically move on after its own 3-second post-hammer delay.');
+  }
+
+  if(msg.type === 'cmd_reset'){
+    addEntry('system', '🔄', 'CMD → Both panels: Reset',
+      'Coordinator is resetting both Bidpath and Saleroom to a clean state. '+
+      'All bid history, lot position and sold state cleared. '+
+      'Both panels will start from lot 1 when the auction begins.');
+  }
+
+  if(msg.type === 'cmd_start'){
+    addEntry('system', '▶', 'CMD → Bidpath: Start simulation',
+      'Bidpath simulation is starting. It will generate random bids (60% Vectis Auto, 40% Saleroom.com) '+
+      'across all lots. Coordinator silence detection is now active.');
+  }
+
+  // ── SALEROOM RESPONSES ──
+  if(msg.type === 'sr_bid'){
+    addEntry('system', '✅', 'Saleroom confirmed bid at '+fmt(msg.amount),
+      'Saleroom has updated its internal state to '+fmt(msg.amount)+'. '+
+      'Coordinator uses this to know Saleroom\'s current bid level.');
+  }
+
+  if(msg.type === 'sr_room_bid'){
+    addEntry('room', '🏠', 'Saleroom reported a room bid at '+fmt(msg.amount),
+      'Someone clicked the Room button on Saleroom. In a real scenario, '+
+      'the Bidpath operator would press ! next to the Saleroom source to drop the bidder '+
+      'but keep the amount at '+fmt(msg.amount)+' on Bidpath too.');
+  }
+
+  if(msg.type === 'sr_sold'){
+    addEntry('sold', '🔨', 'Saleroom: lot sold at '+fmt(msg.amount),
+      'Saleroom has recorded this lot as sold. Both platforms are now in sync on the result.');
+  }
+
+  if(msg.type === 'sr_passed'){
+    addEntry('system', '🚫', 'Saleroom: lot passed — no sale',
+      'Saleroom recorded no sale for this lot.');
+  }
+
+  // ── BIDPATH STATE ──
+  if(msg.type === 'bp_state'){
+    const labels = {
+      idle:'Idle — waiting to start',
+      bidding:'Bidding — coordinator silence timer is running',
+      fair_warning:'Fair Warning — hammer countdown started (10s)',
+      sold:'Sold — lot complete',
+      passed:'Passed — no sale',
+      done:'Done — all lots complete',
+    };
+    const label = labels[msg.state] || msg.state;
+    if(msg.state === 'fair_warning'){
+      addEntry('fw', '🔔', 'Bidpath state: '+label,
+        'Bidpath has entered Fair Warning. No new bids for 10 seconds. '+
+        'Coordinator will hammer in 10 seconds if no bid arrives.');
+    } else if(msg.state === 'sold'){
+      addEntry('sold', '✔', 'Bidpath state: '+label, null);
+    } else if(msg.state !== 'bidding'){
+      addEntry('system', '📊', 'Bidpath state: '+label, null);
+    }
+  }
+
+  if(msg.type === 'bp_fw'){
+    addEntry('fw', '⚠️', 'Bidpath entered Fair Warning at '+fmt(msg.amount),
+      'Bidpath has flagged Fair Warning. Coordinator will now wait 10 seconds. '+
+      'If a new bid arrives, Fair Warning is cancelled and the silence timer resets.');
+  }
+
+  if(msg.type === 'bp_hammer'){
+    if(msg.sold){
+      addEntry('hammer', '🔨', 'Bidpath hammered — SOLD at '+fmt(msg.amount),
+        'Lot sold on Bidpath. Coordinator will now send cmd_sell + cmd_next to Saleroom '+
+        'to close the lot there at the same price.');
+    } else {
+      addEntry('hammer', '🚫', 'Bidpath hammered — PASSED (no sale)',
+        'Lot did not sell on Bidpath. Coordinator will still advance Saleroom.');
+    }
+  }
+
+  if(msg.type === 'sim_ended'){
+    addEntry('system', '🏁', 'Simulation complete — all lots finished',
+      'All lots have been auctioned. The coordinator will stop automatically.');
+    dot.textContent = '● Done';
+    dot.className   = '';
+  }
+
+  if(msg.type === 'coordinator_hello'){
+    addEntry('system', '🔗', 'Coordinator connected',
+      'The Auto Clerk coordinator is online and listening on the BroadcastChannel.');
+  }
+
+  if(msg.type === 'bidpath_hello'){
+    addEntry('system', '🖥', 'Bidpath panel connected',
+      'Bidpath panel acknowledged the coordinator. Ready to start.');
+  }
+};
+
+// Announce we are listening
+setTimeout(function(){ CH.postMessage({ type:'commentary_hello' }); }, 200);
+</script>
+</body>
+</html>
