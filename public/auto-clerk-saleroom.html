@@ -409,15 +409,18 @@ CH.onmessage = function(e){
   // ── COMMANDS from coordinator / Playwright ──
 
   // cmd_bid: a bid arrived on Bidpath — register it here at the given amount
-  // (equivalent to the notification "BID RECEIVED" from the online platform)
+  // source='Saleroom' means a real saleroom.com online customer → show "Online"
+  // source='Vectis Auto' (or anything else) → Bidpath bidder mirrored → show "Room"
   if(msg.type === 'cmd_bid'){
-    const amount = msg.amount;
-    S.bid = amount; S.hi = amount; S.lbdr = 'ONLINE'; S.lname = 'Online';
-    addLog('ONLINE', amount, 'Online', '');
-    setNotif('ng'); setAmt(amount); hiInc(amount);
+    const amount   = msg.amount;
+    const isOnline = msg.source === 'Saleroom';
+    const label    = isOnline ? 'Online' : 'Room';
+    S.bid = amount; S.hi = amount; S.lbdr = label; S.lname = label;
+    addLog(label, amount, label, isOnline ? '' : 'room');
+    setNotif(isOnline ? 'ng' : 'nr'); setAmt(amount); hiInc(amount);
     updateSrState(amount);
     setTimeout(function(){ setNotif(''); }, 2000);
-    setSbarText('Bid received: '+fmt(amount)+' — Online');
+    setSbarText('Bid received: '+fmt(amount)+' — '+label);
   }
 
   // cmd_fw: click Fair Warning
@@ -480,12 +483,13 @@ function act(a){
       setSbarText('Lot '+lot.number+' — ready');
     }
   } else if(a === 'bid'){
-    // Bid button — steps up to next increment (used when a Bidpath bid comes in)
+    // Bid button — steps up to next increment (no online bidder — shows as Room)
     const amount = nextBid(S.hi);
-    S.bid = amount; S.hi = amount; S.lbdr = 'ONLINE'; S.lname = 'Online';
-    addLog('ONLINE', amount, 'Online', '');
-    setNotif(''); setAmt(amount); hiInc(amount);
+    S.bid = amount; S.hi = amount; S.lbdr = 'ROOM'; S.lname = 'ROOM';
+    addLog('ROOM', amount, 'ROOM', 'room');
+    setNotif('nr'); setAmt(amount); hiInc(amount);
     updateSrState(amount);
+    setTimeout(function(){ setNotif(''); }, 2000);
     setTimeout(focusOverride, 50);
   } else if(a === 'room'){
     // Room — keeps current amount, attributes to room bidder
