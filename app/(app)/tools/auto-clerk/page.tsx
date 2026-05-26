@@ -257,6 +257,17 @@ export default function AutoClerkPage() {
 
       </div>
 
+      {/* Live Feed Test */}
+      <a href="/tools/auto-clerk-live"
+        className="flex items-center gap-4 bg-gradient-to-r from-emerald-900/60 to-teal-900/60 hover:from-emerald-800/60 hover:to-teal-800/60 border border-emerald-700/50 rounded-xl p-5 transition-all group">
+        <span className="text-3xl">📡</span>
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-white text-base">Live Feed Test</p>
+          <p className="text-sm text-emerald-300 mt-0.5">Connect to a real Bidpath auction — see exactly what would be pressed on Saleroom in shadow mode</p>
+        </div>
+        <span className="text-emerald-400 text-sm group-hover:translate-x-1 transition-transform">→</span>
+      </a>
+
       {/* Coordinator */}
       <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-700 rounded-xl p-5">
         <div className="flex items-center justify-between mb-4">
