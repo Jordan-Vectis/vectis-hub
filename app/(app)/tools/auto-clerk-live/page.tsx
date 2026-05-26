@@ -12,8 +12,7 @@ type ActionType =
   | 'fw_cancel'  // FW cancelled — no action needed
   | 'sell'       // Fill hammer price + Press Sell
   | 'next'       // Press Next Lot on Saleroom
-  | 'lock'       // Lot locked — Sell + Next incoming
-  | 'info'       // Informational only
+  | 'info'       // Informational only (e.g. lot locked — no Saleroom button)
   | 'connect'
   | 'disconnect'
   | 'error'
@@ -58,7 +57,6 @@ const ACTION_STYLE: Record<ActionType, { border: string; badge: string; badgeBg:
   fw_cancel:  { border: 'border-slate-500',  badge: 'FW CANCELLED',     badgeBg: 'bg-slate-600' },
   sell:       { border: 'border-green-500',  badge: 'PRESS SELL',       badgeBg: 'bg-green-600' },
   next:       { border: 'border-purple-400', badge: 'PRESS NEXT LOT',   badgeBg: 'bg-purple-600' },
-  lock:       { border: 'border-yellow-400', badge: 'LOT LOCKED',       badgeBg: 'bg-yellow-600' },
   info:       { border: 'border-slate-600',  badge: 'INFO',             badgeBg: 'bg-slate-700' },
   connect:    { border: 'border-emerald-500',badge: 'CONNECTED',        badgeBg: 'bg-emerald-600' },
   disconnect: { border: 'border-red-500',    badge: 'DISCONNECTED',     badgeBg: 'bg-red-700' },
@@ -86,7 +84,7 @@ export default function AutoClerkLivePage() {
   })
   const [rawLog, setRawLog]         = useState<string[]>([])
   const [showRaw, setShowRaw]       = useState(false)
-  const [simButton, setSimButton]   = useState<'bid' | 'sell' | 'next' | 'fw' | 'lock' | null>(null)
+  const [simButton, setSimButton]   = useState<'bid' | 'sell' | 'next' | 'fw' | null>(null)
   const [simAmount, setSimAmount]   = useState(0)
 
   const wsRef        = useRef<WebSocket | null>(null)
@@ -95,7 +93,7 @@ export default function AutoClerkLivePage() {
   const feedRef      = useRef<HTMLDivElement | null>(null)
   const simTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function triggerSim(btn: 'bid' | 'sell' | 'next' | 'fw' | 'lock', amount = 0) {
+  function triggerSim(btn: 'bid' | 'sell' | 'next' | 'fw', amount = 0) {
     if (simTimerRef.current) clearTimeout(simTimerRef.current)
     setSimButton(btn)
     setSimAmount(amount)
@@ -237,10 +235,9 @@ export default function AutoClerkLivePage() {
       const status = d.status ?? d.lockStatus
 
       if (status === 1 || status === '1') {
-        triggerSim('lock')
-        addAction('lock',
+        addAction('info',
           'Lot locked on Bidpath',
-          'Sell + Next Lot sequence incoming — wait for lotInformationUpdate and activeLotChange'
+          'Sell + Next Lot sequence incoming — watch for the SELL and NEXT LOT prompts'
         )
       }
       return
@@ -539,13 +536,12 @@ export default function AutoClerkLivePage() {
                   </div>
                 </div>
               </div>
-              {/* Action buttons */}
+              {/* Action buttons — only buttons that actually exist on Saleroom */}
               {([
-                { key: 'bid',  label: `BID${simButton === 'bid'  && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`, activeClass: 'bg-blue-500   ring-blue-400   shadow-blue-500/50'  },
-                { key: 'sell', label: `SELL${simButton === 'sell' && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`,activeClass: 'bg-green-500  ring-green-400  shadow-green-500/50' },
-                { key: 'next', label: 'NEXT LOT',    activeClass: 'bg-purple-500  ring-purple-400 shadow-purple-500/50' },
-                { key: 'fw',   label: 'FAIR WARNING',activeClass: 'bg-orange-500  ring-orange-400 shadow-orange-500/50' },
-                { key: 'lock', label: 'LOT LOCKED',  activeClass: 'bg-yellow-500  ring-yellow-400 shadow-yellow-500/50' },
+                { key: 'bid',  label: `BID${simButton === 'bid'  && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`, activeClass: 'bg-blue-500  ring-blue-400  shadow-blue-500/50'  },
+                { key: 'sell', label: `SELL${simButton === 'sell' && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`,activeClass: 'bg-green-500 ring-green-400 shadow-green-500/50' },
+                { key: 'next', label: 'NEXT LOT',    activeClass: 'bg-purple-500 ring-purple-400 shadow-purple-500/50' },
+                { key: 'fw',   label: 'FAIR WARNING',activeClass: 'bg-orange-500 ring-orange-400 shadow-orange-500/50' },
               ] as const).map(({ key, label, activeClass }) => (
                 <div
                   key={key}
