@@ -338,42 +338,126 @@ export default function AutoClerkPage() {
       </div>
 
       {/* Logic reference */}
-      <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-700 rounded-xl p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">Sync Logic</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-gray-600 dark:text-gray-400">
-          <div>
-            <p className="font-semibold text-gray-700 dark:text-gray-300 mb-1">Bid sync</p>
-            <ul className="space-y-1">
-              <li>Bidpath bid → <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">cmd_bid</code> to Saleroom (amount goes up)</li>
-              <li>Saleroom bid → <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">Saleroom button</code> on Bidpath (amount goes up)</li>
-              <li>Same amount, drop bidder → <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">!</code> on Bidpath / <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">Room</code> on Saleroom</li>
+      <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-700 rounded-xl p-5 space-y-5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Sync Logic Reference</p>
+
+        {/* Buttons that exist on each platform */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+
+          {/* Bidpath (Vectis) buttons */}
+          <div className="bg-gray-50 dark:bg-black/30 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+            <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm mb-2">🖥 Bidpath (Vectis) buttons</p>
+            <ul className="space-y-1.5 text-xs text-gray-600 dark:text-gray-400">
+              <li><span className="inline-block w-5 h-5 rounded bg-blue-500 text-white font-black text-sm leading-5 text-center align-middle mr-1.5">!</span><strong className="text-gray-700 dark:text-gray-300">Bid</strong> — accepts an incoming bid</li>
+              <li><span className="inline-block w-5 h-5 rounded bg-yellow-500 text-white font-black text-sm leading-5 text-center align-middle mr-1.5">!</span><strong className="text-gray-700 dark:text-gray-300">Same amount</strong> — drop bidder, keep price</li>
+              <li><span className="inline-block w-5 h-5 rounded bg-green-500 text-white font-black text-sm leading-5 text-center align-middle mr-1.5">!</span><strong className="text-gray-700 dark:text-gray-300">Hammer</strong> — sells the lot</li>
+              <li><span className="inline-block w-5 h-5 rounded bg-purple-500 text-white font-black text-sm leading-5 text-center align-middle mr-1.5">!</span><strong className="text-gray-700 dark:text-gray-300">Next Lot</strong> — advance to next lot</li>
+              <li><span className="inline-block px-1.5 py-0.5 rounded bg-orange-500 text-white text-[10px] font-bold align-middle mr-1.5">FW</span><strong className="text-gray-700 dark:text-gray-300">Fair Warning</strong> — labelled button (not a !)</li>
+              <li><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[10px] font-bold align-middle mr-1.5">UNDO</span><strong className="text-gray-700 dark:text-gray-300">Undo</strong> — removes the last bid</li>
             </ul>
           </div>
-          <div>
-            <p className="font-semibold text-gray-700 dark:text-gray-300 mb-1">Timers</p>
-            <ul className="space-y-1">
-              <li>10s silence → Fair Warning on both</li>
-              <li>10s after FW → Hammer on Bidpath</li>
-              <li>Then Sell + Next on Saleroom</li>
+
+          {/* Saleroom buttons */}
+          <div className="bg-gray-50 dark:bg-black/30 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+            <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm mb-2">📺 Saleroom buttons</p>
+            <ul className="space-y-1.5 text-xs text-gray-600 dark:text-gray-400">
+              <li><span className="inline-block px-1.5 py-0.5 rounded bg-blue-600 text-white text-[10px] font-bold align-middle mr-1.5">BID</span><strong className="text-gray-700 dark:text-gray-300">Bid</strong> — internet/online bid</li>
+              <li><span className="inline-block px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-bold align-middle mr-1.5">ROOM</span><strong className="text-gray-700 dark:text-gray-300">Room</strong> — room bid at Vectis</li>
+              <li><span className="inline-block px-1.5 py-0.5 rounded bg-yellow-600 text-white text-[10px] font-bold align-middle mr-1.5">ROOM</span><strong className="text-gray-700 dark:text-gray-300">Room (same amount)</strong> — drop bidder</li>
+              <li><span className="inline-block px-1.5 py-0.5 rounded bg-green-600 text-white text-[10px] font-bold align-middle mr-1.5">SELL</span><strong className="text-gray-700 dark:text-gray-300">Sell</strong> — fills hammer, sells the lot</li>
+              <li><span className="inline-block px-1.5 py-0.5 rounded bg-purple-600 text-white text-[10px] font-bold align-middle mr-1.5">NEXT</span><strong className="text-gray-700 dark:text-gray-300">Next Lot</strong> — advance after sell</li>
+              <li><span className="inline-block px-1.5 py-0.5 rounded bg-orange-500 text-white text-[10px] font-bold align-middle mr-1.5">FW</span><strong className="text-gray-700 dark:text-gray-300">Fair Warning</strong></li>
+              <li><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[10px] font-bold align-middle mr-1.5">UNDO</span><strong className="text-gray-700 dark:text-gray-300">Undo</strong></li>
             </ul>
           </div>
         </div>
-        <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            <strong>Playwright targets — Bidpath:</strong>{' '}
-            <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">#sim-state-badge[data-state]</code>{' '}
-            <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">#current-bid[data-current-bid]</code>{' '}
-            <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">#current-bid[data-last-bid-ms]</code>
-          </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            <strong>Playwright targets — Saleroom:</strong>{' '}
-            <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">#sr-state[data-current-bid]</code>{' '}
-            <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">#bFW</code>{' '}
-            <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">#fH</code>{' '}
-            <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">#btn-sell</code>{' '}
-            <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">#btn-next</code>
-          </p>
+
+        {/* Event → Action mappings */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+
+          {/* Bidpath → Saleroom */}
+          <div>
+            <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm mb-2">📡 Bidpath event → press on Saleroom</p>
+            <ul className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
+              <li>Online/internet bid → <strong>BID</strong></li>
+              <li>BSCB (room) bid → <strong>ROOM</strong></li>
+              <li>BSCB bid at same amount → <strong>ROOM (same)</strong></li>
+              <li>Commission bid → <strong>BID</strong></li>
+              <li>Lot sold → <strong>SELL</strong> (fill hammer) <em>then</em> <strong>NEXT LOT</strong></li>
+              <li>Lot advance → <strong>NEXT LOT</strong></li>
+              <li>Fair Warning called → <strong>FAIR WARNING</strong></li>
+              <li>Lot lock → info only (no Saleroom button exists)</li>
+              <li>Pause / resume → info only</li>
+            </ul>
+          </div>
+
+          {/* Saleroom → Bidpath */}
+          <div>
+            <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm mb-2">🏷 Saleroom event → press on Bidpath</p>
+            <ul className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
+              <li>Internet bid → blue <strong>! (Bid)</strong></li>
+              <li>Bid at same amount as current → yellow <strong>! (Same amount)</strong></li>
+              <li>Lot sold → green <strong>! (Hammer)</strong> <em>then</em> purple <strong>! (Next Lot)</strong></li>
+              <li>Lot offered → purple <strong>! (Next Lot)</strong> (confirm sync)</li>
+              <li>Fair Warning called → <strong>Fair Warning</strong> button (not a !)</li>
+              <li>Lot passed → info only</li>
+              <li>Pause / resume → info only</li>
+            </ul>
+          </div>
         </div>
+
+        {/* Sequence rules */}
+        <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3 border border-blue-200 dark:border-blue-900">
+          <p className="font-semibold text-blue-900 dark:text-blue-200 text-sm mb-2">🔁 Sell sequences (two-step)</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-blue-900 dark:text-blue-200">
+            <div>
+              <p className="font-semibold mb-0.5">On Bidpath (Vectis)</p>
+              <p>1. Press <strong>! Hammer</strong> (green) — sells</p>
+              <p>2. Press <strong>! Next Lot</strong> (purple) — advances</p>
+            </div>
+            <div>
+              <p className="font-semibold mb-0.5">On Saleroom</p>
+              <p>1. Fill hammer price → Press <strong>SELL</strong></p>
+              <p>2. Press <strong>NEXT LOT</strong></p>
+            </div>
+          </div>
+        </div>
+
+        {/* Doesn't-exist warnings */}
+        <div className="bg-rose-50 dark:bg-rose-950/30 rounded-lg p-3 border border-rose-200 dark:border-rose-900">
+          <p className="font-semibold text-rose-900 dark:text-rose-200 text-sm mb-2">⚠ Things that don't exist (don't add these)</p>
+          <ul className="space-y-0.5 text-xs text-rose-900 dark:text-rose-200">
+            <li>❌ No "Lot Locked" button on Saleroom — lot lock is info only</li>
+            <li>❌ Saleroom buttons do NOT have exclamation marks — they're plain labelled buttons</li>
+            <li>❌ Bidpath's "Fair Warning" is its own labelled button — it is NOT a !</li>
+            <li>❌ No automatic double-bid detection — undo is a manual button only</li>
+          </ul>
+        </div>
+
+        {/* Data sources */}
+        <div>
+          <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm mb-2">🔌 Data sources</p>
+          <ul className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
+            <li><strong>Bidpath:</strong> direct WebSocket — <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">wss://www.vectis.co.uk/wss/{'{auctionId}'}</code></li>
+            <li><strong>Saleroom (GAP):</strong> console-script MutationObserver watches <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">hammer-price</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">asking-price</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">lot-number</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">auction-message-content</code> — POSTs to <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">/api/gap-relay</code>, shadow page polls every 1s</li>
+          </ul>
+        </div>
+
+        {/* Bidpath WebSocket field reference */}
+        <div>
+          <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm mb-2">📨 Bidpath WebSocket field reference</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">All message data is in <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">parsed.content</code>, not <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">parsed.data</code></p>
+          <ul className="space-y-0.5 text-xs text-gray-600 dark:text-gray-400 font-mono">
+            <li><code className="text-gray-700 dark:text-gray-300">liveBidEvent</code>: content.amount, content.asking, content.platform (BSCB/Online/Saleroom), content.lot_id</li>
+            <li><code className="text-gray-700 dark:text-gray-300">activeLotChange</code>: content.lot_number, content.lot_id</li>
+            <li><code className="text-gray-700 dark:text-gray-300">lotInformationUpdate</code>: content.hammer_price (string), content.key_name, content.key_value</li>
+            <li><code className="text-gray-700 dark:text-gray-300">getFairWarningStatus</code>: content.fair_warning (boolean)</li>
+            <li><code className="text-gray-700 dark:text-gray-300">activeLotLock</code>: content.status (0 or 1)</li>
+            <li><code className="text-gray-700 dark:text-gray-300">setLiveAskingPrice</code>: content.asking_bid, content.lot_number</li>
+            <li><code className="text-gray-700 dark:text-gray-300">liveCommissionBidEvent</code>: content.amount</li>
+          </ul>
+        </div>
+
       </div>
 
     </div>
