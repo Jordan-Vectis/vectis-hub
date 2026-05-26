@@ -74,11 +74,25 @@ function mapEvent(e: GapEvent): Action | null {
   }
 }
 
+// ── Relay endpoint options ────────────────────────────────────────────────────
+
+const RELAY_PRESETS = [
+  { label: 'Production', url: 'https://vectis-crm-production.up.railway.app/api/gap-relay' },
+  { label: 'Staging',    url: 'https://vectis-staging.up.railway.app/api/gap-relay' },
+]
+
+function defaultRelayUrl() {
+  if (typeof window === 'undefined') return RELAY_PRESETS[0].url
+  return window.location.hostname.includes('staging')
+    ? RELAY_PRESETS[1].url
+    : RELAY_PRESETS[0].url
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function AutoClerkSaleroomPage() {
   const [actions, setActions]       = useState<Action[]>([])
-  const [relayUrl, setRelayUrl]     = useState('https://vectis-crm-production.up.railway.app/api/gap-relay')
+  const [relayUrl, setRelayUrl]     = useState(defaultRelayUrl)
   const [lastSeen, setLastSeen]     = useState(0)
   const [active, setActive]         = useState(false)
   const [lastEventAt, setLastEventAt] = useState<number | null>(null)
@@ -179,12 +193,30 @@ export default function AutoClerkSaleroomPage() {
         {/* Step 1 — Relay URL */}
         <div className="mt-4 flex items-center gap-3 flex-wrap">
           <label className="text-xs text-slate-400 shrink-0">Relay endpoint:</label>
+
+          {/* Quick-pick dropdown */}
+          <select
+            value={RELAY_PRESETS.some(p => p.url === relayUrl) ? relayUrl : ''}
+            onChange={e => { if (e.target.value) setRelayUrl(e.target.value) }}
+            disabled={active}
+            className="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {RELAY_PRESETS.map(p => (
+              <option key={p.url} value={p.url}>{p.label}</option>
+            ))}
+            {!RELAY_PRESETS.some(p => p.url === relayUrl) && (
+              <option value=''>Custom</option>
+            )}
+          </select>
+
           <input
             type="text"
             value={relayUrl}
             onChange={e => setRelayUrl(e.target.value)}
-            className="bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-xs w-96 focus:outline-none focus:border-blue-500 font-mono"
+            disabled={active}
+            className="bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-xs w-80 focus:outline-none focus:border-blue-500 font-mono disabled:opacity-50 disabled:cursor-not-allowed"
           />
+
           {!active ? (
             <button onClick={startPolling}
               className="bg-emerald-600 hover:bg-emerald-500 px-4 py-1.5 rounded text-sm font-semibold transition-colors">
