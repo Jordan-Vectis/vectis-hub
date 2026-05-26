@@ -56,7 +56,6 @@ const ACTION_STYLE: Record<ActionType, { border: string; badge: string; badgeBg:
   bid:        { border: 'border-blue-500',   badge: 'PRESS BID',        badgeBg: 'bg-blue-600' },
   room:       { border: 'border-rose-500',   badge: 'PRESS ROOM',       badgeBg: 'bg-rose-600' },
   same:       { border: 'border-yellow-400', badge: 'PRESS ROOM (SAME)',badgeBg: 'bg-yellow-600' },
-  undo:       { border: 'border-amber-400',  badge: 'PRESS UNDO',       badgeBg: 'bg-amber-600' },
   fw:         { border: 'border-orange-400', badge: 'PRESS FW',         badgeBg: 'bg-orange-500' },
   fw_cancel:  { border: 'border-slate-500',  badge: 'FW CANCELLED',     badgeBg: 'bg-slate-600' },
   sell:       { border: 'border-green-500',  badge: 'PRESS SELL',       badgeBg: 'bg-green-600' },
@@ -88,7 +87,7 @@ export default function AutoClerkLivePage() {
   })
   const [rawLog, setRawLog]         = useState<string[]>([])
   const [showRaw, setShowRaw]       = useState(false)
-  const [simButton, setSimButton]   = useState<'bid' | 'room' | 'same' | 'sell' | 'next' | 'fw' | 'undo' | null>(null)
+  const [simButton, setSimButton]   = useState<'bid' | 'room' | 'same' | 'sell' | 'next' | 'fw' | null>(null)
   const [simAmount, setSimAmount]   = useState(0)
 
   const wsRef        = useRef<WebSocket | null>(null)
@@ -96,22 +95,12 @@ export default function AutoClerkLivePage() {
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const feedRef      = useRef<HTMLDivElement | null>(null)
   const simTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lastBidAtRef = useRef<number>(0)
 
-  const DOUBLE_BID_THRESHOLD_MS = 1500 // two bids within this = likely double-trigger
-
-  function triggerSim(btn: 'bid' | 'room' | 'same' | 'sell' | 'next' | 'fw' | 'undo', amount = 0) {
+  function triggerSim(btn: 'bid' | 'room' | 'same' | 'sell' | 'next' | 'fw', amount = 0) {
     if (simTimerRef.current) clearTimeout(simTimerRef.current)
     setSimButton(btn)
     setSimAmount(amount)
     simTimerRef.current = setTimeout(() => setSimButton(null), 2000)
-  }
-
-  function checkDoubleBid(): boolean {
-    const now = Date.now()
-    const gap = now - lastBidAtRef.current
-    lastBidAtRef.current = now
-    return lastBidAtRef.current > 0 && gap < DOUBLE_BID_THRESHOLD_MS
   }
 
   // Keep stateRef in sync
@@ -174,15 +163,8 @@ export default function AutoClerkLivePage() {
 
       const isRoom    = platform === 'BSCB'
       const isSameAmt = amount > 0 && amount === stateRef.current.currentBid
-      const isDouble  = checkDoubleBid()
 
-      if (isDouble) {
-        triggerSim('undo', amount)
-        addAction('undo',
-          `Double bid detected — press UNDO on Saleroom`,
-          `Two bids arrived within ${DOUBLE_BID_THRESHOLD_MS / 1000}s · ${fmt(amount)} · Lot ${lotNo}`
-        )
-      } else if (isRoom && isSameAmt) {
+      if (isRoom && isSameAmt) {
         triggerSim('same', amount)
         addAction('same',
           `Press ROOM on Saleroom — same amount ${fmt(amount)}`,
@@ -212,20 +194,12 @@ export default function AutoClerkLivePage() {
       const lotNo  = d.lot_number ?? stateRef.current.lotNumber
 
       updateLive({ currentBid: amount })
+      triggerSim('bid', amount)
 
-      if (checkDoubleBid()) {
-        triggerSim('undo', amount)
-        addAction('undo',
-          `Double bid detected — press UNDO on Saleroom`,
-          `Commission bid · ${fmt(amount)} · Lot ${lotNo}`
-        )
-      } else {
-        triggerSim('bid', amount)
-        addAction('bid',
-          `Press BID on Saleroom — ${fmt(amount)}`,
-          `Source: Commission bid · Lot ${lotNo}`
-        )
-      }
+      addAction('bid',
+        `Press BID on Saleroom — ${fmt(amount)}`,
+        `Source: Commission bid · Lot ${lotNo}`
+      )
       return
     }
 
