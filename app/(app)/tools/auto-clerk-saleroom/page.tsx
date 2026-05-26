@@ -5,7 +5,7 @@ import type { GapEvent, GapEventType } from '@/app/api/gap-relay/route'
 
 // ── Action mapping ────────────────────────────────────────────────────────────
 
-type ActionType = 'bid' | 'sell' | 'next' | 'fw' | 'info' | 'connect' | 'disconnect'
+type ActionType = 'bid' | 'sell' | 'next' | 'fw' | 'undo' | 'info' | 'connect' | 'disconnect'
 
 interface Action {
   id:       number
@@ -21,6 +21,7 @@ const ACTION_STYLE: Record<ActionType, { border: string; badge: string; bg: stri
   sell:       { border: 'border-green-500',  badge: '! HAMMER',       bg: 'bg-green-600' },
   next:       { border: 'border-purple-400', badge: '! NEXT LOT',     bg: 'bg-purple-600' },
   fw:         { border: 'border-orange-400', badge: 'FAIR WARNING',   bg: 'bg-orange-500' },
+  undo:       { border: 'border-amber-400',  badge: 'PRESS UNDO',     bg: 'bg-amber-600' },
   info:       { border: 'border-slate-600',  badge: 'INFO',           bg: 'bg-slate-700' },
   connect:    { border: 'border-emerald-500',badge: 'RELAY ACTIVE',   bg: 'bg-emerald-600' },
   disconnect: { border: 'border-red-500',    badge: 'NO SIGNAL',      bg: 'bg-red-700' },
@@ -98,22 +99,25 @@ export default function AutoClerkSaleroomPage() {
   const [lastEventAt, setLastEventAt] = useState<number | null>(null)
   const [lotState, setLotState]     = useState({ lot: '—', hammer: 0, asking: 0, message: '—' })
 
-  const [simButton, setSimButton]   = useState<'bid' | 'same' | 'sell' | 'next' | 'fw' | null>(null)
+  const [simButton, setSimButton]   = useState<'bid' | 'same' | 'sell' | 'next' | 'fw' | 'undo' | null>(null)
   const [simAmount, setSimAmount]   = useState(0)
 
-  const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null)
-  const feedRef    = useRef<HTMLDivElement | null>(null)
-  const cursorRef  = useRef(0)
-  const simTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null)
+  const feedRef      = useRef<HTMLDivElement | null>(null)
+  const cursorRef    = useRef(0)
+  const simTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastBidAtRef = useRef<number>(0)
 
-  function triggerSim(btn: 'bid' | 'same' | 'sell' | 'next' | 'fw', amount = 0) {
+  const DOUBLE_BID_THRESHOLD_MS = 1500
+
+  function triggerSim(btn: 'bid' | 'same' | 'sell' | 'next' | 'fw' | 'undo', amount = 0) {
     if (simTimerRef.current) clearTimeout(simTimerRef.current)
     setSimButton(btn)
     setSimAmount(amount)
     simTimerRef.current = setTimeout(() => setSimButton(null), 2000)
   }
 
-  function triggerSimSequence(btn1: 'bid' | 'same' | 'sell' | 'next' | 'fw', amount1: number, btn2: 'bid' | 'same' | 'sell' | 'next' | 'fw') {
+  function triggerSimSequence(btn1: 'bid' | 'same' | 'sell' | 'next' | 'fw' | 'undo', amount1: number, btn2: 'bid' | 'same' | 'sell' | 'next' | 'fw' | 'undo') {
     triggerSim(btn1, amount1)
     // Show the follow-up button after the first clears
     const t = setTimeout(() => triggerSim(btn2), 2200)
@@ -163,9 +167,17 @@ export default function AutoClerkSaleroomPage() {
           )
           if (lastActionable) {
             if (lastActionable.type === 'bid_internet' || lastActionable.type === 'bid_room') {
-              // Same amount as current bid = drop bidder scenario → ! same
-              const isSame = lastActionable.hammer > 0 && lastActionable.hammer === lotState.hammer
-              triggerSim(isSame ? 'same' : 'bid', lastActionable.hammer)
+              const now    = Date.now()
+              const isDouble = lastBidAtRef.current > 0 && (now - lastBidAtRef.current) < DOUBLE_BID_THRESHOLD_MS
+              lastBidAtRef.current = now
+
+              if (isDouble) {
+                triggerSim('undo', lastActionable.hammer)
+              } else {
+                // Same amount as current bid = drop bidder scenario → ! same
+                const isSame = lastActionable.hammer > 0 && lastActionable.hammer === lotState.hammer
+                triggerSim(isSame ? 'same' : 'bid', lastActionable.hammer)
+              }
             } else if (lastActionable.type === 'lot_sold') {
               // Hammer! then Next Lot! sequence
               triggerSimSequence('sell', lastActionable.hammer, 'next')
@@ -403,6 +415,7 @@ export default function AutoClerkSaleroomPage() {
                 { key: 'same', label: 'Same amt',   amount: simButton === 'same' ? simAmount : 0, activeClass: 'bg-yellow-500 ring-yellow-400 shadow-yellow-500/50' },
                 { key: 'sell', label: 'Hammer',     amount: simButton === 'sell' ? simAmount : 0, activeClass: 'bg-green-500  ring-green-400  shadow-green-500/50'  },
                 { key: 'next', label: 'Next Lot',   amount: 0,                                   activeClass: 'bg-purple-500 ring-purple-400 shadow-purple-500/50'  },
+                { key: 'undo', label: 'Undo',       amount: 0,                                   activeClass: 'bg-amber-500  ring-amber-400  shadow-amber-500/50'   },
               ] as const).map(({ key, label, amount, activeClass }) => (
                 <div key={key} className="flex flex-col items-center gap-1">
                   <div className={`w-14 h-14 rounded-xl font-black text-3xl flex items-center justify-center transition-all duration-150 select-none ${
