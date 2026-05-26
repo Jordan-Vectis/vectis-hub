@@ -257,16 +257,38 @@ export default function AutoClerkPage() {
 
       </div>
 
-      {/* Live Feed Test */}
-      <a href="/tools/auto-clerk-live"
-        className="flex items-center gap-4 bg-gradient-to-r from-emerald-900/60 to-teal-900/60 hover:from-emerald-800/60 hover:to-teal-800/60 border border-emerald-700/50 rounded-xl p-5 transition-all group">
-        <span className="text-3xl">📡</span>
+      {/* Combined shadow view */}
+      <a href="/tools/auto-clerk-combined"
+        className="flex items-center gap-4 bg-gradient-to-r from-violet-900/60 to-purple-900/60 hover:from-violet-800/60 hover:to-purple-800/60 border border-violet-700/50 rounded-xl p-5 transition-all group">
+        <span className="text-3xl">⚡</span>
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-white text-base">Live Feed Test</p>
-          <p className="text-sm text-emerald-300 mt-0.5">Connect to a real Bidpath auction — see exactly what would be pressed on Saleroom in shadow mode</p>
+          <p className="font-bold text-white text-base">Combined Shadow View</p>
+          <p className="text-sm text-violet-300 mt-0.5">Both feeds side by side — Bidpath→Saleroom on the left, Saleroom→Bidpath on the right</p>
         </div>
-        <span className="text-emerald-400 text-sm group-hover:translate-x-1 transition-transform">→</span>
+        <span className="text-violet-400 text-sm group-hover:translate-x-1 transition-transform">→</span>
       </a>
+
+      {/* Individual shadow pages */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <a href="/tools/auto-clerk-live"
+          className="flex items-center gap-3 bg-gradient-to-r from-emerald-900/40 to-teal-900/40 hover:from-emerald-800/40 hover:to-teal-800/40 border border-emerald-700/40 rounded-xl p-4 transition-all group">
+          <span className="text-2xl">📡</span>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-white text-sm">Bidpath → Saleroom</p>
+            <p className="text-xs text-emerald-300 mt-0.5">Enter a Bidpath auction ID — see what to press on Saleroom</p>
+          </div>
+          <span className="text-emerald-400 text-xs group-hover:translate-x-1 transition-transform">→</span>
+        </a>
+        <a href="/tools/auto-clerk-saleroom"
+          className="flex items-center gap-3 bg-gradient-to-r from-amber-900/40 to-orange-900/40 hover:from-amber-800/40 hover:to-orange-800/40 border border-amber-700/40 rounded-xl p-4 transition-all group">
+          <span className="text-2xl">🏷</span>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-white text-sm">Saleroom → Bidpath</p>
+            <p className="text-xs text-amber-300 mt-0.5">Install bookmarklet on Saleroom — see what to press on Bidpath</p>
+          </div>
+          <span className="text-amber-400 text-xs group-hover:translate-x-1 transition-transform">→</span>
+        </a>
+      </div>
 
       {/* Coordinator */}
       <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-700 rounded-xl p-5">
