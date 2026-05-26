@@ -74,25 +74,6 @@ function mapEvent(e: GapEvent): Action | null {
   }
 }
 
-// ── Bookmarklet ───────────────────────────────────────────────────────────────
-
-function makeBookmarklet(relayUrl: string) {
-  const code = `(function(){
-var R='${relayUrl}';
-var S={hammer:0,asking:0,lot:'',message:''};
-var T=null;
-function send(){fetch(R,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({},S,{at:Date.now()}))}).catch(function(){});}
-function upd(k,v){S[k]=v;clearTimeout(T);T=setTimeout(send,100);}
-function watch(id,k,num){var el=document.getElementById(id);if(!el)return;new MutationObserver(function(){var v=el.textContent.trim();upd(k,num?parseFloat(v.replace(/[^0-9.]/g,''))||0:v);}).observe(el,{childList:true,characterData:true,subtree:true});}
-watch('hammer-price','hammer',true);
-watch('asking-price','asking',true);
-watch('lot-number','lot',false);
-watch('auction-message-content','message',false);
-alert('Vectis relay started ✓');
-})()`
-  return 'javascript:' + encodeURIComponent(code)
-}
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function AutoClerkSaleroomPage() {
@@ -175,8 +156,6 @@ export default function AutoClerkSaleroomPage() {
     return () => clearInterval(t)
   }, [active, lastEventAt])
 
-  const bookmarklet = makeBookmarklet(relayUrl)
-
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -219,22 +198,20 @@ export default function AutoClerkSaleroomPage() {
           )}
         </div>
 
-        {/* Step 2 — Bookmarklet */}
-        <div className="mt-3 flex items-start gap-3 flex-wrap">
-          <span className="text-xs text-slate-400 shrink-0 mt-1.5">Bookmarklet:</span>
-          <div className="flex items-center gap-3 flex-wrap">
-            <a
-              href={bookmarklet}
-              onClick={e => e.preventDefault()}
-              draggable
-              className="bg-amber-600 hover:bg-amber-500 px-4 py-1.5 rounded text-sm font-semibold cursor-grab active:cursor-grabbing select-none transition-colors"
-              title="Drag this to your bookmarks bar"
+        {/* Step 2 — Console script */}
+        <div className="mt-3">
+          <div className="flex items-center gap-3 mb-1.5">
+            <span className="text-xs text-slate-400">Console script — paste into DevTools on the Saleroom page:</span>
+            <button
+              onClick={() => {
+                const script = `(function(){var R='${relayUrl}';var S={hammer:0,asking:0,lot:'',message:''};var T=null;function send(){fetch(R,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({},S,{at:Date.now()}))}).catch(function(e){console.error('Relay error:',e);})}function upd(k,v){S[k]=v;clearTimeout(T);T=setTimeout(send,100);}function watch(id,k,num){var el=document.getElementById(id);if(!el){console.warn('Not found:',id);return;}new MutationObserver(function(){var v=el.textContent.trim();upd(k,num?parseFloat(v.replace(/[^0-9.]/g,''))||0:v);}).observe(el,{childList:true,characterData:true,subtree:true});console.log('Watching:',id);}watch('hammer-price','hammer',true);watch('asking-price','asking',true);watch('lot-number','lot',false);watch('auction-message-content','message',false);console.log('Vectis relay started',R);})();`
+                navigator.clipboard.writeText(script)
+              }}
+              className="bg-amber-600 hover:bg-amber-500 px-3 py-1 rounded text-xs font-semibold transition-colors shrink-0"
             >
-              📡 Vectis Relay
-            </a>
-            <p className="text-xs text-slate-500">
-              ← Drag to your bookmarks bar, then click it on the Saleroom page to start sending events here
-            </p>
+              Copy script
+            </button>
+            <span className="text-xs text-slate-600">Then open F12 on the Saleroom page → Console → paste → Enter</span>
           </div>
         </div>
       </div>
@@ -263,7 +240,7 @@ export default function AutoClerkSaleroomPage() {
             <p className="text-xs text-slate-600 leading-relaxed">
               1. Start polling above<br/>
               2. Open Saleroom page<br/>
-              3. Click the bookmarklet<br/>
+              3. Click Copy script above<br/>
               4. Events appear here live
             </p>
           </div>
@@ -276,7 +253,7 @@ export default function AutoClerkSaleroomPage() {
               <p className="text-4xl mb-3">🏷</p>
               <p className="text-sm">No events yet.</p>
               <p className="text-xs mt-1 text-slate-700">
-                Start polling, then click the bookmarklet on the Saleroom page.
+                Start polling, copy the script, paste it in the Saleroom Console.
               </p>
             </div>
           )}
