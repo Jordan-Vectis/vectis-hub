@@ -9,6 +9,7 @@ type ConnState = 'idle' | 'connecting' | 'open' | 'error' | 'closed'
 type ActionType =
   | 'bid'        // Press Bid button on Saleroom (internet bid)
   | 'room'       // Press Room button on Saleroom (room/BSCB bid from Bidpath)
+  | 'same'       // Press Room button at same amount (drop bidder)
   | 'fw'         // Press Fair Warning on Saleroom
   | 'fw_cancel'  // FW cancelled — no action needed
   | 'sell'       // Fill hammer price + Press Sell
