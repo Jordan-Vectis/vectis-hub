@@ -549,8 +549,9 @@ export default function AutoClerkLivePage() {
               </div>
               {/* Action buttons — only buttons that actually exist on Saleroom */}
               {([
-                { key: 'bid',  label: `BID${simButton === 'bid'  && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`, activeClass: 'bg-blue-500  ring-blue-400  shadow-blue-500/50'  },
-                { key: 'sell', label: `SELL${simButton === 'sell' && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`,activeClass: 'bg-green-500 ring-green-400 shadow-green-500/50' },
+                { key: 'bid',  label: `BID${simButton === 'bid'   && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`,  activeClass: 'bg-blue-500   ring-blue-400   shadow-blue-500/50'  },
+                { key: 'room', label: `ROOM${simButton === 'room'  && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`, activeClass: 'bg-rose-500   ring-rose-400   shadow-rose-500/50'  },
+                { key: 'sell', label: `SELL${simButton === 'sell'  && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`, activeClass: 'bg-green-500  ring-green-400  shadow-green-500/50' },
                 { key: 'next', label: 'NEXT LOT',    activeClass: 'bg-purple-500 ring-purple-400 shadow-purple-500/50' },
                 { key: 'fw',   label: 'FAIR WARNING',activeClass: 'bg-orange-500 ring-orange-400 shadow-orange-500/50' },
               ] as const).map(({ key, label, activeClass }) => (
