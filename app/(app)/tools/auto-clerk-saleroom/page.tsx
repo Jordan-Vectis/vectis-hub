@@ -17,13 +17,13 @@ interface Action {
 }
 
 const ACTION_STYLE: Record<ActionType, { border: string; badge: string; bg: string }> = {
-  bid:        { border: 'border-blue-500',   badge: 'PRESS BID',      bg: 'bg-blue-600' },
-  sell:       { border: 'border-green-500',  badge: 'PRESS SELL',     bg: 'bg-green-600' },
-  next:       { border: 'border-purple-400', badge: 'NEW LOT',        bg: 'bg-purple-600' },
-  fw:         { border: 'border-orange-400', badge: 'FAIR WARNING',   bg: 'bg-orange-500' },
-  info:       { border: 'border-slate-600',  badge: 'INFO',           bg: 'bg-slate-700' },
-  connect:    { border: 'border-emerald-500',badge: 'RELAY ACTIVE',   bg: 'bg-emerald-600' },
-  disconnect: { border: 'border-red-500',    badge: 'NO SIGNAL',      bg: 'bg-red-700' },
+  bid:        { border: 'border-blue-500',   badge: 'PRESS BID!',          bg: 'bg-blue-600' },
+  sell:       { border: 'border-green-500',  badge: 'PRESS HAMMER!',       bg: 'bg-green-600' },
+  next:       { border: 'border-purple-400', badge: 'PRESS NEXT LOT!',     bg: 'bg-purple-600' },
+  fw:         { border: 'border-orange-400', badge: 'PRESS FAIR WARNING!', bg: 'bg-orange-500' },
+  info:       { border: 'border-slate-600',  badge: 'INFO',                bg: 'bg-slate-700' },
+  connect:    { border: 'border-emerald-500',badge: 'RELAY ACTIVE',        bg: 'bg-emerald-600' },
+  disconnect: { border: 'border-red-500',    badge: 'NO SIGNAL',           bg: 'bg-red-700' },
 }
 
 function fmt(n: number) { return '£' + n.toLocaleString('en-GB') }
@@ -35,28 +35,28 @@ function mapEvent(e: GapEvent): Action | null {
   switch (e.type) {
     case 'bid_internet':
       return { ...base, aType: 'bid',
-        headline: `Press BID on Bidpath — ${fmt(e.hammer)}`,
+        headline: `Press BID! on Bidpath — ${fmt(e.hammer)}`,
         detail:   `Saleroom.com online bidder · Lot ${e.lot} · Asking ${fmt(e.asking)}` }
 
     case 'bid_room':
       return { ...base, aType: 'bid',
-        headline: `Press BID on Bidpath — ${fmt(e.hammer)}`,
+        headline: `Press BID! on Bidpath — ${fmt(e.hammer)}`,
         detail:   `Room/phone bid via Saleroom · Lot ${e.lot} · Asking ${fmt(e.asking)}` }
 
     case 'lot_offered':
       return { ...base, aType: 'next',
-        headline: `New lot starting on Saleroom — Lot ${e.lot}`,
-        detail:   'Bidpath advances independently — no button press required unless out of sync' }
+        headline: `Press NEXT LOT! on Bidpath — Lot ${e.lot} now live on Saleroom`,
+        detail:   'Confirm Bidpath is on the same lot' }
 
     case 'lot_sold':
       return { ...base, aType: 'sell',
-        headline: `Press SELL on Bidpath — ${e.hammer > 0 ? fmt(e.hammer) : 'see Saleroom'}`,
-        detail:   `${e.message} · Lot ${e.lot}` }
+        headline: `Press HAMMER! on Bidpath — ${e.hammer > 0 ? fmt(e.hammer) : 'check Saleroom'}`,
+        detail:   `Lot ${e.lot} · Then press NEXT LOT! to advance` }
 
     case 'fair_warning':
       return { ...base, aType: 'fw',
-        headline: 'Fair Warning called on Saleroom',
-        detail:   'No Bidpath button press needed — Bidpath has its own FW mechanism' }
+        headline: 'Press FAIR WARNING! on Bidpath',
+        detail:   'Fair Warning called on Saleroom — press the button on Bidpath too' }
 
     case 'lot_passed':
       return { ...base, aType: 'info',
@@ -98,7 +98,7 @@ export default function AutoClerkSaleroomPage() {
   const [lastEventAt, setLastEventAt] = useState<number | null>(null)
   const [lotState, setLotState]     = useState({ lot: '—', hammer: 0, asking: 0, message: '—' })
 
-  const [simButton, setSimButton]   = useState<'bid' | 'sell' | 'next' | null>(null)
+  const [simButton, setSimButton]   = useState<'bid' | 'sell' | 'next' | 'fw' | null>(null)
   const [simAmount, setSimAmount]   = useState(0)
 
   const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -106,11 +106,18 @@ export default function AutoClerkSaleroomPage() {
   const cursorRef  = useRef(0)
   const simTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function triggerSim(btn: 'bid' | 'sell' | 'next', amount = 0) {
+  function triggerSim(btn: 'bid' | 'sell' | 'next' | 'fw', amount = 0) {
     if (simTimerRef.current) clearTimeout(simTimerRef.current)
     setSimButton(btn)
     setSimAmount(amount)
     simTimerRef.current = setTimeout(() => setSimButton(null), 2000)
+  }
+
+  function triggerSimSequence(btn1: 'bid' | 'sell' | 'next' | 'fw', amount1: number, btn2: 'bid' | 'sell' | 'next' | 'fw') {
+    triggerSim(btn1, amount1)
+    // Show the follow-up button after the first clears
+    const t = setTimeout(() => triggerSim(btn2), 2200)
+    simTimerRef.current = t
   }
 
   function addAction(a: Action) {
@@ -152,15 +159,18 @@ export default function AutoClerkSaleroomPage() {
 
           // Trigger sim from most recent actionable event
           const lastActionable = [...data.events].reverse().find(
-            (e: any) => ['bid_internet','bid_room','lot_sold','lot_offered'].includes(e.type)
+            (e: any) => ['bid_internet','bid_room','lot_sold','lot_offered','fair_warning'].includes(e.type)
           )
           if (lastActionable) {
             if (lastActionable.type === 'bid_internet' || lastActionable.type === 'bid_room') {
               triggerSim('bid', lastActionable.hammer)
             } else if (lastActionable.type === 'lot_sold') {
-              triggerSim('sell', lastActionable.hammer)
+              // Hammer! then Next Lot! sequence
+              triggerSimSequence('sell', lastActionable.hammer, 'next')
             } else if (lastActionable.type === 'lot_offered') {
               triggerSim('next')
+            } else if (lastActionable.type === 'fair_warning') {
+              triggerSim('fw')
             }
           }
 
@@ -385,16 +395,16 @@ export default function AutoClerkSaleroomPage() {
                 </div>
               </div>
 
-              {/* BID button */}
+              {/* BID! */}
               <div className={`px-4 py-2.5 rounded-lg font-bold text-sm transition-all duration-150 select-none ${
                 simButton === 'bid'
                   ? 'bg-blue-500 text-white scale-105 ring-4 ring-blue-400 ring-offset-2 ring-offset-slate-950 shadow-lg shadow-blue-500/50'
                   : 'bg-slate-800 text-slate-500 border border-slate-700'
               }`}>
-                BID{simButton === 'bid' && simAmount > 0 ? ` — ${fmt(simAmount)}` : ''}
+                BID!{simButton === 'bid' && simAmount > 0 ? ` — ${fmt(simAmount)}` : ''}
               </div>
 
-              {/* SELL — hammer price box + button */}
+              {/* HAMMER! — price box + button */}
               <div className="flex items-stretch gap-0 rounded-lg overflow-hidden">
                 <div className={`px-3 py-2.5 font-mono font-bold text-sm transition-all duration-150 ${
                   simButton === 'sell'
@@ -407,15 +417,22 @@ export default function AutoClerkSaleroomPage() {
                   simButton === 'sell'
                     ? 'bg-green-500 text-white scale-105 ring-4 ring-green-400 ring-offset-2 ring-offset-slate-950 shadow-lg shadow-green-500/50'
                     : 'bg-slate-800 text-slate-500 border border-slate-700'
-                }`}>SELL</div>
+                }`}>HAMMER!</div>
               </div>
 
-              {/* NEXT LOT */}
+              {/* NEXT LOT! */}
               <div className={`px-4 py-2.5 rounded-lg font-bold text-sm transition-all duration-150 select-none ${
                 simButton === 'next'
                   ? 'bg-purple-500 text-white scale-105 ring-4 ring-purple-400 ring-offset-2 ring-offset-slate-950 shadow-lg shadow-purple-500/50'
                   : 'bg-slate-800 text-slate-500 border border-slate-700'
-              }`}>NEXT LOT</div>
+              }`}>NEXT LOT!</div>
+
+              {/* FAIR WARNING! */}
+              <div className={`px-4 py-2.5 rounded-lg font-bold text-sm transition-all duration-150 select-none ${
+                simButton === 'fw'
+                  ? 'bg-orange-500 text-white scale-105 ring-4 ring-orange-400 ring-offset-2 ring-offset-slate-950 shadow-lg shadow-orange-500/50'
+                  : 'bg-slate-800 text-slate-500 border border-slate-700'
+              }`}>FAIR WARNING!</div>
             </div>
           </div>
 
