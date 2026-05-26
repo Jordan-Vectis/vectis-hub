@@ -139,6 +139,9 @@ body {
 .entry.silence  { background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.2); }
 .entry.silence .entry-title { color: #fcd34d; }
 
+.entry.clash    { background: rgba(194,65,12,0.3);   border-color: rgba(249,115,22,0.5); border-width: 2px; }
+.entry.clash .entry-title { color: #fed7aa; font-size: 13px; }
+
 /* ── EMPTY STATE ── */
 #empty {
   flex: 1;
@@ -174,6 +177,7 @@ body {
   <div class="leg"><div class="leg-dot" style="background:#f97316"></div> Fair Warning</div>
   <div class="leg"><div class="leg-dot" style="background:#ef4444"></div> Hammer</div>
   <div class="leg"><div class="leg-dot" style="background:#8b5cf6"></div> Lot change</div>
+  <div class="leg"><div class="leg-dot" style="background:#f97316"></div> ⚡ Clash</div>
 </div>
 
 <div id="feed">
@@ -380,6 +384,15 @@ CH.onmessage = function(e){
       'All lots have been auctioned. The coordinator will stop automatically.');
     dot.textContent = '● Done';
     dot.className   = '';
+  }
+
+  // ── CLASH ──
+  if(msg.type === 'clash_warning'){
+    addEntry('clash', '⚡', 'CLASH at '+fmt(msg.amount)+' — both platforms have online bidders at the same price!',
+      'A Saleroom.com customer bid '+fmt(msg.amount)+' at the same time a Vectis Auto bidder was already at the same level. '+
+      'Resolution options: (1) On Bidpath, press ! next to the Saleroom source — keeps the amount at '+fmt(msg.amount)+' but drops the Saleroom bidder, leaving the Vectis Auto customer in. '+
+      '(2) Step up to '+fmt(msg.amount+1)+' on one platform and accept the first new bid as the winner. '+
+      'In a real auction the auctioneer would usually call "I have it online on [platform]" and take the next bid.');
   }
 
   if(msg.type === 'coordinator_hello'){

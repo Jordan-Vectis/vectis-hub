@@ -231,6 +231,10 @@ function doStart(){
       if(msg.amount > S.saleroomBid){
         ch.postMessage({ type:'cmd_bid', amount:msg.amount, source:msg.source })
         S.saleroomBid = msg.amount
+      } else if(msg.source === 'Saleroom' && msg.amount === S.saleroomBid && S.saleroomBid > 0){
+        // Clash — Saleroom.com bid came in at same level as existing bid
+        ch.postMessage({ type:'clash_warning', amount:msg.amount })
+        showPill('⚡ Clash at £'+msg.amount.toLocaleString()+' — both platforms have online bidders!')
       }
     }
 

@@ -98,6 +98,10 @@ body {
 .btn-room-bp  { background: linear-gradient(135deg, #374151, #4b5563); }
 .btn-room-sr  { background: linear-gradient(135deg, #1e3a8a, #1d4ed8); }
 .btn-bang     { background: linear-gradient(135deg, #1f2937, #374151); border: 1px solid rgba(255,255,255,0.15) !important; }
+.btn-clash    { background: linear-gradient(135deg, #7c2d12, #c2410c); }
+.btn-rapid    { background: linear-gradient(135deg, #1e1b4b, #4338ca); }
+.btn-rapid-sr { background: linear-gradient(135deg, #14532d, #16a34a); }
+.btn-rapid-both { background: linear-gradient(135deg, #4a1d96, #7c3aed); }
 
 /* ── CUSTOM BID ── */
 .custom-row {
@@ -299,6 +303,47 @@ body {
     </div>
   </div>
 
+  <!-- ── SCENARIOS ── -->
+  <div class="card">
+    <div class="card-head">
+      <h2>⚡ Clash &amp; stress scenarios</h2>
+      <p>Simulate edge cases to check the coordinator handles them correctly</p>
+    </div>
+    <div class="card-body">
+
+      <button class="bid-btn btn-clash" id="btn-clash" onclick="injectClash()" disabled>
+        <div class="bid-btn-left">
+          <div>⚡ Simultaneous clash — both platforms bid at same amount</div>
+          <div class="label">Fires Vectis Auto then Saleroom.com at same price 150ms apart — tests conflict resolution</div>
+        </div>
+        <div class="bid-btn-amt" id="clash-amt">£—</div>
+      </button>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <button class="bid-btn btn-rapid" id="btn-rapid-v" onclick="injectRapidFire('Vectis Auto',5)" disabled>
+          <div class="bid-btn-left">
+            <div>🌊 Rapid ×5 — Vectis Auto</div>
+            <div class="label">5 bids, 300ms apart</div>
+          </div>
+        </button>
+        <button class="bid-btn btn-rapid-sr" id="btn-rapid-s" onclick="injectRapidFire('Saleroom',5)" disabled>
+          <div class="bid-btn-left">
+            <div>🌊 Rapid ×5 — Saleroom.com</div>
+            <div class="label">5 bids, 300ms apart</div>
+          </div>
+        </button>
+      </div>
+
+      <button class="bid-btn btn-rapid-both" id="btn-rapid-both" onclick="injectRapidFireBoth()" disabled>
+        <div class="bid-btn-left">
+          <div>💥 Alternating rapid ×10 — both platforms simultaneously</div>
+          <div class="label">Vectis Auto &amp; Saleroom.com alternate every 200ms — full stress test</div>
+        </div>
+      </button>
+
+    </div>
+  </div>
+
   <!-- ── TIMING ── -->
   <div class="card">
     <div class="card-head">
@@ -436,13 +481,18 @@ function updateState(){
   const canFW     = ST.state === 'bidding';
   const canHammer = ST.state === 'fair_warning';
 
-  document.getElementById('btn-vectis').disabled     = !canBid;
+  document.getElementById('btn-vectis').disabled      = !canBid;
   document.getElementById('btn-saleroom-bid').disabled = !canBid;
-  document.getElementById('btn-custom').disabled     = !inBid;
-  document.getElementById('btn-room-sr').disabled    = !inBid;
-  document.getElementById('btn-bang-sr').disabled    = !canBid;
-  document.getElementById('btn-fw').disabled         = !canFW;
-  document.getElementById('btn-hammer').disabled     = !canHammer;
+  document.getElementById('btn-custom').disabled      = !inBid;
+  document.getElementById('btn-room-sr').disabled     = !inBid;
+  document.getElementById('btn-bang-sr').disabled     = !canBid;
+  document.getElementById('btn-fw').disabled          = !canFW;
+  document.getElementById('btn-hammer').disabled      = !canHammer;
+  document.getElementById('btn-clash').disabled       = !canBid;
+  document.getElementById('btn-rapid-v').disabled     = !canBid;
+  document.getElementById('btn-rapid-s').disabled     = !canBid;
+  document.getElementById('btn-rapid-both').disabled  = !canBid;
+  document.getElementById('clash-amt').textContent    = ST.bid > 0 ? fmt(nextBid(ST.bid)) : '£—';
 }
 
 /* ─── ACTIONS ─── */
@@ -469,6 +519,49 @@ function bangSaleroom(){
   // Tells Bidpath to do a bang on the Saleroom source (drops bidder, keeps price)
   send('cmd_inject_bang', { source:'Saleroom' });
   addLog('! sent to Bidpath — Saleroom bidder dropped at '+fmt(ST.bid));
+}
+
+/* ─── SCENARIO FUNCTIONS ─── */
+function injectClash(){
+  const clashAmt = nextBid(ST.bid);
+  // Fire Vectis Auto first at next increment
+  send('cmd_inject_bid', { source:'Vectis Auto', amount:clashAmt });
+  // Then Saleroom.com at the SAME amount 150ms later — clash!
+  setTimeout(function(){
+    send('cmd_inject_bid', { source:'Saleroom', amount:clashAmt });
+    addLog('⚡ Clash injected — both platforms at '+fmt(clashAmt));
+  }, 150);
+}
+
+function injectRapidFire(source, count){
+  let bid = ST.bid;
+  const amts = [];
+  for(let i = 0; i < count; i++){
+    bid = nextBid(bid);
+    amts.push(bid);
+  }
+  amts.forEach(function(amt, i){
+    setTimeout(function(){
+      send('cmd_inject_bid', { source:source, amount:amt });
+    }, i * 300);
+  });
+  addLog('🌊 Rapid fire ×'+count+' ('+source+') — '+fmt(amts[0])+' → '+fmt(amts[amts.length-1]));
+}
+
+function injectRapidFireBoth(){
+  let bid = ST.bid;
+  const sources = ['Vectis Auto','Saleroom'];
+  const steps = [];
+  for(let i = 0; i < 10; i++){
+    bid = nextBid(bid);
+    steps.push({ source:sources[i%2], amount:bid });
+  }
+  steps.forEach(function(step, i){
+    setTimeout(function(){
+      send('cmd_inject_bid', { source:step.source, amount:step.amount });
+    }, i * 200);
+  });
+  addLog('💥 Stress test ×10 — '+fmt(steps[0].amount)+' → '+fmt(steps[9].amount)+' alternating');
 }
 
 function forceFW(){

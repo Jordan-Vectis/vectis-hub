@@ -77,14 +77,14 @@ export default function AutoClerkPage() {
         s.fwIssued   = false
         s.bidpathBid = amount
 
-        // Mirror to Saleroom — tell it a bid arrived at this amount
-        // Pass the source through so Saleroom can label it correctly:
-        //   source='Saleroom' → real saleroom.com online customer → show "Online"
-        //   source='Vectis Auto' → Bidpath/Vectis bidder → show "Room" (operator clicking Bid)
         if (amount > s.saleroomBid) {
           ch.postMessage({ type: 'cmd_bid', amount, source: msg.source })
           s.saleroomBid = amount
           addLog(`Bidpath bid £${amount} (${msg.source}) → cmd_bid to Saleroom`)
+        } else if (msg.source === 'Saleroom' && amount === s.saleroomBid && s.saleroomBid > 0) {
+          // Clash — Saleroom.com bid at same level as existing — both platforms have online bidders
+          ch.postMessage({ type: 'clash_warning', amount })
+          addLog(`⚡ CLASH at £${amount} — both platforms have online bidders!`)
         }
       }
 
