@@ -20,7 +20,7 @@ const ACTION_STYLE: Record<ActionType, { border: string; badge: string; bg: stri
   bid:        { border: 'border-blue-500',   badge: '! BID',          bg: 'bg-blue-600' },
   sell:       { border: 'border-green-500',  badge: '! HAMMER',       bg: 'bg-green-600' },
   next:       { border: 'border-purple-400', badge: '! NEXT LOT',     bg: 'bg-purple-600' },
-  fw:         { border: 'border-orange-400', badge: '! FAIR WARNING', bg: 'bg-orange-500' },
+  fw:         { border: 'border-orange-400', badge: 'FAIR WARNING',   bg: 'bg-orange-500' },
   info:       { border: 'border-slate-600',  badge: 'INFO',           bg: 'bg-slate-700' },
   connect:    { border: 'border-emerald-500',badge: 'RELAY ACTIVE',   bg: 'bg-emerald-600' },
   disconnect: { border: 'border-red-500',    badge: 'NO SIGNAL',      bg: 'bg-red-700' },
@@ -55,7 +55,7 @@ function mapEvent(e: GapEvent): Action | null {
 
     case 'fair_warning':
       return { ...base, aType: 'fw',
-        headline: 'Press ! (Fair Warning) on Bidpath',
+        headline: 'Press Fair Warning on Bidpath',
         detail:   'Fair Warning called on Saleroom — press the button on Bidpath too' }
 
     case 'lot_passed':
@@ -395,12 +395,11 @@ export default function AutoClerkSaleroomPage() {
                 </div>
               </div>
 
-              {/* ! buttons — each is a coloured ! with a small label, matching the real Bidpath clerking screen */}
+              {/* ! buttons for bid actions */}
               {([
-                { key: 'bid',  label: 'Bid',          amount: simButton === 'bid'  ? simAmount : 0, activeClass: 'bg-blue-500   ring-blue-400   shadow-blue-500/50'   },
-                { key: 'sell', label: 'Hammer',        amount: simButton === 'sell' ? simAmount : 0, activeClass: 'bg-green-500  ring-green-400  shadow-green-500/50'  },
-                { key: 'next', label: 'Next Lot',      amount: 0,                                   activeClass: 'bg-purple-500 ring-purple-400 shadow-purple-500/50' },
-                { key: 'fw',   label: 'Fair Warning',  amount: 0,                                   activeClass: 'bg-orange-500 ring-orange-400 shadow-orange-500/50' },
+                { key: 'bid',  label: 'Bid',     amount: simButton === 'bid'  ? simAmount : 0, activeClass: 'bg-blue-500  ring-blue-400  shadow-blue-500/50'  },
+                { key: 'sell', label: 'Hammer',   amount: simButton === 'sell' ? simAmount : 0, activeClass: 'bg-green-500 ring-green-400 shadow-green-500/50' },
+                { key: 'next', label: 'Next Lot', amount: 0,                                   activeClass: 'bg-purple-500 ring-purple-400 shadow-purple-500/50' },
               ] as const).map(({ key, label, amount, activeClass }) => (
                 <div key={key} className="flex flex-col items-center gap-1">
                   <div className={`w-14 h-14 rounded-xl font-black text-3xl flex items-center justify-center transition-all duration-150 select-none ${
@@ -412,6 +411,16 @@ export default function AutoClerkSaleroomPage() {
                   {amount > 0 && <p className="text-[10px] text-white font-bold">{fmt(amount)}</p>}
                 </div>
               ))}
+
+              {/* Fair Warning — labelled button, not a ! */}
+              <div className="flex flex-col items-center gap-1">
+                <div className={`px-3 h-14 rounded-xl font-bold text-xs flex items-center justify-center transition-all duration-150 select-none ${
+                  simButton === 'fw'
+                    ? 'bg-orange-500 text-white scale-110 ring-4 ring-orange-400 ring-offset-2 ring-offset-slate-950 shadow-lg shadow-orange-500/50'
+                    : 'bg-slate-800 text-slate-600 border border-slate-700'
+                }`}>FAIR<br/>WARNING</div>
+                <p className="text-[10px] text-slate-500 font-medium">button</p>
+              </div>
             </div>
           </div>
 

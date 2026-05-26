@@ -7,7 +7,8 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 type ConnState = 'idle' | 'connecting' | 'open' | 'error' | 'closed'
 
 type ActionType =
-  | 'bid'        // Press Bid button on Saleroom
+  | 'bid'        // Press Bid button on Saleroom (internet bid)
+  | 'room'       // Press Room button on Saleroom (room/BSCB bid from Bidpath)
   | 'fw'         // Press Fair Warning on Saleroom
   | 'fw_cancel'  // FW cancelled — no action needed
   | 'sell'       // Fill hammer price + Press Sell
@@ -53,6 +54,7 @@ function ts() {
 
 const ACTION_STYLE: Record<ActionType, { border: string; badge: string; badgeBg: string }> = {
   bid:        { border: 'border-blue-500',   badge: 'PRESS BID',        badgeBg: 'bg-blue-600' },
+  room:       { border: 'border-rose-500',   badge: 'PRESS ROOM',       badgeBg: 'bg-rose-600' },
   fw:         { border: 'border-orange-400', badge: 'PRESS FW',         badgeBg: 'bg-orange-500' },
   fw_cancel:  { border: 'border-slate-500',  badge: 'FW CANCELLED',     badgeBg: 'bg-slate-600' },
   sell:       { border: 'border-green-500',  badge: 'PRESS SELL',       badgeBg: 'bg-green-600' },
@@ -84,7 +86,7 @@ export default function AutoClerkLivePage() {
   })
   const [rawLog, setRawLog]         = useState<string[]>([])
   const [showRaw, setShowRaw]       = useState(false)
-  const [simButton, setSimButton]   = useState<'bid' | 'sell' | 'next' | 'fw' | null>(null)
+  const [simButton, setSimButton]   = useState<'bid' | 'room' | 'sell' | 'next' | 'fw' | null>(null)
   const [simAmount, setSimAmount]   = useState(0)
 
   const wsRef        = useRef<WebSocket | null>(null)
@@ -93,7 +95,7 @@ export default function AutoClerkLivePage() {
   const feedRef      = useRef<HTMLDivElement | null>(null)
   const simTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function triggerSim(btn: 'bid' | 'sell' | 'next' | 'fw', amount = 0) {
+  function triggerSim(btn: 'bid' | 'room' | 'sell' | 'next' | 'fw', amount = 0) {
     if (simTimerRef.current) clearTimeout(simTimerRef.current)
     setSimButton(btn)
     setSimAmount(amount)
@@ -157,13 +159,22 @@ export default function AutoClerkLivePage() {
       const lotNo    = d.lot_number ?? d.lotNumber ?? stateRef.current.lotNumber
 
       updateLive({ currentBid: amount, ...(asking > 0 ? { askingBid: asking } : {}) })
-      triggerSim('bid', amount)
+
+      const isRoom = platform === 'BSCB'
+      triggerSim(isRoom ? 'room' : 'bid', amount)
 
       const platformLabel = PLATFORM_LABEL[platform] ?? platform
-      addAction('bid',
-        `Press BID on Saleroom — ${fmt(amount)}`,
-        `Source: ${platformLabel} · Lot ${lotNo}`
-      )
+      if (isRoom) {
+        addAction('room',
+          `Press ROOM on Saleroom — ${fmt(amount)}`,
+          `Room bid at Vectis · Lot ${lotNo}`
+        )
+      } else {
+        addAction('bid',
+          `Press BID on Saleroom — ${fmt(amount)}`,
+          `Source: ${platformLabel} · Lot ${lotNo}`
+        )
+      }
       return
     }
 
