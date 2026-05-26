@@ -98,9 +98,20 @@ export default function AutoClerkSaleroomPage() {
   const [lastEventAt, setLastEventAt] = useState<number | null>(null)
   const [lotState, setLotState]     = useState({ lot: '—', hammer: 0, asking: 0, message: '—' })
 
-  const pollRef  = useRef<ReturnType<typeof setInterval> | null>(null)
-  const feedRef  = useRef<HTMLDivElement | null>(null)
-  const cursorRef = useRef(0)
+  const [simButton, setSimButton]   = useState<'bid' | 'sell' | 'next' | null>(null)
+  const [simAmount, setSimAmount]   = useState(0)
+
+  const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null)
+  const feedRef    = useRef<HTMLDivElement | null>(null)
+  const cursorRef  = useRef(0)
+  const simTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function triggerSim(btn: 'bid' | 'sell' | 'next', amount = 0) {
+    if (simTimerRef.current) clearTimeout(simTimerRef.current)
+    setSimButton(btn)
+    setSimAmount(amount)
+    simTimerRef.current = setTimeout(() => setSimButton(null), 2000)
+  }
 
   function addAction(a: Action) {
     setActions(prev => [a, ...prev].slice(0, 200))
@@ -138,6 +149,20 @@ export default function AutoClerkSaleroomPage() {
             asking:  latest.asking  || 0,
             message: latest.message || '—',
           })
+
+          // Trigger sim from most recent actionable event
+          const lastActionable = [...data.events].reverse().find(
+            (e: any) => ['bid_internet','bid_room','lot_sold','lot_offered'].includes(e.type)
+          )
+          if (lastActionable) {
+            if (lastActionable.type === 'bid_internet' || lastActionable.type === 'bid_room') {
+              triggerSim('bid', lastActionable.hammer)
+            } else if (lastActionable.type === 'lot_sold') {
+              triggerSim('sell', lastActionable.hammer)
+            } else if (lastActionable.type === 'lot_offered') {
+              triggerSim('next')
+            }
+          }
 
           // Map to actions (newest last → displayed newest first)
           const newActions = data.events
@@ -334,36 +359,97 @@ export default function AutoClerkSaleroomPage() {
           </div>
         </div>
 
-        {/* Right — action feed */}
-        <div ref={feedRef} className="flex-1 overflow-y-auto p-4">
-          {actions.length === 0 && (
-            <div className="text-center text-slate-600 mt-20">
-              <p className="text-4xl mb-3">🏷</p>
-              <p className="text-sm">No events yet.</p>
-              <p className="text-xs mt-1 text-slate-700">
-                Start polling, copy the script, paste it in the Saleroom Console.
-              </p>
-            </div>
-          )}
+        {/* Right — sim panel + feed */}
+        <div className="flex-1 flex flex-col overflow-hidden">
 
-          <div className="space-y-2">
-            {actions.map(a => {
-              const style = ACTION_STYLE[a.aType]
-              return (
-                <div key={`${a.id}-${a.at}`}
-                  className={`flex items-start gap-3 bg-slate-900 border-l-4 ${style.border} rounded-r px-4 py-3`}>
-                  <span className={`${style.bg} text-white text-[10px] font-bold px-2 py-0.5 rounded shrink-0 mt-0.5 uppercase tracking-wide`}>
-                    {style.badge}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium leading-snug">{a.headline}</p>
-                    {a.detail && <p className="text-xs text-slate-400 mt-0.5">{a.detail}</p>}
-                    {a.raw && <p className="text-[10px] text-slate-600 mt-0.5 italic">"{a.raw}"</p>}
+          {/* Fake Bidpath clerk screen */}
+          <div className="shrink-0 border-b border-slate-800 bg-slate-900/40 px-4 py-3">
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+              Simulated Bidpath — buttons that would be pressed
+            </p>
+            <div className="flex gap-3 items-center flex-wrap">
+              {/* Lot info */}
+              <div className="bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-center min-w-[100px] shrink-0">
+                <p className="text-[9px] text-slate-500 uppercase tracking-wide">Lot</p>
+                <p className="text-2xl font-black tabular-nums">{lotState.lot}</p>
+                <div className="flex gap-3 justify-center mt-1">
+                  <div>
+                    <p className="text-[9px] text-slate-600">Bid</p>
+                    <p className="text-xs font-bold text-blue-300">{lotState.hammer > 0 ? fmt(lotState.hammer) : '—'}</p>
                   </div>
-                  <span className="text-[10px] text-slate-600 shrink-0 mt-1 tabular-nums">{a.at}</span>
+                  <div>
+                    <p className="text-[9px] text-slate-600">Ask</p>
+                    <p className="text-xs font-bold text-slate-300">{lotState.asking > 0 ? fmt(lotState.asking) : '—'}</p>
+                  </div>
                 </div>
-              )
-            })}
+              </div>
+
+              {/* BID button */}
+              <div className={`px-4 py-2.5 rounded-lg font-bold text-sm transition-all duration-150 select-none ${
+                simButton === 'bid'
+                  ? 'bg-blue-500 text-white scale-105 ring-4 ring-blue-400 ring-offset-2 ring-offset-slate-950 shadow-lg shadow-blue-500/50'
+                  : 'bg-slate-800 text-slate-500 border border-slate-700'
+              }`}>
+                BID{simButton === 'bid' && simAmount > 0 ? ` — ${fmt(simAmount)}` : ''}
+              </div>
+
+              {/* SELL — hammer price box + button */}
+              <div className="flex items-stretch gap-0 rounded-lg overflow-hidden">
+                <div className={`px-3 py-2.5 font-mono font-bold text-sm transition-all duration-150 ${
+                  simButton === 'sell'
+                    ? 'bg-green-700 text-white'
+                    : 'bg-slate-800 text-slate-500 border border-r-0 border-slate-700'
+                }`}>
+                  {simButton === 'sell' && simAmount > 0 ? fmt(simAmount) : '£ ——'}
+                </div>
+                <div className={`px-4 py-2.5 font-bold text-sm transition-all duration-150 select-none ${
+                  simButton === 'sell'
+                    ? 'bg-green-500 text-white scale-105 ring-4 ring-green-400 ring-offset-2 ring-offset-slate-950 shadow-lg shadow-green-500/50'
+                    : 'bg-slate-800 text-slate-500 border border-slate-700'
+                }`}>SELL</div>
+              </div>
+
+              {/* NEXT LOT */}
+              <div className={`px-4 py-2.5 rounded-lg font-bold text-sm transition-all duration-150 select-none ${
+                simButton === 'next'
+                  ? 'bg-purple-500 text-white scale-105 ring-4 ring-purple-400 ring-offset-2 ring-offset-slate-950 shadow-lg shadow-purple-500/50'
+                  : 'bg-slate-800 text-slate-500 border border-slate-700'
+              }`}>NEXT LOT</div>
+            </div>
+          </div>
+
+          {/* Action feed */}
+          <div ref={feedRef} className="flex-1 overflow-y-auto p-4">
+            {actions.length === 0 && (
+              <div className="text-center text-slate-600 mt-20">
+                <p className="text-4xl mb-3">🏷</p>
+                <p className="text-sm">No events yet.</p>
+                <p className="text-xs mt-1 text-slate-700">
+                  Start polling, copy the script, paste it in the Saleroom Console.
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {actions.map(a => {
+                const style = ACTION_STYLE[a.aType]
+                return (
+                  <div key={`${a.id}-${a.at}`}
+                    className={`flex items-start gap-3 bg-slate-900 border-l-4 ${style.border} rounded-r px-4 py-3`}>
+                    <span className={`${style.bg} text-white text-[10px] font-bold px-2 py-0.5 rounded shrink-0 mt-0.5 uppercase tracking-wide`}>
+                      {style.badge}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium leading-snug">{a.headline}</p>
+                      {a.detail && <p className="text-xs text-slate-400 mt-0.5">{a.detail}</p>}
+                      {a.raw && <p className="text-[10px] text-slate-600 mt-0.5 italic">"{a.raw}"</p>}
+                    </div>
+                    <span className="text-[10px] text-slate-600 shrink-0 mt-1 tabular-nums">{a.at}</span>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </div>
       </div>

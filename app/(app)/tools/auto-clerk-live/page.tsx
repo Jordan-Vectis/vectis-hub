@@ -86,11 +86,21 @@ export default function AutoClerkLivePage() {
   })
   const [rawLog, setRawLog]         = useState<string[]>([])
   const [showRaw, setShowRaw]       = useState(false)
+  const [simButton, setSimButton]   = useState<'bid' | 'sell' | 'next' | 'fw' | 'lock' | null>(null)
+  const [simAmount, setSimAmount]   = useState(0)
 
   const wsRef        = useRef<WebSocket | null>(null)
   const stateRef     = useRef<LiveState>({ lotNumber: '—', lotTitle: '—', currentBid: 0, askingBid: 0, fwActive: false, soldLots: new Set() })
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const feedRef      = useRef<HTMLDivElement | null>(null)
+  const simTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function triggerSim(btn: 'bid' | 'sell' | 'next' | 'fw' | 'lock', amount = 0) {
+    if (simTimerRef.current) clearTimeout(simTimerRef.current)
+    setSimButton(btn)
+    setSimAmount(amount)
+    simTimerRef.current = setTimeout(() => setSimButton(null), 2000)
+  }
 
   // Keep stateRef in sync
   const updateLive = useCallback((patch: Partial<Omit<LiveState, 'soldLots'>>) => {
@@ -132,6 +142,7 @@ export default function AutoClerkLivePage() {
         fwActive:   false,
       })
 
+      triggerSim('next')
       addAction('next',
         `Press NEXT LOT on Saleroom — advancing to Lot ${lotNo}`,
         title ? `"${title}"` : ''
@@ -148,6 +159,7 @@ export default function AutoClerkLivePage() {
       const lotNo    = d.lot_number ?? d.lotNumber ?? stateRef.current.lotNumber
 
       updateLive({ currentBid: amount, ...(asking > 0 ? { askingBid: asking } : {}) })
+      triggerSim('bid', amount)
 
       const platformLabel = PLATFORM_LABEL[platform] ?? platform
       addAction('bid',
@@ -164,6 +176,7 @@ export default function AutoClerkLivePage() {
       const lotNo  = d.lot_number ?? stateRef.current.lotNumber
 
       updateLive({ currentBid: amount })
+      triggerSim('bid', amount)
 
       addAction('bid',
         `Press BID on Saleroom — ${fmt(amount)}`,
@@ -179,6 +192,7 @@ export default function AutoClerkLivePage() {
 
       if (fw && !stateRef.current.fwActive) {
         updateLive({ fwActive: true })
+        triggerSim('fw')
         addAction('fw',
           'Press FAIR WARNING on Saleroom',
           `Current bid: ${stateRef.current.currentBid > 0 ? fmt(stateRef.current.currentBid) : 'none'} · Lot ${stateRef.current.lotNumber}`
@@ -207,6 +221,7 @@ export default function AutoClerkLivePage() {
         if (!stateRef.current.soldLots.has(lotKey)) {
           stateRef.current.soldLots.add(lotKey)
           setLiveState(prev => ({ ...prev, soldLots: new Set(stateRef.current.soldLots) }))
+          triggerSim('sell', hammerPrice)
           addAction('sell',
             `Fill hammer ${fmt(hammerPrice)} → Press SELL on Saleroom`,
             `Lot ${stateRef.current.lotNumber} sold at ${fmt(hammerPrice)}`
@@ -222,6 +237,7 @@ export default function AutoClerkLivePage() {
       const status = d.status ?? d.lockStatus
 
       if (status === 1 || status === '1') {
+        triggerSim('lock')
         addAction('lock',
           'Lot locked on Bidpath',
           'Sell + Next Lot sequence incoming — wait for lotInformationUpdate and activeLotChange'
@@ -498,9 +514,53 @@ export default function AutoClerkLivePage() {
           </div>
         </div>
 
-        {/* ── Right: Action feed (or raw log) ─────────────────────────── */}
-        <div ref={feedRef} className="flex-1 overflow-y-auto p-4">
+        {/* ── Right: Sim panel + feed ──────────────────────────────────── */}
+        <div className="flex-1 flex flex-col overflow-hidden">
 
+          {/* Fake Saleroom clerk screen */}
+          <div className="shrink-0 border-b border-slate-800 bg-slate-900/40 px-4 py-3">
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
+              Simulated Saleroom — buttons that would be pressed
+            </p>
+            <div className="flex gap-3 items-center flex-wrap">
+              {/* Lot info */}
+              <div className="bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-center min-w-[100px] shrink-0">
+                <p className="text-[9px] text-slate-500 uppercase tracking-wide">Lot</p>
+                <p className="text-2xl font-black tabular-nums">{liveState.lotNumber}</p>
+                <div className="flex gap-3 justify-center mt-1">
+                  <div>
+                    <p className="text-[9px] text-slate-600">Bid</p>
+                    <p className="text-xs font-bold text-blue-300">{liveState.currentBid > 0 ? fmt(liveState.currentBid) : '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] text-slate-600">Ask</p>
+                    <p className="text-xs font-bold text-slate-300">{liveState.askingBid > 0 ? fmt(liveState.askingBid) : '—'}</p>
+                  </div>
+                </div>
+              </div>
+              {/* Action buttons */}
+              {([
+                { key: 'bid',  label: `BID${simButton === 'bid'  && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`, activeClass: 'bg-blue-500   ring-blue-400   shadow-blue-500/50'  },
+                { key: 'sell', label: `SELL${simButton === 'sell' && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`,activeClass: 'bg-green-500  ring-green-400  shadow-green-500/50' },
+                { key: 'next', label: 'NEXT LOT',    activeClass: 'bg-purple-500  ring-purple-400 shadow-purple-500/50' },
+                { key: 'fw',   label: 'FAIR WARNING',activeClass: 'bg-orange-500  ring-orange-400 shadow-orange-500/50' },
+                { key: 'lock', label: 'LOT LOCKED',  activeClass: 'bg-yellow-500  ring-yellow-400 shadow-yellow-500/50' },
+              ] as const).map(({ key, label, activeClass }) => (
+                <div
+                  key={key}
+                  className={`px-4 py-2.5 rounded-lg font-bold text-sm transition-all duration-150 select-none ${
+                    simButton === key
+                      ? `${activeClass} text-white scale-105 ring-4 ring-offset-2 ring-offset-slate-950 shadow-lg`
+                      : 'bg-slate-800 text-slate-500 border border-slate-700'
+                  }`}
+                >{label}</div>
+              ))}
+            </div>
+          </div>
+
+          {/* Action feed */}
+          <div ref={feedRef} className="flex-1 overflow-y-auto p-4">
           {showRaw ? (
             <div className="font-mono text-xs text-slate-400 space-y-1">
               {rawLog.length === 0 && (
@@ -544,7 +604,8 @@ export default function AutoClerkLivePage() {
               })}
             </div>
           )}
-        </div>
+          </div>{/* end feed */}
+        </div>{/* end right column */}
       </div>
     </div>
   )
