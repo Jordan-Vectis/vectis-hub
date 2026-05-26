@@ -17,13 +17,13 @@ interface Action {
 }
 
 const ACTION_STYLE: Record<ActionType, { border: string; badge: string; bg: string }> = {
-  bid:        { border: 'border-blue-500',   badge: 'PRESS BID!',          bg: 'bg-blue-600' },
-  sell:       { border: 'border-green-500',  badge: 'PRESS HAMMER!',       bg: 'bg-green-600' },
-  next:       { border: 'border-purple-400', badge: 'PRESS NEXT LOT!',     bg: 'bg-purple-600' },
-  fw:         { border: 'border-orange-400', badge: 'PRESS FAIR WARNING!', bg: 'bg-orange-500' },
-  info:       { border: 'border-slate-600',  badge: 'INFO',                bg: 'bg-slate-700' },
-  connect:    { border: 'border-emerald-500',badge: 'RELAY ACTIVE',        bg: 'bg-emerald-600' },
-  disconnect: { border: 'border-red-500',    badge: 'NO SIGNAL',           bg: 'bg-red-700' },
+  bid:        { border: 'border-blue-500',   badge: '! BID',          bg: 'bg-blue-600' },
+  sell:       { border: 'border-green-500',  badge: '! HAMMER',       bg: 'bg-green-600' },
+  next:       { border: 'border-purple-400', badge: '! NEXT LOT',     bg: 'bg-purple-600' },
+  fw:         { border: 'border-orange-400', badge: '! FAIR WARNING', bg: 'bg-orange-500' },
+  info:       { border: 'border-slate-600',  badge: 'INFO',           bg: 'bg-slate-700' },
+  connect:    { border: 'border-emerald-500',badge: 'RELAY ACTIVE',   bg: 'bg-emerald-600' },
+  disconnect: { border: 'border-red-500',    badge: 'NO SIGNAL',      bg: 'bg-red-700' },
 }
 
 function fmt(n: number) { return '£' + n.toLocaleString('en-GB') }
@@ -35,27 +35,27 @@ function mapEvent(e: GapEvent): Action | null {
   switch (e.type) {
     case 'bid_internet':
       return { ...base, aType: 'bid',
-        headline: `Press BID! on Bidpath — ${fmt(e.hammer)}`,
+        headline: `Press ! (Bid) on Bidpath — ${fmt(e.hammer)}`,
         detail:   `Saleroom.com online bidder · Lot ${e.lot} · Asking ${fmt(e.asking)}` }
 
     case 'bid_room':
       return { ...base, aType: 'bid',
-        headline: `Press BID! on Bidpath — ${fmt(e.hammer)}`,
+        headline: `Press ! (Bid) on Bidpath — ${fmt(e.hammer)}`,
         detail:   `Room/phone bid via Saleroom · Lot ${e.lot} · Asking ${fmt(e.asking)}` }
 
     case 'lot_offered':
       return { ...base, aType: 'next',
-        headline: `Press NEXT LOT! on Bidpath — Lot ${e.lot} now live on Saleroom`,
+        headline: `Press ! (Next Lot) on Bidpath — Lot ${e.lot} now live on Saleroom`,
         detail:   'Confirm Bidpath is on the same lot' }
 
     case 'lot_sold':
       return { ...base, aType: 'sell',
-        headline: `Press HAMMER! on Bidpath — ${e.hammer > 0 ? fmt(e.hammer) : 'check Saleroom'}`,
-        detail:   `Lot ${e.lot} · Then press NEXT LOT! to advance` }
+        headline: `Press ! (Hammer) on Bidpath — ${e.hammer > 0 ? fmt(e.hammer) : 'check Saleroom'}`,
+        detail:   `Lot ${e.lot} · Then press ! (Next Lot) to advance` }
 
     case 'fair_warning':
       return { ...base, aType: 'fw',
-        headline: 'Press FAIR WARNING! on Bidpath',
+        headline: 'Press ! (Fair Warning) on Bidpath',
         detail:   'Fair Warning called on Saleroom — press the button on Bidpath too' }
 
     case 'lot_passed':
@@ -395,44 +395,23 @@ export default function AutoClerkSaleroomPage() {
                 </div>
               </div>
 
-              {/* BID! */}
-              <div className={`px-4 py-2.5 rounded-lg font-bold text-sm transition-all duration-150 select-none ${
-                simButton === 'bid'
-                  ? 'bg-blue-500 text-white scale-105 ring-4 ring-blue-400 ring-offset-2 ring-offset-slate-950 shadow-lg shadow-blue-500/50'
-                  : 'bg-slate-800 text-slate-500 border border-slate-700'
-              }`}>
-                BID!{simButton === 'bid' && simAmount > 0 ? ` — ${fmt(simAmount)}` : ''}
-              </div>
-
-              {/* HAMMER! — price box + button */}
-              <div className="flex items-stretch gap-0 rounded-lg overflow-hidden">
-                <div className={`px-3 py-2.5 font-mono font-bold text-sm transition-all duration-150 ${
-                  simButton === 'sell'
-                    ? 'bg-green-700 text-white'
-                    : 'bg-slate-800 text-slate-500 border border-r-0 border-slate-700'
-                }`}>
-                  {simButton === 'sell' && simAmount > 0 ? fmt(simAmount) : '£ ——'}
+              {/* ! buttons — each is a coloured ! with a small label, matching the real Bidpath clerking screen */}
+              {([
+                { key: 'bid',  label: 'Bid',          amount: simButton === 'bid'  ? simAmount : 0, activeClass: 'bg-blue-500   ring-blue-400   shadow-blue-500/50'   },
+                { key: 'sell', label: 'Hammer',        amount: simButton === 'sell' ? simAmount : 0, activeClass: 'bg-green-500  ring-green-400  shadow-green-500/50'  },
+                { key: 'next', label: 'Next Lot',      amount: 0,                                   activeClass: 'bg-purple-500 ring-purple-400 shadow-purple-500/50' },
+                { key: 'fw',   label: 'Fair Warning',  amount: 0,                                   activeClass: 'bg-orange-500 ring-orange-400 shadow-orange-500/50' },
+              ] as const).map(({ key, label, amount, activeClass }) => (
+                <div key={key} className="flex flex-col items-center gap-1">
+                  <div className={`w-14 h-14 rounded-xl font-black text-3xl flex items-center justify-center transition-all duration-150 select-none ${
+                    simButton === key
+                      ? `${activeClass} text-white scale-110 ring-4 ring-offset-2 ring-offset-slate-950 shadow-lg`
+                      : 'bg-slate-800 text-slate-600 border border-slate-700'
+                  }`}>!</div>
+                  <p className="text-[10px] text-slate-500 font-medium text-center leading-tight">{label}</p>
+                  {amount > 0 && <p className="text-[10px] text-white font-bold">{fmt(amount)}</p>}
                 </div>
-                <div className={`px-4 py-2.5 font-bold text-sm transition-all duration-150 select-none ${
-                  simButton === 'sell'
-                    ? 'bg-green-500 text-white scale-105 ring-4 ring-green-400 ring-offset-2 ring-offset-slate-950 shadow-lg shadow-green-500/50'
-                    : 'bg-slate-800 text-slate-500 border border-slate-700'
-                }`}>HAMMER!</div>
-              </div>
-
-              {/* NEXT LOT! */}
-              <div className={`px-4 py-2.5 rounded-lg font-bold text-sm transition-all duration-150 select-none ${
-                simButton === 'next'
-                  ? 'bg-purple-500 text-white scale-105 ring-4 ring-purple-400 ring-offset-2 ring-offset-slate-950 shadow-lg shadow-purple-500/50'
-                  : 'bg-slate-800 text-slate-500 border border-slate-700'
-              }`}>NEXT LOT!</div>
-
-              {/* FAIR WARNING! */}
-              <div className={`px-4 py-2.5 rounded-lg font-bold text-sm transition-all duration-150 select-none ${
-                simButton === 'fw'
-                  ? 'bg-orange-500 text-white scale-105 ring-4 ring-orange-400 ring-offset-2 ring-offset-slate-950 shadow-lg shadow-orange-500/50'
-                  : 'bg-slate-800 text-slate-500 border border-slate-700'
-              }`}>FAIR WARNING!</div>
+              ))}
             </div>
           </div>
 
