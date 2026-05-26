@@ -119,10 +119,10 @@ export default function AutoClerkLivePage() {
 
     // ── Lot advance ───────────────────────────────────────────────────────
     if (cmd === 'activeLotChange') {
-      const d      = parsed.data || parsed
+      const d      = parsed.content || parsed
       const lotNo  = d.lot_number ?? d.lotNumber ?? d.auction_lot_number ?? '?'
       const title  = d.lot_title  ?? d.title ?? ''
-      const asking = Number(d.asking_price ?? d.askingPrice ?? 0)
+      const asking = Number(d.asking_price ?? d.asking ?? 0)
 
       updateLive({
         lotNumber:  String(lotNo),
@@ -141,12 +141,13 @@ export default function AutoClerkLivePage() {
 
     // ── Bid received ──────────────────────────────────────────────────────
     if (cmd === 'liveBidEvent') {
-      const d        = parsed.data || parsed
-      const amount   = Number(d.bid_amount ?? d.amount ?? 0)
+      const d        = parsed.content || parsed
+      const amount   = Number(d.amount ?? 0)
+      const asking   = Number(d.asking ?? 0)
       const platform = d.platform ?? ''
       const lotNo    = d.lot_number ?? d.lotNumber ?? stateRef.current.lotNumber
 
-      updateLive({ currentBid: amount })
+      updateLive({ currentBid: amount, ...(asking > 0 ? { askingBid: asking } : {}) })
 
       const platformLabel = PLATFORM_LABEL[platform] ?? platform
       addAction('bid',
@@ -158,8 +159,8 @@ export default function AutoClerkLivePage() {
 
     // ── Commission bid received ───────────────────────────────────────────
     if (cmd === 'liveCommissionBidEvent') {
-      const d      = parsed.data || parsed
-      const amount = Number(d.bid_amount ?? d.amount ?? 0)
+      const d      = parsed.content || parsed
+      const amount = Number(d.amount ?? 0)
       const lotNo  = d.lot_number ?? stateRef.current.lotNumber
 
       updateLive({ currentBid: amount })
@@ -173,7 +174,7 @@ export default function AutoClerkLivePage() {
 
     // ── Fair warning ──────────────────────────────────────────────────────
     if (cmd === 'getFairWarningStatus') {
-      const d  = parsed.data || parsed
+      const d  = parsed.content || parsed
       const fw = Boolean(d.fair_warning ?? d.fairWarning)
 
       if (fw && !stateRef.current.fwActive) {
@@ -194,7 +195,7 @@ export default function AutoClerkLivePage() {
 
     // ── Lot sold ──────────────────────────────────────────────────────────
     if (cmd === 'lotInformationUpdate') {
-      const d        = parsed.data || parsed
+      const d        = parsed.content || parsed
       const keyName  = d.key_name  ?? d.keyName  ?? ''
       const keyValue = d.key_value ?? d.keyValue
 
@@ -217,7 +218,7 @@ export default function AutoClerkLivePage() {
 
     // ── Lot lock ──────────────────────────────────────────────────────────
     if (cmd === 'activeLotLock') {
-      const d      = parsed.data || parsed
+      const d      = parsed.content || parsed
       const status = d.status ?? d.lockStatus
 
       if (status === 1 || status === '1') {
@@ -229,9 +230,20 @@ export default function AutoClerkLivePage() {
       return
     }
 
+    // ── Asking price update ───────────────────────────────────────────────
+    if (cmd === 'setLiveAskingPrice') {
+      const d      = parsed.content || parsed
+      const asking = Number(d.asking_bid ?? 0)
+      const lotNo  = d.lot_number ?? stateRef.current.lotNumber
+
+      if (asking > 0) updateLive({ askingBid: asking })
+      // Informational only — no Saleroom button press needed
+      return
+    }
+
     // ── Sensor / network events ───────────────────────────────────────────
     if (cmd === 'sensorNetworkEvent') {
-      const d = parsed.data || parsed
+      const d = parsed.content || parsed
       if (d.action === 'pause') {
         addAction('info', 'Auction paused on Bidpath', 'No Saleroom action required')
       } else if (d.action === 'resume') {
@@ -242,9 +254,8 @@ export default function AutoClerkLivePage() {
       return
     }
 
-    // ── Lot information (non-sold, e.g. title update) ─────────────────────
+    // Non-sold lotInformationUpdate updates are ignored silently
     if (cmd === 'lotInformationUpdate') {
-      // Catch-all — non-Sold updates ignored silently
       return
     }
   }
