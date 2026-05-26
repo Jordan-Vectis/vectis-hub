@@ -55,6 +55,7 @@ function ts() {
 const ACTION_STYLE: Record<ActionType, { border: string; badge: string; badgeBg: string }> = {
   bid:        { border: 'border-blue-500',   badge: 'PRESS BID',        badgeBg: 'bg-blue-600' },
   room:       { border: 'border-rose-500',   badge: 'PRESS ROOM',       badgeBg: 'bg-rose-600' },
+  same:       { border: 'border-yellow-400', badge: 'PRESS ROOM (SAME)',badgeBg: 'bg-yellow-600' },
   fw:         { border: 'border-orange-400', badge: 'PRESS FW',         badgeBg: 'bg-orange-500' },
   fw_cancel:  { border: 'border-slate-500',  badge: 'FW CANCELLED',     badgeBg: 'bg-slate-600' },
   sell:       { border: 'border-green-500',  badge: 'PRESS SELL',       badgeBg: 'bg-green-600' },
@@ -86,7 +87,7 @@ export default function AutoClerkLivePage() {
   })
   const [rawLog, setRawLog]         = useState<string[]>([])
   const [showRaw, setShowRaw]       = useState(false)
-  const [simButton, setSimButton]   = useState<'bid' | 'room' | 'sell' | 'next' | 'fw' | null>(null)
+  const [simButton, setSimButton]   = useState<'bid' | 'room' | 'same' | 'sell' | 'next' | 'fw' | null>(null)
   const [simAmount, setSimAmount]   = useState(0)
 
   const wsRef        = useRef<WebSocket | null>(null)
@@ -95,7 +96,7 @@ export default function AutoClerkLivePage() {
   const feedRef      = useRef<HTMLDivElement | null>(null)
   const simTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function triggerSim(btn: 'bid' | 'room' | 'sell' | 'next' | 'fw', amount = 0) {
+  function triggerSim(btn: 'bid' | 'room' | 'same' | 'sell' | 'next' | 'fw', amount = 0) {
     if (simTimerRef.current) clearTimeout(simTimerRef.current)
     setSimButton(btn)
     setSimAmount(amount)
@@ -160,16 +161,24 @@ export default function AutoClerkLivePage() {
 
       updateLive({ currentBid: amount, ...(asking > 0 ? { askingBid: asking } : {}) })
 
-      const isRoom = platform === 'BSCB'
-      triggerSim(isRoom ? 'room' : 'bid', amount)
+      const isRoom   = platform === 'BSCB'
+      const isSameAmt = amount > 0 && amount === stateRef.current.currentBid
 
-      const platformLabel = PLATFORM_LABEL[platform] ?? platform
-      if (isRoom) {
+      if (isRoom && isSameAmt) {
+        triggerSim('same', amount)
+        addAction('same',
+          `Press ROOM on Saleroom — same amount ${fmt(amount)}`,
+          `Drop bidder — room bid at Vectis at same price · Lot ${lotNo}`
+        )
+      } else if (isRoom) {
+        triggerSim('room', amount)
         addAction('room',
           `Press ROOM on Saleroom — ${fmt(amount)}`,
           `Room bid at Vectis · Lot ${lotNo}`
         )
       } else {
+        triggerSim('bid', amount)
+        const platformLabel = PLATFORM_LABEL[platform] ?? platform
         addAction('bid',
           `Press BID on Saleroom — ${fmt(amount)}`,
           `Source: ${platformLabel} · Lot ${lotNo}`
@@ -549,9 +558,10 @@ export default function AutoClerkLivePage() {
               </div>
               {/* Action buttons — only buttons that actually exist on Saleroom */}
               {([
-                { key: 'bid',  label: `BID${simButton === 'bid'   && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`,  activeClass: 'bg-blue-500   ring-blue-400   shadow-blue-500/50'  },
-                { key: 'room', label: `ROOM${simButton === 'room'  && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`, activeClass: 'bg-rose-500   ring-rose-400   shadow-rose-500/50'  },
-                { key: 'sell', label: `SELL${simButton === 'sell'  && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`, activeClass: 'bg-green-500  ring-green-400  shadow-green-500/50' },
+                { key: 'bid',  label: `BID${simButton === 'bid'   && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`,       activeClass: 'bg-blue-500   ring-blue-400   shadow-blue-500/50'   },
+                { key: 'room', label: `ROOM${simButton === 'room'  && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`,      activeClass: 'bg-rose-500   ring-rose-400   shadow-rose-500/50'   },
+                { key: 'same', label: `ROOM (same${simButton === 'same' && simAmount > 0 ? ' ' + fmt(simAmount) : ''})`,  activeClass: 'bg-yellow-500 ring-yellow-400 shadow-yellow-500/50' },
+                { key: 'sell', label: `SELL${simButton === 'sell'  && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`,      activeClass: 'bg-green-500  ring-green-400  shadow-green-500/50'  },
                 { key: 'next', label: 'NEXT LOT',    activeClass: 'bg-purple-500 ring-purple-400 shadow-purple-500/50' },
                 { key: 'fw',   label: 'FAIR WARNING',activeClass: 'bg-orange-500 ring-orange-400 shadow-orange-500/50' },
               ] as const).map(({ key, label, activeClass }) => (
