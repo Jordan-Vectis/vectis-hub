@@ -7,14 +7,11 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 type ConnState = 'idle' | 'connecting' | 'open' | 'error' | 'closed'
 
 type ActionType =
-  | 'bid'        // Press Bid button on Saleroom (internet bid)
-  | 'room'       // Press Room button on Saleroom (room/BSCB bid from Bidpath)
-  | 'same'       // Press Room button at same amount (drop bidder)
-  | 'fw'         // Press Fair Warning on Saleroom
-  | 'fw_cancel'  // FW cancelled — no action needed
-  | 'sell'       // Fill hammer price + Press Sell
-  | 'next'       // Press Next Lot on Saleroom
-  | 'info'       // Informational only (e.g. lot locked — no Saleroom button)
+  | 'bid'        // Press BID on Saleroom to advance to match Vectis
+  | 'sell'       // Press SELL on Saleroom (step 1 of sell sequence)
+  | 'next'       // Press NEXT on Saleroom (step 2 of sell sequence)
+  | 'fw'         // Press FAIR WARNING on Saleroom
+  | 'info'       // Informational only (online bids, lot lock, etc.)
   | 'connect'
   | 'disconnect'
   | 'error'
@@ -55,12 +52,9 @@ function ts() {
 
 const ACTION_STYLE: Record<ActionType, { border: string; badge: string; badgeBg: string }> = {
   bid:        { border: 'border-blue-500',   badge: 'PRESS BID',        badgeBg: 'bg-blue-600' },
-  room:       { border: 'border-rose-500',   badge: 'PRESS ROOM',       badgeBg: 'bg-rose-600' },
-  same:       { border: 'border-yellow-400', badge: 'PRESS ROOM (SAME)',badgeBg: 'bg-yellow-600' },
-  fw:         { border: 'border-orange-400', badge: 'PRESS FW',         badgeBg: 'bg-orange-500' },
-  fw_cancel:  { border: 'border-slate-500',  badge: 'FW CANCELLED',     badgeBg: 'bg-slate-600' },
   sell:       { border: 'border-green-500',  badge: 'PRESS SELL',       badgeBg: 'bg-green-600' },
-  next:       { border: 'border-purple-400', badge: 'PRESS NEXT LOT',   badgeBg: 'bg-purple-600' },
+  next:       { border: 'border-purple-400', badge: 'PRESS NEXT',       badgeBg: 'bg-purple-600' },
+  fw:         { border: 'border-orange-400', badge: 'PRESS FW',         badgeBg: 'bg-orange-500' },
   info:       { border: 'border-slate-600',  badge: 'INFO',             badgeBg: 'bg-slate-700' },
   connect:    { border: 'border-emerald-500',badge: 'CONNECTED',        badgeBg: 'bg-emerald-600' },
   disconnect: { border: 'border-red-500',    badge: 'DISCONNECTED',     badgeBg: 'bg-red-700' },
@@ -88,7 +82,8 @@ export default function AutoClerkLivePage() {
   })
   const [rawLog, setRawLog]         = useState<string[]>([])
   const [showRaw, setShowRaw]       = useState(false)
-  const [simButton, setSimButton]   = useState<'bid' | 'room' | 'same' | 'sell' | 'next' | 'fw' | null>(null)
+  type SimBtn = 'bid' | 'sell' | 'next' | 'fw'
+  const [simButton, setSimButton]   = useState<SimBtn | null>(null)
   const [simAmount, setSimAmount]   = useState(0)
 
   const wsRef        = useRef<WebSocket | null>(null)
@@ -97,11 +92,17 @@ export default function AutoClerkLivePage() {
   const feedRef      = useRef<HTMLDivElement | null>(null)
   const simTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function triggerSim(btn: 'bid' | 'room' | 'same' | 'sell' | 'next' | 'fw', amount = 0) {
+  function triggerSim(btn: SimBtn, amount = 0) {
     if (simTimerRef.current) clearTimeout(simTimerRef.current)
     setSimButton(btn)
     setSimAmount(amount)
     simTimerRef.current = setTimeout(() => setSimButton(null), 2000)
+  }
+
+  // For two-step sell sequence: SELL then NEXT (2.2s apart)
+  function triggerSimSequence(btn1: SimBtn, amount1: number, btn2: SimBtn) {
+    triggerSim(btn1, amount1)
+    simTimerRef.current = setTimeout(() => triggerSim(btn2), 2200)
   }
 
   // Keep stateRef in sync
@@ -130,6 +131,8 @@ export default function AutoClerkLivePage() {
     const cmd = parsed.command || parsed.type || ''
 
     // ── Lot advance ───────────────────────────────────────────────────────
+    // The sell+next sequence (Saleroom: SELL then NEXT) is fired by lotInformationUpdate (Sold) below.
+    // activeLotChange is just the confirmation that Vectis has moved on.
     if (cmd === 'activeLotChange') {
       const d      = parsed.content || parsed
       const lotNo  = d.lot_number ?? d.lotNumber ?? d.auction_lot_number ?? '?'
@@ -144,15 +147,16 @@ export default function AutoClerkLivePage() {
         fwActive:   false,
       })
 
-      triggerSim('next')
-      addAction('next',
-        `Press NEXT LOT on Saleroom — advancing to Lot ${lotNo}`,
+      addAction('info',
+        `Vectis moved to Lot ${lotNo}`,
         title ? `"${title}"` : ''
       )
       return
     }
 
     // ── Bid received ──────────────────────────────────────────────────────
+    // Rule: online bids are automatic on both platforms. Only room (BSCB) bids
+    // need the clerk to advance Saleroom by pressing BID.
     if (cmd === 'liveBidEvent') {
       const d        = parsed.content || parsed
       const amount   = Number(d.amount ?? 0)
@@ -162,33 +166,26 @@ export default function AutoClerkLivePage() {
 
       updateLive({ currentBid: amount, ...(asking > 0 ? { askingBid: asking } : {}) })
 
-      const isRoom    = platform === 'BSCB'
-      const isSameAmt = amount > 0 && amount === stateRef.current.currentBid
-
-      if (isRoom && isSameAmt) {
-        triggerSim('same', amount)
-        addAction('same',
-          `Press ROOM on Saleroom — same amount ${fmt(amount)}`,
-          `Drop bidder — room bid at Vectis at same price · Lot ${lotNo}`
-        )
-      } else if (isRoom) {
-        triggerSim('room', amount)
-        addAction('room',
-          `Press ROOM on Saleroom — ${fmt(amount)}`,
+      if (platform === 'BSCB') {
+        // Room bid at Vectis — Saleroom doesn't know, clerk must press BID to catch up
+        triggerSim('bid', amount)
+        addAction('bid',
+          `Press BID on Saleroom — advance to ${fmt(amount)}`,
           `Room bid at Vectis · Lot ${lotNo}`
         )
       } else {
-        triggerSim('bid', amount)
+        // Online bid (Vectis or Saleroom) — automatic on both platforms
         const platformLabel = PLATFORM_LABEL[platform] ?? platform
-        addAction('bid',
-          `Press BID on Saleroom — ${fmt(amount)}`,
-          `Source: ${platformLabel} · Lot ${lotNo}`
+        addAction('info',
+          `${platformLabel} bid ${fmt(amount)} on Vectis — automatic on Saleroom`,
+          `Lot ${lotNo}`
         )
       }
       return
     }
 
     // ── Commission bid received ───────────────────────────────────────────
+    // Treated like a room bid — not automatic, Saleroom needs catching up
     if (cmd === 'liveCommissionBidEvent') {
       const d      = parsed.content || parsed
       const amount = Number(d.amount ?? 0)
@@ -198,8 +195,8 @@ export default function AutoClerkLivePage() {
       triggerSim('bid', amount)
 
       addAction('bid',
-        `Press BID on Saleroom — ${fmt(amount)}`,
-        `Source: Commission bid · Lot ${lotNo}`
+        `Press BID on Saleroom — advance to ${fmt(amount)}`,
+        `Commission bid on Vectis · Lot ${lotNo}`
       )
       return
     }
@@ -218,15 +215,15 @@ export default function AutoClerkLivePage() {
         )
       } else if (!fw && stateRef.current.fwActive) {
         updateLive({ fwActive: false })
-        addAction('fw_cancel',
-          'Fair Warning cancelled — no action on Saleroom',
-          'New bid came in on Bidpath after FW was called'
+        addAction('info',
+          'Fair Warning cancelled on Vectis',
+          'New bid came in after FW was called'
         )
       }
       return
     }
 
-    // ── Lot sold ──────────────────────────────────────────────────────────
+    // ── Lot sold — fires the SELL → NEXT two-step sequence on Saleroom ────
     if (cmd === 'lotInformationUpdate') {
       const d        = parsed.content || parsed
       const keyName  = d.key_name  ?? d.keyName  ?? ''
@@ -240,10 +237,10 @@ export default function AutoClerkLivePage() {
         if (!stateRef.current.soldLots.has(lotKey)) {
           stateRef.current.soldLots.add(lotKey)
           setLiveState(prev => ({ ...prev, soldLots: new Set(stateRef.current.soldLots) }))
-          triggerSim('sell', hammerPrice)
+          triggerSimSequence('sell', hammerPrice, 'next')
           addAction('sell',
-            `Fill hammer ${fmt(hammerPrice)} → Press SELL on Saleroom`,
-            `Lot ${stateRef.current.lotNumber} sold at ${fmt(hammerPrice)}`
+            `Press SELL on Saleroom — ${fmt(hammerPrice)} — then press NEXT`,
+            `Lot ${stateRef.current.lotNumber} sold at ${fmt(hammerPrice)} on Vectis`
           )
         }
       }
@@ -557,15 +554,14 @@ export default function AutoClerkLivePage() {
                   </div>
                 </div>
               </div>
-              {/* Action buttons — only buttons that actually exist on Saleroom */}
+              {/* Saleroom buttons — auto-triggered ones light up; ROOM and UNDO are manual */}
               {([
-                { key: 'bid',  label: `BID${simButton === 'bid'   && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`,       activeClass: 'bg-blue-500   ring-blue-400   shadow-blue-500/50'   },
-                { key: 'room', label: `ROOM${simButton === 'room'  && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`,      activeClass: 'bg-rose-500   ring-rose-400   shadow-rose-500/50'   },
-                { key: 'same', label: `ROOM (same${simButton === 'same' && simAmount > 0 ? ' ' + fmt(simAmount) : ''})`,  activeClass: 'bg-yellow-500 ring-yellow-400 shadow-yellow-500/50' },
-                { key: 'sell', label: `SELL${simButton === 'sell'  && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`,      activeClass: 'bg-green-500  ring-green-400  shadow-green-500/50'  },
-                { key: 'next', label: 'NEXT LOT',    activeClass: 'bg-purple-500 ring-purple-400 shadow-purple-500/50' },
-                { key: 'fw',   label: 'FAIR WARNING',activeClass: 'bg-orange-500 ring-orange-400 shadow-orange-500/50' },
-                { key: 'undo', label: 'UNDO',        activeClass: 'bg-amber-500  ring-amber-400  shadow-amber-500/50'  },
+                { key: 'bid',  label: `BID${simButton === 'bid'   && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`,  activeClass: 'bg-blue-500   ring-blue-400   shadow-blue-500/50'   },
+                { key: 'room', label: 'ROOM',                                                                       activeClass: 'bg-rose-500   ring-rose-400   shadow-rose-500/50'   },
+                { key: 'sell', label: `SELL${simButton === 'sell' && simAmount > 0 ? ' — ' + fmt(simAmount) : ''}`, activeClass: 'bg-green-500  ring-green-400  shadow-green-500/50'  },
+                { key: 'next', label: 'NEXT',                                                                       activeClass: 'bg-purple-500 ring-purple-400 shadow-purple-500/50' },
+                { key: 'fw',   label: 'FAIR WARNING',                                                               activeClass: 'bg-orange-500 ring-orange-400 shadow-orange-500/50' },
+                { key: 'undo', label: 'UNDO',                                                                       activeClass: 'bg-amber-500  ring-amber-400  shadow-amber-500/50'  },
               ] as const).map(({ key, label, activeClass }) => (
                 <div
                   key={key}

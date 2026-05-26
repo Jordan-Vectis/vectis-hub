@@ -5,7 +5,13 @@ import type { GapEvent, GapEventType } from '@/app/api/gap-relay/route'
 
 // ── Action mapping ────────────────────────────────────────────────────────────
 
-type ActionType = 'bid' | 'sell' | 'next' | 'fw' | 'info' | 'connect' | 'disconnect'
+type ActionType =
+  | 'saleroom'  // Press SALEROOM button on Vectis to advance bid to match
+  | 'sell'      // Press HAMMER on Vectis (step 1 of sell sequence)
+  | 'next'      // Press NEXT LOT on Vectis (step 2 of sell sequence)
+  | 'fw'        // Press FAIR WARNING on Vectis
+  | 'info'      // Informational only (online bids, etc.)
+  | 'connect' | 'disconnect'
 
 interface Action {
   id:       number
@@ -17,10 +23,10 @@ interface Action {
 }
 
 const ACTION_STYLE: Record<ActionType, { border: string; badge: string; bg: string }> = {
-  bid:        { border: 'border-blue-500',   badge: '! BID',          bg: 'bg-blue-600' },
-  sell:       { border: 'border-green-500',  badge: '! HAMMER',       bg: 'bg-green-600' },
-  next:       { border: 'border-purple-400', badge: '! NEXT LOT',     bg: 'bg-purple-600' },
-  fw:         { border: 'border-orange-400', badge: 'FAIR WARNING',   bg: 'bg-orange-500' },
+  saleroom:   { border: 'border-blue-500',   badge: 'PRESS SALEROOM', bg: 'bg-blue-600' },
+  sell:       { border: 'border-green-500',  badge: 'PRESS HAMMER',   bg: 'bg-green-600' },
+  next:       { border: 'border-purple-400', badge: 'PRESS NEXT LOT', bg: 'bg-purple-600' },
+  fw:         { border: 'border-orange-400', badge: 'PRESS FW',       bg: 'bg-orange-500' },
   info:       { border: 'border-slate-600',  badge: 'INFO',           bg: 'bg-slate-700' },
   connect:    { border: 'border-emerald-500',badge: 'RELAY ACTIVE',   bg: 'bg-emerald-600' },
   disconnect: { border: 'border-red-500',    badge: 'NO SIGNAL',      bg: 'bg-red-700' },
@@ -34,34 +40,38 @@ function mapEvent(e: GapEvent): Action | null {
 
   switch (e.type) {
     case 'bid_internet':
-      return { ...base, aType: 'bid',
-        headline: `Press ! (Bid) on Bidpath — ${fmt(e.hammer)}`,
-        detail:   `Saleroom.com online bidder · Lot ${e.lot} · Asking ${fmt(e.asking)}` }
+      // Online bid on Saleroom — automatic on Vectis, no clerk action
+      return { ...base, aType: 'info',
+        headline: `Online bid ${fmt(e.hammer)} on Saleroom — automatic on Vectis`,
+        detail:   `Lot ${e.lot} · Asking ${fmt(e.asking)}` }
 
     case 'bid_room':
-      return { ...base, aType: 'bid',
-        headline: `Press ! (Bid) on Bidpath — ${fmt(e.hammer)}`,
-        detail:   `Room/phone bid via Saleroom · Lot ${e.lot} · Asking ${fmt(e.asking)}` }
+      // Room/phone bid on Saleroom — not automatic, Vectis needs catching up
+      return { ...base, aType: 'saleroom',
+        headline: `Press SALEROOM on Vectis — advance to ${fmt(e.hammer)}`,
+        detail:   `Room/phone bid via Saleroom · Lot ${e.lot}` }
 
     case 'lot_offered':
-      return { ...base, aType: 'next',
-        headline: `Press ! (Next Lot) on Bidpath — Lot ${e.lot} now live on Saleroom`,
-        detail:   'Confirm Bidpath is on the same lot' }
+      // New lot live on Saleroom — info only, sync handled at lot start
+      return { ...base, aType: 'info',
+        headline: `Lot ${e.lot} now live on Saleroom`,
+        detail:   'Check Vectis is on the same lot at the same starting amount' }
 
     case 'lot_sold':
+      // Sold on Saleroom — Vectis needs HAMMER then NEXT LOT sequence
       return { ...base, aType: 'sell',
-        headline: `Press ! (Hammer) on Bidpath — ${e.hammer > 0 ? fmt(e.hammer) : 'check Saleroom'}`,
-        detail:   `Lot ${e.lot} · Then press ! (Next Lot) to advance` }
+        headline: `Press HAMMER on Vectis — ${e.hammer > 0 ? fmt(e.hammer) : 'check Saleroom'} — then press NEXT LOT`,
+        detail:   `Lot ${e.lot} sold on Saleroom` }
 
     case 'fair_warning':
       return { ...base, aType: 'fw',
-        headline: 'Press Fair Warning on Bidpath',
-        detail:   'Fair Warning called on Saleroom — press the button on Bidpath too' }
+        headline: 'Press FAIR WARNING on Vectis',
+        detail:   'Fair Warning called on Saleroom' }
 
     case 'lot_passed':
       return { ...base, aType: 'info',
         headline: `Lot ${e.lot} passed on Saleroom`,
-        detail:   'Mark lot as passed on Bidpath if not already' }
+        detail:   'Mark lot as passed on Vectis if not already' }
 
     case 'auction_paused':
       return { ...base, aType: 'info', headline: 'Auction paused on Saleroom', detail: '' }
@@ -98,7 +108,8 @@ export default function AutoClerkSaleroomPage() {
   const [lastEventAt, setLastEventAt] = useState<number | null>(null)
   const [lotState, setLotState]     = useState({ lot: '—', hammer: 0, asking: 0, message: '—' })
 
-  const [simButton, setSimButton]   = useState<'bid' | 'same' | 'sell' | 'next' | 'fw' | null>(null)
+  type SimBtn = 'saleroom' | 'drop' | 'sell' | 'next' | 'fw'
+  const [simButton, setSimButton]   = useState<SimBtn | null>(null)
   const [simAmount, setSimAmount]   = useState(0)
 
   const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -106,18 +117,16 @@ export default function AutoClerkSaleroomPage() {
   const cursorRef    = useRef(0)
   const simTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function triggerSim(btn: 'bid' | 'same' | 'sell' | 'next' | 'fw', amount = 0) {
+  function triggerSim(btn: SimBtn, amount = 0) {
     if (simTimerRef.current) clearTimeout(simTimerRef.current)
     setSimButton(btn)
     setSimAmount(amount)
     simTimerRef.current = setTimeout(() => setSimButton(null), 2000)
   }
 
-  function triggerSimSequence(btn1: 'bid' | 'same' | 'sell' | 'next' | 'fw', amount1: number, btn2: 'bid' | 'same' | 'sell' | 'next' | 'fw') {
+  function triggerSimSequence(btn1: SimBtn, amount1: number, btn2: SimBtn) {
     triggerSim(btn1, amount1)
-    // Show the follow-up button after the first clears
-    const t = setTimeout(() => triggerSim(btn2), 2200)
-    simTimerRef.current = t
+    simTimerRef.current = setTimeout(() => triggerSim(btn2), 2200)
   }
 
   function addAction(a: Action) {
@@ -158,18 +167,16 @@ export default function AutoClerkSaleroomPage() {
           })
 
           // Trigger sim from most recent actionable event
+          // Online bids are automatic on Vectis — only room bids, sells and FW need action
           const lastActionable = [...data.events].reverse().find(
-            (e: any) => ['bid_internet','bid_room','lot_sold','lot_offered','fair_warning'].includes(e.type)
+            (e: any) => ['bid_room','lot_sold','fair_warning'].includes(e.type)
           )
           if (lastActionable) {
-            if (lastActionable.type === 'bid_internet' || lastActionable.type === 'bid_room') {
-              const isSame = lastActionable.hammer > 0 && lastActionable.hammer === lotState.hammer
-              triggerSim(isSame ? 'same' : 'bid', lastActionable.hammer)
+            if (lastActionable.type === 'bid_room') {
+              triggerSim('saleroom', lastActionable.hammer)
             } else if (lastActionable.type === 'lot_sold') {
-              // Hammer! then Next Lot! sequence
+              // Hammer then Next Lot sequence on Vectis
               triggerSimSequence('sell', lastActionable.hammer, 'next')
-            } else if (lastActionable.type === 'lot_offered') {
-              triggerSim('next')
             } else if (lastActionable.type === 'fair_warning') {
               triggerSim('fw')
             }
@@ -396,33 +403,58 @@ export default function AutoClerkSaleroomPage() {
                 </div>
               </div>
 
-              {/* ! buttons for bid actions */}
-              {([
-                { key: 'bid',  label: 'Bid',       amount: simButton === 'bid'  ? simAmount : 0, activeClass: 'bg-blue-500   ring-blue-400   shadow-blue-500/50'   },
-                { key: 'same', label: 'Same amt',   amount: simButton === 'same' ? simAmount : 0, activeClass: 'bg-yellow-500 ring-yellow-400 shadow-yellow-500/50' },
-                { key: 'sell', label: 'Hammer',     amount: simButton === 'sell' ? simAmount : 0, activeClass: 'bg-green-500  ring-green-400  shadow-green-500/50'  },
-                { key: 'next', label: 'Next Lot',   amount: 0,                                   activeClass: 'bg-purple-500 ring-purple-400 shadow-purple-500/50'  },
-                { key: 'undo', label: 'Undo',       amount: 0,                                   activeClass: 'bg-amber-500  ring-amber-400  shadow-amber-500/50'   },
-              ] as const).map(({ key, label, amount, activeClass }) => (
-                <div key={key} className="flex flex-col items-center gap-1">
-                  <div className={`w-14 h-14 rounded-xl font-black text-3xl flex items-center justify-center transition-all duration-150 select-none ${
-                    simButton === key
-                      ? `${activeClass} text-white scale-110 ring-4 ring-offset-2 ring-offset-slate-950 shadow-lg`
-                      : 'bg-slate-800 text-slate-600 border border-slate-700'
-                  }`}>!</div>
-                  <p className="text-[10px] text-slate-500 font-medium text-center leading-tight">{label}</p>
-                  {amount > 0 && <p className="text-[10px] text-white font-bold">{fmt(amount)}</p>}
-                </div>
-              ))}
-
-              {/* Fair Warning — labelled button, not a ! */}
+              {/* SALEROOM — advance bid when Saleroom is higher */}
               <div className="flex flex-col items-center gap-1">
-                <div className={`px-3 h-14 rounded-xl font-bold text-xs flex items-center justify-center transition-all duration-150 select-none ${
+                <div className={`px-3 h-14 rounded-xl font-bold text-xs flex items-center justify-center text-center transition-all duration-150 select-none ${
+                  simButton === 'saleroom'
+                    ? 'bg-blue-500 text-white scale-110 ring-4 ring-blue-400 ring-offset-2 ring-offset-slate-950 shadow-lg shadow-blue-500/50'
+                    : 'bg-slate-800 text-slate-600 border border-slate-700'
+                }`}>SALEROOM</div>
+                {simButton === 'saleroom' && simAmount > 0 && <p className="text-[10px] text-white font-bold">{fmt(simAmount)}</p>}
+              </div>
+
+              {/* ! — drop Vectis bidder, keep amount (only ! button on Vectis) */}
+              <div className="flex flex-col items-center gap-1">
+                <div className={`w-14 h-14 rounded-xl font-black text-3xl flex items-center justify-center transition-all duration-150 select-none ${
+                  simButton === 'drop'
+                    ? 'bg-yellow-500 text-white scale-110 ring-4 ring-yellow-400 ring-offset-2 ring-offset-slate-950 shadow-lg shadow-yellow-500/50'
+                    : 'bg-slate-800 text-slate-600 border border-slate-700'
+                }`}>!</div>
+                <p className="text-[10px] text-slate-500 font-medium text-center leading-tight">Drop Vectis<br/>(manual)</p>
+              </div>
+
+              {/* HAMMER — step 1 of sell sequence */}
+              <div className="flex flex-col items-center gap-1">
+                <div className={`px-3 h-14 rounded-xl font-bold text-xs flex items-center justify-center text-center transition-all duration-150 select-none ${
+                  simButton === 'sell'
+                    ? 'bg-green-500 text-white scale-110 ring-4 ring-green-400 ring-offset-2 ring-offset-slate-950 shadow-lg shadow-green-500/50'
+                    : 'bg-slate-800 text-slate-600 border border-slate-700'
+                }`}>HAMMER</div>
+                {simButton === 'sell' && simAmount > 0 && <p className="text-[10px] text-white font-bold">{fmt(simAmount)}</p>}
+              </div>
+
+              {/* NEXT LOT — step 2 of sell sequence */}
+              <div className="flex flex-col items-center gap-1">
+                <div className={`px-3 h-14 rounded-xl font-bold text-xs flex items-center justify-center text-center transition-all duration-150 select-none ${
+                  simButton === 'next'
+                    ? 'bg-purple-500 text-white scale-110 ring-4 ring-purple-400 ring-offset-2 ring-offset-slate-950 shadow-lg shadow-purple-500/50'
+                    : 'bg-slate-800 text-slate-600 border border-slate-700'
+                }`}>NEXT LOT</div>
+              </div>
+
+              {/* FAIR WARNING */}
+              <div className="flex flex-col items-center gap-1">
+                <div className={`px-3 h-14 rounded-xl font-bold text-xs flex items-center justify-center text-center whitespace-pre-line transition-all duration-150 select-none ${
                   simButton === 'fw'
                     ? 'bg-orange-500 text-white scale-110 ring-4 ring-orange-400 ring-offset-2 ring-offset-slate-950 shadow-lg shadow-orange-500/50'
                     : 'bg-slate-800 text-slate-600 border border-slate-700'
-                }`}>FAIR<br/>WARNING</div>
-                <p className="text-[10px] text-slate-500 font-medium">button</p>
+                }`}>{'FAIR\nWARNING'}</div>
+              </div>
+
+              {/* UNDO — manual only */}
+              <div className="flex flex-col items-center gap-1">
+                <div className="px-3 h-14 rounded-xl font-bold text-xs flex items-center justify-center bg-slate-800 text-slate-600 border border-slate-700 select-none">UNDO</div>
+                <p className="text-[10px] text-slate-600 font-medium">manual</p>
               </div>
             </div>
           </div>

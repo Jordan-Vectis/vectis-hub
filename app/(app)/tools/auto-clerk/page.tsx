@@ -344,16 +344,16 @@ export default function AutoClerkPage() {
         {/* Buttons that exist on each platform */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
 
-          {/* Bidpath (Vectis) buttons */}
+          {/* Vectis (Bidpath) buttons */}
           <div className="bg-gray-50 dark:bg-black/30 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-            <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm mb-2">🖥 Bidpath (Vectis) buttons</p>
+            <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm mb-2">🖥 Vectis (Bidpath) buttons</p>
             <ul className="space-y-1.5 text-xs text-gray-600 dark:text-gray-400">
-              <li><span className="inline-block w-5 h-5 rounded bg-blue-500 text-white font-black text-sm leading-5 text-center align-middle mr-1.5">!</span><strong className="text-gray-700 dark:text-gray-300">Bid</strong> — accepts an incoming bid</li>
-              <li><span className="inline-block w-5 h-5 rounded bg-yellow-500 text-white font-black text-sm leading-5 text-center align-middle mr-1.5">!</span><strong className="text-gray-700 dark:text-gray-300">Same amount</strong> — drop bidder, keep price</li>
-              <li><span className="inline-block w-5 h-5 rounded bg-green-500 text-white font-black text-sm leading-5 text-center align-middle mr-1.5">!</span><strong className="text-gray-700 dark:text-gray-300">Hammer</strong> — sells the lot</li>
-              <li><span className="inline-block w-5 h-5 rounded bg-purple-500 text-white font-black text-sm leading-5 text-center align-middle mr-1.5">!</span><strong className="text-gray-700 dark:text-gray-300">Next Lot</strong> — advance to next lot</li>
-              <li><span className="inline-block px-1.5 py-0.5 rounded bg-orange-500 text-white text-[10px] font-bold align-middle mr-1.5">FW</span><strong className="text-gray-700 dark:text-gray-300">Fair Warning</strong> — labelled button (not a !)</li>
-              <li><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[10px] font-bold align-middle mr-1.5">UNDO</span><strong className="text-gray-700 dark:text-gray-300">Undo</strong> — removes the last bid</li>
+              <li><span className="inline-block px-1.5 py-0.5 rounded bg-blue-600 text-white text-[10px] font-bold align-middle mr-1.5">SALEROOM</span><strong className="text-gray-700 dark:text-gray-300">Saleroom</strong> — advances Vectis bid when Saleroom is higher (press until matched)</li>
+              <li><span className="inline-block w-5 h-5 rounded bg-yellow-500 text-white font-black text-sm leading-5 text-center align-middle mr-1.5">!</span><strong className="text-gray-700 dark:text-gray-300">!</strong> — drops Vectis bidder, keeps amount the same → Saleroom wins</li>
+              <li><span className="inline-block px-1.5 py-0.5 rounded bg-green-600 text-white text-[10px] font-bold align-middle mr-1.5">HAMMER</span><strong className="text-gray-700 dark:text-gray-300">Hammer</strong> — sells the lot (step 1 of sell)</li>
+              <li><span className="inline-block px-1.5 py-0.5 rounded bg-purple-600 text-white text-[10px] font-bold align-middle mr-1.5">NEXT LOT</span><strong className="text-gray-700 dark:text-gray-300">Next Lot</strong> — advance to next lot (step 2 of sell)</li>
+              <li><span className="inline-block px-1.5 py-0.5 rounded bg-orange-500 text-white text-[10px] font-bold align-middle mr-1.5">FW</span><strong className="text-gray-700 dark:text-gray-300">Fair Warning</strong> — pressed manually after 15s inactivity</li>
+              <li><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[10px] font-bold align-middle mr-1.5">UNDO</span><strong className="text-gray-700 dark:text-gray-300">Undo</strong> — removes the last bid (manual mistakes only)</li>
             </ul>
           </div>
 
@@ -361,64 +361,63 @@ export default function AutoClerkPage() {
           <div className="bg-gray-50 dark:bg-black/30 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
             <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm mb-2">📺 Saleroom buttons</p>
             <ul className="space-y-1.5 text-xs text-gray-600 dark:text-gray-400">
-              <li><span className="inline-block px-1.5 py-0.5 rounded bg-blue-600 text-white text-[10px] font-bold align-middle mr-1.5">BID</span><strong className="text-gray-700 dark:text-gray-300">Bid</strong> — internet/online bid</li>
-              <li><span className="inline-block px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-bold align-middle mr-1.5">ROOM</span><strong className="text-gray-700 dark:text-gray-300">Room</strong> — room bid at Vectis</li>
-              <li><span className="inline-block px-1.5 py-0.5 rounded bg-yellow-600 text-white text-[10px] font-bold align-middle mr-1.5">ROOM</span><strong className="text-gray-700 dark:text-gray-300">Room (same amount)</strong> — drop bidder</li>
-              <li><span className="inline-block px-1.5 py-0.5 rounded bg-green-600 text-white text-[10px] font-bold align-middle mr-1.5">SELL</span><strong className="text-gray-700 dark:text-gray-300">Sell</strong> — fills hammer, sells the lot</li>
-              <li><span className="inline-block px-1.5 py-0.5 rounded bg-purple-600 text-white text-[10px] font-bold align-middle mr-1.5">NEXT</span><strong className="text-gray-700 dark:text-gray-300">Next Lot</strong> — advance after sell</li>
-              <li><span className="inline-block px-1.5 py-0.5 rounded bg-orange-500 text-white text-[10px] font-bold align-middle mr-1.5">FW</span><strong className="text-gray-700 dark:text-gray-300">Fair Warning</strong></li>
-              <li><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[10px] font-bold align-middle mr-1.5">UNDO</span><strong className="text-gray-700 dark:text-gray-300">Undo</strong></li>
+              <li><span className="inline-block px-1.5 py-0.5 rounded bg-blue-600 text-white text-[10px] font-bold align-middle mr-1.5">BID</span><strong className="text-gray-700 dark:text-gray-300">Bid</strong> — advances Saleroom bid when Vectis is higher (press until matched)</li>
+              <li><span className="inline-block px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-bold align-middle mr-1.5">ROOM</span><strong className="text-gray-700 dark:text-gray-300">Room</strong> — drops Saleroom bidder, keeps amount the same → Vectis wins</li>
+              <li><span className="inline-block px-1.5 py-0.5 rounded bg-green-600 text-white text-[10px] font-bold align-middle mr-1.5">SELL</span><strong className="text-gray-700 dark:text-gray-300">Sell</strong> — sells the lot (step 1 of sell)</li>
+              <li><span className="inline-block px-1.5 py-0.5 rounded bg-purple-600 text-white text-[10px] font-bold align-middle mr-1.5">NEXT</span><strong className="text-gray-700 dark:text-gray-300">Next</strong> — advance to next lot (step 2 of sell)</li>
+              <li><span className="inline-block px-1.5 py-0.5 rounded bg-orange-500 text-white text-[10px] font-bold align-middle mr-1.5">FW</span><strong className="text-gray-700 dark:text-gray-300">Fair Warning</strong> — pressed manually after 15s inactivity</li>
+              <li><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[10px] font-bold align-middle mr-1.5">UNDO</span><strong className="text-gray-700 dark:text-gray-300">Undo</strong> — removes the last bid (manual mistakes only)</li>
             </ul>
           </div>
         </div>
 
-        {/* Event → Action mappings */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        {/* Core rules */}
+        <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border border-blue-200 dark:border-blue-900 space-y-3">
+          <p className="font-semibold text-blue-900 dark:text-blue-200 text-sm">🔁 Core sync rules</p>
 
-          {/* Bidpath → Saleroom */}
-          <div>
-            <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm mb-2">📡 Bidpath event → press on Saleroom</p>
-            <ul className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
-              <li>Online/internet bid → <strong>BID</strong></li>
-              <li>BSCB (room) bid → <strong>ROOM</strong></li>
-              <li>BSCB bid at same amount → <strong>ROOM (same)</strong></li>
-              <li>Commission bid → <strong>BID</strong></li>
-              <li>Lot sold → <strong>SELL</strong> (fill hammer) <em>then</em> <strong>NEXT LOT</strong></li>
-              <li>Lot advance → <strong>NEXT LOT</strong></li>
-              <li>Fair Warning called → <strong>FAIR WARNING</strong></li>
-              <li>Lot lock → info only (no Saleroom button exists)</li>
-              <li>Pause / resume → info only</li>
-            </ul>
-          </div>
-
-          {/* Saleroom → Bidpath */}
-          <div>
-            <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm mb-2">🏷 Saleroom event → press on Bidpath</p>
-            <ul className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
-              <li>Internet bid → blue <strong>! (Bid)</strong></li>
-              <li>Bid at same amount as current → yellow <strong>! (Same amount)</strong></li>
-              <li>Lot sold → green <strong>! (Hammer)</strong> <em>then</em> purple <strong>! (Next Lot)</strong></li>
-              <li>Lot offered → purple <strong>! (Next Lot)</strong> (confirm sync)</li>
-              <li>Fair Warning called → <strong>Fair Warning</strong> button (not a !)</li>
-              <li>Lot passed → info only</li>
-              <li>Pause / resume → info only</li>
-            </ul>
-          </div>
-        </div>
-
-        {/* Sequence rules */}
-        <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3 border border-blue-200 dark:border-blue-900">
-          <p className="font-semibold text-blue-900 dark:text-blue-200 text-sm mb-2">🔁 Sell sequences (two-step)</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-blue-900 dark:text-blue-200">
+          <div className="text-xs text-blue-900 dark:text-blue-200 space-y-2">
             <div>
-              <p className="font-semibold mb-0.5">On Bidpath (Vectis)</p>
-              <p>1. Press <strong>! Hammer</strong> (green) — sells</p>
-              <p>2. Press <strong>! Next Lot</strong> (purple) — advances</p>
+              <p className="font-semibold">1. Online bids are automatic on both platforms</p>
+              <p className="text-blue-700 dark:text-blue-300/80 mt-0.5">No clerk action needed for online bids placed on either side. They appear by themselves on the other platform.</p>
             </div>
+
             <div>
-              <p className="font-semibold mb-0.5">On Saleroom</p>
-              <p>1. Fill hammer price → Press <strong>SELL</strong></p>
-              <p>2. Press <strong>NEXT LOT</strong></p>
+              <p className="font-semibold">2. Lot start sync — catch the lower platform up</p>
+              <p className="text-blue-700 dark:text-blue-300/80 mt-0.5">Pre-bids can mean platforms open at different amounts.</p>
+              <ul className="list-disc list-inside text-blue-700 dark:text-blue-300/80 mt-1 ml-2">
+                <li>If <strong>Vectis is higher</strong> → press <strong>BID</strong> on Saleroom repeatedly until matched</li>
+                <li>If <strong>Saleroom is higher</strong> → press <strong>SALEROOM</strong> button on Vectis repeatedly until matched</li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="font-semibold">3. Same-amount tie — drop one bidder, keep the price</p>
+              <p className="text-blue-700 dark:text-blue-300/80 mt-0.5">Only one platform can win each lot, so when both have a bid at the same price we must consolidate.</p>
+              <ul className="list-disc list-inside text-blue-700 dark:text-blue-300/80 mt-1 ml-2">
+                <li><strong>Favour Vectis</strong> → press <strong>ROOM</strong> on Saleroom (drops Saleroom bidder)</li>
+                <li><strong>Favour Saleroom</strong> → press <strong>!</strong> on Vectis (drops Vectis bidder)</li>
+                <li><strong>Default tie-break at lot start = always favour Vectis</strong> → press ROOM on Saleroom</li>
+                <li><strong>During live bidding</strong> — whoever bid first at the tied price keeps it (no transfer)</li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="font-semibold">4. Fair Warning — after 15s of no new bids</p>
+              <p className="text-blue-700 dark:text-blue-300/80 mt-0.5">Both platforms have a FW button. Pressed on <strong>both at the same time</strong> by the clerk.</p>
+            </div>
+
+            <div>
+              <p className="font-semibold">5. Sell sequence — 20s after Fair Warning if still no bids</p>
+              <p className="text-blue-700 dark:text-blue-300/80 mt-0.5">Both platforms need their sell buttons pressed simultaneously by the clerk.</p>
+              <ul className="list-disc list-inside text-blue-700 dark:text-blue-300/80 mt-1 ml-2">
+                <li><strong>Vectis:</strong> <strong>HAMMER</strong> → then <strong>NEXT LOT</strong></li>
+                <li><strong>Saleroom:</strong> <strong>SELL</strong> → then <strong>NEXT</strong></li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="font-semibold">6. Undo — manual mistakes only</p>
+              <p className="text-blue-700 dark:text-blue-300/80 mt-0.5">Both platforms have an Undo button to remove the last bid if something goes wrong. No automatic detection.</p>
             </div>
           </div>
         </div>
@@ -429,8 +428,10 @@ export default function AutoClerkPage() {
           <ul className="space-y-0.5 text-xs text-rose-900 dark:text-rose-200">
             <li>❌ No "Lot Locked" button on Saleroom — lot lock is info only</li>
             <li>❌ Saleroom buttons do NOT have exclamation marks — they're plain labelled buttons</li>
-            <li>❌ Bidpath's "Fair Warning" is its own labelled button — it is NOT a !</li>
-            <li>❌ No automatic double-bid detection — undo is a manual button only</li>
+            <li>❌ The only ! button is on Vectis, and it's only for dropping the Vectis bidder (favour Saleroom)</li>
+            <li>❌ Hammer, Next Lot and Fair Warning on Vectis are labelled buttons — they are NOT !</li>
+            <li>❌ No automatic same-amount detection in shadow pages — the tie-break logic only applies when both feeds are visible together</li>
+            <li>❌ No automatic double-bid / undo detection — undo is a manual button only</li>
           </ul>
         </div>
 
@@ -438,7 +439,7 @@ export default function AutoClerkPage() {
         <div>
           <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm mb-2">🔌 Data sources</p>
           <ul className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
-            <li><strong>Bidpath:</strong> direct WebSocket — <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">wss://www.vectis.co.uk/wss/{'{auctionId}'}</code></li>
+            <li><strong>Vectis (Bidpath):</strong> direct WebSocket — <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">wss://www.vectis.co.uk/wss/{'{auctionId}'}</code></li>
             <li><strong>Saleroom (GAP):</strong> console-script MutationObserver watches <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">hammer-price</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">asking-price</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">lot-number</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">auction-message-content</code> — POSTs to <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">/api/gap-relay</code>, shadow page polls every 1s</li>
           </ul>
         </div>
@@ -448,7 +449,7 @@ export default function AutoClerkPage() {
           <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm mb-2">📨 Bidpath WebSocket field reference</p>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">All message data is in <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">parsed.content</code>, not <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">parsed.data</code></p>
           <ul className="space-y-0.5 text-xs text-gray-600 dark:text-gray-400 font-mono">
-            <li><code className="text-gray-700 dark:text-gray-300">liveBidEvent</code>: content.amount, content.asking, content.platform (BSCB/Online/Saleroom), content.lot_id</li>
+            <li><code className="text-gray-700 dark:text-gray-300">liveBidEvent</code>: content.amount, content.asking, content.platform (BSCB / Online / Saleroom), content.lot_id</li>
             <li><code className="text-gray-700 dark:text-gray-300">activeLotChange</code>: content.lot_number, content.lot_id</li>
             <li><code className="text-gray-700 dark:text-gray-300">lotInformationUpdate</code>: content.hammer_price (string), content.key_name, content.key_value</li>
             <li><code className="text-gray-700 dark:text-gray-300">getFairWarningStatus</code>: content.fair_warning (boolean)</li>
