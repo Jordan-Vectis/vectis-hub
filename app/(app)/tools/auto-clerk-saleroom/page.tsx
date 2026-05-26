@@ -172,17 +172,73 @@ export default function AutoClerkSaleroomPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
+  const [showInfo, setShowInfo] = useState(false)
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+
+      {/* ── Info modal ──────────────────────────────────────────────────── */}
+      {showInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setShowInfo(false)}>
+          <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-lg w-full p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between mb-4">
+              <h2 className="text-base font-bold text-slate-100">How this works — Saleroom shadow</h2>
+              <button onClick={() => setShowInfo(false)} className="text-slate-500 hover:text-slate-300 text-xl leading-none ml-4">✕</button>
+            </div>
+            <div className="space-y-4 text-sm text-slate-300 leading-relaxed">
+              <div>
+                <p className="font-semibold text-white mb-1">🏷 Where does the data come from?</p>
+                <p>The Saleroom platform (GAP) doesn't expose a public data feed. Instead, a small script is pasted into the browser console on the Saleroom page. It uses a <strong>MutationObserver</strong> — a browser API — to watch four elements on screen for any changes:</p>
+                <ul className="list-disc list-inside mt-2 space-y-0.5 text-slate-400 text-xs">
+                  <li><code className="bg-slate-800 px-1 rounded">hammer-price</code> — current bid</li>
+                  <li><code className="bg-slate-800 px-1 rounded">asking-price</code> — next asking price</li>
+                  <li><code className="bg-slate-800 px-1 rounded">lot-number</code> — current lot</li>
+                  <li><code className="bg-slate-800 px-1 rounded">auction-message-content</code> — status messages (e.g. "Internet Bid", "Sold", "Fair Warning")</li>
+                </ul>
+              </div>
+              <div>
+                <p className="font-semibold text-white mb-1">📮 How does it get here?</p>
+                <p>Whenever any of those elements change, the script POSTs the updated values to a <strong>relay API</strong> hosted on Railway (<code className="text-xs bg-slate-800 px-1 rounded">/api/gap-relay</code>). This page polls that relay every second and displays any new events.</p>
+              </div>
+              <div>
+                <p className="font-semibold text-white mb-1">🔔 What events are shown?</p>
+                <ul className="list-disc list-inside space-y-1 text-slate-400">
+                  <li><strong className="text-blue-400">PRESS BID</strong> — Saleroom received an internet or room bid</li>
+                  <li><strong className="text-green-400">PRESS SELL</strong> — lot sold on Saleroom; enter hammer price on Bidpath</li>
+                  <li><strong className="text-purple-400">NEW LOT</strong> — Saleroom moved to a new lot</li>
+                  <li><strong className="text-orange-400">FAIR WARNING</strong> — FW called on Saleroom (Bidpath handles its own FW)</li>
+                </ul>
+              </div>
+              <div>
+                <p className="font-semibold text-white mb-1">⚙️ Setup steps</p>
+                <ol className="list-decimal list-inside space-y-1 text-slate-400">
+                  <li>Click <strong className="text-white">Start polling</strong> on this page</li>
+                  <li>Open the Saleroom live auction page in another tab</li>
+                  <li>Click <strong className="text-white">Copy script</strong> above</li>
+                  <li>On the Saleroom tab — press F12 → Console → paste → Enter</li>
+                  <li>Events will appear here as bids come in</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div className="border-b border-slate-800 px-6 py-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">Auto Clerk — Saleroom Shadow</h1>
-            <p className="text-sm text-slate-400 mt-0.5">
-              Reads live Saleroom (GAP) events — shows what to press on Bidpath
-            </p>
+          <div className="flex items-center gap-3">
+            <div>
+              <h1 className="text-xl font-bold tracking-tight">Auto Clerk — Saleroom Shadow</h1>
+              <p className="text-sm text-slate-400 mt-0.5">
+                Reads live Saleroom (GAP) events — shows what to press on Bidpath
+              </p>
+            </div>
+            <button
+              onClick={() => setShowInfo(true)}
+              title="How does this work?"
+              className="w-6 h-6 rounded-full border border-slate-600 text-slate-400 hover:text-white hover:border-slate-400 text-xs font-bold flex items-center justify-center transition-colors shrink-0"
+            >i</button>
           </div>
           <div className={`flex items-center gap-2 text-sm font-medium ${active ? (stale ? 'text-amber-400' : 'text-emerald-400') : 'text-slate-400'}`}>
             <span className={`w-2.5 h-2.5 rounded-full ${active ? (stale ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse') : 'bg-slate-600'}`} />
