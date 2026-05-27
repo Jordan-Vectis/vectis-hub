@@ -127,6 +127,7 @@ export default function StatsTab({ lots, auction }: { lots: Lot[]; auction: Auct
     const withDesc        = lots.filter(l => l.description?.trim())
     const withKeyPoints   = lots.filter(l => l.keyPoints?.trim())
     const withPhotos      = lots.filter(l => l.imageUrls.length > 0)
+    const missingPhotos   = lots.filter(l => l.imageUrls.length === 0)
     const withTitle       = lots.filter(l => l.title?.trim())
     const aiUpgraded      = lots.filter(l => l.aiUpgraded)
     const totalPhotos     = lots.reduce((s, l) => s + l.imageUrls.length, 0)
@@ -172,7 +173,8 @@ export default function StatsTab({ lots, auction }: { lots: Lot[]; auction: Auct
       avgEstLow, avgEstHigh, highestLot, lowestLot,
       withHammer: withHammer.length, totalHammer, avgHammer,
       withDesc: withDesc.length, withKeyPoints: withKeyPoints.length,
-      withPhotos: withPhotos.length, withTitle: withTitle.length,
+      withPhotos: withPhotos.length, missingPhotos: missingPhotos.length,
+      withTitle: withTitle.length,
       aiUpgraded: aiUpgraded.length, totalPhotos, avgPhotos,
       byCondition, byCategory, bySubCat, byVendor, byTote,
       byReceipt, byStatus, byCataloguer, byBrand,
@@ -198,7 +200,7 @@ export default function StatsTab({ lots, auction }: { lots: Lot[]; auction: Auct
     <div className="space-y-6 pb-8">
 
       {/* ── Headline numbers ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <BigStat label="Total Lots"        value={stats.total} />
         <BigStat label="Estimate Low (total)"  value={`£${fmt(stats.totalEstLow)}`}  colour="text-[#2AB4A6]"
           sub={`${stats.withEstimate} of ${total} lots have estimates`} />
@@ -206,6 +208,12 @@ export default function StatsTab({ lots, auction }: { lots: Lot[]; auction: Auct
           sub={`Avg £${fmt(stats.avgEstLow)}–£${fmt(stats.avgEstHigh)} per lot`} />
         <BigStat label="Total Photos"      value={stats.totalPhotos}
           sub={`${stats.avgPhotos} avg per lot`} />
+        <BigStat label="Lots Missing Photos"
+          value={stats.missingPhotos}
+          colour={stats.missingPhotos > 0 ? 'text-red-500 dark:text-red-400' : 'text-emerald-500 dark:text-emerald-400'}
+          sub={stats.missingPhotos > 0
+            ? `${pct(stats.missingPhotos, total)}% of lots have no photos`
+            : 'All lots have photos ✓'} />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
