@@ -2284,8 +2284,12 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
     }
   }
 
-  async function runCheck() {
-    const toCheck = lots.filter(l => l.keyPoints && l.description)
+  async function runCheck(forceAll = false) {
+    // Skip already-done lots unless forceAll is set (re-run all)
+    const toCheck = lots.filter(l =>
+      l.keyPoints && l.description &&
+      (forceAll || (l.status !== "ok" && l.status !== "fixed"))
+    )
     if (!toCheck.length || checking) return
     cancelRef.current = false
     pauseRef.current  = false
@@ -2294,8 +2298,13 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
     setChecking(true)
     setLog([])
     setProgress({ done: 0, total: toCheck.length })
-    setLots(prev => prev.map(l => ({ ...l, status: "checking", revised: undefined, changed: undefined })))
-    addLog(`── Starting check: ${toCheck.length} lots · model: ${localModel}`)
+    // Only reset the lots being sent — preserve results for already-checked lots
+    const toCheckIds = new Set(toCheck.map(l => l.id))
+    setLots(prev => prev.map(l =>
+      toCheckIds.has(l.id) ? { ...l, status: "checking", revised: undefined, changed: undefined } : l
+    ))
+    const resuming = !forceAll && lots.some(l => l.status === "ok" || l.status === "fixed")
+    addLog(`── ${resuming ? "Resuming" : "Starting"} check: ${toCheck.length} lot${toCheck.length !== 1 ? "s" : ""} · model: ${localModel}`)
 
     const lotStartTimes: Record<string, number> = {}
     const controller = new AbortController()
@@ -2448,8 +2457,9 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
     setTimeout(() => setSavedMsg(""), 3000)
   }
 
-  const checkedCount = lots.filter(l => l.status === "ok" || l.status === "fixed").length
-  const fixedCount   = lots.filter(l => l.status === "fixed").length
+  const checkedCount   = lots.filter(l => l.status === "ok" || l.status === "fixed").length
+  const fixedCount     = lots.filter(l => l.status === "fixed").length
+  const remainingCount = lots.filter(l => l.keyPoints && l.description && l.status !== "ok" && l.status !== "fixed").length
   const inp = "w-full bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-600 focus:outline-none focus:border-[#C8A96E]"
 
   return (
@@ -2593,11 +2603,22 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
                   <button onClick={handleStop} className="text-xs text-gray-600 dark:text-gray-500 hover:text-red-400 transition-colors">Stop & results</button>
                 </>
               )}
-              <button onClick={runCheck} disabled={checking}
+              {/* Re-run all — only shown when everything is already done */}
+              {!checking && checkedCount > 0 && remainingCount === 0 && (
+                <button onClick={() => runCheck(true)}
+                  className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors underline underline-offset-2">
+                  Re-run all
+                </button>
+              )}
+              <button onClick={() => runCheck()} disabled={checking || remainingCount === 0}
                 className="bg-[#C8A96E] hover:bg-[#b8944f] text-black text-xs font-semibold px-4 py-1.5 rounded disabled:opacity-40 transition-colors whitespace-nowrap">
                 {checking
                   ? `${paused ? "Paused" : "Checking"} ${progress?.done ?? 0}/${progress?.total ?? 0}${progress?.current ? ` · Lot ${progress.current}` : ""}`
-                  : checkedCount > 0 ? "Re-run Check" : "▶ Run Key Points Check"}
+                  : remainingCount === 0
+                    ? "✓ All checked"
+                    : checkedCount > 0
+                      ? `▶ Resume (${remainingCount} remaining)`
+                      : "▶ Run Key Points Check"}
               </button>
             </div>
           </div>
