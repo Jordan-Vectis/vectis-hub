@@ -2109,7 +2109,7 @@ type KPLot = {
   selected?: boolean
 }
 
-function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
+function KeyPointsCheckTab({ model: globalModel, onModelChange }: { model: string; onModelChange: (m: string) => void }) {
   const [code,         setCode]         = useState("")
   const [auctionId,    setAuctionId]    = useState<string | null>(null)
   const [loading,      setLoading]      = useState(false)
@@ -2120,6 +2120,9 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
   const [progress,     setProgress]     = useState<{ done: number; total: number; current?: string } | null>(null)
   const [expandedLot,  setExpandedLot]  = useState<string | null>(null)
   const [localModel,   setLocalModel]   = useState(globalModel)
+
+  // Keep localModel in sync with sidebar dropdown changes
+  useEffect(() => { setLocalModel(globalModel) }, [globalModel])
   const [modelList,    setModelList]    = useState<string[]>([globalModel])
   const [modelStatus,  setModelStatus]  = useState<Record<string, { ok: boolean; ms: number; error?: string } | "testing">>({})
   const [testingAll,   setTestingAll]   = useState(false)
@@ -2489,7 +2492,7 @@ function KeyPointsCheckTab({ model: globalModel }: { model: string }) {
             const status = modelStatus[m]
             const isSelected = localModel === m
             return (
-              <button key={m} onClick={() => setLocalModel(m)}
+              <button key={m} onClick={() => { setLocalModel(m); onModelChange(m) }}
                 className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors border-b border-gray-200 dark:border-gray-800 last:border-0 ${isSelected ? "bg-[#C8A96E]/10" : "hover:bg-gray-50 dark:hover:bg-[#1a1a1e]"}`}>
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isSelected ? "bg-[#C8A96E]" : "bg-gray-700"}`} />
                 <span className={`text-sm flex-1 font-mono ${isSelected ? "text-[#C8A96E]" : "text-gray-600 dark:text-gray-400"}`}>{m}</span>
@@ -2812,7 +2815,7 @@ type DCLot = {
   status?:         "idle" | "checking" | "ok" | "issues" | "error"
 }
 
-function DoubleCheckTab({ model: globalModel }: { model: string }) {
+function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; onModelChange: (m: string) => void }) {
   const [code,        setCode]        = useState("")
   const [auctionId,   setAuctionId]   = useState<string | null>(null)
   const [loading,     setLoading]     = useState(false)
@@ -2822,6 +2825,9 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
   const [progress,    setProgress]    = useState<{ done: number; total: number } | null>(null)
   const [expandedLot, setExpandedLot] = useState<string | null>(null)
   const [localModel,  setLocalModel]  = useState(globalModel)
+
+  // Keep localModel in sync with sidebar dropdown changes
+  useEffect(() => { setLocalModel(globalModel) }, [globalModel])
   const [modelList,   setModelList]   = useState<string[]>([globalModel])
   const [modelStatus, setModelStatus] = useState<Record<string, { ok: boolean; ms: number; error?: string } | "testing">>({})
   const [testingAll,  setTestingAll]  = useState(false)
@@ -3022,7 +3028,7 @@ function DoubleCheckTab({ model: globalModel }: { model: string }) {
             const status     = modelStatus[m]
             const isSelected = localModel === m
             return (
-              <button key={m} onClick={() => setLocalModel(m)}
+              <button key={m} onClick={() => { setLocalModel(m); onModelChange(m) }}
                 className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors border-b border-gray-200 dark:border-gray-800 last:border-0 ${isSelected ? "bg-indigo-950/40" : "hover:bg-gray-50 dark:hover:bg-[#1a1a1e]"}`}>
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isSelected ? "bg-indigo-400" : "bg-gray-700"}`} />
                 <span className={`text-sm flex-1 font-mono ${isSelected ? "text-indigo-300" : "text-gray-600 dark:text-gray-400"}`}>{m}</span>
@@ -3267,8 +3273,8 @@ export default function AuctionAIPage() {
         <div className={tab === "kpruns"       ? "" : "hidden"}>{tab === "kpruns" && <KPRunsTab />}</div>
         <div className={tab === "barcode"      ? "" : "hidden"}><BarcodeTab /></div>
         <div className={tab === "copier"       ? "" : "hidden"}><CopierTab /></div>
-        <div className={tab === "kpcheck"      ? "" : "hidden"}><KeyPointsCheckTab model={model} /></div>
-        <div className={tab === "doublecheck"  ? "" : "hidden"}>{tab === "doublecheck" && <DoubleCheckTab model={model} />}</div>
+        <div className={tab === "kpcheck"      ? "" : "hidden"}><KeyPointsCheckTab model={model} onModelChange={m => { setModel(m); localStorage.setItem("ai_model", m) }} /></div>
+        <div className={tab === "doublecheck"  ? "" : "hidden"}>{tab === "doublecheck" && <DoubleCheckTab model={model} onModelChange={m => { setModel(m); localStorage.setItem("ai_model", m) }} />}</div>
         <div className={tab === "instructions" ? "" : "hidden"}><InstructionsTab /></div>
         <div className={tab === "macro"        ? "" : "hidden"}><MacroTab /></div>
       </main>
