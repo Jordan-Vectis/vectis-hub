@@ -420,7 +420,7 @@ export default function AutoClerkSaleroomPage() {
                     ? 'bg-yellow-500 text-white scale-110 ring-4 ring-yellow-400 ring-offset-2 ring-offset-slate-950 shadow-lg shadow-yellow-500/50'
                     : 'bg-slate-800 text-slate-600 border border-slate-700'
                 }`}>!</div>
-                <p className="text-[10px] text-slate-500 font-medium text-center leading-tight">Drop Vectis<br/>(manual)</p>
+                <p className="text-[10px] text-slate-500 font-medium text-center leading-tight">Drop Vectis</p>
               </div>
 
               {/* HAMMER — step 1 of sell sequence */}
