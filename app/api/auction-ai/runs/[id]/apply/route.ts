@@ -83,6 +83,8 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
             description:     l.description,
             estimateLow:     low,
             estimateHigh:    high,
+            aiEstimateLow:   low,
+            aiEstimateHigh:  high,
             aiUpgraded:      true,
           },
         })

@@ -75,7 +75,7 @@ export async function setStartingBids(auctionId: string, updates: { id: string; 
 
 export async function applyAiDescriptions(
   auctionId: string,
-  updates: { id: string; description: string; estimateLow: number | null; estimateHigh: number | null }[]
+  updates: { id: string; description: string; aiEstimateLow: number | null; aiEstimateHigh: number | null }[]
 ) {
   await requireCataloguer()
   await Promise.all(
@@ -83,11 +83,10 @@ export async function applyAiDescriptions(
       prisma.catalogueLot.update({
         where: { id: u.id },
         data: {
-          description: u.description,
-          // Only overwrite estimate if AI returned a value — never clear an existing estimate
-          ...(u.estimateLow  !== null ? { estimateLow:  u.estimateLow  } : {}),
-          ...(u.estimateHigh !== null ? { estimateHigh: u.estimateHigh } : {}),
-          aiUpgraded: true,
+          description:    u.description,
+          aiEstimateLow:  u.aiEstimateLow,
+          aiEstimateHigh: u.aiEstimateHigh,
+          aiUpgraded:     true,
         },
       })
     )
@@ -97,17 +96,16 @@ export async function applyAiDescriptions(
 
 export async function applyAiDescriptionOne(
   auctionId: string,
-  update: { id: string; description: string; estimateLow: number | null; estimateHigh: number | null }
+  update: { id: string; description: string; aiEstimateLow: number | null; aiEstimateHigh: number | null }
 ) {
   await requireCataloguer()
   await prisma.catalogueLot.update({
     where: { id: update.id },
     data: {
-      description: update.description,
-      // Only overwrite estimate if AI returned a value — never clear an existing estimate
-      ...(update.estimateLow  !== null ? { estimateLow:  update.estimateLow  } : {}),
-      ...(update.estimateHigh !== null ? { estimateHigh: update.estimateHigh } : {}),
-      aiUpgraded: true,
+      description:    update.description,
+      aiEstimateLow:  update.aiEstimateLow,
+      aiEstimateHigh: update.aiEstimateHigh,
+      aiUpgraded:     true,
     },
   })
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)

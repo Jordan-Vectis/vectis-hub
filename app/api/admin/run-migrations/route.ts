@@ -214,6 +214,10 @@ const MIGRATIONS = [
   `ALTER TABLE "CatalogueLot" DROP COLUMN IF EXISTS "lotNumber"`,
   `ALTER TABLE "CatalogueTimingLog" DROP COLUMN IF EXISTS "lotNumber"`,
 
+  // 2026-05-28 — AI estimate fields on CatalogueLot (separate from human estimate)
+  `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "aiEstimateLow"  INTEGER`,
+  `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "aiEstimateHigh" INTEGER`,
+
   // 2026-04-29 — MacroFile: stores uploaded macro/instruction files for Auction AI
   `CREATE TABLE IF NOT EXISTS "MacroFile" (
     "id"          TEXT         NOT NULL,

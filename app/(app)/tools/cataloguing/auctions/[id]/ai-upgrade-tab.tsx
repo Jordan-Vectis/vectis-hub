@@ -402,10 +402,10 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
       const t0 = Date.now()
       try {
         await applyAiDescriptionOne(auctionId, {
-          id:           r.lotId,
-          description:  r.newDescription,
-          estimateLow:  r.newEstimateLow,
-          estimateHigh: r.newEstimateHigh,
+          id:             r.lotId,
+          description:    r.newDescription,
+          aiEstimateLow:  r.newEstimateLow,
+          aiEstimateHigh: r.newEstimateHigh,
         })
         addLog(`  ✓ ${r.label} — saved (${Date.now() - t0}ms)`)
       } catch (e: any) {

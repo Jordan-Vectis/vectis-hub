@@ -306,8 +306,10 @@ model CatalogueLot {
   keyPoints    String           @db.Text @default("")
   description  String           @db.Text @default("")
   barcode      String?
-  estimateLow  Int?
-  estimateHigh Int?
+  estimateLow    Int?
+  estimateHigh   Int?
+  aiEstimateLow  Int?
+  aiEstimateHigh Int?
   startingBid  Int?
   reserve      Int?
   currentBid   Int?

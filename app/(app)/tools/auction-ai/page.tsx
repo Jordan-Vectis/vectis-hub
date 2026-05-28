@@ -1645,7 +1645,9 @@ function KPRunsTab() {
         (l.receiptUniqueId && l.receiptUniqueId === lotLabel) || (l.barcode && l.barcode === lotLabel)
       )
       if (!match) throw new Error(`Lot ${lotLabel} not found in catalogue`)
-      await applyAiDescriptionOne(data.auctionId, { id: match.id, description: desc, estimateLow: null, estimateHigh: null })
+      const runLot  = detail?.lots.find(l => l.id === lotId)
+      const { low, high } = parseEstimate(runLot?.estimate ?? "")
+      await applyAiDescriptionOne(data.auctionId, { id: match.id, description: desc, aiEstimateLow: low || null, aiEstimateHigh: high || null })
       showToast(`✓ Lot ${lotLabel} saved to catalogue`, "ok")
     } catch (e: any) {
       showError("Failed to apply to catalogue", e.message)
@@ -1670,7 +1672,8 @@ function KPRunsTab() {
         )
         if (!match) { fail++; continue }
         try {
-          await applyAiDescriptionOne(data.auctionId, { id: match.id, description: revised[l.id] ?? l.description, estimateLow: null, estimateHigh: null })
+          const { low, high } = parseEstimate(l.estimate ?? "")
+          await applyAiDescriptionOne(data.auctionId, { id: match.id, description: revised[l.id] ?? l.description, aiEstimateLow: low || null, aiEstimateHigh: high || null })
           ok++
         } catch { fail++ }
       }
@@ -2210,10 +2213,10 @@ function KeyPointsCheckTab({ model: globalModel, onModelChange }: { model: strin
     setLots(prev => prev.map(l => l.id === lot.id ? { ...l, accepted: true } : l))
     try {
       await applyAiDescriptionOne(auctionId, {
-        id:           lot.id,
-        description:  lot.revised,
-        estimateLow:  null,
-        estimateHigh: null,
+        id:             lot.id,
+        description:    lot.revised,
+        aiEstimateLow:  null,
+        aiEstimateHigh: null,
       })
     } catch (e: any) {
       setLots(prev => prev.map(l => l.id === lot.id ? { ...l, accepted: false } : l))
