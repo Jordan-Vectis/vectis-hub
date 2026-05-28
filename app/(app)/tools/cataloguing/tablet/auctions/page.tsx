@@ -9,7 +9,7 @@ export default async function TabletAuctionsPage() {
   if (!["ADMIN", "CATALOGUER"].includes(session.user.role)) redirect("/submissions")
 
   const auctions = await prisma.catalogueAuction.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: { auctionDate: "desc" },
     include: { _count: { select: { lots: true } } },
   })
 
