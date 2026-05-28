@@ -23,10 +23,12 @@ WHAT NOT TO FLAG:
 - Facts that are plausible and commonly known (e.g. well-known band names, standard formats)
 - Absence of information — only flag what is present and wrong, not what is missing
 
-If the description appears factually sound, set verdict to "ok" and leave both fields empty.
+If issues are found: also produce a corrected version of the description. Make the minimum change necessary — remove or soften only the specific problematic claims. Do NOT rewrite, restructure, or change anything that is not flagged.
+
+If the description is fine, set verdict to "ok", leave contradictions and unsupported empty, and set revised to an empty string.
 
 Respond with ONLY valid JSON — no markdown, no code fences:
-{"contradictions":"<description of internal inconsistencies or obvious errors, or empty string>","unsupported":"<comma-separated list of specific unverifiable claims, or empty string>","verdict":"ok or issues"}`
+{"contradictions":"<description of internal inconsistencies or obvious errors, or empty string>","unsupported":"<comma-separated list of specific unverifiable claims, or empty string>","verdict":"ok or issues","revised":"<corrected description if issues found, otherwise empty string>"}`
 
 // POST /api/auction-ai/double-check
 // Checks a single lot — label, description, optional images.
@@ -76,19 +78,21 @@ export async function POST(req: NextRequest) {
 
     let contradictions = ""
     let unsupported    = ""
+    let revised        = ""
     let verdict: "ok" | "issues" = "ok"
 
     try {
       const parsed   = JSON.parse(raw)
       contradictions = parsed.contradictions?.trim() || ""
       unsupported    = parsed.unsupported?.trim()    || ""
+      revised        = parsed.revised?.trim()        || ""
       verdict        = contradictions || unsupported ? "issues" : "ok"
     } catch {
       contradictions = raw.slice(0, 200)
       verdict        = "issues"
     }
 
-    return NextResponse.json({ verdict, contradictions, unsupported })
+    return NextResponse.json({ verdict, contradictions, unsupported, revised })
   } catch (e: any) {
     const msg: string = e.message ?? "Unknown error"
     // Prefix rate limit errors so the client can apply the correct backoff

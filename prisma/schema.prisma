@@ -231,6 +231,46 @@ model AiPreset {
   updatedAt   DateTime @updatedAt
 }
 
+model PipelineRun {
+  id        String        @id @default(cuid())
+  code      String        @unique
+  preset    String        @default("")
+  model     String        @default("")
+  stage     String        @default("batch")  // "batch" | "doublecheck" | "kpcheck" | "complete"
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  lots      PipelineLot[]
+}
+
+model PipelineLot {
+  id          String      @id @default(cuid())
+  runId       String
+  run         PipelineRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  lotId       String
+  label       String
+
+  // Stage 1 — Batch Run
+  batchStatus  String?    // "ok" | "failed" | "skipped"
+  description  String?    @db.Text
+  estimate     String?
+
+  // Stage 2 — Double Check
+  dcStatus       String?  // "ok" | "issues" | "error" | "skipped"
+  contradictions String?  @db.Text
+  unsupported    String?  @db.Text
+
+  // Stage 3 — Key Points Check
+  kpStatus   String?      // "ok" | "fixed" | "error" | "skipped"
+  revised    String?      @db.Text
+  kpMissing  String?      @db.Text
+  kpAdded    String?      @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([runId, lotId])
+}
+
 model Logistics {
   id      String        @id @default(cuid())
   type    LogisticsType

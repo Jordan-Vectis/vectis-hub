@@ -218,6 +218,42 @@ const MIGRATIONS = [
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "aiEstimateLow"  INTEGER`,
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "aiEstimateHigh" INTEGER`,
 
+  // 2026-05-28 — Pipeline: automated batch → double check → key points run
+  `CREATE TABLE IF NOT EXISTS "PipelineRun" (
+    "id"        TEXT         NOT NULL,
+    "code"      TEXT         NOT NULL,
+    "preset"    TEXT         NOT NULL DEFAULT '',
+    "model"     TEXT         NOT NULL DEFAULT '',
+    "stage"     TEXT         NOT NULL DEFAULT 'batch',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "PipelineRun_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "PipelineRun_code_key" UNIQUE ("code")
+  )`,
+  `CREATE TABLE IF NOT EXISTS "PipelineLot" (
+    "id"           TEXT         NOT NULL,
+    "runId"        TEXT         NOT NULL,
+    "lotId"        TEXT         NOT NULL,
+    "label"        TEXT         NOT NULL,
+    "batchStatus"  TEXT,
+    "description"  TEXT,
+    "estimate"     TEXT,
+    "dcStatus"     TEXT,
+    "contradictions" TEXT,
+    "unsupported"  TEXT,
+    "kpStatus"     TEXT,
+    "revised"      TEXT,
+    "kpMissing"    TEXT,
+    "kpAdded"      TEXT,
+    "createdAt"    TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt"    TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "PipelineLot_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "PipelineLot_runId_lotId_key" UNIQUE ("runId", "lotId"),
+    CONSTRAINT "PipelineLot_runId_fkey" FOREIGN KEY ("runId")
+      REFERENCES "PipelineRun"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "PipelineLot_runId_idx" ON "PipelineLot"("runId")`,
+
   // 2026-04-29 — MacroFile: stores uploaded macro/instruction files for Auction AI
   `CREATE TABLE IF NOT EXISTS "MacroFile" (
     "id"          TEXT         NOT NULL,

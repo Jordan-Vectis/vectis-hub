@@ -2326,115 +2326,119 @@ function KeyPointsCheckTab({ model: globalModel, onModelChange }: { model: strin
     setShowResults(false)
     setChecking(true)
     setLog([])
-    setProgress({ done: 0, total: toCheck.length })
-    // Only reset the lots being sent — preserve results for already-checked lots
-    const toCheckIds = new Set(toCheck.map(l => l.id))
-    setLots(prev => prev.map(l =>
-      toCheckIds.has(l.id) ? { ...l, status: "checking", revised: undefined, changed: undefined } : l
-    ))
     const resuming = !forceAll && lots.some(l => l.status === "ok" || l.status === "fixed")
     addLog(`── ${resuming ? "Resuming" : "Starting"} check: ${toCheck.length} lot${toCheck.length !== 1 ? "s" : ""} · model: ${localModel}`)
 
-    const lotStartTimes: Record<string, number> = {}
-    const controller = new AbortController()
-    abortRef.current = controller
+    // Reset only the lots being checked
+    const toCheckIds = new Set(toCheck.map(l => l.id))
+    setLots(prev => prev.map(l =>
+      toCheckIds.has(l.id) ? { ...l, status: "idle" as const, revised: undefined, changed: undefined } : l
+    ))
+
+    let done = 0
+    const runCode = code.trim().toUpperCase() + "_KP"
 
     try {
-      const res = await fetch("/api/auction-ai/key-points-check", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ lots: toCheck.map(l => ({ label: l.label, keyPoints: l.keyPoints, description: l.description })), model: localModel }),
-        signal:  controller.signal,
-      })
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        throw new Error(errData.error ?? res.statusText)
-      }
+      for (let i = 0; i < toCheck.length; i++) {
+        if (cancelRef.current) break
+        const lot = toCheck[i]
 
-      const reader  = res.body!.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ""
+        setLots(prev => prev.map(l => l.id === lot.id ? { ...l, status: "checking" as const } : l))
+        addLog(`  · ${done + 1}/${toCheck.length} Lot ${lot.label} — sending to Gemini…`)
+        setProgress({ done, total: toCheck.length, current: lot.label })
 
-      outer: while (true) {
-        // Pause: stop reading until resumed or cancelled
-        while (pauseRef.current && !cancelRef.current) {
-          await new Promise(r => setTimeout(r, 200))
-        }
-        if (cancelRef.current) { reader.cancel(); break }
+        // Retry loop — same rules as batch run
+        let lastError = ""
+        let succeeded = false
+        let attempt   = 0
 
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split("\n"); buffer = lines.pop()!
-        for (const line of lines) {
-          if (!line.trim()) continue
-          const msg = JSON.parse(line)
-          if (msg.type === "progress") {
-            lotStartTimes[msg.label] = Date.now()
-            setProgress({ done: msg.index, total: toCheck.length, current: msg.label })
-            addLog(`  · ${msg.index + 1}/${toCheck.length} Lot ${msg.label} — sending to Gemini…`)
-          } else if (msg.type === "result") {
-            const ms = lotStartTimes[msg.label] ? Date.now() - lotStartTimes[msg.label] : 0
-            const outcome = msg.changed ? "⚑ fixed" : "✓ all included"
-            addLog(`  ${outcome} — Lot ${msg.label} (${(ms / 1000).toFixed(1)}s)${msg.missing ? ` · missing: ${msg.missing}` : ""}`)
+        while (!cancelRef.current) {
+          if (attempt > 0) {
+            const isRateLimit = lastError.startsWith("RATE_LIMITED:")
+            const wait = isRateLimit
+              ? Math.min(60000 * Math.pow(2, attempt - 1), 1800000)
+              : Math.min(attempt * 12000, 30000)
+            addLog(`↺ ${lot.label} — ${isRateLimit ? "rate limited, waiting" : "retrying in"} ${wait / 1000}s (attempt ${attempt + 1})…`)
+            await new Promise(r => setTimeout(r, wait))
+            if (cancelRef.current) break
+          }
+          attempt++
+
+          try {
+            const t0  = Date.now()
+            const res = await fetch("/api/auction-ai/key-points-check", {
+              method:  "POST",
+              headers: { "Content-Type": "application/json" },
+              body:    JSON.stringify({ label: lot.label, keyPoints: lot.keyPoints, description: lot.description, model: localModel }),
+            })
+            const json = await res.json()
+            if (json.error) throw new Error(json.error)
+
+            const { revised, changed, missing, added } = json
+            const ms      = Date.now() - t0
+            const outcome = changed ? "⚑ fixed" : "✓ all included"
+            addLog(`  ${outcome} — Lot ${lot.label} (${(ms / 1000).toFixed(1)}s)${missing ? ` · missing: ${missing}` : ""}`)
+
             setLots(prev => prev.map(l =>
-              l.label === msg.label
-                ? { ...l, revised: msg.revised, changed: msg.changed, missing: msg.missing, added: msg.added, status: msg.changed ? "fixed" : "ok", selected: msg.changed ? true : undefined }
+              l.id === lot.id
+                ? { ...l, revised, changed, missing, added, status: changed ? "fixed" : "ok", selected: changed ? true : undefined }
                 : l
             ))
-            setProgress({ done: msg.index + 1, total: toCheck.length })
-          } else if (msg.type === "error") {
-            addLog(`  ✗ Lot ${msg.label} — error: ${msg.error}`)
-            setLots(prev => prev.map(l => l.label === msg.label ? { ...l, status: "error" } : l))
-          } else if (msg.type === "done") {
-            addLog(`── Complete`)
-          }
-        }
-      }
-    } catch (e: any) {
-      if (!cancelRef.current) {
-        addLog(`✗ Failed: ${e.message}`)
-        setError(e.message)
-      }
-    } finally {
-      abortRef.current = null
-      setChecking(false)
-      setProgress(null)
-      setShowResults(true)
 
-      // Save all checked lots to Saved Runs (use _KP suffix to avoid clashing with batch runs)
-      setLots(current => {
-        const checked = current.filter(l => (l.status === "ok" || l.status === "fixed") && l.description)
-        if (checked.length > 0) {
-          const runCode = code.trim().toUpperCase() + "_KP"
-          checked.forEach(l => {
+            // Auto-save to Saved Runs
             fetch("/api/auction-ai/runs", {
               method:  "POST",
               headers: { "Content-Type": "application/json" },
               body:    JSON.stringify({
                 code:                runCode,
                 preset:              "Key Points Check",
-                lot:                 l.label,
-                description:         l.revised ?? l.description,
+                lot:                 lot.label,
+                description:         revised ?? lot.description,
                 estimate:            "",
-                originalDescription: l.description,
-                keyPoints:           l.keyPoints,
-                missing:             l.missing  ?? null,
-                added:               l.added    ?? null,
+                originalDescription: lot.description,
+                keyPoints:           lot.keyPoints,
+                missing:             missing ?? null,
+                added:               added   ?? null,
               }),
-            }).then(async r => {
-              if (!r.ok) {
-                const txt = await r.text().catch(() => "")
-                let msg = ""
-                try { msg = JSON.parse(txt).error ?? "" } catch { msg = txt }
-                showError(`Auto-save failed — Lot ${l.label}`, `HTTP ${r.status}`, msg || "No detail returned from server")
-              }
-            }).catch(e => showError(`Auto-save failed — Lot ${l.label}`, e.message))
-          })
-          addLog(`── Saved ${checked.length} lot${checked.length !== 1 ? "s" : ""} to Saved Runs`)
+            }).catch(() => {/* silent — don't break the run for a save failure */})
+
+            succeeded = true
+            break
+          } catch (e: any) {
+            lastError = e.message ?? String(e)
+            if (lastError.startsWith("BLOCKED:")) {
+              addLog(`✗ ${lot.label} — blocked by Gemini, skipping: ${lastError}`)
+              setLots(prev => prev.map(l => l.id === lot.id ? { ...l, status: "error" as const } : l))
+              break
+            }
+          }
         }
-        return current
-      })
+
+        if (!succeeded && !cancelRef.current) {
+          addLog(`✗ ${lot.label} — FAILED after ${attempt} attempt${attempt !== 1 ? "s" : ""}: ${lastError}`)
+          setLots(prev => prev.map(l => l.id === lot.id ? { ...l, status: "error" as const } : l))
+        }
+
+        done++
+        setProgress({ done, total: toCheck.length })
+
+        // Pause support
+        if (pauseRef.current) {
+          addLog(`⏸ Paused after ${lot.label} — click Resume to continue`)
+          while (pauseRef.current && !cancelRef.current) {
+            await new Promise(r => setTimeout(r, 500))
+          }
+          if (!cancelRef.current) addLog("▶ Resumed")
+        }
+      }
+
+      if (!cancelRef.current) addLog("── Complete")
+    } catch (e: any) {
+      if (!cancelRef.current) { addLog(`✗ Unexpected error: ${e.message}`); setError(e.message) }
+    } finally {
+      setChecking(false)
+      setProgress(null)
+      setShowResults(true)
     }
   }
 
@@ -2838,6 +2842,8 @@ type DCLot = {
   verdict?:        "ok" | "issues"
   contradictions?: string
   unsupported?:    string
+  revised?:        string
+  accepted?:       boolean
   status?:         "idle" | "checking" | "ok" | "issues" | "error"
 }
 
@@ -2927,6 +2933,8 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
     }
   }
 
+  const [accepting, setAccepting] = useState(false)
+
   function handleStop() {
     cancelRef.current = true
     pauseRef.current  = false
@@ -2944,6 +2952,25 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
     pauseRef.current = false
     setPaused(false)
     addLog("▶ Resumed")
+  }
+
+  async function acceptLot(lot: DCLot) {
+    if (!auctionId || !lot.revised) return
+    setLots(prev => prev.map(l => l.id === lot.id ? { ...l, accepted: true } : l))
+    try {
+      await applyAiDescriptionOne(auctionId, { id: lot.id, description: lot.revised, aiEstimateLow: null, aiEstimateHigh: null })
+    } catch (e: any) {
+      setLots(prev => prev.map(l => l.id === lot.id ? { ...l, accepted: false } : l))
+      setError(`Failed to save Lot ${lot.label}: ${e.message}`)
+    }
+  }
+
+  async function acceptAll() {
+    const toAccept = lots.filter(l => l.status === "issues" && l.revised && !l.accepted)
+    if (!auctionId || !toAccept.length) return
+    setAccepting(true)
+    for (const lot of toAccept) await acceptLot(lot)
+    setAccepting(false)
   }
 
   async function runCheck() {
@@ -3024,12 +3051,12 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
 
             if (json.error) throw new Error(json.error)
 
-            const { verdict, contradictions, unsupported } = json
+            const { verdict, contradictions, unsupported, revised } = json
             const ms = Date.now() - t0
             addLog(`  ${verdict === "ok" ? "✓ clean" : "⚑ issues"} — ${lot.label} (${(ms / 1000).toFixed(1)}s)`)
             setLots(prev => prev.map(l =>
               l.label === lot.label
-                ? { ...l, verdict, contradictions, unsupported, status: verdict }
+                ? { ...l, verdict, contradictions, unsupported, revised: revised || undefined, status: verdict }
                 : l
             ))
             succeeded = true
@@ -3186,7 +3213,13 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
           <div className="flex items-center gap-4 flex-wrap">
             {okCount > 0    && <span className="text-xs font-semibold text-green-400 bg-green-950/40 border border-green-800/50 rounded-full px-3 py-1">✓ {okCount} clean</span>}
             {issueCount > 0 && <span className="text-xs font-semibold text-red-400   bg-red-950/40   border border-red-800/50   rounded-full px-3 py-1">⚑ {issueCount} with issues</span>}
-            {errCount > 0   && <span className="text-xs font-semibold text-gray-600 dark:text-gray-400  bg-gray-800/40  border border-gray-300 dark:border-gray-700     rounded-full px-3 py-1">✗ {errCount} errors</span>}
+            {errCount > 0   && <span className="text-xs font-semibold text-gray-600 dark:text-gray-400  bg-gray-800/40  border border-gray-300 dark:border-gray-700 rounded-full px-3 py-1">✗ {errCount} errors</span>}
+            {auctionId && lots.some(l => l.status === "issues" && l.revised && !l.accepted) && (
+              <button onClick={acceptAll} disabled={accepting}
+                className="text-xs font-semibold px-3 py-1 rounded-full bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 text-white transition-colors">
+                {accepting ? "Applying…" : `✓ Accept all fixes (${lots.filter(l => l.status === "issues" && l.revised && !l.accepted).length})`}
+              </button>
+            )}
           </div>
 
           {[...lots]
@@ -3201,15 +3234,19 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
               return (
                 <div key={lot.label}
                   className={`border rounded-xl overflow-hidden ${
-                    hasIssues ? "border-red-800/60 bg-red-950/20" : lot.status === "error" ? "border-gray-700 bg-gray-900/30" : "border-green-800/40 bg-green-950/10"
+                    lot.accepted ? "border-indigo-800/50 bg-indigo-950/20"
+                    : hasIssues  ? "border-red-800/60 bg-red-950/20"
+                    : lot.status === "error" ? "border-gray-700 bg-gray-900/30"
+                    : "border-green-800/40 bg-green-950/10"
                   }`}>
                   <button onClick={() => setExpandedLot(isExpanded ? null : lot.label)}
                     className="w-full flex items-center gap-3 px-4 py-3 text-left">
-                    <span className={`text-base flex-shrink-0 ${hasIssues ? "text-red-400" : lot.status === "error" ? "text-gray-600 dark:text-gray-500" : "text-green-400"}`}>
-                      {hasIssues ? "⚑" : lot.status === "error" ? "✗" : "✓"}
+                    <span className={`text-base flex-shrink-0 ${lot.accepted ? "text-indigo-400" : hasIssues ? "text-red-400" : lot.status === "error" ? "text-gray-600 dark:text-gray-500" : "text-green-400"}`}>
+                      {lot.accepted ? "✓" : hasIssues ? "⚑" : lot.status === "error" ? "✗" : "✓"}
                     </span>
                     <span className="font-mono text-sm text-gray-700 dark:text-gray-200 flex-1">{lot.label}</span>
-                    {hasIssues && lot.contradictions && (
+                    {lot.accepted && <span className="text-xs text-indigo-400 font-medium">Fix applied</span>}
+                    {hasIssues && !lot.accepted && lot.contradictions && (
                       <span className="text-xs text-red-400 truncate max-w-sm opacity-80">{lot.contradictions.slice(0, 80)}{lot.contradictions.length > 80 ? "…" : ""}</span>
                     )}
                     <span className="text-gray-600 text-xs flex-shrink-0">{isExpanded ? "▲" : "▼"}</span>
@@ -3230,10 +3267,28 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
                         </div>
                       )}
                       {lot.status === "error" && <p className="text-xs text-gray-600 dark:text-gray-500">Check failed — try running again</p>}
+
+                      {/* Original description */}
                       <div className="pt-2 border-t border-gray-200 dark:border-gray-800">
-                        <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Description</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Original description</p>
                         <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-wrap">{lot.description}</p>
                       </div>
+
+                      {/* Revised description + accept button */}
+                      {hasIssues && lot.revised && (
+                        <div className="pt-2 border-t border-gray-200 dark:border-gray-800">
+                          <p className="text-xs text-indigo-400 uppercase tracking-wider mb-1 font-semibold">Suggested fix</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap mb-3">{lot.revised}</p>
+                          {auctionId && (
+                            lot.accepted
+                              ? <span className="text-xs text-indigo-400 font-medium">✓ Fix applied to catalogue</span>
+                              : <button onClick={() => acceptLot(lot)}
+                                  className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-indigo-700 hover:bg-indigo-600 text-white transition-colors">
+                                  ✓ Accept fix
+                                </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
