@@ -232,7 +232,7 @@ type BCMatchRow = {
   ourReceipt: string | null
   ourUniqueId: string | null
   lotId:      string | null
-  status:     "match" | "mismatch" | "not_found"
+  status:     "match" | "mismatch" | "not_found" | "our_only"
 }
 
 function BCMatchModal({ lots, auctionId, onClose }: {
@@ -273,7 +273,22 @@ function BCMatchModal({ lots, auctionId, onClose }: {
           const receiptMatch = (lot.receipt ?? "").trim().toUpperCase() === bcReceipt.toUpperCase()
           return { barcode, bcReceipt, bcUniqueId, ourReceipt: lot.receipt, ourUniqueId: lot.receiptUniqueId, lotId: lot.id, status: receiptMatch ? "match" as const : "mismatch" as const }
         }).filter(Boolean)) as BCMatchRow[]
-        setRows(parsed)
+
+        // Reverse check — our lots whose barcode doesn't appear in the BC export at all
+        const bcBarcodeSet = new Set(parsed.map(r => r.barcode.toLowerCase()))
+        const ourOnly: BCMatchRow[] = lots
+          .filter(l => l.barcode && !bcBarcodeSet.has(l.barcode.toLowerCase().trim()))
+          .map(l => ({
+            barcode:    l.barcode!,
+            bcReceipt:  "",
+            bcUniqueId: "",
+            ourReceipt:  l.receipt,
+            ourUniqueId: l.receiptUniqueId,
+            lotId:       l.id,
+            status:      "our_only" as const,
+          }))
+
+        setRows([...parsed, ...ourOnly])
       } catch (e: any) {
         setError("Could not read file: " + (e.message ?? "unknown error"))
       }
@@ -296,6 +311,7 @@ function BCMatchModal({ lots, auctionId, onClose }: {
   const matched    = rows.filter(r => r.status === "match")
   const mismatched = rows.filter(r => r.status === "mismatch")
   const notFound   = rows.filter(r => r.status === "not_found")
+  const ourOnly    = rows.filter(r => r.status === "our_only")
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={onClose}>
@@ -318,7 +334,7 @@ function BCMatchModal({ lots, auctionId, onClose }: {
               {fileName ? `📄 ${fileName}` : "Choose BC Lines .xlsx…"}
             </button>
             <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile} />
-            {rows.length > 0 && <span className="text-xs text-gray-500">{rows.length} rows parsed</span>}
+            {rows.length > 0 && <span className="text-xs text-gray-500">{rows.filter(r => r.status !== "our_only").length} BC rows · {lots.filter(l => l.barcode).length} our lots</span>}
           </div>
 
           {error && (
@@ -328,7 +344,7 @@ function BCMatchModal({ lots, auctionId, onClose }: {
           {rows.length > 0 && (
             <>
               {/* Summary cards */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg px-4 py-3">
                   <div className="text-2xl font-bold text-green-700 dark:text-green-400">{matched.length}</div>
                   <div className="text-xs text-green-600 dark:text-green-500 mt-0.5">Receipt matches — ready to import</div>
@@ -339,7 +355,11 @@ function BCMatchModal({ lots, auctionId, onClose }: {
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3">
                   <div className="text-2xl font-bold text-gray-700 dark:text-gray-400">{notFound.length}</div>
-                  <div className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">Barcodes not in this auction</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">In BC but not our system</div>
+                </div>
+                <div className="bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 rounded-lg px-4 py-3">
+                  <div className="text-2xl font-bold text-violet-700 dark:text-violet-400">{ourOnly.length}</div>
+                  <div className="text-xs text-violet-600 dark:text-violet-500 mt-0.5">In our system but not in BC</div>
                 </div>
               </div>
 
@@ -377,7 +397,8 @@ function BCMatchModal({ lots, auctionId, onClose }: {
                         <td className="px-3 py-2">
                           {r.status === "match"     && <span className="text-green-600 dark:text-green-400 font-semibold">✓ Match</span>}
                           {r.status === "mismatch"  && <span className="text-yellow-600 dark:text-yellow-400 font-semibold">⚠ Mismatch</span>}
-                          {r.status === "not_found" && <span className="text-gray-500 font-semibold">✗ Not found</span>}
+                          {r.status === "not_found" && <span className="text-gray-500 font-semibold">✗ Not in our system</span>}
+                          {r.status === "our_only"  && <span className="text-violet-600 dark:text-violet-400 font-semibold">✗ Not in BC</span>}
                         </td>
                       </tr>
                     ))}
