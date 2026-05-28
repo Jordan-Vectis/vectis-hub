@@ -1408,8 +1408,8 @@ function SavedRunsTab() {
   const [search,        setSearch]        = useState("")
   const [loading,       setLoading]       = useState(false)
   const [deleting,      setDeleting]      = useState<string | null>(null)
-  const [applying,      setApplying]      = useState(false)
-  const [applyResult,   setApplyResult]   = useState<{ created: number; skipped: string[]; auctionId: string } | null>(null)
+  const [applying,      setApplying]      = useState<string | boolean>(false) // lotId | "all" | false
+  const [applyResult,   setApplyResult]   = useState<{ created: number; updated: number; auctionId: string } | null>(null)
   const [applyError,    setApplyError]    = useState<string | null>(null)
 
   useEffect(() => { loadRuns() }, [])
@@ -1454,12 +1454,32 @@ function SavedRunsTab() {
   }
 
   async function applyToAuction(runId: string) {
-    if (!confirm("This will create new catalogue lots from the AI run results. Lots that already exist in the auction will be skipped. Continue?")) return
-    setApplying(true)
+    if (!confirm("Apply all lots to the catalogue auction? Existing lots will have their description and AI estimate updated. New lots will be created.")) return
+    setApplying("all")
     setApplyResult(null)
     setApplyError(null)
     try {
       const r = await fetch(`/api/auction-ai/runs/${runId}/apply`, { method: "POST" })
+      const j = await r.json()
+      if (!r.ok) { setApplyError(j.error ?? "Failed to apply"); return }
+      setApplyResult(j)
+    } catch (e: any) {
+      setApplyError(e.message ?? "Network error")
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  async function applyOneLot(runId: string, lotId: string) {
+    setApplying(lotId)
+    setApplyResult(null)
+    setApplyError(null)
+    try {
+      const r = await fetch(`/api/auction-ai/runs/${runId}/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lotIds: [lotId] }),
+      })
       const j = await r.json()
       if (!r.ok) { setApplyError(j.error ?? "Failed to apply"); return }
       setApplyResult(j)
@@ -1533,19 +1553,18 @@ function SavedRunsTab() {
                           className="text-xs px-3 py-1 bg-gray-100 dark:bg-[#2C2C2E] hover:bg-gray-200 dark:hover:bg-[#3A3A3C] border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded transition-colors">
                           ⬇ Export Excel
                         </button>
-                        <button onClick={() => applyToAuction(run.id)} disabled={applying}
+                        <button onClick={() => applyToAuction(run.id)} disabled={!!applying}
                           className="text-xs px-3 py-1 bg-[#C8A96E] hover:bg-[#d4b87a] disabled:opacity-50 text-black font-semibold rounded transition-colors">
-                          {applying ? "Applying…" : "✓ Apply to Auction"}
+                          {applying === "all" ? "Applying…" : "✓ Apply All to Auction"}
                         </button>
                       </div>
                     </div>
 
                     {applyResult && expanded === run.id && (
                       <div className="px-4 py-2 bg-green-950 border-t border-green-800 text-xs text-green-300 flex flex-wrap items-center gap-3">
-                        <span>✓ Created {applyResult.created} lots</span>
-                        {applyResult.skipped.length > 0 && (
-                          <span className="text-yellow-400">⚠ {applyResult.skipped.length} already existed (skipped): {applyResult.skipped.join(", ")}</span>
-                        )}
+                        {applyResult.updated > 0 && <span>✓ {applyResult.updated} lot{applyResult.updated !== 1 ? "s" : ""} updated</span>}
+                        {applyResult.created > 0 && <span>✓ {applyResult.created} lot{applyResult.created !== 1 ? "s" : ""} created</span>}
+                        {applyResult.updated === 0 && applyResult.created === 0 && <span>No matching lots found in auction</span>}
                         <a href={`/tools/cataloguing/auctions/${applyResult.auctionId}`} target="_blank" rel="noreferrer"
                           className="ml-auto text-blue-400 hover:text-blue-300 underline">
                           Open in Cataloguing →
@@ -1565,6 +1584,12 @@ function SavedRunsTab() {
                           <span className="text-xs font-mono text-[#C8A96E] flex-shrink-0 w-20">{l.lot}</span>
                           <span className="text-xs text-gray-600 dark:text-gray-300 flex-1 line-clamp-2">{l.description}</span>
                           <span className="text-xs text-gray-600 dark:text-gray-500 flex-shrink-0 w-20 text-right">{l.estimate}</span>
+                          <button
+                            onClick={() => applyOneLot(run.id, l.id)}
+                            disabled={!!applying}
+                            className="text-xs px-2 py-0.5 rounded bg-[#C8A96E]/20 border border-[#C8A96E]/40 text-[#C8A96E] hover:bg-[#C8A96E]/40 disabled:opacity-40 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
+                            {applying === l.id ? "…" : "Apply"}
+                          </button>
                           <button onClick={() => deleteLot(l.id)}
                             className="text-xs text-red-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">✕</button>
                         </div>

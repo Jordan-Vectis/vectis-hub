@@ -11,7 +11,6 @@ function parseEstimate(est: string): { low: number | null; high: number | null }
   }
 }
 
-// Extract a short title from the AI description (first sentence, capped at 83 chars)
 const TITLE_LIMIT = 83
 function titleFromDescription(desc: string): string {
   const first = desc.split(/[.\n]/)[0].trim()
@@ -19,25 +18,31 @@ function titleFromDescription(desc: string): string {
 }
 
 // POST /api/auction-ai/runs/[id]/apply
-// Creates new CatalogueLot records in the matching CatalogueAuction from a saved AI run.
-// Skips lots whose barcode or receiptUniqueId already exists in that auction to avoid duplicates.
-export async function POST(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// Applies saved AI run results to the matching CatalogueAuction.
+// Body: { lotIds?: string[] } — if provided, only apply those specific run lot IDs.
+// - Existing lots (matched by barcode or receiptUniqueId): description + AI estimate updated
+// - New lots: created with description, human estimate, and AI estimate both set
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
   const { id } = await params
 
   try {
+    // Optional: restrict to specific run lot IDs (for per-lot apply)
+    let body: { lotIds?: string[] } = {}
+    try { body = await req.json() } catch { /* no body is fine */ }
+    const filterIds = body.lotIds && body.lotIds.length > 0 ? new Set(body.lotIds) : null
+
     const run = await prisma.auctionRun.findUnique({
       where: { id },
       include: { lots: { orderBy: { createdAt: "asc" } } },
     })
     if (!run) return NextResponse.json({ error: "Run not found" }, { status: 404 })
 
-    // Find the matching catalogue auction by code
     const auction = await prisma.catalogueAuction.findUnique({
       where: { code: run.code },
-      select: { id: true, lots: { select: { barcode: true, receiptUniqueId: true } } },
+      select: { id: true, lots: { select: { id: true, barcode: true, receiptUniqueId: true } } },
     })
     if (!auction) {
       return NextResponse.json(
@@ -46,53 +51,65 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
       )
     }
 
-    // Track existing identifiers so we don't create duplicates
-    const existingBarcodes    = new Set(auction.lots.filter(l => l.barcode).map(l => l.barcode!))
-    const existingUniqueIds   = new Set(auction.lots.filter(l => l.receiptUniqueId).map(l => l.receiptUniqueId!))
+    // Build lookup maps: identifier → lot ID
+    const barcodeToId  = new Map(auction.lots.filter(l => l.barcode).map(l => [l.barcode!, l.id]))
+    const uniqueIdToId = new Map(auction.lots.filter(l => l.receiptUniqueId).map(l => [l.receiptUniqueId!, l.id]))
 
-    // Deduplicate within the run itself: if the batch was re-run after a page refresh,
-    // the same lot may have been saved multiple times with different descriptions.
-    // Use the most recently saved record for each lot identifier.
+    // Deduplicate within the run — keep the most recently saved record per lot identifier
     const deduped = new Map<string, typeof run.lots[0]>()
     for (const l of run.lots) {
-      deduped.set(l.lot.trim(), l) // later entries overwrite earlier ones
+      deduped.set(l.lot.trim(), l)
     }
-    const uniqueLots = Array.from(deduped.values())
+    let uniqueLots = Array.from(deduped.values())
 
-    const skipped: string[] = []
+    // Apply filter if specific lot IDs were requested
+    if (filterIds) {
+      uniqueLots = uniqueLots.filter(l => filterIds.has(l.id))
+    }
+
     let created = 0
+    let updated = 0
 
     await Promise.all(
       uniqueLots.map(async l => {
-        const isUniqueIdFormat = /^[A-Za-z]\d{4,7}-\d{1,6}$/.test(l.lot.trim())
-        const alreadyExists = isUniqueIdFormat
-          ? existingUniqueIds.has(l.lot)
-          : existingBarcodes.has(l.lot)
-        if (alreadyExists) {
-          skipped.push(l.lot)
-          return
-        }
-        const { low, high } = parseEstimate(l.estimate)
-        // Detect receipt unique ID format e.g. R000016-413 — store in receiptUniqueId
         const isUniqueId = /^[A-Za-z]\d{4,7}-\d{1,6}$/.test(l.lot.trim())
-        await prisma.catalogueLot.create({
-          data: {
-            auctionId:       auction.id,
-            receiptUniqueId: isUniqueId ? l.lot : null,
-            title:           titleFromDescription(l.description),
-            description:     l.description,
-            estimateLow:     low,
-            estimateHigh:    high,
-            aiEstimateLow:   low,
-            aiEstimateHigh:  high,
-            aiUpgraded:      true,
-          },
-        })
-        created++
+        const existingId = isUniqueId ? uniqueIdToId.get(l.lot) : barcodeToId.get(l.lot)
+        const { low, high } = parseEstimate(l.estimate)
+
+        if (existingId) {
+          // Update existing lot — description + AI estimate only, never touch human estimate
+          await prisma.catalogueLot.update({
+            where: { id: existingId },
+            data: {
+              title:          titleFromDescription(l.description),
+              description:    l.description,
+              aiEstimateLow:  low,
+              aiEstimateHigh: high,
+              aiUpgraded:     true,
+            },
+          })
+          updated++
+        } else {
+          // Create new lot — AI is the starting point so populate both estimate fields
+          await prisma.catalogueLot.create({
+            data: {
+              auctionId:       auction.id,
+              receiptUniqueId: isUniqueId ? l.lot : null,
+              title:           titleFromDescription(l.description),
+              description:     l.description,
+              estimateLow:     low,
+              estimateHigh:    high,
+              aiEstimateLow:   low,
+              aiEstimateHigh:  high,
+              aiUpgraded:      true,
+            },
+          })
+          created++
+        }
       }),
     )
 
-    return NextResponse.json({ ok: true, created, skipped, auctionId: auction.id })
+    return NextResponse.json({ ok: true, created, updated, auctionId: auction.id })
   } catch (e: any) {
     console.error("[auction-ai/runs/[id]/apply POST]", e)
     return NextResponse.json({ error: e.message ?? "Database error" }, { status: 500 })
