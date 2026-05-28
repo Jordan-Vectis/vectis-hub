@@ -2860,8 +2860,10 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
   const [log,         setLog]         = useState<string[]>([])
   const [showResults, setShowResults] = useState(false)
   const [auctionList, setAuctionList] = useState<{ code: string; name: string }[]>([])
+  const [paused,      setPaused]      = useState(false)
   const logRef    = useRef<HTMLDivElement>(null)
   const cancelRef = useRef(false)
+  const pauseRef  = useRef(false)
   const abortRef  = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -2927,100 +2929,144 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
 
   function handleStop() {
     cancelRef.current = true
-    if (abortRef.current) { abortRef.current.abort(); abortRef.current = null }
+    pauseRef.current  = false
+    setPaused(false)
     addLog("⛔ Stopped")
+  }
+
+  function handlePause() {
+    pauseRef.current = true
+    setPaused(true)
+    addLog("⏸ Paused — finishing current lot…")
+  }
+
+  function handleResume() {
+    pauseRef.current = false
+    setPaused(false)
+    addLog("▶ Resumed")
   }
 
   async function runCheck() {
     const toCheck = lots.filter(l => l.description)
     if (!toCheck.length || checking) return
     cancelRef.current = false
+    pauseRef.current  = false
+    setPaused(false)
     setShowResults(false)
     setChecking(true)
     setLog([])
-    setProgress({ done: 0, total: toCheck.length })
-    setLots(prev => prev.map(l => ({ ...l, status: "checking", verdict: undefined, contradictions: undefined, unsupported: undefined })))
     const withPhotos = toCheck.filter(l => (l.imageUrls?.length ?? 0) > 0).length
     addLog(`── Starting double check: ${toCheck.length} lots · ${withPhotos} with photos · model: ${localModel}`)
 
-    const controller = new AbortController()
-    abortRef.current = controller
+    // Reset only lots that don't already have a verdict (allows resume)
+    setLots(prev => prev.map(l =>
+      l.verdict ? l : { ...l, status: "idle", contradictions: undefined, unsupported: undefined }
+    ))
+
+    let done = 0
 
     try {
-      // Fetch and base64-encode images for each lot (up to 6 per lot)
-      addLog("  · Preparing images…")
-      const lotsWithImages = await Promise.all(
-        toCheck.map(async (l) => {
-          const urls = (l.imageUrls ?? []).slice(0, 6)
-          const images = await Promise.all(
-            urls.map(async (url) => {
-              try {
-                const r = await fetch(`/api/catalogue/photo-proxy?key=${encodeURIComponent(url)}`)
-                if (!r.ok) return null
-                const buf = await r.arrayBuffer()
-                const data = btoa(String.fromCharCode(...new Uint8Array(buf)))
-                const mimeType = r.headers.get("content-type") || "image/jpeg"
-                return { data, mimeType }
-              } catch {
-                return null
-              }
-            })
-          )
-          return {
-            label:       l.label,
-            description: l.description,
-            images:      images.filter(Boolean) as { data: string; mimeType: string }[],
+      for (let i = 0; i < toCheck.length; i++) {
+        if (cancelRef.current) break
+
+        const lot = toCheck[i]
+
+        // Skip lots already checked
+        if (lot.verdict) {
+          done++
+          setProgress({ done, total: toCheck.length })
+          continue
+        }
+
+        // Fetch and base64-encode images for this lot (up to 6)
+        const urls = (lot.imageUrls ?? []).slice(0, 6)
+        const images = (await Promise.all(
+          urls.map(async (url) => {
+            try {
+              const r = await fetch(`/api/catalogue/photo-proxy?key=${encodeURIComponent(url)}`)
+              if (!r.ok) return null
+              const buf = await r.arrayBuffer()
+              const data = btoa(String.fromCharCode(...new Uint8Array(buf)))
+              const mimeType = r.headers.get("content-type") || "image/jpeg"
+              return { data, mimeType }
+            } catch { return null }
+          })
+        )).filter(Boolean) as { data: string; mimeType: string }[]
+
+        setLots(prev => prev.map(l => l.label === lot.label ? { ...l, status: "checking" } : l))
+        addLog(`  · ${done + 1}/${toCheck.length} ${lot.label} — checking…`)
+
+        // Retry loop — same rules as batch run
+        let lastError = ""
+        let succeeded = false
+        let attempt   = 0
+
+        while (!cancelRef.current) {
+          if (attempt > 0) {
+            const isRateLimit = lastError.startsWith("RATE_LIMITED:")
+            const wait = isRateLimit
+              ? Math.min(60000 * Math.pow(2, attempt - 1), 1800000)
+              : Math.min(attempt * 12000, 30000)
+            addLog(`↺ ${lot.label} — ${isRateLimit ? "rate limited, waiting" : "retrying in"} ${wait / 1000}s (attempt ${attempt + 1})…`)
+            await new Promise(r => setTimeout(r, wait))
+            if (cancelRef.current) break
           }
-        })
-      )
+          attempt++
 
-      const res = await fetch("/api/auction-ai/double-check", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ lots: lotsWithImages, model: localModel }),
-        signal:  controller.signal,
-      })
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText)
+          try {
+            const t0  = Date.now()
+            const res = await fetch("/api/auction-ai/double-check", {
+              method:  "POST",
+              headers: { "Content-Type": "application/json" },
+              body:    JSON.stringify({ label: lot.label, description: lot.description, images, model: localModel }),
+            })
+            const json = await res.json()
 
-      const reader  = res.body!.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ""
-      const lotStartTimes: Record<string, number> = {}
+            if (json.error) throw new Error(json.error)
 
-      while (true) {
-        if (cancelRef.current) { reader.cancel(); break }
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split("\n"); buffer = lines.pop()!
-        for (const line of lines) {
-          if (!line.trim()) continue
-          const msg = JSON.parse(line)
-          if (msg.type === "progress") {
-            lotStartTimes[msg.label] = Date.now()
-            setProgress({ done: msg.index, total: toCheck.length })
-            addLog(`  · ${msg.index + 1}/${toCheck.length} ${msg.label} — checking…`)
-          } else if (msg.type === "result") {
-            const ms = lotStartTimes[msg.label] ? Date.now() - lotStartTimes[msg.label] : 0
-            addLog(`  ${msg.verdict === "ok" ? "✓ clean" : "⚑ issues"} — ${msg.label} (${(ms / 1000).toFixed(1)}s)`)
+            const { verdict, contradictions, unsupported } = json
+            const ms = Date.now() - t0
+            addLog(`  ${verdict === "ok" ? "✓ clean" : "⚑ issues"} — ${lot.label} (${(ms / 1000).toFixed(1)}s)`)
             setLots(prev => prev.map(l =>
-              l.label === msg.label
-                ? { ...l, verdict: msg.verdict, contradictions: msg.contradictions, unsupported: msg.unsupported, status: msg.verdict }
+              l.label === lot.label
+                ? { ...l, verdict, contradictions, unsupported, status: verdict }
                 : l
             ))
-            setProgress({ done: msg.index + 1, total: toCheck.length })
-          } else if (msg.type === "error") {
-            addLog(`  ✗ ${msg.label} — ${msg.error}`)
-            setLots(prev => prev.map(l => l.label === msg.label ? { ...l, status: "error" } : l))
-          } else if (msg.type === "done") {
-            addLog("── Complete")
+            succeeded = true
+            break
+          } catch (e: any) {
+            lastError = e.message ?? String(e)
+            // Content blocks will never succeed — skip immediately
+            if (lastError.startsWith("BLOCKED:")) {
+              addLog(`✗ ${lot.label} — blocked by Gemini, skipping: ${lastError}`)
+              setLots(prev => prev.map(l => l.label === lot.label ? { ...l, status: "error" } : l))
+              break
+            }
           }
         }
+
+        if (!succeeded && !cancelRef.current) {
+          addLog(`✗ ${lot.label} — FAILED after ${attempt} attempt${attempt !== 1 ? "s" : ""}: ${lastError}`)
+          setLots(prev => prev.map(l => l.label === lot.label ? { ...l, status: "error" } : l))
+        }
+
+        done++
+        setProgress({ done, total: toCheck.length })
+
+        // Pause support
+        if (pauseRef.current) {
+          addLog(`⏸ Paused after ${lot.label} — click Resume to continue`)
+          while (pauseRef.current && !cancelRef.current) {
+            await new Promise(r => setTimeout(r, 500))
+          }
+          if (!cancelRef.current) addLog("▶ Resumed")
+        }
       }
+
+      if (!cancelRef.current) addLog("── Complete")
     } catch (e: any) {
-      if (!cancelRef.current) { addLog(`✗ Failed: ${e.message}`); setError(e.message) }
+      if (!cancelRef.current) addLog(`✗ Unexpected error: ${e.message}`)
     } finally {
-      abortRef.current = null
       setChecking(false)
       setProgress(null)
       setShowResults(true)
@@ -3104,10 +3150,16 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
               🔎 Run Double Check ({lots.length} lots)
             </button>
           ) : (
-            <button onClick={handleStop}
-              className="px-5 py-2.5 bg-red-900/50 hover:bg-red-900/80 border border-red-700 text-red-300 font-semibold text-sm rounded-lg transition-colors">
-              ⛔ Stop
-            </button>
+            <>
+              {paused
+                ? <button onClick={handleResume} className="px-5 py-2.5 bg-green-700 hover:bg-green-600 text-white font-semibold text-sm rounded-lg transition-colors">▶ Resume</button>
+                : <button onClick={handlePause}  className="px-5 py-2.5 bg-yellow-700/60 hover:bg-yellow-700 border border-yellow-600 text-yellow-300 font-semibold text-sm rounded-lg transition-colors">⏸ Pause</button>
+              }
+              <button onClick={handleStop}
+                className="px-5 py-2.5 bg-red-900/50 hover:bg-red-900/80 border border-red-700 text-red-300 font-semibold text-sm rounded-lg transition-colors">
+                ⛔ Stop
+              </button>
+            </>
           )}
           {progress && (
             <div className="flex-1 flex items-center gap-3">

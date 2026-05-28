@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 
-export const maxDuration = 300
+export const maxDuration = 60
 
 const SYSTEM_INSTRUCTION = `You are a quality checker for auction house lot descriptions. You will be given a written description and, where available, one or more photos of the lot.
 
@@ -28,6 +28,10 @@ If the description appears factually sound, set verdict to "ok" and leave both f
 Respond with ONLY valid JSON — no markdown, no code fences:
 {"contradictions":"<description of internal inconsistencies or obvious errors, or empty string>","unsupported":"<comma-separated list of specific unverifiable claims, or empty string>","verdict":"ok or issues"}`
 
+// POST /api/auction-ai/double-check
+// Checks a single lot — label, description, optional images.
+// Returns { verdict, contradictions, unsupported } or { error }.
+// Always returns HTTP 200 — inspect the body for errors.
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
@@ -35,85 +39,62 @@ export async function POST(req: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
 
-  const { lots, model } = await req.json() as {
-    lots: { label: string; description: string; images?: { data: string; mimeType: string }[] }[]
-    model?: string
+  try {
+    const { label, description, images, model } = await req.json() as {
+      label:       string
+      description: string
+      images?:     { data: string; mimeType: string }[]
+      model?:      string
+    }
+    if (!label || !description) return NextResponse.json({ error: "Missing label or description" }, { status: 400 })
+
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const ai = genAI.getGenerativeModel({
+      model: model ?? "gemini-2.5-flash-preview-04-17",
+      systemInstruction: SYSTEM_INSTRUCTION,
+    })
+
+    const imageParts = (images ?? []).map(img => ({
+      inlineData: { data: img.data, mimeType: img.mimeType },
+    }))
+    const textPart = { text: `Lot: ${label}\n\nDescription:\n${description}` }
+    const contents = imageParts.length > 0 ? [...imageParts, textPart] : [textPart]
+
+    // Check for prompt block before calling .text()
+    const result = await ai.generateContent(contents)
+    const response = result.response
+
+    if (response.promptFeedback?.blockReason) {
+      throw new Error(`BLOCKED: ${response.promptFeedback.blockReason}`)
+    }
+    const finishReason = response.candidates?.[0]?.finishReason
+    if (finishReason && finishReason !== "STOP" && finishReason !== "MAX_TOKENS") {
+      throw new Error(`BLOCKED: ${finishReason}`)
+    }
+
+    const raw = response.text().trim().replace(/^```json\s*/i, "").replace(/```$/, "")
+
+    let contradictions = ""
+    let unsupported    = ""
+    let verdict: "ok" | "issues" = "ok"
+
+    try {
+      const parsed   = JSON.parse(raw)
+      contradictions = parsed.contradictions?.trim() || ""
+      unsupported    = parsed.unsupported?.trim()    || ""
+      verdict        = contradictions || unsupported ? "issues" : "ok"
+    } catch {
+      contradictions = raw.slice(0, 200)
+      verdict        = "issues"
+    }
+
+    return NextResponse.json({ verdict, contradictions, unsupported })
+  } catch (e: any) {
+    const msg: string = e.message ?? "Unknown error"
+    // Prefix rate limit errors so the client can apply the correct backoff
+    if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
+      return NextResponse.json({ error: `RATE_LIMITED: ${msg}` })
+    }
+    return NextResponse.json({ error: msg })
   }
-  if (!lots?.length) return NextResponse.json({ error: "No lots provided" }, { status: 400 })
-
-  const genAI = new GoogleGenerativeAI(apiKey)
-  const ai = genAI.getGenerativeModel({
-    model: model ?? "gemini-2.5-flash-preview-04-17",
-    systemInstruction: SYSTEM_INSTRUCTION,
-  })
-
-  const encoder = new TextEncoder()
-  const stream = new ReadableStream({
-    async start(controller) {
-      function send(obj: object) {
-        controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"))
-      }
-
-      send({ type: "total", count: lots.length })
-
-      for (let i = 0; i < lots.length; i++) {
-        const lot = lots[i]
-        send({ type: "progress", index: i, label: lot.label })
-
-        let attempt = 0
-        let success = false
-
-        while (attempt < 3 && !success) {
-          try {
-            const imageParts = (lot.images ?? []).map(img => ({
-              inlineData: { data: img.data, mimeType: img.mimeType },
-            }))
-
-            const textPart = { text: `Lot: ${lot.label}\n\nDescription:\n${lot.description}` }
-
-            const contents = imageParts.length > 0
-              ? [...imageParts, textPart]
-              : [textPart]
-
-            const result = await ai.generateContent(contents)
-            const raw = result.response.text().trim().replace(/^```json\s*/i, "").replace(/```$/, "")
-
-            let contradictions = ""
-            let unsupported    = ""
-            let verdict: "ok" | "issues" = "ok"
-
-            try {
-              const parsed   = JSON.parse(raw)
-              contradictions = parsed.contradictions?.trim() || ""
-              unsupported    = parsed.unsupported?.trim()    || ""
-              verdict        = contradictions || unsupported ? "issues" : "ok"
-            } catch {
-              contradictions = raw.slice(0, 200)
-              verdict        = "issues"
-            }
-
-            send({ type: "result", index: i, label: lot.label, verdict, contradictions, unsupported })
-            success = true
-          } catch (e: any) {
-            const msg: string = e.message ?? ""
-            const isRetryable = msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("503")
-            if (isRetryable && attempt < 2) {
-              await new Promise(r => setTimeout(r, 8000 * (attempt + 1)))
-              attempt++
-            } else {
-              send({ type: "error", index: i, label: lot.label, error: msg || "Failed" })
-              success = true
-            }
-          }
-        }
-
-        if (i < lots.length - 1) await new Promise(r => setTimeout(r, 2000))
-      }
-
-      send({ type: "done" })
-      controller.close()
-    },
-  })
-
-  return new Response(stream, { headers: { "Content-Type": "application/x-ndjson" } })
 }
