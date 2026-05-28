@@ -246,6 +246,7 @@ function BCMatchModal({ lots, auctionId, onClose }: {
   const [error, setError]                 = useState<string | null>(null)
   const [importing, setImporting]         = useState(false)
   const [importResult, setImportResult]   = useState<{ updated: number; skipped: number } | null>(null)
+  const [tableFilter, setTableFilter]     = useState<BCMatchRow["status"] | "all">("all")
 
   const barcodeMap = useMemo(() => {
     const m = new Map<string, Lot>()
@@ -256,7 +257,7 @@ function BCMatchModal({ lots, auctionId, onClose }: {
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    setError(null); setImportResult(null); setFileName(file.name)
+    setError(null); setImportResult(null); setFileName(file.name); setTableFilter("all")
     const reader = new FileReader()
     reader.onload = ev => {
       try {
@@ -343,24 +344,24 @@ function BCMatchModal({ lots, auctionId, onClose }: {
 
           {rows.length > 0 && (
             <>
-              {/* Summary cards */}
+              {/* Summary cards — click to filter table */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg px-4 py-3">
-                  <div className="text-2xl font-bold text-green-700 dark:text-green-400">{matched.length}</div>
-                  <div className="text-xs text-green-600 dark:text-green-500 mt-0.5">Receipt matches — ready to import</div>
-                </div>
-                <div className="bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 rounded-lg px-4 py-3">
-                  <div className="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{mismatched.length}</div>
-                  <div className="text-xs text-yellow-600 dark:text-yellow-500 mt-0.5">Receipt mismatch — skipped</div>
-                </div>
-                <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3">
-                  <div className="text-2xl font-bold text-gray-700 dark:text-gray-400">{notFound.length}</div>
-                  <div className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">In BC but not our system</div>
-                </div>
-                <div className="bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 rounded-lg px-4 py-3">
-                  <div className="text-2xl font-bold text-violet-700 dark:text-violet-400">{ourOnly.length}</div>
-                  <div className="text-xs text-violet-600 dark:text-violet-500 mt-0.5">In our system but not in BC</div>
-                </div>
+                {([
+                  { status: "match"     as const, count: matched.length,    label: "Receipt matches — ready to import", active: "bg-green-100 dark:bg-green-900/60 ring-2 ring-green-500",  inactive: "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-900/50",  num: "text-green-700 dark:text-green-400",  txt: "text-green-600 dark:text-green-500"  },
+                  { status: "mismatch"  as const, count: mismatched.length,  label: "Receipt mismatch — skipped",         active: "bg-yellow-100 dark:bg-yellow-900/60 ring-2 ring-yellow-500", inactive: "bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 hover:bg-yellow-100 dark:hover:bg-yellow-900/50", num: "text-yellow-700 dark:text-yellow-400", txt: "text-yellow-600 dark:text-yellow-500" },
+                  { status: "not_found" as const, count: notFound.length,    label: "In BC but not our system",           active: "bg-gray-200 dark:bg-gray-700/60 ring-2 ring-gray-400",       inactive: "bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800/60",           num: "text-gray-700 dark:text-gray-400",    txt: "text-gray-600 dark:text-gray-500"    },
+                  { status: "our_only"  as const, count: ourOnly.length,     label: "In our system but not in BC",        active: "bg-violet-100 dark:bg-violet-900/60 ring-2 ring-violet-500", inactive: "bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 hover:bg-violet-100 dark:hover:bg-violet-900/50", num: "text-violet-700 dark:text-violet-400", txt: "text-violet-600 dark:text-violet-500" },
+                ] as const).map(card => (
+                  <button
+                    key={card.status}
+                    onClick={() => setTableFilter(f => f === card.status ? "all" : card.status)}
+                    className={`text-left rounded-lg px-4 py-3 transition-all ${tableFilter === card.status ? card.active : card.inactive}`}
+                  >
+                    <div className={`text-2xl font-bold ${card.num}`}>{card.count}</div>
+                    <div className={`text-xs mt-0.5 ${card.txt}`}>{card.label}</div>
+                    {tableFilter === card.status && <div className="text-xs mt-1 opacity-60 font-medium">Click to clear filter</div>}
+                  </button>
+                ))}
               </div>
 
               {/* Import action */}
@@ -388,7 +389,7 @@ function BCMatchModal({ lots, auctionId, onClose }: {
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((r, i) => (
+                    {(tableFilter === "all" ? rows : rows.filter(r => r.status === tableFilter)).map((r, i) => (
                       <tr key={i} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
                         <td className="px-3 py-2 font-mono text-gray-800 dark:text-gray-200">{r.barcode}</td>
                         <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-400">{r.bcReceipt || "—"}</td>
