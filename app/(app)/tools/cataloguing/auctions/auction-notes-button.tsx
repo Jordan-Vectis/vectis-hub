@@ -1,34 +1,38 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState } from "react"
 
-export default function AuctionNotesButton({ notes }: { notes: string }) {
+export default function AuctionNotesButton({ notes, auctionName }: { notes: string; auctionName: string }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
-  }, [open])
 
   return (
-    <div ref={ref} className="relative inline-block">
+    <>
       <button
-        onClick={() => setOpen(v => !v)}
+        onClick={() => setOpen(true)}
         className="text-xs px-2 py-1 rounded border border-amber-400/50 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors font-medium"
       >
         📝 Notes
       </button>
+
       {open && (
-        <div className="absolute z-50 top-full mt-1 right-0 w-72 bg-white dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-600 rounded-xl shadow-xl p-4">
-          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Auction Notes</p>
-          <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">{notes}</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setOpen(false)}>
+          <div
+            className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl shadow-2xl w-full max-w-lg mx-4"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">Auction Notes</h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{auctionName}</p>
+              </div>
+              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none">✕</button>
+            </div>
+            <div className="px-5 py-4">
+              <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">{notes}</p>
+            </div>
+          </div>
         </div>
       )}
-    </div>
+    </>
   )
 }

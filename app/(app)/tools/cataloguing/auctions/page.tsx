@@ -105,7 +105,7 @@ export default async function AuctionsPage() {
                     </td>
                   ))}
                   <td className="px-4 py-3 text-right">
-                    {auction.notes ? <AuctionNotesButton notes={auction.notes} /> : <span className="text-gray-600">—</span>}
+                    {auction.notes ? <AuctionNotesButton notes={auction.notes} auctionName={auction.name} /> : <span className="text-gray-600">—</span>}
                   </td>
                 </tr>
               ))}
