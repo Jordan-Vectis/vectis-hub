@@ -82,7 +82,13 @@ export async function applyAiDescriptions(
     updates.map(u =>
       prisma.catalogueLot.update({
         where: { id: u.id },
-        data: { description: u.description, estimateLow: u.estimateLow, estimateHigh: u.estimateHigh, aiUpgraded: true },
+        data: {
+          description: u.description,
+          // Only overwrite estimate if AI returned a value — never clear an existing estimate
+          ...(u.estimateLow  !== null ? { estimateLow:  u.estimateLow  } : {}),
+          ...(u.estimateHigh !== null ? { estimateHigh: u.estimateHigh } : {}),
+          aiUpgraded: true,
+        },
       })
     )
   )
@@ -96,7 +102,13 @@ export async function applyAiDescriptionOne(
   await requireCataloguer()
   await prisma.catalogueLot.update({
     where: { id: update.id },
-    data: { description: update.description, estimateLow: update.estimateLow, estimateHigh: update.estimateHigh, aiUpgraded: true },
+    data: {
+      description: update.description,
+      // Only overwrite estimate if AI returned a value — never clear an existing estimate
+      ...(update.estimateLow  !== null ? { estimateLow:  update.estimateLow  } : {}),
+      ...(update.estimateHigh !== null ? { estimateHigh: update.estimateHigh } : {}),
+      aiUpgraded: true,
+    },
   })
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
