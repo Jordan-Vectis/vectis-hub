@@ -3371,6 +3371,7 @@ function PipelineTab({ model: globalModel }: { model: string }) {
   const [log,         setLog]         = useState<string[]>([])
   const [preset,      setPreset]      = useState(Object.keys(PRESETS)[1])
   const [overrides,   setOverrides]   = useState<Record<string, string>>({})
+  const [editOpen,     setEditOpen]    = useState(false)
   const [auctionList, setAuctionList] = useState<{ code: string; name: string }[]>([])
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const codeRef  = useRef<HTMLDivElement>(null)
@@ -3393,6 +3394,16 @@ function PipelineTab({ model: globalModel }: { model: string }) {
     document.addEventListener("mousedown", handler)
     return () => document.removeEventListener("mousedown", handler)
   }, [])
+
+  async function savePreset(text: string) {
+    await fetch("/api/auction-ai/presets", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: preset, instruction: text }),
+    })
+    setOverrides(prev => ({ ...prev, [preset]: text }))
+    setEditOpen(false)
+  }
 
   function addLog(msg: string) {
     const ts = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
@@ -3881,7 +3892,8 @@ function PipelineTab({ model: globalModel }: { model: string }) {
           {/* Preset */}
           <div>
             <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1.5">Batch Preset</p>
-            <PresetSelector value={preset} onChange={setPreset} overrides={overrides} onEdit={() => {}} />
+            <PresetSelector value={preset} onChange={setPreset} overrides={overrides} onEdit={() => setEditOpen(true)} />
+            {editOpen && <PresetEditorModal presetKey={preset} initialText={overrides[preset] ?? PRESETS[preset]} onSave={savePreset} onClose={() => setEditOpen(false)} />}
           </div>
         </div>
 
