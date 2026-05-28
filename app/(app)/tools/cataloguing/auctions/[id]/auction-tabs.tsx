@@ -681,17 +681,19 @@ export default function AuctionTabs({ auction, lots, userId, userName, showScanT
           <LotHistoryTab
             auctionId={auction.id}
             lots={lots.map(l => ({
-              id:           l.id,
-              title:        l.title,
-              description:  l.description,
-              keyPoints:    l.keyPoints,
-              category:     l.category,
-              subCategory:  l.subCategory,
-              brand:        l.brand,
-              condition:    l.condition,
-              estimateLow:  l.estimateLow,
-              estimateHigh: l.estimateHigh,
-              extraDetails: l.extraDetails,
+              id:             l.id,
+              barcode:        l.barcode,
+              receiptUniqueId: l.receiptUniqueId,
+              title:          l.title,
+              description:    l.description,
+              keyPoints:      l.keyPoints,
+              category:       l.category,
+              subCategory:    l.subCategory,
+              brand:          l.brand,
+              condition:      l.condition,
+              estimateLow:    l.estimateLow,
+              estimateHigh:   l.estimateHigh,
+              extraDetails:   l.extraDetails,
             }))}
           />
         )}
