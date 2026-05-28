@@ -1362,7 +1362,10 @@ function CopierTab() {
                             <span className="text-gray-600 dark:text-gray-500 font-sans font-normal">{label}: </span>{value}
                           </p>
                         )}
-                        <p className="text-gray-700 dark:text-gray-200 text-sm leading-relaxed whitespace-pre-wrap">{row.description}</p>
+                        {row.description
+                          ? <p className="text-gray-700 dark:text-gray-200 text-sm leading-relaxed whitespace-pre-wrap">{row.description}</p>
+                          : <p className="text-red-400 text-sm font-semibold italic">Missing Photos</p>
+                        }
                         {row.estimate && <p className="text-[#C8A96E] text-sm font-semibold mt-2">{row.estimate}</p>}
                       </div>
                     </div>
