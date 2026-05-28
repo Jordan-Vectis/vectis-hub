@@ -562,6 +562,17 @@ async function sequencedReceiptUid(base: string, extra = 0): Promise<string> {
   return `${base}-${count + extra + 1}`
 }
 
+export async function transferLots(lotIds: string[], sourceAuctionId: string, targetAuctionId: string) {
+  await requireCataloguer()
+  await prisma.catalogueLot.updateMany({
+    where: { id: { in: lotIds }, auctionId: sourceAuctionId },
+    data: { auctionId: targetAuctionId },
+  })
+  revalidatePath(`/tools/cataloguing/auctions/${sourceAuctionId}`)
+  revalidatePath(`/tools/cataloguing/auctions/${targetAuctionId}`)
+  return lotIds.length
+}
+
 export async function massCreateLots(
   auctionId: string,
   auctionCode: string,

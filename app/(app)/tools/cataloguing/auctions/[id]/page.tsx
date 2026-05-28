@@ -16,7 +16,7 @@ export default async function AuctionDetailPage({
 
   const { id } = await params
 
-  const [auction, currentUser] = await Promise.all([
+  const [auction, currentUser, allAuctions] = await Promise.all([
     prisma.catalogueAuction.findUnique({
       where: { id },
       include: {
@@ -41,6 +41,11 @@ export default async function AuctionDetailPage({
     prisma.user.findUnique({
       where: { id: session.user.id },
       select: { showScanTimer: true, timerYellowMins: true, timerRedMins: true },
+    }),
+    prisma.catalogueAuction.findMany({
+      where: { id: { not: id } },
+      select: { id: true, code: true, name: true, auctionDate: true },
+      orderBy: { auctionDate: "desc" },
     }),
   ])
 
@@ -80,6 +85,7 @@ export default async function AuctionDetailPage({
         showScanTimer={currentUser?.showScanTimer ?? true}
         timerYellowMins={currentUser?.timerYellowMins ?? 4}
         timerRedMins={currentUser?.timerRedMins ?? 10}
+        allAuctions={allAuctions.map(a => ({ id: a.id, code: a.code, name: a.name, auctionDate: a.auctionDate }))}
         auction={{
           id: auction.id,
           code: auction.code,

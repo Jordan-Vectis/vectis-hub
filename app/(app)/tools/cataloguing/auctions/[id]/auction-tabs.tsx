@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, fillLotsFromTotes, togglePublished, generateTitlesFromDescriptions, assignLotNumbers, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions } from "@/lib/actions/catalogue"
+import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, fillLotsFromTotes, togglePublished, generateTitlesFromDescriptions, assignLotNumbers, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, transferLots } from "@/lib/actions/catalogue"
 import LotWizardTab, { CATEGORY_MAP, BRANDS_LIST } from "./lot-wizard-tab"
 import PhotoOnlyTab from "./photo-only-tab"
 import ImportTab from "./import-tab"
@@ -393,14 +393,119 @@ function BCMatchModal({ lots, auctionId, onClose }: {
   )
 }
 
-export default function AuctionTabs({ auction, lots, userId, userName, showScanTimer, timerYellowMins, timerRedMins }: { auction: Auction; lots: Lot[]; userId: string; userName: string; showScanTimer?: boolean; timerYellowMins?: number; timerRedMins?: number }) {
+// ─── Transfer Lots Modal ──────────────────────────────────────────────────────
+
+type AuctionSummary = { id: string; code: string; name: string; auctionDate: Date | null }
+
+function TransferLotsModal({ selectedIds, sourceAuctionId, allAuctions, onClose, onDone }: {
+  selectedIds: string[]
+  sourceAuctionId: string
+  allAuctions: AuctionSummary[]
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [targetId, setTargetId] = useState("")
+  const [transferring, setTransferring] = useState(false)
+  const [search, setSearch] = useState("")
+
+  const filtered = allAuctions.filter(a => {
+    const q = search.toLowerCase()
+    return a.code.toLowerCase().includes(q) || a.name.toLowerCase().includes(q)
+  })
+
+  async function handleConfirm() {
+    if (!targetId) return
+    setTransferring(true)
+    try {
+      await transferLots(selectedIds, sourceAuctionId, targetId)
+      onDone()
+    } finally {
+      setTransferring(false)
+    }
+  }
+
+  const target = allAuctions.find(a => a.id === targetId)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={onClose}>
+      <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl w-full max-w-md shadow-2xl"
+        onClick={e => e.stopPropagation()}>
+
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-300 dark:border-gray-700">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Transfer Lots</h2>
+            <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">
+              Moving {selectedIds.length} lot{selectedIds.length !== 1 ? "s" : ""} to another auction
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-600 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-xl leading-none">✕</button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <input
+            type="text"
+            placeholder="Search by code or name…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#2C2C2E] px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]"
+          />
+
+          <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <p className="text-xs text-gray-500 text-center py-6">No auctions found</p>
+            ) : (
+              filtered.map(a => {
+                const dateStr = a.auctionDate
+                  ? new Date(a.auctionDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+                  : null
+                return (
+                  <button
+                    key={a.id}
+                    onClick={() => setTargetId(a.id)}
+                    className={`w-full text-left px-4 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0 transition-colors ${
+                      targetId === a.id
+                        ? "bg-[#2AB4A6]/20 text-[#2AB4A6]"
+                        : "hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-gray-300"
+                    }`}
+                  >
+                    <span className="font-mono font-semibold text-sm mr-2">{a.code}</span>
+                    <span className="text-sm">{a.name}</span>
+                    {dateStr && <span className="text-xs text-gray-500 ml-2">{dateStr}</span>}
+                  </button>
+                )
+              })
+            )}
+          </div>
+
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              onClick={handleConfirm}
+              disabled={!targetId || transferring}
+              className="flex-1 py-2 bg-[#2AB4A6] hover:bg-[#24a090] disabled:opacity-40 text-black font-semibold text-sm rounded-lg transition-colors"
+            >
+              {transferring
+                ? "Transferring…"
+                : target
+                  ? `Transfer to ${target.code} — ${target.name}`
+                  : "Select a destination auction"}
+            </button>
+            <button onClick={onClose} className="text-xs text-gray-600 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function AuctionTabs({ auction, lots, userId, userName, showScanTimer, timerYellowMins, timerRedMins, allAuctions }: { auction: Auction; lots: Lot[]; userId: string; userName: string; showScanTimer?: boolean; timerYellowMins?: number; timerRedMins?: number; allAuctions: AuctionSummary[] }) {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const [tab, setTab]             = useState<Tab>("manage-lots")
   const [published, setPublished] = useState(auction.published)
   const [pubPending, startPub]    = useTransition()
-  const [showDupeChecker, setShowDupeChecker] = useState(false)
-  const [showBCMatch,     setShowBCMatch]     = useState(false)
+  const [showDupeChecker,  setShowDupeChecker]  = useState(false)
+  const [showBCMatch,      setShowBCMatch]      = useState(false)
+  const [transferLotIds,   setTransferLotIds]   = useState<string[]>([])
 
   // Count duplicate unique ID groups for badge
   const dupeCount = useMemo(() => {
@@ -545,8 +650,10 @@ export default function AuctionTabs({ auction, lots, userId, userName, showScanT
             ? <LotEditView key={editingLotId} lot={editingLot} auctionId={auction.id}
                 allLots={lots} entryDir={navDir} onEdit={openLot} onDone={closeLot} />
             : <ManageLotsTab lots={lots} auctionId={auction.id} auction={auction}
+                allAuctions={allAuctions}
                 onEdit={openLot}
-                onDelete={() => router.push(`/tools/cataloguing/auctions/${auction.id}`)} />
+                onDelete={() => router.push(`/tools/cataloguing/auctions/${auction.id}`)}
+                onTransfer={ids => setTransferLotIds(ids)} />
         )}
 
         {tab === "photo-only" && (
@@ -607,6 +714,16 @@ export default function AuctionTabs({ auction, lots, userId, userName, showScanT
           lots={lots}
           auctionId={auction.id}
           onClose={() => setShowBCMatch(false)}
+        />
+      )}
+
+      {transferLotIds.length > 0 && (
+        <TransferLotsModal
+          selectedIds={transferLotIds}
+          sourceAuctionId={auction.id}
+          allAuctions={allAuctions}
+          onClose={() => setTransferLotIds([])}
+          onDone={() => { setTransferLotIds([]); router.refresh() }}
         />
       )}
     </div>
@@ -741,11 +858,13 @@ function colMatch(value: string | null | undefined, filter: string) {
   return (value ?? "").toLowerCase().includes(filter.toLowerCase().trim())
 }
 
-function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
+function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete, onTransfer }: {
   lots: Lot[]; auctionId: string
   auction: { id: string; code: string; name: string }
+  allAuctions: AuctionSummary[]
   onEdit: (id: string) => void
   onDelete: () => void
+  onTransfer: (ids: string[]) => void
 }) {
   const [deleting, setDeleting]     = useState<string | null>(null)
   const [selected, setSelected]     = useState<Set<string>>(new Set())
@@ -1269,6 +1388,11 @@ function ManageLotsTab({ lots, auctionId, auction, onEdit, onDelete }: {
               <button onClick={handleGenerateTitles} disabled={titlesPending}
                 className="px-4 py-1.5 text-sm font-medium rounded-lg border border-blue-700 text-blue-400 hover:bg-blue-900/30 transition-colors disabled:opacity-50">
                 {titlesPending ? "Generating…" : `✏️ Generate Titles (${selected.size})`}
+              </button>
+              <button
+                onClick={() => onTransfer(Array.from(selected))}
+                className="px-4 py-1.5 text-sm font-medium rounded-lg border border-indigo-700 text-indigo-400 hover:bg-indigo-900/30 transition-colors">
+                ↗ Transfer {selected.size} to another auction
               </button>
               <button onClick={handleBulkDelete} disabled={bulkDeleting}
                 className="px-4 py-1.5 text-sm font-medium rounded-lg border border-red-700 text-red-400 hover:bg-red-900/30 transition-colors disabled:opacity-50">
