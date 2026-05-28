@@ -671,6 +671,15 @@ function renderBody(body: string) {
 export default function MemoryPage() {
   const [open, setOpen]       = useState<string | null>(null)
   const [entries, setEntries] = useState<Entry[]>(ENTRIES)
+  const [copied, setCopied]   = useState<string | null>(null)
+
+  function handleCopy(e: React.MouseEvent, entry: Entry) {
+    e.stopPropagation()
+    const { body } = parseFrontmatter(entry.content)
+    navigator.clipboard.writeText(body)
+    setCopied(entry.filename)
+    setTimeout(() => setCopied(c => (c === entry.filename ? null : c)), 1500)
+  }
 
   function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
@@ -736,8 +745,21 @@ export default function MemoryPage() {
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{meta.description}</p>
                   )}
                 </div>
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => handleCopy(e, entry)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleCopy(e as unknown as React.MouseEvent, entry) }}
+                  className={`shrink-0 mt-0.5 text-xs font-medium px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${
+                    copied === entry.filename
+                      ? "border-green-500 text-green-600 dark:text-green-400"
+                      : "border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:border-gray-300 dark:hover:border-gray-600"
+                  }`}
+                >
+                  {copied === entry.filename ? "Copied ✓" : "Copy"}
+                </span>
                 <svg
-                  className={`w-4 h-4 text-gray-400 dark:text-gray-500 mt-0.5 shrink-0 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                  className={`w-4 h-4 text-gray-400 dark:text-gray-500 mt-1.5 shrink-0 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
                   fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
