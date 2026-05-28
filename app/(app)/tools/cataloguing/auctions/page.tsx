@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import NewAuctionButton from "./new-auction-button"
+import AuctionNotesButton from "./auction-notes-button"
 import { getCataloguingSidebarItems } from "@/lib/apps"
 
 export default async function AuctionsPage() {
@@ -71,6 +72,7 @@ export default async function AuctionsPage() {
                 <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Photography</th>
                 <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Ran through AI</th>
                 <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Complete</th>
+                <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody>
@@ -102,6 +104,9 @@ export default async function AuctionsPage() {
                         : <span className="text-gray-600">—</span>}
                     </td>
                   ))}
+                  <td className="px-4 py-3 text-right">
+                    {auction.notes ? <AuctionNotesButton notes={auction.notes} /> : <span className="text-gray-600">—</span>}
+                  </td>
                 </tr>
               ))}
             </tbody>
