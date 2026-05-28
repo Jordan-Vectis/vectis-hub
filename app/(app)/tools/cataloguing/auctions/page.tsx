@@ -18,7 +18,7 @@ export default async function AuctionsPage() {
   if (!allowed.includes("AUCTION_MANAGER")) redirect("/tools/cataloguing/tablet/auctions")
 
   const auctions = await prisma.catalogueAuction.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: { auctionDate: "desc" },
     include: { _count: { select: { lots: true } } },
   })
 
