@@ -3981,6 +3981,66 @@ function PipelineTab({ model: globalModel }: { model: string }) {
           {log.map((l, i) => <div key={i}>{l}</div>)}
         </div>
       )}
+
+      {/* Results table — shown once any lot has results */}
+      {lots.some(l => l.batchStatus || l.dcStatus || l.kpStatus) && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Results</h3>
+          <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-gray-100 dark:bg-[#1a1a1c] border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left px-3 py-2 text-gray-500 dark:text-gray-400 font-medium w-32">Lot</th>
+                  <th className="text-left px-3 py-2 text-gray-500 dark:text-gray-400 font-medium">⚡ Batch</th>
+                  <th className="text-left px-3 py-2 text-gray-500 dark:text-gray-400 font-medium">🔎 Double Check</th>
+                  <th className="text-left px-3 py-2 text-gray-500 dark:text-gray-400 font-medium">✓ Key Points</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lots.map((lot, i) => {
+                  const batchCell = !lot.batchStatus ? (
+                    <span className="text-gray-500">—</span>
+                  ) : lot.batchStatus === "ok" ? (
+                    <span className="text-green-400">✓ Generated{lot.estimate ? ` · ${lot.estimate}` : ""}</span>
+                  ) : (
+                    <span className="text-gray-500">— Skipped</span>
+                  )
+
+                  const dcCell = !lot.dcStatus ? (
+                    <span className="text-gray-500">—</span>
+                  ) : lot.dcStatus === "ok" ? (
+                    <span className="text-green-400">✓ Clean</span>
+                  ) : lot.dcStatus === "issues" ? (
+                    <span className="text-yellow-400">⚑ Fixed{lot.contradictions ? ` · ${lot.contradictions}` : ""}</span>
+                  ) : (
+                    <span className="text-gray-500">— Skipped</span>
+                  )
+
+                  const kpCell = !lot.kpStatus ? (
+                    <span className="text-gray-500">—</span>
+                  ) : lot.kpStatus === "ok" ? (
+                    <span className="text-green-400">✓ All present</span>
+                  ) : lot.kpStatus === "fixed" ? (
+                    <span className="text-yellow-400">⚑ Added{lot.kpAdded ? ` · ${lot.kpAdded}` : ""}</span>
+                  ) : (
+                    <span className="text-gray-500">— Skipped</span>
+                  )
+
+                  return (
+                    <tr key={lot.id}
+                      className={`border-b border-gray-100 dark:border-gray-800 last:border-0 ${i % 2 === 0 ? "bg-white dark:bg-transparent" : "bg-gray-50 dark:bg-white/[0.02]"}`}>
+                      <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-400 truncate max-w-[8rem]">{lot.label}</td>
+                      <td className="px-3 py-2">{batchCell}</td>
+                      <td className="px-3 py-2">{dcCell}</td>
+                      <td className="px-3 py-2">{kpCell}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
