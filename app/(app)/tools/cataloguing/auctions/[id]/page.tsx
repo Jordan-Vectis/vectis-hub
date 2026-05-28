@@ -77,6 +77,7 @@ export default async function AuctionDetailPage({
       <AuctionTabs
         userId={session.user.id}
         userName={session.user.name ?? session.user.email ?? "Unknown"}
+        userRole={session.user.role}
         showScanTimer={currentUser?.showScanTimer ?? true}
         timerYellowMins={currentUser?.timerYellowMins ?? 4}
         timerRedMins={currentUser?.timerRedMins ?? 10}

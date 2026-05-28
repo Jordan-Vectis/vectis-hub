@@ -518,9 +518,10 @@ function TransferLotsModal({ selectedIds, sourceAuctionId, allAuctions, onClose,
   )
 }
 
-export default function AuctionTabs({ auction, lots, userId, userName, showScanTimer, timerYellowMins, timerRedMins, allAuctions }: { auction: Auction; lots: Lot[]; userId: string; userName: string; showScanTimer?: boolean; timerYellowMins?: number; timerRedMins?: number; allAuctions: AuctionSummary[] }) {
+export default function AuctionTabs({ auction, lots, userId, userName, userRole, showScanTimer, timerYellowMins, timerRedMins, allAuctions }: { auction: Auction; lots: Lot[]; userId: string; userName: string; userRole: string; showScanTimer?: boolean; timerYellowMins?: number; timerRedMins?: number; allAuctions: AuctionSummary[] }) {
   const router       = useRouter()
   const searchParams = useSearchParams()
+  const bcLocked     = auction.addedToBC && userRole !== "ADMIN"
   const [tab, setTab]             = useState<Tab>("manage-lots")
   const [published, setPublished] = useState(auction.published)
   const [pubPending, startPub]    = useTransition()
@@ -655,14 +656,29 @@ export default function AuctionTabs({ auction, lots, userId, userName, showScanT
         ))}
       </div>
 
+      {/* BC locked banner */}
+      {bcLocked && (
+        <div className="flex-shrink-0 mb-4 flex items-center gap-3 px-4 py-3 rounded-xl bg-orange-950/40 border border-orange-700/50 text-orange-300 text-sm">
+          <span className="text-lg">🔒</span>
+          <span>This auction has been <strong>Added to BC</strong> and is locked for editing. Contact an admin to make changes.</span>
+        </div>
+      )}
+
       {/* Tab panels — scrollable content area */}
       <div className="flex-1 overflow-y-auto min-h-0 pr-3" style={{ scrollbarWidth: "thin", scrollbarColor: "#4b5563 transparent" }}>
         {tab === "settings" && <SettingsTab auction={auction} />}
 
         <div className={tab === "add-lot" ? "" : "hidden"}>
-          <LotWizardTab auctionId={auction.id} auction={auction}
-            userId={userId} userName={userName}
-            onCreated={() => router.refresh()} showScanTimer={showScanTimer} timerYellowMins={timerYellowMins} timerRedMins={timerRedMins} />
+          {bcLocked ? (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-orange-950/40 border border-orange-700/50 text-orange-300 text-sm max-w-lg">
+              <span className="text-lg">🔒</span>
+              <span>This auction is locked. Adding new lots is disabled. Contact an admin to make changes.</span>
+            </div>
+          ) : (
+            <LotWizardTab auctionId={auction.id} auction={auction}
+              userId={userId} userName={userName}
+              onCreated={() => router.refresh()} showScanTimer={showScanTimer} timerYellowMins={timerYellowMins} timerRedMins={timerRedMins} />
+          )}
         </div>
 
         {tab === "manage-lots" && (
@@ -671,6 +687,7 @@ export default function AuctionTabs({ auction, lots, userId, userName, showScanT
                 allLots={lots} entryDir={navDir} onEdit={openLot} onDone={closeLot} />
             : <ManageLotsTab lots={lots} auctionId={auction.id} auction={auction}
                 allAuctions={allAuctions}
+                bcLocked={bcLocked}
                 onEdit={openLot}
                 onDelete={() => router.push(`/tools/cataloguing/auctions/${auction.id}`)}
                 onTransfer={ids => setTransferLotIds(ids)} />
@@ -879,10 +896,11 @@ function colMatch(value: string | null | undefined, filter: string) {
   return (value ?? "").toLowerCase().includes(filter.toLowerCase().trim())
 }
 
-function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete, onTransfer }: {
+function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit, onDelete, onTransfer }: {
   lots: Lot[]; auctionId: string
   auction: { id: string; code: string; name: string }
   allAuctions: AuctionSummary[]
+  bcLocked: boolean
   onEdit: (id: string) => void
   onDelete: () => void
   onTransfer: (ids: string[]) => void
@@ -1214,16 +1232,18 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
   if (lots.length === 0) {
     return (
       <div>
-        {/* ── Mass Add panel still available on empty auction ── */}
-        <div className="flex items-center gap-2 mb-4">
-          <button
-            onClick={() => setShowMassAdd(v => !v)}
-            className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showMassAdd ? "border-orange-500 text-orange-400 bg-orange-900/20" : "border-gray-600 text-gray-600 dark:text-gray-400 hover:border-orange-500 hover:text-orange-400"}`}>
-            ➕ Mass Add Lots
-          </button>
-          {massMsg && <span className="text-xs text-orange-400">{massMsg}</span>}
-        </div>
-        {showMassAdd && (
+        {/* ── Mass Add panel still available on empty auction (not when locked) ── */}
+        {!bcLocked && (
+          <div className="flex items-center gap-2 mb-4">
+            <button
+              onClick={() => setShowMassAdd(v => !v)}
+              className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showMassAdd ? "border-orange-500 text-orange-400 bg-orange-900/20" : "border-gray-600 text-gray-600 dark:text-gray-400 hover:border-orange-500 hover:text-orange-400"}`}>
+              ➕ Mass Add Lots
+            </button>
+            {massMsg && <span className="text-xs text-orange-400">{massMsg}</span>}
+          </div>
+        )}
+        {showMassAdd && !bcLocked && (
           <div className="mb-4 bg-white dark:bg-[#1C1C1E] border border-orange-700/40 rounded-xl p-4 space-y-4">
             <div>
               <p className="text-sm font-semibold text-orange-300">Mass Add Lots</p>
@@ -1312,11 +1332,13 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
           >
             {fillPending ? "Pulling…" : "⟳ Pull Vendor/Receipt from Totes"}
           </button>
-          <button
-            onClick={() => { setShowMassAdd(v => !v); setShowBids(false) }}
-            className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showMassAdd ? "border-orange-500 text-orange-400 bg-orange-900/20" : "border-gray-600 text-gray-600 dark:text-gray-400 hover:border-orange-500 hover:text-orange-400"}`}>
-            ➕ Mass Add Lots
-          </button>
+          {!bcLocked && (
+            <button
+              onClick={() => { setShowMassAdd(v => !v); setShowBids(false) }}
+              className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showMassAdd ? "border-orange-500 text-orange-400 bg-orange-900/20" : "border-gray-600 text-gray-600 dark:text-gray-400 hover:border-orange-500 hover:text-orange-400"}`}>
+              ➕ Mass Add Lots
+            </button>
+          )}
           <button
             onClick={() => { setShowBids(v => !v); setShowMassAdd(false); setShowUniqueIdMatcher(false) }}
             className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showBids ? "border-green-500 text-green-400 bg-green-900/20" : "border-gray-600 text-gray-600 dark:text-gray-400 hover:border-green-500 hover:text-green-400"}`}>
@@ -1341,7 +1363,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
           {condMsg && <span className="text-xs text-[#2AB4A6]">{condMsg}</span>}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {selected.size > 0 && (
+          {selected.size > 0 && !bcLocked && (
             <>
               {(() => {
                 const anyUnticked = lots.some(l => selected.has(l.id) && !l.addedToBC)
@@ -1397,7 +1419,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
       {photoMsg && <p className="text-xs text-[#2AB4A6] mb-2">{photoMsg}</p>}
 
       {/* ── Mass Add Lots panel ── */}
-      {showMassAdd && (
+      {showMassAdd && !bcLocked && (
         <div className="mb-4 bg-white dark:bg-[#1C1C1E] border border-orange-700/40 rounded-xl p-4 space-y-4">
           <div>
             <p className="text-sm font-semibold text-orange-300">Mass Add Lots</p>
@@ -1744,10 +1766,12 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
                   </button>
                 </td>
                 <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
-                  <button onClick={() => handleDelete(lot)} disabled={deleting === lot.id || pending}
-                    className="text-xs text-red-500 hover:text-red-400 transition-colors disabled:opacity-40">
-                    {deleting === lot.id ? "…" : "Delete"}
-                  </button>
+                  {!bcLocked && (
+                    <button onClick={() => handleDelete(lot)} disabled={deleting === lot.id || pending}
+                      className="text-xs text-red-500 hover:text-red-400 transition-colors disabled:opacity-40">
+                      {deleting === lot.id ? "…" : "Delete"}
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

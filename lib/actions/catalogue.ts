@@ -10,6 +10,13 @@ async function requireCataloguer() {
   return session
 }
 
+// Throws for non-admin users when the auction has been marked as Added to BC.
+async function requireNotBCLocked(auctionId: string, session: Awaited<ReturnType<typeof requireCataloguer>>) {
+  if (session.user.role === "ADMIN") return
+  const auction = await prisma.catalogueAuction.findUnique({ where: { id: auctionId }, select: { addedToBC: true } })
+  if (auction?.addedToBC) throw new Error("This auction has been added to BC and is locked. Only admins can make changes.")
+}
+
 export async function createAuction(formData: FormData) {
   await requireCataloguer()
   const code = (formData.get("code") as string).toUpperCase().trim()
@@ -54,7 +61,8 @@ export async function deleteAuction(id: string) {
 }
 
 export async function generateTitlesFromDescriptions(auctionId: string, lotIds: string[]) {
-  await requireCataloguer()
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
   const lots = await prisma.catalogueLot.findMany({ where: { id: { in: lotIds } }, select: { id: true, description: true } })
   await Promise.all(lots.map(l => {
     const firstLine = (l.description ?? "").split(/\.\s|\n/)[0].trim()
@@ -67,7 +75,8 @@ export async function generateTitlesFromDescriptions(auctionId: string, lotIds: 
 
 
 export async function setStartingBids(auctionId: string, updates: { id: string; startingBid: number }[]) {
-  await requireCataloguer()
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
   await Promise.all(updates.map(u =>
     prisma.catalogueLot.update({ where: { id: u.id }, data: { startingBid: u.startingBid } })
   ))
@@ -122,6 +131,7 @@ export async function togglePublished(id: string, published: boolean) {
 
 export async function createLot(auctionId: string, formData: FormData) {
   const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
   const data = extractLotData(formData)
   const createdByName = session.user.name ?? session.user.email ?? "Unknown"
 
@@ -162,6 +172,7 @@ export async function createLot(auctionId: string, formData: FormData) {
 
 export async function createPhotoOnlyLot(auctionId: string, formData: FormData) {
   const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
 
   const toteNumber = (formData.get("tote") as string)?.trim() || null
   const notes      = (formData.get("notes") as string)?.trim() || null
@@ -202,34 +213,39 @@ export async function createPhotoOnlyLot(auctionId: string, formData: FormData) 
 }
 
 export async function updateLot(lotId: string, auctionId: string, formData: FormData) {
-  await requireCataloguer()
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
   const data = extractLotData(formData)
   await prisma.catalogueLot.update({ where: { id: lotId }, data })
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
 export async function deleteLot(lotId: string, auctionId: string) {
-  await requireCataloguer()
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
   await prisma.catalogueLot.delete({ where: { id: lotId } })
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
 export async function toggleLotAiUpgraded(lotId: string, auctionId: string, value: boolean) {
-  await requireCataloguer()
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
   await prisma.catalogueLot.update({ where: { id: lotId }, data: { aiUpgraded: value } })
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
 // Manual cataloguer tick — set after a lot has gone over to Business Central.
 export async function toggleLotAddedToBC(lotId: string, auctionId: string, value: boolean) {
-  await requireCataloguer()
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
   await prisma.catalogueLot.update({ where: { id: lotId }, data: { addedToBC: value } })
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
 // Bulk set — used by the mass-select action on Manage Lots.
 export async function bulkSetLotsAddedToBC(lotIds: string[], auctionId: string, value: boolean) {
-  await requireCataloguer()
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
   if (lotIds.length === 0) return { count: 0 }
   const r = await prisma.catalogueLot.updateMany({
     where: { id: { in: lotIds }, auctionId },
@@ -240,7 +256,8 @@ export async function bulkSetLotsAddedToBC(lotIds: string[], auctionId: string, 
 }
 
 export async function saveLotExtraDetails(lotId: string, auctionId: string, extraDetails: string) {
-  await requireCataloguer()
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
   await prisma.catalogueLot.update({ where: { id: lotId }, data: { extraDetails } })
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
@@ -302,7 +319,8 @@ export async function createPhotoSession(formData: FormData) {
 }
 
 export async function fillLotsFromTotes(auctionId: string) {
-  await requireCataloguer()
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
 
   const lots = await prisma.catalogueLot.findMany({
     where: { auctionId, tote: { not: null } },
@@ -386,7 +404,8 @@ export async function fillLotsFromTotes(auctionId: string) {
 }
 
 export async function uploadLotPhoto(lotId: string, auctionId: string, formData: FormData) {
-  await requireCataloguer()
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
 
   const file = formData.get("photo") as File
   if (!file || file.size === 0) throw new Error("No file provided")
@@ -410,7 +429,8 @@ export async function uploadLotPhoto(lotId: string, auctionId: string, formData:
 }
 
 export async function deleteLotPhoto(lotId: string, auctionId: string, key: string) {
-  await requireCataloguer()
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
 
   const lot = await prisma.catalogueLot.findUnique({ where: { id: lotId }, select: { imageUrls: true } })
   if (!lot) throw new Error("Lot not found")
@@ -485,7 +505,8 @@ export async function bulkAssignUniqueIds(
   auctionId: string,
   pairs: { barcode: string; uniqueId: string }[]
 ): Promise<{ updated: number; skipped: number }> {
-  await requireCataloguer()
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
 
   // Fetch all lots in this auction that have a barcode
   const lots = await prisma.catalogueLot.findMany({
@@ -519,7 +540,8 @@ export async function bulkAssignUniqueIds(
 export async function bulkAddConditionsToDescriptions(
   auctionId: string
 ): Promise<{ updated: number; skipped: number }> {
-  await requireCataloguer()
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
 
   const lots = await prisma.catalogueLot.findMany({
     where:  { auctionId, condition: { not: null } },
@@ -563,7 +585,8 @@ async function sequencedReceiptUid(base: string, extra = 0): Promise<string> {
 }
 
 export async function transferLots(lotIds: string[], sourceAuctionId: string, targetAuctionId: string) {
-  await requireCataloguer()
+  const session = await requireCataloguer()
+  await requireNotBCLocked(sourceAuctionId, session)
   await prisma.catalogueLot.updateMany({
     where: { id: { in: lotIds }, auctionId: sourceAuctionId },
     data: { auctionId: targetAuctionId },
@@ -586,6 +609,7 @@ export async function massCreateLots(
   }
 ) {
   const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
   const createdByName = session.user.name ?? session.user.email ?? "Unknown"
 
   // Work out the highest existing barcode suffix for this auction code so we
