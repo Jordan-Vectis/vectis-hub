@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { useState, useRef, useCallback, useEffect } from "react"
+import { useState, useRef, useCallback, useEffect, useTransition } from "react"
 import * as XLSX from "xlsx"
 import { PRESETS } from "@/lib/auction-ai-presets"
 import { applyAiDescriptionOne } from "@/lib/actions/catalogue"
@@ -52,7 +52,7 @@ function ToastContainer() {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "chat" | "batch" | "barcode" | "copier" | "runs" | "kpruns" | "instructions" | "kpcheck" | "macro" | "doublecheck"
+type Tab = "chat" | "batch" | "barcode" | "copier" | "runs" | "kpruns" | "instructions" | "kpcheck" | "macro" | "doublecheck" | "pipeline"
 
 type ChatMessage = {
   role: "user" | "model"
@@ -3335,6 +3335,660 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
   )
 }
 
+// ─── Pipeline Tab ────────────────────────────────────────────────────────────
+
+type PipelineStage = "batch" | "doublecheck" | "kpcheck" | "complete"
+
+type PLot = {
+  id:          string
+  label:       string
+  keyPoints:   string
+  imageUrls:   string[]
+  currentDesc: string   // updated as stages complete so next stage uses latest
+  // Stage 1
+  batchStatus?: "ok" | "failed" | "skipped"
+  estimate?:    string
+  // Stage 2
+  dcStatus?:       "ok" | "issues" | "error" | "skipped"
+  contradictions?: string
+  unsupported?:    string
+  // Stage 3
+  kpStatus?: "ok" | "fixed" | "error" | "skipped"
+  kpMissing?: string
+  kpAdded?:   string
+}
+
+function PipelineTab({ model: globalModel }: { model: string }) {
+  const [code,        setCode]        = useState("")
+  const [auctionId,   setAuctionId]   = useState<string | null>(null)
+  const [lots,        setLots]        = useState<PLot[]>([])
+  const [loading,     setLoading]     = useState(false)
+  const [error,       setError]       = useState<string | null>(null)
+  const [running,     setRunning]     = useState(false)
+  const [paused,      setPaused]      = useState(false)
+  const [stage,       setStage]       = useState<PipelineStage>("batch")
+  const [progress,    setProgress]    = useState<{ done: number; total: number } | null>(null)
+  const [log,         setLog]         = useState<string[]>([])
+  const [preset,      setPreset]      = useState(Object.keys(PRESETS)[1])
+  const [overrides,   setOverrides]   = useState<Record<string, string>>({})
+  const [auctionList, setAuctionList] = useState<{ code: string; name: string }[]>([])
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const codeRef  = useRef<HTMLDivElement>(null)
+  const logRef   = useRef<HTMLDivElement>(null)
+  const cancelRef = useRef(false)
+  const pauseRef  = useRef(false)
+  const localModel = globalModel
+
+  const systemInstruction = overrides[preset] ?? PRESETS[preset] ?? ""
+
+  useEffect(() => {
+    fetch("/api/auction-ai/presets").then(r => r.json()).then(setOverrides).catch(() => {})
+    fetch("/api/auction-ai/auctions").then(r => r.json()).then(d => { if (Array.isArray(d)) setAuctionList(d) }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (codeRef.current && !codeRef.current.contains(e.target as Node)) setDropdownOpen(false)
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
+
+  function addLog(msg: string) {
+    const ts = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    setLog(l => [...l, `[${ts}]  ${msg}`])
+    setTimeout(() => logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" }), 50)
+  }
+
+  async function saveLot(lotId: string, fields: Record<string, any>) {
+    await fetch("/api/auction-ai/pipeline/lot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: code.trim().toUpperCase(), lotId, label: lots.find(l => l.id === lotId)?.label ?? "", ...fields }),
+    }).catch(() => {/* silent */})
+  }
+
+  async function advanceStage(newStage: PipelineStage) {
+    setStage(newStage)
+    await fetch("/api/auction-ai/pipeline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: code.trim().toUpperCase(), stage: newStage, model: localModel, preset }),
+    }).catch(() => {})
+  }
+
+  async function handleLoad() {
+    const upper = code.trim().toUpperCase()
+    if (!upper) return
+    setLoading(true); setError(null); setLots([]); setAuctionId(null); setLog([]); setStage("batch"); setProgress(null)
+    try {
+      // Load catalogue lots
+      const catRes = await fetch(`/api/auction-ai/catalogue-lots?code=${encodeURIComponent(upper)}`)
+      if (!catRes.ok) throw new Error((await catRes.json()).error ?? "Catalogue not found")
+      const catData = await catRes.json()
+      setAuctionId(catData.auctionId ?? null)
+
+      // Load existing pipeline state
+      const pipeRes = await fetch(`/api/auction-ai/pipeline?code=${encodeURIComponent(upper)}`)
+      const pipeData = await pipeRes.json()
+      const savedRun = pipeData.run
+      const savedLots: Record<string, any> = {}
+      if (savedRun) {
+        setStage(savedRun.stage as PipelineStage)
+        for (const sl of (savedRun.lots ?? [])) savedLots[sl.lotId] = sl
+      }
+
+      const mapped: PLot[] = catData.lots.map((l: any) => {
+        const saved = savedLots[l.id]
+        return {
+          id:          l.id,
+          label:       l.barcode || l.receiptUniqueId || l.id,
+          keyPoints:   l.keyPoints ?? "",
+          imageUrls:   l.imageUrls ?? [],
+          currentDesc: saved?.description ?? l.description ?? "",
+          batchStatus: saved?.batchStatus,
+          estimate:    saved?.estimate,
+          dcStatus:    saved?.dcStatus,
+          contradictions: saved?.contradictions,
+          unsupported: saved?.unsupported,
+          kpStatus:    saved?.kpStatus,
+          kpMissing:   saved?.kpMissing,
+          kpAdded:     saved?.kpAdded,
+        }
+      })
+
+      setLots(mapped)
+      if (savedRun) addLog(`▶ Loaded saved pipeline — stage: ${savedRun.stage} · ${mapped.length} lots`)
+      else          addLog(`▶ Loaded ${mapped.length} lots — ready to start`)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ── Retry helper — same rules as batch run ──────────────────────────────────
+  async function withRetry<T>(
+    label: string,
+    fn: (attempt: number) => Promise<T>,
+    isBlock: (err: string) => boolean,
+  ): Promise<T | null> {
+    let lastError = ""
+    let attempt   = 0
+    while (!cancelRef.current) {
+      if (attempt > 0) {
+        const isRL = lastError.startsWith("RATE_LIMITED:")
+        const wait = isRL ? Math.min(60000 * Math.pow(2, attempt - 1), 1800000) : Math.min(attempt * 12000, 30000)
+        addLog(`↺ ${label} — ${isRL ? "rate limited, waiting" : "retrying in"} ${wait / 1000}s (attempt ${attempt + 1})…`)
+        await new Promise(r => setTimeout(r, wait))
+        if (cancelRef.current) return null
+      }
+      attempt++
+      try {
+        return await fn(attempt)
+      } catch (e: any) {
+        lastError = e.message ?? String(e)
+        if (isBlock(lastError)) {
+          addLog(`✗ ${label} — blocked, skipping: ${lastError}`)
+          return null
+        }
+      }
+    }
+    return null
+  }
+
+  // ── Stage 1: Batch ──────────────────────────────────────────────────────────
+  async function runBatchStage(currentLots: PLot[]): Promise<PLot[]> {
+    const toRun = currentLots.filter(l => !l.batchStatus)
+    addLog(`── Stage 1: Batch Run — ${toRun.length} to process`)
+    let done = 0
+    const updated = [...currentLots]
+
+    for (const lot of toRun) {
+      if (cancelRef.current) break
+      const idx = updated.findIndex(l => l.id === lot.id)
+
+      // Lots with no photos → skip
+      if (lot.imageUrls.length === 0) {
+        updated[idx] = { ...updated[idx], batchStatus: "skipped" }
+        setLots([...updated])
+        await saveLot(lot.id, { batchStatus: "skipped" })
+        done++; setProgress({ done, total: toRun.length })
+        continue
+      }
+
+      addLog(`  · ${done + 1}/${toRun.length} ${lot.label} — fetching images…`)
+
+      const result = await withRetry(lot.label, async () => {
+        // Fetch images from S3
+        const fd = new FormData()
+        fd.append("systemInstruction", systemInstruction)
+        fd.append("model", localModel)
+        fd.append("grounded", "false")
+        const urls = lot.imageUrls.slice(0, 24)
+        let imgCount = 0
+        for (const url of urls) {
+          try {
+            const r = await fetch(`/api/catalogue/photo-proxy?key=${encodeURIComponent(url)}`)
+            if (!r.ok) continue
+            const blob = await r.blob()
+            const file = new File([blob], url.split("/").pop() || `img_${imgCount}.jpg`, { type: blob.type || "image/jpeg" })
+            fd.append(`lot_${lot.label}_image_${imgCount}`, file, file.name)
+            imgCount++
+          } catch { /* skip failed image */ }
+        }
+        if (imgCount === 0) throw new Error("No images could be fetched")
+
+        const res  = await fetch("/api/auction-ai/batch", { method: "POST", body: fd })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error ?? res.statusText)
+        const r = json.results?.[0]
+        if (!r || r.status !== "OK") throw new Error(r?.error ?? "No result from Gemini")
+        return r
+      }, err => err.toLowerCase().includes("block"))
+
+      if (result) {
+        const desc = result.description ?? ""
+        updated[idx] = { ...updated[idx], batchStatus: "ok", currentDesc: desc, estimate: result.estimate ?? "" }
+        setLots([...updated])
+        addLog(`  ✓ ${lot.label} — OK`)
+        // Save to pipeline + existing saved runs
+        await saveLot(lot.id, { batchStatus: "ok", description: desc, estimate: result.estimate ?? "" })
+        fetch("/api/auction-ai/runs", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: code.trim().toUpperCase(), preset, lot: lot.label, description: desc, estimate: result.estimate ?? "" }),
+        }).catch(() => {})
+      } else if (!cancelRef.current) {
+        updated[idx] = { ...updated[idx], batchStatus: "failed" }
+        setLots([...updated])
+        await saveLot(lot.id, { batchStatus: "failed" })
+        addLog(`  ✗ ${lot.label} — failed`)
+      }
+
+      done++; setProgress({ done, total: toRun.length })
+
+      if (pauseRef.current) {
+        addLog(`⏸ Paused — click Resume to continue`)
+        while (pauseRef.current && !cancelRef.current) await new Promise(r => setTimeout(r, 500))
+        if (!cancelRef.current) addLog("▶ Resumed")
+      }
+    }
+    return updated
+  }
+
+  // ── Stage 2: Double Check (auto-apply fixes) ────────────────────────────────
+  async function runDoubleCheckStage(currentLots: PLot[], aid: string): Promise<PLot[]> {
+    const toRun = currentLots.filter(l => !l.dcStatus && (l.batchStatus === "ok" || l.currentDesc))
+    addLog(`── Stage 2: Double Check — ${toRun.length} to process`)
+    let done = 0
+    const updated = [...currentLots]
+
+    for (const lot of toRun) {
+      if (cancelRef.current) break
+      const idx = updated.findIndex(l => l.id === lot.id)
+
+      // No images → skip
+      if (lot.imageUrls.length === 0 || !lot.currentDesc) {
+        updated[idx] = { ...updated[idx], dcStatus: "skipped" }
+        setLots([...updated])
+        await saveLot(lot.id, { dcStatus: "skipped" })
+        done++; setProgress({ done, total: toRun.length })
+        continue
+      }
+
+      addLog(`  · ${done + 1}/${toRun.length} ${lot.label} — double checking…`)
+
+      const result = await withRetry(lot.label, async () => {
+        // Fetch images
+        const urls = lot.imageUrls.slice(0, 6)
+        const images = (await Promise.all(urls.map(async url => {
+          try {
+            const r = await fetch(`/api/catalogue/photo-proxy?key=${encodeURIComponent(url)}`)
+            if (!r.ok) return null
+            const buf  = await r.arrayBuffer()
+            const data = btoa(String.fromCharCode(...new Uint8Array(buf)))
+            return { data, mimeType: r.headers.get("content-type") || "image/jpeg" }
+          } catch { return null }
+        }))).filter(Boolean) as { data: string; mimeType: string }[]
+
+        const res  = await fetch("/api/auction-ai/double-check", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ label: lot.label, description: lot.currentDesc, images, model: localModel }),
+        })
+        const json = await res.json()
+        if (json.error) throw new Error(json.error)
+        return json
+      }, err => err.startsWith("BLOCKED:"))
+
+      if (result) {
+        const { verdict, contradictions, unsupported, revised } = result
+        let newDesc = lot.currentDesc
+
+        // Auto-apply fix if issues were found and revised is available
+        if (verdict === "issues" && revised) {
+          try {
+            await applyAiDescriptionOne(aid, { id: lot.id, description: revised, aiEstimateLow: null, aiEstimateHigh: null })
+            newDesc = revised
+            addLog(`  ⚑ ${lot.label} — issues found, fix auto-applied`)
+          } catch {
+            addLog(`  ⚑ ${lot.label} — issues found but auto-apply failed`)
+          }
+        } else {
+          addLog(`  ✓ ${lot.label} — clean`)
+        }
+
+        updated[idx] = { ...updated[idx], dcStatus: verdict, contradictions, unsupported, currentDesc: newDesc }
+        setLots([...updated])
+        await saveLot(lot.id, { dcStatus: verdict, contradictions, unsupported, description: newDesc })
+      } else if (!cancelRef.current) {
+        updated[idx] = { ...updated[idx], dcStatus: "error" }
+        setLots([...updated])
+        await saveLot(lot.id, { dcStatus: "error" })
+        addLog(`  ✗ ${lot.label} — failed`)
+      }
+
+      done++; setProgress({ done, total: toRun.length })
+
+      if (pauseRef.current) {
+        addLog(`⏸ Paused — click Resume to continue`)
+        while (pauseRef.current && !cancelRef.current) await new Promise(r => setTimeout(r, 500))
+        if (!cancelRef.current) addLog("▶ Resumed")
+      }
+    }
+    return updated
+  }
+
+  // ── Stage 3: Key Points Check (auto-apply) ──────────────────────────────────
+  async function runKPStage(currentLots: PLot[], aid: string): Promise<PLot[]> {
+    const toRun = currentLots.filter(l => !l.kpStatus && l.currentDesc && l.keyPoints)
+    addLog(`── Stage 3: Key Points Check — ${toRun.length} to process`)
+    let done = 0
+    const updated = [...currentLots]
+
+    for (const lot of toRun) {
+      if (cancelRef.current) break
+      const idx = updated.findIndex(l => l.id === lot.id)
+
+      if (!lot.currentDesc || !lot.keyPoints) {
+        updated[idx] = { ...updated[idx], kpStatus: "skipped" }
+        setLots([...updated])
+        await saveLot(lot.id, { kpStatus: "skipped" })
+        done++; setProgress({ done, total: toRun.length })
+        continue
+      }
+
+      addLog(`  · ${done + 1}/${toRun.length} ${lot.label} — checking key points…`)
+
+      const result = await withRetry(lot.label, async () => {
+        const res  = await fetch("/api/auction-ai/key-points-check", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ label: lot.label, keyPoints: lot.keyPoints, description: lot.currentDesc, model: localModel }),
+        })
+        const json = await res.json()
+        if (json.error) throw new Error(json.error)
+        return json
+      }, err => err.startsWith("BLOCKED:"))
+
+      if (result) {
+        const { revised, changed, missing, added } = result
+        if (changed && revised) {
+          try {
+            await applyAiDescriptionOne(aid, { id: lot.id, description: revised, aiEstimateLow: null, aiEstimateHigh: null })
+            updated[idx] = { ...updated[idx], kpStatus: "fixed", kpMissing: missing, kpAdded: added, currentDesc: revised }
+            addLog(`  ⚑ ${lot.label} — key points added, applied`)
+          } catch {
+            updated[idx] = { ...updated[idx], kpStatus: "fixed", kpMissing: missing, kpAdded: added }
+            addLog(`  ⚑ ${lot.label} — key points added but auto-apply failed`)
+          }
+        } else {
+          updated[idx] = { ...updated[idx], kpStatus: "ok", kpMissing: missing }
+          addLog(`  ✓ ${lot.label} — all key points present`)
+        }
+        setLots([...updated])
+        await saveLot(lot.id, { kpStatus: updated[idx].kpStatus, kpMissing: missing, kpAdded: added })
+      } else if (!cancelRef.current) {
+        updated[idx] = { ...updated[idx], kpStatus: "error" }
+        setLots([...updated])
+        await saveLot(lot.id, { kpStatus: "error" })
+        addLog(`  ✗ ${lot.label} — failed`)
+      }
+
+      done++; setProgress({ done, total: toRun.length })
+
+      if (pauseRef.current) {
+        addLog(`⏸ Paused — click Resume to continue`)
+        while (pauseRef.current && !cancelRef.current) await new Promise(r => setTimeout(r, 500))
+        if (!cancelRef.current) addLog("▶ Resumed")
+      }
+    }
+    return updated
+  }
+
+  // ── Main run ────────────────────────────────────────────────────────────────
+  async function handleRun() {
+    if (!lots.length || running || !auctionId) return
+    cancelRef.current = false
+    pauseRef.current  = false
+    setPaused(false)
+    setRunning(true)
+    setError(null)
+
+    // Save initial pipeline record
+    await fetch("/api/auction-ai/pipeline", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: code.trim().toUpperCase(), stage, model: localModel, preset }),
+    }).catch(() => {})
+
+    try {
+      let current = lots
+      const aid   = auctionId
+
+      // Stage 1 — Batch (skip if already done)
+      if (stage === "batch") {
+        current = await runBatchStage(current)
+        if (cancelRef.current) return
+        await advanceStage("doublecheck")
+      }
+
+      // Stage 2 — Double Check
+      if (stage === "batch" || stage === "doublecheck") {
+        current = await runDoubleCheckStage(current, aid)
+        if (cancelRef.current) return
+        await advanceStage("kpcheck")
+      }
+
+      // Stage 3 — Key Points Check
+      if (stage === "batch" || stage === "doublecheck" || stage === "kpcheck") {
+        current = await runKPStage(current, aid)
+        if (cancelRef.current) return
+        await advanceStage("complete")
+      }
+
+      if (!cancelRef.current) addLog("🎉 Pipeline complete!")
+    } catch (e: any) {
+      if (!cancelRef.current) { addLog(`✗ Unexpected error: ${e.message}`); setError(e.message) }
+    } finally {
+      setRunning(false)
+      setProgress(null)
+    }
+  }
+
+  function handleStop() {
+    cancelRef.current = true
+    pauseRef.current  = false
+    setPaused(false)
+    addLog("⛔ Stopped")
+  }
+
+  function handlePause() {
+    pauseRef.current = true
+    setPaused(true)
+    addLog("⏸ Paused — finishing current lot…")
+  }
+
+  function handleResume() {
+    pauseRef.current = false
+    setPaused(false)
+    addLog("▶ Resumed")
+  }
+
+  async function handleReset() {
+    if (!confirm("Reset pipeline for this auction? This clears all saved progress.")) return
+    await fetch("/api/auction-ai/pipeline", {
+      method: "DELETE", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: code.trim().toUpperCase() }),
+    }).catch(() => {})
+    setStage("batch")
+    setLots(prev => prev.map(l => ({
+      ...l, batchStatus: undefined, estimate: undefined,
+      dcStatus: undefined, contradictions: undefined, unsupported: undefined,
+      kpStatus: undefined, kpMissing: undefined, kpAdded: undefined,
+    })))
+    setLog([])
+    setProgress(null)
+    addLog("↺ Pipeline reset")
+  }
+
+  // ── Stage summary helpers ───────────────────────────────────────────────────
+  function stageSummary(lots: PLot[], stage: "batch" | "dc" | "kp") {
+    if (stage === "batch") {
+      const ok      = lots.filter(l => l.batchStatus === "ok").length
+      const failed  = lots.filter(l => l.batchStatus === "failed").length
+      const skipped = lots.filter(l => l.batchStatus === "skipped").length
+      return { ok, failed, skipped, total: lots.length }
+    }
+    if (stage === "dc") {
+      const ok      = lots.filter(l => l.dcStatus === "ok").length
+      const issues  = lots.filter(l => l.dcStatus === "issues").length
+      const failed  = lots.filter(l => l.dcStatus === "error").length
+      const skipped = lots.filter(l => l.dcStatus === "skipped").length
+      return { ok: ok + issues, failed, skipped, total: lots.length, issues }
+    }
+    // kp
+    const ok      = lots.filter(l => l.kpStatus === "ok").length
+    const fixed   = lots.filter(l => l.kpStatus === "fixed").length
+    const failed  = lots.filter(l => l.kpStatus === "error").length
+    const skipped = lots.filter(l => l.kpStatus === "skipped").length
+    return { ok, failed, skipped, total: lots.length, fixed }
+  }
+
+  const batchSummary = stageSummary(lots, "batch")
+  const dcSummary    = stageSummary(lots, "dc")
+  const kpSummary    = stageSummary(lots, "kp")
+
+  const stageOrder: PipelineStage[] = ["batch", "doublecheck", "kpcheck", "complete"]
+  const stageIndex = stageOrder.indexOf(stage)
+
+  const filtered = auctionList.filter(a => {
+    const q = code.toLowerCase()
+    return a.code.toLowerCase().includes(q) || a.name.toLowerCase().includes(q)
+  })
+
+  return (
+    <div className="space-y-5 max-w-4xl">
+      <div>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-1">Auto Pipeline</h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          Runs Batch → Double Check → Key Points automatically. Fixes are applied as each stage completes.
+          Progress is saved to the database — close the browser and resume any time.
+        </p>
+      </div>
+
+      {/* Config */}
+      <div className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl p-4 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Auction code */}
+          <div>
+            <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1.5">Auction</p>
+            <div ref={codeRef} className="relative">
+              <input
+                value={code}
+                onChange={e => { setCode(e.target.value.toUpperCase()); setDropdownOpen(true) }}
+                onFocus={() => setDropdownOpen(true)}
+                placeholder="e.g. F073"
+                className="w-full bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-[#C8A96E]"
+              />
+              {dropdownOpen && filtered.length > 0 && (
+                <div className="absolute z-20 w-full mt-1 bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {filtered.slice(0, 20).map(a => (
+                    <button key={a.code} onClick={() => { setCode(a.code); setDropdownOpen(false) }}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 text-gray-700 dark:text-gray-300">
+                      <span className="font-mono font-semibold mr-2">{a.code}</span>{a.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Preset */}
+          <div>
+            <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1.5">Batch Preset</p>
+            <PresetSelector value={preset} onChange={setPreset} overrides={overrides} onEdit={() => {}} />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          <button onClick={handleLoad} disabled={loading || !code.trim()}
+            className="px-5 py-2 bg-[#C8A96E] hover:bg-[#b8945a] disabled:opacity-40 text-black font-semibold text-sm rounded-lg transition-colors">
+            {loading ? "Loading…" : "Load Auction"}
+          </button>
+          {lots.length > 0 && !running && (
+            <button onClick={handleReset}
+              className="px-4 py-2 text-xs border border-gray-600 text-gray-600 dark:text-gray-400 hover:border-red-500 hover:text-red-400 rounded-lg transition-colors">
+              ↺ Reset Progress
+            </button>
+          )}
+        </div>
+
+        {error && <p className="text-sm text-red-400">{error}</p>}
+      </div>
+
+      {/* Stage cards */}
+      {lots.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          {([
+            { key: "batch",       label: "1. Batch Run",          s: batchSummary, stageVal: "batch" as const,       icon: "⚡" },
+            { key: "doublecheck", label: "2. Double Check",        s: dcSummary,    stageVal: "doublecheck" as const, icon: "🔎" },
+            { key: "kpcheck",     label: "3. Key Points Check",    s: kpSummary,    stageVal: "kpcheck" as const,     icon: "✓"  },
+          ] as const).map(({ key, label, s, stageVal, icon }) => {
+            const isActive   = stage === stageVal && running
+            const isDone     = stageOrder.indexOf(stageVal) < stageIndex
+            const isUpcoming = stageOrder.indexOf(stageVal) > stageIndex && !running
+            const processed  = s.ok + s.failed + ("issues" in s ? s.issues! : 0) + ("fixed" in s ? s.fixed! : 0)
+            return (
+              <div key={key} className={`rounded-xl border p-4 space-y-2 transition-colors ${
+                isActive   ? "border-[#C8A96E]/60 bg-[#C8A96E]/10"
+                : isDone   ? "border-green-700/50 bg-green-950/20"
+                : isUpcoming ? "border-gray-700 bg-gray-900/20 opacity-50"
+                : "border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#1C1C1E]"
+              }`}>
+                <div className="flex items-center gap-2">
+                  <span>{icon}</span>
+                  <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{label}</p>
+                  {isDone    && <span className="ml-auto text-xs text-green-400">✓ Done</span>}
+                  {isActive  && <span className="ml-auto text-xs text-[#C8A96E] animate-pulse">Running…</span>}
+                </div>
+                {processed > 0 && (
+                  <div className="space-y-0.5 text-xs text-gray-600 dark:text-gray-500">
+                    {s.ok > 0          && <p className="text-green-400">✓ {s.ok} OK {("fixed" in s && s.fixed! > 0) ? `· ${s.fixed} fixed` : ""}</p>}
+                    {"issues" in s && s.issues! > 0 && <p className="text-yellow-400">⚑ {s.issues} fixed by DC</p>}
+                    {s.failed > 0      && <p className="text-red-400">✗ {s.failed} failed</p>}
+                    {s.skipped > 0     && <p>— {s.skipped} skipped</p>}
+                  </div>
+                )}
+                {isActive && progress && key === (stage === "batch" ? "batch" : stage === "doublecheck" ? "doublecheck" : "kpcheck") && (
+                  <div className="w-full bg-gray-700 rounded-full h-1.5">
+                    <div className="bg-[#C8A96E] h-1.5 rounded-full transition-all duration-300"
+                      style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }} />
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Run / control buttons */}
+      {lots.length > 0 && stage !== "complete" && (
+        <div className="flex items-center gap-3 flex-wrap">
+          {!running ? (
+            <button onClick={handleRun} disabled={!auctionId}
+              className="px-5 py-2.5 bg-[#C8A96E] hover:bg-[#b8945a] disabled:opacity-40 text-black font-semibold text-sm rounded-lg transition-colors">
+              {stageIndex > 0 ? `▶ Resume Pipeline (from ${stage})` : "▶ Start Pipeline"}
+            </button>
+          ) : (
+            <>
+              {paused
+                ? <button onClick={handleResume} className="px-5 py-2.5 bg-green-700 hover:bg-green-600 text-white font-semibold text-sm rounded-lg transition-colors">▶ Resume</button>
+                : <button onClick={handlePause}  className="px-5 py-2.5 bg-yellow-700/60 hover:bg-yellow-700 border border-yellow-600 text-yellow-300 font-semibold text-sm rounded-lg transition-colors">⏸ Pause</button>
+              }
+              <button onClick={handleStop} className="px-5 py-2.5 bg-red-900/50 hover:bg-red-900/80 border border-red-700 text-red-300 font-semibold text-sm rounded-lg transition-colors">⛔ Stop</button>
+            </>
+          )}
+          {progress && (
+            <span className="text-xs text-gray-600 dark:text-gray-400">{progress.done} / {progress.total}</span>
+          )}
+        </div>
+      )}
+
+      {stage === "complete" && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-green-950/30 border border-green-700/50 text-green-300 text-sm">
+          <span className="text-xl">🎉</span>
+          <span>Pipeline complete — all three stages finished for <span className="font-mono font-bold">{code.trim().toUpperCase()}</span></span>
+        </div>
+      )}
+
+      {/* Log */}
+      {log.length > 0 && (
+        <div ref={logRef} className="bg-gray-100 dark:bg-[#0d0d0f] border border-gray-200 dark:border-gray-800 rounded-xl p-3 max-h-56 overflow-y-auto font-mono text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
+          {log.map((l, i) => <div key={i}>{l}</div>)}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
 
 const TABS: { id: Tab; label: string; icon: string; accent?: string }[] = [
@@ -3346,6 +4000,7 @@ const TABS: { id: Tab; label: string; icon: string; accent?: string }[] = [
   { id: "copier",       label: "Description Copier", icon: "📋" },
   { id: "kpcheck",      label: "Key Points Check",   icon: "✓"  },
   { id: "doublecheck",  label: "Double Check",       icon: "🔎", accent: "#6366f1" },
+  { id: "pipeline",     label: "Auto Pipeline",      icon: "🔄", accent: "#C8A96E" },
   { id: "instructions", label: "Instructions",       icon: "📝" },
   { id: "macro",        label: "Macro Downloader",   icon: "⌨️" },
 ]
@@ -3444,6 +4099,7 @@ export default function AuctionAIPage() {
         <div className={tab === "copier"       ? "" : "hidden"}><CopierTab /></div>
         <div className={tab === "kpcheck"      ? "" : "hidden"}><KeyPointsCheckTab model={model} onModelChange={m => { setModel(m); localStorage.setItem("ai_model", m) }} /></div>
         <div className={tab === "doublecheck"  ? "" : "hidden"}>{tab === "doublecheck" && <DoubleCheckTab model={model} onModelChange={m => { setModel(m); localStorage.setItem("ai_model", m) }} />}</div>
+        <div className={tab === "pipeline"     ? "" : "hidden"}>{tab === "pipeline" && <PipelineTab model={model} />}</div>
         <div className={tab === "instructions" ? "" : "hidden"}><InstructionsTab /></div>
         <div className={tab === "macro"        ? "" : "hidden"}><MacroTab /></div>
       </main>
