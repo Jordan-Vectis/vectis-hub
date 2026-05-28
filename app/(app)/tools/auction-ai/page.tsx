@@ -2987,39 +2987,47 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
   }
 
   async function runCheck() {
-    const toCheck = lots.filter(l => l.description)
-    if (!toCheck.length || checking) return
+    const allLots = lots.filter(l => l.description)
+    if (!allLots.length || checking) return
     cancelRef.current = false
     pauseRef.current  = false
     setPaused(false)
     setShowResults(false)
     setChecking(true)
     setLog([])
-    const withPhotos = toCheck.filter(l => (l.imageUrls?.length ?? 0) > 0).length
-    addLog(`── Starting double check: ${toCheck.length} lots · ${withPhotos} with photos · model: ${localModel}`)
+    const withPhotos = allLots.filter(l => (l.imageUrls?.length ?? 0) > 0).length
 
-    // Reset only lots that don't already have a verdict (allows resume)
-    setLots(prev => prev.map(l =>
-      l.verdict ? l : { ...l, status: "idle", contradictions: undefined, unsupported: undefined }
-    ))
+    // Build working copy — keep existing verdicts, reset the rest to idle
+    // Using a local array means every update is a full setLots([...working])
+    // call, which React never batches away, fixing the React 18 batching bug
+    // that caused only ~37% of results to appear for large auctions.
+    const working: DCLot[] = allLots.map(l =>
+      l.verdict ? l : { ...l, status: "idle" as const, contradictions: undefined, unsupported: undefined }
+    )
+    setLots([...working])
+
+    const toRun = working.filter(l => !l.verdict)
+    addLog(`── Starting double check: ${toRun.length} lots · ${withPhotos} with photos · model: ${localModel}`)
 
     let done = 0
+    const total = allLots.length  // progress counts skipped + processed
 
     try {
-      for (let i = 0; i < toCheck.length; i++) {
+      for (let i = 0; i < allLots.length; i++) {
         if (cancelRef.current) break
 
-        const lot = toCheck[i]
+        const snap = allLots[i]
+        const idx  = working.findIndex(l => l.id === snap.id)
+        if (idx === -1) { done++; setProgress({ done, total }); continue }
 
-        // Skip lots already checked
-        if (lot.verdict) {
-          done++
-          setProgress({ done, total: toCheck.length })
+        // Skip lots already checked in a previous run
+        if (working[idx].verdict) {
+          done++; setProgress({ done, total })
           continue
         }
 
         // Fetch and base64-encode images for this lot (up to 6)
-        const urls = (lot.imageUrls ?? []).slice(0, 6)
+        const urls = (snap.imageUrls ?? []).slice(0, 6)
         const images = (await Promise.all(
           urls.map(async (url) => {
             try {
@@ -3033,8 +3041,9 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
           })
         )).filter(Boolean) as { data: string; mimeType: string }[]
 
-        setLots(prev => prev.map(l => l.label === lot.label ? { ...l, status: "checking" } : l))
-        addLog(`  · ${done + 1}/${toCheck.length} ${lot.label} — checking…`)
+        working[idx] = { ...working[idx], status: "checking" }
+        setLots([...working])
+        addLog(`  · ${done + 1}/${total} ${snap.label} — checking…`)
 
         // Retry loop — same rules as batch run
         let lastError = ""
@@ -3047,7 +3056,7 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
             const wait = isRateLimit
               ? Math.min(60000 * Math.pow(2, attempt - 1), 1800000)
               : Math.min(attempt * 12000, 30000)
-            addLog(`↺ ${lot.label} — ${isRateLimit ? "rate limited, waiting" : "retrying in"} ${wait / 1000}s (attempt ${attempt + 1})…`)
+            addLog(`↺ ${snap.label} — ${isRateLimit ? "rate limited, waiting" : "retrying in"} ${wait / 1000}s (attempt ${attempt + 1})…`)
             await new Promise(r => setTimeout(r, wait))
             if (cancelRef.current) break
           }
@@ -3058,47 +3067,41 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
             const res = await fetch("/api/auction-ai/double-check", {
               method:  "POST",
               headers: { "Content-Type": "application/json" },
-              body:    JSON.stringify({ label: lot.label, description: lot.description, images, model: localModel }),
+              body:    JSON.stringify({ label: snap.label, description: snap.description, images, model: localModel }),
             })
             const json = await res.json()
-
             if (json.error) throw new Error(json.error)
 
             const { verdict, contradictions, unsupported, revised } = json
             const ms = Date.now() - t0
-            addLog(`  ${verdict === "ok" ? "✓ clean" : "⚑ issues"} — ${lot.label} (${(ms / 1000).toFixed(1)}s)`)
-            setLots(prev => prev.map(l =>
-              l.label === lot.label
-                ? { ...l, verdict, contradictions, unsupported, revised: revised || undefined, status: verdict, selected: verdict === "issues" && !!revised ? true : undefined }
-                : l
-            ))
+            addLog(`  ${verdict === "ok" ? "✓ clean" : "⚑ issues"} — ${snap.label} (${(ms / 1000).toFixed(1)}s)`)
+            working[idx] = { ...working[idx], verdict, contradictions, unsupported, revised: revised || undefined, status: verdict, selected: verdict === "issues" && !!revised ? true : undefined }
+            setLots([...working])
             succeeded = true
             break
           } catch (e: any) {
             lastError = e.message ?? String(e)
-            // Content blocks will never succeed — skip immediately
             if (lastError.startsWith("BLOCKED:")) {
-              addLog(`✗ ${lot.label} — blocked by Gemini, skipping: ${lastError}`)
-              setLots(prev => prev.map(l => l.label === lot.label ? { ...l, status: "error" } : l))
+              addLog(`— ${snap.label} — blocked by Gemini, skipping`)
+              working[idx] = { ...working[idx], status: "error" }
+              setLots([...working])
               break
             }
           }
         }
 
         if (!succeeded && !cancelRef.current) {
-          addLog(`✗ ${lot.label} — FAILED after ${attempt} attempt${attempt !== 1 ? "s" : ""}: ${lastError}`)
-          setLots(prev => prev.map(l => l.label === lot.label ? { ...l, status: "error" } : l))
+          addLog(`— ${snap.label} — skipped (content blocked)`)
+          working[idx] = { ...working[idx], status: "error" }
+          setLots([...working])
         }
 
         done++
-        setProgress({ done, total: toCheck.length })
+        setProgress({ done, total })
 
-        // Pause support
         if (pauseRef.current) {
-          addLog(`⏸ Paused after ${lot.label} — click Resume to continue`)
-          while (pauseRef.current && !cancelRef.current) {
-            await new Promise(r => setTimeout(r, 500))
-          }
+          addLog(`⏸ Paused after ${snap.label} — click Resume to continue`)
+          while (pauseRef.current && !cancelRef.current) await new Promise(r => setTimeout(r, 500))
           if (!cancelRef.current) addLog("▶ Resumed")
         }
       }
