@@ -107,6 +107,8 @@ export default async function AuctionDetailPage({
           description: l.description,
           estimateLow: l.estimateLow,
           estimateHigh: l.estimateHigh,
+          aiEstimateLow: l.aiEstimateLow ?? null,
+          aiEstimateHigh: l.aiEstimateHigh ?? null,
           startingBid: l.startingBid,
           reserve: l.reserve,
           hammerPrice: l.hammerPrice,

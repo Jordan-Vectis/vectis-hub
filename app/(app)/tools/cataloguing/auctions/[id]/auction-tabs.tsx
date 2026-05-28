@@ -26,7 +26,8 @@ interface Auction {
 
 interface Lot {
   id: string; barcode: string | null; title: string; keyPoints: string; description: string
-  estimateLow: number | null; estimateHigh: number | null; startingBid: number | null; reserve: number | null
+  estimateLow: number | null; estimateHigh: number | null; aiEstimateLow: number | null; aiEstimateHigh: number | null
+  startingBid: number | null; reserve: number | null
   hammerPrice: number | null; condition: string | null; vendor: string | null
   tote: string | null; receipt: string | null; receiptUniqueId: string | null; category: string | null
   subCategory: string | null; brand: string | null; notes: string | null
@@ -2046,6 +2047,18 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
                 <input name="estimateHigh" type="number" min="0" defaultValue={lot.estimateHigh ?? ""} className={input} />
               </div>
             </div>
+            {(lot.aiEstimateLow != null || lot.aiEstimateHigh != null) && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-950/30 border border-purple-800/40">
+                <span className="text-xs text-purple-400">✨ AI estimate:</span>
+                <span className="text-xs font-semibold text-purple-300">
+                  {lot.aiEstimateLow != null && lot.aiEstimateHigh != null
+                    ? `£${lot.aiEstimateLow}–£${lot.aiEstimateHigh}`
+                    : lot.aiEstimateLow != null
+                      ? `£${lot.aiEstimateLow}`
+                      : `£${lot.aiEstimateHigh}`}
+                </span>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={lbl}>Starting Bid (£)</label>
