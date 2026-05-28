@@ -1248,13 +1248,14 @@ function CopierTab() {
 
   function copyDesc() {
     if (!row) return
-    navigator.clipboard.writeText(row.description)
+    navigator.clipboard.writeText(row.description || "Missing Photos")
     setCopied("desc"); setTimeout(() => setCopied(null), 1500)
   }
 
   function copyBoth() {
     if (!row) return
-    navigator.clipboard.writeText(row.estimate ? `${row.description}\n${row.estimate}` : row.description)
+    const desc = row.description || "Missing Photos"
+    navigator.clipboard.writeText(row.estimate ? `${desc}\n${row.estimate}` : desc)
     setCopied("both"); setTimeout(() => setCopied(null), 1500)
   }
 
