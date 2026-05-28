@@ -2844,6 +2844,7 @@ type DCLot = {
   unsupported?:    string
   revised?:        string
   accepted?:       boolean
+  selected?:       boolean
   status?:         "idle" | "checking" | "ok" | "issues" | "error"
 }
 
@@ -2954,6 +2955,18 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
     addLog("▶ Resumed")
   }
 
+  function toggleSelected(id: string) {
+    setLots(prev => prev.map(l => l.id === id ? { ...l, selected: !l.selected } : l))
+  }
+
+  function toggleSelectAll() {
+    const fixedLots  = lots.filter(l => l.status === "issues" && l.revised && !l.accepted)
+    const allSelected = fixedLots.every(l => l.selected)
+    setLots(prev => prev.map(l =>
+      l.status === "issues" && l.revised && !l.accepted ? { ...l, selected: !allSelected } : l
+    ))
+  }
+
   async function acceptLot(lot: DCLot) {
     if (!auctionId || !lot.revised) return
     setLots(prev => prev.map(l => l.id === lot.id ? { ...l, accepted: true } : l))
@@ -2966,7 +2979,7 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
   }
 
   async function acceptAll() {
-    const toAccept = lots.filter(l => l.status === "issues" && l.revised && !l.accepted)
+    const toAccept = lots.filter(l => l.status === "issues" && l.revised && !l.accepted && l.selected)
     if (!auctionId || !toAccept.length) return
     setAccepting(true)
     for (const lot of toAccept) await acceptLot(lot)
@@ -3056,7 +3069,7 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
             addLog(`  ${verdict === "ok" ? "✓ clean" : "⚑ issues"} — ${lot.label} (${(ms / 1000).toFixed(1)}s)`)
             setLots(prev => prev.map(l =>
               l.label === lot.label
-                ? { ...l, verdict, contradictions, unsupported, revised: revised || undefined, status: verdict }
+                ? { ...l, verdict, contradictions, unsupported, revised: revised || undefined, status: verdict, selected: verdict === "issues" && !!revised ? true : undefined }
                 : l
             ))
             succeeded = true
@@ -3210,17 +3223,31 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
       {/* Results */}
       {showResults && lots.some(l => l.status && l.status !== "idle") && (
         <div className="space-y-3">
-          <div className="flex items-center gap-4 flex-wrap">
-            {okCount > 0    && <span className="text-xs font-semibold text-green-400 bg-green-950/40 border border-green-800/50 rounded-full px-3 py-1">✓ {okCount} clean</span>}
-            {issueCount > 0 && <span className="text-xs font-semibold text-red-400   bg-red-950/40   border border-red-800/50   rounded-full px-3 py-1">⚑ {issueCount} with issues</span>}
-            {errCount > 0   && <span className="text-xs font-semibold text-gray-600 dark:text-gray-400  bg-gray-800/40  border border-gray-300 dark:border-gray-700 rounded-full px-3 py-1">✗ {errCount} errors</span>}
-            {auctionId && lots.some(l => l.status === "issues" && l.revised && !l.accepted) && (
-              <button onClick={acceptAll} disabled={accepting}
-                className="text-xs font-semibold px-3 py-1 rounded-full bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 text-white transition-colors">
-                {accepting ? "Applying…" : `✓ Accept all fixes (${lots.filter(l => l.status === "issues" && l.revised && !l.accepted).length})`}
-              </button>
-            )}
-          </div>
+          {(() => {
+            const fixable    = lots.filter(l => l.status === "issues" && l.revised && !l.accepted)
+            const selCount   = fixable.filter(l => l.selected).length
+            const allSel     = fixable.length > 0 && fixable.every(l => l.selected)
+            return (
+              <div className="flex items-center gap-4 flex-wrap">
+                {okCount > 0    && <span className="text-xs font-semibold text-green-400 bg-green-950/40 border border-green-800/50 rounded-full px-3 py-1">✓ {okCount} clean</span>}
+                {issueCount > 0 && <span className="text-xs font-semibold text-red-400   bg-red-950/40   border border-red-800/50   rounded-full px-3 py-1">⚑ {issueCount} with issues</span>}
+                {errCount > 0   && <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 bg-gray-800/40 border border-gray-300 dark:border-gray-700 rounded-full px-3 py-1">✗ {errCount} errors</span>}
+                {auctionId && fixable.length > 0 && (
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-600 dark:text-gray-400 ml-auto">
+                    <input type="checkbox" checked={allSel} onChange={toggleSelectAll}
+                      className="w-4 h-4 rounded border-gray-600 accent-indigo-500" />
+                    Select all fixable ({fixable.length})
+                  </label>
+                )}
+                {auctionId && selCount > 0 && (
+                  <button onClick={acceptAll} disabled={accepting}
+                    className="text-xs font-semibold px-3 py-1 rounded-full bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 text-white transition-colors">
+                    {accepting ? "Applying…" : `✓ Accept ${selCount} selected fix${selCount !== 1 ? "es" : ""}`}
+                  </button>
+                )}
+              </div>
+            )
+          })()}
 
           {[...lots]
             .sort((a, b) => {
@@ -3239,18 +3266,26 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
                     : lot.status === "error" ? "border-gray-700 bg-gray-900/30"
                     : "border-green-800/40 bg-green-950/10"
                   }`}>
-                  <button onClick={() => setExpandedLot(isExpanded ? null : lot.label)}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left">
-                    <span className={`text-base flex-shrink-0 ${lot.accepted ? "text-indigo-400" : hasIssues ? "text-red-400" : lot.status === "error" ? "text-gray-600 dark:text-gray-500" : "text-green-400"}`}>
-                      {lot.accepted ? "✓" : hasIssues ? "⚑" : lot.status === "error" ? "✗" : "✓"}
-                    </span>
-                    <span className="font-mono text-sm text-gray-700 dark:text-gray-200 flex-1">{lot.label}</span>
-                    {lot.accepted && <span className="text-xs text-indigo-400 font-medium">Fix applied</span>}
-                    {hasIssues && !lot.accepted && lot.contradictions && (
-                      <span className="text-xs text-red-400 truncate max-w-sm opacity-80">{lot.contradictions.slice(0, 80)}{lot.contradictions.length > 80 ? "…" : ""}</span>
+                  <div className="flex items-center">
+                    {hasIssues && lot.revised && !lot.accepted && (
+                      <label className="flex items-center justify-center px-3 py-3 cursor-pointer" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={!!lot.selected} onChange={() => toggleSelected(lot.id)}
+                          className="w-4 h-4 rounded border-gray-600 accent-indigo-500" />
+                      </label>
                     )}
-                    <span className="text-gray-600 text-xs flex-shrink-0">{isExpanded ? "▲" : "▼"}</span>
-                  </button>
+                    <button onClick={() => setExpandedLot(isExpanded ? null : lot.label)}
+                      className={`flex-1 flex items-center gap-3 px-4 py-3 text-left ${hasIssues && lot.revised && !lot.accepted ? "pl-0" : ""}`}>
+                      <span className={`text-base flex-shrink-0 ${lot.accepted ? "text-indigo-400" : hasIssues ? "text-red-400" : lot.status === "error" ? "text-gray-600 dark:text-gray-500" : "text-green-400"}`}>
+                        {lot.accepted ? "✓" : hasIssues ? "⚑" : lot.status === "error" ? "✗" : "✓"}
+                      </span>
+                      <span className="font-mono text-sm text-gray-700 dark:text-gray-200 flex-1">{lot.label}</span>
+                      {lot.accepted && <span className="text-xs text-indigo-400 font-medium">Fix applied</span>}
+                      {hasIssues && !lot.accepted && lot.contradictions && (
+                        <span className="text-xs text-red-400 truncate max-w-sm opacity-80">{lot.contradictions.slice(0, 80)}{lot.contradictions.length > 80 ? "…" : ""}</span>
+                      )}
+                      <span className="text-gray-600 text-xs flex-shrink-0">{isExpanded ? "▲" : "▼"}</span>
+                    </button>
+                  </div>
 
                   {isExpanded && (
                     <div className="border-t border-gray-200 dark:border-gray-800 px-4 py-4 space-y-4">
