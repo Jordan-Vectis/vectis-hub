@@ -3559,10 +3559,10 @@ function PipelineTab({ model: globalModel }: { model: string }) {
           body: JSON.stringify({ code: code.trim().toUpperCase(), preset, lot: lot.label, description: desc, estimate: result.estimate ?? "" }),
         }).catch(() => {})
       } else if (!cancelRef.current) {
-        updated[idx] = { ...updated[idx], batchStatus: "failed" }
+        updated[idx] = { ...updated[idx], batchStatus: "skipped" }
         setLots([...updated])
-        await saveLot(lot.id, { batchStatus: "failed" })
-        addLog(`  ✗ ${lot.label} — failed`)
+        await saveLot(lot.id, { batchStatus: "skipped" })
+        addLog(`  — ${lot.label} — skipped (content blocked)`)
       }
 
       done++; setProgress({ done, total: toRun.length })
@@ -3641,10 +3641,10 @@ function PipelineTab({ model: globalModel }: { model: string }) {
         setLots([...updated])
         await saveLot(lot.id, { dcStatus: verdict, contradictions, unsupported, description: newDesc })
       } else if (!cancelRef.current) {
-        updated[idx] = { ...updated[idx], dcStatus: "error" }
+        updated[idx] = { ...updated[idx], dcStatus: "skipped" }
         setLots([...updated])
-        await saveLot(lot.id, { dcStatus: "error" })
-        addLog(`  ✗ ${lot.label} — failed`)
+        await saveLot(lot.id, { dcStatus: "skipped" })
+        addLog(`  — ${lot.label} — skipped (content blocked)`)
       }
 
       done++; setProgress({ done, total: toRun.length })
@@ -3707,10 +3707,10 @@ function PipelineTab({ model: globalModel }: { model: string }) {
         setLots([...updated])
         await saveLot(lot.id, { kpStatus: updated[idx].kpStatus, kpMissing: missing, kpAdded: added })
       } else if (!cancelRef.current) {
-        updated[idx] = { ...updated[idx], kpStatus: "error" }
+        updated[idx] = { ...updated[idx], kpStatus: "skipped" }
         setLots([...updated])
-        await saveLot(lot.id, { kpStatus: "error" })
-        addLog(`  ✗ ${lot.label} — failed`)
+        await saveLot(lot.id, { kpStatus: "skipped" })
+        addLog(`  — ${lot.label} — skipped (content blocked)`)
       }
 
       done++; setProgress({ done, total: toRun.length })
@@ -3813,23 +3813,20 @@ function PipelineTab({ model: globalModel }: { model: string }) {
   function stageSummary(lots: PLot[], stage: "batch" | "dc" | "kp") {
     if (stage === "batch") {
       const ok      = lots.filter(l => l.batchStatus === "ok").length
-      const failed  = lots.filter(l => l.batchStatus === "failed").length
       const skipped = lots.filter(l => l.batchStatus === "skipped").length
-      return { ok, failed, skipped, total: lots.length }
+      return { ok, skipped, total: lots.length }
     }
     if (stage === "dc") {
       const ok      = lots.filter(l => l.dcStatus === "ok").length
       const issues  = lots.filter(l => l.dcStatus === "issues").length
-      const failed  = lots.filter(l => l.dcStatus === "error").length
       const skipped = lots.filter(l => l.dcStatus === "skipped").length
-      return { ok: ok + issues, failed, skipped, total: lots.length, issues }
+      return { ok, skipped, total: lots.length, issues }
     }
     // kp
     const ok      = lots.filter(l => l.kpStatus === "ok").length
     const fixed   = lots.filter(l => l.kpStatus === "fixed").length
-    const failed  = lots.filter(l => l.kpStatus === "error").length
     const skipped = lots.filter(l => l.kpStatus === "skipped").length
-    return { ok, failed, skipped, total: lots.length, fixed }
+    return { ok, skipped, total: lots.length, fixed }
   }
 
   const batchSummary = stageSummary(lots, "batch")
@@ -3915,7 +3912,7 @@ function PipelineTab({ model: globalModel }: { model: string }) {
             const isActive   = stage === stageVal && running
             const isDone     = stageOrder.indexOf(stageVal) < stageIndex
             const isUpcoming = stageOrder.indexOf(stageVal) > stageIndex && !running
-            const processed  = s.ok + s.failed + ("issues" in s ? s.issues! : 0) + ("fixed" in s ? s.fixed! : 0)
+            const processed  = s.ok + s.skipped + ("issues" in s ? s.issues! : 0) + ("fixed" in s ? s.fixed! : 0)
             return (
               <div key={key} className={`rounded-xl border p-4 space-y-2 transition-colors ${
                 isActive   ? "border-[#C8A96E]/60 bg-[#C8A96E]/10"
@@ -3931,10 +3928,9 @@ function PipelineTab({ model: globalModel }: { model: string }) {
                 </div>
                 {processed > 0 && (
                   <div className="space-y-0.5 text-xs text-gray-600 dark:text-gray-500">
-                    {s.ok > 0          && <p className="text-green-400">✓ {s.ok} OK {("fixed" in s && s.fixed! > 0) ? `· ${s.fixed} fixed` : ""}</p>}
+                    {s.ok > 0          && <p className="text-green-400">✓ {s.ok} OK{"fixed" in s && s.fixed! > 0 ? ` · ${s.fixed} fixed` : ""}</p>}
                     {"issues" in s && s.issues! > 0 && <p className="text-yellow-400">⚑ {s.issues} fixed by DC</p>}
-                    {s.failed > 0      && <p className="text-red-400">✗ {s.failed} failed</p>}
-                    {s.skipped > 0     && <p>— {s.skipped} skipped</p>}
+                    {s.skipped > 0     && <p className="text-gray-500">— {s.skipped} skipped</p>}
                   </div>
                 )}
                 {isActive && progress && key === (stage === "batch" ? "batch" : stage === "doublecheck" ? "doublecheck" : "kpcheck") && (
