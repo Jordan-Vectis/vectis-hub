@@ -7,7 +7,7 @@ interface Lot {
   estimateLow: number | null; estimateHigh: number | null; startingBid: number | null
   reserve: number | null; hammerPrice: number | null
   condition: string | null; vendor: string | null; tote: string | null
-  receipt: string | null; receiptUniqueId: string | null
+  receipt: string | null
   category: string | null; subCategory: string | null; brand: string | null
   status: string; aiUpgraded: boolean; createdByName: string | null; imageUrls: string[]
 }
