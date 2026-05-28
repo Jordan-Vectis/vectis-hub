@@ -37,7 +37,7 @@ export default async function AuctionDetailPage({
     where: { code: code.toUpperCase(), published: true },
     include: {
       lots: {
-        orderBy: { lotNumber: "asc" },
+        orderBy: { createdAt: "asc" },
         include: {
           commissionBids: {
             select: { maxBid: true },
@@ -54,11 +54,6 @@ export default async function AuctionDetailPage({
 
   if (!auction) notFound()
 
-  auction.lots.sort((a, b) => {
-    const na = parseInt(a.lotNumber), nb = parseInt(b.lotNumber)
-    return (!isNaN(na) && !isNaN(nb)) ? na - nb : a.lotNumber.localeCompare(b.lotNumber, undefined, { numeric: true })
-  })
-
   // Dedupe categories
   const categories = [...new Set(auction.lots.map(l => l.category).filter(Boolean))] as string[]
 
@@ -67,7 +62,7 @@ export default async function AuctionDetailPage({
     if (category && l.category !== category) return false
     if (search) {
       const q = search.toLowerCase()
-      return l.title.toLowerCase().includes(q) || l.lotNumber.includes(q) || l.description.toLowerCase().includes(q)
+      return l.title.toLowerCase().includes(q) || (l.barcode ?? "").toLowerCase().includes(q) || l.description.toLowerCase().includes(q)
     }
     return true
   })
@@ -228,14 +223,9 @@ export default async function AuctionDetailPage({
   )
 }
 
-// Strip auction code prefix from lot number (e.g. "F051315" → "315")
-function displayLotNum(lotNumber: string, auctionCode: string): string {
-  return lotNumber.replace(new RegExp(`^${auctionCode}`, "i"), "").replace(/^0+/, "") || lotNumber
-}
-
 function LotCard({ lot, auctionCode }: {
   lot: {
-    id: string; lotNumber: string; title: string
+    id: string; barcode: string | null; receiptUniqueId: string | null; title: string
     estimateLow: number | null; estimateHigh: number | null
     hammerPrice: number | null; condition: string | null
     imageUrls: string[]; status: string
@@ -246,7 +236,7 @@ function LotCard({ lot, auctionCode }: {
 }) {
   const img = lotPhotoUrl(lot.imageUrls[0], true)
   const sold = lot.status === "SOLD"
-  const lotNum = displayLotNum(lot.lotNumber, auctionCode)
+  const lotLabel = lot.barcode ?? lot.receiptUniqueId ?? "—"
   const currentBid = lot.currentBid ?? lot.commissionBids[0]?.maxBid ?? null
 
   const estimateStr = lot.estimateLow && lot.estimateHigh
@@ -296,7 +286,7 @@ function LotCard({ lot, auctionCode }: {
       <div className="p-3 flex flex-col flex-1">
         {/* Lot number + estimate row */}
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-bold text-[#DB0606] tracking-wide">LOT {lotNum}</span>
+          <span className="text-xs font-bold text-[#DB0606] tracking-wide">LOT {lotLabel}</span>
           {estimateStr && (
             <span className="text-[11px] text-gray-500">Estimate: {estimateStr}</span>
           )}

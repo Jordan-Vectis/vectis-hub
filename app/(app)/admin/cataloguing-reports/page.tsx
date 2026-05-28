@@ -288,7 +288,7 @@ export default async function CataloguingReportsPage() {
                   </td>
                   <td className="px-5 py-3 font-medium text-gray-700 dark:text-gray-300">{log.userName}</td>
                   <td className="px-5 py-3 font-mono text-slate-600 dark:text-gray-300">{log.auction.code}</td>
-                  <td className="px-5 py-3 font-mono text-gray-500 dark:text-gray-400 text-xs">{log.lotNumber || "—"}</td>
+                  <td className="px-5 py-3 font-mono text-gray-500 dark:text-gray-400 text-xs">{log.lotId ? log.lotId.slice(-6) : "—"}</td>
                   <td className="px-5 py-3">
                     <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
                       log.method === "WIZARD"

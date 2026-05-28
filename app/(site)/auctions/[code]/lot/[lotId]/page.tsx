@@ -16,15 +16,11 @@ export async function generateMetadata({
   const { code, lotId } = await params
   const lot = await prisma.catalogueLot.findFirst({
     where: { id: lotId, auction: { code: code.toUpperCase(), published: true } },
-    select: { title: true, lotNumber: true },
+    select: { title: true, barcode: true, receiptUniqueId: true },
   })
   return {
-    title: lot ? `Lot ${lot.lotNumber} — ${lot.title} — Vectis Auctions` : "Lot — Vectis",
+    title: lot ? `Lot ${lot.barcode ?? lot.receiptUniqueId ?? ""} — ${lot.title} — Vectis Auctions` : "Lot — Vectis",
   }
-}
-
-function displayLotNum(lotNumber: string, auctionCode: string): string {
-  return lotNumber.replace(new RegExp(`^${auctionCode}`, "i"), "").replace(/^0+/, "") || lotNumber
 }
 
 export default async function LotDetailPage({
@@ -37,7 +33,7 @@ export default async function LotDetailPage({
   const auction = await prisma.catalogueAuction.findFirst({
     where: { code: code.toUpperCase(), published: true },
     include: {
-      lots: { orderBy: { lotNumber: "asc" }, select: { id: true, lotNumber: true } },
+      lots: { orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, receiptUniqueId: true } },
       liveAuction: true,
     },
   })
@@ -84,7 +80,7 @@ export default async function LotDetailPage({
       })
     : null
 
-  const lotNum = displayLotNum(lot.lotNumber, auction.code)
+  const lotLabel = lot.barcode ?? lot.receiptUniqueId ?? "—"
   const sold = lot.status === "SOLD"
 
   return (
@@ -100,7 +96,7 @@ export default async function LotDetailPage({
               {auction.name}
             </Link>
             <span>/</span>
-            <span className="text-[#32348A]">Lot {lotNum}</span>
+            <span className="text-[#32348A]">Lot {lotLabel}</span>
           </nav>
 
           {/* Lot navigation arrows */}
@@ -177,7 +173,7 @@ export default async function LotDetailPage({
 
               {/* Lot number badge */}
               <div className="absolute top-3 left-3 bg-[#32348A] text-white text-xs font-black px-3 py-1 tracking-wider uppercase">
-                LOT {lotNum}
+                LOT {lotLabel}
               </div>
 
               {sold && (
@@ -240,10 +236,12 @@ export default async function LotDetailPage({
 
             {/* Key details grid */}
             <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-6 border-t border-b border-gray-200 py-4">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-0.5">Lot Number</p>
-                <p className="text-sm font-bold text-[#32348A]">{lot.lotNumber}</p>
-              </div>
+              {lot.barcode && (
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-0.5">Barcode</p>
+                  <p className="text-sm font-bold text-[#32348A]">{lot.barcode}</p>
+                </div>
+              )}
               {lot.condition && (
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-0.5">Condition</p>
@@ -355,7 +353,7 @@ export default async function LotDetailPage({
               </svg>
               Previous Lot
               <span className="text-gray-400 font-normal normal-case tracking-normal">
-                — {displayLotNum(prevLot.lotNumber, auction.code)}
+                — {prevLot.barcode ?? prevLot.receiptUniqueId ?? ""}
               </span>
             </Link>
           ) : <div />}
@@ -373,7 +371,7 @@ export default async function LotDetailPage({
               className="flex items-center gap-2 text-sm font-bold text-[#32348A] hover:underline uppercase tracking-wider"
             >
               <span className="text-gray-400 font-normal normal-case tracking-normal">
-                {displayLotNum(nextLot.lotNumber, auction.code)} —
+                {nextLot.barcode ?? nextLot.receiptUniqueId ?? ""} —
               </span>
               Next Lot
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

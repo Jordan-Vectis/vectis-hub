@@ -11,7 +11,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const parcel = await prisma.parcel.findUnique({
       where: { id },
-      include: { lots: { include: { lot: { select: { lotNumber: true, title: true, hammerPrice: true } } } } },
+      include: { lots: { include: { lot: { select: { barcode: true, receiptUniqueId: true, title: true, hammerPrice: true } } } } },
     })
     if (!parcel) return NextResponse.json({ error: "Not found" }, { status: 404 })
     if (parcel.status === "DISPATCHED") return NextResponse.json({ error: "Already dispatched" }, { status: 400 })

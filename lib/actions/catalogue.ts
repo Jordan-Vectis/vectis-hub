@@ -64,13 +64,6 @@ export async function generateTitlesFromDescriptions(auctionId: string, lotIds: 
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
-export async function assignLotNumbers(auctionId: string, orderedIds: string[]) {
-  await requireCataloguer()
-  await Promise.all(orderedIds.map((id, i) =>
-    prisma.catalogueLot.update({ where: { id }, data: { lotNumber: String(i + 1) } })
-  ))
-  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
-}
 
 export async function setStartingBids(auctionId: string, updates: { id: string; startingBid: number }[]) {
   await requireCataloguer()
@@ -128,7 +121,7 @@ export async function createLot(auctionId: string, formData: FormData) {
     if (f && f.size > 0) {
       const ext = f.name.split(".").pop() || "jpg"
       const buf = Buffer.from(await f.arrayBuffer())
-      const key = await uploadBufferToR2(buf, `lot-photos/${auctionId}/${data.lotNumber || "lot"}-${Date.now()}-${i}.${ext}`, f.type || "image/jpeg")
+      const key = await uploadBufferToR2(buf, `lot-photos/${auctionId}/${data.barcode || "lot"}-${Date.now()}-${i}.${ext}`, f.type || "image/jpeg")
       imageUrls.push(key)
     }
   }
@@ -149,7 +142,6 @@ export async function createLot(auctionId: string, formData: FormData) {
         method:      "WIZARD",
         durationMs,
         keyPointsMs: keyPointsMs > 0 ? keyPointsMs : null,
-        lotNumber:   data.lotNumber || null,
       },
     })
   }
@@ -160,7 +152,6 @@ export async function createLot(auctionId: string, formData: FormData) {
 export async function createPhotoOnlyLot(auctionId: string, formData: FormData) {
   const session = await requireCataloguer()
 
-  const lotNumber  = (formData.get("lotNumber") as string)?.trim() || ""
   const toteNumber = (formData.get("tote") as string)?.trim() || null
   const notes      = (formData.get("notes") as string)?.trim() || null
   const photoFiles = formData.getAll("itemPhoto") as File[]
@@ -171,14 +162,14 @@ export async function createPhotoOnlyLot(auctionId: string, formData: FormData) 
     if (f && f.size > 0) {
       const ext = f.name.split(".").pop() || "jpg"
       const buf = Buffer.from(await f.arrayBuffer())
-      const key = await uploadBufferToR2(buf, `lot-photos/${auctionId}/${lotNumber}-${Date.now()}-${i}.${ext}`, f.type || "image/jpeg")
+      const key = await uploadBufferToR2(buf, `lot-photos/${auctionId}/${Date.now()}-${i}.${ext}`, f.type || "image/jpeg")
       imageUrls.push(key)
     }
   }
 
   const createdByName = session.user.name ?? session.user.email ?? "Unknown"
   const lot = await prisma.catalogueLot.create({
-    data: { auctionId, lotNumber, title: "", description: "", tote: toteNumber || null, notes, status: "ENTERED", imageUrls, createdByName },
+    data: { auctionId, title: "", description: "", tote: toteNumber || null, notes, status: "ENTERED", imageUrls, createdByName },
   })
 
   // Log timing if provided
@@ -192,7 +183,6 @@ export async function createPhotoOnlyLot(auctionId: string, formData: FormData) 
         userName:  createdByName,
         method:    "PHOTO_ONLY",
         durationMs,
-        lotNumber: lotNumber || null,
       },
     })
   }
@@ -422,7 +412,7 @@ export async function deleteLotPhoto(lotId: string, auctionId: string, key: stri
 }
 
 export async function importLots(auctionId: string, rows: {
-  lotNumber: string; title: string; description: string
+  title: string; description: string
   keyPoints?: string; barcode?: string
   estimateLow: string; estimateHigh: string; reserve: string
   condition: string; status: string; vendor: string
@@ -450,7 +440,6 @@ export async function importLots(auctionId: string, rows: {
       data: {
         auctionId,
         createdByName,
-        lotNumber:      r.lotNumber,
         title:          r.title || "",
         keyPoints:      r.keyPoints || r.description || "",
         barcode:        r.barcode?.toUpperCase() || null,
@@ -588,18 +577,12 @@ export async function massCreateLots(
   const session = await requireCataloguer()
   const createdByName = session.user.name ?? session.user.email ?? "Unknown"
 
-  // Work out the highest existing lot number so we can continue sequentially
-  const existingLots = await prisma.catalogueLot.findMany({
-    where:  { auctionId },
-    select: { lotNumber: true, barcode: true },
-  })
-  const maxLotNum = existingLots.reduce((max, l) => {
-    const n = parseInt(l.lotNumber)
-    return !isNaN(n) && n > max ? n : max
-  }, 0)
-
   // Work out the highest existing barcode suffix for this auction code so we
   // never produce a duplicate — e.g. F051003 → suffix 3
+  const existingLots = await prisma.catalogueLot.findMany({
+    where:  { auctionId },
+    select: { barcode: true },
+  })
   const prefix = auctionCode.toUpperCase()
   const maxBarcode = existingLots.reduce((max, l) => {
     if (!l.barcode) return max
@@ -617,7 +600,6 @@ export async function massCreateLots(
   const data = Array.from({ length: opts.count }, (_, i) => ({
     auctionId,
     createdByName,
-    lotNumber:       String(maxLotNum  + i + 1),
     barcode:         `${prefix}${String(maxBarcode + i + 1).padStart(3, "0")}`,
     title:           "",
     keyPoints:       "",
@@ -640,7 +622,6 @@ function extractLotData(formData: FormData) {
   const str = (key: string) => (formData.get(key) as string)?.trim() || null
   const up  = (key: string) => str(key)?.toUpperCase() || null
   return {
-    lotNumber:   (formData.get("lotNumber") as string) || "",
     barcode:     up("barcode"),
     title:       (formData.get("title") as string) || "",
     keyPoints:   (formData.get("keyPoints") as string) || "",

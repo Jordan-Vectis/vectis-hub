@@ -1154,19 +1154,12 @@ function BarcodeTab() {
 
 // ─── Description Copier Tab ───────────────────────────────────────────────────
 
-type SortBy = "uniqueId" | "barcode" | "lotNumber"
+type SortBy = "uniqueId" | "barcode"
 
-type CopierRow = { folder: string; description: string; estimate: string; uniqueId?: string; barcode?: string; lotNumber?: string; imageUrls?: string[] }
+type CopierRow = { folder: string; description: string; estimate: string; uniqueId?: string; barcode?: string; imageUrls?: string[] }
 
 function sortRows(rows: CopierRow[], sortBy: SortBy) {
   return [...rows].sort((a, b) => {
-    if (sortBy === "lotNumber") {
-      const fa = (a.lotNumber || a.folder).trim()
-      const fb = (b.lotNumber || b.folder).trim()
-      const na = parseInt(fa, 10), nb = parseInt(fb, 10)
-      if (!isNaN(na) && !isNaN(nb)) return na - nb
-      return fa.localeCompare(fb, undefined, { numeric: true })
-    }
     if (sortBy === "uniqueId") {
       const fa = (a.uniqueId || a.folder).trim()
       const fb = (b.uniqueId || b.folder).trim()
@@ -1209,7 +1202,6 @@ function CopierTab() {
           estimate:    String(r.Estimate ?? ""),
           uniqueId:    String(r["Receipt Unique ID"] ?? r.UniqueID ?? r["Unique ID"] ?? r.uniqueId ?? ""),
           barcode:     String(r.Barcode ?? r.barcode ?? ""),
-          lotNumber:   String(r["Lot Number"] ?? r.LotNumber ?? r.lotNumber ?? ""),
           imageUrls:   Array.isArray(r.ImageUrls) ? r.ImageUrls : [],
         })))
         setIdx(0)
@@ -1245,7 +1237,6 @@ function CopierTab() {
           estimate:    String(r.Estimate ?? r.estimate ?? ""),
           uniqueId:    String(r["Receipt Unique ID"] ?? r.UniqueID ?? r["Unique ID"] ?? r.uniqueId ?? ""),
           barcode:     String(r.Barcode ?? r.barcode ?? ""),
-          lotNumber:   String(r["Lot Number"] ?? r.LotNumber ?? r.lotNumber ?? ""),
         })))
         setIdx(0); setError(null); setJumpQuery("")
       } catch (e: any) { setError("Failed to read Excel: " + e.message) }
@@ -1275,8 +1266,7 @@ function CopierTab() {
 
   function rowLabel(r: CopierRow) {
     if (sortBy === "uniqueId") return r.uniqueId || r.folder
-    if (sortBy === "barcode")  return r.barcode  || r.folder
-    return r.lotNumber || r.folder
+    return r.barcode || r.folder
   }
 
   const filteredJump = sortedRows
@@ -1300,14 +1290,14 @@ function CopierTab() {
           {/* Sort selector */}
           <div className="flex items-center gap-2 mb-3">
             <span className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider">Sort by:</span>
-            {(["uniqueId", "barcode", "lotNumber"] as SortBy[]).map(s => (
+            {(["uniqueId", "barcode"] as SortBy[]).map(s => (
               <button key={s} onClick={() => { setSortBy(s); setIdx(0) }}
                 className={`px-3 py-1 rounded text-xs font-medium border transition-colors ${
                   sortBy === s
                     ? "bg-[#C8A96E] border-[#C8A96E] text-black"
                     : "bg-gray-100 dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"
                 }`}>
-                {s === "uniqueId" ? "Unique ID" : s === "barcode" ? "Barcode" : "Lot Number"}
+                {s === "uniqueId" ? "Unique ID" : "Barcode"}
               </button>
             ))}
           </div>
@@ -1647,7 +1637,9 @@ function KPRunsTab() {
       const res     = await fetch(`/api/auction-ai/catalogue-lots?code=${encodeURIComponent(code)}`)
       if (!res.ok) throw new Error("Could not fetch catalogue lots")
       const data    = await res.json()
-      const match   = data.lots?.find((l: { lotNumber: string; id: string }) => l.lotNumber === lotLabel)
+      const match   = data.lots?.find((l: { receiptUniqueId?: string; barcode?: string; id: string }) =>
+        (l.receiptUniqueId && l.receiptUniqueId === lotLabel) || (l.barcode && l.barcode === lotLabel)
+      )
       if (!match) throw new Error(`Lot ${lotLabel} not found in catalogue`)
       await applyAiDescriptionOne(data.auctionId, { id: match.id, description: desc, estimateLow: null, estimateHigh: null })
       showToast(`✓ Lot ${lotLabel} saved to catalogue`, "ok")
@@ -1669,7 +1661,9 @@ function KPRunsTab() {
       if (!res.ok) throw new Error("Could not fetch catalogue lots")
       const data  = await res.json()
       for (const l of toApply) {
-        const match = data.lots?.find((x: { lotNumber: string; id: string }) => x.lotNumber === l.lot)
+        const match = data.lots?.find((x: { receiptUniqueId?: string; barcode?: string; id: string }) =>
+          (x.receiptUniqueId && x.receiptUniqueId === l.lot) || (x.barcode && x.barcode === l.lot)
+        )
         if (!match) { fail++; continue }
         try {
           await applyAiDescriptionOne(data.auctionId, { id: match.id, description: revised[l.id] ?? l.description, estimateLow: null, estimateHigh: null })
@@ -2262,7 +2256,7 @@ function KeyPointsCheckTab({ model: globalModel, onModelChange }: { model: strin
         .filter((l: any) => l.keyPoints?.trim() && l.description?.trim())
         .map((l: any) => ({
           id:          l.id,
-          label:       l.lotNumber,
+          label:       l.barcode || l.receiptUniqueId || l.id,
           keyPoints:   l.keyPoints,
           description: l.description,
           status:      "idle" as const,
@@ -2882,7 +2876,7 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
         .filter((l: any) => l.description?.trim())
         .map((l: any) => ({
           id:          l.id,
-          label:       l.lotNumber || l.receiptUniqueId || l.id,
+          label:       l.barcode || l.receiptUniqueId || l.id,
           description: l.description,
           imageUrls:   l.imageUrls ?? [],
           status:      "idle" as const,

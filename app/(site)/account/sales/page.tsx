@@ -134,7 +134,7 @@ export default async function MySalesPage() {
                         return (
                           <div key={lot.id} className="flex items-center justify-between text-sm py-2 border-b border-gray-50 last:border-0">
                             <div className="flex items-center gap-3">
-                              <span className="font-mono text-xs text-[#2AB4A6] font-bold">Lot {lot.lotNumber}</span>
+                              <span className="font-mono text-xs text-[#2AB4A6] font-bold">Lot {lot.barcode ?? lot.receiptUniqueId ?? lot.id.slice(-6)}</span>
                               <span className="text-gray-800 font-medium truncate max-w-xs">{lot.title}</span>
                             </div>
                             <div className="flex items-center gap-4 text-right shrink-0">

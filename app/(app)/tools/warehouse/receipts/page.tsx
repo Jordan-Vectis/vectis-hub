@@ -462,7 +462,7 @@ export default function ReceiptsPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{lot.title || <span className="text-gray-400 italic">Untitled</span>}</p>
                         <p className="text-xs text-gray-400">
-                          {lot.auction?.code} · Lot {lot.lotNumber}
+                          {lot.auction?.code}{lot.barcode || lot.receiptUniqueId ? ` · ${lot.barcode ?? lot.receiptUniqueId}` : ""}
                           {lot.estimateLow ? ` · £${lot.estimateLow}–£${lot.estimateHigh}` : ""}
                         </p>
                       </div>

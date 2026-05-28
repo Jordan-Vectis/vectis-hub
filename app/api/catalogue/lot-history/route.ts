@@ -18,7 +18,6 @@ type LotData = {
   condition:   string | null
   estimateLow: number | null
   estimateHigh:number | null
-  lotNumber:   string
 }
 
 export const DEFAULT_INSTRUCTIONS = `Write a single, long, detailed SEO-optimised paragraph (250–400 words) about the item described below. This paragraph will appear on the auction lot page to help collectors find it via search engines.
@@ -43,7 +42,7 @@ function buildPrompt(lot: LotData, instructions: string): string {
 ${instructions}
 
 LOT DETAILS:
-Lot ${lot.lotNumber}: ${lot.title}
+${lot.title}
 ${lot.description ? `Description: ${lot.description}` : ""}
 ${lot.keyPoints ? `Key points: ${lot.keyPoints}` : ""}
 ${lot.category ? `Category: ${lot.category}` : ""}

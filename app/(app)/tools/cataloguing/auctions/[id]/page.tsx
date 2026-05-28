@@ -20,7 +20,7 @@ export default async function AuctionDetailPage({
     prisma.catalogueAuction.findUnique({
       where: { id },
       include: {
-        lots: { orderBy: { lotNumber: "asc" } },
+        lots: { orderBy: { createdAt: "asc" } },
         bidderRegistrations: {
           include: {
             customerAccount: {
@@ -50,11 +50,6 @@ export default async function AuctionDetailPage({
   ])
 
   if (!auction) notFound()
-
-  auction.lots.sort((a, b) => {
-    const na = parseInt(a.lotNumber), nb = parseInt(b.lotNumber)
-    return (!isNaN(na) && !isNaN(nb)) ? na - nb : a.lotNumber.localeCompare(b.lotNumber, undefined, { numeric: true })
-  })
 
   const registrations = auction.bidderRegistrations.map(r => ({
     id: r.id,
@@ -105,7 +100,6 @@ export default async function AuctionDetailPage({
         }}
         lots={auction.lots.map(l => ({
           id: l.id,
-          lotNumber: l.lotNumber,
           barcode: l.barcode,
           title: l.title,
           keyPoints: l.keyPoints,

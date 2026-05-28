@@ -11,7 +11,7 @@ interface Props {
 }
 
 interface PreviewRow {
-  lotNumber: string; title: string; description: string
+  title: string; description: string
   keyPoints: string; barcode: string
   estimateLow: string; estimateHigh: string; reserve: string
   condition: string; status: string; vendor: string
@@ -64,14 +64,14 @@ export default function ImportTab({ auctionId, auctionCode, onImported }: Props)
           // New catalogue export format
           parsed = raw.map(r => {
             const kp = col(r, "Key Points")
+            const barcode = col(r, "Internal Barcode").toUpperCase()
             // Derive title from first line of key points (up to 83 chars)
             const title = kp.split("\n")[0].trim().slice(0, 83).trimEnd()
             return {
-              lotNumber:    col(r, "Lot No."),
               title,
               description:  "",
               keyPoints:    kp,
-              barcode:      col(r, "Internal Barcode").toUpperCase(),
+              barcode,
               estimateLow:  money(col(r, "Estimate Low")),
               estimateHigh: money(col(r, "Estimate High")),
               reserve:      "",
@@ -85,16 +85,15 @@ export default function ImportTab({ auctionId, auctionCode, onImported }: Props)
               brand:        col(r, "Brand"),
               notes:        col(r, "Parcel Size"),
             }
-          }).filter(r => r.lotNumber)
+          }).filter(r => r.title || r.barcode)
           setFormat("catalogue")
         } else {
           // Existing standard format
           parsed = raw.map(r => ({
-            lotNumber:    col(r, "Lot No."),
             title:        col(r, "Title", "Short Description"),
             description:  col(r, "Description", "Catalogue Description"),
             keyPoints:    "",
-            barcode:      "",
+            barcode:      col(r, "Barcode", "Internal Barcode", "").toUpperCase(),
             estimateLow:  col(r, "Estimate Low", "Low Estimate"),
             estimateHigh: col(r, "Estimate High", "High Estimate"),
             reserve:      col(r, "Reserve", "Reserve Price"),
@@ -107,11 +106,11 @@ export default function ImportTab({ auctionId, auctionCode, onImported }: Props)
             subCategory:  col(r, "Sub-Category", "Article Subcategory Code"),
             brand:        col(r, "Brand"),
             notes:        col(r, "Notes"),
-          })).filter(r => r.lotNumber)
+          })).filter(r => r.title)
           setFormat("standard")
         }
 
-        if (parsed.length === 0) { setError("No valid rows found — make sure the file has a 'Lot No.' column."); return }
+        if (parsed.length === 0) { setError("No valid rows found — make sure the file has a 'Title' or 'Key Points' column."); return }
         setRows(parsed)
       } catch {
         setError("Could not read file — make sure it's a valid Excel file.")
@@ -175,10 +174,10 @@ export default function ImportTab({ auctionId, auctionCode, onImported }: Props)
               <thead>
                 <tr className="border-b border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#141416]">
                   {format === "catalogue"
-                    ? ["Lot No.", "Key Points", "Barcode", "Vendor", "Category", "Est. Low/High"].map(h => (
+                    ? ["Barcode", "Key Points", "Vendor", "Category", "Est. Low/High"].map(h => (
                         <th key={h} className="text-left px-3 py-2 text-gray-600 dark:text-gray-500 font-medium uppercase tracking-wide">{h}</th>
                       ))
-                    : ["Lot No.", "Title", "Vendor", "Tote", "Category", "Status"].map(h => (
+                    : ["Title", "Vendor", "Tote", "Category", "Status"].map(h => (
                         <th key={h} className="text-left px-3 py-2 text-gray-600 dark:text-gray-500 font-medium uppercase tracking-wide">{h}</th>
                       ))
                   }
@@ -187,10 +186,9 @@ export default function ImportTab({ auctionId, auctionCode, onImported }: Props)
               <tbody>
                 {rows.map((r, i) => (
                   <tr key={i} className="border-b border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-[#2C2C2E]">
-                    <td className="px-3 py-2 font-mono text-[#2AB4A6]">{r.lotNumber}</td>
                     {format === "catalogue" ? <>
+                      <td className="px-3 py-2 font-mono text-[#2AB4A6]">{r.barcode || "—"}</td>
                       <td className="px-3 py-2 text-gray-600 dark:text-gray-300 max-w-[220px] truncate">{r.keyPoints || "—"}</td>
-                      <td className="px-3 py-2 text-gray-600 dark:text-gray-400 font-mono">{r.barcode || "—"}</td>
                       <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{r.vendor || "—"}</td>
                       <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{r.category || "—"}</td>
                       <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{r.estimateLow || "—"} / {r.estimateHigh || "—"}</td>

@@ -302,7 +302,6 @@ model LiveAuction {
 
 model CatalogueLot {
   id           String           @id @default(cuid())
-  lotNumber    String
   title        String
   keyPoints    String           @db.Text @default("")
   description  String           @db.Text @default("")
@@ -376,7 +375,6 @@ model CatalogueTimingLog {
   method       String           // "WIZARD" | "PHOTO_ONLY"
   durationMs   Int              // Total ms from barcode entry to save
   keyPointsMs  Int?             // Ms spent on the Key Points step (wizard only)
-  lotNumber    String?          // Barcode for reference
   savedAt      DateTime         @default(now())
 }
 

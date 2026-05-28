@@ -10,7 +10,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const parcel = await prisma.parcel.findUnique({
       where: { id },
       include: {
-        lots: { include: { lot: { select: { id: true, lotNumber: true, title: true, hammerPrice: true, auction: { select: { code: true, name: true } } } } } },
+        lots: { include: { lot: { select: { id: true, barcode: true, receiptUniqueId: true, title: true, hammerPrice: true, auction: { select: { code: true, name: true } } } } } },
         customerAccount: { select: { id: true, firstName: true, lastName: true, email: true } },
       },
     })

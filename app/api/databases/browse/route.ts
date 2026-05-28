@@ -119,7 +119,7 @@ function buildWhitelist(): Record<ModelKey, WhitelistEntry> {
       description: "How long each lot took per cataloguer",
       delegate: prisma.catalogueTimingLog,
       orderBy: { savedAt: "desc" },
-      searchFields: ["userName", "lotNumber", "method"],
+      searchFields: ["userName", "method"],
     },
     researchLogs: {
       label: "Research Sessions",
@@ -337,7 +337,7 @@ function buildWhitelist(): Record<ModelKey, WhitelistEntry> {
       description: "Catalogued lots — also editable on the Lots tab",
       delegate: prisma.catalogueLot,
       orderBy: { createdAt: "desc" },
-      searchFields: ["lotNumber", "title", "description", "barcode", "vendor", "category", "status"],
+      searchFields: ["barcode", "receiptUniqueId", "title", "description", "vendor", "category", "status"],
     },
     commissionBids: {
       label: "Commission Bids",

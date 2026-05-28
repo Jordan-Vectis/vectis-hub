@@ -16,17 +16,12 @@ export default async function LiveAuctionPage({
   const auction = await prisma.catalogueAuction.findFirst({
     where: { code: code.toUpperCase(), published: true },
     include: {
-      lots: { orderBy: { lotNumber: "asc" } },
+      lots: { orderBy: { createdAt: "asc" } },
       liveAuction: true,
     },
   })
 
   if (!auction) notFound()
-
-  auction.lots.sort((a, b) => {
-    const na = parseInt(a.lotNumber), nb = parseInt(b.lotNumber)
-    return (!isNaN(na) && !isNaN(nb)) ? na - nb : a.lotNumber.localeCompare(b.lotNumber, undefined, { numeric: true })
-  })
 
   // Customer session + registration check
   const session = await getCustomerSession()
@@ -47,7 +42,7 @@ export default async function LiveAuctionPage({
 
   const lots = auction.lots.map(l => ({
     id: l.id,
-    lotNumber: l.lotNumber,
+    barcode: l.barcode ?? "",
     title: l.title,
     description: l.description,
     imageUrls: l.imageUrls.map(k => lotPhotoUrl(k, true) ?? k),

@@ -210,6 +210,10 @@ const MIGRATIONS = [
   `ALTER TABLE "CatalogueAuction" ADD COLUMN IF NOT EXISTS "photography" BOOLEAN NOT NULL DEFAULT FALSE`,
   `ALTER TABLE "CatalogueAuction" ADD COLUMN IF NOT EXISTS "aiRan"       BOOLEAN NOT NULL DEFAULT FALSE`,
 
+  // 2026-05-28 — Remove lotNumber from CatalogueLot and CatalogueTimingLog
+  `ALTER TABLE "CatalogueLot" DROP COLUMN IF EXISTS "lotNumber"`,
+  `ALTER TABLE "CatalogueTimingLog" DROP COLUMN IF EXISTS "lotNumber"`,
+
   // 2026-04-29 — MacroFile: stores uploaded macro/instruction files for Auction AI
   `CREATE TABLE IF NOT EXISTS "MacroFile" (
     "id"          TEXT         NOT NULL,

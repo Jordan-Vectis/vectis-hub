@@ -10,9 +10,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const lots = await prisma.catalogueLot.findMany({
       where: { receipt: { startsWith: id + "-" } },
       select: {
-        id:          true,
-        lotNumber:   true,
-        title:       true,
+        id:              true,
+        barcode:         true,
+        receiptUniqueId: true,
+        title:           true,
         receipt:     true,
         status:      true,
         estimateLow: true,

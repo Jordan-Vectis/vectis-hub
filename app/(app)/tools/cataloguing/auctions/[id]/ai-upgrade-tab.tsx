@@ -7,8 +7,8 @@ import { showError } from "@/lib/error-modal"
 
 interface Lot {
   id: string
-  lotNumber: string
   barcode: string | null
+  receiptUniqueId: string | null
   title: string
   keyPoints: string
   description: string
@@ -29,7 +29,7 @@ type Phase = "idle" | "fetching" | "running" | "review" | "saving" | "done"
 
 interface LotResult {
   lotId:          string
-  lotNumber:      string
+  label:          string
   oldDescription: string
   oldEstimateLow: number | null
   oldEstimateHigh: number | null
@@ -196,7 +196,7 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
     for (const lot of eligibleLots) {
       if (cancelRef.current) break
       photoMap[lot.id] = []
-      const label = lot.barcode || lot.lotNumber
+      const label = lot.barcode || lot.receiptUniqueId || lot.id
       for (let pi = 0; pi < lot.imageUrls.length; pi++) {
         if (cancelRef.current) break
         const key = lot.imageUrls[pi]
@@ -241,7 +241,7 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
 
       const lot    = eligibleLots[i]
       const photos = photoMap[lot.id] ?? []
-      const label  = lot.barcode || lot.lotNumber
+      const label  = lot.barcode || lot.receiptUniqueId || lot.id
       const lotKb  = Math.round(photos.reduce((s, b) => s + b.size, 0) / 1024)
       addLog(`── ${i + 1}/${runTotal} ${label} — ${photos.length} photo${photos.length !== 1 ? "s" : ""} (${lotKb} KB)`)
 
@@ -255,11 +255,11 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
           fd.set("model", model)
           fd.set("grounded", grounded ? "true" : "false")
           photos.forEach((blob, j) => {
-            fd.append(`lot_${lot.lotNumber}_image_${j}`, blob, `photo_${j}.jpg`)
+            fd.append(`lot_${lot.id}_image_${j}`, blob, `photo_${j}.jpg`)
           })
           const ctx = sendDesc ? (contextField === "description" ? lot.description : lot.keyPoints).trim() : ""
           if (ctx) {
-            fd.set(`lot_${lot.lotNumber}_context`, ctx)
+            fd.set(`lot_${lot.id}_context`, ctx)
             addLog(`  → sending ${contextField === "description" ? "description" : "key points"} as context (${ctx.length} chars)`)
           } else {
             addLog(`  → no existing context — AI working from photos only`)
@@ -302,7 +302,7 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
           const { low, high } = parseEstimate(r.estimate)
           collected.push({
             lotId:           lot.id,
-            lotNumber:       lot.lotNumber,
+            label:           lot.barcode || lot.receiptUniqueId || lot.id,
             oldDescription:  lot.keyPoints,
             oldEstimateLow:  lot.estimateLow,
             oldEstimateHigh: lot.estimateHigh,
@@ -398,7 +398,7 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
     const failed: string[] = []
     for (let i = 0; i < toApply.length; i++) {
       const r = toApply[i]
-      addLog(`  · ${i + 1}/${toApply.length} ${r.lotNumber} — saving…`)
+      addLog(`  · ${i + 1}/${toApply.length} ${r.label} — saving…`)
       const t0 = Date.now()
       try {
         await applyAiDescriptionOne(auctionId, {
@@ -407,10 +407,10 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
           estimateLow:  r.newEstimateLow,
           estimateHigh: r.newEstimateHigh,
         })
-        addLog(`  ✓ ${r.lotNumber} — saved (${Date.now() - t0}ms)`)
+        addLog(`  ✓ ${r.label} — saved (${Date.now() - t0}ms)`)
       } catch (e: any) {
-        addLog(`  ✗ ${r.lotNumber} — failed: ${e.message}`)
-        failed.push(r.lotNumber)
+        addLog(`  ✗ ${r.label} — failed: ${e.message}`)
+        failed.push(r.label)
       }
       setSaveProgress({ done: i + 1, total: toApply.length })
     }
@@ -561,7 +561,7 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
                     }`}>
                     <input type="checkbox" checked={selectedLotIds.has(lot.id)} onChange={() => toggleLot(lot.id)}
                       className="w-3.5 h-3.5 rounded accent-purple-500 flex-shrink-0" />
-                    <span className="font-mono text-xs text-purple-300 w-14 flex-shrink-0">{lot.lotNumber}</span>
+                    <span className="font-mono text-xs text-purple-300 w-14 flex-shrink-0">{lot.barcode ?? lot.receiptUniqueId ?? ""}</span>
                     <span className="text-xs text-gray-600 dark:text-gray-300 flex-1 truncate">{lot.title || <span className="text-gray-600 italic">Untitled</span>}</span>
                     <span className="text-xs w-10 text-center">
                       {lot.imageUrls.length > 0
@@ -708,7 +708,7 @@ function ProgressCard({
   onReviewNow?: () => void
   reviewNowCount?: number
   paused?: boolean
-  liveResults?: { status: string; lotNumber: string }[]
+  liveResults?: { status: string; label: string }[]
 }) {
   return (
     <div className="space-y-4">
@@ -763,7 +763,7 @@ function ReviewRow({ result, onToggle }: { result: LotResult; onToggle: () => vo
   if (result.status === "failed") {
     return (
       <div className="bg-red-900/10 border border-red-800/40 rounded-xl px-4 py-3 flex items-center gap-3">
-        <span className="font-mono text-xs text-red-400 w-16 flex-shrink-0">{result.lotNumber}</span>
+        <span className="font-mono text-xs text-red-400 w-16 flex-shrink-0">{result.label}</span>
         <span className="text-xs text-red-500 flex-1">Failed: {result.error}</span>
       </div>
     )
@@ -777,7 +777,7 @@ function ReviewRow({ result, onToggle }: { result: LotResult; onToggle: () => vo
       <div className="flex items-center gap-3 px-4 py-3">
         <input type="checkbox" checked={result.approved} onChange={onToggle}
           className="accent-purple-500 w-4 h-4 flex-shrink-0 cursor-pointer" />
-        <span className="font-mono text-xs text-purple-300 w-16 flex-shrink-0">{result.lotNumber}</span>
+        <span className="font-mono text-xs text-purple-300 w-16 flex-shrink-0">{result.label}</span>
         <div className="flex-1 min-w-0">
           <p className="text-xs text-gray-300 truncate">{result.newDescription}</p>
           {result.newEstimateRaw && (

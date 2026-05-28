@@ -43,7 +43,8 @@ export default async function DatabasesPage() {
         lot: {
           select: {
             id: true,
-            lotNumber: true,
+            barcode: true,
+            receiptUniqueId: true,
             title: true,
             estimateLow: true,
             estimateHigh: true,
@@ -76,7 +77,7 @@ export default async function DatabasesPage() {
         lastLocation: c.movements[0]?.locationCode ?? null,
       }))}
       lots={lots.map(l => ({
-        id: l.id, lotNumber: l.lotNumber, title: l.title,
+        id: l.id, barcode: l.barcode ?? null, receiptUniqueId: l.receiptUniqueId ?? null, title: l.title,
         description: l.description ?? "",
         auctionId: l.auctionId, auctionCode: l.auction.code, auctionName: l.auction.name,
         vendor: l.vendor ?? null, receipt: l.receipt ?? null,
@@ -93,7 +94,7 @@ export default async function DatabasesPage() {
       commissionBids={commissionBids.map(b => ({
         id: b.id,
         lotId: b.lot.id,
-        lotNumber: b.lot.lotNumber,
+        lotBarcode: b.lot.barcode ?? b.lot.receiptUniqueId ?? null,
         lotTitle: b.lot.title,
         estimateLow: b.lot.estimateLow ?? null,
         estimateHigh: b.lot.estimateHigh ?? null,

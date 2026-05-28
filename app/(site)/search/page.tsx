@@ -58,14 +58,15 @@ export default async function SearchPage({
           OR: [
             { title: { contains: query, mode: "insensitive" } },
             { description: { contains: query, mode: "insensitive" } },
-            { lotNumber: { contains: query, mode: "insensitive" } },
+            { barcode: { contains: query, mode: "insensitive" } },
             { brand: { contains: query, mode: "insensitive" } },
             { category: { contains: query, mode: "insensitive" } },
           ],
         },
         select: {
           id: true,
-          lotNumber: true,
+          barcode: true,
+          receiptUniqueId: true,
           title: true,
           estimateLow: true,
           estimateHigh: true,
@@ -90,7 +91,8 @@ export default async function SearchPage({
   // Flatten lots with their auction info
   type LotResult = {
     id: string
-    lotNumber: string
+    barcode: string | null
+    receiptUniqueId: string | null
     title: string
     estimateLow: number | null
     estimateHigh: number | null
@@ -229,7 +231,8 @@ export default async function SearchPage({
 function SearchLotCard({ lot }: {
   lot: {
     id: string
-    lotNumber: string
+    barcode: string | null
+    receiptUniqueId: string | null
     title: string
     estimateLow: number | null
     estimateHigh: number | null
@@ -245,11 +248,7 @@ function SearchLotCard({ lot }: {
 }) {
   const img = lotPhotoUrl(lot.imageUrls[0], true)
   const sold = lot.status === "SOLD"
-
-  // Strip auction code prefix from lot number
-  const displayNum = lot.lotNumber
-    .replace(new RegExp(`^${lot.auctionCode}`, "i"), "")
-    .replace(/^0+/, "") || lot.lotNumber
+  const lotLabel = lot.barcode ?? lot.receiptUniqueId ?? "—"
 
   return (
     <Link
@@ -274,7 +273,7 @@ function SearchLotCard({ lot }: {
           </div>
         )}
         <div className="absolute top-0 left-0 bg-[#32348A] text-white text-[10px] font-bold px-2 py-0.5 tracking-wider">
-          LOT {displayNum}
+          LOT {lotLabel}
         </div>
         {sold && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">

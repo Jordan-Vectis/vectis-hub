@@ -289,7 +289,7 @@ export type SerialLotLog = {
   id: string
   savedAt: string
   auctionCode: string
-  lotNumber: string | null
+  lotId: string | null
   method: string
   keyPointsMs: number | null
   durationMs: number
@@ -367,7 +367,7 @@ export function CollapsibleLotsTable({ logs }: { logs: SerialLotLog[] }) {
                       {format(new Date(log.savedAt), "dd/MM/yyyy HH:mm:ss")}
                     </td>
                     <td className="px-5 py-3 font-mono text-slate-600 dark:text-gray-300 text-xs">{log.auctionCode}</td>
-                    <td className="px-5 py-3 font-mono text-gray-500 dark:text-gray-400 text-xs">{log.lotNumber || "—"}</td>
+                    <td className="px-5 py-3 font-mono text-gray-500 dark:text-gray-400 text-xs">{log.lotId ? log.lotId.slice(-6) : "—"}</td>
                     <td className="px-5 py-3">
                       <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
                         log.method === "WIZARD"
@@ -818,7 +818,7 @@ export type TodayLot = {
   savedAt:    string   // ISO string
   durationMs: number
   method:     string
-  lotNumber:  string | null
+  lotId:      string | null
 }
 
 export function TodayTimeline({
@@ -920,7 +920,7 @@ export function TodayTimeline({
                       key={i}
                       className={`absolute top-0 h-full w-[3px] opacity-90 hover:opacity-100 transition-opacity cursor-default ${isWizard ? "bg-emerald-500" : "bg-purple-500"}`}
                       style={{ left: `${left}%` }}
-                      title={`Lot ${lot.lotNumber || "—"} · ${isWizard ? "Wizard" : "Photo Only"} · ${fmtDuration(lot.durationMs)} · saved ${format(new Date(lot.savedAt), "HH:mm:ss")}`}
+                      title={`Lot ${lot.lotId ? lot.lotId.slice(-6) : "—"} · ${isWizard ? "Wizard" : "Photo Only"} · ${fmtDuration(lot.durationMs)} · saved ${format(new Date(lot.savedAt), "HH:mm:ss")}`}
                     />
                   )
                 })}

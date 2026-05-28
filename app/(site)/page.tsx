@@ -54,7 +54,7 @@ export default async function HomePage() {
     where: { status: { in: ["ACTIVE", "PAUSED"] } },
     include: {
       auction: {
-        include: { lots: { orderBy: { lotNumber: "asc" } } },
+        include: { lots: { orderBy: { createdAt: "asc" } } },
       },
     },
   })
@@ -79,7 +79,7 @@ export default async function HomePage() {
         status: liveAuction.status,
         lots: liveAuction.auction.lots.map(l => ({
           id: l.id,
-          lotNumber: l.lotNumber,
+          barcode: l.barcode ?? "",
           title: l.title,
           imageUrls: l.imageUrls,
           estimateLow: l.estimateLow,

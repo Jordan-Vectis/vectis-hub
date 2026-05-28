@@ -324,12 +324,11 @@ The Claude Memory viewer at /admin/memory is a static page — content is hardco
 
 ## Lot identifier rules — CRITICAL
 
-Three separate fields. Never interchange them.
+Two active fields. Never interchange them.
 - receiptUniqueId: format R000016-413 — for AI runs and receipt matching
 - barcode: format F066001 — physical label on item
-- lotNumber: integer string "42" — catalogue sequence
 
-Unique IDs (R000016-413 format) always go in receiptUniqueId, NEVER in lotNumber. Lots created via Apply to Auction have empty lotNumber — this is correct. Folder in Description Copier must always be receiptUniqueId || lotNumber, never just lotNumber.
+(lotNumber has been removed from the schema. Folder in Description Copier is receiptUniqueId || barcode.)
 
 Detection regex:
 - Unique ID: /^[A-Za-z]\\d{4,7}-\\d{1,6}$/

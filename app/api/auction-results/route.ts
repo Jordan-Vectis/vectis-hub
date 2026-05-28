@@ -37,10 +37,11 @@ export async function GET(req: NextRequest) {
   // Return lot-level results for a specific auction
   const lots = await prisma.catalogueLot.findMany({
     where: { auctionId },
-    orderBy: { lotNumber: "asc" },
+    orderBy: { createdAt: "asc" },
     select: {
       id: true,
-      lotNumber: true,
+      barcode: true,
+      receiptUniqueId: true,
       title: true,
       status: true,
       hammerPrice: true,
@@ -53,11 +54,6 @@ export async function GET(req: NextRequest) {
   const auction = await prisma.catalogueAuction.findUnique({
     where: { id: auctionId },
     select: { id: true, name: true, code: true, auctionDate: true },
-  })
-
-  lots.sort((a, b) => {
-    const na = parseInt(a.lotNumber), nb = parseInt(b.lotNumber)
-    return (!isNaN(na) && !isNaN(nb)) ? na - nb : a.lotNumber.localeCompare(b.lotNumber, undefined, { numeric: true })
   })
 
   return NextResponse.json({ auction, lots })

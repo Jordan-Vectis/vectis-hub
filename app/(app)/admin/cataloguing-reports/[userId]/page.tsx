@@ -352,7 +352,7 @@ export default async function CataloguingUserReportPage({
               id:          l.id,
               savedAt:     l.savedAt.toISOString(),
               auctionCode: l.auction.code,
-              lotNumber:   l.lotNumber,
+              lotId:       l.lotId ?? null,
               method:      l.method,
               keyPointsMs: l.keyPointsMs,
               durationMs:  l.durationMs,

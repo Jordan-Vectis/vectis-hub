@@ -280,7 +280,7 @@ export default async function ReportsUserPage({
           savedAt:    l.savedAt.toISOString(),
           durationMs: l.durationMs,
           method:     l.method,
-          lotNumber:  l.lotNumber,
+          lotId:      l.lotId ?? null,
         }))}
         idleSessions={todayIdleLogs.map(l => ({
           startedAt:   l.idleStartedAt.toISOString(),
@@ -476,7 +476,7 @@ export default async function ReportsUserPage({
                   id:          l.id,
                   savedAt:     l.savedAt.toISOString(),
                   auctionCode: l.auction.code,
-                  lotNumber:   l.lotNumber,
+                  lotId:       l.lotId ?? null,
                   method:      l.method,
                   keyPointsMs: l.keyPointsMs,
                   durationMs:  l.durationMs,

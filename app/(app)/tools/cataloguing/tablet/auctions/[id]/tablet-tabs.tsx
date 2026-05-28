@@ -23,7 +23,6 @@ interface Auction {
 
 interface Lot {
   id: string
-  lotNumber: string
   barcode: string | null
   title: string
   keyPoints: string
@@ -199,7 +198,6 @@ function TabletManageLots({ lots, auctionId, onEdit, onDelete }: {
     const q = search.toLowerCase().trim()
     const result = q
       ? lots.filter(l =>
-          l.lotNumber.toLowerCase().includes(q) ||
           (l.barcode ?? "").toLowerCase().includes(q) ||
           l.title.toLowerCase().includes(q) ||
           (l.vendor ?? "").toLowerCase().includes(q) ||
@@ -210,16 +208,13 @@ function TabletManageLots({ lots, auctionId, onEdit, onDelete }: {
     return [...result].sort((a, b) => {
       if (sortKey === "newest") return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       if (sortKey === "oldest") return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      // lot-asc: numeric then alpha
-      const an = parseInt(a.lotNumber, 10)
-      const bn = parseInt(b.lotNumber, 10)
-      if (!isNaN(an) && !isNaN(bn)) return an - bn
-      return a.lotNumber.localeCompare(b.lotNumber)
+      // lot-asc: alphanumeric by barcode
+      return (a.barcode ?? "").localeCompare(b.barcode ?? "", undefined, { numeric: true })
     })
   }, [lots, search, sortKey])
 
   async function handleDelete(lot: Lot) {
-    if (!confirm(`Delete lot ${lot.lotNumber}?`)) return
+    if (!confirm(`Delete lot ${lot.barcode || lot.id}?`)) return
     setDeleting(lot.id)
     start(async () => {
       await deleteLot(lot.id, auctionId)
@@ -285,7 +280,7 @@ function TabletManageLots({ lots, auctionId, onEdit, onDelete }: {
           >
             <div className="flex items-start gap-3 mb-2">
               <span className="font-mono font-bold text-[#2AB4A6] text-xl leading-none">
-                {lot.lotNumber || "—"}
+                {lot.barcode || "—"}
               </span>
               <span className={`ml-auto text-sm px-3 py-1 rounded-full font-medium flex-shrink-0 ${STATUS_STYLES[lot.status] ?? "bg-gray-700 text-gray-300"}`}>
                 {lot.status}
@@ -337,12 +332,9 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
   onNavigate: (id: string, dir: "next" | "prev") => void
 }) {
   // Sorted list matches the manage-lots sort order
-  const sortedLots = useMemo(() => [...allLots].sort((a, b) => {
-    const an = parseInt(a.lotNumber, 10)
-    const bn = parseInt(b.lotNumber, 10)
-    if (!isNaN(an) && !isNaN(bn)) return an - bn
-    return a.lotNumber.localeCompare(b.lotNumber)
-  }), [allLots])
+  const sortedLots = useMemo(() => [...allLots].sort((a, b) =>
+    (a.barcode ?? "").localeCompare(b.barcode ?? "", undefined, { numeric: true })
+  ), [allLots])
 
   const currentIdx = sortedLots.findIndex(l => l.id === lot?.id)
   const prevLot    = currentIdx > 0 ? sortedLots[currentIdx - 1] : null
@@ -510,10 +502,6 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
 
         {/* Lot number / barcode */}
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={lbl}>Lot No.</label>
-            <input name="lotNumber" defaultValue={lot.lotNumber} className={inp} />
-          </div>
           <div>
             <label className={lbl}>Barcode</label>
             <input name="barcode" defaultValue={lot.barcode ?? ""} className={`${inp} font-mono`} />

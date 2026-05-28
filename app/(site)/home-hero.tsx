@@ -36,7 +36,7 @@ const DEFAULT_SLIDES: Slide[] = [
 
 interface LiveLot {
   id: string
-  lotNumber: string
+  barcode: string
   title: string
   imageUrls: string[]
   estimateLow: number | null
@@ -54,7 +54,7 @@ interface AuctionState {
   } | null
   currentLot: {
     id: string
-    lotNumber: string
+    barcode: string
     title: string
     imageUrls: string[]
     estimateLow: number | null
@@ -267,7 +267,7 @@ export default function HomeHero({ initialLive, dbSlides, isLoggedIn }: Props) {
             {/* Lot info */}
             <div className="shrink-0 px-5 py-4 bg-[#12134a] border-t border-white/10">
               <p className="text-[#2AB4A6] text-[10px] font-black uppercase tracking-widest mb-1">
-                LOT {currentLot.lotNumber.replace(new RegExp(`^${live.auctionCode}`, "i"), "").replace(/^0+/, "") || currentLot.lotNumber}
+                LOT {currentLot.barcode || "—"}
               </p>
               <p className="text-white font-bold text-sm leading-snug line-clamp-2 mb-3">
                 {currentLot.title}

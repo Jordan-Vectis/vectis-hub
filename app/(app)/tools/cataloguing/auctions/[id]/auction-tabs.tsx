@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, fillLotsFromTotes, togglePublished, generateTitlesFromDescriptions, assignLotNumbers, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, transferLots } from "@/lib/actions/catalogue"
+import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, fillLotsFromTotes, togglePublished, generateTitlesFromDescriptions, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, transferLots } from "@/lib/actions/catalogue"
 import LotWizardTab, { CATEGORY_MAP, BRANDS_LIST } from "./lot-wizard-tab"
 import PhotoOnlyTab from "./photo-only-tab"
 import ImportTab from "./import-tab"
@@ -25,7 +25,7 @@ interface Auction {
 }
 
 interface Lot {
-  id: string; lotNumber: string; barcode: string | null; title: string; keyPoints: string; description: string
+  id: string; barcode: string | null; title: string; keyPoints: string; description: string
   estimateLow: number | null; estimateHigh: number | null; startingBid: number | null; reserve: number | null
   hammerPrice: number | null; condition: string | null; vendor: string | null
   tote: string | null; receipt: string | null; receiptUniqueId: string | null; category: string | null
@@ -94,7 +94,6 @@ function DupeCheckerModal({ lots, auctionId, onClose, onDeleted }: {
     if (l.keyPoints)     s += 1
     if (l.estimateLow)   s += 1
     if (l.estimateHigh)  s += 1
-    if (l.lotNumber)     s += 1
     if (l.barcode)       s += 1
     if (l.vendor)        s += 1
     s += l.imageUrls.length * 2
@@ -177,7 +176,7 @@ function DupeCheckerModal({ lots, auctionId, onClose, onDeleted }: {
                             {isKeep
                               ? <span className="text-green-400 font-semibold">✓ Keep</span>
                               : <span className="text-red-400">Remove</span>}
-                            <span className="font-mono text-gray-600 dark:text-gray-400">Lot {lot.lotNumber || "—"}</span>
+                            {lot.barcode && <span className="font-mono text-gray-600 dark:text-gray-400">{lot.barcode}</span>}
                             {lot.imageUrls.length > 0 && <span className="text-blue-400">{lot.imageUrls.length} photos</span>}
                             {lot.description && <span className="text-green-400">Description</span>}
                             {lot.title && <span className="text-gray-600 dark:text-gray-400">Title</span>}
@@ -589,10 +588,9 @@ export default function AuctionTabs({ auction, lots, userId, userName, showScanT
           </button>
           <button onClick={() => {
             const data = lots.map(l => ({
-              Folder:               l.receiptUniqueId || l.lotNumber || "",
+              Folder:               l.receiptUniqueId || l.barcode || "",
               "Receipt Unique ID":  l.receiptUniqueId || "",
               Barcode:              l.barcode || "",
-              "Lot Number":         l.lotNumber || "",
               Description:          l.description,
               Estimate:             l.estimateLow && l.estimateHigh ? `Estimate: £${l.estimateLow}–£${l.estimateHigh}` : "",
               ImageUrls:            l.imageUrls || [],
@@ -684,7 +682,6 @@ export default function AuctionTabs({ auction, lots, userId, userName, showScanT
             auctionId={auction.id}
             lots={lots.map(l => ({
               id:           l.id,
-              lotNumber:    l.lotNumber,
               title:        l.title,
               description:  l.description,
               keyPoints:    l.keyPoints,
@@ -876,8 +873,8 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
   const [photoMsg, setPhotoMsg]     = useState<string | null>(null)
 
   // Column sort
-  type SortCol = "lotNumber" | "barcode" | "receiptUniqueId" | "title" | "vendor" | "receipt" | "tote" | "category" | "photos" | "status"
-  const [sortCol, setSortCol] = useState<SortCol>("lotNumber")
+  type SortCol = "barcode" | "receiptUniqueId" | "title" | "vendor" | "receipt" | "tote" | "category" | "photos" | "status"
+  const [sortCol, setSortCol] = useState<SortCol>("barcode")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
 
   function toggleSort(col: SortCol) {
@@ -904,10 +901,6 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
   const [massAdding,     startMassAdd]      = useTransition()
   const [massMsg,        setMassMsg]        = useState<string | null>(null)
 
-  const [showAutolotter, setShowAutolotter] = useState(false)
-  const [sortMode, setSortMode] = useState<"subcat" | "vendor" | "subcat_vendor" | "vendor_subcat">("subcat")
-  const [lotterMsg, setLotterMsg] = useState<string | null>(null)
-  const [lotterPending, startLotter] = useTransition()
 
   // Starting bid panel
   const [showBids, setShowBids] = useState(false)
@@ -942,7 +935,6 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
   }
 
   // ── Per-column filters ──────────────────────────────────────────────────
-  const [fLotNo,         setFLotNo]         = useState("")
   const [fBarcode,       setFBarcode]       = useState("")
   const [fUniqueId,      setFUniqueId]      = useState("")
   const [fTitle,         setFTitle]         = useState("")
@@ -959,7 +951,6 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
 
   const filtered = useMemo(() => {
     const f = lots.filter(l =>
-      colMatch(l.lotNumber, fLotNo) &&
       colMatch(l.barcode, fBarcode) &&
       colMatch(l.receiptUniqueId, fUniqueId) &&
       colMatch(l.title, fTitle) &&
@@ -974,10 +965,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
     )
     return f.sort((a, b) => {
       let cmp = 0
-      if (sortCol === "lotNumber") {
-        const na = parseInt(a.lotNumber, 10), nb = parseInt(b.lotNumber, 10)
-        cmp = (!isNaN(na) && !isNaN(nb)) ? na - nb : a.lotNumber.localeCompare(b.lotNumber, undefined, { numeric: true })
-      } else if (sortCol === "photos") {
+      if (sortCol === "photos") {
         cmp = a.imageUrls.length - b.imageUrls.length
       } else {
         const getVal = (l: Lot) => {
@@ -989,7 +977,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
           if (sortCol === "tote")           return l.tote
           if (sortCol === "category")       return l.category
           if (sortCol === "status")         return l.status
-          return l.lotNumber
+          return l.barcode
         }
         const va = getVal(a) ?? ""
         const vb = getVal(b) ?? ""
@@ -997,18 +985,17 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
       }
       return sortDir === "asc" ? cmp : -cmp
     })
-  }, [lots, fLotNo, fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAiUpgraded, fAddedToBC, fStatus, sortCol, sortDir])
+  }, [lots, fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAiUpgraded, fAddedToBC, fStatus, sortCol, sortDir])
 
-  const filtersActive = [fLotNo, fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAiUpgraded, fAddedToBC, fStatus].some(f => f !== "")
+  const filtersActive = [fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAiUpgraded, fAddedToBC, fStatus].some(f => f !== "")
 
   function clearFilters() {
-    setFLotNo(""); setFBarcode(""); setFUniqueId(""); setFTitle(""); setFVendor(""); setFReceipt("")
+    setFBarcode(""); setFUniqueId(""); setFTitle(""); setFVendor(""); setFReceipt("")
     setFTote(""); setFCategory(""); setFPhotos(""); setFAiUpgraded(""); setFAddedToBC(""); setFStatus("")
   }
 
   function exportExcel() {
     const rows = filtered.map(l => ({
-      "Lot No.":       l.lotNumber,
       "Barcode":       l.barcode ?? "",
       "Unique ID":     l.receiptUniqueId ?? "",
       "Title":         l.title,
@@ -1045,7 +1032,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
       if (!l.tote?.trim()) continue
       const tote = l.tote.trim()
       if (!toteMap.has(tote)) toteMap.set(tote, [])
-      toteMap.get(tote)!.push((l.barcode ?? l.lotNumber).trim())
+      toteMap.get(tote)!.push((l.barcode ?? "").trim())
     }
     if (toteMap.size === 0) { alert("No lots with tote numbers in current filter."); return }
     const lines = ["ToteNumber,LotCount,Barcodes", ...Array.from(toteMap.entries()).map(([t, barcodes]) => `${t},${barcodes.length},${barcodes.join("|")}`)]
@@ -1065,7 +1052,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
       if (!l.receipt?.trim()) continue
       const receipt = l.receipt.trim()
       if (!receiptMap.has(receipt)) receiptMap.set(receipt, [])
-      receiptMap.get(receipt)!.push((l.barcode ?? l.lotNumber).trim())
+      receiptMap.get(receipt)!.push((l.barcode ?? "").trim())
     }
     if (receiptMap.size === 0) { alert("No lots with receipt numbers in current filter."); return }
     const lines = ["ToteNumber,LotCount,Barcodes", ...Array.from(receiptMap.entries()).map(([r, barcodes]) => `${r},${barcodes.length},${barcodes.join("|")}`)]
@@ -1090,7 +1077,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
       let fetched = 0
 
       for (const lot of lotsWithPhotos) {
-        const folder = zip.folder(lot.lotNumber)!
+        const folder = zip.folder(lot.barcode || lot.id)!
 
         for (let i = 0; i < lot.imageUrls.length; i++) {
           const key = lot.imageUrls[i]
@@ -1125,7 +1112,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
   }
 
   async function handleDelete(lot: Lot) {
-    if (!confirm(`Delete lot "${lot.lotNumber} — ${lot.title}"?`)) return
+    if (!confirm(`Delete lot "${lot.barcode || lot.id} — ${lot.title}"?`)) return
     setDeleting(lot.id)
     start(async () => {
       await deleteLot(lot.id, auctionId)
@@ -1171,42 +1158,6 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
       setSelected(new Set())
       onDelete()
       setTimeout(() => setBcMsg(null), 3500)
-    })
-  }
-
-  function getSortedLotIds(): string[] {
-    const sortKey = (l: Lot) => {
-      const a = l.subCategory?.toLowerCase() ?? "zzz"
-      const b = l.vendor?.toLowerCase() ?? "zzz"
-      if (sortMode === "subcat")         return `${a}|||${b}`
-      if (sortMode === "vendor")         return `${b}|||${a}`
-      if (sortMode === "subcat_vendor")  return `${a}|||${b}`
-      return `${b}|||${a}` // vendor_subcat
-    }
-    return [...lots].sort((a, b) => sortKey(a).localeCompare(sortKey(b))).map(l => l.id)
-  }
-
-  function getAutoLotterPreview() {
-    const sorted = getSortedLotIds().map(id => lots.find(l => l.id === id)!)
-    const groups: Record<string, number> = {}
-    for (const l of sorted) {
-      const key = sortMode === "vendor" || sortMode === "vendor_subcat"
-        ? (l.vendor ?? "(no vendor)")
-        : (l.subCategory ?? "(no sub-category)")
-      groups[key] = (groups[key] ?? 0) + 1
-    }
-    return groups
-  }
-
-  function handleAssignLotNumbers() {
-    if (!confirm(`This will renumber all ${lots.length} lots starting from 1. Continue?`)) return
-    const orderedIds = getSortedLotIds()
-    startLotter(async () => {
-      await assignLotNumbers(auctionId, orderedIds)
-      setLotterMsg(`✓ ${lots.length} lots renumbered`)
-      setShowAutolotter(false)
-      onDelete()
-      setTimeout(() => setLotterMsg(null), 3000)
     })
   }
 
@@ -1338,22 +1289,17 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
             {fillPending ? "Pulling…" : "⟳ Pull Vendor/Receipt from Totes"}
           </button>
           <button
-            onClick={() => { setShowMassAdd(v => !v); setShowAutolotter(false); setShowBids(false) }}
+            onClick={() => { setShowMassAdd(v => !v); setShowBids(false) }}
             className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showMassAdd ? "border-orange-500 text-orange-400 bg-orange-900/20" : "border-gray-600 text-gray-600 dark:text-gray-400 hover:border-orange-500 hover:text-orange-400"}`}>
             ➕ Mass Add Lots
           </button>
           <button
-            onClick={() => { setShowAutolotter(v => !v); setShowBids(false); setShowMassAdd(false) }}
-            className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showAutolotter ? "border-yellow-500 text-yellow-400 bg-yellow-900/20" : "border-gray-600 text-gray-600 dark:text-gray-400 hover:border-yellow-500 hover:text-yellow-400"}`}>
-            🔢 Auto-number Lots
-          </button>
-          <button
-            onClick={() => { setShowBids(v => !v); setShowAutolotter(false); setShowMassAdd(false); setShowUniqueIdMatcher(false) }}
+            onClick={() => { setShowBids(v => !v); setShowMassAdd(false); setShowUniqueIdMatcher(false) }}
             className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showBids ? "border-green-500 text-green-400 bg-green-900/20" : "border-gray-600 text-gray-600 dark:text-gray-400 hover:border-green-500 hover:text-green-400"}`}>
             💰 Set Starting Bids
           </button>
           <button
-            onClick={() => { setShowUniqueIdMatcher(v => !v); setUniqueIdPairs([]); setUniqueIdMsg(null); setShowBids(false); setShowAutolotter(false); setShowMassAdd(false) }}
+            onClick={() => { setShowUniqueIdMatcher(v => !v); setUniqueIdPairs([]); setUniqueIdMsg(null); setShowBids(false); setShowMassAdd(false) }}
             className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showUniqueIdMatcher ? "border-cyan-500 text-cyan-400 bg-cyan-900/20" : "border-gray-600 text-gray-600 dark:text-gray-400 hover:border-cyan-500 hover:text-cyan-400"}`}>
             🔗 Unique ID Matcher
           </button>
@@ -1364,7 +1310,6 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
             {condPending ? "Updating…" : "✚ Add Conditions to Descriptions"}
           </button>
           {fillMsg  && <span className="text-xs text-[#2AB4A6]">{fillMsg}</span>}
-          {lotterMsg && <span className="text-xs text-yellow-400">{lotterMsg}</span>}
           {bidsMsg  && <span className="text-xs text-green-400">{bidsMsg}</span>}
           {titlesMsg && <span className="text-xs text-[#2AB4A6]">{titlesMsg}</span>}
           {massMsg  && <span className="text-xs text-orange-400">{massMsg}</span>}
@@ -1495,53 +1440,11 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
         </div>
       )}
 
-      {/* ── Auto-number Lots panel ── */}
-      {showAutolotter && (
-        <div className="mb-4 bg-white dark:bg-[#1C1C1E] border border-yellow-700/40 rounded-xl p-4 space-y-3">
-          <p className="text-sm font-semibold text-yellow-300">Auto-number Lots</p>
-          <p className="text-xs text-gray-600 dark:text-gray-500">Sorts all {lots.length} lots by the chosen criteria then assigns lot numbers 1, 2, 3… sequentially.</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {([
-              ["subcat",        "By Sub-Category"],
-              ["vendor",        "By Vendor"],
-              ["subcat_vendor", "Sub-Cat → Vendor"],
-              ["vendor_subcat", "Vendor → Sub-Cat"],
-            ] as const).map(([val, label]) => (
-              <button key={val} onClick={() => setSortMode(val)}
-                className={`py-2 px-3 rounded-lg border text-xs font-medium transition-colors ${
-                  sortMode === val ? "border-yellow-500 bg-yellow-900/20 text-yellow-300" : "border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"
-                }`}>
-                {label}
-              </button>
-            ))}
-          </div>
-          {/* Preview groups */}
-          <div className="text-xs text-gray-600 dark:text-gray-500 space-y-0.5 max-h-32 overflow-y-auto">
-            {Object.entries(getAutoLotterPreview()).map(([group, count]) => (
-              <div key={group} className="flex gap-2">
-                <span className="text-yellow-400/70 w-6 text-right">{count}</span>
-                <span>{group}</span>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => setShowAutolotter(false)}
-              className="px-4 py-2 rounded-lg border border-gray-700 text-gray-600 dark:text-gray-400 text-sm hover:border-gray-500 transition-colors">
-              Cancel
-            </button>
-            <button onClick={handleAssignLotNumbers} disabled={lotterPending}
-              className="flex-1 py-2 bg-yellow-600 hover:bg-yellow-500 disabled:opacity-50 text-black font-semibold rounded-lg text-sm transition-colors">
-              {lotterPending ? "Numbering…" : `Assign lot numbers 1–${lots.length}`}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* ── Set Starting Bids panel ── */}
       {showBids && (() => {
         const eligible = (selected.size > 0 ? lots.filter(l => selected.has(l.id)) : lots).filter(l => l.estimateLow != null)
         const preview  = eligible.slice(0, 3).map(l => ({
-          lotNumber: l.lotNumber,
+          label: l.barcode || l.id,
           low: l.estimateLow!,
           bid: roundUpToIncrement(Math.ceil(l.estimateLow! * bidPct / 100)),
         }))
@@ -1563,8 +1466,8 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
               <div className="text-xs text-gray-600 dark:text-gray-500 space-y-1">
                 <p className="text-gray-600 uppercase tracking-wider">Preview</p>
                 {preview.map(p => (
-                  <div key={p.lotNumber} className="flex gap-3">
-                    <span className="text-gray-600 dark:text-gray-400 font-mono w-10">{p.lotNumber}</span>
+                  <div key={p.label} className="flex gap-3">
+                    <span className="text-gray-600 dark:text-gray-400 font-mono w-16 truncate">{p.label}</span>
                     <span>Low est. £{p.low} → starting bid <span className="text-green-400 font-semibold">£{p.bid}</span></span>
                   </div>
                 ))}
@@ -1707,10 +1610,10 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
                 <input type="checkbox" checked={filtered.length > 0 && selected.size === filtered.length}
                   onChange={toggleSelectAll} className="w-4 h-4 rounded border-gray-600 accent-[#2AB4A6]" />
               </th>
-              {(["lotNumber","barcode","receiptUniqueId","title","vendor","receipt","tote","category","photos","status"] as SortCol[]).map((col, i) => (
+              {(["barcode","receiptUniqueId","title","vendor","receipt","tote","category","photos","status"] as SortCol[]).map((col, i) => (
                 <th key={col} onClick={() => toggleSort(col)}
                   className="text-left px-4 py-3 text-xs font-medium text-gray-600 dark:text-gray-500 uppercase tracking-wide cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
-                  {["Lot No.","Barcode","Unique ID","Title","Vendor","Receipt","Tote","Category","Photos","Status"][i]}
+                  {["Barcode","Unique ID","Title","Vendor","Receipt","Tote","Category","Photos","Status"][i]}
                   {sortCol === col ? (sortDir === "asc" ? " ▲" : " ▼") : <span className="text-gray-700"> ⇅</span>}
                 </th>
               ))}
@@ -1721,7 +1624,6 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
             {/* Filter row */}
             <tr className="border-b border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-[#111113]">
               <td className="px-4 py-1.5" />
-              <td className="px-2 py-1.5"><input value={fLotNo}    onChange={e => setFLotNo(e.target.value)}    placeholder="Filter…" className={COL_INPUT} /></td>
               <td className="px-2 py-1.5"><input value={fBarcode}  onChange={e => setFBarcode(e.target.value)}  placeholder="Filter…" className={COL_INPUT} /></td>
               <td className="px-2 py-1.5"><input value={fUniqueId} onChange={e => setFUniqueId(e.target.value)} placeholder="Filter…" className={COL_INPUT} /></td>
               <td className="px-2 py-1.5"><input value={fTitle}    onChange={e => setFTitle(e.target.value)}    placeholder="Filter…" className={COL_INPUT} /></td>
@@ -1768,7 +1670,6 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
                       className="w-4 h-4 rounded border-gray-600 accent-[#2AB4A6]" />
                   </label>
                 </td>
-                <td className="px-4 py-3 font-mono font-semibold text-[#2AB4A6] whitespace-nowrap">{lot.lotNumber || "—"}</td>
                 <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{lot.barcode ?? "—"}</td>
                 <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">
                   {lot.receiptUniqueId
@@ -1827,7 +1728,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, onEdit, onDelete
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={13} className="px-4 py-8 text-center text-gray-600 text-sm">No lots match your filters</td></tr>
+              <tr><td colSpan={12} className="px-4 py-8 text-center text-gray-600 text-sm">No lots match your filters</td></tr>
             )}
           </tbody>
         </table>
@@ -1843,11 +1744,7 @@ const PARCEL_OPTIONS = ["Small", "Medium", "Large", "Contact", "Collection Only"
 function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lot: Lot | null; auctionId: string; allLots?: Lot[]; entryDir?: "next" | "prev" | null; onDone: () => void; onEdit?: (id: string, dir: "next" | "prev") => void }) {
   const sortedLots = useMemo(() => {
     if (!allLots) return []
-    return [...allLots].sort((a, b) => {
-      const an = parseInt(a.lotNumber, 10), bn = parseInt(b.lotNumber, 10)
-      if (!isNaN(an) && !isNaN(bn)) return an - bn
-      return a.lotNumber.localeCompare(b.lotNumber)
-    })
+    return [...allLots].sort((a, b) => (a.barcode ?? "").localeCompare(b.barcode ?? "", undefined, { numeric: true }))
   }, [allLots])
   const currentIdx = sortedLots.findIndex(l => l.id === lot?.id)
   const prevLot    = currentIdx > 0 ? sortedLots[currentIdx - 1] : null
@@ -2007,10 +1904,6 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
             <div>
               <label className={lbl}>Barcode</label>
               <input name="barcode" defaultValue={lot.barcode ?? ""} className={input} placeholder="BC internal barcode" />
-            </div>
-            <div>
-              <label className={lbl}>Lot Number <span className="text-gray-600 font-normal">(auction catalogue number)</span></label>
-              <input name="lotNumber" defaultValue={lot.lotNumber} className={input} placeholder="Set by Auto-number" />
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">

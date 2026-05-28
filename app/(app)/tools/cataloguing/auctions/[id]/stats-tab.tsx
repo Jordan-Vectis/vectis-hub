@@ -3,7 +3,7 @@
 import { useMemo } from "react"
 
 interface Lot {
-  id: string; lotNumber: string; title: string; description: string; keyPoints: string
+  id: string; barcode: string | null; receiptUniqueId: string | null; title: string; description: string; keyPoints: string
   estimateLow: number | null; estimateHigh: number | null; startingBid: number | null
   reserve: number | null; hammerPrice: number | null
   condition: string | null; vendor: string | null; tote: string | null
@@ -230,14 +230,14 @@ export default function StatsTab({ lots, auction }: { lots: Lot[]; auction: Auct
             <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl px-5 py-4">
               <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-2">Highest Estimate Lot</p>
               <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{stats.highestLot.title || "Uncatalogued"}</p>
-              <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">Lot {stats.highestLot.lotNumber} · <span className="text-[#2AB4A6] font-semibold">£{fmt(stats.highestLot.estimateLow ?? 0)}–£{fmt(stats.highestLot.estimateHigh ?? 0)}</span></p>
+              <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">Lot {stats.highestLot.barcode ?? stats.highestLot.receiptUniqueId ?? ""} ·<span className="text-[#2AB4A6] font-semibold">£{fmt(stats.highestLot.estimateLow ?? 0)}–£{fmt(stats.highestLot.estimateHigh ?? 0)}</span></p>
             </div>
           )}
           {stats.lowestLot && (
             <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl px-5 py-4">
               <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-2">Lowest Estimate Lot</p>
               <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{stats.lowestLot.title || "Uncatalogued"}</p>
-              <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">Lot {stats.lowestLot.lotNumber} · <span className="text-yellow-400 font-semibold">£{fmt(stats.lowestLot.estimateLow ?? 0)}–£{fmt(stats.lowestLot.estimateHigh ?? 0)}</span></p>
+              <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">Lot {stats.lowestLot.barcode ?? stats.lowestLot.receiptUniqueId ?? ""} ·<span className="text-yellow-400 font-semibold">£{fmt(stats.lowestLot.estimateLow ?? 0)}–£{fmt(stats.lowestLot.estimateHigh ?? 0)}</span></p>
             </div>
           )}
         </div>

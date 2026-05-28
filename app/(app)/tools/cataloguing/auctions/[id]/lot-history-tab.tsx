@@ -18,9 +18,10 @@ The paragraph should cover ALL of the following where relevant:
 Write in flowing, informative prose — NOT as bullet points. British English throughout. Do not start with "This" or "The item". Do not mention Vectis by name. Output plain text only — no HTML tags, no headings, no markdown.`
 
 interface Lot {
-  id:           string
-  lotNumber:    string
-  title:        string
+  id:              string
+  barcode:         string | null
+  receiptUniqueId: string | null
+  title:           string
   description:  string
   keyPoints:    string
   category:     string | null
@@ -95,7 +96,6 @@ export default function LotHistoryTab({ auctionId, lots }: Props) {
           modelId,
           customInstructions: instructions !== DEFAULT_INSTRUCTIONS ? instructions : undefined,
           lot: {
-            lotNumber:   lot.lotNumber,
             title:       lot.title,
             description: lot.description,
             keyPoints:   lot.keyPoints,
@@ -272,7 +272,7 @@ export default function LotHistoryTab({ auctionId, lots }: Props) {
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono text-gray-600 dark:text-gray-500">#{lot.lotNumber}</span>
+                    <span className="text-xs font-mono text-gray-600 dark:text-gray-500">#{lot.barcode ?? lot.receiptUniqueId ?? ""}</span>
                     <span className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{lot.title}</span>
                   </div>
                   {(lot.category || lot.brand) && (

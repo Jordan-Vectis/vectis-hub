@@ -8,7 +8,7 @@ import { format } from "date-fns"
 
 interface Lot {
   id: string
-  lotNumber: string
+  barcode: string
   title: string
   description: string
   imageUrls: string[]       // already proxy-resolved
@@ -28,7 +28,7 @@ interface BidEntry {
 
 interface LiveLot {
   id: string
-  lotNumber: string
+  barcode: string
   title: string
   description: string
   imageUrls: string[]
@@ -47,7 +47,7 @@ interface AuctionState {
     fairWarning: boolean; pauseMessage: string | null; totalLots: number
   } | null
   currentLot: LiveLot | null
-  lots: { id: string; lotNumber: string; status: string; hammerPrice: number | null; currentBid: number }[]
+  lots: { id: string; barcode: string; status: string; hammerPrice: number | null; currentBid: number }[]
   onlineCount: number
 }
 
@@ -99,7 +99,7 @@ export default function LiveBiddingRoom({
   const [streamActive, setStreamActive] = useState(false)
   const [bidPending, setBidPending] = useState(false)
   const [bidFeedback, setBidFeedback] = useState<{ ok: boolean; msg: string } | null>(null)
-  const [commissionModal, setCommissionModal] = useState<{ lotId: string; lotNumber: string; title: string; estimateLow: number | null; estimateHigh: number | null; imageUrl: string | null; status: string } | null>(null)
+  const [commissionModal, setCommissionModal] = useState<{ lotId: string; barcode: string; title: string; estimateLow: number | null; estimateHigh: number | null; imageUrl: string | null; status: string } | null>(null)
   const [commissionAmount, setCommissionAmount] = useState("")
   const [commissionPending, setCommissionPending] = useState(false)
   const [commissionFeedback, setCommissionFeedback] = useState<{ ok: boolean; msg: string } | null>(null)
@@ -140,7 +140,7 @@ export default function LiveBiddingRoom({
 
     socket.on("bid:commission:accepted", ({ lotNumber, maxAmount }: { lotId: string; lotNumber: string; maxAmount: number }) => {
       setCommissionPending(false)
-      setCommissionFeedback({ ok: true, msg: `✓ Commission bid of £${maxAmount.toLocaleString("en-GB")} placed on Lot ${lotNumber}` })
+      setCommissionFeedback({ ok: true, msg: `✓ Commission bid of £${maxAmount.toLocaleString("en-GB")} placed on lot ${lotNumber}` })
       setCommissionAmount("")
       setTimeout(() => { setCommissionFeedback(null); setCommissionModal(null) }, 2500)
     })
@@ -227,7 +227,7 @@ export default function LiveBiddingRoom({
   const displayImages = lot?.imageUrls?.length ? lot.imageUrls : staticLot?.imageUrls ?? []
   const displayTitle = lot?.title ?? staticLot?.title ?? "—"
   const displayDesc = lot?.description ?? staticLot?.description ?? ""
-  const displayLotNum = lot?.lotNumber ?? staticLot?.lotNumber ?? "—"
+  const displayLotNum = lot?.barcode ?? staticLot?.barcode ?? "—"
   const displayImg = displayImages[imageIndex] ?? null
 
   const currentBid = lot?.currentBid ?? 0
@@ -244,7 +244,7 @@ export default function LiveBiddingRoom({
   // Lots strip — use socket summary if available, otherwise initial lots
   const stripLots = state?.lots?.length
     ? state.lots
-    : initialLots.map(l => ({ id: l.id, lotNumber: l.lotNumber, status: l.status, hammerPrice: l.hammerPrice, currentBid: 0 }))
+    : initialLots.map(l => ({ id: l.id, barcode: l.barcode, status: l.status, hammerPrice: l.hammerPrice, currentBid: 0 }))
 
   return (
     <div className="bg-white min-h-screen">
@@ -589,7 +589,7 @@ export default function LiveBiddingRoom({
 
         <div ref={stripRef} className="flex gap-2 overflow-x-auto pb-1">
           {stripLots.map((l, i) => {
-            const staticL = initialLots.find(il => il.lotNumber === l.lotNumber)
+            const staticL = initialLots.find(il => il.id === l.id)
             const thumb = staticL?.imageUrls[0] ?? null
             const isActive = i === lotIndex
             const isSold = l.status === "SOLD"
@@ -603,8 +603,8 @@ export default function LiveBiddingRoom({
                   if (!isClickable) return
                   setCommissionModal({
                     lotId: l.id,
-                    lotNumber: l.lotNumber,
-                    title: staticL?.title ?? l.lotNumber,
+                    barcode: l.barcode,
+                    title: staticL?.title ?? l.barcode,
                     estimateLow: staticL?.estimateLow ?? null,
                     estimateHigh: staticL?.estimateHigh ?? null,
                     imageUrl: thumb,
@@ -651,7 +651,7 @@ export default function LiveBiddingRoom({
                   )}
                 </div>
                 <div className="px-2 py-1.5 bg-white">
-                  <p className="text-[#32348A] text-[9px] font-black uppercase tracking-wide">LOT {l.lotNumber}</p>
+                  <p className="text-[#32348A] text-[9px] font-black uppercase tracking-wide">LOT {l.barcode ?? "—"}</p>
                   <p className="text-gray-500 text-[9px] leading-tight line-clamp-2">{staticL?.title ?? ""}</p>
                 </div>
               </div>
@@ -671,7 +671,7 @@ export default function LiveBiddingRoom({
             {/* Modal header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
               <p className="text-[#32348A] text-xs font-black uppercase tracking-widest">
-                LOT {commissionModal.lotNumber}
+                LOT {commissionModal.barcode}
               </p>
               <button
                 onClick={() => { setCommissionModal(null); setCommissionFeedback(null) }}

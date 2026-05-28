@@ -20,7 +20,7 @@ function titleFromDescription(desc: string): string {
 
 // POST /api/auction-ai/runs/[id]/apply
 // Creates new CatalogueLot records in the matching CatalogueAuction from a saved AI run.
-// Skips lots whose lotNumber already exists in that auction to avoid duplicates.
+// Skips lots whose barcode or receiptUniqueId already exists in that auction to avoid duplicates.
 export async function POST(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
@@ -37,7 +37,7 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
     // Find the matching catalogue auction by code
     const auction = await prisma.catalogueAuction.findUnique({
       where: { code: run.code },
-      select: { id: true, lots: { select: { lotNumber: true, receiptUniqueId: true } } },
+      select: { id: true, lots: { select: { barcode: true, receiptUniqueId: true } } },
     })
     if (!auction) {
       return NextResponse.json(
@@ -47,7 +47,7 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
     }
 
     // Track existing identifiers so we don't create duplicates
-    const existingLotNumbers  = new Set(auction.lots.map(l => l.lotNumber))
+    const existingBarcodes    = new Set(auction.lots.filter(l => l.barcode).map(l => l.barcode!))
     const existingUniqueIds   = new Set(auction.lots.filter(l => l.receiptUniqueId).map(l => l.receiptUniqueId!))
 
     // Deduplicate within the run itself: if the batch was re-run after a page refresh,
@@ -67,19 +67,17 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
         const isUniqueIdFormat = /^[A-Za-z]\d{4,7}-\d{1,6}$/.test(l.lot.trim())
         const alreadyExists = isUniqueIdFormat
           ? existingUniqueIds.has(l.lot)
-          : existingLotNumbers.has(l.lot)
+          : existingBarcodes.has(l.lot)
         if (alreadyExists) {
           skipped.push(l.lot)
           return
         }
         const { low, high } = parseEstimate(l.estimate)
-        // Detect receipt unique ID format e.g. R000016-413 — store in receiptUniqueId,
-        // not lotNumber (lot numbers are catalogue sequence numbers, assigned separately)
+        // Detect receipt unique ID format e.g. R000016-413 — store in receiptUniqueId
         const isUniqueId = /^[A-Za-z]\d{4,7}-\d{1,6}$/.test(l.lot.trim())
         await prisma.catalogueLot.create({
           data: {
             auctionId:       auction.id,
-            lotNumber:       isUniqueId ? "" : l.lot,
             receiptUniqueId: isUniqueId ? l.lot : null,
             title:           titleFromDescription(l.description),
             description:     l.description,

@@ -19,7 +19,7 @@ type ContainerRow = {
   receiptId: string; contactId: string; contactName: string; lastLocation: string | null
 }
 type LotRow = {
-  id: string; lotNumber: string; title: string; description: string
+  id: string; barcode: string | null; receiptUniqueId: string | null; title: string; description: string
   auctionId: string; auctionCode: string; auctionName: string
   vendor: string | null; receipt: string | null; tote: string | null
   category: string | null; subCategory: string | null; status: string
@@ -33,7 +33,7 @@ type Tab = "customers" | "receipts" | "totes" | "lots" | "bids" | "browse"
 type BidRow = {
   id: string
   lotId: string
-  lotNumber: string
+  lotBarcode: string | null
   lotTitle: string
   estimateLow: number | null
   estimateHigh: number | null
@@ -315,7 +315,7 @@ function LotEditPanel({ row, auctions, onClose, onSaved }: {
   row: LotRow; auctions: AuctionOption[]
   onClose: () => void; onSaved: (updated: LotRow) => void
 }) {
-  const [lotNumber,    setLotNumber]    = useState(row.lotNumber)
+  const [barcode,      setBarcode]      = useState(row.barcode ?? "")
   const [title,        setTitle]        = useState(row.title)
   const [description,  setDescription]  = useState(row.description)
   const [auctionId,    setAuctionId]    = useState(row.auctionId)
@@ -342,7 +342,7 @@ function LotEditPanel({ row, auctions, onClose, onSaved }: {
     start(async () => {
       try {
         await updateLotDb(row.id, {
-          lotNumber: lotNumber.trim(), title: title.trim(), description: description.trim(),
+          barcode: barcode.trim() || null, title: title.trim(), description: description.trim(),
           auctionId, vendor: vendor.trim() || null, receipt: receipt.trim() || null,
           tote: tote.trim() || null, category: category.trim() || null, subCategory: subCategory.trim() || null,
           condition: condition.trim() || null, brand: brand.trim() || null, notes: notes.trim() || null,
@@ -351,7 +351,7 @@ function LotEditPanel({ row, auctions, onClose, onSaved }: {
         })
         onSaved({
           ...row,
-          lotNumber: lotNumber.trim(), title: title.trim(), description: description.trim(),
+          barcode: barcode.trim() || null, title: title.trim(), description: description.trim(),
           auctionId, auctionCode: selectedAuction?.code ?? row.auctionCode, auctionName: selectedAuction?.name ?? row.auctionName,
           vendor: vendor.trim() || null, receipt: receipt.trim() || null, tote: tote.trim() || null,
           category: category.trim() || null, subCategory: subCategory.trim() || null,
@@ -368,7 +368,7 @@ function LotEditPanel({ row, auctions, onClose, onSaved }: {
     <div className="space-y-4">
       {/* Identity */}
       <div className="grid grid-cols-2 gap-3">
-        <EField label="Lot Number"><input value={lotNumber} onChange={e => setLotNumber(e.target.value)} className={EDIT_INPUT} /></EField>
+        <EField label="Barcode"><input value={barcode} onChange={e => setBarcode(e.target.value)} className={EDIT_INPUT} /></EField>
         <EField label="Status">
           <select value={status} onChange={e => setStatus(e.target.value)} className={EDIT_SELECT}>
             {["ENTERED","CATALOGUED","APPROVED","SOLD","WITHDRAWN","PASSED"].map(s =>
@@ -487,7 +487,7 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
     { key: "location",   label: "Location"    },
   ]
   const LOT_COLS = [
-    { key: "lotNumber",  label: "Lot No."     },
+    { key: "barcode",    label: "Barcode"     },
     { key: "title",      label: "Title"       },
     { key: "auction",    label: "Auction"     },
     { key: "vendor",     label: "Vendor"      },
@@ -503,7 +503,7 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
   const [visCust,  setVisCust]  = useState<Set<string>>(new Set(["name","email","phone","buyer","seller"]))
   const [visRcpt,  setVisRcpt]  = useState<Set<string>>(new Set(["id","contact","commission","totes","status"]))
   const [visTote,  setVisTote]  = useState<Set<string>>(new Set(["id","type","description","contact","category","location"]))
-  const [visLot,   setVisLot]   = useState<Set<string>>(new Set(["lotNumber","title","auction","vendor","tote","photos","status"]))
+  const [visLot,   setVisLot]   = useState<Set<string>>(new Set(["barcode","title","auction","vendor","tote","photos","status"]))
 
   function toggleCol(setter: React.Dispatch<React.SetStateAction<Set<string>>>, key: string) {
     setter(prev => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next })
@@ -569,7 +569,7 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
   ), [containers, tId, tType, tDesc, tContact, tCategory, tLocation])
 
   const filteredLots = useMemo(() => lots.filter(l =>
-    match(l.lotNumber, lLotNo) && match(l.title, lTitle) &&
+    match(l.barcode ?? l.receiptUniqueId ?? "", lLotNo) && match(l.title, lTitle) &&
     (lAuction === "" || l.auctionCode === lAuction) &&
     match(l.vendor, lVendor) && match(l.receipt, lReceipt) &&
     match(l.tote, lTote) && (lStatus === "" || l.status === lStatus)
@@ -767,7 +767,7 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-800 bg-white dark:bg-[#1C1C1E]">
-                  {visLot.has("lotNumber") && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Lot No.</th>}
+                  {visLot.has("barcode") && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Barcode</th>}
                   {visLot.has("title")     && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Title</th>}
                   {visLot.has("auction")   && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Auction</th>}
                   {visLot.has("vendor")    && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Vendor</th>}
@@ -780,7 +780,7 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                   {visLot.has("status")    && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>}
                 </tr>
                 <tr className="border-b border-gray-900 bg-gray-100 dark:bg-[#111113]">
-                  {visLot.has("lotNumber") && <td className="px-2 py-1.5"><input value={lLotNo}   onChange={e => setLLotNo(e.target.value)}   placeholder="Filter…" className={COL_INPUT} /></td>}
+                  {visLot.has("barcode") && <td className="px-2 py-1.5"><input value={lLotNo}   onChange={e => setLLotNo(e.target.value)}   placeholder="Filter…" className={COL_INPUT} /></td>}
                   {visLot.has("title")     && <td className="px-2 py-1.5"><input value={lTitle}   onChange={e => setLTitle(e.target.value)}   placeholder="Filter…" className={COL_INPUT} /></td>}
                   {visLot.has("auction")   && <td className="px-2 py-1.5"><select value={lAuction} onChange={e => setLAuction(e.target.value)} className={COL_SELECT}><option value="">All</option>{auctionCodes.map(a => <option key={a} value={a}>{a}</option>)}</select></td>}
                   {visLot.has("vendor")    && <td className="px-2 py-1.5"><input value={lVendor}  onChange={e => setLVendor(e.target.value)}  placeholder="Filter…" className={COL_INPUT} /></td>}
@@ -796,7 +796,7 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
               <tbody>
                 {filteredLots.map((l, i) => (
                   <tr key={l.id} onClick={() => setEditLot(l)} className={TR(i)}>
-                    {visLot.has("lotNumber") && <td className="px-3 py-2.5 text-gray-300 font-mono">{l.lotNumber}</td>}
+                    {visLot.has("barcode") && <td className="px-3 py-2.5 text-gray-300 font-mono">{l.barcode ?? l.receiptUniqueId ?? "—"}</td>}
                     {visLot.has("title")     && <td className="px-3 py-2.5 text-gray-200 max-w-[180px] truncate">{l.title || <span className="text-gray-600">Untitled</span>}</td>}
                     {visLot.has("auction")   && <td className="px-3 py-2.5 text-gray-400">{l.auctionCode}</td>}
                     {visLot.has("vendor")    && <td className="px-3 py-2.5 text-gray-400">{l.vendor ?? <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
@@ -866,7 +866,7 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                   return (
                     <tr key={b.id} className={TR(i)}>
                       <td className="px-3 py-2.5 text-gray-400 font-mono text-xs whitespace-nowrap">{b.auctionCode}</td>
-                      <td className="px-3 py-2.5 text-gray-300 font-mono text-xs whitespace-nowrap">{b.lotNumber}</td>
+                      <td className="px-3 py-2.5 text-gray-300 font-mono text-xs whitespace-nowrap">{b.lotBarcode ?? "—"}</td>
                       <td className="px-3 py-2.5 text-gray-200 max-w-[180px] truncate">{b.lotTitle}</td>
                       <td className="px-3 py-2.5">
                         <p className="text-gray-200 text-xs">{b.customerName}</p>
@@ -930,7 +930,7 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
         )}
       </Drawer>
 
-      <Drawer title={editLot ? `Lot ${editLot.lotNumber}` : ""} subtitle={editLot ? `${editLot.auctionCode} — ${editLot.auctionName}` : ""} open={!!editLot} onClose={() => setEditLot(null)}>
+      <Drawer title={editLot ? `Lot ${editLot.barcode ?? editLot.receiptUniqueId ?? editLot.id.slice(-6)}` : ""} subtitle={editLot ? `${editLot.auctionCode} — ${editLot.auctionName}` : ""} open={!!editLot} onClose={() => setEditLot(null)}>
         {editLot && (
           <LotEditPanel row={editLot} auctions={auctions} onClose={() => setEditLot(null)}
             onSaved={updated => { setLots(prev => prev.map(l => l.id === updated.id ? updated : l)); flash() }} />

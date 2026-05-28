@@ -5,14 +5,14 @@ import { uploadLotPhoto } from "@/lib/actions/catalogue"
 
 interface Props {
   auctionId: string
-  lots: { id: string; lotNumber: string; barcode: string | null; receiptUniqueId?: string | null }[]
+  lots: { id: string; barcode: string | null; receiptUniqueId?: string | null }[]
   onUploaded: () => void
 }
 
 interface LotGroup {
-  lotId:     string | null
-  lotNumber: string
-  photos:    File[]
+  lotId:    string | null
+  label:    string
+  photos:   File[]
 }
 
 type Phase = "idle" | "scanning" | "preview" | "uploading" | "done"
@@ -39,9 +39,8 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const [error, setError]          = useState<string | null>(null)
   const [skipped, setSkipped]      = useState<string[]>([])
 
-  // Lookup: lotNumber / barcode / receiptUniqueId → lot id
+  // Lookup: barcode / receiptUniqueId → lot id
   const lotMap = new Map([
-    ...lots.map(l => [l.lotNumber.toLowerCase().trim(), l.id] as [string, string]),
     ...lots.filter(l => l.barcode).map(l => [l.barcode!.toLowerCase().trim(), l.id] as [string, string]),
     ...lots.filter(l => l.receiptUniqueId).map(l => [l.receiptUniqueId!.toLowerCase().trim(), l.id] as [string, string]),
   ])
@@ -76,7 +75,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       const key     = barcode.toLowerCase().trim()
       if (!groupMap.has(key)) {
         const lotId = lotMap.get(key) ?? null
-        groupMap.set(key, { lotId, lotNumber: barcode, photos: [] })
+        groupMap.set(key, { lotId, label: barcode, photos: [] })
         orderedKeys.push(key)
       }
       groupMap.get(key)!.photos.push(file)
@@ -207,7 +206,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       if (barcode) {
         const key   = barcode.toLowerCase().trim()
         const lotId = lotMap.get(key) ?? null
-        current = { lotId, lotNumber: barcode, photos: [] }
+        current = { lotId, label: barcode, photos: [] }
         result.push(current)
       } else if (current) {
         current.photos.push(file)
@@ -245,7 +244,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
           fd.set("photo", photo)
           await uploadLotPhoto(group.lotId!, auctionId, fd)
         } catch {
-          failedList.push(`${group.lotNumber}/${photo.name}`)
+          failedList.push(`${group.label}/${photo.name}`)
         }
         done++
         setUploadProgress({ done, total })
@@ -371,13 +370,13 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
                   ? "IDs not matched to any lot in this auction:"
                   : "Barcodes detected but not found in this auction:"}
               </p>
-              <p className="text-xs text-yellow-600 font-mono">{unmatchedGroups.map(g => g.lotNumber).join(", ")}</p>
+              <p className="text-xs text-yellow-600 font-mono">{unmatchedGroups.map(g => g.label).join(", ")}</p>
             </div>
           )}
           {emptyGroups.length > 0 && (
             <div className="bg-gray-900/50 border border-gray-700 rounded-lg px-3 py-2">
               <p className="text-xs text-gray-600 dark:text-gray-500">
-                Lots matched but no photos found: <span className="font-mono">{emptyGroups.map(g => g.lotNumber).join(", ")}</span>
+                Lots matched but no photos found: <span className="font-mono">{emptyGroups.map(g => g.label).join(", ")}</span>
               </p>
             </div>
           )}
@@ -394,8 +393,8 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
                 </thead>
                 <tbody>
                   {matchedGroups.map(g => (
-                    <tr key={g.lotNumber} className="border-b border-gray-200 dark:border-gray-800 last:border-0">
-                      <td className="px-4 py-2 font-mono text-[#2AB4A6]">{g.lotNumber}</td>
+                    <tr key={g.label} className="border-b border-gray-200 dark:border-gray-800 last:border-0">
+                      <td className="px-4 py-2 font-mono text-[#2AB4A6]">{g.label}</td>
                       <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{g.photos.length}</td>
                       <td className="px-4 py-2 text-gray-600 truncate max-w-[200px]">{g.photos.map(p => p.name).join(", ")}</td>
                     </tr>

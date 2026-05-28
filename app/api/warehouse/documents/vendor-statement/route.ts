@@ -36,12 +36,7 @@ export async function GET(req: NextRequest) {
         OR: receipts.map(r => ({ receipt: { startsWith: r.id + "-" } })),
         hammerPrice: { not: null },
       },
-      orderBy: { lotNumber: "asc" },
-    })
-
-    lots.sort((a, b) => {
-      const na = parseInt(a.lotNumber), nb = parseInt(b.lotNumber)
-      return (!isNaN(na) && !isNaN(nb)) ? na - nb : a.lotNumber.localeCompare(b.lotNumber, undefined, { numeric: true })
+      orderBy: { createdAt: "asc" },
     })
 
     const today = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })
@@ -72,7 +67,7 @@ export async function GET(req: NextRequest) {
 
     const lotRows = lotsWithCalcs.map(({ lot, hammer, commRate, commTotal, subTotal }) => `
       <tr>
-        <td>${esc(lot.lotNumber)}</td>
+        <td style="font-size:8pt;color:#555">${esc(lot.barcode ?? lot.receiptUniqueId ?? "")}</td>
         <td style="font-size:8pt;color:#555">${esc(lot.receipt ?? "")}</td>
         <td>${esc(lot.title)}</td>
         <td style="text-align:right">${fmtMoney(hammer)}</td>
@@ -138,8 +133,8 @@ export async function GET(req: NextRequest) {
 <table>
   <thead>
     <tr>
-      <th style="width:55px">Lot</th>
-      <th style="width:85px">Unique ID</th>
+      <th style="width:100px">Barcode / Unique ID</th>
+      <th style="width:85px">Receipt</th>
       <th>Description</th>
       <th style="width:90px;text-align:right">Hammer Price</th>
       <th style="width:110px;text-align:right">Commission</th>

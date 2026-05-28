@@ -19,7 +19,8 @@ export default async function MyBidsPage() {
       lot: {
         select: {
           id: true,
-          lotNumber: true,
+          barcode: true,
+          receiptUniqueId: true,
           title: true,
           estimateLow: true,
           estimateHigh: true,
@@ -87,7 +88,7 @@ export default async function MyBidsPage() {
     bids: g.bids.map(b => ({
       bidId: b.id,
       lotId: b.lot.id,
-      lotNumber: b.lot.lotNumber,
+      lotBarcode: b.lot.barcode ?? b.lot.receiptUniqueId ?? null,
       lotTitle: b.lot.title,
       imageUrl: b.lot.imageUrls[0] ?? null,
       lotStatus: b.lot.status,

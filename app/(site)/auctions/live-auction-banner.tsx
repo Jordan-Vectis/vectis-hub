@@ -9,7 +9,7 @@ import { format } from "date-fns"
 
 interface LotInfo {
   id: string
-  lotNumber: string
+  barcode: string
   title: string
   imageUrls: string[]
   estimateLow: number | null
@@ -18,7 +18,7 @@ interface LotInfo {
 
 interface LiveLot {
   id: string
-  lotNumber: string
+  barcode: string
   title: string
   description: string
   imageUrls: string[]
@@ -40,7 +40,7 @@ interface AuctionState {
     totalLots: number
   } | null
   currentLot: LiveLot | null
-  lots: { id: string; lotNumber: string; status: string; hammerPrice: number | null }[]
+  lots: { id: string; barcode: string; status: string; hammerPrice: number | null }[]
   onlineCount: number
 }
 
@@ -200,7 +200,7 @@ export default function LiveAuctionBanner({
             )}
             <div className="flex-1 min-w-0">
               <p className="text-[#32348A] text-xs font-black tracking-widest uppercase">
-                LOT {lot?.lotNumber ?? fallbackLot?.lotNumber ?? "—"}
+                LOT {lot?.barcode ?? fallbackLot?.barcode ?? "—"}
               </p>
               <p className="text-gray-700 text-sm font-medium leading-snug line-clamp-2">
                 {lot?.title ?? fallbackLot?.title ?? "Loading…"}

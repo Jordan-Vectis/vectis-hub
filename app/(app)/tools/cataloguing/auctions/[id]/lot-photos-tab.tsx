@@ -5,7 +5,8 @@ import { uploadLotPhoto, deleteLotPhoto } from "@/lib/actions/catalogue"
 
 interface LotRow {
   id: string
-  lotNumber: string
+  barcode: string | null
+  receiptUniqueId: string | null
   title: string
   imageUrls: string[]
 }
@@ -81,7 +82,7 @@ export default function LotPhotosTab({ auctionId, lots: initialLots }: Props) {
 
   const filtered = lots.filter(l =>
     search === "" ||
-    l.lotNumber.toLowerCase().includes(search.toLowerCase()) ||
+    (l.barcode ?? l.receiptUniqueId ?? "").toLowerCase().includes(search.toLowerCase()) ||
     l.title.toLowerCase().includes(search.toLowerCase())
   )
 
@@ -129,7 +130,7 @@ export default function LotPhotosTab({ auctionId, lots: initialLots }: Props) {
                 className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#2C2C2E] transition-colors text-left"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="font-mono text-sm font-semibold text-[#2AB4A6] flex-shrink-0">{lot.lotNumber}</span>
+                  <span className="font-mono text-sm font-semibold text-[#2AB4A6] flex-shrink-0">{lot.barcode ?? lot.receiptUniqueId ?? ""}</span>
                   <span className="text-sm text-gray-300 truncate">{lot.title}</span>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 ml-2">

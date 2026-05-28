@@ -88,8 +88,7 @@ export default function PhotoOnlyTab({ auctionId, auctionCode, onCreated, tablet
 
   function buildFormData() {
     const fd = new FormData()
-    fd.set("lotNumber",  lotBarcode.trim())   // temp ID until auto-lotter runs
-    fd.set("barcode",    lotBarcode.trim())   // permanent barcode field
+    fd.set("barcode",    lotBarcode.trim())
     fd.set("durationMs", String(barcodeStartedAt.current ? Date.now() - barcodeStartedAt.current : 0))
     if (toteNumber.trim()) fd.set("tote", toteNumber.trim())
     if (notes.trim()) fd.set("notes", notes.trim())

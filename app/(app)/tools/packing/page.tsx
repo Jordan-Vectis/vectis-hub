@@ -329,7 +329,7 @@ export default function PackingPage() {
                   <div className="space-y-0.5">
                     {selected.lots.map((pl: any) => (
                       <p key={pl.id} className="text-xs text-gray-600">
-                        <span className="font-mono text-gray-400">{pl.lot.auction?.code} #{pl.lot.lotNumber}</span> — {pl.lot.title}
+                        <span className="font-mono text-gray-400">{pl.lot.auction?.code}{pl.lot.barcode || pl.lot.receiptUniqueId ? ` #${pl.lot.barcode ?? pl.lot.receiptUniqueId}` : ""}</span> — {pl.lot.title}
                       </p>
                     ))}
                   </div>

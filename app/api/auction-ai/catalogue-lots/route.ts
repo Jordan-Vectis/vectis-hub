@@ -15,25 +15,19 @@ export async function GET(req: NextRequest) {
     where: { code },
     include: {
       lots: {
-        select: { id: true, lotNumber: true, title: true, keyPoints: true, description: true, barcode: true, imageUrls: true },
-        orderBy: { lotNumber: "asc" },
+        select: { id: true, title: true, keyPoints: true, description: true, barcode: true, imageUrls: true },
+        orderBy: { createdAt: "asc" },
       },
     },
   })
 
   if (!auction) return NextResponse.json({ error: `No catalogue auction found for code "${code}"` }, { status: 404 })
 
-  auction.lots.sort((a, b) => {
-    const na = parseInt(a.lotNumber), nb = parseInt(b.lotNumber)
-    return (!isNaN(na) && !isNaN(nb)) ? na - nb : a.lotNumber.localeCompare(b.lotNumber, undefined, { numeric: true })
-  })
-
   return NextResponse.json({
     auctionId: auction.id,
     code:      auction.code,
     lots:      auction.lots.map(l => ({
       id:          l.id,
-      lotNumber:   l.lotNumber,
       title:       l.title,
       keyPoints:   l.keyPoints ?? "",
       description: l.description ?? "",

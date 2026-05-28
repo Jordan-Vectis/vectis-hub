@@ -9,7 +9,7 @@ import { lotPhotoUrl } from "@/lib/photo-url"
 type LotBid = {
   bidId: string
   lotId: string
-  lotNumber: string
+  lotBarcode: string | null
   lotTitle: string
   imageUrl: string | null
   lotStatus: string
@@ -33,10 +33,6 @@ type AuctionGroup = {
 
 interface Props {
   groups: AuctionGroup[]
-}
-
-function displayLotNum(lotNumber: string, auctionCode: string): string {
-  return lotNumber.replace(new RegExp(`^${auctionCode}`, "i"), "").replace(/^0+/, "") || lotNumber
 }
 
 export default function BidsClient({ groups }: Props) {
@@ -139,7 +135,6 @@ export default function BidsClient({ groups }: Props) {
               <div className="border-t border-gray-200">
                 {group.bids.map(bid => {
                   const img = bid.imageUrl ? lotPhotoUrl(bid.imageUrl, true) : null
-                  const lotNum = displayLotNum(bid.lotNumber, group.auctionCode)
                   const sold = bid.lotStatus === "SOLD"
                   const won = sold && bid.hammerPrice !== null
 
@@ -171,7 +166,7 @@ export default function BidsClient({ groups }: Props) {
                           <p className="text-sm font-bold text-[#32348A] truncate">{bid.lotTitle}</p>
                         </Link>
                         <p className="text-xs text-gray-400 mt-0.5">
-                          Lot {lotNum}
+                          {bid.lotBarcode ? `Lot ${bid.lotBarcode}` : "—"}
                           {bid.estimateLow && bid.estimateHigh && (
                             <> · Est. £{bid.estimateLow.toLocaleString("en-GB")}–£{bid.estimateHigh.toLocaleString("en-GB")}</>
                           )}

@@ -56,7 +56,7 @@ export default async function AuctionsPage({
   // Check for active live auction
   const liveAuction = await prisma.liveAuction.findFirst({
     where: { status: { in: ["ACTIVE", "PAUSED"] } },
-    include: { auction: { include: { lots: { orderBy: { lotNumber: "asc" } } } } },
+    include: { auction: { include: { lots: { orderBy: { createdAt: "asc" } } } } },
   })
 
   const allPublished = await prisma.catalogueAuction.findMany({
@@ -108,7 +108,7 @@ export default async function AuctionsPage({
           status={liveAuction.status}
           lots={liveAuction.auction.lots.map(l => ({
             id: l.id,
-            lotNumber: l.lotNumber,
+            barcode: l.barcode ?? "",
             title: l.title,
             imageUrls: l.imageUrls,
             estimateLow: l.estimateLow,

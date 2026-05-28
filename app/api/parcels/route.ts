@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
       },
       include: {
         lots: {
-          include: { lot: { select: { id: true, lotNumber: true, title: true, auction: { select: { code: true } } } } },
+          include: { lot: { select: { id: true, barcode: true, receiptUniqueId: true, title: true, auction: { select: { code: true } } } } },
         },
       },
       orderBy: { createdAt: "desc" },
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
           : undefined,
       },
       include: {
-        lots: { include: { lot: { select: { id: true, lotNumber: true, title: true, auction: { select: { code: true } } } } } },
+        lots: { include: { lot: { select: { id: true, barcode: true, receiptUniqueId: true, title: true, auction: { select: { code: true } } } } } },
       },
     })
 

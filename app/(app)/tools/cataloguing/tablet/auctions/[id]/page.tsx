@@ -19,7 +19,7 @@ export default async function TabletAuctionDetailPage({
     prisma.catalogueAuction.findUnique({
       where: { id },
       include: {
-        lots: { orderBy: { lotNumber: "asc" } },
+        lots: { orderBy: { createdAt: "asc" } },
       },
     }),
     prisma.user.findUnique({
@@ -29,11 +29,6 @@ export default async function TabletAuctionDetailPage({
   ])
 
   if (!auction) notFound()
-
-  auction.lots.sort((a, b) => {
-    const na = parseInt(a.lotNumber), nb = parseInt(b.lotNumber)
-    return (!isNaN(na) && !isNaN(nb)) ? na - nb : a.lotNumber.localeCompare(b.lotNumber, undefined, { numeric: true })
-  })
 
   return (
     <TabletTabs
@@ -47,7 +42,6 @@ export default async function TabletAuctionDetailPage({
       }}
       lots={auction.lots.map(l => ({
         id: l.id,
-        lotNumber: l.lotNumber,
         barcode: l.barcode,
         title: l.title,
         keyPoints: l.keyPoints,

@@ -63,7 +63,7 @@ export async function moveContainerDb(containerId: string, locationCode: string,
 // ── Lots ───────────────────────────────────────────────────────────────────
 
 export async function updateLotDb(id: string, data: {
-  lotNumber?: string
+  barcode?: string | null
   title?: string
   description?: string
   auctionId?: string
