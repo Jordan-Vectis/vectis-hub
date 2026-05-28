@@ -93,11 +93,25 @@ export default async function HubPage() {
   }
 
   return (
-    <div className="relative min-h-screen bg-gray-100 dark:bg-[#111318] flex flex-col items-center px-6 py-16">
+    <div className="relative min-h-screen bg-gray-100 dark:bg-[#111318] flex flex-col items-center">
 
-      <div className="w-full max-w-6xl space-y-10">
+      {grouped.length > 1 && (
+        <div className="sticky top-0 z-10 w-full bg-gray-900/95 backdrop-blur border-b border-white/5 flex items-center gap-1 px-6 py-2">
+          {grouped.map(section => (
+            <a
+              key={section.key}
+              href={`#${section.key}`}
+              className="text-xs font-medium text-gray-400 hover:text-white px-3 py-1.5 rounded-md hover:bg-white/10 transition-colors whitespace-nowrap"
+            >
+              {section.label}
+            </a>
+          ))}
+        </div>
+      )}
+
+      <div className="w-full max-w-6xl space-y-10 px-6 pt-10 pb-16">
         {grouped.map(section => (
-          <div key={section.key}>
+          <div key={section.key} id={section.key} className="scroll-mt-12">
             <div className="flex items-center gap-4 mb-5">
               <span className="text-xs font-semibold text-gray-500 dark:text-gray-500 uppercase tracking-widest">{section.label}</span>
               <div className="flex-1 h-px bg-gray-300 dark:bg-white/5" />
