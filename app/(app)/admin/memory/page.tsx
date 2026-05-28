@@ -430,16 +430,38 @@ Databases (/databases): Customers, Receipts, Totes, Lots, Bids editors + Browse 
 
 ---
 
-## Recent work (as of 2026-05-19)
+## Auto Clerk (/tools/auto-clerk) — READ THE REFERENCE CARD FIRST
 
-- Idle log cleanup — delete with 10-hour exclusion rule (logs under 10h old protected)
-- AI preset Edited badge — fixed bug where badge wasn't showing on preset changes
-- Military Figures preset — fully rewritten examples-first; Set 2055 Confederate Cavalry expanded; WRONG OUTPUT example added
-- Matchbox preset — new preset from scratch; full 1-75 reference table (417 model variants, 75 slots, 1953–1982); 6 correct-output examples; 10 strict rules
+A shadow-clerking aid for running an auction on TWO platforms at once: Vectis (Bidpath) and Saleroom (GAP). The clerk works one platform; these pages show what to press on the other.
 
-## Next task: Dark mode
+**The reference card at the bottom of /tools/auto-clerk is the SOURCE OF TRUTH** for which buttons exist and when to press them. Read it before changing any auto-clerk code — the button mappings are fiddly and easy to get wrong (I got them wrong repeatedly before they were documented).
 
-Agreed to implement app-wide dark mode with dark as the default. Current state: hub is already dark (hardcoded), admin/tool pages are light. Tailwind v4 — dark mode config goes in the CSS file. Plan: configure dark variant in CSS → add theme toggle to top bar (localStorage + dark class on html) → update all pages/components with dark: variants. Hub page flips the other way (already dark, needs light mode variants).`,
+Pages:
+- /tools/auto-clerk-live — Bidpath → Saleroom shadow (reads Bidpath WebSocket directly)
+- /tools/auto-clerk-saleroom — Saleroom → Bidpath shadow (reads GAP via relay)
+- /tools/auto-clerk-combined — both side by side in iframes
+
+Data sources:
+- Bidpath: direct WebSocket wss://www.vectis.co.uk/wss/{auctionId}. Message data is in parsed.content (NOT parsed.data — this was a real bug). liveBidEvent has content.amount/asking/platform (BSCB=room, Online, Saleroom)/lot_id.
+- Saleroom (GAP): no public feed. A console script (copy button on the page) uses a MutationObserver on hammer-price / asking-price / lot-number / auction-message-content, POSTs to /api/gap-relay (in-memory store, CORS open, must stay in publicPaths in auth.config.ts), and the shadow page polls every 1s.
+
+Core sync rules (full detail on the reference card):
+- Online bids are automatic on BOTH platforms — no clerk action.
+- Lot start: catch the lower platform up — BID on Saleroom / SALEROOM button on Vectis.
+- Same-amount tie: ROOM on Saleroom = favour Vectis (default at lot start); ! on Vectis = favour Saleroom. The ! is the ONLY ! button and only drops the Vectis bidder.
+- Fair Warning after 15s inactivity (both, manual). Sell 20s after FW (both, manual): Vectis HAMMER then NEXT LOT; Saleroom SELL then NEXT.
+- Undo is a manual button only (no auto-detection). Saleroom buttons have NO exclamation marks.
+
+## Recent work (as of 2026-05-28)
+
+- Auto Clerk shadow system built end-to-end (pages above, GAP relay, reference card) — pushed to production
+- Auction AI: sidebar model dropdown now stays in sync with the KP Check / Double Check tester-list selection (they could silently drift before; the run uses the tester selection)
+- Cataloguing Statistics tab: added "Lots Missing Photos" headline stat (red with %, green tick when none)
+
+## Working-style reminders that came up this session
+
+- When unsure how a real-world workflow maps to buttons/actions, ASK one question at a time and write the answers down — don't invent logic (I invented a 1.5s double-bid detector and a same-amount auto-detector that were never asked for).
+- Don't add behaviour that wasn't requested. Build exactly what's asked.`,
   },
   {
     filename: "feedback_vectis.md",
