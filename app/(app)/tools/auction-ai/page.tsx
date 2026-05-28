@@ -2955,7 +2955,8 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
           const images = await Promise.all(
             urls.map(async (url) => {
               try {
-                const r = await fetch(url)
+                const r = await fetch(`/api/catalogue/photo-proxy?key=${encodeURIComponent(url)}`)
+                if (!r.ok) return null
                 const buf = await r.arrayBuffer()
                 const data = btoa(String.fromCharCode(...new Uint8Array(buf)))
                 const mimeType = r.headers.get("content-type") || "image/jpeg"
