@@ -56,9 +56,10 @@ export default async function TabletAuctionDetailPage({
         subCategory: l.subCategory,
         brand: l.brand,
         notes: l.notes,
-        status:    l.status,
-        imageUrls: l.imageUrls,
-        createdAt: l.createdAt.toISOString(),
+        status:        l.status,
+        imageUrls:     l.imageUrls,
+        createdAt:     l.createdAt.toISOString(),
+        createdByName: l.createdByName ?? null,
       }))}
     />
   )

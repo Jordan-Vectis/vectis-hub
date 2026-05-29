@@ -916,7 +916,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
   const [photoMsg, setPhotoMsg]     = useState<string | null>(null)
 
   // Column sort
-  type SortCol = "barcode" | "receiptUniqueId" | "title" | "vendor" | "receipt" | "tote" | "category" | "photos" | "status"
+  type SortCol = "barcode" | "receiptUniqueId" | "title" | "vendor" | "receipt" | "tote" | "category" | "photos" | "status" | "addedBy"
   const [sortCol, setSortCol] = useState<SortCol>("barcode")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
 
@@ -1020,6 +1020,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
           if (sortCol === "tote")           return l.tote
           if (sortCol === "category")       return l.category
           if (sortCol === "status")         return l.status
+          if (sortCol === "addedBy")        return l.createdByName
           return l.barcode
         }
         const va = getVal(a) ?? ""
@@ -1657,10 +1658,10 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                 <input type="checkbox" checked={filtered.length > 0 && selected.size === filtered.length}
                   onChange={toggleSelectAll} className="w-4 h-4 rounded border-gray-600 accent-[#2AB4A6]" />
               </th>
-              {(["barcode","receiptUniqueId","title","vendor","receipt","tote","category","photos","status"] as SortCol[]).map((col, i) => (
+              {(["barcode","receiptUniqueId","title","vendor","receipt","tote","category","photos","status","addedBy"] as SortCol[]).map((col, i) => (
                 <th key={col} onClick={() => toggleSort(col)}
                   className="text-left px-4 py-3 text-xs font-medium text-gray-600 dark:text-gray-500 uppercase tracking-wide cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
-                  {["Barcode","Unique ID","Title","Vendor","Receipt","Tote","Category","Photos","Status"][i]}
+                  {["Barcode","Unique ID","Title","Vendor","Receipt","Tote","Category","Photos","Status","Added By"][i]}
                   {sortCol === col ? (sortDir === "asc" ? " ▲" : " ▼") : <span className="text-gray-700"> ⇅</span>}
                 </th>
               ))}
@@ -1691,6 +1692,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                   {uniqueStatuses.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </td>
+              <td className="px-2 py-1.5" />
               <td className="px-2 py-1.5">
                 <select value={fAiUpgraded} onChange={e => setFAiUpgraded(e.target.value)} className={COL_SELECT}>
                   <option value="">All</option>
@@ -1745,6 +1747,9 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                   <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[lot.status] ?? "bg-gray-700 text-gray-300"}`}>
                     {lot.status}
                   </span>
+                </td>
+                <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-500 whitespace-nowrap">
+                  {lot.createdByName ?? "—"}
                 </td>
                 <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
                   <button

@@ -40,6 +40,7 @@ interface Lot {
   status: string
   imageUrls: string[]
   createdAt: string   // ISO string
+  createdByName: string | null
 }
 
 type SortKey = "lot-asc" | "newest" | "oldest"
@@ -301,7 +302,18 @@ function TabletManageLots({ lots, auctionId, onEdit, onDelete }: {
               {lot.imageUrls.length > 0 && (
                 <span className="text-[#2AB4A6]">📷 {lot.imageUrls.length}</span>
               )}
+              {lot.createdByName && (
+                <span className="text-gray-500">👤 {lot.createdByName}</span>
+              )}
             </div>
+
+            {/* Key points */}
+            {lot.keyPoints?.trim() && (
+              <div className="mt-2.5 pt-2.5 border-t border-gray-800">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1">Key Points</p>
+                <p className="text-sm text-gray-400 leading-relaxed whitespace-pre-line">{lot.keyPoints.trim()}</p>
+              </div>
+            )}
           </button>
 
           {/* Delete button */}
