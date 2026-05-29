@@ -3,7 +3,7 @@
 import { useState } from "react"
 
 // ─── Static memory content ────────────────────────────────────────────────────
-// Updated by Claude alongside memory file changes. Last synced: 2026-05-19
+// Updated by Claude alongside memory file changes. Last synced: 2026-05-29
 
 type Entry = { filename: string; content: string }
 
@@ -161,7 +161,7 @@ type: user
 name: Vectis Hub Project
 description: Full spec, tech stack, deployment details, and current feature state for the Vectis Hub app
 type: project
-last_updated: 2026-05-19
+last_updated: 2026-05-29
 ---
 
 # Vectis Hub
@@ -204,38 +204,89 @@ last_updated: 2026-05-19
 - Never push to \`main\` unless Jordan explicitly says "push to main"
 - Always pull from remote staging before pushing (another developer works on the same branch)
 
-## Current feature surface
+## Current feature surface (2026-05-29)
+
+### Website (/website)
+Live vectis.co.uk iframe preview + Back End Controller tab (embeds /auction-controller). Banner Manager at /website/banner — manage hero carousel slides (headline, subtext, CTA, image, active toggle, reorder). DB model: HeroSlide.
+
+### Auction Controller (/auction-controller)
+Password-gated Socket.IO clerk interface. Control panel: current lot, asking/increment, auto-bids, Fair Warning, Hammer + 3s countdown, pause messages, WebRTC camera broadcast. Results page at /auction-controller/results.
+
+### Submissions (/submissions)
+Customer submission pipeline. Statuses: PENDING_ASSIGNMENT → PENDING_VALUATION → VALUATION_COMPLETE → PENDING_CUSTOMER_DECISION → APPROVED/DECLINED/FOLLOW_UP → COLLECTION_PENDING → ARRIVED → COMPLETED. Channels: Email, Web Form, Phone, Walk-in.
+
+### Follow-ups (/follow-ups)
+Submissions with DECLINED or FOLLOW_UP status, ordered by lastFollowUpAt.
+
+### Contacts (/contacts)
+Customer database. Paginated list + search. Detail overlay: Details / Seller / Buyer / Documents tabs.
 
 ### Cataloguing (/tools/cataloguing)
-- Per-auction tabs: Manage Lots, Add Lot, Photo Only Cataloguing, Import Lots, Upload Photos, AI Upgrade, Statistics, Lot History, Auction Settings
+- Per-auction tabs: Manage Lots, Add Lot, Photo Only Cataloguing, Import Lots, Upload Photos, AI Upgrade, Statistics (incl. Lots Missing Photos), Lot History, Auction Settings
 - Lots have addedToBC boolean, aliases for Unique ID matcher
-- Mass actions: delete, generate titles, mark added to BC
+- bcLocked = auction.addedToBC && userRole !== "ADMIN" — gates mutations
+- Export/Import xlsx on auctions list page
+- Lotting Up (/tools/cataloguing/lotting-up): AI photo → proposed lot groups with bounding boxes
+- Research (/tools/cataloguing/research): Quick-launch Google/eBay/WorthPoint/Catawiki/Vectis/Wikipedia + invisible research timer
+- Tablet Mode (/tools/cataloguing/tablet): Touch-optimised iPad interface
 
-### Auction AI (/tools/auction-ai)
-- Batch AI run with Gemini — up to 24 images per lot, 12s inter-lot delay, infinite retry loop
-- Presets in lib/auction-ai-presets.ts: Vinyl & Memorabilia, TV & Film, Modern Diecast, Comics & Toys, Model Railway (strict + free), Teddy Bears, General Toys, Military Figures, Matchbox
-- Chat mode (up to 6 images), Model Tester, Description Copier, Duplicate Checker
+### Auction AI (/tools/auction-ai) — 11 tabs
+Chat Window, Batch Run, Saved Runs, KP Check Runs, Barcode Sorter (placeholder), Description Copier, Key Points Check, Double Check, Auto Pipeline, Instructions, Macro Downloader.
+
+Key Points Check: validates descriptions against key points, returns verdict/contradictions/unsupported claims/revised description. Stored in KPCheckRun/KPCheckLot tables.
+Double Check: second-pass AI validation. Uses React 18 batching fix pattern.
+Auto Pipeline: chains Batch → KP Check → Double Check. Content blocks = skipped, errors retry infinitely. Stored in PipelineRun/PipelineLot tables.
+React 18 batching fix: never setState(prev => prev.map(...)) in a 100+ item loop. Use local working[] array + setState([...working]) full replace after each item.
+Export/Import: xlsx with Auction + Lots sheets. Routes: /api/catalogue/export, /api/catalogue/import.
+
+Presets: Vinyl, TV/Film, Modern Diecast, Comics, Model Railway (strict+free), Teddy Bears, General Toys, Military Figures, Matchbox.
 
 ### BC Marketing (/tools/bc-marketing) — 5 tabs
-Content Generator, Paste & Generate, Insights, Saved Drafts, Hashtag Bank
+Content Generator (16 types), Paste & Generate, Insights, Saved Drafts (DRAFT/APPROVED/PUBLISHED), Hashtag Bank. BC codes (F025, DM0126 etc.) NEVER in AI output.
 
 ### BC Warehouse (/tools/bc-warehouse) — 8 tabs
-Location Heatmap, Sale Checklist, Search by Location, Location History (DO NOT redesign), Tote Data, Collections Due, Unsold Items, Data Sync, DB Explorer
+Location Heatmap, Sale Checklist, Search by Location, Location History (DO NOT redesign), Tote Data, Collections Due, Unsold Items, Data Sync, DB Explorer.
 
 ### BC Reports (/tools/bc-reports)
-Cataloguing report (barcode/uniqueid/compare modes), Packing report
+Cataloguing report (barcode/uniqueid/compare modes), Packing report.
 
 ### Packing (/tools/packing)
-Royal Mail dispatch, Packers sub-page with Full Time/Agency/Ex-Staff groups, aliases, barcode sheet PDF
+Royal Mail dispatch. Packers sub-page: Full Time/Agency/Ex-Staff groups, aliases, barcode sheet PDF.
 
 ### Auction Monitor (/tools/auction-monitor)
-Live WebSocket monitor, ntfy.sh push notifications, 10 alert rules
+Live WebSocket monitor (wss://www.vectis.co.uk/wss/{auctionId}). ntfy.sh push notifications (10 alert rules, JSON body POST). Persistent lot-outcomes store (~2000 lots).
+
+### IT Help (/tools/it-help)
+Internal IT knowledge base + AI assistant. Articles (GENERAL/HARDWARE/SOFTWARE/NETWORK/APP/HOW_TO). Chat searches articles + tickets, cites sources.
+
+### IT Tools (/tools/it-tools)
+IT utilities + ModelPingTester component for Gemini model availability testing.
+
+### Tickets (/tools/tickets)
+Internal IT helpdesk. Statuses: OPEN/IN_PROGRESS/AWAITING_RESPONSE/RESOLVED/CLOSED. Priorities: LOW/MEDIUM/HIGH/URGENT. Configurable categories. Comments + resolution notes.
+
+### Reports (/tools/reports)
+Cataloguing performance with time ranges (7d/30d/90d/6m/1y/all). Per-user stats + charts + research time.
+
+### Saleroom Trainer (/tools/saleroom-trainer)
+Iframe embedding /saleroom-trainer.html static training guide.
+
+### Internal Warehouse (/tools/warehouse)
+Vectis's own physical warehouse (separate from BC Warehouse). Dashboard + sub-pages: /customers, /receipts, /inbound, /locate, /history, /warehouse, /reports. DB models: Contact, WarehouseReceipt, WarehouseContainer, WarehouseMovement, WarehouseLocation.
 
 ### Admin (/admin)
-About, Users & Permissions, Roles & Defaults, Home Page (drag-to-reorder), Departments, Cataloguing Reports, Devices, Claude Memory, Run Migrations
+About, Users & Permissions, Roles & Defaults, Home Page (drag-to-reorder), Departments, Cataloguing Reports, Devices, Claude Memory, Run Migrations. Also: Backup (DB backup viewer in R2, cross-table search), Documents (nested folders, drag-and-drop R2 upload), Idle Timer (yellowMins/redMins/reasons, IdleTimerConfig singleton).
 
 ### Databases (/databases)
-Customers, Receipts, Totes, Lots, Bids editors + Browse Any Table (30 models)`,
+Customers, Receipts, Totes, Lots, Bids editors + Browse Any Table (~30 models, row counts + 3 sample rows).
+
+## Common gotchas
+- pdfkit fails on Railway — use pdf-lib + sharp + bwip-js
+- CORS preflight blocks custom headers on ntfy.sh — use JSON body
+- BC OData: Auction_Lines_Excel uses EVA_AuctionNo; Receipt_Lines_Excel uses EVA_SalesAllocation
+- Complex OR filters time out at BC — run per-key in parallel with Promise.allSettled
+- React 18 batching: never setState(prev => prev.map(...)) in 100+ item loops
+- S3/R2 image keys: always route through /api/catalogue/photo-proxy?key=... never fetch raw keys`,
   },
   {
     filename: "opening_message.md",
@@ -407,25 +458,47 @@ DO NOT change the design or behaviour of the Location History tab in /tools/bc-w
 
 ---
 
-## Current feature surface (as of 2026-05-19)
+## Current feature surface (as of 2026-05-29)
 
-Cataloguing (/tools/cataloguing): Auction list → per-auction tabs: Manage Lots (filters, inline edit, mass actions inc. mark-added-to-BC), Add Lot, Photo Only Cataloguing, Import Lots, Upload Photos, AI Upgrade, Statistics, Lot History, Auction Settings. Lots have addedToBC boolean and aliases for Unique ID matcher.
+Website (/website): Live vectis.co.uk iframe preview, Back End Controller tab, Banner Manager (/website/banner) for hero carousel slides.
 
-Auction AI (/tools/auction-ai): Batch run with Gemini (24 images/lot, 12s delay, infinite retry). Presets in lib/auction-ai-presets.ts (Vinyl, TV/Film, Modern Diecast, Comics, Model Railway strict+free, Teddy Bears, General Toys, Military Figures, Matchbox). Chat mode (6 images), Model Tester, Description Copier, Duplicate Checker.
+Auction Controller (/auction-controller): Password-gated Socket.IO clerk interface. Current lot display, asking/increment, auto-bids, Fair Warning, Hammer + 3s countdown, WebRTC camera broadcast. Results page at /auction-controller/results.
 
-BC Marketing (/tools/bc-marketing): 5 tabs — Content Generator (16 content types, DB-sourced), Paste & Generate, Insights, Saved Drafts (DRAFT/APPROVED/PUBLISHED), Hashtag Bank. BC internal codes (F025, DM0126 etc.) must NEVER appear in AI output.
+Submissions (/submissions): Customer submission pipeline with statuses PENDING_ASSIGNMENT through COMPLETED. Channels: Email, Web Form, Phone, Walk-in.
 
-BC Warehouse (/tools/bc-warehouse): 8 tabs — Location Heatmap, Sale Checklist, Search by Location, Location History (DO NOT redesign), Tote Data, Collections Due (per-aisle PDFs), Unsold Items, Data Sync, DB Explorer.
+Follow-ups (/follow-ups): Submissions with DECLINED or FOLLOW_UP status.
 
-BC Reports (/tools/bc-reports): Cataloguing report (barcode/uniqueid/compare modes), Packing report (fuzzy matcher + aliases).
+Contacts (/contacts): Customer database with paginated list, create modal, detail overlay (Details/Seller/Buyer/Documents tabs).
 
-Packing (/tools/packing + /tools/packing/packers): Royal Mail dispatch. Packers: Full Time / Agency / Ex-Staff groups, aliases, barcode sheet PDF (10 rows/page, Code 128, Vectis logo).
+Cataloguing (/tools/cataloguing): Auction list with Export/Import xlsx. Per-auction tabs: Manage Lots, Add Lot, Photo Only, Import Lots, Upload Photos, AI Upgrade, Statistics (Lots Missing Photos), Lot History, Auction Settings. bcLocked = auction.addedToBC && userRole !== "ADMIN". Lotting Up (AI photo → lot groups with bounding boxes). Research (quick-launch + invisible timer). Tablet Mode (iPad UI).
 
-Auction Monitor (/tools/auction-monitor): Live WebSocket monitor (wss://www.vectis.co.uk/wss/{auctionId}). Tracks bids, session totals, sale-state flags. ntfy.sh push notifications (10 alert rules, JSON body POST). Persistent lot-outcomes store (~2000 lots).
+Auction AI (/tools/auction-ai) — 11 tabs: Chat Window, Batch Run, Saved Runs, KP Check Runs, Barcode Sorter, Description Copier, Key Points Check, Double Check, Auto Pipeline, Instructions, Macro Downloader. KP Check: validates descriptions, returns verdict/contradictions/revised description, stored in KPCheckRun/KPCheckLot. Double Check: second-pass validation, uses React 18 batching fix. Auto Pipeline: chains Batch→KP→Double Check, stored in PipelineRun/PipelineLot. React 18 fix: use local working[] + setState([...working]) full replace — never setState(prev=>prev.map(...)) in 100+ item loop.
 
-Admin (/admin): About, Users & Permissions, Roles & Defaults, Home Page (drag-to-reorder), Departments, Cataloguing Reports, Devices (serial/user tracking), Claude Memory, Run Migrations.
+BC Marketing (/tools/bc-marketing): 5 tabs — Content Generator (16 types), Paste & Generate, Insights, Saved Drafts, Hashtag Bank. BC codes never in AI output.
 
-Databases (/databases): Customers, Receipts, Totes, Lots, Bids editors + Browse Any Table (read-only, ~30 models, row counts + 3 sample rows).
+BC Warehouse (/tools/bc-warehouse): Location Heatmap, Sale Checklist, Search by Location, Location History (DO NOT redesign), Tote Data, Collections Due, Unsold Items, Data Sync, DB Explorer.
+
+BC Reports (/tools/bc-reports): Cataloguing report (barcode/uniqueid/compare), Packing report.
+
+Packing (/tools/packing): Royal Mail dispatch. Packers: Full Time/Agency/Ex-Staff, aliases, barcode sheet PDF.
+
+Auction Monitor (/tools/auction-monitor): Live WebSocket (wss://www.vectis.co.uk/wss/{auctionId}). ntfy.sh push notifications (10 alert rules, JSON body POST).
+
+IT Help (/tools/it-help): IT knowledge base + AI chat (searches articles + tickets, cites sources).
+
+IT Tools (/tools/it-tools): IT utilities + ModelPingTester.
+
+Tickets (/tools/tickets): IT helpdesk with statuses, priorities, configurable categories, comments, resolution notes.
+
+Reports (/tools/reports): Cataloguing performance with time ranges, per-user stats + charts.
+
+Saleroom Trainer (/tools/saleroom-trainer): Iframe training guide.
+
+Internal Warehouse (/tools/warehouse): Vectis physical warehouse (separate from BC Warehouse). Sub-pages: /customers, /receipts, /inbound, /locate, /history, /warehouse, /reports.
+
+Admin (/admin): About, Users & Permissions, Roles & Defaults, Home Page, Departments, Cataloguing Reports, Devices, Claude Memory, Run Migrations, Backup (R2 backup viewer + cross-table search), Documents (nested folders, drag-and-drop R2 upload), Idle Timer (yellowMins/redMins/reasons config).
+
+Databases (/databases): Customers, Receipts, Totes, Lots, Bids editors + Browse Any Table (~30 models).
 
 ---
 

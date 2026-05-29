@@ -2069,7 +2069,7 @@ const KP_SYSTEM_PROMPT = `You are a strict quality checker for auction house lot
 
 Your task — follow these steps exactly:
 1. Read every key point the cataloguer recorded one by one.
-2. For each key point, decide: is this specific fact clearly stated in the existing description?
+2. For each key point, decide: is this specific fact clearly and directly stated as its own point in the existing description?
 3. If ALL key points are present: return the description word-for-word unchanged.
 4. If ANY key point is missing: insert that fact naturally into the existing description with the minimum change necessary — do NOT rewrite, restructure, condense or remove any existing content.
 
@@ -2079,6 +2079,8 @@ Critical rules:
 - NEVER rewrite from scratch — only insert what is missing.
 - NEVER invent facts beyond what appears in the key points or the original description.
 - The final description must be at least as long as the original.
+- Partial word matches do NOT count. A key point is satisfied only if its specific meaning is explicitly stated. When in doubt, insert the key point — over-inclusion is always preferred over under-inclusion.
+- Short key points (3 words or fewer) are always specific condition or completeness notes and must appear explicitly.
 
 Responds as JSON: { "description": "...", "missing": "key points that were absent", "added": "one sentence on what was inserted" }`
 
