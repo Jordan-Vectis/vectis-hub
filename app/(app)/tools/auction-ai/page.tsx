@@ -3363,7 +3363,7 @@ type PLot = {
   kpAdded?:   string
 }
 
-function PipelineTab({ model: globalModel }: { model: string }) {
+function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fallbackModel: string }) {
   const [code,        setCode]        = useState("")
   const [auctionId,   setAuctionId]   = useState<string | null>(null)
   const [lots,        setLots]        = useState<PLot[]>([])
@@ -3536,11 +3536,13 @@ function PipelineTab({ model: globalModel }: { model: string }) {
 
       addLog(`  · ${done + 1}/${toRun.length} ${lot.label} — fetching images…`)
 
-      const result = await withRetry(lot.label, async () => {
+      const result = await withRetry(lot.label, async (attempt) => {
         // Fetch images from S3
+        const modelToUse = (attempt % 2 === 0 && fallbackModel) ? fallbackModel : localModel
+        if (attempt > 1) addLog(`  ↳ ${lot.label} trying ${modelToUse}`)
         const fd = new FormData()
         fd.append("systemInstruction", systemInstruction)
-        fd.append("model", localModel)
+        fd.append("model", modelToUse)
         fd.append("grounded", grounded ? "true" : "false")
         const urls = lot.imageUrls.slice(0, 24)
         let imgCount = 0
@@ -3615,7 +3617,9 @@ function PipelineTab({ model: globalModel }: { model: string }) {
 
       addLog(`  · ${done + 1}/${toRun.length} ${lot.label} — double checking…`)
 
-      const result = await withRetry(lot.label, async () => {
+      const result = await withRetry(lot.label, async (attempt) => {
+        const modelToUse = (attempt % 2 === 0 && fallbackModel) ? fallbackModel : localModel
+        if (attempt > 1) addLog(`  ↳ ${lot.label} trying ${modelToUse}`)
         // Fetch images
         const urls = lot.imageUrls.slice(0, 6)
         const images = (await Promise.all(urls.map(async url => {
@@ -3630,7 +3634,7 @@ function PipelineTab({ model: globalModel }: { model: string }) {
 
         const res  = await fetch("/api/auction-ai/double-check", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ label: lot.label, description: lot.currentDesc, images, model: localModel }),
+          body: JSON.stringify({ label: lot.label, description: lot.currentDesc, images, model: modelToUse }),
         })
         const json = await res.json()
         if (json.error) throw new Error(json.error)
@@ -3696,10 +3700,12 @@ function PipelineTab({ model: globalModel }: { model: string }) {
 
       addLog(`  · ${done + 1}/${toRun.length} ${lot.label} — checking key points…`)
 
-      const result = await withRetry(lot.label, async () => {
+      const result = await withRetry(lot.label, async (attempt) => {
+        const modelToUse = (attempt % 2 === 0 && fallbackModel) ? fallbackModel : localModel
+        if (attempt > 1) addLog(`  ↳ ${lot.label} trying ${modelToUse}`)
         const res  = await fetch("/api/auction-ai/key-points-check", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ label: lot.label, keyPoints: lot.keyPoints, description: lot.currentDesc, model: localModel }),
+          body: JSON.stringify({ label: lot.label, keyPoints: lot.keyPoints, description: lot.currentDesc, model: modelToUse }),
         })
         const json = await res.json()
         if (json.error) throw new Error(json.error)
@@ -4180,7 +4186,7 @@ export default function AuctionAIPage() {
         <div className={tab === "copier"       ? "" : "hidden"}><CopierTab /></div>
         <div className={tab === "kpcheck"      ? "" : "hidden"}><KeyPointsCheckTab model={model} onModelChange={m => { setModel(m); localStorage.setItem("ai_model", m) }} /></div>
         <div className={tab === "doublecheck"  ? "" : "hidden"}>{tab === "doublecheck" && <DoubleCheckTab model={model} onModelChange={m => { setModel(m); localStorage.setItem("ai_model", m) }} />}</div>
-        <div className={tab === "pipeline"     ? "" : "hidden"}>{tab === "pipeline" && <PipelineTab model={model} />}</div>
+        <div className={tab === "pipeline"     ? "" : "hidden"}>{tab === "pipeline" && <PipelineTab model={model} fallbackModel={fallbackModel} />}</div>
         <div className={tab === "instructions" ? "" : "hidden"}><InstructionsTab /></div>
         <div className={tab === "macro"        ? "" : "hidden"}><MacroTab /></div>
       </main>
