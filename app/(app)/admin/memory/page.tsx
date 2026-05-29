@@ -223,21 +223,23 @@ Customer database. Paginated list + search. Detail overlay: Details / Seller / B
 
 ### Cataloguing (/tools/cataloguing)
 - Per-auction tabs: Manage Lots, Add Lot, Photo Only Cataloguing, Import Lots, Upload Photos, AI Upgrade, Statistics (incl. Lots Missing Photos), Lot History, Auction Settings
+- Manage Lots table: columns include Added By (createdByName, sortable) — shows who created each lot
 - Lots have addedToBC boolean, aliases for Unique ID matcher
 - bcLocked = auction.addedToBC && userRole !== "ADMIN" — gates mutations
 - Export/Import xlsx on auctions list page
 - Lotting Up (/tools/cataloguing/lotting-up): AI photo → proposed lot groups with bounding boxes
 - Research (/tools/cataloguing/research): Quick-launch Google/eBay/WorthPoint/Catawiki/Vectis/Wikipedia + invisible research timer
-- Tablet Mode (/tools/cataloguing/tablet): Touch-optimised iPad interface
+- Tablet Mode (/tools/cataloguing/tablet): Touch-optimised iPad interface. Lot cards show key points at bottom and creator name (👤) in metadata row.
 
 ### Auction AI (/tools/auction-ai) — 12 tabs
-Chat Window, Batch Run, Saved Runs, KP Check Runs, Barcode Sorter (placeholder), Description Copier, Key Points Check, Double Check, Auto Pipeline, AI Upgrade, Instructions, Macro Downloader.
+Sidebar organised into groups: Chat / Run / History / Tools / Reference.
+Chat Window, Batch Run, Key Points Check, Double Check, Auto Pipeline, AI Upgrade (Run group); Saved Runs, KP Check Runs (History group); Description Copier, Barcode Sorter (Tools group); Instructions, Macro Downloader (Reference group).
 
 Key Points Check: validates descriptions against key points, returns verdict/contradictions/unsupported claims/revised description. Stored in KPCheckRun/KPCheckLot tables. Partial match rule: a key point is only satisfied if its exact meaning is explicitly present — partial word matches do not count.
 Double Check: second-pass AI validation. Uses React 18 batching fix pattern.
 Auto Pipeline: chains Batch → KP Check → Double Check. Content blocks = skipped, errors retry infinitely. Has Google Search toggle (off by default). Stored in PipelineRun/PipelineLot tables.
-AI Upgrade: mass description rewrite tab. Auction code → pick transformation options (shorten/expand/humanise/grammar etc.) → run → before/after review step → accept individually or all.
-Model alternation: all tabs (Batch, KP Check, Double Check, Pipeline, AI Upgrade) use attempt % 2 to switch between primary and fallback model on retries.
+AI Upgrade: mass description rewrite tab. Auction code → pick transformation options (shorten/expand/humanise/grammar etc.) → run → before/after review step → accept individually or all. API route: /api/auction-ai/upgrade.
+Model alternation: all tabs (Batch, KP Check, Double Check, Pipeline, AI Upgrade) use attempt % 2 to switch between primary and fallback model on retries. fallbackModel prop passed from top-level sidebar to all run tabs.
 applyAiDescriptionOne: aiEstimateLow/aiEstimateHigh are optional — omitting preserves existing DB values. DC and KP stages must NOT pass these fields or they wipe Batch-set estimates.
 React 18 batching fix: never setState(prev => prev.map(...)) in a 100+ item loop. Use local working[] array + setState([...working]) full replace after each item.
 Export/Import: xlsx with Auction + Lots sheets. Routes: /api/catalogue/export, /api/catalogue/import.
@@ -252,9 +254,12 @@ Location Heatmap, Sale Checklist, Search by Location, Location History (DO NOT r
 
 ### BC Reports (/tools/bc-reports)
 Cataloguing report (barcode/uniqueid/compare modes), Packing report.
+DateRange component: active preset tracked explicitly via state (not date-string comparison) — prevents two presets with coinciding dates both highlighting. Manual date-input edits clear the active preset.
+Bar charts: isAnimationActive={false} on Bar to prevent LabelList flash during animation.
 
 ### Packing (/tools/packing)
-Royal Mail dispatch. Packers sub-page: Full Time/Agency/Ex-Staff groups, aliases, barcode sheet PDF.
+Royal Mail dispatch. Packers sub-page (/tools/packing/packers): Full Time/Agency/Ex-Staff groups, aliases, barcode sheet PDF.
+Export/Import JSON on Packers page — Export downloads all packers+aliases as JSON; Import upserts by name (merges aliases for existing, creates new). API route: /api/packers/import.
 
 ### Auction Monitor (/tools/auction-monitor)
 Live WebSocket monitor (wss://www.vectis.co.uk/wss/{auctionId}). ntfy.sh push notifications (10 alert rules, JSON body POST). Persistent lot-outcomes store (~2000 lots).
