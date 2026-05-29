@@ -88,7 +88,7 @@ Strip non-ASCII before testing barcodes: `.replace(/[^\x20-\x7E]/g, "")`
 ## Lot Titles
 
 - Maximum **83 characters**. Truncate with `…` if exceeded.
-- Extracted from the first sentence of the description (split on `.` or newline).
+- First 83 characters of the description, truncated with `…` if longer. No sentence splitting — full stops do not break the title.
 - Fallback: `"Untitled"` if description is empty.
 
 ---

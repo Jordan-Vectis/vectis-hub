@@ -13,8 +13,9 @@ function parseEstimate(est: string): { low: number | null; high: number | null }
 
 const TITLE_LIMIT = 83
 function titleFromDescription(desc: string): string {
-  const first = desc.split(/[.\n]/)[0].trim()
-  return first.length > TITLE_LIMIT ? first.slice(0, TITLE_LIMIT - 1) + "…" : first || "Untitled"
+  const text = desc.trim()
+  if (!text) return "Untitled"
+  return text.length > TITLE_LIMIT ? text.slice(0, TITLE_LIMIT - 1).trimEnd() + "…" : text
 }
 
 // POST /api/auction-ai/runs/[id]/apply

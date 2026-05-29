@@ -65,9 +65,9 @@ export async function generateTitlesFromDescriptions(auctionId: string, lotIds: 
   await requireNotBCLocked(auctionId, session)
   const lots = await prisma.catalogueLot.findMany({ where: { id: { in: lotIds } }, select: { id: true, description: true } })
   await Promise.all(lots.map(l => {
-    const firstLine = (l.description ?? "").split(/\.\s|\n/)[0].trim()
-    const title = firstLine.slice(0, 83).trimEnd()
-    if (!title) return Promise.resolve()
+    const text = (l.description ?? "").trim()
+    if (!text) return Promise.resolve()
+    const title = text.length > 83 ? text.slice(0, 82).trimEnd() + "…" : text
     return prisma.catalogueLot.update({ where: { id: l.id }, data: { title } })
   }))
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
