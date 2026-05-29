@@ -122,15 +122,20 @@ function DateRange({ from, to, onChange, onPreset }: {
     { label: "Last 12 months", from: last12Months(),      to: today() },
     { label: "This year",      from: startOfYear(),       to: today() },
   ]
+  // Track which preset was explicitly selected — never derive from date comparison
+  // (two presets can produce the same dates, e.g. on the 1st of the month)
+  const [activePreset, setActivePreset] = useState<string | null>(
+    () => presets.find(p => p.from === from && p.to === to)?.label ?? null
+  )
   return (
     <div className="space-y-3 mb-4">
       <div className="flex gap-2">
         {presets.map((p) => (
           <button
             key={p.label}
-            onClick={() => onPreset(p.from, p.to)}
+            onClick={() => { setActivePreset(p.label); onPreset(p.from, p.to) }}
             className={`flex-1 px-2 py-1.5 text-xs font-medium rounded border transition-colors ${
-              from === p.from && to === p.to
+              activePreset === p.label
                 ? "bg-[#0078D4] text-gray-900 dark:text-white border-[#0078D4]"
                 : "bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:border-gray-500 hover:text-gray-200"
             }`}
@@ -144,7 +149,7 @@ function DateRange({ from, to, onChange, onPreset }: {
           <label className="block text-xs text-gray-600 dark:text-gray-500 mb-1 uppercase tracking-wider">From</label>
           <input
             type="date" value={from}
-            onChange={(e) => onChange(e.target.value, to)}
+            onChange={(e) => { setActivePreset(null); onChange(e.target.value, to) }}
             className="w-full bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-blue-500"
           />
         </div>
@@ -152,7 +157,7 @@ function DateRange({ from, to, onChange, onPreset }: {
           <label className="block text-xs text-gray-600 dark:text-gray-500 mb-1 uppercase tracking-wider">To</label>
           <input
             type="date" value={to}
-            onChange={(e) => onChange(from, e.target.value)}
+            onChange={(e) => { setActivePreset(null); onChange(from, e.target.value) }}
             className="w-full bg-gray-100 dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-blue-500"
           />
         </div>
