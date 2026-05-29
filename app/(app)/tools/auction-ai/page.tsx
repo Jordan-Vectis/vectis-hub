@@ -4471,20 +4471,50 @@ function UpgradeTab({ model: globalModel, fallbackModel }: { model: string; fall
 
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
 
-const TABS: { id: Tab; label: string; icon: string; accent?: string }[] = [
-  { id: "chat",         label: "Chat Window",        icon: "💬" },
-  { id: "batch",        label: "Batch Run",          icon: "⚡" },
-  { id: "runs",         label: "Saved Runs",         icon: "🗂" },
-  { id: "kpruns",       label: "KP Check Runs",      icon: "✅" },
-  { id: "barcode",      label: "Barcode Sorter",     icon: "▦"  },
-  { id: "copier",       label: "Description Copier", icon: "📋" },
-  { id: "kpcheck",      label: "Key Points Check",   icon: "✓"  },
-  { id: "doublecheck",  label: "Double Check",       icon: "🔎", accent: "#6366f1" },
-  { id: "pipeline",     label: "Auto Pipeline",      icon: "🔄", accent: "#C8A96E" },
-  { id: "upgrade",      label: "AI Upgrade",         icon: "✨", accent: "#6366f1" },
-  { id: "instructions", label: "Instructions",       icon: "📝" },
-  { id: "macro",        label: "Macro Downloader",   icon: "⌨️" },
+type TabDef = { id: Tab; label: string; icon: string; accent?: string }
+
+const TAB_GROUPS: { label: string; tabs: TabDef[] }[] = [
+  {
+    label: "Chat",
+    tabs: [
+      { id: "chat",         label: "Chat Window",        icon: "💬" },
+    ],
+  },
+  {
+    label: "Run",
+    tabs: [
+      { id: "batch",        label: "Batch Run",          icon: "⚡" },
+      { id: "kpcheck",      label: "Key Points Check",   icon: "✓"  },
+      { id: "doublecheck",  label: "Double Check",       icon: "🔎" },
+      { id: "pipeline",     label: "Auto Pipeline",      icon: "🔄", accent: "#C8A96E" },
+      { id: "upgrade",      label: "AI Upgrade",         icon: "✨", accent: "#6366f1" },
+    ],
+  },
+  {
+    label: "History",
+    tabs: [
+      { id: "runs",         label: "Saved Runs",         icon: "🗂" },
+      { id: "kpruns",       label: "KP Check Runs",      icon: "📋" },
+    ],
+  },
+  {
+    label: "Tools",
+    tabs: [
+      { id: "copier",       label: "Description Copier", icon: "📄" },
+      { id: "barcode",      label: "Barcode Sorter",     icon: "▦"  },
+    ],
+  },
+  {
+    label: "Reference",
+    tabs: [
+      { id: "instructions", label: "Instructions",       icon: "📝" },
+      { id: "macro",        label: "Macro Downloader",   icon: "⌨️" },
+    ],
+  },
 ]
+
+// Flat list for compatibility with allowedSections filtering
+const TABS: TabDef[] = TAB_GROUPS.flatMap(g => g.tabs)
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
@@ -4535,20 +4565,34 @@ export default function AuctionAIPage() {
           <p className="text-gray-900 dark:text-white font-bold text-base tracking-wide">AUCTION AI</p>
           <p className="text-[#C8A96E] text-xs mt-0.5 tracking-widest uppercase">Vectis</p>
         </div>
-        <div className="flex-1 px-3 py-4 space-y-0.5">
-          {TABS.filter(t => !allowedSections || allowedSections.includes(t.id)).map((t) => {
-            const accent = t.accent ?? "#C8A96E"
-            const active = tab === t.id
+        <div className="flex-1 px-3 py-3 overflow-y-auto space-y-3">
+          {TAB_GROUPS.map(group => {
+            const visibleTabs = group.tabs.filter(t => !allowedSections || allowedSections.includes(t.id))
+            if (visibleTabs.length === 0) return null
             return (
-              <button key={t.id} onClick={() => setTab(t.id)}
-                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded text-sm font-medium transition-colors text-left"
-                style={{
-                  background: active ? accent + "1a" : "",
-                  color: active ? accent : "#9ca3af",
-                  border: active ? `1px solid ${accent}4d` : "1px solid transparent",
-                }}>
-                <span>{t.icon}</span><span>{t.label}</span>
-              </button>
+              <div key={group.label}>
+                <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-600">
+                  {group.label}
+                </p>
+                <div className="space-y-0.5">
+                  {visibleTabs.map(t => {
+                    const accent = t.accent ?? "#C8A96E"
+                    const active = tab === t.id
+                    return (
+                      <button key={t.id} onClick={() => setTab(t.id)}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded text-sm font-medium transition-colors text-left"
+                        style={{
+                          background: active ? accent + "1a" : "",
+                          color: active ? accent : "#9ca3af",
+                          border: active ? `1px solid ${accent}4d` : "1px solid transparent",
+                        }}>
+                        <span className="text-base leading-none">{t.icon}</span>
+                        <span className="truncate">{t.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
             )
           })}
         </div>
