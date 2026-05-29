@@ -230,12 +230,15 @@ Customer database. Paginated list + search. Detail overlay: Details / Seller / B
 - Research (/tools/cataloguing/research): Quick-launch Google/eBay/WorthPoint/Catawiki/Vectis/Wikipedia + invisible research timer
 - Tablet Mode (/tools/cataloguing/tablet): Touch-optimised iPad interface
 
-### Auction AI (/tools/auction-ai) — 11 tabs
-Chat Window, Batch Run, Saved Runs, KP Check Runs, Barcode Sorter (placeholder), Description Copier, Key Points Check, Double Check, Auto Pipeline, Instructions, Macro Downloader.
+### Auction AI (/tools/auction-ai) — 12 tabs
+Chat Window, Batch Run, Saved Runs, KP Check Runs, Barcode Sorter (placeholder), Description Copier, Key Points Check, Double Check, Auto Pipeline, AI Upgrade, Instructions, Macro Downloader.
 
-Key Points Check: validates descriptions against key points, returns verdict/contradictions/unsupported claims/revised description. Stored in KPCheckRun/KPCheckLot tables.
+Key Points Check: validates descriptions against key points, returns verdict/contradictions/unsupported claims/revised description. Stored in KPCheckRun/KPCheckLot tables. Partial match rule: a key point is only satisfied if its exact meaning is explicitly present — partial word matches do not count.
 Double Check: second-pass AI validation. Uses React 18 batching fix pattern.
-Auto Pipeline: chains Batch → KP Check → Double Check. Content blocks = skipped, errors retry infinitely. Stored in PipelineRun/PipelineLot tables.
+Auto Pipeline: chains Batch → KP Check → Double Check. Content blocks = skipped, errors retry infinitely. Has Google Search toggle (off by default). Stored in PipelineRun/PipelineLot tables.
+AI Upgrade: mass description rewrite tab. Auction code → pick transformation options (shorten/expand/humanise/grammar etc.) → run → before/after review step → accept individually or all.
+Model alternation: all tabs (Batch, KP Check, Double Check, Pipeline, AI Upgrade) use attempt % 2 to switch between primary and fallback model on retries.
+applyAiDescriptionOne: aiEstimateLow/aiEstimateHigh are optional — omitting preserves existing DB values. DC and KP stages must NOT pass these fields or they wipe Batch-set estimates.
 React 18 batching fix: never setState(prev => prev.map(...)) in a 100+ item loop. Use local working[] array + setState([...working]) full replace after each item.
 Export/Import: xlsx with Auction + Lots sheets. Routes: /api/catalogue/export, /api/catalogue/import.
 

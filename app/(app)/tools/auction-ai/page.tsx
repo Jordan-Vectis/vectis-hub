@@ -52,7 +52,7 @@ function ToastContainer() {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "chat" | "batch" | "barcode" | "copier" | "runs" | "kpruns" | "instructions" | "kpcheck" | "macro" | "doublecheck" | "pipeline"
+type Tab = "chat" | "batch" | "barcode" | "copier" | "runs" | "kpruns" | "instructions" | "kpcheck" | "macro" | "doublecheck" | "pipeline" | "upgrade"
 
 type ChatMessage = {
   role: "user" | "model"
@@ -4078,6 +4078,397 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   )
 }
 
+// ─── AI Upgrade Tab ──────────────────────────────────────────────────────────
+
+type UpgradeLot = {
+  id:          string
+  label:       string
+  description: string
+  selected:    boolean
+  status:      "idle" | "running" | "done" | "skipped"
+  revised?:    string
+  accepted:    boolean
+}
+
+const UPGRADE_MODES = [
+  { key: "shorten",          label: "Shorten",                desc: "Remove padding, tighten verbose descriptions" },
+  { key: "expand",           label: "Add more detail",        desc: "Expand sparse descriptions with useful context" },
+  { key: "humanise",         label: "Humanise",               desc: "Remove AI-robotic phrasing, make it read naturally" },
+  { key: "grammar",          label: "Fix grammar",            desc: "Spelling, punctuation and sentence structure" },
+  { key: "format",           label: "Standardise format",     desc: "Consistent bullets, capitalisation and spacing" },
+  { key: "condition",        label: "Expand condition notes", desc: "More specific about defects and completeness" },
+  { key: "no_hyperbole",     label: "Remove hyperbole",       desc: "Strip vague positives and sales-speak" },
+  { key: "auction_language", label: "Auction language",       desc: "Reinforce lot/catalogue-appropriate terminology" },
+]
+
+function UpgradeTab({ model: globalModel, fallbackModel }: { model: string; fallbackModel: string }) {
+  const [code,         setCode]         = useState("")
+  const [auctionId,    setAuctionId]    = useState<string | null>(null)
+  const [lots,         setLots]         = useState<UpgradeLot[]>([])
+  const [loading,      setLoading]      = useState(false)
+  const [error,        setError]        = useState<string | null>(null)
+  const [running,      setRunning]      = useState(false)
+  const [paused,       setPaused]       = useState(false)
+  const [progress,     setProgress]     = useState<{ done: number; total: number } | null>(null)
+  const [log,          setLog]          = useState<string[]>([])
+  const [modes,        setModes]        = useState<Set<string>>(new Set(["humanise", "grammar"]))
+  const [auctionList,  setAuctionList]  = useState<{ code: string; name: string }[]>([])
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [showResults,  setShowResults]  = useState(false)
+  const [accepting,    setAccepting]    = useState(false)
+  const localModel  = globalModel
+  const cancelRef   = useRef(false)
+  const pauseRef    = useRef(false)
+  const logRef      = useRef<HTMLDivElement>(null)
+  const codeRef     = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    fetch("/api/auction-ai/auctions").then(r => r.json()).then(d => { if (Array.isArray(d)) setAuctionList(d) }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (codeRef.current && !codeRef.current.contains(e.target as Node)) setDropdownOpen(false)
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
+
+  function addLog(msg: string) {
+    const ts = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    setLog(l => [...l, `[${ts}]  ${msg}`])
+    setTimeout(() => logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" }), 50)
+  }
+
+  function toggleMode(key: string) {
+    setModes(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  async function handleLoad() {
+    const upper = code.trim().toUpperCase()
+    if (!upper) return
+    setLoading(true); setError(null); setLots([]); setAuctionId(null); setLog([]); setProgress(null); setShowResults(false)
+    try {
+      const res = await fetch(`/api/auction-ai/catalogue-lots?code=${encodeURIComponent(upper)}`)
+      if (!res.ok) throw new Error((await res.json()).error ?? "Catalogue not found")
+      const data = await res.json()
+      setAuctionId(data.auctionId ?? null)
+      const loaded: UpgradeLot[] = data.lots
+        .filter((l: any) => l.description?.trim())
+        .map((l: any) => ({
+          id:          l.id,
+          label:       l.barcode || l.receiptUniqueId || l.id,
+          description: l.description,
+          selected:    true,
+          status:      "idle" as const,
+          accepted:    false,
+        }))
+      if (loaded.length === 0) throw new Error(`No lots with descriptions found for "${upper}".`)
+      setLots(loaded)
+      addLog(`✓ Loaded ${loaded.length} lots with descriptions`)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleRun() {
+    if (!auctionId || modes.size === 0) return
+    cancelRef.current = false
+    pauseRef.current  = false
+    setRunning(true); setPaused(false); setShowResults(false)
+    const toRun = lots.filter(l => l.selected && l.status === "idle")
+    addLog(`── AI Upgrade — ${toRun.length} lots · modes: ${Array.from(modes).join(", ")}`)
+    let done = 0
+    const working = [...lots]
+
+    for (const lot of toRun) {
+      if (cancelRef.current) break
+      while (pauseRef.current && !cancelRef.current) await new Promise(r => setTimeout(r, 500))
+      if (cancelRef.current) break
+
+      const idx = working.findIndex(l => l.id === lot.id)
+      working[idx] = { ...working[idx], status: "running" }
+      setLots([...working])
+      addLog(`  · ${done + 1}/${toRun.length} ${lot.label}…`)
+
+      let lastError = ""
+      let attempt   = 0
+      let succeeded = false
+
+      while (!cancelRef.current) {
+        if (attempt > 0) {
+          const isRL = lastError.startsWith("RATE_LIMITED:")
+          const wait = isRL ? Math.min(60000 * Math.pow(2, attempt - 1), 1800000) : Math.min(attempt * 12000, 30000)
+          addLog(`↺ ${lot.label} — ${isRL ? "rate limited, waiting" : "retrying in"} ${wait / 1000}s (attempt ${attempt + 1})…`)
+          await new Promise(r => setTimeout(r, wait))
+          if (cancelRef.current) break
+        }
+        attempt++
+
+        try {
+          const modelToUse = (attempt % 2 === 0 && fallbackModel) ? fallbackModel : localModel
+          if (attempt > 1) addLog(`  ↳ ${lot.label} trying ${modelToUse}`)
+
+          const res  = await fetch("/api/auction-ai/upgrade", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ description: lot.description, modes: Array.from(modes), model: modelToUse }),
+          })
+          const json = await res.json()
+          if (json.error) throw new Error(json.error)
+
+          working[idx] = { ...working[idx], status: "done", revised: json.revised }
+          setLots([...working])
+          succeeded = true
+          done++
+          setProgress({ done, total: toRun.length })
+          break
+        } catch (e: any) {
+          lastError = e.message ?? String(e)
+          if (lastError.startsWith("BLOCKED:")) {
+            working[idx] = { ...working[idx], status: "skipped" }
+            setLots([...working])
+            addLog(`✗ ${lot.label} — blocked, skipping`)
+            done++; setProgress({ done, total: toRun.length })
+            succeeded = true
+            break
+          }
+        }
+      }
+
+      if (!succeeded) {
+        working[idx] = { ...working[idx], status: "skipped" }
+        setLots([...working])
+        done++; setProgress({ done, total: toRun.length })
+      }
+    }
+
+    setRunning(false)
+    setShowResults(true)
+    const doneCount = working.filter(l => l.status === "done").length
+    addLog(`── Complete — ${doneCount} revised`)
+  }
+
+  async function acceptLot(lot: UpgradeLot) {
+    if (!auctionId || !lot.revised) return
+    const working = [...lots]
+    const idx = working.findIndex(l => l.id === lot.id)
+    working[idx] = { ...working[idx], accepted: true }
+    setLots([...working])
+    try {
+      await applyAiDescriptionOne(auctionId, { id: lot.id, description: lot.revised })
+    } catch (e: any) {
+      const revert = [...lots]
+      revert[idx] = { ...revert[idx], accepted: false }
+      setLots([...revert])
+      setError(`Failed to save ${lot.label}: ${e.message}`)
+    }
+  }
+
+  async function acceptAll() {
+    const toAccept = lots.filter(l => l.status === "done" && !l.accepted && l.revised)
+    if (!auctionId || toAccept.length === 0) return
+    setAccepting(true)
+    for (const lot of toAccept) await acceptLot(lot)
+    setAccepting(false)
+  }
+
+  const filtered = auctionList.filter(a => {
+    const q = code.toLowerCase()
+    return a.code.toLowerCase().includes(q) || a.name.toLowerCase().includes(q)
+  })
+
+  const pendingCount  = lots.filter(l => l.status === "done" && !l.accepted).length
+  const acceptedCount = lots.filter(l => l.accepted).length
+  const conflictModes = modes.has("shorten") && modes.has("expand")
+
+  return (
+    <div className="space-y-5 max-w-4xl">
+      <div>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-1">AI Upgrade</h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          Run mass description rewrites against an entire auction. Pick your transformation modes, run, then review the before/after and accept what you want.
+        </p>
+      </div>
+
+      {/* Config */}
+      <div className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl p-4 space-y-4">
+        {/* Auction picker */}
+        <div className="max-w-xs">
+          <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1.5">Auction</p>
+          <div ref={codeRef} className="relative">
+            <input
+              value={code}
+              onChange={e => { setCode(e.target.value.toUpperCase()); setDropdownOpen(true) }}
+              onFocus={() => setDropdownOpen(true)}
+              placeholder="e.g. F073"
+              disabled={running}
+              className="w-full bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-[#C8A96E] disabled:opacity-50"
+            />
+            {dropdownOpen && filtered.length > 0 && (
+              <div className="absolute z-20 w-full mt-1 bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {filtered.slice(0, 20).map(a => (
+                  <button key={a.code} onClick={() => { setCode(a.code); setDropdownOpen(false) }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 text-gray-700 dark:text-gray-300">
+                    <span className="font-mono font-semibold mr-2">{a.code}</span>{a.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Mode picker */}
+        <div>
+          <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-2">Transformation Modes</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {UPGRADE_MODES.map(m => (
+              <label key={m.key} title={m.desc}
+                className={`flex items-start gap-2 cursor-pointer px-3 py-2 rounded-lg border transition-colors text-xs ${
+                  modes.has(m.key)
+                    ? "bg-[#C8A96E]/15 border-[#C8A96E]/60 text-[#C8A96E]"
+                    : "bg-white dark:bg-[#1C1C1E] border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"
+                }`}>
+                <input type="checkbox" checked={modes.has(m.key)} onChange={() => toggleMode(m.key)}
+                  className="mt-0.5 w-3.5 h-3.5 accent-[#C8A96E] shrink-0" />
+                <div>
+                  <div className="font-medium leading-tight">{m.label}</div>
+                  <div className="text-[10px] opacity-60 mt-0.5 leading-tight">{m.desc}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+          {conflictModes && (
+            <p className="text-xs text-amber-400 mt-2">⚠ Shorten and Add more detail are opposites — the AI will attempt both but results may vary.</p>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <button onClick={handleLoad} disabled={loading || running || !code.trim()}
+            className="px-5 py-2 bg-[#C8A96E] hover:bg-[#b8945a] disabled:opacity-40 text-black font-semibold text-sm rounded-lg transition-colors">
+            {loading ? "Loading…" : "Load Auction"}
+          </button>
+          {lots.length > 0 && !running && (
+            <button onClick={handleRun} disabled={modes.size === 0 || lots.filter(l => l.selected && l.status === "idle").length === 0}
+              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-semibold text-sm rounded-lg transition-colors">
+              Run Upgrade ({lots.filter(l => l.selected && l.status === "idle").length} lots)
+            </button>
+          )}
+          {running && (
+            <>
+              {!paused
+                ? <button onClick={() => { pauseRef.current = true; setPaused(true); addLog("⏸ Paused — finishing current lot…") }}
+                    className="px-4 py-2 text-xs border border-amber-600 text-amber-400 rounded-lg">⏸ Pause</button>
+                : <button onClick={() => { pauseRef.current = false; setPaused(false); addLog("▶ Resumed") }}
+                    className="px-4 py-2 text-xs border border-green-600 text-green-400 rounded-lg">▶ Resume</button>
+              }
+              <button onClick={() => { cancelRef.current = true }}
+                className="px-4 py-2 text-xs border border-red-600 text-red-400 rounded-lg">⛔ Stop</button>
+            </>
+          )}
+        </div>
+
+        {error && <p className="text-sm text-red-400">{error}</p>}
+      </div>
+
+      {/* Lot list */}
+      {lots.length > 0 && (
+        <div className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider">
+              {lots.length} lots loaded · {lots.filter(l => l.selected).length} selected
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setLots(prev => prev.map(l => ({ ...l, selected: true })))}
+                className="text-xs text-gray-500 dark:text-gray-400 hover:text-white px-2 py-1 rounded border border-gray-600 hover:border-gray-400 transition-colors">
+                Select all
+              </button>
+              <button onClick={() => setLots(prev => prev.map(l => ({ ...l, selected: false })))}
+                className="text-xs text-gray-500 dark:text-gray-400 hover:text-white px-2 py-1 rounded border border-gray-600 hover:border-gray-400 transition-colors">
+                Deselect all
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-1.5 max-h-36 overflow-y-auto pr-1">
+            {lots.map(l => (
+              <button key={l.id} onClick={() => !running && setLots(prev => prev.map(x => x.id === l.id ? { ...x, selected: !x.selected } : x))}
+                className={`text-xs px-2 py-1.5 rounded border transition-colors font-mono ${
+                  l.status === "done" && l.accepted  ? "border-green-600 bg-green-950/30 text-green-400"
+                  : l.status === "done"              ? "border-indigo-600 bg-indigo-950/30 text-indigo-300"
+                  : l.status === "running"           ? "border-[#C8A96E]/60 bg-[#C8A96E]/10 text-[#C8A96E] animate-pulse"
+                  : l.status === "skipped"           ? "border-gray-600 bg-gray-900/20 text-gray-500"
+                  : l.selected                       ? "border-gray-500 bg-gray-200 dark:bg-[#3C3C3E] text-gray-900 dark:text-white"
+                  :                                    "border-gray-700 bg-transparent text-gray-600 opacity-50"
+                }`}>
+                {l.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Log */}
+      {log.length > 0 && (
+        <div ref={logRef} className="bg-black/40 border border-gray-700 rounded-xl p-4 font-mono text-xs text-gray-400 space-y-0.5 max-h-40 overflow-y-auto">
+          {log.map((l, i) => <div key={i}>{l}</div>)}
+          {progress && <div className="text-[#C8A96E]">Progress: {progress.done}/{progress.total}</div>}
+        </div>
+      )}
+
+      {/* Results */}
+      {showResults && lots.some(l => l.status === "done") && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-white">
+              Review — {pendingCount} pending · {acceptedCount} accepted
+            </p>
+            {pendingCount > 0 && (
+              <button onClick={acceptAll} disabled={accepting}
+                className="px-4 py-2 text-sm bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white font-semibold rounded-lg transition-colors">
+                {accepting ? "Accepting…" : `Accept All (${pendingCount})`}
+              </button>
+            )}
+          </div>
+          <div className="space-y-3">
+            {lots.filter(l => l.status === "done" && l.revised).map(lot => (
+              <div key={lot.id} className={`border rounded-xl p-4 space-y-3 transition-colors ${lot.accepted ? "border-green-700/50 bg-green-950/10" : "border-indigo-700/50 bg-indigo-950/10"}`}>
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-sm font-semibold text-white">{lot.label}</span>
+                  {lot.accepted
+                    ? <span className="text-xs text-green-400 font-medium">✓ Accepted</span>
+                    : <button onClick={() => acceptLot(lot)}
+                        className="px-3 py-1 text-xs bg-green-700 hover:bg-green-600 text-white font-semibold rounded-lg transition-colors">
+                        Accept
+                      </button>
+                  }
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Before</p>
+                    <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap">{lot.description}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-indigo-400 mb-1">After</p>
+                    <p className="text-xs text-gray-200 leading-relaxed whitespace-pre-wrap">{lot.revised}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
 
 const TABS: { id: Tab; label: string; icon: string; accent?: string }[] = [
@@ -4090,6 +4481,7 @@ const TABS: { id: Tab; label: string; icon: string; accent?: string }[] = [
   { id: "kpcheck",      label: "Key Points Check",   icon: "✓"  },
   { id: "doublecheck",  label: "Double Check",       icon: "🔎", accent: "#6366f1" },
   { id: "pipeline",     label: "Auto Pipeline",      icon: "🔄", accent: "#C8A96E" },
+  { id: "upgrade",      label: "AI Upgrade",         icon: "✨", accent: "#6366f1" },
   { id: "instructions", label: "Instructions",       icon: "📝" },
   { id: "macro",        label: "Macro Downloader",   icon: "⌨️" },
 ]
@@ -4189,6 +4581,7 @@ export default function AuctionAIPage() {
         <div className={tab === "kpcheck"      ? "" : "hidden"}><KeyPointsCheckTab model={model} fallbackModel={fallbackModel} onModelChange={m => { setModel(m); localStorage.setItem("ai_model", m) }} /></div>
         <div className={tab === "doublecheck"  ? "" : "hidden"}>{tab === "doublecheck" && <DoubleCheckTab model={model} fallbackModel={fallbackModel} onModelChange={m => { setModel(m); localStorage.setItem("ai_model", m) }} />}</div>
         <div className={tab === "pipeline"     ? "" : "hidden"}>{tab === "pipeline" && <PipelineTab model={model} fallbackModel={fallbackModel} />}</div>
+        <div className={tab === "upgrade"      ? "" : "hidden"}>{tab === "upgrade"   && <UpgradeTab model={model} fallbackModel={fallbackModel} />}</div>
         <div className={tab === "instructions" ? "" : "hidden"}><InstructionsTab /></div>
         <div className={tab === "macro"        ? "" : "hidden"}><MacroTab /></div>
       </main>
