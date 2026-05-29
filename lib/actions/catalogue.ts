@@ -106,15 +106,16 @@ export async function applyAiDescriptions(
 
 export async function applyAiDescriptionOne(
   auctionId: string,
-  update: { id: string; description: string; aiEstimateLow: number | null; aiEstimateHigh: number | null }
+  update: { id: string; description: string; aiEstimateLow?: number | null; aiEstimateHigh?: number | null }
 ) {
   await requireCataloguer()
   await prisma.catalogueLot.update({
     where: { id: update.id },
     data: {
       description:    update.description,
-      aiEstimateLow:  update.aiEstimateLow,
-      aiEstimateHigh: update.aiEstimateHigh,
+      // Only update estimate fields if explicitly provided — omitting preserves existing values
+      ...(update.aiEstimateLow  !== undefined ? { aiEstimateLow:  update.aiEstimateLow  } : {}),
+      ...(update.aiEstimateHigh !== undefined ? { aiEstimateHigh: update.aiEstimateHigh } : {}),
       aiUpgraded:     true,
     },
   })

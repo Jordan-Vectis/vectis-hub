@@ -2973,7 +2973,7 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
     if (!auctionId || !lot.revised) return
     setLots(prev => prev.map(l => l.id === lot.id ? { ...l, accepted: true } : l))
     try {
-      await applyAiDescriptionOne(auctionId, { id: lot.id, description: lot.revised, aiEstimateLow: null, aiEstimateHigh: null })
+      await applyAiDescriptionOne(auctionId, { id: lot.id, description: lot.revised })
     } catch (e: any) {
       setLots(prev => prev.map(l => l.id === lot.id ? { ...l, accepted: false } : l))
       setError(`Failed to save Lot ${lot.label}: ${e.message}`)
@@ -3643,7 +3643,7 @@ function PipelineTab({ model: globalModel }: { model: string }) {
         // Auto-apply fix if issues were found and revised is available
         if (verdict === "issues" && revised) {
           try {
-            await applyAiDescriptionOne(aid, { id: lot.id, description: revised, aiEstimateLow: null, aiEstimateHigh: null })
+            await applyAiDescriptionOne(aid, { id: lot.id, description: revised })
             newDesc = revised
             addLog(`  ⚑ ${lot.label} — issues found, fix auto-applied`)
           } catch {
@@ -3709,7 +3709,7 @@ function PipelineTab({ model: globalModel }: { model: string }) {
         const { revised, changed, missing, added } = result
         if (changed && revised) {
           try {
-            await applyAiDescriptionOne(aid, { id: lot.id, description: revised, aiEstimateLow: null, aiEstimateHigh: null })
+            await applyAiDescriptionOne(aid, { id: lot.id, description: revised })
             updated[idx] = { ...updated[idx], kpStatus: "fixed", kpMissing: missing, kpAdded: added, currentDesc: revised }
             addLog(`  ⚑ ${lot.label} — key points added, applied`)
           } catch {
