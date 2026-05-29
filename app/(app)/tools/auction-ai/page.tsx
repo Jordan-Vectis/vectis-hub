@@ -3379,6 +3379,7 @@ function PipelineTab({ model: globalModel }: { model: string }) {
   const [editOpen,     setEditOpen]    = useState(false)
   const [auctionList, setAuctionList] = useState<{ code: string; name: string }[]>([])
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [grounded,     setGrounded]    = useState(false)
   const codeRef  = useRef<HTMLDivElement>(null)
   const logRef   = useRef<HTMLDivElement>(null)
   const cancelRef = useRef(false)
@@ -3540,7 +3541,7 @@ function PipelineTab({ model: globalModel }: { model: string }) {
         const fd = new FormData()
         fd.append("systemInstruction", systemInstruction)
         fd.append("model", localModel)
-        fd.append("grounded", "false")
+        fd.append("grounded", grounded ? "true" : "false")
         const urls = lot.imageUrls.slice(0, 24)
         let imgCount = 0
         for (const url of urls) {
@@ -3901,6 +3902,13 @@ function PipelineTab({ model: globalModel }: { model: string }) {
             {editOpen && <PresetEditorModal presetKey={preset} initialText={overrides[preset] ?? PRESETS[preset]} onSave={savePreset} onClose={() => setEditOpen(false)} />}
           </div>
         </div>
+
+        {/* Google Search grounding */}
+        <label className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-colors w-fit ${grounded ? "bg-blue-950/50 border-blue-600/60 text-blue-300" : "bg-gray-100 dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
+          <input type="checkbox" checked={grounded} onChange={e => setGrounded(e.target.checked)}
+            className="w-3.5 h-3.5 accent-blue-500" />
+          <span className="text-xs font-medium">🔍 Google Search</span>
+        </label>
 
         <div className="flex items-center gap-3 flex-wrap">
           <button onClick={handleLoad} disabled={loading || !code.trim()}
