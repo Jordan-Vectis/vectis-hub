@@ -2137,7 +2137,7 @@ type KPLot = {
   selected?: boolean
 }
 
-function KeyPointsCheckTab({ model: globalModel, onModelChange }: { model: string; onModelChange: (m: string) => void }) {
+function KeyPointsCheckTab({ model: globalModel, fallbackModel, onModelChange }: { model: string; fallbackModel: string; onModelChange: (m: string) => void }) {
   const [code,         setCode]         = useState("")
   const [auctionId,    setAuctionId]    = useState<string | null>(null)
   const [loading,      setLoading]      = useState(false)
@@ -2240,10 +2240,8 @@ function KeyPointsCheckTab({ model: globalModel, onModelChange }: { model: strin
     setLots(prev => prev.map(l => l.id === lot.id ? { ...l, accepted: true } : l))
     try {
       await applyAiDescriptionOne(auctionId, {
-        id:             lot.id,
-        description:    lot.revised,
-        aiEstimateLow:  null,
-        aiEstimateHigh: null,
+        id:          lot.id,
+        description: lot.revised,
       })
     } catch (e: any) {
       setLots(prev => prev.map(l => l.id === lot.id ? { ...l, accepted: false } : l))
@@ -2367,11 +2365,13 @@ function KeyPointsCheckTab({ model: globalModel, onModelChange }: { model: strin
           attempt++
 
           try {
+            const modelToUse = (attempt % 2 === 0 && fallbackModel) ? fallbackModel : localModel
+            if (attempt > 1) addLog(`  ↳ ${lot.label} trying ${modelToUse}`)
             const t0  = Date.now()
             const res = await fetch("/api/auction-ai/key-points-check", {
               method:  "POST",
               headers: { "Content-Type": "application/json" },
-              body:    JSON.stringify({ label: lot.label, keyPoints: lot.keyPoints, description: lot.description, model: localModel }),
+              body:    JSON.stringify({ label: lot.label, keyPoints: lot.keyPoints, description: lot.description, model: modelToUse }),
             })
             const json = await res.json()
             if (json.error) throw new Error(json.error)
@@ -2850,7 +2850,7 @@ type DCLot = {
   status?:         "idle" | "checking" | "ok" | "issues" | "error"
 }
 
-function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; onModelChange: (m: string) => void }) {
+function DoubleCheckTab({ model: globalModel, fallbackModel, onModelChange }: { model: string; fallbackModel: string; onModelChange: (m: string) => void }) {
   const [code,        setCode]        = useState("")
   const [auctionId,   setAuctionId]   = useState<string | null>(null)
   const [loading,     setLoading]     = useState(false)
@@ -3065,11 +3065,13 @@ function DoubleCheckTab({ model: globalModel, onModelChange }: { model: string; 
           attempt++
 
           try {
+            const modelToUse = (attempt % 2 === 0 && fallbackModel) ? fallbackModel : localModel
+            if (attempt > 1) addLog(`  ↳ ${snap.label} trying ${modelToUse}`)
             const t0  = Date.now()
             const res = await fetch("/api/auction-ai/double-check", {
               method:  "POST",
               headers: { "Content-Type": "application/json" },
-              body:    JSON.stringify({ label: snap.label, description: snap.description, images, model: localModel }),
+              body:    JSON.stringify({ label: snap.label, description: snap.description, images, model: modelToUse }),
             })
             const json = await res.json()
             if (json.error) throw new Error(json.error)
@@ -4184,8 +4186,8 @@ export default function AuctionAIPage() {
         <div className={tab === "kpruns"       ? "" : "hidden"}>{tab === "kpruns" && <KPRunsTab />}</div>
         <div className={tab === "barcode"      ? "" : "hidden"}><BarcodeTab /></div>
         <div className={tab === "copier"       ? "" : "hidden"}><CopierTab /></div>
-        <div className={tab === "kpcheck"      ? "" : "hidden"}><KeyPointsCheckTab model={model} onModelChange={m => { setModel(m); localStorage.setItem("ai_model", m) }} /></div>
-        <div className={tab === "doublecheck"  ? "" : "hidden"}>{tab === "doublecheck" && <DoubleCheckTab model={model} onModelChange={m => { setModel(m); localStorage.setItem("ai_model", m) }} />}</div>
+        <div className={tab === "kpcheck"      ? "" : "hidden"}><KeyPointsCheckTab model={model} fallbackModel={fallbackModel} onModelChange={m => { setModel(m); localStorage.setItem("ai_model", m) }} /></div>
+        <div className={tab === "doublecheck"  ? "" : "hidden"}>{tab === "doublecheck" && <DoubleCheckTab model={model} fallbackModel={fallbackModel} onModelChange={m => { setModel(m); localStorage.setItem("ai_model", m) }} />}</div>
         <div className={tab === "pipeline"     ? "" : "hidden"}>{tab === "pipeline" && <PipelineTab model={model} fallbackModel={fallbackModel} />}</div>
         <div className={tab === "instructions" ? "" : "hidden"}><InstructionsTab /></div>
         <div className={tab === "macro"        ? "" : "hidden"}><MacroTab /></div>
