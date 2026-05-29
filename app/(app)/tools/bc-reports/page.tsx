@@ -97,7 +97,7 @@ function HBar({ data, valueKey, labelKey }: { data: object[]; valueKey: string; 
           cursor={{ fill: "rgba(255,255,255,0.04)" }}
           contentStyle={{ background: "#1c1f27", border: "1px solid #2d3047", borderRadius: 6, fontSize: 13, color: "#fff" }}
         />
-        <Bar dataKey={valueKey} radius={[0, 3, 3, 0]} maxBarSize={36}>
+        <Bar dataKey={valueKey} radius={[0, 3, 3, 0]} maxBarSize={36} isAnimationActive={false}>
           {data.map((_, i) => <Cell key={i} fill="#0078D4" />)}
           <LabelList dataKey={valueKey} position="right" style={{ fontSize: 12, fill: "#c8c8d8" }} />
         </Bar>
