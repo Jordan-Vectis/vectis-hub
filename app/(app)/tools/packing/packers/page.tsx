@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import Link from "next/link"
 
 type Packer = {
@@ -228,6 +228,57 @@ export default function PackersPage() {
     }
   }
 
+  // ── Export / Import ───────────────────────────────────────────────────────
+  const [importing, setImporting] = useState(false)
+  const importRef = useRef<HTMLInputElement>(null)
+
+  function handleExport() {
+    const data = packers.map(p => ({
+      name:       p.name,
+      staffGroup: p.staffGroup,
+      active:     p.active,
+      sortOrder:  p.sortOrder,
+      aliases:    p.aliases,
+    }))
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
+    const link = document.createElement("a")
+    link.href = URL.createObjectURL(blob)
+    link.download = `packers-export-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(link); link.click(); document.body.removeChild(link)
+    URL.revokeObjectURL(link.href)
+  }
+
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ""
+    let rows: { name: string; staffGroup: string; active: boolean; sortOrder: number; aliases: string[] }[]
+    try {
+      rows = JSON.parse(await file.text())
+      if (!Array.isArray(rows)) throw new Error("Expected a JSON array")
+    } catch (err: any) {
+      alert(`Invalid file: ${err.message}`)
+      return
+    }
+    if (!confirm(`Import ${rows.length} packers? Existing packers matched by name will have their aliases merged. New names will be created.`)) return
+    setImporting(true)
+    try {
+      const res = await fetch("/api/packers/import", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ packers: rows }),
+      })
+      const data = await res.json()
+      if (!res.ok) { alert(data.error ?? "Import failed"); return }
+      alert(`Done — ${data.created} created, ${data.updated} updated`)
+      await load()
+    } catch {
+      alert("Network error during import")
+    } finally {
+      setImporting(false)
+    }
+  }
+
   const byGroup: Record<"FULL_TIME" | "AGENCY" | "EX_STAFF", Packer[]> = { FULL_TIME: [], AGENCY: [], EX_STAFF: [] }
   for (const p of packers) {
     // Defensive: unrecognised group strings shouldn't crash — log + skip
@@ -236,13 +287,26 @@ export default function PackersPage() {
 
   return (
     <div className="p-6 max-w-5xl" style={{ fontFamily: "Arial, sans-serif" }}>
-      <div className="mb-6">
-        <Link href="/tools/packing" className="text-sm text-gray-500 hover:text-gray-700">← Packing &amp; Dispatch</Link>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-2">Packer Barcodes</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Manage the list of packing-floor staff. Print barcode sheets for the benches —
-          each barcode is the packer's name in Code 128 so it scans straight into BC.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <Link href="/tools/packing" className="text-sm text-gray-500 hover:text-gray-700">← Packing &amp; Dispatch</Link>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-2">Packer Barcodes</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Manage the list of packing-floor staff. Print barcode sheets for the benches —
+            each barcode is the packer's name in Code 128 so it scans straight into BC.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0 pt-6">
+          <button onClick={handleExport} disabled={packers.length === 0}
+            className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-500 hover:text-gray-200 rounded-lg transition-colors disabled:opacity-40">
+            ↓ Export JSON
+          </button>
+          <button onClick={() => importRef.current?.click()} disabled={importing}
+            className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-500 hover:text-gray-200 rounded-lg transition-colors disabled:opacity-40">
+            {importing ? "Importing…" : "↑ Import JSON"}
+          </button>
+          <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
+        </div>
       </div>
 
       {/* Add new */}
