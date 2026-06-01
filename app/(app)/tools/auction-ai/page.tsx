@@ -3477,6 +3477,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           kpStatus:    saved?.kpStatus,
           kpMissing:   saved?.kpMissing,
           kpAdded:     saved?.kpAdded,
+          // Restore pending revised text from DB; for already-applied lots use current catalogue desc
+          kpRevised:   saved?.revised ?? (saved?.kpStatus === "fixed" ? l.description : undefined),
         }
       })
 
@@ -3729,7 +3731,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           addLog(`  ✓ ${lot.label} — all key points present`)
         }
         setLots([...updated])
-        await saveLot(lot.id, { kpStatus: updated[idx].kpStatus, kpMissing: missing, kpAdded: added })
+        await saveLot(lot.id, { kpStatus: updated[idx].kpStatus, kpMissing: missing, kpAdded: added, revised: updated[idx].kpRevised ?? null })
       } else if (!cancelRef.current) {
         updated[idx] = { ...updated[idx], kpStatus: "skipped" }
         setLots([...updated])
@@ -4060,22 +4062,30 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       )}
 
       {/* KP Review section */}
-      {lots.some(l => l.kpStatus === "pending") && (
+      {lots.some(l => (l.kpStatus === "pending" || l.kpStatus === "fixed") && l.kpRevised) && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-amber-300">
-              ✓ Key Points Review — {lots.filter(l => l.kpStatus === "pending").length} lots awaiting approval
+              ✓ Key Points Review — {lots.filter(l => l.kpStatus === "pending" && l.kpRevised).length} pending · {lots.filter(l => l.kpStatus === "fixed" && l.kpRevised).length} already applied
             </h3>
-            <button onClick={acceptAllKP} disabled={accepting}
-              className="px-4 py-1.5 text-xs bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white font-semibold rounded-lg transition-colors">
-              {accepting ? "Applying…" : `Accept All (${lots.filter(l => l.kpStatus === "pending").length})`}
-            </button>
+            {lots.some(l => l.kpStatus === "pending" && l.kpRevised) && (
+              <button onClick={acceptAllKP} disabled={accepting}
+                className="px-4 py-1.5 text-xs bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white font-semibold rounded-lg transition-colors">
+                {accepting ? "Applying…" : `Accept All Pending (${lots.filter(l => l.kpStatus === "pending" && l.kpRevised).length})`}
+              </button>
+            )}
           </div>
           <div className="space-y-2">
-            {lots.filter(l => l.kpStatus === "pending" && l.kpRevised).map(lot => (
-              <div key={lot.id} className="border border-amber-700/50 bg-amber-950/10 rounded-xl p-4 space-y-3">
+            {lots.filter(l => (l.kpStatus === "pending" || l.kpStatus === "fixed") && l.kpRevised).map(lot => (
+              <div key={lot.id} className={`border rounded-xl p-4 space-y-3 ${lot.kpStatus === "pending" ? "border-amber-700/50 bg-amber-950/10" : "border-[#2AB4A6]/30 bg-[#2AB4A6]/5"}`}>
                 <div className="flex items-center justify-between gap-3">
-                  <span className="font-mono text-sm font-semibold text-white">{lot.label}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm font-semibold text-white">{lot.label}</span>
+                    {lot.kpStatus === "fixed"
+                      ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#2AB4A6]/20 text-[#2AB4A6] font-medium">Already applied — re-save to update</span>
+                      : <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-900/40 text-amber-400 font-medium">Pending</span>
+                    }
+                  </div>
                   <div className="flex items-center gap-2">
                     {lot.imageUrls.length > 0 && (
                       <button onClick={() => openPhotos(lot)}
@@ -4085,7 +4095,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                     )}
                     <button onClick={() => acceptKP(lot)}
                       className="px-3 py-1 text-xs bg-green-700 hover:bg-green-600 text-white font-semibold rounded-lg transition-colors">
-                      Accept
+                      {lot.kpStatus === "fixed" ? "Re-save" : "Accept"}
                     </button>
                   </div>
                 </div>
@@ -4110,7 +4120,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                     <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap">{lot.currentDesc}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] uppercase tracking-wider text-amber-400 mb-1">Revised — edit before accepting</p>
+                    <p className="text-[10px] uppercase tracking-wider text-amber-400 mb-1">{lot.kpStatus === "fixed" ? "Current — edit and re-save to correct" : "Revised — edit before accepting"}</p>
                     <textarea
                       value={lot.kpRevised ?? ""}
                       onChange={e => setLots(prev => prev.map(l => l.id === lot.id ? { ...l, kpRevised: e.target.value } : l))}
