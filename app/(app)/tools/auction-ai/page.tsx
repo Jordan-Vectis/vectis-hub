@@ -3364,6 +3364,7 @@ type PLot = {
   kpMissing?: string
   kpAdded?:   string
   kpRevised?: string  // proposed text waiting for approval
+  appliedDesc?: string  // description currently on the catalogue lot (to detect un-applied work)
 }
 
 function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fallbackModel: string }) {
@@ -3477,23 +3478,18 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           kpStatus:    saved?.kpStatus,
           kpMissing:   saved?.kpMissing,
           kpAdded:     saved?.kpAdded,
-          // Restore pending revised text from DB; for already-applied lots use current catalogue desc
-          // Use || not ?? — revised may be stored as "" (falsy) rather than null for old runs
-          kpRevised:   saved?.revised || (saved?.kpStatus === "fixed" ? l.description : undefined) || undefined,
+          // Best AI text available: KP-revised → post-DC pipeline desc → catalogue desc.
+          // Use || not ?? — fields may be stored as "" (falsy) rather than null.
+          kpRevised:   saved?.revised || saved?.description || l.description || undefined,
+          appliedDesc: l.description ?? "",
         }
       })
 
       setLots(mapped)
       if (savedRun) {
-        const fixedCount    = mapped.filter(l => l.kpStatus === "fixed").length
-        const pendingCount  = mapped.filter(l => l.kpStatus === "pending").length
-        const reviewable    = mapped.filter(l => (l.kpStatus === "fixed" || l.kpStatus === "pending") && l.kpRevised).length
-        const catWithDesc   = catData.lots.filter((l: any) => (l.description ?? "").trim()).length
-        const savedWithRev  = (savedRun.lots ?? []).filter((sl: any) => (sl.revised ?? "").trim()).length
-        const savedWithDesc = (savedRun.lots ?? []).filter((sl: any) => (sl.description ?? "").trim()).length
+        const needApply = mapped.filter(l => l.kpRevised && (l.kpRevised ?? "").trim() !== (l.appliedDesc ?? "").trim()).length
         addLog(`▶ Loaded saved pipeline — stage: ${savedRun.stage} · ${mapped.length} lots`)
-        addLog(`   KP: ${fixedCount} fixed · ${pendingCount} pending · ${reviewable} reviewable`)
-        addLog(`   DEBUG: catalogue lots with desc=${catWithDesc}/${catData.lots.length} · pipeline saved revised=${savedWithRev} · saved batch-desc=${savedWithDesc}`)
+        if (needApply > 0) addLog(`   ${needApply} lots have descriptions not yet on the catalogue — review below`)
       } else {
         addLog(`▶ Loaded ${mapped.length} lots — ready to start`)
       }
@@ -3588,9 +3584,20 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
 
       if (result) {
         const desc = result.description ?? ""
-        updated[idx] = { ...updated[idx], batchStatus: "ok", currentDesc: desc, estimate: result.estimate ?? "" }
+        const { low, high } = parseEstimate(result.estimate ?? "")
+        updated[idx] = { ...updated[idx], batchStatus: "ok", currentDesc: desc, estimate: result.estimate ?? "", appliedDesc: desc }
         setLots([...updated])
         addLog(`  ✓ ${lot.label} — OK`)
+        // Apply the generated description + estimate straight to the catalogue lot
+        if (auctionId && desc) {
+          try {
+            await applyAiDescriptionOne(auctionId, {
+              id: lot.id,
+              description: desc,
+              ...(low > 0 && high > 0 ? { aiEstimateLow: low, aiEstimateHigh: high } : {}),
+            })
+          } catch { addLog(`  ⚠ ${lot.label} — saved to pipeline but failed to apply to catalogue`) }
+        }
         // Save to pipeline + existing saved runs
         await saveLot(lot.id, { batchStatus: "ok", description: desc, estimate: result.estimate ?? "" })
         fetch("/api/auction-ai/runs", {
@@ -3840,29 +3847,34 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     setLots(prev => prev.map(l => ({
       ...l, batchStatus: undefined, estimate: undefined,
       dcStatus: undefined, contradictions: undefined, unsupported: undefined,
-      kpStatus: undefined, kpMissing: undefined, kpAdded: undefined, kpRevised: undefined,
+      kpStatus: undefined, kpMissing: undefined, kpAdded: undefined, kpRevised: undefined, appliedDesc: undefined,
     })))
     setLog([])
     setProgress(null)
     addLog("↺ Pipeline reset")
   }
 
-  // ── KP review ───────────────────────────────────────────────────────────────
+  // ── Review & apply ──────────────────────────────────────────────────────────
   async function acceptKP(lot: PLot) {
     if (!auctionId || !lot.kpRevised) return
-    setLots(prev => prev.map(l => l.id === lot.id ? { ...l, kpStatus: "fixed", currentDesc: l.kpRevised!, kpRevised: undefined } : l))
+    const text = lot.kpRevised
+    const prevApplied = lot.appliedDesc
+    // Optimistically mark as applied — sets appliedDesc === kpRevised so it leaves the review list
+    setLots(prev => prev.map(l => l.id === lot.id ? { ...l, kpStatus: "fixed", currentDesc: text, appliedDesc: text } : l))
     try {
-      await applyAiDescriptionOne(auctionId, { id: lot.id, description: lot.kpRevised })
+      await applyAiDescriptionOne(auctionId, { id: lot.id, description: text })
+      // Persist to pipeline DB so the applied text survives a reload
+      await saveLot(lot.id, { kpStatus: "fixed", revised: text, description: text })
     } catch {
-      setLots(prev => prev.map(l => l.id === lot.id ? { ...l, kpStatus: "pending" } : l))
+      setLots(prev => prev.map(l => l.id === lot.id ? { ...l, appliedDesc: prevApplied } : l))
     }
   }
 
   async function acceptAllKP() {
-    const pending = lots.filter(l => l.kpStatus === "pending" && l.kpRevised)
-    if (!auctionId || pending.length === 0) return
+    const toApply = lots.filter(needsReview)
+    if (!auctionId || toApply.length === 0) return
     setAccepting(true)
-    for (const lot of pending) await acceptKP(lot)
+    for (const lot of toApply) await acceptKP(lot)
     setAccepting(false)
   }
 
@@ -3907,6 +3919,15 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   const batchSummary = stageSummary(lots, "batch")
   const dcSummary    = stageSummary(lots, "dc")
   const kpSummary    = stageSummary(lots, "kp")
+
+  // A lot needs review/apply if it has AI-generated text that isn't yet on the catalogue lot,
+  // or it was explicitly flagged pending by the KP stage.
+  function needsReview(l: PLot): boolean {
+    if (!l.kpRevised) return false
+    if (l.kpStatus === "pending") return true
+    return (l.kpRevised ?? "").trim() !== (l.appliedDesc ?? "").trim()
+  }
+  const reviewLots = lots.filter(needsReview)
 
   const stageOrder: PipelineStage[] = ["batch", "doublecheck", "kpcheck", "complete"]
   const stageIndex = stageOrder.indexOf(stage)
@@ -4053,15 +4074,15 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       )}
 
       {stage === "complete" && (
-        lots.some(l => l.kpStatus === "pending") ? (
+        reviewLots.length > 0 ? (
           <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-950/30 border border-amber-600/50 text-amber-300 text-sm">
             <span className="text-xl">⏳</span>
-            <span>Stages 1 & 2 complete — review Key Points changes below before finishing</span>
+            <span>{reviewLots.length} lots need reviewing & applying to the catalogue — see below</span>
           </div>
         ) : (
           <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-green-950/30 border border-green-700/50 text-green-300 text-sm">
             <span className="text-xl">🎉</span>
-            <span>Pipeline complete — all three stages finished for <span className="font-mono font-bold">{code.trim().toUpperCase()}</span></span>
+            <span>Pipeline complete — all descriptions applied for <span className="font-mono font-bold">{code.trim().toUpperCase()}</span></span>
           </div>
         )
       )}
@@ -4073,30 +4094,25 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         </div>
       )}
 
-      {/* KP Review section */}
-      {lots.some(l => (l.kpStatus === "pending" || l.kpStatus === "fixed") && l.kpRevised) && (
+      {/* Review & Apply section */}
+      {reviewLots.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-amber-300">
-              ✓ Key Points Review — {lots.filter(l => l.kpStatus === "pending" && l.kpRevised).length} pending · {lots.filter(l => l.kpStatus === "fixed" && l.kpRevised).length} already applied
+              ✓ Review & Apply — {reviewLots.length} lots with descriptions to apply to the catalogue
             </h3>
-            {lots.some(l => l.kpStatus === "pending" && l.kpRevised) && (
-              <button onClick={acceptAllKP} disabled={accepting}
-                className="px-4 py-1.5 text-xs bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white font-semibold rounded-lg transition-colors">
-                {accepting ? "Applying…" : `Accept All Pending (${lots.filter(l => l.kpStatus === "pending" && l.kpRevised).length})`}
-              </button>
-            )}
+            <button onClick={acceptAllKP} disabled={accepting}
+              className="px-4 py-1.5 text-xs bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white font-semibold rounded-lg transition-colors">
+              {accepting ? "Applying…" : `Apply All (${reviewLots.length})`}
+            </button>
           </div>
           <div className="space-y-2">
-            {lots.filter(l => (l.kpStatus === "pending" || l.kpStatus === "fixed") && l.kpRevised).map(lot => (
-              <div key={lot.id} className={`border rounded-xl p-4 space-y-3 ${lot.kpStatus === "pending" ? "border-amber-700/50 bg-amber-950/10" : "border-[#2AB4A6]/30 bg-[#2AB4A6]/5"}`}>
+            {reviewLots.map(lot => (
+              <div key={lot.id} className="border border-amber-700/50 bg-amber-950/10 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-sm font-semibold text-white">{lot.label}</span>
-                    {lot.kpStatus === "fixed"
-                      ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#2AB4A6]/20 text-[#2AB4A6] font-medium">Already applied — re-save to update</span>
-                      : <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-900/40 text-amber-400 font-medium">Pending</span>
-                    }
+                    {lot.kpAdded && <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-900/40 text-amber-400 font-medium">KP added</span>}
                   </div>
                   <div className="flex items-center gap-2">
                     {lot.imageUrls.length > 0 && (
@@ -4107,7 +4123,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                     )}
                     <button onClick={() => acceptKP(lot)}
                       className="px-3 py-1 text-xs bg-green-700 hover:bg-green-600 text-white font-semibold rounded-lg transition-colors">
-                      {lot.kpStatus === "fixed" ? "Re-save" : "Accept"}
+                      Apply
                     </button>
                   </div>
                 </div>
@@ -4126,20 +4142,20 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Current description</p>
-                    <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap">{lot.currentDesc}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-amber-400 mb-1">{lot.kpStatus === "fixed" ? "Current — edit and re-save to correct" : "Revised — edit before accepting"}</p>
-                    <textarea
-                      value={lot.kpRevised ?? ""}
-                      onChange={e => setLots(prev => prev.map(l => l.id === lot.id ? { ...l, kpRevised: e.target.value } : l))}
-                      rows={8}
-                      className="w-full text-xs bg-black/30 border border-amber-700/40 rounded-lg px-3 py-2 text-gray-200 leading-relaxed resize-y focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-amber-400 mb-1">Description — edit before applying</p>
+                  <textarea
+                    value={lot.kpRevised ?? ""}
+                    onChange={e => setLots(prev => prev.map(l => l.id === lot.id ? { ...l, kpRevised: e.target.value } : l))}
+                    rows={8}
+                    className="w-full text-xs bg-black/30 border border-amber-700/40 rounded-lg px-3 py-2 text-gray-200 leading-relaxed resize-y focus:outline-none focus:border-amber-500"
+                  />
+                  {(lot.appliedDesc ?? "").trim() && (lot.appliedDesc ?? "").trim() !== (lot.kpRevised ?? "").trim() && (
+                    <details className="mt-2">
+                      <summary className="text-[10px] uppercase tracking-wider text-gray-500 cursor-pointer">Currently on catalogue</summary>
+                      <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap mt-1">{lot.appliedDesc}</p>
+                    </details>
+                  )}
                 </div>
                 <div className="flex justify-end">
                   <button onClick={() => setLots(prev => prev.map(l => l.id === lot.id ? { ...l, kpStatus: "skipped", kpRevised: undefined } : l))}
