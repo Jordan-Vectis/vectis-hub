@@ -3360,9 +3360,10 @@ type PLot = {
   contradictions?: string
   unsupported?:    string
   // Stage 3
-  kpStatus?: "ok" | "fixed" | "error" | "skipped"
+  kpStatus?:  "ok" | "pending" | "fixed" | "error" | "skipped"
   kpMissing?: string
   kpAdded?:   string
+  kpRevised?: string  // proposed text waiting for approval
 }
 
 function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fallbackModel: string }) {
@@ -3382,6 +3383,9 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   const [auctionList, setAuctionList] = useState<{ code: string; name: string }[]>([])
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [grounded,     setGrounded]    = useState(false)
+  const [accepting,    setAccepting]   = useState(false)
+  const [photoLot,     setPhotoLot]    = useState<PLot | null>(null)
+  const [signedUrls,   setSignedUrls]  = useState<Record<string, string>>({})
   const codeRef  = useRef<HTMLDivElement>(null)
   const logRef   = useRef<HTMLDivElement>(null)
   const cancelRef = useRef(false)
@@ -3717,14 +3721,9 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       if (result) {
         const { revised, changed, missing, added } = result
         if (changed && revised) {
-          try {
-            await applyAiDescriptionOne(aid, { id: lot.id, description: revised })
-            updated[idx] = { ...updated[idx], kpStatus: "fixed", kpMissing: missing, kpAdded: added, currentDesc: revised }
-            addLog(`  ⚑ ${lot.label} — key points added, applied`)
-          } catch {
-            updated[idx] = { ...updated[idx], kpStatus: "fixed", kpMissing: missing, kpAdded: added }
-            addLog(`  ⚑ ${lot.label} — key points added but auto-apply failed`)
-          }
+          // Store for review — do NOT auto-apply KP changes
+          updated[idx] = { ...updated[idx], kpStatus: "pending", kpMissing: missing, kpAdded: added, kpRevised: revised }
+          addLog(`  ⚑ ${lot.label} — key points ready for review`)
         } else {
           updated[idx] = { ...updated[idx], kpStatus: "ok", kpMissing: missing }
           addLog(`  ✓ ${lot.label} — all key points present`)
@@ -3827,11 +3826,47 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     setLots(prev => prev.map(l => ({
       ...l, batchStatus: undefined, estimate: undefined,
       dcStatus: undefined, contradictions: undefined, unsupported: undefined,
-      kpStatus: undefined, kpMissing: undefined, kpAdded: undefined,
+      kpStatus: undefined, kpMissing: undefined, kpAdded: undefined, kpRevised: undefined,
     })))
     setLog([])
     setProgress(null)
     addLog("↺ Pipeline reset")
+  }
+
+  // ── KP review ───────────────────────────────────────────────────────────────
+  async function acceptKP(lot: PLot) {
+    if (!auctionId || !lot.kpRevised) return
+    setLots(prev => prev.map(l => l.id === lot.id ? { ...l, kpStatus: "fixed", currentDesc: l.kpRevised!, kpRevised: undefined } : l))
+    try {
+      await applyAiDescriptionOne(auctionId, { id: lot.id, description: lot.kpRevised })
+    } catch {
+      setLots(prev => prev.map(l => l.id === lot.id ? { ...l, kpStatus: "pending" } : l))
+    }
+  }
+
+  async function acceptAllKP() {
+    const pending = lots.filter(l => l.kpStatus === "pending" && l.kpRevised)
+    if (!auctionId || pending.length === 0) return
+    setAccepting(true)
+    for (const lot of pending) await acceptKP(lot)
+    setAccepting(false)
+  }
+
+  // ── Photo viewer ─────────────────────────────────────────────────────────────
+  async function openPhotos(lot: PLot) {
+    setPhotoLot(lot)
+    const missing = lot.imageUrls.filter(k => !signedUrls[k])
+    if (missing.length === 0) return
+    const results = await Promise.all(
+      missing.map(async key => {
+        try {
+          const res = await fetch(`/api/catalogue/signed-url?key=${encodeURIComponent(key)}`)
+          const { url } = await res.json()
+          return [key, url] as [string, string]
+        } catch { return [key, ""] as [string, string] }
+      })
+    )
+    setSignedUrls(prev => ({ ...prev, ...Object.fromEntries(results) }))
   }
 
   // ── Stage summary helpers ───────────────────────────────────────────────────
@@ -3850,8 +3885,9 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     // kp
     const ok      = lots.filter(l => l.kpStatus === "ok").length
     const fixed   = lots.filter(l => l.kpStatus === "fixed").length
+    const pending = lots.filter(l => l.kpStatus === "pending").length
     const skipped = lots.filter(l => l.kpStatus === "skipped").length
-    return { ok, skipped, total: lots.length, fixed }
+    return { ok, skipped, total: lots.length, fixed, pending }
   }
 
   const batchSummary = stageSummary(lots, "batch")
@@ -3961,7 +3997,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                 </div>
                 {processed > 0 && (
                   <div className="space-y-0.5 text-xs text-gray-600 dark:text-gray-500">
-                    {s.ok > 0          && <p className="text-green-400">✓ {s.ok} OK{"fixed" in s && s.fixed! > 0 ? ` · ${s.fixed} fixed` : ""}</p>}
+                    {s.ok > 0          && <p className="text-green-400">✓ {s.ok} OK{"fixed" in s && s.fixed! > 0 ? ` · ${s.fixed} accepted` : ""}</p>}
+                    {"pending" in s && s.pending! > 0 && <p className="text-amber-400">⏳ {s.pending} awaiting review</p>}
                     {"issues" in s && s.issues! > 0 && <p className="text-yellow-400">⚑ {s.issues} fixed by DC</p>}
                     {s.skipped > 0     && <p className="text-gray-500">— {s.skipped} skipped</p>}
                   </div>
@@ -4002,16 +4039,72 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       )}
 
       {stage === "complete" && (
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-green-950/30 border border-green-700/50 text-green-300 text-sm">
-          <span className="text-xl">🎉</span>
-          <span>Pipeline complete — all three stages finished for <span className="font-mono font-bold">{code.trim().toUpperCase()}</span></span>
-        </div>
+        lots.some(l => l.kpStatus === "pending") ? (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-950/30 border border-amber-600/50 text-amber-300 text-sm">
+            <span className="text-xl">⏳</span>
+            <span>Stages 1 & 2 complete — review Key Points changes below before finishing</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-green-950/30 border border-green-700/50 text-green-300 text-sm">
+            <span className="text-xl">🎉</span>
+            <span>Pipeline complete — all three stages finished for <span className="font-mono font-bold">{code.trim().toUpperCase()}</span></span>
+          </div>
+        )
       )}
 
       {/* Log */}
       {log.length > 0 && (
         <div ref={logRef} className="bg-gray-100 dark:bg-[#0d0d0f] border border-gray-200 dark:border-gray-800 rounded-xl p-3 max-h-56 overflow-y-auto font-mono text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
           {log.map((l, i) => <div key={i}>{l}</div>)}
+        </div>
+      )}
+
+      {/* KP Review section */}
+      {lots.some(l => l.kpStatus === "pending") && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-amber-300">
+              ✓ Key Points Review — {lots.filter(l => l.kpStatus === "pending").length} lots awaiting approval
+            </h3>
+            <button onClick={acceptAllKP} disabled={accepting}
+              className="px-4 py-1.5 text-xs bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white font-semibold rounded-lg transition-colors">
+              {accepting ? "Applying…" : `Accept All (${lots.filter(l => l.kpStatus === "pending").length})`}
+            </button>
+          </div>
+          <div className="space-y-2">
+            {lots.filter(l => l.kpStatus === "pending" && l.kpRevised).map(lot => (
+              <div key={lot.id} className="border border-amber-700/50 bg-amber-950/10 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-sm font-semibold text-white">{lot.label}</span>
+                    {lot.kpAdded && <span className="text-xs text-amber-400">+ {lot.kpAdded}</span>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {lot.imageUrls.length > 0 && (
+                      <button onClick={() => openPhotos(lot)}
+                        className="px-3 py-1 text-xs border border-gray-600 text-gray-400 hover:border-gray-400 hover:text-white rounded-lg transition-colors">
+                        📷 View Photo
+                      </button>
+                    )}
+                    <button onClick={() => acceptKP(lot)}
+                      className="px-3 py-1 text-xs bg-green-700 hover:bg-green-600 text-white font-semibold rounded-lg transition-colors">
+                      Accept
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Before</p>
+                    <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap">{lot.currentDesc}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-amber-400 mb-1">After</p>
+                    <p className="text-xs text-gray-200 leading-relaxed whitespace-pre-wrap">{lot.kpRevised}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -4027,6 +4120,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                   <th className="text-left px-3 py-2 text-gray-500 dark:text-gray-400 font-medium">⚡ Batch</th>
                   <th className="text-left px-3 py-2 text-gray-500 dark:text-gray-400 font-medium">🔎 Double Check</th>
                   <th className="text-left px-3 py-2 text-gray-500 dark:text-gray-400 font-medium">✓ Key Points</th>
+                  <th className="px-3 py-2" />
                 </tr>
               </thead>
               <tbody>
@@ -4053,8 +4147,10 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                     <span className="text-gray-500">—</span>
                   ) : lot.kpStatus === "ok" ? (
                     <span className="text-green-400">✓ All present</span>
+                  ) : lot.kpStatus === "pending" ? (
+                    <span className="text-amber-400">⏳ Review needed</span>
                   ) : lot.kpStatus === "fixed" ? (
-                    <span className="text-yellow-400">⚑ Added{lot.kpAdded ? ` · ${lot.kpAdded}` : ""}</span>
+                    <span className="text-green-400">✓ Accepted{lot.kpAdded ? ` · ${lot.kpAdded}` : ""}</span>
                   ) : (
                     <span className="text-gray-500">— Skipped</span>
                   )
@@ -4066,11 +4162,46 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                       <td className="px-3 py-2">{batchCell}</td>
                       <td className="px-3 py-2">{dcCell}</td>
                       <td className="px-3 py-2">{kpCell}</td>
+                      <td className="px-3 py-2 text-right">
+                        {lot.imageUrls.length > 0 && (
+                          <button onClick={() => openPhotos(lot)}
+                            className="text-xs text-gray-500 hover:text-gray-200 transition-colors">
+                            📷 View Photo
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Photo viewer modal */}
+      {photoLot && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setPhotoLot(null)}>
+          <div className="bg-[#1C1C1E] border border-gray-700 rounded-2xl p-5 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <span className="font-mono font-semibold text-white">{photoLot.label}</span>
+              <button onClick={() => setPhotoLot(null)} className="text-gray-400 hover:text-white text-xl leading-none">✕</button>
+            </div>
+            {photoLot.imageUrls.length === 0 ? (
+              <p className="text-gray-500 text-sm">No photos</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {photoLot.imageUrls.map((key, i) => (
+                  <div key={key} className="aspect-square rounded-xl overflow-hidden bg-[#2C2C2E] flex items-center justify-center">
+                    {signedUrls[key] ? (
+                      <img src={signedUrls[key]} alt={`Photo ${i + 1}`} className="w-full h-full object-contain" />
+                    ) : (
+                      <span className="text-gray-600 text-xs">Loading…</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
