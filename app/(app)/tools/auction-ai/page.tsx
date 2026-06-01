@@ -4075,10 +4075,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
             {lots.filter(l => l.kpStatus === "pending" && l.kpRevised).map(lot => (
               <div key={lot.id} className="border border-amber-700/50 bg-amber-950/10 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-sm font-semibold text-white">{lot.label}</span>
-                    {lot.kpAdded && <span className="text-xs text-amber-400">+ {lot.kpAdded}</span>}
-                  </div>
+                  <span className="font-mono text-sm font-semibold text-white">{lot.label}</span>
                   <div className="flex items-center gap-2">
                     {lot.imageUrls.length > 0 && (
                       <button onClick={() => openPhotos(lot)}
@@ -4092,6 +4089,21 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                     </button>
                   </div>
                 </div>
+
+                {/* Key points */}
+                {lot.keyPoints?.trim() && (
+                  <div className="bg-black/20 rounded-lg px-3 py-2 border border-gray-700">
+                    <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Key Points</p>
+                    <p className="text-xs text-gray-300 whitespace-pre-wrap leading-relaxed">{lot.keyPoints.trim()}</p>
+                    {lot.kpAdded && (
+                      <p className="text-xs text-amber-400 mt-1.5">➕ Added: {lot.kpAdded}</p>
+                    )}
+                    {lot.kpMissing && (
+                      <p className="text-xs text-red-400 mt-0.5">⚠ Was missing: {lot.kpMissing}</p>
+                    )}
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Before</p>
