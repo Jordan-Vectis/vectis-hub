@@ -5,6 +5,7 @@ import { redirect } from "next/navigation"
 import NewAuctionButton from "./new-auction-button"
 import AuctionNotesButton from "./auction-notes-button"
 import ExportImportButtons from "./export-import-buttons"
+import CompleteToggle from "./complete-toggle"
 import { getCataloguingSidebarItems } from "@/lib/apps"
 
 export default async function AuctionsPage() {
@@ -25,7 +26,68 @@ export default async function AuctionsPage() {
   })
 
   const totalLots = auctions.reduce((sum, a) => sum + a._count.lots, 0)
-  const activeAuctions = auctions.filter(a => !a.complete && !a.finished).length
+  const active    = auctions.filter(a => !a.complete)
+  const completed = auctions.filter(a => a.complete)
+
+  function AuctionTable({ rows }: { rows: typeof auctions }) {
+    return (
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E]">
+            <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Code</th>
+            <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Name</th>
+            <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Date</th>
+            <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Type</th>
+            <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Lots</th>
+            <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Catalogued</th>
+            <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Added to BC</th>
+            <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Photography</th>
+            <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Ran through AI</th>
+            <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Complete</th>
+            <th className="px-4 py-3"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((auction) => (
+            <tr
+              key={auction.id}
+              className="border-b border-gray-200 dark:border-gray-800 last:border-0 hover:bg-gray-100 dark:hover:bg-[#2C2C2E] transition-colors"
+            >
+              <td className="px-4 py-3">
+                <Link
+                  href={`/tools/cataloguing/auctions/${auction.id}`}
+                  className="font-mono font-semibold text-[#2AB4A6] hover:text-[#24a090]"
+                >
+                  {auction.code}
+                </Link>
+              </td>
+              <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">{auction.name}</td>
+              <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
+                {auction.auctionDate
+                  ? new Date(auction.auctionDate).toLocaleDateString("en-GB")
+                  : "—"}
+              </td>
+              <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{auction.auctionType}</td>
+              <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{auction._count.lots}</td>
+              {(["catalogued","addedToBC","photography","aiRan"] as const).map(f => (
+                <td key={f} className="px-4 py-3 text-center">
+                  {(auction as any)[f]
+                    ? <span className="text-green-400 font-bold">✓</span>
+                    : <span className="text-gray-600">—</span>}
+                </td>
+              ))}
+              <td className="px-4 py-3 text-center">
+                <CompleteToggle id={auction.id} complete={!!auction.complete} />
+              </td>
+              <td className="px-4 py-3 text-right">
+                {auction.notes ? <AuctionNotesButton notes={auction.notes} auctionName={auction.name} /> : <span className="text-gray-600">—</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )
+  }
 
   return (
     <div className="p-6">
@@ -48,7 +110,7 @@ export default async function AuctionsPage() {
         </div>
         <div className="bg-white dark:bg-[#1C1C1E] rounded-xl border border-gray-300 dark:border-gray-700 p-4">
           <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Active</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{activeAuctions}</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{active.length}</p>
         </div>
         <div className="bg-white dark:bg-[#1C1C1E] rounded-xl border border-gray-300 dark:border-gray-700 p-4">
           <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Total Lots</p>
@@ -56,67 +118,27 @@ export default async function AuctionsPage() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white dark:bg-[#1C1C1E] rounded-xl border border-gray-300 dark:border-gray-700 overflow-hidden">
-        {auctions.length === 0 ? (
-          <div className="text-center py-12 text-gray-600 dark:text-gray-500 text-sm">
-            No auctions yet. Create the first one.
+      {/* Active auctions */}
+      <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Active Auctions</h2>
+      <div className="bg-white dark:bg-[#1C1C1E] rounded-xl border border-gray-300 dark:border-gray-700 overflow-hidden mb-8">
+        {active.length === 0 ? (
+          <div className="text-center py-10 text-gray-600 dark:text-gray-500 text-sm">
+            No active auctions. Create one, or tick Complete to bring one back here.
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E]">
-                <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Code</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Name</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Date</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Type</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Lots</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Catalogued</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Added to BC</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Photography</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Ran through AI</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Complete</th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {auctions.map((auction) => (
-                <tr
-                  key={auction.id}
-                  className="border-b border-gray-200 dark:border-gray-800 last:border-0 hover:bg-gray-100 dark:hover:bg-[#2C2C2E] transition-colors"
-                >
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/tools/cataloguing/auctions/${auction.id}`}
-                      className="font-mono font-semibold text-[#2AB4A6] hover:text-[#24a090]"
-                    >
-                      {auction.code}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">{auction.name}</td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
-                    {auction.auctionDate
-                      ? new Date(auction.auctionDate).toLocaleDateString("en-GB")
-                      : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{auction.auctionType}</td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{auction._count.lots}</td>
-                  {(["catalogued","addedToBC","photography","aiRan","complete"] as const).map(f => (
-                    <td key={f} className="px-4 py-3 text-center">
-                      {(auction as any)[f]
-                        ? <span className="text-green-400 font-bold">✓</span>
-                        : <span className="text-gray-600">—</span>}
-                    </td>
-                  ))}
-                  <td className="px-4 py-3 text-right">
-                    {auction.notes ? <AuctionNotesButton notes={auction.notes} auctionName={auction.name} /> : <span className="text-gray-600">—</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <AuctionTable rows={active} />
         )}
       </div>
+
+      {/* Completed auctions */}
+      {completed.length > 0 && (
+        <>
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Completed Auctions</h2>
+          <div className="bg-white dark:bg-[#1C1C1E] rounded-xl border border-gray-300 dark:border-gray-700 overflow-hidden opacity-80">
+            <AuctionTable rows={completed} />
+          </div>
+        </>
+      )}
     </div>
   )
 }

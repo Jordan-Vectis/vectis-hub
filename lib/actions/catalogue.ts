@@ -130,6 +130,14 @@ export async function togglePublished(id: string, published: boolean) {
   revalidatePath("/auctions")
 }
 
+// Toggle the "complete" flag from the auctions list — moves the auction between
+// the Active and Completed tables.
+export async function toggleAuctionComplete(id: string, value: boolean) {
+  await requireCataloguer()
+  await prisma.catalogueAuction.update({ where: { id }, data: { complete: value } })
+  revalidatePath("/tools/cataloguing/auctions")
+}
+
 export async function createLot(auctionId: string, formData: FormData) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)

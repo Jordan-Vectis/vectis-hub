@@ -223,6 +223,7 @@ Customer database. Paginated list + search. Detail overlay: Details / Seller / B
 
 ### Cataloguing (/tools/cataloguing)
 - Per-auction tabs: Manage Lots, Add Lot, Photo Only Cataloguing, Import Lots, Upload Photos, AI Upgrade, Statistics (incl. Lots Missing Photos), Lot History, Auction Settings
+- Auctions list page (Auction Manager): split into two tables — Active Auctions (!complete) and Completed Auctions (complete). The Complete column is an interactive toggle (CompleteToggle client component → toggleAuctionComplete action); ticking moves the auction between tables.
 - Manage Lots table: columns include Added By (createdByName, sortable) — shows who created each lot
 - Lots have addedToBC boolean, aliases for Unique ID matcher
 - bcLocked = auction.addedToBC && userRole !== "ADMIN" — gates mutations
