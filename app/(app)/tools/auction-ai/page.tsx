@@ -3478,7 +3478,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           kpMissing:   saved?.kpMissing,
           kpAdded:     saved?.kpAdded,
           // Restore pending revised text from DB; for already-applied lots use current catalogue desc
-          kpRevised:   saved?.revised ?? (saved?.kpStatus === "fixed" ? l.description : undefined),
+          // Use || not ?? — revised may be stored as "" (falsy) rather than null for old runs
+          kpRevised:   saved?.revised || (saved?.kpStatus === "fixed" ? l.description : undefined) || undefined,
         }
       })
 
