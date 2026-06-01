@@ -92,8 +92,15 @@ export async function POST(req: NextRequest) {
         { text: userPrompt },
       ])
 
+      // Occasionally Gemini returns a JSON object instead of plain text — extract description if so
+      let rawText = text.trim()
+      try {
+        const parsed = JSON.parse(rawText)
+        if (parsed && typeof parsed.description === "string") rawText = parsed.description.trim()
+      } catch { /* not JSON — use as-is */ }
+
       // Split description and estimate — preserve newlines so list formatting is kept
-      const lines = text.trim().split("\n")
+      const lines = rawText.split("\n")
       const estimateLine = lines.find((l) => l.toLowerCase().startsWith("estimate:")) ?? ""
       const description  = lines.filter((l) => !l.toLowerCase().startsWith("estimate:")).join("\n").trim()
 
