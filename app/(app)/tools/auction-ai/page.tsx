@@ -4106,13 +4106,24 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Before</p>
+                    <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Current description</p>
                     <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap">{lot.currentDesc}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] uppercase tracking-wider text-amber-400 mb-1">After</p>
-                    <p className="text-xs text-gray-200 leading-relaxed whitespace-pre-wrap">{lot.kpRevised}</p>
+                    <p className="text-[10px] uppercase tracking-wider text-amber-400 mb-1">Revised — edit before accepting</p>
+                    <textarea
+                      value={lot.kpRevised ?? ""}
+                      onChange={e => setLots(prev => prev.map(l => l.id === lot.id ? { ...l, kpRevised: e.target.value } : l))}
+                      rows={8}
+                      className="w-full text-xs bg-black/30 border border-amber-700/40 rounded-lg px-3 py-2 text-gray-200 leading-relaxed resize-y focus:outline-none focus:border-amber-500"
+                    />
                   </div>
+                </div>
+                <div className="flex justify-end">
+                  <button onClick={() => setLots(prev => prev.map(l => l.id === lot.id ? { ...l, kpStatus: "skipped", kpRevised: undefined } : l))}
+                    className="px-3 py-1 text-xs border border-gray-600 text-gray-500 hover:border-red-500 hover:text-red-400 rounded-lg transition-colors">
+                    Reject
+                  </button>
                 </div>
               </div>
             ))}
