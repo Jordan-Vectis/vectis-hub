@@ -3484,8 +3484,15 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       })
 
       setLots(mapped)
-      if (savedRun) addLog(`▶ Loaded saved pipeline — stage: ${savedRun.stage} · ${mapped.length} lots`)
-      else          addLog(`▶ Loaded ${mapped.length} lots — ready to start`)
+      if (savedRun) {
+        const fixedCount   = mapped.filter(l => l.kpStatus === "fixed").length
+        const pendingCount = mapped.filter(l => l.kpStatus === "pending").length
+        const reviewable   = mapped.filter(l => (l.kpStatus === "fixed" || l.kpStatus === "pending") && l.kpRevised).length
+        addLog(`▶ Loaded saved pipeline — stage: ${savedRun.stage} · ${mapped.length} lots`)
+        addLog(`   KP: ${fixedCount} fixed · ${pendingCount} pending · ${reviewable} have revised text for review`)
+      } else {
+        addLog(`▶ Loaded ${mapped.length} lots — ready to start`)
+      }
     } catch (e: any) {
       setError(e.message)
     } finally {
