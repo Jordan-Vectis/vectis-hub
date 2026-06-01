@@ -3485,11 +3485,15 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
 
       setLots(mapped)
       if (savedRun) {
-        const fixedCount   = mapped.filter(l => l.kpStatus === "fixed").length
-        const pendingCount = mapped.filter(l => l.kpStatus === "pending").length
-        const reviewable   = mapped.filter(l => (l.kpStatus === "fixed" || l.kpStatus === "pending") && l.kpRevised).length
+        const fixedCount    = mapped.filter(l => l.kpStatus === "fixed").length
+        const pendingCount  = mapped.filter(l => l.kpStatus === "pending").length
+        const reviewable    = mapped.filter(l => (l.kpStatus === "fixed" || l.kpStatus === "pending") && l.kpRevised).length
+        const catWithDesc   = catData.lots.filter((l: any) => (l.description ?? "").trim()).length
+        const savedWithRev  = (savedRun.lots ?? []).filter((sl: any) => (sl.revised ?? "").trim()).length
+        const savedWithDesc = (savedRun.lots ?? []).filter((sl: any) => (sl.description ?? "").trim()).length
         addLog(`▶ Loaded saved pipeline — stage: ${savedRun.stage} · ${mapped.length} lots`)
-        addLog(`   KP: ${fixedCount} fixed · ${pendingCount} pending · ${reviewable} have revised text for review`)
+        addLog(`   KP: ${fixedCount} fixed · ${pendingCount} pending · ${reviewable} reviewable`)
+        addLog(`   DEBUG: catalogue lots with desc=${catWithDesc}/${catData.lots.length} · pipeline saved revised=${savedWithRev} · saved batch-desc=${savedWithDesc}`)
       } else {
         addLog(`▶ Loaded ${mapped.length} lots — ready to start`)
       }
