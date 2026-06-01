@@ -404,7 +404,7 @@ Detection regex:
 
 ## Lot titles
 
-Max 83 characters. Extracted from first sentence of description (split on . or newline). Fallback: "Untitled".
+Max 83 characters. First 83 characters of the description, truncated with … if longer. No sentence splitting — full stops do NOT break the title. Fallback: "Untitled".
 
 ## Lot status values
 
@@ -486,7 +486,7 @@ Contacts (/contacts): Customer database with paginated list, create modal, detai
 
 Cataloguing (/tools/cataloguing): Auction list with Export/Import xlsx. Per-auction tabs: Manage Lots, Add Lot, Photo Only, Import Lots, Upload Photos, AI Upgrade, Statistics (Lots Missing Photos), Lot History, Auction Settings. bcLocked = auction.addedToBC && userRole !== "ADMIN". Lotting Up (AI photo → lot groups with bounding boxes). Research (quick-launch + invisible timer). Tablet Mode (iPad UI).
 
-Auction AI (/tools/auction-ai) — 11 tabs: Chat Window, Batch Run, Saved Runs, KP Check Runs, Barcode Sorter, Description Copier, Key Points Check, Double Check, Auto Pipeline, Instructions, Macro Downloader. KP Check: validates descriptions, returns verdict/contradictions/revised description, stored in KPCheckRun/KPCheckLot. Double Check: second-pass validation, uses React 18 batching fix. Auto Pipeline: chains Batch→KP→Double Check, stored in PipelineRun/PipelineLot. React 18 fix: use local working[] + setState([...working]) full replace — never setState(prev=>prev.map(...)) in 100+ item loop.
+Auction AI (/tools/auction-ai) — 12 tabs, grouped sidebar (Chat/Run/History/Tools/Reference): Chat Window, Batch Run, Key Points Check, Double Check, Auto Pipeline, AI Upgrade, Saved Runs, KP Check Runs, Description Copier, Barcode Sorter, Instructions, Macro Downloader. All run tabs alternate primary/fallback model on retries. applyAiDescriptionOne estimate fields optional — only Batch sets estimates. KP Check: validates descriptions (partial word matches don't count), stored in KPCheckRun/KPCheckLot. Double Check: second-pass validation (counts boxes not vehicles in a set title), uses React 18 batching fix. AI Upgrade: mass rewrite with before/after review (/api/auction-ai/upgrade). Auto Pipeline: chains Batch→Double Check→Key Points; Batch applies desc+estimate to catalogue, DC auto-applies, KP is MANUAL Review & Apply; PipelineLot.batchDesc preserves pre-DC text. Stored in PipelineRun/PipelineLot. React 18 fix: use local working[] + setState([...working]) full replace — never setState(prev=>prev.map(...)) in 100+ item loop.
 
 BC Marketing (/tools/bc-marketing): 5 tabs — Content Generator (16 types), Paste & Generate, Insights, Saved Drafts, Hashtag Bank. BC codes never in AI output.
 
