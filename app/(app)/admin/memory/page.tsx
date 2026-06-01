@@ -237,7 +237,12 @@ Chat Window, Batch Run, Key Points Check, Double Check, Auto Pipeline, AI Upgrad
 
 Key Points Check: validates descriptions against key points, returns verdict/contradictions/unsupported claims/revised description. Stored in KPCheckRun/KPCheckLot tables. Partial match rule: a key point is only satisfied if its exact meaning is explicitly present — partial word matches do not count.
 Double Check: second-pass AI validation. Uses React 18 batching fix pattern.
-Auto Pipeline: chains Batch → KP Check → Double Check. Content blocks = skipped, errors retry infinitely. Has Google Search toggle (off by default). Stored in PipelineRun/PipelineLot tables.
+Auto Pipeline: chains Batch → Double Check → Key Points. Content blocks = skipped, errors retry infinitely. Has Google Search toggle (off by default). Stored in PipelineRun/PipelineLot tables.
+  - Batch stage applies generated description + estimate straight to the catalogue (was a bug: only saved to pipeline DB).
+  - Double Check auto-applies fixes; raw pre-DC text preserved in PipelineLot.batchDesc for the before/after.
+  - Key Points = manual review (does NOT auto-apply): lots appear in a Review & Apply section with key points, DC findings + before/after, editable textarea, View Photo, Apply/Apply All/Reject. Applying writes to catalogue + persists revised to pipeline DB.
+  - Recovery: review section shows any lot whose AI text isn't yet on the catalogue (kpRevised vs appliedDesc), so old completed runs can be applied retroactively.
+  - PipelineLot.batchDesc column added 2026-06-01 — run migrations after deploy.
 AI Upgrade: mass description rewrite tab. Auction code → pick transformation options (shorten/expand/humanise/grammar etc.) → run → before/after review step → accept individually or all. API route: /api/auction-ai/upgrade.
 Model alternation: all tabs (Batch, KP Check, Double Check, Pipeline, AI Upgrade) use attempt % 2 to switch between primary and fallback model on retries. fallbackModel prop passed from top-level sidebar to all run tabs.
 applyAiDescriptionOne: aiEstimateLow/aiEstimateHigh are optional — omitting preserves existing DB values. DC and KP stages must NOT pass these fields or they wipe Batch-set estimates.

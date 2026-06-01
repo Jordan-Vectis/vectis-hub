@@ -251,7 +251,8 @@ model PipelineLot {
 
   // Stage 1 — Batch Run
   batchStatus  String?    // "ok" | "failed" | "skipped"
-  description  String?    @db.Text
+  description  String?    @db.Text   // running latest text (overwritten by DC)
+  batchDesc    String?    @db.Text   // original raw batch text, preserved for DC before/after
   estimate     String?
 
   // Stage 2 — Double Check

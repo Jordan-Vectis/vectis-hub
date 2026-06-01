@@ -3355,6 +3355,7 @@ type PLot = {
   // Stage 1
   batchStatus?: "ok" | "failed" | "skipped"
   estimate?:    string
+  batchDesc?:   string   // original raw batch text, before DC/KP — for the DC before/after
   // Stage 2
   dcStatus?:       "ok" | "issues" | "error" | "skipped"
   contradictions?: string
@@ -3472,6 +3473,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           currentDesc: saved?.description ?? l.description ?? "",
           batchStatus: saved?.batchStatus,
           estimate:    saved?.estimate,
+          batchDesc:   saved?.batchDesc || undefined,
           dcStatus:    saved?.dcStatus,
           contradictions: saved?.contradictions,
           unsupported: saved?.unsupported,
@@ -3585,7 +3587,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       if (result) {
         const desc = result.description ?? ""
         const { low, high } = parseEstimate(result.estimate ?? "")
-        updated[idx] = { ...updated[idx], batchStatus: "ok", currentDesc: desc, estimate: result.estimate ?? "", appliedDesc: desc }
+        updated[idx] = { ...updated[idx], batchStatus: "ok", currentDesc: desc, estimate: result.estimate ?? "", appliedDesc: desc, batchDesc: desc }
         setLots([...updated])
         addLog(`  ✓ ${lot.label} — OK`)
         // Apply the generated description + estimate straight to the catalogue lot
@@ -3599,7 +3601,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           } catch { addLog(`  ⚠ ${lot.label} — saved to pipeline but failed to apply to catalogue`) }
         }
         // Save to pipeline + existing saved runs
-        await saveLot(lot.id, { batchStatus: "ok", description: desc, estimate: result.estimate ?? "" })
+        await saveLot(lot.id, { batchStatus: "ok", description: desc, batchDesc: desc, estimate: result.estimate ?? "" })
         fetch("/api/auction-ai/runs", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ code: code.trim().toUpperCase(), preset, lot: lot.label, description: desc, estimate: result.estimate ?? "" }),
@@ -4154,6 +4156,19 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                     )}
                     {!lot.contradictions?.trim() && !lot.unsupported?.trim() && (
                       <p className="text-xs text-gray-400">No issues flagged.</p>
+                    )}
+                    {/* Before/after text — only available for runs where the raw batch text was preserved */}
+                    {lot.batchDesc?.trim() && lot.batchDesc.trim() !== (lot.currentDesc ?? "").trim() && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2 pt-2 border-t border-indigo-900/40">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">Before DC (raw batch)</p>
+                          <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap">{lot.batchDesc.trim()}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-indigo-400 mb-0.5">After DC</p>
+                          <p className="text-xs text-gray-200 leading-relaxed whitespace-pre-wrap">{lot.currentDesc}</p>
+                        </div>
+                      </div>
                     )}
                   </div>
                 )}

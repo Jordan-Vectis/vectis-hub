@@ -254,6 +254,9 @@ const MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS "PipelineLot_runId_idx" ON "PipelineLot"("runId")`,
 
+  // 2026-06-01 — Preserve original raw batch text for DC before/after in review
+  `ALTER TABLE "PipelineLot" ADD COLUMN IF NOT EXISTS "batchDesc" TEXT`,
+
   // 2026-04-29 — MacroFile: stores uploaded macro/instruction files for Auction AI
   `CREATE TABLE IF NOT EXISTS "MacroFile" (
     "id"          TEXT         NOT NULL,
