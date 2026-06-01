@@ -4142,6 +4142,22 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                   </div>
                 )}
 
+                {/* Double Check findings */}
+                {(lot.dcStatus === "issues" || lot.contradictions?.trim() || lot.unsupported?.trim()) && (
+                  <div className="bg-black/20 rounded-lg px-3 py-2 border border-indigo-800/40">
+                    <p className="text-[10px] uppercase tracking-wider text-indigo-400 mb-1">🔎 Double Check {lot.dcStatus === "issues" ? "— issues found & corrected" : "— clean"}</p>
+                    {lot.contradictions?.trim() && (
+                      <p className="text-xs text-red-300 leading-relaxed"><span className="text-red-400 font-medium">Contradictions: </span>{lot.contradictions.trim()}</p>
+                    )}
+                    {lot.unsupported?.trim() && (
+                      <p className="text-xs text-amber-300 leading-relaxed mt-0.5"><span className="text-amber-400 font-medium">Unsupported: </span>{lot.unsupported.trim()}</p>
+                    )}
+                    {!lot.contradictions?.trim() && !lot.unsupported?.trim() && (
+                      <p className="text-xs text-gray-400">No issues flagged.</p>
+                    )}
+                  </div>
+                )}
+
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-amber-400 mb-1">Description — edit before applying</p>
                   <textarea
