@@ -17,6 +17,9 @@ WHAT TO FLAG as unsupported:
 - Claims that seem invented or hallucinated rather than observed (e.g. describing features not typically visible or not readable in the provided photos)
 - Where photos are provided: specific details that cannot be confirmed from the photos — for example a catalogue number that is not clearly readable, a pressing year not visible, condition claims that the photo is too blurry or cropped to confirm
 
+COUNTING ITEMS — critical rule:
+When verifying item counts, count the number of physical units/boxes in the lot, not the number of individual vehicles or models named within a set title. A boxed set labelled "Thunderbird 1 & 3" is ONE item. A set labelled "Thunderbird 2 & 4" is ONE item. Do NOT split a set name into its constituent parts when counting. If the description says "seven models" and seven boxes are visible or listed, that count is correct regardless of how many individual vehicles those sets contain internally.
+
 WHAT NOT TO FLAG:
 - General descriptive language or style choices
 - Reasonable estimates or condition grades
