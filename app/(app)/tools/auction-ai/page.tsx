@@ -1358,9 +1358,10 @@ function CopierTab() {
                       )}
                       {/* Text */}
                       <div className="min-w-0 flex-1">
-                        {value && (
-                          <p className="text-xs font-mono text-[#C8A96E] font-semibold mb-2">
-                            <span className="text-gray-600 dark:text-gray-500 font-sans font-normal">{label}: </span>{value}
+                        {(row.uniqueId || row.barcode) && (
+                          <p className="text-xs font-mono text-[#C8A96E] font-semibold mb-2 flex flex-wrap gap-x-4">
+                            {row.uniqueId && <span><span className="text-gray-600 dark:text-gray-500 font-sans font-normal">Unique ID: </span>{row.uniqueId}</span>}
+                            {row.barcode  && <span><span className="text-gray-600 dark:text-gray-500 font-sans font-normal">Barcode: </span>{row.barcode}</span>}
                           </p>
                         )}
                         {row.description
