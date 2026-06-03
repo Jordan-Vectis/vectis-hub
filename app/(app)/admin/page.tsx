@@ -64,6 +64,12 @@ const sections = [
     description: "Upload and organise documents and images into folders. Accessible by all staff.",
     icon:        "🗂️",
   },
+  {
+    href:        "/admin/invoices",
+    label:       "Invoices",
+    description: "Upload and access invoices. Accepts any file type.",
+    icon:        "🧾",
+  },
 ]
 
 export default async function AdminOverviewPage() {

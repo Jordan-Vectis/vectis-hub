@@ -257,6 +257,19 @@ const MIGRATIONS = [
   // 2026-06-01 — Preserve original raw batch text for DC before/after in review
   `ALTER TABLE "PipelineLot" ADD COLUMN IF NOT EXISTS "batchDesc" TEXT`,
 
+  // Invoices — flat file list backed by Cloudflare R2
+  `CREATE TABLE IF NOT EXISTS "InvoiceFile" (
+    "id"         TEXT         NOT NULL,
+    "name"       TEXT         NOT NULL,
+    "key"        TEXT         NOT NULL,
+    "size"       INTEGER      NOT NULL,
+    "mimeType"   TEXT         NOT NULL,
+    "uploadedBy" TEXT         NOT NULL,
+    "createdAt"  TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "InvoiceFile_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "InvoiceFile_createdAt_idx" ON "InvoiceFile"("createdAt")`,
+
   // 2026-04-29 — MacroFile: stores uploaded macro/instruction files for Auction AI
   `CREATE TABLE IF NOT EXISTS "MacroFile" (
     "id"          TEXT         NOT NULL,

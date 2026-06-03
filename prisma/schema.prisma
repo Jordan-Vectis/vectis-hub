@@ -920,6 +920,20 @@ model SocialPost {
   @@index([scheduledAt])
 }
 
+// Invoice file storage — flat list backed by Cloudflare R2.
+// Accessible from /admin/invoices.
+model InvoiceFile {
+  id         String   @id @default(cuid())
+  name       String
+  key        String
+  size       Int
+  mimeType   String
+  uploadedBy String
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 model SocialImage {
   id           String   @id @default(cuid())
   key          String   @unique   // R2 object key
