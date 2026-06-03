@@ -11,11 +11,11 @@ function parseEstimate(est: string): { low: number | null; high: number | null }
   }
 }
 
-const TITLE_LIMIT = 83
+// First sentence of the description, capped at 83 chars — matches lib/actions/catalogue.ts
 function titleFromDescription(desc: string): string {
-  const text = desc.trim()
-  if (!text) return "Untitled"
-  return text.length > TITLE_LIMIT ? text.slice(0, TITLE_LIMIT - 1).trimEnd() + "…" : text
+  const first = (desc ?? "").split(/\.\s|\n/)[0].trim()
+  if (!first) return "Untitled"
+  return first.length > 83 ? first.slice(0, 82) + "…" : first
 }
 
 // POST /api/auction-ai/runs/[id]/apply

@@ -4,6 +4,13 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { uploadBufferToR2 } from "@/lib/r2"
 
+// Derive a lot title from a description — first sentence, max 83 chars with ellipsis
+function titleFromDescription(desc: string): string {
+  const first = (desc ?? "").split(/\.\s|\n/)[0].trim()
+  if (!first) return "Untitled"
+  return first.length > 83 ? first.slice(0, 82) + "…" : first
+}
+
 async function requireCataloguer() {
   const session = await auth()
   if (!session || !["ADMIN","CATALOGUER"].includes(session.user.role)) throw new Error("Access denied")
@@ -65,9 +72,8 @@ export async function generateTitlesFromDescriptions(auctionId: string, lotIds: 
   await requireNotBCLocked(auctionId, session)
   const lots = await prisma.catalogueLot.findMany({ where: { id: { in: lotIds } }, select: { id: true, description: true } })
   await Promise.all(lots.map(l => {
-    const text = (l.description ?? "").trim()
-    if (!text) return Promise.resolve()
-    const title = text.length > 83 ? text.slice(0, 82).trimEnd() + "…" : text
+    const title = titleFromDescription(l.description ?? "")
+    if (!title || title === "Untitled") return Promise.resolve()
     return prisma.catalogueLot.update({ where: { id: l.id }, data: { title } })
   }))
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
@@ -94,6 +100,7 @@ export async function applyAiDescriptions(
         where: { id: u.id },
         data: {
           description:    u.description,
+          title:          titleFromDescription(u.description),
           aiEstimateLow:  u.aiEstimateLow,
           aiEstimateHigh: u.aiEstimateHigh,
           aiUpgraded:     true,
@@ -113,6 +120,7 @@ export async function applyAiDescriptionOne(
     where: { id: update.id },
     data: {
       description:    update.description,
+      title:          titleFromDescription(update.description),
       // Only update estimate fields if explicitly provided — omitting preserves existing values
       ...(update.aiEstimateLow  !== undefined ? { aiEstimateLow:  update.aiEstimateLow  } : {}),
       ...(update.aiEstimateHigh !== undefined ? { aiEstimateHigh: update.aiEstimateHigh } : {}),
