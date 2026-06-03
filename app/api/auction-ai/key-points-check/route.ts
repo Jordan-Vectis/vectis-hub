@@ -23,6 +23,7 @@ Critical rules:
 - Short key points (3 words or fewer) are always specific condition or completeness notes. They must appear explicitly — never assume they are implied by longer phrases.
 - **Longer descriptions are not more likely to contain a key point.** Do not assume a fact is present just because the description is detailed. Check the exact wording.
 - If a key point looks similar to something in the description but is not an exact semantic match, treat it as MISSING and insert it.
+- **If a key point's meaning is approximately present but phrased differently to how the cataloguer wrote it**, do not leave the approximate phrasing — replace it with the cataloguer's exact wording. Example: if the key point is "Folded" and the description says "presented in its original folded condition", replace that phrase so it uses the word "Folded" directly as the cataloguer intended. The cataloguer's phrasing is authoritative.
 
 Respond with ONLY valid JSON — no markdown, no code fences:
 {"description":"<the full final description>","missing":"<comma-separated list of key points that were absent from the original, or empty string if none>","added":"<one sentence describing what was inserted, or empty string if nothing changed>","found":"<for each key point you judged to be PRESENT in the original, write: KeyPoint → 'exact quoted phrase from the description that satisfied it'. Separate entries with a semicolon. If nothing was present leave empty string.>"}`
