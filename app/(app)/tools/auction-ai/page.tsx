@@ -2132,6 +2132,7 @@ type KPLot = {
   changed?: boolean
   missing?: string
   added?: string
+  found?: string
   status?: "idle" | "checking" | "ok" | "fixed" | "error"
   accepted?: boolean
   selected?: boolean
@@ -2376,14 +2377,14 @@ function KeyPointsCheckTab({ model: globalModel, fallbackModel, onModelChange }:
             const json = await res.json()
             if (json.error) throw new Error(json.error)
 
-            const { revised, changed, missing, added } = json
+            const { revised, changed, missing, added, found } = json
             const ms      = Date.now() - t0
             const outcome = changed ? "⚑ fixed" : "✓ all included"
             addLog(`  ${outcome} — Lot ${lot.label} (${(ms / 1000).toFixed(1)}s)${missing ? ` · missing: ${missing}` : ""}`)
 
             setLots(prev => prev.map(l =>
               l.id === lot.id
-                ? { ...l, revised, changed, missing, added, status: changed ? "fixed" : "ok", selected: changed ? true : undefined }
+                ? { ...l, revised, changed, missing, added, found, status: changed ? "fixed" : "ok", selected: changed ? true : undefined }
                 : l
             ))
 
@@ -2742,6 +2743,14 @@ function KeyPointsCheckTab({ model: globalModel, fallbackModel, onModelChange }:
                                 <p className="text-xs text-[#C8A96E]">{l.added}</p>
                               </div>
                             )}
+                          </div>
+                        )}
+
+                        {/* Evidence — what the AI matched for present key points */}
+                        {l.found && (
+                          <div className="px-3 py-2 border-b border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1C1C1E]">
+                            <p className="text-[10px] text-green-500 uppercase tracking-wider mb-0.5">Evidence (what the AI matched)</p>
+                            <p className="text-xs text-green-400 leading-relaxed">{l.found}</p>
                           </div>
                         )}
 
@@ -3364,6 +3373,7 @@ type PLot = {
   kpStatus?:  "ok" | "pending" | "fixed" | "error" | "skipped"
   kpMissing?: string
   kpAdded?:   string
+  kpFound?:   string  // exact phrases the AI matched for each "present" key point
   kpRevised?: string  // proposed text waiting for approval
   appliedDesc?: string  // description currently on the catalogue lot (to detect un-applied work)
 }
@@ -3742,13 +3752,13 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       }, err => err.startsWith("BLOCKED:"))
 
       if (result) {
-        const { revised, changed, missing, added } = result
+        const { revised, changed, missing, added, found } = result
         if (changed && revised) {
           // Store for review — do NOT auto-apply KP changes
-          updated[idx] = { ...updated[idx], kpStatus: "pending", kpMissing: missing, kpAdded: added, kpRevised: revised }
+          updated[idx] = { ...updated[idx], kpStatus: "pending", kpMissing: missing, kpAdded: added, kpFound: found, kpRevised: revised }
           addLog(`  ⚑ ${lot.label} — key points ready for review`)
         } else {
-          updated[idx] = { ...updated[idx], kpStatus: "ok", kpMissing: missing }
+          updated[idx] = { ...updated[idx], kpStatus: "ok", kpMissing: missing, kpFound: found }
           addLog(`  ✓ ${lot.label} — all key points present`)
         }
         setLots([...updated])
@@ -4140,6 +4150,12 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                     )}
                     {lot.kpMissing && (
                       <p className="text-xs text-red-400 mt-0.5">⚠ Was missing: {lot.kpMissing}</p>
+                    )}
+                    {lot.kpFound && (
+                      <div className="mt-1.5">
+                        <p className="text-[10px] text-green-500 uppercase tracking-wider mb-0.5">Evidence matched</p>
+                        <p className="text-xs text-green-400 leading-relaxed">{lot.kpFound}</p>
+                      </div>
                     )}
                   </div>
                 )}

@@ -25,7 +25,7 @@ Critical rules:
 - If a key point looks similar to something in the description but is not an exact semantic match, treat it as MISSING and insert it.
 
 Respond with ONLY valid JSON — no markdown, no code fences:
-{"description":"<the full final description>","missing":"<comma-separated list of key points that were absent from the original, or empty string if none>","added":"<one sentence describing what was inserted, or empty string if nothing changed>"}`
+{"description":"<the full final description>","missing":"<comma-separated list of key points that were absent from the original, or empty string if none>","added":"<one sentence describing what was inserted, or empty string if nothing changed>","found":"<for each key point you judged to be PRESENT in the original, write: KeyPoint → 'exact quoted phrase from the description that satisfied it'. Separate entries with a semicolon. If nothing was present leave empty string.>"}`
 
 // POST /api/auction-ai/key-points-check
 // Checks a single lot — label, keyPoints, description.
@@ -75,18 +75,20 @@ export async function POST(req: NextRequest) {
     let revised   = description.trim()
     let missing   = ""
     let added     = ""
+    let found     = ""
 
     try {
       const parsed = JSON.parse(raw)
       revised = parsed.description?.trim() || revised
       missing = parsed.missing?.trim()     || ""
       added   = parsed.added?.trim()       || ""
+      found   = parsed.found?.trim()       || ""
     } catch {
       revised = raw
     }
 
     const changed = revised !== description.trim()
-    return NextResponse.json({ revised, changed, missing, added })
+    return NextResponse.json({ revised, changed, missing, added, found })
   } catch (e: any) {
     const msg: string = e.message ?? "Unknown error"
     if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
