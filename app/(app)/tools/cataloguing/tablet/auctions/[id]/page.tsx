@@ -35,10 +35,12 @@ export default async function TabletAuctionDetailPage({
       showScanTimer={currentUser?.showScanTimer ?? true}
       timerYellowMins={currentUser?.timerYellowMins ?? 4}
       timerRedMins={currentUser?.timerRedMins ?? 10}
+      userRole={session.user.role}
       auction={{
         id: auction.id,
         code: auction.code,
         name: auction.name,
+        addedToBC: auction.addedToBC,
       }}
       lots={auction.lots.map(l => ({
         id: l.id,

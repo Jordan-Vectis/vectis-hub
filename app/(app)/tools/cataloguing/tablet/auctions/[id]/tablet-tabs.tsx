@@ -19,6 +19,7 @@ interface Auction {
   id: string
   code: string
   name: string
+  addedToBC: boolean
 }
 
 interface Lot {
@@ -67,8 +68,9 @@ const lbl = "block text-sm font-semibold uppercase tracking-wider text-gray-400 
 
 // ─── Root component ───────────────────────────────────────────────────────────
 
-export default function TabletTabs({ auction, lots, showScanTimer, timerYellowMins, timerRedMins }: { auction: Auction; lots: Lot[]; showScanTimer?: boolean; timerYellowMins?: number; timerRedMins?: number }) {
+export default function TabletTabs({ auction, lots, userRole, showScanTimer, timerYellowMins, timerRedMins }: { auction: Auction; lots: Lot[]; userRole: string; showScanTimer?: boolean; timerYellowMins?: number; timerRedMins?: number }) {
   const router = useRouter()
+  const bcLocked = auction.addedToBC && userRole !== "ADMIN"
   const [tab, setTab] = useState<Tab>("manage")
   const [editingLotId, setEditingLotId] = useState<string | null>(null)
   const [navDir, setNavDir] = useState<"next" | "prev" | null>(null)
@@ -148,6 +150,12 @@ export default function TabletTabs({ auction, lots, showScanTimer, timerYellowMi
         {/* Add Lot — hidden not unmounted so state persists on tab switch */}
         <div className={tab === "add-lot" ? "h-full" : "hidden"}>
           <div className="p-4 h-full">
+            {bcLocked ? (
+              <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-orange-950/40 border border-orange-700/50 text-orange-300 text-sm max-w-lg">
+                <span className="text-lg">🔒</span>
+                <span>This auction is locked. Contact the system administrators to add lots to this auction.</span>
+              </div>
+            ) : (
             <LotWizardTab
               auctionId={auction.id}
               auction={auction}
@@ -157,6 +165,7 @@ export default function TabletTabs({ auction, lots, showScanTimer, timerYellowMi
               timerYellowMins={timerYellowMins}
               timerRedMins={timerRedMins}
             />
+            )}
           </div>
         </div>
 
