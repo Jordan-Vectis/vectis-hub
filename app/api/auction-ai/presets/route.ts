@@ -10,10 +10,7 @@ export async function GET() {
   const rows = await prisma.aiPreset.findMany()
   const map: Record<string, string> = {}
   for (const r of rows) {
-    // Built-in presets always come from code — never from the DB.
-    // This means code updates take effect automatically on next page load.
-    // Custom presets (keys not in PRESETS) are DB-managed as normal.
-    if (PRESETS[r.key] !== undefined) continue
+    // DB version always takes priority — this allows built-in presets to be edited and saved.
     map[r.key] = r.instruction
   }
   return NextResponse.json(map)
@@ -26,12 +23,6 @@ export async function PUT(req: NextRequest) {
   const { key, instruction } = await req.json()
   if (!key || typeof instruction !== "string")
     return NextResponse.json({ error: "Invalid body" }, { status: 400 })
-
-  // Built-in presets are code-managed — don't write them to the DB.
-  // Edits are applied client-side for the current session only.
-  if (PRESETS[key] !== undefined) {
-    return NextResponse.json({ ok: true, sessionOnly: true })
-  }
 
   await prisma.aiPreset.upsert({
     where: { key },
