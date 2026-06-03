@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useTransition, useRef, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { createLot } from "@/lib/actions/catalogue"
 import { DEFAULT_REASONS } from "@/lib/idle-timer-config"
 import type { IdleReason } from "@/lib/idle-timer-config"
@@ -430,7 +431,9 @@ export default function LotWizardTab({
   timerYellowMins?: number
   timerRedMins?: number
 }) {
+  const router = useRouter()
   const [pending, start] = useTransition()
+  const [barcodeWarning, setBarcodeWarning] = useState(false)
 
   const barcodeStartedAt   = useRef<number | null>(null)
   const keyPointsEnteredAt = useRef<number | null>(null)
@@ -675,6 +678,14 @@ export default function LotWizardTab({
     const err = validateStep(step)
     if (err) { setValidErr(err); return }
     setValidErr("")
+    // Warn if barcode prefix doesn't match auction code
+    if (step === 2 && barcode.trim()) {
+      const code = auction.code.toUpperCase()
+      if (!barcode.trim().toUpperCase().startsWith(code)) {
+        setBarcodeWarning(true)
+        return
+      }
+    }
     if (step < 8) setStep(step + 1)
   }
 
@@ -1041,6 +1052,7 @@ export default function LotWizardTab({
                 const v = e.target.value
                 if (v && !barcode && !barcodeStartedAt.current) { barcodeStartedAt.current = Date.now(); if (showScanTimer) setTimerActive(true) }
                 setBarcode(v)
+                if (barcodeWarning) setBarcodeWarning(false)
               }} className={inpFocus} placeholder="Scan or type barcode…" autoFocus />
             </div>
             <button type="button" onClick={nextBarcodeNumber}
@@ -1048,6 +1060,27 @@ export default function LotWizardTab({
               style={{ background: "#2C2C2E", color: CAT_ACCENT, border: `1px solid ${CAT_ACCENT}66` }}>
               ⊕ Next Barcode Number
             </button>
+
+            {/* Barcode mismatch warning */}
+            {barcodeWarning && (
+              <div className="rounded-xl border border-amber-600/50 bg-amber-950/40 px-4 py-3 space-y-3">
+                <p className="text-sm text-amber-300">
+                  ⚠ Barcode <strong>{barcode.trim().toUpperCase()}</strong> doesn&apos;t look like it belongs to auction <strong>{auction.code.toUpperCase()}</strong>. You may be in the wrong auction.
+                </p>
+                <div className="flex gap-2">
+                  <button type="button"
+                    onClick={() => { setBarcodeWarning(false); setStep(3) }}
+                    className="px-3 py-1.5 text-sm font-medium rounded-lg bg-amber-700/40 hover:bg-amber-700/60 text-amber-200 border border-amber-600/40 transition-colors">
+                    Continue anyway
+                  </button>
+                  <button type="button"
+                    onClick={() => router.push("/tools/cataloguing/auctions")}
+                    className="px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-700/40 hover:bg-gray-700/60 text-gray-300 border border-gray-600/40 transition-colors">
+                    Change auction
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
