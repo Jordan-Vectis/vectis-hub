@@ -724,7 +724,12 @@ export default function LotWizardTab({
     photoFiles.forEach(p => fd.append("photo", p.file))
 
     start(async () => {
-      await createLot(auctionId, fd)
+      try {
+        await createLot(auctionId, fd)
+      } catch (e: any) {
+        setSaveStatus(`⚠ ${e?.message ?? "Failed to save lot"}`)
+        return
+      }
       barcodeStartedAt.current = null
       keyPointsAccumMs.current = 0
       keyPointsEnteredAt.current = null
