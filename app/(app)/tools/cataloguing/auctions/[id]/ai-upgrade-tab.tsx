@@ -54,7 +54,10 @@ function parseEstimate(est: string): { low: number | null; high: number | null }
 const DEFAULT_MODEL = "gemini-3-flash-preview"
 
 export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: Props) {
-  // DB overrides — fetched on mount so edited instructions actually take effect
+  const [phase,  setPhase]  = useState<Phase>("idle")
+  const [preset, setPreset] = useState(() => Object.keys(PRESETS).filter(k => k !== "Custom (paste my own)")[0] ?? "")
+
+  // DB overrides — re-fetched whenever preset changes so edited instructions always take effect
   const [overrides, setOverrides] = useState<Record<string, string>>({})
 
   useEffect(() => {
@@ -69,9 +72,6 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
     ...Object.keys(PRESETS).filter(k => k !== "Custom (paste my own)"),
     ...Object.keys(overrides).filter(k => !PRESETS[k]),
   ]
-
-  const [phase,  setPhase]  = useState<Phase>("idle")
-  const [preset, setPreset] = useState(() => Object.keys(PRESETS).filter(k => k !== "Custom (paste my own)")[0] ?? "")
   const [model,  setModel]  = useState(DEFAULT_MODEL)
   const [modelList,    setModelList]    = useState<string[]>([DEFAULT_MODEL])
   const [modelStatus,  setModelStatus]  = useState<Record<string, { ok: boolean; ms: number; error?: string } | "testing">>({})
