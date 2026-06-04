@@ -10,13 +10,13 @@ import { MacroTab } from "./macro-tab"
 
 // ─── Show Instruction Toggle ──────────────────────────────────────────────────
 
-function ShowInstructionToggle({ instruction }: { instruction: string }) {
+function ShowInstructionToggle({ instruction, label = "instructions sent to Gemini" }: { instruction: string; label?: string }) {
   const [open, setOpen] = useState(false)
   return (
     <div className="mt-2">
       <button onClick={() => setOpen(o => !o)}
         className="text-xs text-gray-600 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-300 transition-colors">
-        {open ? "▲ Hide instructions" : "▼ Show instructions sent to Gemini"}
+        {open ? `▲ Hide ${label}` : `▼ Show ${label}`}
       </button>
       {open && (
         <pre className="mt-2 text-xs text-gray-600 dark:text-gray-400 bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-lg p-3 whitespace-pre-wrap leading-relaxed font-mono">
@@ -3431,6 +3431,15 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   useEffect(() => {
     fetch("/api/auction-ai/presets").then(r => r.json()).then(setOverrides).catch(() => {})
     fetch("/api/auction-ai/auctions").then(r => r.json()).then(d => { if (Array.isArray(d)) setAuctionList(d) }).catch(() => {})
+    // Pre-load auction code from cataloguing "AI Upgrade" button
+    const raw = localStorage.getItem("pipeline_preload")
+    if (raw) {
+      try {
+        const data = JSON.parse(raw)
+        if (data.auctionCode) setCode(data.auctionCode.toUpperCase())
+      } catch {}
+      localStorage.removeItem("pipeline_preload")
+    }
   }, [])
 
   useEffect(() => {
@@ -3979,6 +3988,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           Runs Batch → Double Check → Key Points automatically. Fixes are applied as each stage completes.
           Progress is saved to the database — close the browser and resume any time.
         </p>
+        <ShowInstructionToggle instruction={DOUBLE_CHECK_INSTRUCTION} label="Double Check instructions" />
       </div>
 
       {/* Config */}
