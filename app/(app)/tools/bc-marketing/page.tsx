@@ -9,8 +9,9 @@ import HashtagsTab from "./hashtags-tab"
 import WebDescriptionsTab from "./web-descriptions-tab"
 import SocialPostsTab from "./social-posts-tab"
 import SocialImagesTab from "./social-images-tab"
+import EmailListsTab from "./email-lists-tab"
 
-type TabKey = "content" | "paste" | "insights" | "drafts" | "hashtags" | "webdesc" | "social" | "socialmedia"
+type TabKey = "content" | "paste" | "insights" | "drafts" | "hashtags" | "webdesc" | "social" | "socialmedia" | "emaillists"
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "content",     label: "✍ Content Generator" },
@@ -21,6 +22,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "webdesc",     label: "🌐 Web Descriptions" },
   { key: "social",      label: "📲 Social Auto Posts" },
   { key: "socialmedia", label: "📸 Social Media Images" },
+  { key: "emaillists",  label: "✉ Email Lists" },
 ]
 
 export default function BcMarketingPage() {
@@ -53,6 +55,7 @@ export default function BcMarketingPage() {
       {tab === "webdesc"  && <WebDescriptionsTab />}
       {tab === "social"      && <SocialPostsTab />}
       {tab === "socialmedia" && <SocialImagesTab />}
+      {tab === "emaillists"  && <EmailListsTab />}
     </div>
   )
 }
