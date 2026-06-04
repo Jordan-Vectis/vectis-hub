@@ -3617,6 +3617,12 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         }
         if (imgCount === 0) throw new Error("No images could be fetched")
 
+        // Send key points as context so the batch route constrains output to them
+        if (lot.keyPoints?.trim()) {
+          fd.append(`lot_${lot.label}_context`, lot.keyPoints.trim())
+          fd.append(`lot_${lot.label}_contextType`, "keyPoints")
+        }
+
         const res  = await fetch("/api/auction-ai/batch", { method: "POST", body: fd })
         const json = await res.json()
         if (!res.ok) throw new Error(json.error ?? res.statusText)
