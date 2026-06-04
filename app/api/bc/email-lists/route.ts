@@ -39,20 +39,20 @@ export async function GET(req: NextRequest) {
         const select = "EVA_BuyerName,EVA_EmailAddress"
 
         const all: any[] = []
-        let next: string | null = null
+        let nextUrl: string | null = null
         let first = true
 
-        while (first || next) {
-          const { rows, nextLink } = next
-            ? await bcPageWithNext(token, next)
+        while (first || nextUrl) {
+          const result = nextUrl
+            ? await bcPageWithNext(token, nextUrl)
             : await bcPageWithNext(token, "AttendenceRegister", {
                 $top:    500,
                 $filter: filter,
                 $select: select,
               })
-          all.push(...rows)
-          next  = nextLink
-          first = false
+          all.push(...result.rows)
+          nextUrl = result.nextLink
+          first   = false
         }
 
         return all
