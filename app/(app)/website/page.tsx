@@ -4,14 +4,15 @@ import { useState } from "react"
 import Link from "next/link"
 
 const SITE_PAGES = [
-  { label: "Home",        path: "/" },
-  { label: "Auctions",    path: "/auctions" },
-  { label: "Login",       path: "/portal/login" },
-  { label: "Register",    path: "/portal/register" },
-  { label: "My Account",  path: "/account" },
+  { label: "Home",              path: "/" },
+  { label: "Auctions",          path: "/auctions" },
+  { label: "BidJS Live",        path: "/auctions/bidjs" },
+  { label: "Login",             path: "/portal/login" },
+  { label: "Register",          path: "/portal/register" },
+  { label: "My Account",        path: "/account" },
 ]
 
-type Tab = "website" | "controller"
+type Tab = "website" | "controller" | "bidjs"
 
 export default function WebsitePreviewPage() {
   const [activeTab, setActiveTab]       = useState<Tab>("website")
@@ -56,6 +57,18 @@ export default function WebsitePreviewPage() {
               LIVE
             </span>
           )}
+        </button>
+
+        {/* BidJS Setup tab */}
+        <button
+          onClick={() => setActiveTab("bidjs")}
+          className={`flex items-center gap-2 px-5 py-3 text-xs font-bold tracking-wide border-b-2 transition-colors ${
+            activeTab === "bidjs"
+              ? "border-[#2AB4A6] text-white bg-[#2C2C2E]"
+              : "border-transparent text-gray-400 hover:text-white hover:bg-gray-800"
+          }`}
+        >
+          ⚡ BidJS Setup
         </button>
 
         {/* Banner manager link */}
@@ -113,13 +126,72 @@ export default function WebsitePreviewPage() {
         </a>
       </div>
 
-      {/* ── iframe ──────────────────────────────────────────────────────── */}
-      <iframe
-        key={iframeSrc}
-        src={iframeSrc}
-        className="flex-1 w-full border-0 bg-white"
-        title={activeTab === "controller" ? "Back End Controller" : "Website Preview"}
-      />
+      {/* ── BidJS Setup panel ───────────────────────────────────────────── */}
+      {activeTab === "bidjs" ? (
+        <div className="flex-1 overflow-y-auto p-8 bg-[#1C1C1E]">
+          <div className="max-w-3xl mx-auto space-y-6">
+
+            <div>
+              <h1 className="text-white text-xl font-bold mb-1">BidJS Integration Setup</h1>
+              <p className="text-gray-400 text-sm">Reference guide for embedding BidJS on the Vectis website.</p>
+            </div>
+
+            {/* Installation */}
+            <div className="bg-[#2C2C2E] rounded-lg p-5 space-y-3">
+              <h2 className="text-[#2AB4A6] text-sm font-bold uppercase tracking-wide">Installation</h2>
+              <p className="text-gray-300 text-sm">Follow the two-step copy-and-paste guide. Remember to replace the <span className="text-white font-semibold">Server Name</span>, <span className="text-white font-semibold">Server Region</span>, <span className="text-white font-semibold">Client ID</span>, and <span className="text-white font-semibold">Version Number</span> with the demo values first — production values are swapped in after contract sign-off (under 5 minutes).</p>
+              <div className="flex flex-col gap-2">
+                <a href="https://docs.bidjs.com/" target="_blank" rel="noopener noreferrer" className="text-[#2AB4A6] hover:underline text-sm">📄 Introduction — docs.bidjs.com</a>
+                <a href="https://docs.bidjs.com/developer/gettingStarted/installation" target="_blank" rel="noopener noreferrer" className="text-[#2AB4A6] hover:underline text-sm">🚀 Installation guide — docs.bidjs.com/developer/gettingStarted/installation</a>
+                <a href="https://docs.bidjs.com/developer/configuration/navigation" target="_blank" rel="noopener noreferrer" className="text-[#2AB4A6] hover:underline text-sm">🔗 Visual hooks / navigation config — docs.bidjs.com/developer/configuration/navigation</a>
+              </div>
+            </div>
+
+            {/* Sandbox credentials */}
+            <div className="bg-[#2C2C2E] rounded-lg p-5 space-y-3">
+              <h2 className="text-[#2AB4A6] text-sm font-bold uppercase tracking-wide">Sandbox Admin Credentials</h2>
+              <p className="text-gray-400 text-sm">Once logged in, click <span className="text-white">My Account → Admin</span> and log in again with the same details.</p>
+              <a href="https://examples-hove.eu-west-2.bidjs.com/5/index.html?clientId=sandbox#!/" target="_blank" rel="noopener noreferrer" className="text-[#2AB4A6] hover:underline text-sm block">🌐 Sandbox login portal</a>
+              <div className="grid grid-cols-2 gap-3 mt-1">
+                <div className="bg-[#1C1C1E] rounded p-3">
+                  <p className="text-gray-500 text-xs mb-1">Username</p>
+                  <p className="text-white font-mono text-sm">sandbox_admin</p>
+                </div>
+                <div className="bg-[#1C1C1E] rounded p-3">
+                  <p className="text-gray-500 text-xs mb-1">Password</p>
+                  <p className="text-white font-mono text-sm">sandboxadmin</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Support */}
+            <div className="bg-[#2C2C2E] rounded-lg p-5 space-y-3">
+              <h2 className="text-[#2AB4A6] text-sm font-bold uppercase tracking-wide">Support &amp; Training</h2>
+              <div className="flex flex-col gap-2">
+                <a href="https://support.bidlogix.net/support/solutions" target="_blank" rel="noopener noreferrer" className="text-[#2AB4A6] hover:underline text-sm">📚 Self-help solutions — support.bidlogix.net</a>
+                <a href="https://support.bidlogix.com/en/articles/5831227-bidjs-self-teach-guide" target="_blank" rel="noopener noreferrer" className="text-[#2AB4A6] hover:underline text-sm">🎓 BidJS self-teach guide</a>
+              </div>
+            </div>
+
+            {/* Contact */}
+            <div className="bg-[#2C2C2E] rounded-lg p-5 space-y-1">
+              <h2 className="text-[#2AB4A6] text-sm font-bold uppercase tracking-wide">BidJS Contact</h2>
+              <p className="text-white text-sm font-semibold">Ross Ciccone — Sales Manager</p>
+              <p className="text-gray-400 text-sm">Mob: +44 (0)779 892 1937</p>
+              <a href="https://bidjs.com" target="_blank" rel="noopener noreferrer" className="text-[#2AB4A6] hover:underline text-sm">bidjs.com</a>
+            </div>
+
+          </div>
+        </div>
+      ) : (
+        /* ── iframe ─────────────────────────────────────────────────────── */
+        <iframe
+          key={iframeSrc}
+          src={iframeSrc}
+          className="flex-1 w-full border-0 bg-white"
+          title={activeTab === "controller" ? "Back End Controller" : "Website Preview"}
+        />
+      )}
     </div>
   )
 }

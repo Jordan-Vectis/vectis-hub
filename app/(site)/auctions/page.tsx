@@ -97,6 +97,22 @@ export default async function AuctionsPage({
 
   return (
     <div>
+      {/* ── Platform switcher ── */}
+      <div className="bg-[#1e3058] border-b border-white/10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 flex items-center gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mr-2">Auction Platform:</span>
+          <span className="text-xs font-black uppercase tracking-widest text-white bg-[#2AB4A6] px-3 py-1.5 rounded">
+            Vectis Catalogue
+          </span>
+          <Link
+            href="/auctions/bidjs"
+            className="text-xs font-bold uppercase tracking-widest text-gray-300 hover:text-white px-3 py-1.5 rounded transition-colors"
+          >
+            BidJS Live Bidding
+          </Link>
+        </div>
+      </div>
+
       {/* ── Live auction takeover ── */}
       {liveAuction && (
         <LiveAuctionBanner
