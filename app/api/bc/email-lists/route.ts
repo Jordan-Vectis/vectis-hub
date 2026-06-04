@@ -28,13 +28,15 @@ export async function GET(req: NextRequest) {
     // Run in parallel, then merge and deduplicate
     const results = await Promise.allSettled(
       keywords.map(async (kw) => {
+        // tolower() makes the search case-insensitive — important as BC auction names vary in casing
+        const safe = kw.replace(/'/g, "''").toLowerCase()
         const filterParts: string[] = [
-          `contains(EVA_AuctionName,'${kw.replace(/'/g, "''")}')`,
-          `EVA_EmailAddress ne ''`,
+          `contains(tolower(EVA_AuctionName),'${safe}')`,
         ]
         if (dateFrom) {
           filterParts.push(`EVA_AuctionDate ge ${dateFrom}`)
         }
+        // Removed EVA_EmailAddress ne '' — that misses null values; empty check is done in code
         const filter = filterParts.join(" and ")
         const select = "EVA_BuyerName,EVA_EmailAddress"
 
@@ -65,8 +67,10 @@ export async function GET(req: NextRequest) {
 
     // Merge all rows, deduplicate by email (case-insensitive)
     const seen = new Map<string, EmailListEntry>()
+    let rawCount = 0
     for (const result of results) {
       if (result.status !== "fulfilled") continue
+      rawCount += result.value.length
       for (const row of result.value) {
         const email = String(row.EVA_EmailAddress ?? "").trim().toLowerCase()
         if (!email) continue
@@ -82,7 +86,7 @@ export async function GET(req: NextRequest) {
     const entries = Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name))
     const errors  = results.filter(r => r.status === "rejected").map(r => (r as any).reason?.message ?? "Unknown error")
 
-    return NextResponse.json({ entries, total: entries.length, errors })
+    return NextResponse.json({ entries, total: entries.length, rawCount, errors })
   } catch (e: any) {
     console.error("bc/email-lists error:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })

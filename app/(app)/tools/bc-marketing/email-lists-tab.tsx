@@ -31,6 +31,7 @@ export default function EmailListsTab() {
   const [datePreset,  setDatePreset]  = useState(12)
   const [loading,     setLoading]     = useState(false)
   const [entries,     setEntries]     = useState<Entry[] | null>(null)
+  const [rawCount,    setRawCount]    = useState<number>(0)
   const [errors,      setErrors]      = useState<string[]>([])
   const [error,       setError]       = useState<string | null>(null)
   const [copied,      setCopied]      = useState(false)
@@ -62,6 +63,7 @@ export default function EmailListsTab() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
       setEntries(data.entries)
+      setRawCount(data.rawCount ?? 0)
       setErrors(data.errors ?? [])
     } catch (e: any) {
       setError(e.message ?? "Failed to fetch")
@@ -192,7 +194,8 @@ export default function EmailListsTab() {
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <span className="font-semibold text-gray-900 dark:text-white">{entries.length}</span>
-              <span className="text-gray-600 dark:text-gray-400 text-sm ml-1">unique buyers found</span>
+              <span className="text-gray-600 dark:text-gray-400 text-sm ml-1">unique buyers</span>
+              <span className="text-gray-600 dark:text-gray-500 text-xs ml-2">({rawCount} total registrations from BC)</span>
               {search && filtered.length !== entries.length && (
                 <span className="text-gray-600 dark:text-gray-500 text-sm ml-2">· {filtered.length} shown</span>
               )}
