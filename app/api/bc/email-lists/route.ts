@@ -43,15 +43,19 @@ export async function GET(req: NextRequest) {
         let first = true
 
         while (first || nextUrl) {
-          const result = nextUrl
-            ? await bcPageWithNext(token, nextUrl)
-            : await bcPageWithNext(token, "AttendenceRegister", {
-                $top:    500,
-                $filter: filter,
-                $select: select,
-              })
-          all.push(...result.rows)
-          nextUrl = result.nextLink
+          let rows: any[]
+          let newNextUrl: string | null
+          if (nextUrl) {
+            const r = await bcPageWithNext(token, nextUrl)
+            rows = r.rows; newNextUrl = r.nextLink
+          } else {
+            const r = await bcPageWithNext(token, "AttendenceRegister", {
+              $top: 500, $filter: filter, $select: select,
+            })
+            rows = r.rows; newNextUrl = r.nextLink
+          }
+          all.push(...rows)
+          nextUrl = newNextUrl
           first   = false
         }
 
