@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
-import { getBCToken, bcPageWithNext } from "@/lib/bc"
+import { getBCToken, bcFetchAll } from "@/lib/bc"
 
 export const maxDuration = 120
 
@@ -40,28 +40,7 @@ export async function GET(req: NextRequest) {
         const filter = filterParts.join(" and ")
         const select = "EVA_BuyerName,EVA_EmailAddress"
 
-        const all: any[] = []
-        let nextUrl: string | null = null
-        let first = true
-
-        while (first || nextUrl) {
-          let rows: any[]
-          let newNextUrl: string | null
-          if (nextUrl) {
-            const r = await bcPageWithNext(token, nextUrl)
-            rows = r.rows; newNextUrl = r.nextLink
-          } else {
-            const r = await bcPageWithNext(token, "AttendenceRegister", {
-              $top: 500, $filter: filter, $select: select,
-            })
-            rows = r.rows; newNextUrl = r.nextLink
-          }
-          all.push(...rows)
-          nextUrl = newNextUrl
-          first   = false
-        }
-
-        return all
+        return await bcFetchAll(token, "AttendenceRegister", filter, select)
       })
     )
 
