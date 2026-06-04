@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 
-type Entry = { name: string; email: string }
+type Entry = { name: string; email: string; saleCodes: string[] }
 
 const QUICK_KEYWORDS = [
   "Star Wars", "Matchbox", "Diecast", "Comics", "Vinyl", "Trains",
@@ -85,7 +85,9 @@ export default function EmailListsTab() {
   }
 
   function exportCSV() {
-    const rows = ["Name,Email Address", ...filtered.map(e => `"${e.name.replace(/"/g, '""')}","${e.email}"`)].join("\n")
+    const rows = ["Name,Email Address,Sale Codes", ...filtered.map(e =>
+      `"${e.name.replace(/"/g, '""')}","${e.email}","${e.saleCodes.join("; ")}"`
+    )].join("\n")
     const blob = new Blob([rows], { type: "text/csv" })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement("a")
@@ -220,15 +222,17 @@ export default function EmailListsTab() {
             <p className="text-gray-600 dark:text-gray-500 text-sm">No results found.</p>
           ) : (
             <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
-              <div className="grid grid-cols-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+              <div className="grid grid-cols-3 px-4 py-2 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
                 <span className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider">Buyer Name</span>
                 <span className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider">Email Address</span>
+                <span className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider">Sale Codes</span>
               </div>
               <div className="overflow-y-auto max-h-[500px] divide-y divide-gray-100 dark:divide-gray-800">
                 {filtered.map((e, i) => (
-                  <div key={i} className="grid grid-cols-2 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                  <div key={i} className="grid grid-cols-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                     <span className="text-sm text-gray-800 dark:text-gray-200 truncate pr-4">{e.name || "—"}</span>
-                    <span className="text-sm text-gray-600 dark:text-gray-400 font-mono truncate">{e.email}</span>
+                    <span className="text-sm text-gray-600 dark:text-gray-400 font-mono truncate pr-4">{e.email}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-500 truncate">{e.saleCodes.join(", ") || "—"}</span>
                   </div>
                 ))}
               </div>

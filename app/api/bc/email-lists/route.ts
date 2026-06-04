@@ -4,7 +4,7 @@ import { getBCToken } from "@/lib/bc"
 
 export const maxDuration = 300
 
-export type EmailListEntry = { name: string; email: string }
+export type EmailListEntry = { name: string; email: string; saleCodes: string[] }
 
 const BC_BASE = `https://api.businesscentral.dynamics.com/v2.0/${process.env.BC_TENANT_ID ?? "f146b72a-c3fb-4d6b-9002-072b3191507a"}/production/ODataV4/Company('Vectis')/`
 
@@ -76,14 +76,15 @@ export async function GET(req: NextRequest) {
           filterParts.push(`EVA_AuctionDate ge ${dateFrom}`)
         }
         const filter = filterParts.join(" and ")
-        const select = "EVA_BuyerName,EVA_EmailAddress"
+        const select = "EVA_BuyerName,EVA_EmailAddress,EVA_AuctionNo"
 
         return await fetchAllRows(token, "AttendenceRegister", filter, select)
       })
     )
 
-    // Merge and deduplicate
-    const seen = new Map<string, EmailListEntry>()
+    // Merge and deduplicate — collect all sale codes per buyer
+    const seen     = new Map<string, EmailListEntry>()
+    const saleCodes = new Map<string, Set<string>>()
     let rawCount = 0
     let bcTotal  = 0
 
@@ -92,15 +93,24 @@ export async function GET(req: NextRequest) {
       rawCount += result.value.rows.length
       bcTotal  += result.value.bcTotal
       for (const row of result.value.rows) {
-        const email = String(row.EVA_EmailAddress ?? "").trim().toLowerCase()
+        const email    = String(row.EVA_EmailAddress ?? "").trim().toLowerCase()
+        const saleCode = String(row.EVA_AuctionNo ?? "").trim()
         if (!email) continue
         if (!seen.has(email)) {
           seen.set(email, {
-            name:  String(row.EVA_BuyerName ?? "").trim(),
-            email: String(row.EVA_EmailAddress ?? "").trim(),
+            name:      String(row.EVA_BuyerName ?? "").trim(),
+            email:     String(row.EVA_EmailAddress ?? "").trim(),
+            saleCodes: [],
           })
+          saleCodes.set(email, new Set())
         }
+        if (saleCode) saleCodes.get(email)!.add(saleCode)
       }
+    }
+
+    // Attach collected sale codes to each entry
+    for (const [email, entry] of seen) {
+      entry.saleCodes = Array.from(saleCodes.get(email) ?? []).sort()
     }
 
     const entries = Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name))
