@@ -93,6 +93,8 @@ export async function POST(req: NextRequest) {
 
 CRITICAL: Only use the information in the key points and what you can directly observe in the photos. Do NOT add product history, specifications, piece counts, features, or any other details from your training data that are not explicitly stated in the key points. If a detail is not in the key points and cannot be seen in the photos, leave it out entirely.
 
+EXCEPTION: If a key point contains a set or catalogue number (e.g. a LEGO set number like #42110, a Playmobil set number, etc.), you MUST resolve it to its full product name and include both the name and number in the description. This is the only permitted use of training knowledge.
+
 Write a single, concise catalogue description that naturally incorporates every key point. Do not list them separately, do not copy them verbatim, and do not repeat the same information twice.
 
 Key points:
