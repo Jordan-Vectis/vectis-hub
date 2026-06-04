@@ -27,8 +27,8 @@ function monthsAgoISO(months: number): string {
 export default function EmailListsTab() {
   const [keywords,    setKeywords]    = useState<string[]>([])
   const [inputVal,    setInputVal]    = useState("")
-  const [dateFrom,    setDateFrom]    = useState(monthsAgoISO(12))
-  const [datePreset,  setDatePreset]  = useState(12)
+  const [dateFrom,    setDateFrom]    = useState("")
+  const [datePreset,  setDatePreset]  = useState(0)
   const [loading,     setLoading]     = useState(false)
   const [entries,     setEntries]     = useState<Entry[] | null>(null)
   const [rawCount,    setRawCount]    = useState<number>(0)

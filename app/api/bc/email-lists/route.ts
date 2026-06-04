@@ -68,9 +68,9 @@ export async function GET(req: NextRequest) {
     // Run one request per keyword in parallel
     const results = await Promise.allSettled(
       keywords.map(async (kw) => {
-        const safe = kw.replace(/'/g, "''").toLowerCase()
+        const safe = kw.replace(/'/g, "''")
         const filterParts: string[] = [
-          `contains(tolower(EVA_AuctionName),'${safe}')`,
+          `contains(EVA_AuctionName,'${safe}')`,
         ]
         if (dateFrom) {
           filterParts.push(`EVA_AuctionDate ge ${dateFrom}`)
