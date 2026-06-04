@@ -926,8 +926,8 @@ export default function LotWizardTab({
         </button>
         <span className={`text-gray-600 ${tablet ? "text-base" : "text-xs"}`}>{step} / 8</span>
         {step < 8 ? (
-          <button onClick={goNext}
-            className={`font-semibold rounded transition-colors ${tablet ? "px-6 py-3 text-base" : "px-4 py-1.5 text-sm"}`}
+          <button onClick={goNext} disabled={barcodeWarning}
+            className={`font-semibold rounded transition-colors disabled:opacity-40 ${tablet ? "px-6 py-3 text-base" : "px-4 py-1.5 text-sm"}`}
             style={{ background: CAT_ACCENT, color: "#1C1C1E", touchAction: tablet ? "manipulation" : undefined }}>
             Next →
           </button>
