@@ -1,0 +1,60 @@
+import { TimeZoneModel, LanguageModel, UserAddressModel, AuctioneerModel } from '../../types/common';
+export interface LoginCredentials {
+    username: string;
+    password: string;
+}
+export interface AuthenticatedUserModel {
+    id: number;
+    externalUserRef: string | null;
+    language: LanguageModel;
+    timeZone: TimeZoneModel;
+    signupSource: string | null;
+    securityQuestion: string | null;
+    webAppId: number;
+    statusId: number;
+    uuid: string;
+    redFlag: boolean;
+    redFlagReason: string | null;
+    whitelist: boolean;
+    username: string;
+    forename: string;
+    surname: string;
+    companyName: string | null;
+    inserted: number;
+    updated: number | null;
+    activated: number | null;
+    lastLoggedIn: string;
+    penultimateLogin: string;
+    protectedResources: string[] | null;
+    localeFormat: string;
+    localeInternal: string;
+    thousandsSeparator: string;
+    currencySymbolAsPrefix: boolean;
+    loginAdminError: boolean;
+    systemAdmin: boolean;
+    adminLoggedIn: boolean;
+    adminLoginPermitted: boolean;
+    accountNonLocked: boolean;
+    enabled: boolean;
+    credentialsNonExpired: boolean;
+    accountNonExpired: boolean;
+    outbidEmailsOk: boolean;
+    receiveEmailsOk: boolean;
+    forcePasswordReset: boolean;
+    publicVendorAdmin: boolean;
+    mainAddress: UserAddressModel | null;
+    shippingAddress: UserAddressModel | null;
+    billingAddress: UserAddressModel | null;
+    hasMainAddress: boolean;
+    hasShippingAddress: boolean;
+    hasBillingAddress: boolean;
+    phoneVerified: boolean;
+    verifiedPhoneNumber: string | null;
+    auctioneerModels: AuctioneerModel[] | null;
+    accessToken: string;
+    loginFromBlade: boolean;
+    loginFromBladeUrl: string | null;
+    bladeClientLogo: string | null;
+    displayName: string;
+}
+//# sourceMappingURL=token.types.d.ts.map

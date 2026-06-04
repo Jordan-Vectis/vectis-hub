@@ -1,0 +1,1 @@
+{"version":3,"file":"timedNamespace.js","sourceRoot":"","sources":["../../../src/public/timed/timedNamespace.ts"],"names":[],"mappings":";;;AACA,mCAAuC;AACvC,+CAAmD;AAEnD;;;;;GAKG;AACH,MAAa,cAAc;IAMzB,YAAY,UAAsB;QAChC,IAAI,CAAC,GAAG,GAAG,IAAI,iBAAW,CAAC,UAAU,CAAC,CAAA;QACtC,IAAI,CAAC,OAAO,GAAG,IAAI,yBAAe,CAAC,UAAU,CAAC,CAAA;IAChD,CAAC;CACF;AAVD,wCAUC"}

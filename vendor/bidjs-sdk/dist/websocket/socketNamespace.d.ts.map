@@ -1,0 +1,1 @@
+{"version":3,"file":"socketNamespace.d.ts","sourceRoot":"","sources":["../../src/websocket/socketNamespace.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,eAAe,EAAE,MAAM,mBAAmB,CAAA;AAEnD;;;;;;;;;;;;GAYG;AACH,qBAAa,eAAe;IAC1B,OAAO,CAAC,QAAQ,CAAC,iBAAiB,CAAQ;IAC1C,OAAO,CAAC,QAAQ,CAA+B;gBAEnC,iBAAiB,EAAE,MAAM;IAIrC;;;;;;OAMG;IACH,MAAM,IAAI,eAAe;CAQ1B"}
