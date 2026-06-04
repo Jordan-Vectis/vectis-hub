@@ -17,6 +17,7 @@ const KNOWN_ENDPOINTS = [
   { label: "Posted Collection List", value: "PostedCollectionList" },
   { label: "Items",                  value: "items" },
   { label: "Customers",              value: "customers" },
+  { label: "Attendance Register",    value: "AttendenceRegister" },
 ]
 
 // ─── Types ────────────────────────────────────────────────────────────────────
