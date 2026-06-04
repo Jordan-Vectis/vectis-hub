@@ -1,14 +1,55 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
-import { getBCToken, bcFetchAll } from "@/lib/bc"
+import { getBCToken } from "@/lib/bc"
 
-export const maxDuration = 120
+export const maxDuration = 300
 
 export type EmailListEntry = { name: string; email: string }
 
+const BC_BASE = `https://api.businesscentral.dynamics.com/v2.0/${process.env.BC_TENANT_ID ?? "f146b72a-c3fb-4d6b-9002-072b3191507a"}/production/ODataV4/Company('Vectis')/`
+
+// Fetches all rows from a BC endpoint using $skip pagination, returns rows + BC-reported total
+async function fetchAllRows(token: string, endpoint: string, filter: string, select: string): Promise<{ rows: any[]; bcTotal: number }> {
+  const all: any[] = []
+  let skip = 0
+  let bcTotal = 0
+  const batchSize = 500
+
+  while (true) {
+    const params = new URLSearchParams()
+    params.set("$top", String(batchSize))
+    params.set("$skip", String(skip))
+    params.set("$filter", filter)
+    params.set("$select", select)
+    if (skip === 0) params.set("$count", "true")
+
+    const url = `${BC_BASE}${endpoint}?${params.toString()}`
+    const res = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        "OData-MaxVersion": "4.0",
+        Authorization: `Bearer ${token}`,
+      },
+      signal: AbortSignal.timeout(45_000),
+    })
+
+    if (!res.ok) throw new Error(`BC API ${res.status}: ${await res.text()}`)
+    const json = await res.json()
+    const rows: any[] = json.value ?? []
+
+    if (skip === 0 && json["@odata.count"]) {
+      bcTotal = json["@odata.count"]
+    }
+
+    all.push(...rows)
+    if (rows.length < batchSize) break
+    skip += batchSize
+  }
+
+  return { rows: all, bcTotal }
+}
+
 // GET /api/bc/email-lists?keywords=Star+Wars,Matchbox&dateFrom=2024-01-01
-// Fetches AttendenceRegister, filters by auction name keywords and date,
-// returns deduplicated list of { name, email }.
 export async function GET(req: NextRequest) {
   try {
     const session = await auth()
@@ -24,11 +65,9 @@ export async function GET(req: NextRequest) {
     const keywords = keywordsRaw.split(",").map(k => k.trim()).filter(Boolean)
     if (!keywords.length) return NextResponse.json({ error: "No keywords provided" }, { status: 400 })
 
-    // Build one filter per keyword (BC times out on complex OR filters)
-    // Run in parallel, then merge and deduplicate
+    // Run one request per keyword in parallel
     const results = await Promise.allSettled(
       keywords.map(async (kw) => {
-        // tolower() makes the search case-insensitive — important as BC auction names vary in casing
         const safe = kw.replace(/'/g, "''").toLowerCase()
         const filterParts: string[] = [
           `contains(tolower(EVA_AuctionName),'${safe}')`,
@@ -36,21 +75,23 @@ export async function GET(req: NextRequest) {
         if (dateFrom) {
           filterParts.push(`EVA_AuctionDate ge ${dateFrom}`)
         }
-        // Removed EVA_EmailAddress ne '' — that misses null values; empty check is done in code
         const filter = filterParts.join(" and ")
         const select = "EVA_BuyerName,EVA_EmailAddress"
 
-        return await bcFetchAll(token, "AttendenceRegister", filter, select)
+        return await fetchAllRows(token, "AttendenceRegister", filter, select)
       })
     )
 
-    // Merge all rows, deduplicate by email (case-insensitive)
+    // Merge and deduplicate
     const seen = new Map<string, EmailListEntry>()
     let rawCount = 0
+    let bcTotal  = 0
+
     for (const result of results) {
       if (result.status !== "fulfilled") continue
-      rawCount += result.value.length
-      for (const row of result.value) {
+      rawCount += result.value.rows.length
+      bcTotal  += result.value.bcTotal
+      for (const row of result.value.rows) {
         const email = String(row.EVA_EmailAddress ?? "").trim().toLowerCase()
         if (!email) continue
         if (!seen.has(email)) {
@@ -65,7 +106,7 @@ export async function GET(req: NextRequest) {
     const entries = Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name))
     const errors  = results.filter(r => r.status === "rejected").map(r => (r as any).reason?.message ?? "Unknown error")
 
-    return NextResponse.json({ entries, total: entries.length, rawCount, errors })
+    return NextResponse.json({ entries, total: entries.length, rawCount, bcTotal, errors })
   } catch (e: any) {
     console.error("bc/email-lists error:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
