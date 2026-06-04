@@ -5,6 +5,7 @@ import { useMemo } from "react"
 interface Lot {
   id: string; barcode: string | null; receiptUniqueId: string | null; title: string; description: string; keyPoints: string
   estimateLow: number | null; estimateHigh: number | null; startingBid: number | null
+  aiEstimateLow: number | null; aiEstimateHigh: number | null
   reserve: number | null; hammerPrice: number | null
   condition: string | null; vendor: string | null; tote: string | null
   receipt: string | null
@@ -118,6 +119,14 @@ export default function StatsTab({ lots, auction }: { lots: Lot[]; auction: Auct
     const highestLot      = [...withEstimate].sort((a, b) => (b.estimateHigh ?? 0) - (a.estimateHigh ?? 0))[0]
     const lowestLot       = [...withEstimate].sort((a, b) => (a.estimateLow  ?? 0) - (b.estimateLow  ?? 0))[0]
 
+    // AI estimates
+    const withAiEstimate  = lots.filter(l => l.aiEstimateLow != null && l.aiEstimateHigh != null)
+    const totalAiEstLow   = withAiEstimate.reduce((s, l) => s + (l.aiEstimateLow  ?? 0), 0)
+    const totalAiEstHigh  = withAiEstimate.reduce((s, l) => s + (l.aiEstimateHigh ?? 0), 0)
+    const avgAiEstLow     = withAiEstimate.length ? Math.round(totalAiEstLow  / withAiEstimate.length) : 0
+    const avgAiEstHigh    = withAiEstimate.length ? Math.round(totalAiEstHigh / withAiEstimate.length) : 0
+    const highestAiLot    = [...withAiEstimate].sort((a, b) => (b.aiEstimateHigh ?? 0) - (a.aiEstimateHigh ?? 0))[0]
+
     // Hammer prices (if auction has results)
     const withHammer      = lots.filter(l => l.hammerPrice != null)
     const totalHammer     = withHammer.reduce((s, l) => s + (l.hammerPrice ?? 0), 0)
@@ -171,6 +180,8 @@ export default function StatsTab({ lots, auction }: { lots: Lot[]; auction: Auct
     return {
       total, withEstimate: withEstimate.length, totalEstLow, totalEstHigh,
       avgEstLow, avgEstHigh, highestLot, lowestLot,
+      withAiEstimate: withAiEstimate.length, totalAiEstLow, totalAiEstHigh,
+      avgAiEstLow, avgAiEstHigh, highestAiLot,
       withHammer: withHammer.length, totalHammer, avgHammer,
       withDesc: withDesc.length, withKeyPoints: withKeyPoints.length,
       withPhotos: withPhotos.length, missingPhotos: missingPhotos.length,
@@ -223,6 +234,26 @@ export default function StatsTab({ lots, auction }: { lots: Lot[]; auction: Auct
         <BigStat label="Unique Categories" value={stats.uniqueCategories} />
       </div>
 
+      {/* ── AI Estimates ── */}
+      {stats.withAiEstimate > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <BigStat label="AI Est. Low (total)"  value={`£${fmt(stats.totalAiEstLow)}`}  colour="text-purple-400"
+            sub={`${stats.withAiEstimate} of ${total} lots have AI estimates`} />
+          <BigStat label="AI Est. High (total)" value={`£${fmt(stats.totalAiEstHigh)}`} colour="text-purple-400"
+            sub={`Avg £${fmt(stats.avgAiEstLow)}–£${fmt(stats.avgAiEstHigh)} per lot`} />
+          {stats.highestAiLot && (
+            <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl px-5 py-4 col-span-2">
+              <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-2">Highest AI Estimate Lot</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{stats.highestAiLot.title || "Uncatalogued"}</p>
+              <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">
+                {stats.highestAiLot.barcode ?? stats.highestAiLot.receiptUniqueId ?? ""} ·{" "}
+                <span className="text-purple-400 font-semibold">£{fmt(stats.highestAiLot.aiEstimateLow ?? 0)}–£{fmt(stats.highestAiLot.aiEstimateHigh ?? 0)}</span>
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Highest / lowest lots */}
       {(stats.highestLot || stats.lowestLot) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -259,6 +290,7 @@ export default function StatsTab({ lots, auction }: { lots: Lot[]; auction: Auct
           <ProgressBar label="Has key points"   count={stats.withKeyPoints}  total={total} colour="#3b82f6" />
           <ProgressBar label="Has photos"       count={stats.withPhotos}     total={total} colour="#a855f7" />
           <ProgressBar label="Has estimates"    count={stats.withEstimate}   total={total} colour="#f59e0b" />
+          <ProgressBar label="Has AI estimate" count={stats.withAiEstimate} total={total} colour="#a855f7" />
           <ProgressBar label="Has title"        count={stats.withTitle}      total={total} colour="#6366f1" />
           <ProgressBar label="AI upgraded"      count={stats.aiUpgraded}     total={total} colour="#ec4899" />
         </div>
