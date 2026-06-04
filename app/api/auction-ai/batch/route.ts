@@ -89,12 +89,16 @@ export async function POST(req: NextRequest) {
       if (!existingContext) {
         userPrompt = "Please describe this auction lot."
       } else if (contextType === "keyPoints") {
-        userPrompt = `The following key points were recorded about this lot and contain specific details (sizes, quantities, measurements, condition notes, set contents, etc.) that MUST ALL be included in your description. Do not omit any factual detail from the key points. Write a single, natural catalogue description that weaves in every detail from the key points — do not copy them verbatim and do not list them separately, integrate them naturally. Do not repeat the same information twice.
+        userPrompt = `The following key points were recorded about this lot. ALL of them must appear in your description — do not omit a single one.
+
+CRITICAL: Only use the information in the key points and what you can directly observe in the photos. Do NOT add product history, specifications, piece counts, features, or any other details from your training data that are not explicitly stated in the key points. If a detail is not in the key points and cannot be seen in the photos, leave it out entirely.
+
+Write a single, concise catalogue description that naturally incorporates every key point. Do not list them separately, do not copy them verbatim, and do not repeat the same information twice.
 
 Key points:
 ${existingContext}`
       } else {
-        userPrompt = `Existing description: ${existingContext}\n\nImprove and enhance this description based on the photos. Keep the same output format. Do not repeat the same information twice.`
+        userPrompt = `Existing description: ${existingContext}\n\nImprove and enhance this description based on the photos. Only use information present in the existing description or directly visible in the photos — do not add details from training data. Keep the same output format. Do not repeat the same information twice.`
       }
 
       const text = await generateWithRetry([
