@@ -3544,16 +3544,21 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   }
 
   // ── Retry helper — same rules as batch run ──────────────────────────────────
+  // fn receives (attempt, wasRateLimit) so callers can choose fallback model
+  // only when the previous failure was actually a rate limit — not for timeouts
+  // or other transient errors where the primary model should be retried directly.
   async function withRetry<T>(
     label: string,
-    fn: (attempt: number) => Promise<T>,
+    fn: (attempt: number, wasRateLimit: boolean) => Promise<T>,
     isBlock: (err: string) => boolean,
   ): Promise<T | null> {
-    let lastError = ""
-    let attempt   = 0
+    let lastError    = ""
+    let attempt      = 0
+    let wasRateLimit = false
     while (!cancelRef.current) {
       if (attempt > 0) {
         const isRL = lastError.startsWith("RATE_LIMITED:")
+        wasRateLimit = isRL
         const wait = isRL ? Math.min(60000 * Math.pow(2, attempt - 1), 1800000) : Math.min(attempt * 12000, 30000)
         addLog(`↺ ${label} — ${isRL ? "rate limited, waiting" : "retrying in"} ${wait / 1000}s (attempt ${attempt + 1})…`)
         await new Promise(r => setTimeout(r, wait))
@@ -3561,9 +3566,10 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       }
       attempt++
       try {
-        return await fn(attempt)
+        return await fn(attempt, wasRateLimit)
       } catch (e: any) {
         lastError = e.message ?? String(e)
+        wasRateLimit = false
         if (isBlock(lastError)) {
           addLog(`✗ ${label} — blocked, skipping: ${lastError}`)
           return null
@@ -3595,9 +3601,10 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
 
       addLog(`  · ${done + 1}/${toRun.length} ${lot.label} — fetching images…`)
 
-      const result = await withRetry(lot.label, async (attempt) => {
-        // Fetch images from S3
-        const modelToUse = (attempt % 2 === 0 && fallbackModel) ? fallbackModel : localModel
+      const result = await withRetry(lot.label, async (attempt, wasRateLimit) => {
+        // Only use fallback when the previous failure was a rate limit —
+        // for timeouts and other errors always retry with the primary model
+        const modelToUse = (wasRateLimit && fallbackModel) ? fallbackModel : localModel
         if (attempt > 1) addLog(`  ↳ ${lot.label} trying ${modelToUse}`)
         const fd = new FormData()
         fd.append("systemInstruction", systemInstruction)
@@ -3693,8 +3700,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
 
       addLog(`  · ${done + 1}/${toRun.length} ${lot.label} — double checking…`)
 
-      const result = await withRetry(lot.label, async (attempt) => {
-        const modelToUse = (attempt % 2 === 0 && fallbackModel) ? fallbackModel : localModel
+      const result = await withRetry(lot.label, async (attempt, wasRateLimit) => {
+        const modelToUse = (wasRateLimit && fallbackModel) ? fallbackModel : localModel
         if (attempt > 1) addLog(`  ↳ ${lot.label} trying ${modelToUse}`)
         // Fetch images
         const urls = lot.imageUrls.slice(0, 6)
@@ -3776,8 +3783,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
 
       addLog(`  · ${done + 1}/${toRun.length} ${lot.label} — checking key points…`)
 
-      const result = await withRetry(lot.label, async (attempt) => {
-        const modelToUse = (attempt % 2 === 0 && fallbackModel) ? fallbackModel : localModel
+      const result = await withRetry(lot.label, async (attempt, wasRateLimit) => {
+        const modelToUse = (wasRateLimit && fallbackModel) ? fallbackModel : localModel
         if (attempt > 1) addLog(`  ↳ ${lot.label} trying ${modelToUse}`)
         const res  = await fetch("/api/auction-ai/key-points-check", {
           method: "POST", headers: { "Content-Type": "application/json" },
