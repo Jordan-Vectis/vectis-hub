@@ -3,9 +3,29 @@
 import { useState, useRef, useCallback, useEffect, useTransition } from "react"
 import * as XLSX from "xlsx"
 import { PRESETS } from "@/lib/auction-ai-presets"
+import { DOUBLE_CHECK_INSTRUCTION } from "@/lib/double-check-instruction"
 import { applyAiDescriptionOne } from "@/lib/actions/catalogue"
 import { showError } from "@/lib/error-modal"
 import { MacroTab } from "./macro-tab"
+
+// ─── Show Instruction Toggle ──────────────────────────────────────────────────
+
+function ShowInstructionToggle({ instruction }: { instruction: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="mt-2">
+      <button onClick={() => setOpen(o => !o)}
+        className="text-xs text-gray-600 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-300 transition-colors">
+        {open ? "▲ Hide instructions" : "▼ Show instructions sent to Gemini"}
+      </button>
+      {open && (
+        <pre className="mt-2 text-xs text-gray-600 dark:text-gray-400 bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-lg p-3 whitespace-pre-wrap leading-relaxed font-mono">
+          {instruction}
+        </pre>
+      )}
+    </div>
+  )
+}
 
 // ─── Toast system ─────────────────────────────────────────────────────────────
 
@@ -3142,6 +3162,7 @@ function DoubleCheckTab({ model: globalModel, fallbackModel, onModelChange }: { 
           Loads descriptions and photos from the catalogue and runs a second AI pass to spot factual errors,
           inconsistencies, or claims that look guessed — especially where photos are blurry or details aren't clearly visible.
         </p>
+        <ShowInstructionToggle instruction={DOUBLE_CHECK_INSTRUCTION} />
       </div>
 
       {/* Model selector */}
