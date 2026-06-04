@@ -2,7 +2,10 @@ FROM node:22.12.0-alpine
 
 WORKDIR /app
 
-COPY package*.json ./
+ARG BIDJS_NPM_TOKEN
+ENV BIDJS_NPM_TOKEN=$BIDJS_NPM_TOKEN
+
+COPY package*.json .npmrc ./
 RUN npm ci
 
 COPY . .
