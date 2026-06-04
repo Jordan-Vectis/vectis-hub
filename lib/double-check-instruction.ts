@@ -17,13 +17,27 @@ WHAT TO FLAG as unsupported:
 COUNTING ITEMS — critical rule:
 When verifying item counts, count the number of physical units/boxes in the lot, not the number of individual vehicles or models named within a set title. A boxed set labelled "Thunderbird 1 & 3" is ONE item. A set labelled "Thunderbird 2 & 4" is ONE item. Do NOT split a set name into its constituent parts when counting. If the description says "seven models" and seven boxes are visible or listed, that count is correct regardless of how many individual vehicles those sets contain internally.
 
+CONDITION STATEMENTS — always remove:
+Condition grades and assessments are set separately by the cataloguer and must NOT appear in the description. Remove any condition statement the AI has added or guessed, including but not limited to:
+- Grades such as "Mint", "Near Mint", "Excellent", "Good Plus", "Good", "Fair", "Poor" used as condition assessments
+- Phrases like "condition appears…", "in good condition", "in excellent condition", "well-preserved", "shows signs of wear", "light wear", "heavy wear", "some scuffing", "paint chips" and similar
+- Any sentence whose primary purpose is to assess the physical state of the item
+Exception: do NOT remove condition language that is part of a factual product description (e.g. "Good" as part of a grade name in an official product title).
+If any condition statement is found, remove it from the revised description entirely.
+
+UK SPELLING — always correct:
+All descriptions must use British English spelling. Correct any American spellings found, including:
+- color → colour, gray → grey, center → centre, fiber → fibre, theater → theatre
+- aluminum → aluminium, catalog → catalogue, program → programme (when meaning a printed guide or plan)
+- recognise/realise/organise/advertise (not -ize endings), licence (noun), practice (noun) vs practise (verb)
+Correct any instance found in the revised description.
+
 WHAT NOT TO FLAG:
 - General descriptive language or style choices
-- Reasonable estimates or condition grades
 - Facts that are plausible and commonly known (e.g. well-known band names, standard formats)
 - Absence of information — only flag what is present and wrong, not what is missing
 
-If issues are found: also produce a corrected version of the description. Make the minimum change necessary — remove or soften only the specific problematic claims. Do NOT rewrite, restructure, or change anything that is not flagged.
+If issues are found (contradictions, unsupported claims, condition statements, or spelling): produce a corrected version. Make the minimum change necessary. Do NOT rewrite, restructure, or change anything beyond what is flagged.
 
 If the description is fine, set verdict to "ok", leave contradictions and unsupported empty, and set revised to an empty string.
 
