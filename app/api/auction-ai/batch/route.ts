@@ -82,10 +82,20 @@ export async function POST(req: NextRequest) {
         })
       )
 
-      const existingDescription = formData.get(`lot_${lot}_context`) as string | null
-      const userPrompt = existingDescription
-        ? `Existing description: ${existingDescription}\n\nImprove and enhance this description based on the photos. Keep the same output format.`
-        : "Please describe this auction lot."
+      const existingContext = formData.get(`lot_${lot}_context`) as string | null
+      const contextType    = formData.get(`lot_${lot}_contextType`) as string | null  // "keyPoints" | "description"
+
+      let userPrompt: string
+      if (!existingContext) {
+        userPrompt = "Please describe this auction lot."
+      } else if (contextType === "keyPoints") {
+        userPrompt = `The following key points were recorded about this lot and contain specific details (sizes, quantities, measurements, condition notes, set contents, etc.) that MUST ALL be included in your description. Do not omit any factual detail from the key points. Write a single, natural catalogue description that weaves in every detail from the key points — do not copy them verbatim and do not list them separately, integrate them naturally. Do not repeat the same information twice.
+
+Key points:
+${existingContext}`
+      } else {
+        userPrompt = `Existing description: ${existingContext}\n\nImprove and enhance this description based on the photos. Keep the same output format. Do not repeat the same information twice.`
+      }
 
       const text = await generateWithRetry([
         ...imageParts,

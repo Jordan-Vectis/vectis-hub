@@ -62,7 +62,7 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
       .then(r => r.json())
       .then(setOverrides)
       .catch(() => {})
-  }, [])
+  }, [preset])
 
   // All preset keys: static built-ins + any DB-only custom keys, excluding "Custom (paste my own)"
   const presetKeys = [
@@ -260,6 +260,7 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
           const ctx = sendDesc ? (contextField === "description" ? lot.description : lot.keyPoints).trim() : ""
           if (ctx) {
             fd.set(`lot_${lot.id}_context`, ctx)
+            fd.set(`lot_${lot.id}_contextType`, contextField)
             addLog(`  → sending ${contextField === "description" ? "description" : "key points"} as context (${ctx.length} chars)`)
           } else {
             addLog(`  → no existing context — AI working from photos only`)
@@ -453,6 +454,15 @@ export default function AiUpgradeTab({ auctionId, auctionCode, lots, onDone }: P
                 </option>
               ))}
             </select>
+            {/* Read-only preview so you can confirm what will be sent */}
+            <details className="mt-2">
+              <summary className="text-xs text-purple-400 cursor-pointer select-none hover:text-purple-300 transition-colors">
+                {overrides[preset] !== undefined ? "✎ Using your edited instructions — click to preview" : "Click to preview instructions"}
+              </summary>
+              <textarea readOnly value={overrides[preset] ?? PRESETS[preset] ?? ""}
+                rows={6}
+                className="mt-1.5 w-full bg-gray-100 dark:bg-[#111113] border border-gray-700 rounded-lg px-3 py-2 text-xs text-gray-600 dark:text-gray-400 font-mono resize-none focus:outline-none" />
+            </details>
           </div>
 
           {/* Model */}
