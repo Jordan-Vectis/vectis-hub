@@ -252,8 +252,9 @@ Export/Import: xlsx with Auction + Lots sheets. Routes: /api/catalogue/export, /
 
 Presets: Vinyl, TV/Film, Modern Diecast, Comics, Model Railway (strict+free), Teddy Bears, General Toys, Military Figures, Matchbox.
 
-### BC Marketing (/tools/bc-marketing) — 5 tabs
-Content Generator (16 types), Paste & Generate, Insights, Saved Drafts (DRAFT/APPROVED/PUBLISHED), Hashtag Bank. BC codes (F025, DM0126 etc.) NEVER in AI output.
+### BC Marketing (/tools/bc-marketing) — 9 tabs
+Content Generator (16 types), Paste & Generate, Insights, Saved Drafts (DRAFT/APPROVED/PUBLISHED), Hashtag Bank, Web Descriptions, Social Auto Posts, Social Media Images, Email Lists. BC codes (F025, DM0126 etc.) NEVER in AI output.
+Email Lists tab: pulls buyer emails from BC AttendenceRegister by auction name keyword + optional date range. Deduplicates by email, collects all sale codes per buyer. API: /api/bc/email-lists. CSV export: Name, Email, Sale Codes. Default: All time.
 
 ### BC Warehouse (/tools/bc-warehouse) — 8 tabs
 Location Heatmap, Sale Checklist, Search by Location, Location History (DO NOT redesign), Tote Data, Collections Due, Unsold Items, Data Sync, DB Explorer.
@@ -488,7 +489,7 @@ Cataloguing (/tools/cataloguing): Auction list with Export/Import xlsx. Per-auct
 
 Auction AI (/tools/auction-ai) — 12 tabs, grouped sidebar (Chat/Run/History/Tools/Reference): Chat Window, Batch Run, Key Points Check, Double Check, Auto Pipeline, AI Upgrade, Saved Runs, KP Check Runs, Description Copier, Barcode Sorter, Instructions, Macro Downloader. All run tabs alternate primary/fallback model on retries. applyAiDescriptionOne estimate fields optional — only Batch sets estimates. KP Check: validates descriptions (partial word matches don't count), stored in KPCheckRun/KPCheckLot. Double Check: second-pass validation (counts boxes not vehicles in a set title), uses React 18 batching fix. AI Upgrade: mass rewrite with before/after review (/api/auction-ai/upgrade). Auto Pipeline: chains Batch→Double Check→Key Points; Batch applies desc+estimate to catalogue, DC auto-applies, KP is MANUAL Review & Apply; PipelineLot.batchDesc preserves pre-DC text. Stored in PipelineRun/PipelineLot. React 18 fix: use local working[] + setState([...working]) full replace — never setState(prev=>prev.map(...)) in 100+ item loop.
 
-BC Marketing (/tools/bc-marketing): 5 tabs — Content Generator (16 types), Paste & Generate, Insights, Saved Drafts, Hashtag Bank. BC codes never in AI output.
+BC Marketing (/tools/bc-marketing): 9 tabs — Content Generator (16 types), Paste & Generate, Insights, Saved Drafts, Hashtag Bank, Web Descriptions, Social Auto Posts, Social Media Images, Email Lists (buyer emails from BC AttendenceRegister by keyword+date, CSV export with sale codes). BC codes never in AI output.
 
 BC Warehouse (/tools/bc-warehouse): Location Heatmap, Sale Checklist, Search by Location, Location History (DO NOT redesign), Tote Data, Collections Due, Unsold Items, Data Sync, DB Explorer.
 
