@@ -3403,7 +3403,7 @@ type PLot = {
   appliedDesc?: string  // description currently on the catalogue lot (to detect un-applied work)
   // Per-stage debug — exactly what was sent to Gemini and what came back (this session only)
   debug?: {
-    batch?: { prompt: string; response: string; imageCount: number }
+    batch?: { prompt: string; response: string; imageCount: number; searchQueries?: string[] }
     kp?:    { prompt: string; response: string }
     dc?:    { prompt: string; response: string; imageCount: number }
   }
@@ -4439,6 +4439,16 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                   <p className="px-3 py-2 text-xs text-gray-600 italic">Not run yet.</p>
                 ) : (
                   <div className="divide-y divide-gray-800">
+                    {"searchQueries" in d && (
+                      <div className="px-3 py-2">
+                        <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">🔍 Google Search</p>
+                        {d.searchQueries && d.searchQueries.length > 0 ? (
+                          <p className="text-xs text-blue-300 leading-relaxed">Searched: {d.searchQueries.join(" · ")}</p>
+                        ) : (
+                          <p className="text-xs text-gray-500">No search performed for this lot (model answered from the prompt/photos alone).</p>
+                        )}
+                      </div>
+                    )}
                     <div className="px-3 py-2">
                       <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Sent (prompt)</p>
                       <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono leading-relaxed max-h-52 overflow-y-auto">{d.prompt}</pre>

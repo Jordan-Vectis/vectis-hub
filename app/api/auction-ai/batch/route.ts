@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   // client log and the client's own backoff loop handles retrying.
   // Rate-limit errors are prefixed with RATE_LIMITED: so the client can apply
   // a longer backoff before retrying.
-  async function generateWithRetry(contents: any[]): Promise<string> {
+  async function generateWithRetry(contents: any[]): Promise<{ text: string; searchQueries: string[] }> {
     let result: any
     try {
       result = await model.generateContent(contents)
@@ -65,10 +65,13 @@ export async function POST(req: NextRequest) {
       throw new Error(`Blocked (${finishReason})`)
     }
 
-    return response.text()
+    // Surface whether Google Search grounding actually fired
+    const searchQueries: string[] = (candidate?.groundingMetadata as any)?.webSearchQueries ?? []
+
+    return { text: response.text(), searchQueries }
   }
 
-  const results: { lot: string; description: string; estimate: string; status: string; error?: string; debug?: { prompt: string; response: string; imageCount: number } }[] = []
+  const results: { lot: string; description: string; estimate: string; status: string; error?: string; debug?: { prompt: string; response: string; imageCount: number; searchQueries?: string[] } }[] = []
   const lotEntries = Object.entries(lotMap)
 
   for (let idx = 0; idx < lotEntries.length; idx++) {
@@ -105,7 +108,7 @@ ${existingContext}`
         userPrompt = `Existing description: ${existingContext}\n\nImprove and enhance this description based on the photos. Only use information present in the existing description or directly visible in the photos — do not add details from training data. Keep the same output format. Do not repeat the same information twice.`
       }
 
-      const text = await generateWithRetry([
+      const { text, searchQueries } = await generateWithRetry([
         ...imageParts,
         { text: userPrompt },
       ])
@@ -123,7 +126,7 @@ ${existingContext}`
       const description  = lines.filter((l) => !l.toLowerCase().startsWith("estimate:")).join("\n").trim()
 
       results.push({ lot, description, estimate: estimateLine.replace(/^Estimate:\s*/i, "").trim(), status: "OK",
-        debug: { prompt: userPrompt, response: text, imageCount: imageParts.length } })
+        debug: { prompt: userPrompt, response: text, imageCount: imageParts.length, searchQueries } })
 
       // 12-second delay between lots to stay well under Gemini rate limits
       if (idx < lotEntries.length - 1) {
