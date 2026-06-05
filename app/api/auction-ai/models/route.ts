@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
+import { prisma } from "@/lib/prisma"
 
 export async function GET() {
   const session = await auth()
@@ -9,10 +10,15 @@ export async function GET() {
   if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
 
   try {
-    const res  = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`)
+    const [res, disabledRows] = await Promise.all([
+      fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`),
+      prisma.disabledModel.findMany({ select: { modelId: true } }).catch(() => []),
+    ])
+    const disabled = new Set(disabledRows.map((d: any) => d.modelId))
     const json = await res.json()
     const usable = (json.models ?? [])
       .filter((m: any) => m.supportedGenerationMethods?.includes("generateContent"))
+      .filter((m: any) => !disabled.has(m.name.replace("models/", "")))
 
     const models = usable.map((m: any) => m.name.replace("models/", ""))
 

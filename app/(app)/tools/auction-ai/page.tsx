@@ -150,7 +150,7 @@ function ToastContainer() {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "chat" | "batch" | "barcode" | "copier" | "runs" | "kpruns" | "instructions" | "kpcheck" | "macro" | "doublecheck" | "pipeline" | "upgrade"
+type Tab = "chat" | "batch" | "barcode" | "copier" | "runs" | "kpruns" | "instructions" | "kpcheck" | "macro" | "doublecheck" | "pipeline" | "upgrade" | "models"
 
 type ChatMessage = {
   role: "user" | "model"
@@ -5049,6 +5049,143 @@ function UpgradeTab({ model: globalModel, fallbackModel }: { model: string; fall
   )
 }
 
+// ─── Models Tab ───────────────────────────────────────────────────────────────
+
+type ModelRow = {
+  id: string
+  displayName?: string
+  description?: string
+  inputTokenLimit?: number
+  outputTokenLimit?: number
+  enabled: boolean
+}
+type TestState = { ok: boolean; ms: number; error?: string }
+
+function ModelsTab() {
+  const [models, setModels]   = useState<ModelRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState<string | null>(null)
+  const [tests, setTests]     = useState<Record<string, TestState | "testing">>({})
+  const [testingAll, setTestingAll] = useState(false)
+
+  async function load() {
+    setLoading(true); setError(null)
+    try {
+      const res = await fetch("/api/auction-ai/model-config")
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setModels(data.models ?? [])
+    } catch (e: any) { setError(e.message) }
+    setLoading(false)
+  }
+  useEffect(() => { load() }, [])
+
+  async function toggle(id: string, enabled: boolean) {
+    setModels(prev => prev.map(m => m.id === id ? { ...m, enabled } : m))
+    try {
+      await fetch("/api/auction-ai/model-config", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId: id, enabled }),
+      })
+    } catch { /* revert on failure */ setModels(prev => prev.map(m => m.id === id ? { ...m, enabled: !enabled } : m)) }
+  }
+
+  async function testOne(id: string): Promise<TestState> {
+    setTests(prev => ({ ...prev, [id]: "testing" }))
+    try {
+      const res = await fetch("/api/auction-ai/model-test", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: id }),
+      })
+      const data = await res.json()
+      const state: TestState = { ok: !!data.ok, ms: data.ms ?? 0, error: data.error }
+      setTests(prev => ({ ...prev, [id]: state }))
+      return state
+    } catch (e: any) {
+      const state: TestState = { ok: false, ms: 0, error: e.message }
+      setTests(prev => ({ ...prev, [id]: state }))
+      return state
+    }
+  }
+
+  // Sequential with a 1s gap — firing all at once burns quota and causes 429s
+  async function testAll() {
+    setTestingAll(true)
+    for (const m of models) {
+      await testOne(m.id)
+      await new Promise(r => setTimeout(r, 1000))
+    }
+    setTestingAll(false)
+  }
+
+  const enabledCount = models.filter(m => m.enabled).length
+
+  return (
+    <div className="space-y-5 max-w-4xl">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-1">Models</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Every Gemini model available to your API key. Disable ones that are discontinued or fail — disabled models are hidden from all model selectors. {models.length > 0 && <span className="text-gray-500">{enabledCount} of {models.length} enabled.</span>}
+          </p>
+        </div>
+        <button onClick={testAll} disabled={testingAll || loading || !models.length}
+          className="shrink-0 px-4 py-2 text-sm font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white transition-colors">
+          {testingAll ? "Testing…" : "⚡ Test all"}
+        </button>
+      </div>
+
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      {loading ? (
+        <p className="text-sm text-gray-500">Loading models…</p>
+      ) : (
+        <div className="space-y-2">
+          {models.map(m => {
+            const t = tests[m.id]
+            return (
+              <div key={m.id} className={`rounded-xl border p-4 ${m.enabled ? "border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1C1C1E]" : "border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#161618] opacity-60"}`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-gray-900 dark:text-white">{m.displayName ?? m.id}</span>
+                      <span className="text-[11px] font-mono text-gray-500">{m.id}</span>
+                    </div>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 leading-snug">{describeModel(m.id)}</p>
+                    {(m.inputTokenLimit || m.outputTokenLimit) && (
+                      <p className="text-[10px] text-gray-500 mt-1">
+                        Reads ~{fmtTokens(m.inputTokenLimit)} in · writes ~{fmtTokens(m.outputTokenLimit)} out
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {/* Test result */}
+                    {t === "testing"
+                      ? <span className="text-xs text-gray-500 animate-pulse">testing…</span>
+                      : t
+                        ? (t.ok
+                            ? <span className={`text-xs font-medium ${t.ms < 5000 ? "text-green-400" : t.ms < 12000 ? "text-yellow-400" : "text-orange-400"}`}>✓ {(t.ms / 1000).toFixed(1)}s</span>
+                            : <span className="text-xs text-red-400 max-w-[160px] truncate" title={t.error}>✗ {t.error?.match(/\[(\d{3}[^\]]*)\]/)?.[1] ?? "failed"}</span>)
+                        : null}
+                    <button onClick={() => testOne(m.id)} disabled={t === "testing"}
+                      className="text-xs px-2.5 py-1 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-indigo-500 hover:text-indigo-400 transition-colors disabled:opacity-40">
+                      Test
+                    </button>
+                    {/* Enable/disable toggle */}
+                    <button onClick={() => toggle(m.id, !m.enabled)} title={m.enabled ? "Disable" : "Enable"}
+                      className={`relative w-10 h-5 rounded-full transition-colors ${m.enabled ? "bg-green-600" : "bg-gray-400 dark:bg-gray-600"}`}>
+                      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${m.enabled ? "left-5" : "left-0.5"}`} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
 
 type TabDef = { id: Tab; label: string; icon: string; accent?: string }
@@ -5089,6 +5226,7 @@ const TAB_GROUPS: { label: string; tabs: TabDef[] }[] = [
     tabs: [
       { id: "instructions", label: "Instructions",       icon: "📝" },
       { id: "macro",        label: "Macro Downloader",   icon: "⌨️" },
+      { id: "models",       label: "Models",             icon: "🧩" },
     ],
   },
 ]
@@ -5214,6 +5352,7 @@ export default function AuctionAIPage() {
         <div className={tab === "pipeline"     ? "" : "hidden"}>{tab === "pipeline" && <PipelineTab model={model} fallbackModel={fallbackModel} />}</div>
         <div className={tab === "upgrade"      ? "" : "hidden"}>{tab === "upgrade"   && <UpgradeTab model={model} fallbackModel={fallbackModel} />}</div>
         <div className={tab === "instructions" ? "" : "hidden"}><InstructionsTab /></div>
+        <div className={tab === "models" ? "" : "hidden"}><ModelsTab /></div>
         <div className={tab === "macro"        ? "" : "hidden"}><MacroTab /></div>
       </main>
     </div>

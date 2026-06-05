@@ -257,6 +257,13 @@ const MIGRATIONS = [
   // 2026-06-01 — Preserve original raw batch text for DC before/after in review
   `ALTER TABLE "PipelineLot" ADD COLUMN IF NOT EXISTS "batchDesc" TEXT`,
 
+  // Auction AI — models disabled by the user (presence = disabled)
+  `CREATE TABLE IF NOT EXISTS "DisabledModel" (
+    "modelId"   TEXT NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "DisabledModel_pkey" PRIMARY KEY ("modelId")
+  )`,
+
   // Invoices — flat file list backed by Cloudflare R2
   `CREATE TABLE IF NOT EXISTS "InvoiceFile" (
     "id"         TEXT         NOT NULL,

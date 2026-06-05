@@ -920,6 +920,13 @@ model SocialPost {
   @@index([scheduledAt])
 }
 
+// Models the user has disabled in the Auction AI → Models tab. Presence = disabled.
+// Disabled models are hidden from all model selectors/testers.
+model DisabledModel {
+  modelId   String   @id
+  updatedAt DateTime @updatedAt
+}
+
 // Invoice file storage — flat list backed by Cloudflare R2.
 // Accessible from /admin/invoices.
 model InvoiceFile {
