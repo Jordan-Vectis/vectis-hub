@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     return response.text()
   }
 
-  const results: { lot: string; description: string; estimate: string; status: string; error?: string }[] = []
+  const results: { lot: string; description: string; estimate: string; status: string; error?: string; debug?: { prompt: string; response: string; imageCount: number } }[] = []
   const lotEntries = Object.entries(lotMap)
 
   for (let idx = 0; idx < lotEntries.length; idx++) {
@@ -122,7 +122,8 @@ ${existingContext}`
       const estimateLine = lines.find((l) => l.toLowerCase().startsWith("estimate:")) ?? ""
       const description  = lines.filter((l) => !l.toLowerCase().startsWith("estimate:")).join("\n").trim()
 
-      results.push({ lot, description, estimate: estimateLine.replace(/^Estimate:\s*/i, "").trim(), status: "OK" })
+      results.push({ lot, description, estimate: estimateLine.replace(/^Estimate:\s*/i, "").trim(), status: "OK",
+        debug: { prompt: userPrompt, response: text, imageCount: imageParts.length } })
 
       // 12-second delay between lots to stay well under Gemini rate limits
       if (idx < lotEntries.length - 1) {

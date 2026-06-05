@@ -3399,6 +3399,12 @@ type PLot = {
   kpFound?:   string  // exact phrases the AI matched for each "present" key point
   kpRevised?: string  // proposed text waiting for approval
   appliedDesc?: string  // description currently on the catalogue lot (to detect un-applied work)
+  // Per-stage debug — exactly what was sent to Gemini and what came back (this session only)
+  debug?: {
+    batch?: { prompt: string; response: string; imageCount: number }
+    kp?:    { prompt: string; response: string }
+    dc?:    { prompt: string; response: string; imageCount: number }
+  }
 }
 
 function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fallbackModel: string }) {
@@ -3420,6 +3426,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   const [grounded,     setGrounded]    = useState(false)
   const [accepting,    setAccepting]   = useState(false)
   const [photoLot,     setPhotoLot]    = useState<PLot | null>(null)
+  const [debugLot,     setDebugLot]    = useState<PLot | null>(null)
   const [signedUrls,   setSignedUrls]  = useState<Record<string, string>>({})
   const codeRef  = useRef<HTMLDivElement>(null)
   const logRef   = useRef<HTMLDivElement>(null)
@@ -3642,7 +3649,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       if (result) {
         const desc = result.description ?? ""
         const { low, high } = parseEstimate(result.estimate ?? "")
-        updated[idx] = { ...updated[idx], batchStatus: "ok", currentDesc: desc, estimate: result.estimate ?? "", appliedDesc: desc, batchDesc: desc }
+        updated[idx] = { ...updated[idx], batchStatus: "ok", currentDesc: desc, estimate: result.estimate ?? "", appliedDesc: desc, batchDesc: desc,
+          debug: { ...updated[idx].debug, batch: result.debug } }
         setLots([...updated])
         addLog(`  ✓ ${lot.label} — OK`)
         // Apply the generated description + estimate straight to the catalogue lot
@@ -3732,11 +3740,11 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         // DC is now the LAST stage and the manual gate — hold its cleaned result for
         // Review & Apply rather than auto-applying. kpRevised drives the review UI.
         if (verdict === "issues" && revised) {
-          updated[idx] = { ...updated[idx], dcStatus: verdict, contradictions, unsupported, kpRevised: revised }
+          updated[idx] = { ...updated[idx], dcStatus: verdict, contradictions, unsupported, kpRevised: revised, debug: { ...updated[idx].debug, dc: result.debug } }
           addLog(`  ⚑ ${lot.label} — DC cleaned up, ready for review`)
           await saveLot(lot.id, { dcStatus: verdict, contradictions, unsupported, revised })
         } else {
-          updated[idx] = { ...updated[idx], dcStatus: verdict, contradictions, unsupported }
+          updated[idx] = { ...updated[idx], dcStatus: verdict, contradictions, unsupported, debug: { ...updated[idx].debug, dc: result.debug } }
           addLog(`  ✓ ${lot.label} — clean`)
           await saveLot(lot.id, { dcStatus: verdict, contradictions, unsupported })
         }
@@ -3804,9 +3812,9 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           } catch {
             addLog(`  ⚑ ${lot.label} — key points inserted but auto-apply failed`)
           }
-          updated[idx] = { ...updated[idx], kpStatus: "fixed", kpMissing: missing, kpAdded: added, kpFound: found, currentDesc: newDesc, appliedDesc: newDesc, kpRevised: newDesc }
+          updated[idx] = { ...updated[idx], kpStatus: "fixed", kpMissing: missing, kpAdded: added, kpFound: found, currentDesc: newDesc, appliedDesc: newDesc, kpRevised: newDesc, debug: { ...updated[idx].debug, kp: result.debug } }
         } else {
-          updated[idx] = { ...updated[idx], kpStatus: "ok", kpMissing: missing, kpFound: found }
+          updated[idx] = { ...updated[idx], kpStatus: "ok", kpMissing: missing, kpFound: found, debug: { ...updated[idx].debug, kp: result.debug } }
           addLog(`  ✓ ${lot.label} — all key points present`)
         }
         setLots([...updated])
@@ -4323,7 +4331,13 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                       <td className="px-3 py-2">{batchCell}</td>
                       <td className="px-3 py-2">{dcCell}</td>
                       <td className="px-3 py-2">{kpCell}</td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-3 py-2 text-right whitespace-nowrap">
+                        {lot.debug && (
+                          <button onClick={() => setDebugLot(lot)}
+                            className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors mr-3">
+                            🔍 AI log
+                          </button>
+                        )}
                         {lot.imageUrls.length > 0 && (
                           <button onClick={() => openPhotos(lot)}
                             className="text-xs text-gray-500 hover:text-gray-200 transition-colors">
@@ -4363,6 +4377,46 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Per-lot AI log — exactly what was sent to Gemini and what came back at each stage */}
+      {debugLot && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setDebugLot(null)}>
+          <div className="bg-[#1C1C1E] border border-gray-700 rounded-2xl p-5 max-w-3xl w-full max-h-[90vh] overflow-y-auto space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between sticky top-0 bg-[#1C1C1E] pb-2">
+              <span className="font-mono font-semibold text-white">🔍 AI log — {debugLot.label}</span>
+              <button onClick={() => setDebugLot(null)} className="text-gray-400 hover:text-white text-xl leading-none">✕</button>
+            </div>
+            <p className="text-xs text-gray-500">Exact prompt sent and raw response received at each stage (this session only — not saved). The full system instruction for each stage is in the toggles at the top of the tab.</p>
+
+            {([
+              { key: "batch", title: "⚡ Stage 1 — Batch", d: debugLot.debug?.batch },
+              { key: "kp",    title: "✓ Stage 2 — Key Points", d: debugLot.debug?.kp },
+              { key: "dc",    title: "🔎 Stage 3 — Double Check", d: debugLot.debug?.dc },
+            ] as const).map(({ key, title, d }) => (
+              <div key={key} className="border border-gray-700 rounded-xl overflow-hidden">
+                <div className="px-3 py-2 bg-[#141416] border-b border-gray-700 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-gray-200">{title}</span>
+                  {d && "imageCount" in d && <span className="text-[10px] text-gray-500">{d.imageCount} image{d.imageCount === 1 ? "" : "s"} sent</span>}
+                </div>
+                {!d ? (
+                  <p className="px-3 py-2 text-xs text-gray-600 italic">Not run yet.</p>
+                ) : (
+                  <div className="divide-y divide-gray-800">
+                    <div className="px-3 py-2">
+                      <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Sent (prompt)</p>
+                      <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono leading-relaxed max-h-52 overflow-y-auto">{d.prompt}</pre>
+                    </div>
+                    <div className="px-3 py-2">
+                      <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Received (raw response)</p>
+                      <pre className="text-xs text-green-300 whitespace-pre-wrap font-mono leading-relaxed max-h-52 overflow-y-auto">{d.response}</pre>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}

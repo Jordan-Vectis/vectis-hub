@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     // they are cataloguer-verified facts. Tell the model to KEEP them, and to focus
     // on removing any duplication/contradiction the key-point insertion may have caused.
     const kpBlock = keyPoints?.trim()
-      ? `\n\nCATALOGUER KEY POINTS — these are verified facts that MUST remain in the description. Never flag or remove them, even if they read like unsupported claims or condition notes. Your job here is to keep every key point present exactly once and remove any DUPLICATION or contradiction where the same fact has been stated more than once:\n${keyPoints.trim()}`
+      ? `\n\nCATALOGUER KEY POINTS — verified facts recorded by a human. Every one of these MUST remain in the description exactly once. This includes any CONDITION words here (e.g. "Sealed Mint", "Mint", "Sealed") — those are NOT AI guesses, do NOT remove them; your condition-removal rule does NOT apply to anything in this list. Your only job is to remove DUPLICATION or contradiction where the same fact has been stated more than once. If a key point is missing from the description, ADD it back:\n${keyPoints.trim()}`
       : ""
 
     const textPart = { text: `Lot: ${label}\n\nDescription:\n${description}${kpBlock}` }
@@ -58,7 +58,8 @@ export async function POST(req: NextRequest) {
       throw new Error(`BLOCKED: ${finishReason}`)
     }
 
-    const raw = response.text().trim().replace(/^```json\s*/i, "").replace(/```$/, "")
+    const rawResponse = response.text()
+    const raw = rawResponse.trim().replace(/^```json\s*/i, "").replace(/```$/, "")
 
     let contradictions = ""
     let unsupported    = ""
@@ -76,7 +77,8 @@ export async function POST(req: NextRequest) {
       verdict        = "issues"
     }
 
-    return NextResponse.json({ verdict, contradictions, unsupported, revised })
+    return NextResponse.json({ verdict, contradictions, unsupported, revised,
+      debug: { prompt: textPart.text, response: rawResponse, imageCount: imageParts.length } })
   } catch (e: any) {
     const msg: string = e.message ?? "Unknown error"
     // Prefix rate limit errors so the client can apply the correct backoff

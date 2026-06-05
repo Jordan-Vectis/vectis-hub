@@ -51,7 +51,8 @@ export async function POST(req: NextRequest) {
       throw new Error(`BLOCKED: ${finishReason}`)
     }
 
-    const raw     = response.text().trim().replace(/^```json\s*/i, "").replace(/```$/, "")
+    const rawResponse = response.text()
+    const raw     = rawResponse.trim().replace(/^```json\s*/i, "").replace(/```$/, "")
     let revised   = description.trim()
     let missing   = ""
     let added     = ""
@@ -68,7 +69,8 @@ export async function POST(req: NextRequest) {
     }
 
     const changed = revised !== description.trim()
-    return NextResponse.json({ revised, changed, missing, added, found })
+    return NextResponse.json({ revised, changed, missing, added, found,
+      debug: { prompt, response: rawResponse } })
   } catch (e: any) {
     const msg: string = e.message ?? "Unknown error"
     if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
