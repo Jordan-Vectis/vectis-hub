@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { useState, useRef, useCallback, useEffect, useTransition } from "react"
+import { useState, useRef, useCallback, useEffect, useTransition, Fragment } from "react"
 import * as XLSX from "xlsx"
 import { PRESETS } from "@/lib/auction-ai-presets"
 import { DOUBLE_CHECK_INSTRUCTION } from "@/lib/double-check-instruction"
@@ -3387,7 +3387,9 @@ type PLot = {
   // Stage 1
   batchStatus?: "ok" | "failed" | "skipped"
   estimate?:    string
-  batchDesc?:   string   // original raw batch text, before DC/KP — for the DC before/after
+  batchDesc?:   string   // description produced by the Batch stage
+  kpDesc?:      string   // description produced by the Key Points stage
+  dcDesc?:      string   // description produced by the Double Check stage
   // Stage 2
   dcStatus?:       "ok" | "issues" | "error" | "skipped"
   contradictions?: string
@@ -3427,6 +3429,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   const [accepting,    setAccepting]   = useState(false)
   const [photoLot,     setPhotoLot]    = useState<PLot | null>(null)
   const [debugLot,     setDebugLot]    = useState<PLot | null>(null)
+  const [expandedId,   setExpandedId]  = useState<string | null>(null)
   const [signedUrls,   setSignedUrls]  = useState<Record<string, string>>({})
   const codeRef  = useRef<HTMLDivElement>(null)
   const logRef   = useRef<HTMLDivElement>(null)
@@ -3740,11 +3743,11 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         // DC is now the LAST stage and the manual gate — hold its cleaned result for
         // Review & Apply rather than auto-applying. kpRevised drives the review UI.
         if (verdict === "issues" && revised) {
-          updated[idx] = { ...updated[idx], dcStatus: verdict, contradictions, unsupported, kpRevised: revised, debug: { ...updated[idx].debug, dc: result.debug } }
+          updated[idx] = { ...updated[idx], dcStatus: verdict, contradictions, unsupported, kpRevised: revised, dcDesc: revised, debug: { ...updated[idx].debug, dc: result.debug } }
           addLog(`  ⚑ ${lot.label} — DC cleaned up, ready for review`)
           await saveLot(lot.id, { dcStatus: verdict, contradictions, unsupported, revised })
         } else {
-          updated[idx] = { ...updated[idx], dcStatus: verdict, contradictions, unsupported, debug: { ...updated[idx].debug, dc: result.debug } }
+          updated[idx] = { ...updated[idx], dcStatus: verdict, contradictions, unsupported, dcDesc: lot.currentDesc, debug: { ...updated[idx].debug, dc: result.debug } }
           addLog(`  ✓ ${lot.label} — clean`)
           await saveLot(lot.id, { dcStatus: verdict, contradictions, unsupported })
         }
@@ -3812,9 +3815,9 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           } catch {
             addLog(`  ⚑ ${lot.label} — key points inserted but auto-apply failed`)
           }
-          updated[idx] = { ...updated[idx], kpStatus: "fixed", kpMissing: missing, kpAdded: added, kpFound: found, currentDesc: newDesc, appliedDesc: newDesc, kpRevised: newDesc, debug: { ...updated[idx].debug, kp: result.debug } }
+          updated[idx] = { ...updated[idx], kpStatus: "fixed", kpMissing: missing, kpAdded: added, kpFound: found, currentDesc: newDesc, appliedDesc: newDesc, kpRevised: newDesc, kpDesc: newDesc, debug: { ...updated[idx].debug, kp: result.debug } }
         } else {
-          updated[idx] = { ...updated[idx], kpStatus: "ok", kpMissing: missing, kpFound: found, debug: { ...updated[idx].debug, kp: result.debug } }
+          updated[idx] = { ...updated[idx], kpStatus: "ok", kpMissing: missing, kpFound: found, kpDesc: lot.currentDesc, debug: { ...updated[idx].debug, kp: result.debug } }
           addLog(`  ✓ ${lot.label} — all key points present`)
         }
         setLots([...updated])
@@ -4324,28 +4327,59 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                     <span className="text-gray-500">— Skipped</span>
                   )
 
+                  const isOpen = expandedId === lot.id
                   return (
-                    <tr key={lot.id}
-                      className={`border-b border-gray-100 dark:border-gray-800 last:border-0 ${i % 2 === 0 ? "bg-white dark:bg-transparent" : "bg-gray-50 dark:bg-white/[0.02]"}`}>
-                      <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-400 truncate max-w-[8rem]">{lot.label}</td>
+                    <Fragment key={lot.id}>
+                    <tr
+                      onClick={() => setExpandedId(isOpen ? null : lot.id)}
+                      className={`border-b border-gray-100 dark:border-gray-800 last:border-0 cursor-pointer hover:bg-gray-100 dark:hover:bg-white/[0.04] ${i % 2 === 0 ? "bg-white dark:bg-transparent" : "bg-gray-50 dark:bg-white/[0.02]"}`}>
+                      <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-400 truncate max-w-[8rem]">
+                        <span className="text-gray-400 mr-1">{isOpen ? "▾" : "▸"}</span>{lot.label}
+                      </td>
                       <td className="px-3 py-2">{batchCell}</td>
                       <td className="px-3 py-2">{dcCell}</td>
                       <td className="px-3 py-2">{kpCell}</td>
                       <td className="px-3 py-2 text-right whitespace-nowrap">
                         {lot.debug && (
-                          <button onClick={() => setDebugLot(lot)}
+                          <button onClick={e => { e.stopPropagation(); setDebugLot(lot) }}
                             className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors mr-3">
                             🔍 AI log
                           </button>
                         )}
                         {lot.imageUrls.length > 0 && (
-                          <button onClick={() => openPhotos(lot)}
+                          <button onClick={e => { e.stopPropagation(); openPhotos(lot) }}
                             className="text-xs text-gray-500 hover:text-gray-200 transition-colors">
                             📷 View Photo
                           </button>
                         )}
                       </td>
                     </tr>
+                    {isOpen && (
+                      <tr className="bg-gray-50 dark:bg-[#141416] border-b border-gray-200 dark:border-gray-800">
+                        <td colSpan={5} className="px-4 py-3 space-y-3">
+                          {lot.keyPoints?.trim() && (
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Key Points</p>
+                              <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">{lot.keyPoints.trim()}</pre>
+                            </div>
+                          )}
+                          {[
+                            { label: "⚡ After Batch",        text: lot.batchDesc },
+                            { label: "✓ After Key Points",    text: lot.kpDesc },
+                            { label: "🔎 After Double Check",  text: lot.dcDesc },
+                          ].map(({ label, text }) => text?.trim() && (
+                            <div key={label}>
+                              <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">{label}</p>
+                              <p className="text-xs text-gray-700 dark:text-gray-200 whitespace-pre-wrap leading-relaxed bg-white dark:bg-[#1C1C1E] rounded-lg p-2.5 border border-gray-200 dark:border-gray-800">{text}</p>
+                            </div>
+                          ))}
+                          {!lot.batchDesc?.trim() && !lot.kpDesc?.trim() && !lot.dcDesc?.trim() && (
+                            <p className="text-xs text-gray-500 italic">No descriptions generated yet.</p>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   )
                 })}
               </tbody>
