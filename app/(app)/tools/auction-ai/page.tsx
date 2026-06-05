@@ -61,22 +61,34 @@ function fmtTokens(n?: number): string {
 
 function ModelInfoButton({ id, info }: { id: string; info?: { displayName?: string; description?: string; inputTokenLimit?: number; outputTokenLimit?: number } }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLSpanElement>(null)
+  const [pos, setPos] = useState<{ bottom: number; right: number } | null>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (!open) return
-    function handler(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    function handler(e: MouseEvent) {
+      if (btnRef.current && !btnRef.current.contains(e.target as Node)) setOpen(false)
+    }
     document.addEventListener("mousedown", handler)
     return () => document.removeEventListener("mousedown", handler)
   }, [open])
+  function toggle() {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect()
+      // Fixed-position so it escapes the sidebar's overflow clipping; opens above-right of the icon
+      setPos({ bottom: window.innerHeight - r.top + 6, right: window.innerWidth - r.right })
+    }
+    setOpen(o => !o)
+  }
   if (!id) return null
   return (
-    <span ref={ref} className="relative inline-flex">
-      <button type="button" onClick={() => setOpen(o => !o)} title="About this model"
+    <>
+      <button ref={btnRef} type="button" onClick={toggle} title="About this model"
         className="w-4 h-4 flex items-center justify-center rounded-full border border-gray-400 dark:border-gray-600 text-[9px] text-gray-500 dark:text-gray-400 hover:border-[#C8A96E] hover:text-[#C8A96E] transition-colors leading-none">
         i
       </button>
-      {open && (
-        <div className="absolute z-50 bottom-full mb-1.5 right-0 w-60 rounded-lg bg-white dark:bg-[#232325] border border-gray-300 dark:border-gray-700 shadow-xl p-3 space-y-1.5 normal-case">
+      {open && pos && (
+        <div style={{ position: "fixed", bottom: pos.bottom, right: pos.right }}
+          className="z-[60] w-64 max-w-[calc(100vw-2rem)] rounded-lg bg-white dark:bg-[#232325] border border-gray-300 dark:border-gray-700 shadow-2xl p-3 space-y-1.5 normal-case">
           <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">{info?.displayName ?? id}</p>
           <p className="text-[11px] text-gray-600 dark:text-gray-400 leading-snug">{describeModel(id)}</p>
           {(info?.inputTokenLimit || info?.outputTokenLimit) && (
@@ -86,7 +98,7 @@ function ModelInfoButton({ id, info }: { id: string; info?: { displayName?: stri
           )}
         </div>
       )}
-    </span>
+    </>
   )
 }
 
@@ -3475,6 +3487,7 @@ type PLot = {
 // Optional AI Upgrade transformations — same set as the standalone AI Upgrade tab.
 const PIPELINE_UPGRADE_MODES: { id: string; label: string }[] = [
   { id: "expand",           label: "Add more detail" },
+  { id: "seo",              label: "Improve SEO" },
   { id: "condition",        label: "Expand condition notes" },
   { id: "humanise",         label: "Humanise wording" },
   { id: "grammar",          label: "Fix grammar & spelling" },
@@ -4656,6 +4669,7 @@ type UpgradeLot = {
 const UPGRADE_MODES = [
   { key: "shorten",          label: "Shorten",                desc: "Remove padding, tighten verbose descriptions" },
   { key: "expand",           label: "Add more detail",        desc: "Expand sparse descriptions with useful context" },
+  { key: "seo",              label: "Improve SEO",            desc: "Weave in buyer search terms naturally, without changing facts" },
   { key: "humanise",         label: "Humanise",               desc: "Remove AI-robotic phrasing, make it read naturally" },
   { key: "grammar",          label: "Fix grammar",            desc: "Spelling, punctuation and sentence structure" },
   { key: "format",           label: "Standardise format",     desc: "Consistent bullets, capitalisation and spacing" },

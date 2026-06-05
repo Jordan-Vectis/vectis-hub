@@ -11,6 +11,7 @@ const MODE_INSTRUCTIONS: Record<string, string> = {
   condition:        "Expand condition notes — be more specific and explicit about any defects, damage, or completeness issues.",
   no_hyperbole:     "Remove hyperbole and sales-speak — replace vague positive language with specific factual statements.",
   auction_language: "Ensure auction-appropriate terminology throughout — use lot/catalogue language as appropriate.",
+  seo:              "Improve search visibility (SEO) — naturally weave in the specific terms a buyer would search for (brand, maker, model/range name, character, theme, era, format). Do not keyword-stuff, repeat unnaturally, or change any facts.",
 }
 
 // POST /api/auction-ai/upgrade
