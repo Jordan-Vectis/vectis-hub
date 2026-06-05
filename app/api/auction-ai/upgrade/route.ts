@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
 
-    const { description, modes, model } = await req.json()
+    const { description, modes, model, keyPoints } = await req.json()
     if (!description?.trim()) return NextResponse.json({ error: "description is required" }, { status: 400 })
     if (!Array.isArray(modes) || modes.length === 0) return NextResponse.json({ error: "at least one mode required" }, { status: 400 })
 
@@ -32,6 +32,12 @@ export async function POST(req: NextRequest) {
       .filter(m => MODE_INSTRUCTIONS[m])
       .map((m, i) => `${i + 1}. ${MODE_INSTRUCTIONS[m]}`)
       .join("\n")
+
+    // When key points are supplied, they are cataloguer-verified facts that must survive
+    // the rewrite untouched — this is the single most important rule.
+    const kpRule = keyPoints?.trim()
+      ? `\n\n⚠ ABSOLUTE RULE — these cataloguer key points are verified facts. EVERY one of them must remain present in the rewritten description with its exact meaning and the cataloguer's wording for condition/completeness terms (e.g. "Sealed Mint"). Never remove, soften, paraphrase away, or contradict any of them:\n${keyPoints.trim()}`
+      : ""
 
     const systemInstruction = `You are rewriting auction lot descriptions. Apply the following transformations:
 
@@ -42,7 +48,7 @@ Rules:
 - Preserve all factual information — do not invent details or remove real facts.
 - Keep British English spelling throughout.
 - Do not add or change estimate figures.
-- Join lines with \\n, never collapse multi-paragraph or list formatting into a single paragraph.`
+- Join lines with \\n, never collapse multi-paragraph or list formatting into a single paragraph.${kpRule}`
 
     const genai  = new GoogleGenerativeAI(apiKey)
     const gemini = genai.getGenerativeModel({ model: model || "gemini-2.0-flash", systemInstruction })

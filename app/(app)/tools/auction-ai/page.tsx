@@ -3472,6 +3472,18 @@ type PLot = {
   }
 }
 
+// Optional AI Upgrade transformations — same set as the standalone AI Upgrade tab.
+const PIPELINE_UPGRADE_MODES: { id: string; label: string }[] = [
+  { id: "expand",           label: "Add more detail" },
+  { id: "condition",        label: "Expand condition notes" },
+  { id: "humanise",         label: "Humanise wording" },
+  { id: "grammar",          label: "Fix grammar & spelling" },
+  { id: "format",           label: "Standardise formatting" },
+  { id: "no_hyperbole",     label: "Remove hyperbole" },
+  { id: "auction_language", label: "Auction terminology" },
+  { id: "shorten",          label: "Shorten" },
+]
+
 function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fallbackModel: string }) {
   const [code,        setCode]        = useState("")
   const [auctionId,   setAuctionId]   = useState<string | null>(null)
@@ -3493,6 +3505,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   const [photoLot,     setPhotoLot]    = useState<PLot | null>(null)
   const [debugLot,     setDebugLot]    = useState<PLot | null>(null)
   const [expandedId,   setExpandedId]  = useState<string | null>(null)
+  const [upgradeModes, setUpgradeModes] = useState<Set<string>>(new Set(["expand"]))
+  const [upgrading,    setUpgrading]   = useState(false)
   const [signedUrls,   setSignedUrls]  = useState<Record<string, string>>({})
   const codeRef  = useRef<HTMLDivElement>(null)
   const logRef   = useRef<HTMLDivElement>(null)
@@ -3904,6 +3918,58 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     return updated
   }
 
+  // ── Optional final step: AI Upgrade ─────────────────────────────────────────
+  // Runs the AI Upgrade transformations on each lot's latest description for extra
+  // detail/polish. Key points are passed through so nothing factual is dropped.
+  // Result is staged into kpRevised → appears in Review & Apply (never auto-applied).
+  async function runUpgrade() {
+    if (upgrading || !auctionId) return
+    const modes = [...upgradeModes]
+    if (!modes.length) { setError("Pick at least one upgrade option first"); return }
+    cancelRef.current = false
+    setUpgrading(true); setError(null)
+
+    const targets = lots.filter(l => (l.kpRevised || l.appliedDesc || l.currentDesc)?.trim())
+    addLog(`── Optional AI Upgrade — ${targets.length} lots · ${modes.join(", ")}`)
+    let done = 0
+    const updated = [...lots]
+
+    for (const lot of targets) {
+      if (cancelRef.current) break
+      const idx  = updated.findIndex(l => l.id === lot.id)
+      const base = (lot.kpRevised || lot.appliedDesc || lot.currentDesc || "").trim()
+      if (!base) continue
+
+      addLog(`  · ${done + 1}/${targets.length} ${lot.label} — upgrading…`)
+      const result = await withRetry(lot.label, async (attempt, wasRateLimit) => {
+        const modelToUse = (wasRateLimit && fallbackModel) ? fallbackModel : localModel
+        if (attempt > 1) addLog(`  ↳ ${lot.label} trying ${modelToUse}`)
+        const res = await fetch("/api/auction-ai/upgrade", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ description: base, modes, model: modelToUse, keyPoints: lot.keyPoints }),
+        })
+        const json = await res.json()
+        if (json.error) throw new Error(json.error)
+        return json
+      }, err => err.startsWith("BLOCKED:"))
+
+      if (result?.revised && result.revised.trim() !== base) {
+        updated[idx] = { ...updated[idx], kpRevised: result.revised.trim() }
+        setLots([...updated])
+        await saveLot(lot.id, { revised: result.revised.trim() })
+        addLog(`  ✓ ${lot.label} — upgraded, ready for review`)
+      } else if (result) {
+        addLog(`  — ${lot.label} — no change`)
+      } else if (!cancelRef.current) {
+        addLog(`  ✗ ${lot.label} — skipped (blocked)`)
+      }
+      done++; setProgress({ done, total: targets.length })
+    }
+
+    setUpgrading(false); setProgress(null)
+    if (!cancelRef.current) addLog("✨ AI Upgrade complete — review & apply the updated descriptions below")
+  }
+
   // ── Main run ────────────────────────────────────────────────────────────────
   async function handleRun() {
     if (!lots.length || running || !auctionId) return
@@ -4225,6 +4291,37 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
             <span>Pipeline complete — all descriptions applied for <span className="font-mono font-bold">{code.trim().toUpperCase()}</span></span>
           </div>
         )
+      )}
+
+      {/* Optional final step — AI Upgrade */}
+      {stage === "complete" && lots.some(l => l.batchStatus === "ok") && (
+        <div className="rounded-xl border border-purple-700/40 bg-purple-950/10 p-4 space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold text-purple-300">✨ Optional: Enhance with AI Upgrade</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              Polishes every description for extra detail and readability. Key points are protected — no facts are removed.
+              Results go to <span className="text-amber-300">Review &amp; Apply</span> below; nothing is applied automatically.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {PIPELINE_UPGRADE_MODES.map(m => {
+              const on = upgradeModes.has(m.id)
+              return (
+                <button key={m.id} disabled={upgrading}
+                  onClick={() => setUpgradeModes(prev => { const n = new Set(prev); n.has(m.id) ? n.delete(m.id) : n.add(m.id); return n })}
+                  className={`text-xs px-3 py-1.5 rounded-full border transition-colors disabled:opacity-40 ${
+                    on ? "bg-purple-600/30 border-purple-500 text-purple-200" : "bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-purple-500"
+                  }`}>
+                  {on ? "✓ " : ""}{m.label}
+                </button>
+              )
+            })}
+          </div>
+          <button onClick={runUpgrade} disabled={upgrading || upgradeModes.size === 0}
+            className="px-5 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors">
+            {upgrading ? `Upgrading… ${progress ? `${progress.done}/${progress.total}` : ""}` : `✨ Run AI Upgrade on ${lots.filter(l => l.batchStatus === "ok").length} lots`}
+          </button>
+        </div>
       )}
 
       {/* Log */}
