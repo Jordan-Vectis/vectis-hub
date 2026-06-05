@@ -59,17 +59,34 @@ function fmtTokens(n?: number): string {
   return String(n)
 }
 
-function ModelInfo({ id, info }: { id: string; info?: { displayName?: string; description?: string; inputTokenLimit?: number; outputTokenLimit?: number } }) {
+function ModelInfoButton({ id, info }: { id: string; info?: { displayName?: string; description?: string; inputTokenLimit?: number; outputTokenLimit?: number } }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (!open) return
+    function handler(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [open])
   if (!id) return null
   return (
-    <div className="mt-1 rounded bg-gray-100 dark:bg-[#232325] border border-gray-200 dark:border-gray-700 px-2 py-1.5 space-y-1">
-      <p className="text-[11px] text-gray-600 dark:text-gray-400 leading-snug">{describeModel(id)}</p>
-      {(info?.inputTokenLimit || info?.outputTokenLimit) && (
-        <p className="text-[10px] text-gray-500 dark:text-gray-500 leading-snug">
-          Can read up to <span className="text-gray-600 dark:text-gray-400 font-medium">~{fmtTokens(info.inputTokenLimit)} tokens</span> of input (photos + text) and write up to <span className="text-gray-600 dark:text-gray-400 font-medium">~{fmtTokens(info.outputTokenLimit)} tokens</span> of description. (~1 token ≈ ¾ of a word.)
-        </p>
+    <span ref={ref} className="relative inline-flex">
+      <button type="button" onClick={() => setOpen(o => !o)} title="About this model"
+        className="w-4 h-4 flex items-center justify-center rounded-full border border-gray-400 dark:border-gray-600 text-[9px] text-gray-500 dark:text-gray-400 hover:border-[#C8A96E] hover:text-[#C8A96E] transition-colors leading-none">
+        i
+      </button>
+      {open && (
+        <div className="absolute z-50 bottom-full mb-1.5 right-0 w-60 rounded-lg bg-white dark:bg-[#232325] border border-gray-300 dark:border-gray-700 shadow-xl p-3 space-y-1.5 normal-case">
+          <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">{info?.displayName ?? id}</p>
+          <p className="text-[11px] text-gray-600 dark:text-gray-400 leading-snug">{describeModel(id)}</p>
+          {(info?.inputTokenLimit || info?.outputTokenLimit) && (
+            <p className="text-[10px] text-gray-500 dark:text-gray-500 leading-snug pt-0.5 border-t border-gray-200 dark:border-gray-700">
+              Reads up to <span className="text-gray-600 dark:text-gray-400 font-medium">~{fmtTokens(info.inputTokenLimit)} tokens</span> in (photos + text), writes up to <span className="text-gray-600 dark:text-gray-400 font-medium">~{fmtTokens(info.outputTokenLimit)} tokens</span> out. (~1 token ≈ ¾ of a word.)
+            </p>
+          )}
+        </div>
       )}
-    </div>
+    </span>
   )
 }
 
@@ -5048,21 +5065,25 @@ export default function AuctionAIPage() {
         </div>
         <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-800 space-y-2.5">
           <div className="space-y-1">
-            <p className="text-gray-600 text-xs uppercase tracking-wider">Model</p>
+            <div className="flex items-center justify-between">
+              <p className="text-gray-600 text-xs uppercase tracking-wider">Model</p>
+              <ModelInfoButton id={model} info={modelDetails[model]} />
+            </div>
             <select value={model} onChange={e => { setModel(e.target.value); localStorage.setItem("ai_model", e.target.value) }}
               className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-2 py-1.5 text-xs text-gray-600 dark:text-gray-300 focus:outline-none focus:border-[#C8A96E]">
               {modelList.map(m => <option key={m} value={m}>{modelDetails[m]?.displayName ? `${modelDetails[m].displayName} (${m})` : m}</option>)}
             </select>
-            <ModelInfo id={model} info={modelDetails[model]} />
           </div>
           <div className="space-y-1">
-            <p className="text-gray-600 text-xs uppercase tracking-wider">Fallback Model <span className="normal-case text-gray-700">(rate limit)</span></p>
+            <div className="flex items-center justify-between">
+              <p className="text-gray-600 text-xs uppercase tracking-wider">Fallback Model <span className="normal-case text-gray-700">(rate limit)</span></p>
+              {fallbackModel && <ModelInfoButton id={fallbackModel} info={modelDetails[fallbackModel]} />}
+            </div>
             <select value={fallbackModel} onChange={e => { setFallbackModel(e.target.value); localStorage.setItem("ai_fallback_model", e.target.value) }}
               className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-2 py-1.5 text-xs text-gray-600 dark:text-gray-300 focus:outline-none focus:border-[#C8A96E]">
               <option value="">— none —</option>
               {modelList.filter(m => m !== model).map(m => <option key={m} value={m}>{modelDetails[m]?.displayName ? `${modelDetails[m].displayName} (${m})` : m}</option>)}
             </select>
-            {fallbackModel && <ModelInfo id={fallbackModel} info={modelDetails[fallbackModel]} />}
           </div>
         </div>
       </aside>
