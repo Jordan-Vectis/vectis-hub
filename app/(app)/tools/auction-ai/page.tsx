@@ -3717,7 +3717,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
 
         const res  = await fetch("/api/auction-ai/double-check", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ label: lot.label, description: lot.currentDesc, images, model: modelToUse }),
+          // keyPoints sent so DC keeps cataloguer facts and only removes duplication
+          body: JSON.stringify({ label: lot.label, description: lot.currentDesc, images, model: modelToUse, keyPoints: lot.keyPoints }),
         })
         const json = await res.json()
         if (json.error) throw new Error(json.error)
@@ -3726,24 +3727,19 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
 
       if (result) {
         const { verdict, contradictions, unsupported, revised } = result
-        let newDesc = lot.currentDesc
 
-        // Auto-apply fix if issues were found and revised is available
+        // DC is now the LAST stage and the manual gate — hold its cleaned result for
+        // Review & Apply rather than auto-applying. kpRevised drives the review UI.
         if (verdict === "issues" && revised) {
-          try {
-            await applyAiDescriptionOne(aid, { id: lot.id, description: revised })
-            newDesc = revised
-            addLog(`  ⚑ ${lot.label} — issues found, fix auto-applied`)
-          } catch {
-            addLog(`  ⚑ ${lot.label} — issues found but auto-apply failed`)
-          }
+          updated[idx] = { ...updated[idx], dcStatus: verdict, contradictions, unsupported, kpRevised: revised }
+          addLog(`  ⚑ ${lot.label} — DC cleaned up, ready for review`)
+          await saveLot(lot.id, { dcStatus: verdict, contradictions, unsupported, revised })
         } else {
+          updated[idx] = { ...updated[idx], dcStatus: verdict, contradictions, unsupported }
           addLog(`  ✓ ${lot.label} — clean`)
+          await saveLot(lot.id, { dcStatus: verdict, contradictions, unsupported })
         }
-
-        updated[idx] = { ...updated[idx], dcStatus: verdict, contradictions, unsupported, currentDesc: newDesc }
         setLots([...updated])
-        await saveLot(lot.id, { dcStatus: verdict, contradictions, unsupported, description: newDesc })
       } else if (!cancelRef.current) {
         updated[idx] = { ...updated[idx], dcStatus: "skipped" }
         setLots([...updated])
@@ -3797,16 +3793,23 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
 
       if (result) {
         const { revised, changed, missing, added, found } = result
+        let newDesc = lot.currentDesc
         if (changed && revised) {
-          // Store for review — do NOT auto-apply KP changes
-          updated[idx] = { ...updated[idx], kpStatus: "pending", kpMissing: missing, kpAdded: added, kpFound: found, kpRevised: revised }
-          addLog(`  ⚑ ${lot.label} — key points ready for review`)
+          // KP now runs BEFORE Double Check — auto-apply so DC sees the inserted points
+          try {
+            await applyAiDescriptionOne(aid, { id: lot.id, description: revised })
+            newDesc = revised
+            addLog(`  ⚑ ${lot.label} — key points inserted & applied`)
+          } catch {
+            addLog(`  ⚑ ${lot.label} — key points inserted but auto-apply failed`)
+          }
+          updated[idx] = { ...updated[idx], kpStatus: "fixed", kpMissing: missing, kpAdded: added, kpFound: found, currentDesc: newDesc, appliedDesc: newDesc, kpRevised: newDesc }
         } else {
           updated[idx] = { ...updated[idx], kpStatus: "ok", kpMissing: missing, kpFound: found }
           addLog(`  ✓ ${lot.label} — all key points present`)
         }
         setLots([...updated])
-        await saveLot(lot.id, { kpStatus: updated[idx].kpStatus, kpMissing: missing, kpAdded: added, revised: updated[idx].kpRevised ?? null })
+        await saveLot(lot.id, { kpStatus: updated[idx].kpStatus, kpMissing: missing, kpAdded: added, description: newDesc, revised: newDesc })
       } else if (!cancelRef.current) {
         updated[idx] = { ...updated[idx], kpStatus: "skipped" }
         setLots([...updated])
@@ -3848,19 +3851,19 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       if (stage === "batch") {
         current = await runBatchStage(current)
         if (cancelRef.current) return
-        await advanceStage("doublecheck")
-      }
-
-      // Stage 2 — Double Check
-      if (stage === "batch" || stage === "doublecheck") {
-        current = await runDoubleCheckStage(current, aid)
-        if (cancelRef.current) return
         await advanceStage("kpcheck")
       }
 
-      // Stage 3 — Key Points Check
-      if (stage === "batch" || stage === "doublecheck" || stage === "kpcheck") {
+      // Stage 2 — Key Points Check (auto-applies, feeds Double Check)
+      if (stage === "batch" || stage === "kpcheck") {
         current = await runKPStage(current, aid)
+        if (cancelRef.current) return
+        await advanceStage("doublecheck")
+      }
+
+      // Stage 3 — Double Check (final manual Review & Apply gate)
+      if (stage === "batch" || stage === "kpcheck" || stage === "doublecheck") {
+        current = await runDoubleCheckStage(current, aid)
         if (cancelRef.current) return
         await advanceStage("complete")
       }
@@ -3985,7 +3988,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   }
   const reviewLots = lots.filter(needsReview)
 
-  const stageOrder: PipelineStage[] = ["batch", "doublecheck", "kpcheck", "complete"]
+  const stageOrder: PipelineStage[] = ["batch", "kpcheck", "doublecheck", "complete"]
   const stageIndex = stageOrder.indexOf(stage)
 
   const filtered = auctionList.filter(a => {
@@ -3998,8 +4001,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       <div>
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-1">Auto Pipeline</h2>
         <p className="text-sm text-gray-600 dark:text-gray-400">
-          Runs Batch → Double Check → Key Points automatically. Fixes are applied as each stage completes.
-          Progress is saved to the database — close the browser and resume any time.
+          Runs Batch → Key Points → Double Check. Batch & Key Points auto-apply; Double Check holds its
+          cleaned-up result for you to Review & Apply. Progress is saved — close the browser and resume any time.
         </p>
         <ShowInstructionToggle instruction={DOUBLE_CHECK_INSTRUCTION} label="Double Check instructions" />
       </div>
@@ -4067,8 +4070,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         <div className="grid grid-cols-3 gap-3">
           {([
             { key: "batch",       label: "1. Batch Run",          s: batchSummary, stageVal: "batch" as const,       icon: "⚡" },
-            { key: "doublecheck", label: "2. Double Check",        s: dcSummary,    stageVal: "doublecheck" as const, icon: "🔎" },
-            { key: "kpcheck",     label: "3. Key Points Check",    s: kpSummary,    stageVal: "kpcheck" as const,     icon: "✓"  },
+            { key: "kpcheck",     label: "2. Key Points Check",    s: kpSummary,    stageVal: "kpcheck" as const,     icon: "✓"  },
+            { key: "doublecheck", label: "3. Double Check",        s: dcSummary,    stageVal: "doublecheck" as const, icon: "🔎" },
           ] as const).map(({ key, label, s, stageVal, icon }) => {
             const isActive   = stage === stageVal && running
             const isDone     = stageOrder.indexOf(stageVal) < stageIndex
@@ -4091,11 +4094,11 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                   <div className="space-y-0.5 text-xs text-gray-600 dark:text-gray-500">
                     {s.ok > 0          && <p className="text-green-400">✓ {s.ok} OK{"fixed" in s && s.fixed! > 0 ? ` · ${s.fixed} accepted` : ""}</p>}
                     {"pending" in s && s.pending! > 0 && <p className="text-amber-400">⏳ {s.pending} awaiting review</p>}
-                    {"issues" in s && s.issues! > 0 && <p className="text-yellow-400">⚑ {s.issues} fixed by DC</p>}
+                    {"issues" in s && s.issues! > 0 && <p className="text-yellow-400">⚑ {s.issues} cleaned — review below</p>}
                     {s.skipped > 0     && <p className="text-gray-500">— {s.skipped} skipped</p>}
                   </div>
                 )}
-                {isActive && progress && key === (stage === "batch" ? "batch" : stage === "doublecheck" ? "doublecheck" : "kpcheck") && (
+                {isActive && progress && key === stage && (
                   <div className="w-full bg-gray-700 rounded-full h-1.5">
                     <div className="bg-[#C8A96E] h-1.5 rounded-full transition-all duration-300"
                       style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }} />

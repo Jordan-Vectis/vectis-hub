@@ -17,11 +17,12 @@ export async function POST(req: NextRequest) {
   if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
 
   try {
-    const { label, description, images, model } = await req.json() as {
+    const { label, description, images, model, keyPoints } = await req.json() as {
       label:       string
       description: string
       images?:     { data: string; mimeType: string }[]
       model?:      string
+      keyPoints?:  string
     }
     if (!label || !description) return NextResponse.json({ error: "Missing label or description" }, { status: 400 })
 
@@ -34,7 +35,15 @@ export async function POST(req: NextRequest) {
     const imageParts = (images ?? []).map(img => ({
       inlineData: { data: img.data, mimeType: img.mimeType },
     }))
-    const textPart = { text: `Lot: ${label}\n\nDescription:\n${description}` }
+
+    // When key points are supplied (pipeline runs Double Check AFTER Key Points),
+    // they are cataloguer-verified facts. Tell the model to KEEP them, and to focus
+    // on removing any duplication/contradiction the key-point insertion may have caused.
+    const kpBlock = keyPoints?.trim()
+      ? `\n\nCATALOGUER KEY POINTS — these are verified facts that MUST remain in the description. Never flag or remove them, even if they read like unsupported claims or condition notes. Your job here is to keep every key point present exactly once and remove any DUPLICATION or contradiction where the same fact has been stated more than once:\n${keyPoints.trim()}`
+      : ""
+
+    const textPart = { text: `Lot: ${label}\n\nDescription:\n${description}${kpBlock}` }
     const contents = imageParts.length > 0 ? [...imageParts, textPart] : [textPart]
 
     // Check for prompt block before calling .text()
