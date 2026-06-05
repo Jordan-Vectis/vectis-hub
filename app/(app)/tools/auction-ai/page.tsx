@@ -28,18 +28,45 @@ function ShowInstructionToggle({ instruction, label = "instructions sent to Gemi
   )
 }
 
-// ─── Model info (shows Google's own description for the selected model) ─────────
+// ─── Model info ─────────────────────────────────────────────────────────────
+// Curated, plain-English guidance on what each Gemini tier is best for — Google's
+// own API descriptions are too thin to be useful. Matched by patterns in the id so
+// it keeps working as preview model names change.
 
-function ModelInfo({ info }: { info?: { displayName?: string; description?: string; inputTokenLimit?: number; outputTokenLimit?: number } }) {
-  if (!info || (!info.description && !info.inputTokenLimit)) return null
+function describeModel(id: string): string {
+  const m = id.toLowerCase()
+  if (m.includes("image") || m.includes("imagen")) return "Image generation model — not for cataloguing text."
+  if (m.includes("tts") || m.includes("audio"))   return "Audio / speech model — not for cataloguing text."
+  if (m.includes("embedding"))                      return "Embedding model — not for cataloguing text."
+  let base: string
+  if (m.includes("lite")) {
+    base = "Fastest and cheapest tier. Best for very high-volume, simple lots where speed matters most — but the lowest quality and most likely to miss detail. Not recommended for tricky items."
+  } else if (m.includes("flash")) {
+    base = "The everyday workhorse — fast, low cost, strong balance of speed and quality. Best default for bulk cataloguing and the pipeline batch run."
+  } else if (m.includes("pro")) {
+    base = "Highest quality and reasoning. Best for tricky identifications, complex multi-item lots and maximum accuracy — but slower and more expensive. Good as a fallback or for difficult auctions."
+  } else {
+    base = "General-purpose Gemini model."
+  }
+  if (m.includes("preview") || m.includes("exp")) base += " (Preview — newest version, behaviour may still change.)"
+  return base
+}
+
+function fmtTokens(n?: number): string {
+  if (!n) return ""
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1).replace(/\.0$/, "")}M`
+  if (n >= 1_000)     return `${Math.round(n / 1_000)}k`
+  return String(n)
+}
+
+function ModelInfo({ id, info }: { id: string; info?: { displayName?: string; description?: string; inputTokenLimit?: number; outputTokenLimit?: number } }) {
+  if (!id) return null
   return (
-    <div className="mt-1 rounded bg-gray-100 dark:bg-[#232325] border border-gray-200 dark:border-gray-700 px-2 py-1.5">
-      {info.description && <p className="text-[11px] text-gray-600 dark:text-gray-400 leading-snug">{info.description}</p>}
-      {(info.inputTokenLimit || info.outputTokenLimit) && (
-        <p className="text-[10px] text-gray-500 dark:text-gray-500 mt-0.5">
-          {info.inputTokenLimit ? `${(info.inputTokenLimit / 1000).toLocaleString()}k in` : ""}
-          {info.inputTokenLimit && info.outputTokenLimit ? " · " : ""}
-          {info.outputTokenLimit ? `${(info.outputTokenLimit / 1000).toLocaleString()}k out` : ""}
+    <div className="mt-1 rounded bg-gray-100 dark:bg-[#232325] border border-gray-200 dark:border-gray-700 px-2 py-1.5 space-y-1">
+      <p className="text-[11px] text-gray-600 dark:text-gray-400 leading-snug">{describeModel(id)}</p>
+      {(info?.inputTokenLimit || info?.outputTokenLimit) && (
+        <p className="text-[10px] text-gray-500 dark:text-gray-500 leading-snug">
+          Can read up to <span className="text-gray-600 dark:text-gray-400 font-medium">~{fmtTokens(info.inputTokenLimit)} tokens</span> of input (photos + text) and write up to <span className="text-gray-600 dark:text-gray-400 font-medium">~{fmtTokens(info.outputTokenLimit)} tokens</span> of description. (~1 token ≈ ¾ of a word.)
         </p>
       )}
     </div>
@@ -5026,7 +5053,7 @@ export default function AuctionAIPage() {
               className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-2 py-1.5 text-xs text-gray-600 dark:text-gray-300 focus:outline-none focus:border-[#C8A96E]">
               {modelList.map(m => <option key={m} value={m}>{modelDetails[m]?.displayName ? `${modelDetails[m].displayName} (${m})` : m}</option>)}
             </select>
-            <ModelInfo info={modelDetails[model]} />
+            <ModelInfo id={model} info={modelDetails[model]} />
           </div>
           <div className="space-y-1">
             <p className="text-gray-600 text-xs uppercase tracking-wider">Fallback Model <span className="normal-case text-gray-700">(rate limit)</span></p>
@@ -5035,7 +5062,7 @@ export default function AuctionAIPage() {
               <option value="">— none —</option>
               {modelList.filter(m => m !== model).map(m => <option key={m} value={m}>{modelDetails[m]?.displayName ? `${modelDetails[m].displayName} (${m})` : m}</option>)}
             </select>
-            {fallbackModel && <ModelInfo info={modelDetails[fallbackModel]} />}
+            {fallbackModel && <ModelInfo id={fallbackModel} info={modelDetails[fallbackModel]} />}
           </div>
         </div>
       </aside>
