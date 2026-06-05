@@ -61,7 +61,7 @@ function fmtTokens(n?: number): string {
 
 function ModelInfoButton({ id, info }: { id: string; info?: { displayName?: string; description?: string; inputTokenLimit?: number; outputTokenLimit?: number } }) {
   const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState<{ bottom: number; right: number } | null>(null)
+  const [pos, setPos] = useState<{ bottom: number; left: number } | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (!open) return
@@ -74,8 +74,11 @@ function ModelInfoButton({ id, info }: { id: string; info?: { displayName?: stri
   function toggle() {
     if (!open && btnRef.current) {
       const r = btnRef.current.getBoundingClientRect()
-      // Fixed-position so it escapes the sidebar's overflow clipping; opens above-right of the icon
-      setPos({ bottom: window.innerHeight - r.top + 6, right: window.innerWidth - r.right })
+      const width = 256
+      // Fixed-position so it escapes the sidebar's overflow clipping; opens above the icon,
+      // clamped fully on-screen (the sidebar is too narrow to anchor right of the icon).
+      const left = Math.min(Math.max(8, r.left - 40), window.innerWidth - width - 8)
+      setPos({ bottom: window.innerHeight - r.top + 6, left })
     }
     setOpen(o => !o)
   }
@@ -87,8 +90,8 @@ function ModelInfoButton({ id, info }: { id: string; info?: { displayName?: stri
         i
       </button>
       {open && pos && (
-        <div style={{ position: "fixed", bottom: pos.bottom, right: pos.right }}
-          className="z-[60] w-64 max-w-[calc(100vw-2rem)] rounded-lg bg-white dark:bg-[#232325] border border-gray-300 dark:border-gray-700 shadow-2xl p-3 space-y-1.5 normal-case">
+        <div style={{ position: "fixed", bottom: pos.bottom, left: pos.left, width: 256 }}
+          className="z-[60] rounded-lg bg-white dark:bg-[#232325] border border-gray-300 dark:border-gray-700 shadow-2xl p-3 space-y-1.5 normal-case">
           <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">{info?.displayName ?? id}</p>
           <p className="text-[11px] text-gray-600 dark:text-gray-400 leading-snug">{describeModel(id)}</p>
           {(info?.inputTokenLimit || info?.outputTokenLimit) && (
