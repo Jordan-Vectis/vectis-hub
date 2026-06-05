@@ -2266,10 +2266,12 @@ function KeyPointsCheckTab({ model: globalModel, fallbackModel, onModelChange }:
   const codeInputRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    fetch("/api/auction-ai/models")
+    const loadModels = () => fetch("/api/auction-ai/models")
       .then(r => r.json())
       .then(j => { if (j.models?.length) setModelList(j.models) })
       .catch(() => {})
+    loadModels()
+    window.addEventListener("ai-models-changed", loadModels)
     fetch("/api/auction-ai/auctions")
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setAuctionList(data) })
@@ -2984,7 +2986,9 @@ function DoubleCheckTab({ model: globalModel, fallbackModel, onModelChange }: { 
   const abortRef  = useRef<AbortController | null>(null)
 
   useEffect(() => {
-    fetch("/api/auction-ai/models").then(r => r.json()).then(j => { if (j.models?.length) setModelList(j.models) }).catch(() => {})
+    const loadModels = () => fetch("/api/auction-ai/models").then(r => r.json()).then(j => { if (j.models?.length) setModelList(j.models) }).catch(() => {})
+    loadModels()
+    window.addEventListener("ai-models-changed", loadModels)
     fetch("/api/auction-ai/auctions").then(r => r.json()).then(d => { if (Array.isArray(d)) setAuctionList(d) }).catch(() => {})
   }, [])
 
@@ -5082,12 +5086,22 @@ function ModelsTab() {
 
   async function toggle(id: string, enabled: boolean) {
     setModels(prev => prev.map(m => m.id === id ? { ...m, enabled } : m))
+    setError(null)
     try {
-      await fetch("/api/auction-ai/model-config", {
+      const res = await fetch("/api/auction-ai/model-config", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ modelId: id, enabled }),
       })
-    } catch { /* revert on failure */ setModels(prev => prev.map(m => m.id === id ? { ...m, enabled: !enabled } : m)) }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error ?? `Save failed (${res.status})`)
+      }
+      // Tell the model selectors elsewhere on the page to re-fetch the (now filtered) list
+      window.dispatchEvent(new Event("ai-models-changed"))
+    } catch (e: any) {
+      setModels(prev => prev.map(m => m.id === id ? { ...m, enabled: !enabled } : m))
+      setError(`Couldn't ${enabled ? "enable" : "disable"} ${id}: ${e.message}. If this mentions a missing table, run the Migrations button on /admin first.`)
+    }
   }
 
   async function testOne(id: string): Promise<TestState> {
@@ -5269,10 +5283,21 @@ export default function AuctionAIPage() {
   }, [])
 
   useEffect(() => {
-    fetch("/api/auction-ai/models")
+    const loadModels = () => fetch("/api/auction-ai/models")
       .then(r => r.json())
-      .then(j => { if (j.models?.length) setModelList(j.models); if (j.details) setModelDetails(j.details) })
+      .then(j => {
+        if (j.models?.length) {
+          setModelList(j.models)
+          // If the currently-selected model was just disabled, fall back to the first enabled one
+          setModel(cur => j.models.includes(cur) ? cur : (j.models[0] ?? cur))
+          setFallbackModel(cur => (!cur || j.models.includes(cur)) ? cur : "")
+        }
+        if (j.details) setModelDetails(j.details)
+      })
       .catch(() => {})
+    loadModels()
+    window.addEventListener("ai-models-changed", loadModels)
+    return () => window.removeEventListener("ai-models-changed", loadModels)
   }, [])
 
   return (
