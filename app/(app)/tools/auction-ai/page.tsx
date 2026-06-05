@@ -3684,7 +3684,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
               description: desc,
               ...(low > 0 && high > 0 ? { aiEstimateLow: low, aiEstimateHigh: high } : {}),
             })
-          } catch { addLog(`  ⚠ ${lot.label} — saved to pipeline but failed to apply to catalogue`) }
+          } catch (e: any) { addLog(`  ⚠ ${lot.label} — failed to apply to catalogue: ${e?.message ?? "unknown error"}`) }
         }
         // Save to pipeline + existing saved runs
         await saveLot(lot.id, { batchStatus: "ok", description: desc, batchDesc: desc, estimate: result.estimate ?? "" })
