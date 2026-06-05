@@ -3390,6 +3390,7 @@ type PLot = {
   batchDesc?:   string   // description produced by the Batch stage
   kpDesc?:      string   // description produced by the Key Points stage
   dcDesc?:      string   // description produced by the Double Check stage
+  cataloguerFlag?: string  // AI's warning that a key point may be a cataloguer mistake
   // Stage 2
   dcStatus?:       "ok" | "issues" | "error" | "skipped"
   contradictions?: string
@@ -3653,6 +3654,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         const desc = result.description ?? ""
         const { low, high } = parseEstimate(result.estimate ?? "")
         updated[idx] = { ...updated[idx], batchStatus: "ok", currentDesc: desc, estimate: result.estimate ?? "", appliedDesc: desc, batchDesc: desc,
+          cataloguerFlag: result.flag || undefined,
           debug: { ...updated[idx].debug, batch: result.debug } }
         setLots([...updated])
         addLog(`  ✓ ${lot.label} — OK`)
@@ -4284,6 +4286,11 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       {lots.some(l => l.batchStatus || l.dcStatus || l.kpStatus) && (
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Results</h3>
+          {lots.some(l => l.cataloguerFlag) && (
+            <div className="rounded-lg border border-red-600/50 bg-red-950/30 px-3 py-2 text-xs text-red-300">
+              ⚠️ {lots.filter(l => l.cataloguerFlag).length} lot{lots.filter(l => l.cataloguerFlag).length === 1 ? "" : "s"} flagged — the AI thinks a key point may be wrong. Expand the flagged row{lots.filter(l => l.cataloguerFlag).length === 1 ? "" : "s"} (⚠️) to review.
+            </div>
+          )}
           <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
             <table className="w-full text-xs">
               <thead>
@@ -4335,6 +4342,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                       className={`border-b border-gray-100 dark:border-gray-800 last:border-0 cursor-pointer hover:bg-gray-100 dark:hover:bg-white/[0.04] ${i % 2 === 0 ? "bg-white dark:bg-transparent" : "bg-gray-50 dark:bg-white/[0.02]"}`}>
                       <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-400 truncate max-w-[8rem]">
                         <span className="text-gray-400 mr-1">{isOpen ? "▾" : "▸"}</span>{lot.label}
+                        {lot.cataloguerFlag && <span className="ml-1.5" title="AI flagged a possible cataloguer mistake — expand to see">⚠️</span>}
                       </td>
                       <td className="px-3 py-2">{batchCell}</td>
                       <td className="px-3 py-2">{dcCell}</td>
@@ -4357,6 +4365,12 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                     {isOpen && (
                       <tr className="bg-gray-50 dark:bg-[#141416] border-b border-gray-200 dark:border-gray-800">
                         <td colSpan={5} className="px-4 py-3 space-y-3">
+                          {lot.cataloguerFlag && (
+                            <div className="rounded-lg border border-red-600/50 bg-red-950/30 px-3 py-2">
+                              <p className="text-[10px] uppercase tracking-wider text-red-400 mb-1">⚠️ Possible cataloguer mistake</p>
+                              <p className="text-xs text-red-300 leading-relaxed">{lot.cataloguerFlag}</p>
+                            </div>
+                          )}
                           {lot.keyPoints?.trim() && (
                             <div>
                               <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Key Points</p>

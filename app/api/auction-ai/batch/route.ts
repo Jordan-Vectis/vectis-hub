@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
     return { text: response.text(), searchQueries }
   }
 
-  const results: { lot: string; description: string; estimate: string; status: string; error?: string; debug?: { prompt: string; response: string; imageCount: number; searchQueries?: string[] } }[] = []
+  const results: { lot: string; description: string; estimate: string; status: string; error?: string; flag?: string; debug?: { prompt: string; response: string; imageCount: number; searchQueries?: string[] } }[] = []
   const lotEntries = Object.entries(lotMap)
 
   for (let idx = 0; idx < lotEntries.length; idx++) {
@@ -101,6 +101,10 @@ EXCEPTION: If a key point contains a set or catalogue number (e.g. a LEGO set nu
 PRESERVE EXACT MEANING — do not soften or paraphrase factual key points. Short condition, completeness or packaging notes (e.g. "Sealed Mint", "Sealed", "Mint", "Boxed", "Unboxed", "Complete", measurements like "55\\"x39\\"") carry a precise meaning and MUST appear with that meaning intact, using the cataloguer's own wording. For example: "Sealed Mint" means factory sealed AND mint condition — do NOT weaken it to "in original boxes" or "remains sealed". If you cannot fit the exact term naturally, state it plainly rather than dropping or rewording it. Losing or softening any such key point is a failure.
 
 Write a single, concise catalogue description that naturally incorporates every key point. Do not list them separately and do not repeat the same information twice — but keep the precise factual wording of condition/completeness/measurement key points exactly as given.
+${grounded ? `\nVERIFY NUMBERS: Before finalising, ALWAYS use Google Search to verify any catalogue number, set number, model number or product code in the key points — do not rely on memory for these. Confirm the number matches the named product.\n` : ""}
+FLAG POSSIBLE MISTAKES: The key points are the cataloguer's record and the description must stay faithful to them — keep their numbers/wording in the description even if you doubt them. BUT if you are HIGHLY confident (ideally confirmed by search) that a catalogue/set/model number or other hard fact in the key points is WRONG, add ONE extra line at the very end in exactly this format:
+FLAG: <which key point looks wrong, what you believe is correct, and why>
+Only add a FLAG line when you are genuinely confident there is an error. If everything checks out, do NOT add a FLAG line at all.
 
 Key points:
 ${existingContext}`
@@ -120,12 +124,17 @@ ${existingContext}`
         if (parsed && typeof parsed.description === "string") rawText = parsed.description.trim()
       } catch { /* not JSON — use as-is */ }
 
-      // Split description and estimate — preserve newlines so list formatting is kept
+      // Split description, estimate and any cataloguer-mistake FLAG line — preserve newlines
       const lines = rawText.split("\n")
       const estimateLine = lines.find((l) => l.toLowerCase().startsWith("estimate:")) ?? ""
-      const description  = lines.filter((l) => !l.toLowerCase().startsWith("estimate:")).join("\n").trim()
+      const flagLine     = lines.find((l) => l.toLowerCase().startsWith("flag:")) ?? ""
+      const description  = lines
+        .filter((l) => !l.toLowerCase().startsWith("estimate:") && !l.toLowerCase().startsWith("flag:"))
+        .join("\n").trim()
+      const flag = flagLine.replace(/^flag:\s*/i, "").trim()
 
       results.push({ lot, description, estimate: estimateLine.replace(/^Estimate:\s*/i, "").trim(), status: "OK",
+        ...(flag ? { flag } : {}),
         debug: { prompt: userPrompt, response: text, imageCount: imageParts.length, searchQueries } })
 
       // 12-second delay between lots to stay well under Gemini rate limits
