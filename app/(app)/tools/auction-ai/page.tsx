@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect, useTransition } from "react"
 import * as XLSX from "xlsx"
 import { PRESETS } from "@/lib/auction-ai-presets"
 import { DOUBLE_CHECK_INSTRUCTION } from "@/lib/double-check-instruction"
+import { KEY_POINTS_INSTRUCTION } from "@/lib/key-points-instruction"
 import { applyAiDescriptionOne } from "@/lib/actions/catalogue"
 import { showError } from "@/lib/error-modal"
 import { MacroTab } from "./macro-tab"
@@ -4004,7 +4005,11 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           Runs Batch → Key Points → Double Check. Batch & Key Points auto-apply; Double Check holds its
           cleaned-up result for you to Review & Apply. Progress is saved — close the browser and resume any time.
         </p>
-        <ShowInstructionToggle instruction={DOUBLE_CHECK_INSTRUCTION} label="Double Check instructions" />
+        <div className="mt-2 space-y-1">
+          <p className="text-[11px] text-gray-600 dark:text-gray-500">Stage 1 (Batch) uses the Batch Preset selected below.</p>
+          <ShowInstructionToggle instruction={KEY_POINTS_INSTRUCTION}   label="Stage 2 — Key Points instructions" />
+          <ShowInstructionToggle instruction={DOUBLE_CHECK_INSTRUCTION} label="Stage 3 — Double Check instructions" />
+        </div>
       </div>
 
       {/* Config */}
