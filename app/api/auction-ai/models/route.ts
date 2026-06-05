@@ -11,10 +11,25 @@ export async function GET() {
   try {
     const res  = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`)
     const json = await res.json()
-    const models = (json.models ?? [])
+    const usable = (json.models ?? [])
       .filter((m: any) => m.supportedGenerationMethods?.includes("generateContent"))
-      .map((m: any) => m.name.replace("models/", ""))
-    return NextResponse.json({ models })
+
+    const models = usable.map((m: any) => m.name.replace("models/", ""))
+
+    // Authoritative per-model info from Google's own API — used to describe each
+    // model in the selector. Keyed by the same id used in `models`.
+    const details: Record<string, { displayName?: string; description?: string; inputTokenLimit?: number; outputTokenLimit?: number }> = {}
+    for (const m of usable) {
+      const id = m.name.replace("models/", "")
+      details[id] = {
+        displayName:     m.displayName,
+        description:     m.description,
+        inputTokenLimit:  m.inputTokenLimit,
+        outputTokenLimit: m.outputTokenLimit,
+      }
+    }
+
+    return NextResponse.json({ models, details })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }

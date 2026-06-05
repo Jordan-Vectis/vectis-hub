@@ -28,6 +28,24 @@ function ShowInstructionToggle({ instruction, label = "instructions sent to Gemi
   )
 }
 
+// ─── Model info (shows Google's own description for the selected model) ─────────
+
+function ModelInfo({ info }: { info?: { displayName?: string; description?: string; inputTokenLimit?: number; outputTokenLimit?: number } }) {
+  if (!info || (!info.description && !info.inputTokenLimit)) return null
+  return (
+    <div className="mt-1 rounded bg-gray-100 dark:bg-[#232325] border border-gray-200 dark:border-gray-700 px-2 py-1.5">
+      {info.description && <p className="text-[11px] text-gray-600 dark:text-gray-400 leading-snug">{info.description}</p>}
+      {(info.inputTokenLimit || info.outputTokenLimit) && (
+        <p className="text-[10px] text-gray-500 dark:text-gray-500 mt-0.5">
+          {info.inputTokenLimit ? `${(info.inputTokenLimit / 1000).toLocaleString()}k in` : ""}
+          {info.inputTokenLimit && info.outputTokenLimit ? " · " : ""}
+          {info.outputTokenLimit ? `${(info.outputTokenLimit / 1000).toLocaleString()}k out` : ""}
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ─── Toast system ─────────────────────────────────────────────────────────────
 
 type ToastType = "error" | "warn" | "ok"
@@ -4929,6 +4947,7 @@ export default function AuctionAIPage() {
   const [model,         setModel]         = useState(() => (typeof window !== "undefined" ? localStorage.getItem("ai_model") ?? DEFAULT_MODEL : DEFAULT_MODEL))
   const [fallbackModel, setFallbackModel] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("ai_fallback_model") ?? "" : ""))
   const [modelList,     setModelList]     = useState<string[]>([DEFAULT_MODEL])
+  const [modelDetails,  setModelDetails]  = useState<Record<string, { displayName?: string; description?: string; inputTokenLimit?: number; outputTokenLimit?: number }>>({})
   const [allowedSections, setAllowedSections] = useState<string[] | null>(null)
   const [sectionsLoaded,  setSectionsLoaded]  = useState(false)
 
@@ -4956,7 +4975,7 @@ export default function AuctionAIPage() {
   useEffect(() => {
     fetch("/api/auction-ai/models")
       .then(r => r.json())
-      .then(j => { if (j.models?.length) setModelList(j.models) })
+      .then(j => { if (j.models?.length) setModelList(j.models); if (j.details) setModelDetails(j.details) })
       .catch(() => {})
   }, [])
 
@@ -5005,16 +5024,18 @@ export default function AuctionAIPage() {
             <p className="text-gray-600 text-xs uppercase tracking-wider">Model</p>
             <select value={model} onChange={e => { setModel(e.target.value); localStorage.setItem("ai_model", e.target.value) }}
               className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-2 py-1.5 text-xs text-gray-600 dark:text-gray-300 focus:outline-none focus:border-[#C8A96E]">
-              {modelList.map(m => <option key={m} value={m}>{m}</option>)}
+              {modelList.map(m => <option key={m} value={m}>{modelDetails[m]?.displayName ? `${modelDetails[m].displayName} (${m})` : m}</option>)}
             </select>
+            <ModelInfo info={modelDetails[model]} />
           </div>
           <div className="space-y-1">
             <p className="text-gray-600 text-xs uppercase tracking-wider">Fallback Model <span className="normal-case text-gray-700">(rate limit)</span></p>
             <select value={fallbackModel} onChange={e => { setFallbackModel(e.target.value); localStorage.setItem("ai_fallback_model", e.target.value) }}
               className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-2 py-1.5 text-xs text-gray-600 dark:text-gray-300 focus:outline-none focus:border-[#C8A96E]">
               <option value="">— none —</option>
-              {modelList.filter(m => m !== model).map(m => <option key={m} value={m}>{m}</option>)}
+              {modelList.filter(m => m !== model).map(m => <option key={m} value={m}>{modelDetails[m]?.displayName ? `${modelDetails[m].displayName} (${m})` : m}</option>)}
             </select>
+            {fallbackModel && <ModelInfo info={modelDetails[fallbackModel]} />}
           </div>
         </div>
       </aside>
