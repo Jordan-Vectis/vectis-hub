@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Fake Saleroom — Auto Clerk Test Harness</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    min-height: 100vh;
+    padding: 24px;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; color: #f1f5f9; }
+  .sub { font-size: 13px; color: #94a3b8; margin-bottom: 24px; }
+
+  .wrap { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+  .card {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .card h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #94a3b8;
+    margin-bottom: 12px;
+    font-weight: 600;
+  }
+
+  /* ── GAP DOM mirror (the bit the console script watches) ── */
+  .gap-mirror {
+    grid-column: 1 / -1;
+    background: linear-gradient(180deg, #1e293b 0%, #1a2436 100%);
+    border: 1px solid #475569;
+  }
+  .gap-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .gap-cell {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .gap-cell .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #64748b;
+    margin-bottom: 6px;
+  }
+  .gap-cell .value {
+    font-size: 22px;
+    font-weight: 700;
+    color: #f1f5f9;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+    min-height: 1.2em;
+    word-break: break-word;
+  }
+  .gap-cell .id { font-family: ui-monospace, monospace; font-size: 10px; color: #475569; margin-top: 4px; }
+
+  /* ── Inputs ── */
+  label { display: block; font-size: 11px; text-transform: uppercase; color: #94a3b8; margin-bottom: 4px; letter-spacing: 0.5px; }
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 14px;
+    color: #f1f5f9;
+    font-family: inherit;
+  }
+  input:focus { outline: none; border-color: #60a5fa; }
+
+  .row { display: grid; gap: 10px; margin-bottom: 10px; }
+  .row.two { grid-template-columns: 1fr auto; align-items: end; }
+
+  button {
+    background: #334155;
+    border: 1px solid #475569;
+    color: #f1f5f9;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.1s;
+  }
+  button:hover { background: #475569; }
+  button.primary { background: #2563eb; border-color: #3b82f6; }
+  button.primary:hover { background: #1d4ed8; }
+  button.green { background: #16a34a; border-color: #22c55e; }
+  button.green:hover { background: #15803d; }
+  button.rose { background: #e11d48; border-color: #f43f5e; }
+  button.rose:hover { background: #be123c; }
+  button.amber { background: #d97706; border-color: #f59e0b; }
+  button.amber:hover { background: #b45309; }
+  button.slate { background: #475569; border-color: #64748b; }
+
+  .btn-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .btn-grid button { width: 100%; }
+
+  .hint {
+    background: #0c1426;
+    border: 1px solid #1e3a5f;
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 12px;
+    color: #cbd5e1;
+    line-height: 1.6;
+    margin-top: 12px;
+  }
+  .hint code { background: #1e293b; padding: 1px 5px; border-radius: 3px; font-size: 11px; color: #93c5fd; }
+
+  .log {
+    grid-column: 1 / -1;
+    background: #0c1220;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    padding: 12px 14px;
+    height: 140px;
+    overflow-y: auto;
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    color: #94a3b8;
+    line-height: 1.6;
+  }
+  .log .ts { color: #475569; margin-right: 8px; }
+  .log .ok { color: #4ade80; }
+  .log .err { color: #f87171; }
+</style>
+</head>
+<body>
+
+<h1>🏷 Fake Saleroom — Auto Clerk Test Harness</h1>
+<p class="sub">
+  This page mimics the GAP (Saleroom) DOM with the four elements the console script watches.
+  Drive the values manually, paste the console script (F12 → Console), and the relay will receive events
+  just like it does from the real Saleroom page.
+</p>
+
+<div class="wrap">
+
+  <!-- ── GAP DOM mirror — the bit the console script's MutationObserver watches ── -->
+  <div class="card gap-mirror">
+    <h2>Saleroom (GAP) State — watched by console script</h2>
+    <div class="gap-grid">
+      <div class="gap-cell">
+        <div class="label">Lot Number</div>
+        <div class="value" id="lot-number">—</div>
+        <div class="id">id="lot-number"</div>
+      </div>
+      <div class="gap-cell">
+        <div class="label">Auction Message</div>
+        <div class="value" id="auction-message-content">Welcome</div>
+        <div class="id">id="auction-message-content"</div>
+      </div>
+      <div class="gap-cell">
+        <div class="label">Hammer Price (current bid)</div>
+        <div class="value" id="hammer-price">£0</div>
+        <div class="id">id="hammer-price"</div>
+      </div>
+      <div class="gap-cell">
+        <div class="label">Asking Price (next ask)</div>
+        <div class="value" id="asking-price">£0</div>
+        <div class="id">id="asking-price"</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Lot + Price controls ── -->
+  <div class="card">
+    <h2>Lot &amp; Price Controls</h2>
+
+    <div class="row two">
+      <div>
+        <label for="lot-input">Lot number</label>
+        <input type="text" id="lot-input" placeholder="e.g. 615" />
+      </div>
+      <button onclick="setLot()">Set lot</button>
+    </div>
+
+    <div class="row two">
+      <div>
+        <label for="hammer-input">Hammer (current bid) £</label>
+        <input type="number" id="hammer-input" min="0" step="1" placeholder="e.g. 80" />
+      </div>
+      <button onclick="setHammer()">Set hammer</button>
+    </div>
+
+    <div class="row two">
+      <div>
+        <label for="asking-input">Asking (next ask) £</label>
+        <input type="number" id="asking-input" min="0" step="1" placeholder="e.g. 90" />
+      </div>
+      <button onclick="setAsking()">Set asking</button>
+    </div>
+
+    <div class="row">
+      <button class="primary" onclick="advance()">
+        + Advance one increment &nbsp;(hammer → asking, asking → next)
+      </button>
+      <button class="slate" onclick="resetLot()">Reset to £0 (new lot)</button>
+    </div>
+
+    <div class="hint">
+      <strong>Increments</strong> follow the standard rules: £0–50 ×£5, £50–200 ×£10, £200–700 ×£20,
+      £700–1000 ×£50, £1k–3k ×£100, £3k–7k ×£200, £7k–10k ×£500, £10k+ ×£1k.
+    </div>
+  </div>
+
+  <!-- ── Message presets ── -->
+  <div class="card">
+    <h2>Saleroom Messages (auction-message-content)</h2>
+    <p style="font-size:12px;color:#94a3b8;margin-bottom:10px">
+      These mirror the messages the real GAP page emits. The console script classifies them and the relay
+      tells the shadow what to press on Bidpath.
+    </p>
+    <div class="btn-grid">
+      <button class="primary" onclick="setMsg('Internet Bid')">Internet Bid</button>
+      <button class="rose" onclick="setMsg('Room Bid')">Room Bid</button>
+      <button class="primary" onclick="setMsg('Lot offered')">Lot offered (new lot)</button>
+      <button class="green" onclick="setMsg('Sold')">Sold</button>
+      <button class="amber" onclick="setMsg('Fair Warning')">Fair Warning</button>
+      <button class="slate" onclick="setMsg('Lot passed')">Lot passed</button>
+      <button class="slate" onclick="setMsg('Auction paused')">Auction paused</button>
+      <button class="slate" onclick="setMsg('Auction resumed')">Auction resumed</button>
+    </div>
+
+    <div class="hint" style="margin-top:14px">
+      <strong>Setup:</strong> Open <code>/tools/auto-clerk-saleroom</code> on the hub, click
+      <strong>Copy script</strong>, then on THIS page press <strong>F12 → Console</strong>, paste, Enter.
+      Any change above will be POSTed to <code>/api/gap-relay</code>.
+    </div>
+  </div>
+
+  <!-- ── Live log ── -->
+  <div class="log" id="log">
+    <div><span class="ts">—</span>Waiting for activity. Paste the console script then click a button or change a price.</div>
+  </div>
+
+</div>
+
+<script>
+  // ── Bidding increment rules (match RULES.md) ────────────────────────────────
+  function nextIncrement(n) {
+    if (n < 50)     return 5;
+    if (n < 200)    return 10;
+    if (n < 700)    return 20;
+    if (n < 1000)   return 50;
+    if (n < 3000)   return 100;
+    if (n < 7000)   return 200;
+    if (n < 10000)  return 500;
+    return 1000;
+  }
+
+  // ── Element refs ───────────────────────────────────────────────────────────
+  const elHammer  = document.getElementById('hammer-price');
+  const elAsking  = document.getElementById('asking-price');
+  const elLot     = document.getElementById('lot-number');
+  const elMsg     = document.getElementById('auction-message-content');
+  const logEl     = document.getElementById('log');
+
+  function fmt(n) { return '£' + Number(n || 0).toLocaleString('en-GB'); }
+  function ts()   { return new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit' }); }
+  function getNum(el) { return parseFloat((el.textContent || '').replace(/[^0-9.]/g, '')) || 0; }
+
+  function log(line, cls = '') {
+    const div = document.createElement('div');
+    div.innerHTML = '<span class="ts">' + ts() + '</span><span class="' + cls + '">' + line + '</span>';
+    logEl.prepend(div);
+    while (logEl.children.length > 80) logEl.removeChild(logEl.lastChild);
+  }
+
+  // ── Setters (only setting textContent — the MutationObserver in the script will fire) ──
+  function setLot() {
+    const v = (document.getElementById('lot-input').value || '').trim();
+    if (!v) return;
+    elLot.textContent = v;
+    log('lot-number → ' + v);
+  }
+
+  function setHammer() {
+    const v = parseFloat(document.getElementById('hammer-input').value);
+    if (isNaN(v) || v < 0) return;
+    elHammer.textContent = fmt(v);
+    log('hammer-price → ' + fmt(v));
+  }
+
+  function setAsking() {
+    const v = parseFloat(document.getElementById('asking-input').value);
+    if (isNaN(v) || v < 0) return;
+    elAsking.textContent = fmt(v);
+    log('asking-price → ' + fmt(v));
+  }
+
+  function advance() {
+    const current = getNum(elHammer);
+    const askingNow = getNum(elAsking) || current + nextIncrement(current);
+    // New hammer = previous asking; new asking = next increment above that
+    const newHammer = askingNow;
+    const newAsking = newHammer + nextIncrement(newHammer);
+    elHammer.textContent = fmt(newHammer);
+    elAsking.textContent = fmt(newAsking);
+    log('+ advance: hammer ' + fmt(newHammer) + ', asking ' + fmt(newAsking));
+  }
+
+  function resetLot() {
+    elHammer.textContent = '£0';
+    elAsking.textContent = '£0';
+    log('Lot reset (£0 / £0)');
+  }
+
+  function setMsg(text) {
+    elMsg.textContent = text;
+    log('auction-message-content → "' + text + '"');
+  }
+
+  log('Fake Saleroom ready. Open DevTools → Console and paste the script from /tools/auto-clerk-saleroom.', 'ok');
+</script>
+
+</body>
+</html>

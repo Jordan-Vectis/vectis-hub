@@ -290,6 +290,19 @@ export default function AutoClerkPage() {
         </a>
       </div>
 
+      {/* Test harness — fake Saleroom for dry runs */}
+      <a href="/auto-clerk-fake-saleroom.html" target="_blank" rel="noopener noreferrer"
+        className="flex items-center gap-4 bg-gradient-to-r from-sky-900/40 to-cyan-900/40 hover:from-sky-800/40 hover:to-cyan-800/40 border border-sky-700/40 rounded-xl p-4 transition-all group">
+        <span className="text-2xl">🧪</span>
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-white text-sm">Fake Saleroom (test harness)</p>
+          <p className="text-xs text-sky-300 mt-0.5">
+            Mimics the GAP DOM — drive lot, hammer, asking and message manually. Paste the console script on this page to dry-run the relay → shadow pipeline.
+          </p>
+        </div>
+        <span className="text-sky-400 text-xs group-hover:translate-x-1 transition-transform">↗</span>
+      </a>
+
       {/* Coordinator */}
       <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-700 rounded-xl p-5">
         <div className="flex items-center justify-between mb-4">
