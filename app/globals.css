@@ -39,6 +39,26 @@ label {
   touch-action: manipulation;
 }
 
+/* ─── Dark-mode default for form controls ────────────────────────────────────
+   Many inputs across the app set a border but no background/text colour, which
+   makes typed text dark-on-dark in dark mode. This gives every text field a
+   sensible default. Wrapped in :where() so it has ZERO specificity — any input
+   that sets its own dark:bg-/text- utility class still overrides this. Native
+   checkboxes/radios/range/colour pickers are excluded so they keep their look. */
+:where(.dark)
+  :where(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+    textarea,
+    select
+  ) {
+  background-color: #1f2937; /* gray-800 */
+  color: #f3f4f6;            /* gray-100 */
+}
+:where(.dark)
+  :where(input, textarea, select)::placeholder {
+  color: #9ca3af;            /* gray-400 */
+}
+
 /* ─── Warehouse app utility classes ─────────────────────────────────────── */
 
 .wh-card {
