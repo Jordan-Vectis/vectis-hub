@@ -390,8 +390,8 @@ export default function AutoClerkPage() {
 
           <div className="text-xs text-blue-900 dark:text-blue-200 space-y-2">
             <div>
-              <p className="font-semibold">1. Online bids are automatic on both platforms</p>
-              <p className="text-blue-700 dark:text-blue-300/80 mt-0.5">No clerk action needed for online bids placed on either side. They appear by themselves on the other platform.</p>
+              <p className="font-semibold">1. Only Vectis online + Saleroom online bids are automatic</p>
+              <p className="text-blue-700 dark:text-blue-300/80 mt-0.5">Only bids with platform <code className="bg-white/10 px-1 rounded">Online</code> (Vectis online bidder) and <code className="bg-white/10 px-1 rounded">Saleroom</code> (Saleroom online bidder) appear on the other platform on their own. Every other source — <strong>Room</strong>, <strong>Telephone</strong>, <strong>Invaluable</strong>, <strong>BSCB</strong>, etc. — needs the clerk to press <strong>BID</strong> on Saleroom to advance.</p>
             </div>
 
             <div>

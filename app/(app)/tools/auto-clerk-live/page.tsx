@@ -62,9 +62,18 @@ const ACTION_STYLE: Record<ActionType, { border: string; badge: string; badgeBg:
 }
 
 const PLATFORM_LABEL: Record<string, string> = {
-  BSCB:   'Room bid button',
-  Online: 'Vectis online bidder',
+  BSCB:       'Room bid button',
+  Online:     'Vectis online bidder',
+  Saleroom:   'Saleroom online',
+  Room:       'Room bid',
+  Telephone:  'Telephone bid',
+  Invaluable: 'Invaluable bid',
 }
+
+// Only Vectis online + Saleroom-originated bids appear automatically on Saleroom.
+// Every other source (room, phone, Invaluable, BSCB…) needs the clerk to press
+// BID on Saleroom to advance the price.
+const AUTOMATIC_ON_SALEROOM = new Set(['Online', 'Saleroom'])
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
@@ -166,19 +175,19 @@ export default function AutoClerkLivePage() {
 
       updateLive({ currentBid: amount, ...(asking > 0 ? { askingBid: asking } : {}) })
 
-      if (platform === 'BSCB') {
-        // Room bid at Vectis — Saleroom doesn't know, clerk must press BID to catch up
-        triggerSim('bid', amount)
-        addAction('bid',
-          `Press BID on Saleroom — advance to ${fmt(amount)}`,
-          `Room bid at Vectis · Lot ${lotNo}`
-        )
-      } else {
-        // Online bid (Vectis or Saleroom) — automatic on both platforms
-        const platformLabel = PLATFORM_LABEL[platform] ?? platform
+      const platformLabel = PLATFORM_LABEL[platform] ?? platform
+      if (AUTOMATIC_ON_SALEROOM.has(platform)) {
+        // Vectis online or Saleroom-originated — appears on Saleroom on its own
         addAction('info',
           `${platformLabel} bid ${fmt(amount)} on Vectis — automatic on Saleroom`,
           `Lot ${lotNo}`
+        )
+      } else {
+        // Room / Phone / Invaluable / BSCB / other — Saleroom needs catching up
+        triggerSim('bid', amount)
+        addAction('bid',
+          `Press BID on Saleroom — advance to ${fmt(amount)}`,
+          `${platformLabel} at Vectis · Lot ${lotNo}`
         )
       }
       return

@@ -288,7 +288,20 @@
   const elConnBtn = document.getElementById('connectBtn');
   const logEl     = document.getElementById('log');
 
-  const PLATFORM_LABEL = { BSCB: 'Room bid (Vectis)', Online: 'Vectis online', Saleroom: 'Saleroom online' };
+  // Platform → friendly label
+  const PLATFORM_LABEL = {
+    BSCB:       'Room bid (Vectis)',
+    Online:     'Vectis online',
+    Saleroom:   'Saleroom online',
+    Room:       'Room bid',
+    Telephone:  'Telephone bid',
+    Invaluable: 'Invaluable bid',
+  };
+
+  // Only Vectis online + Saleroom-originated bids appear automatically on Saleroom.
+  // Every other source (room, phone, Invaluable, third-party platforms…) needs the
+  // clerk to press BID on Saleroom to advance the price.
+  const AUTOMATIC_ON_SALEROOM = new Set(['Online', 'Saleroom']);
 
   let ws = null;
   let currentLot = '—';
@@ -393,15 +406,15 @@
       if (amount > 0) { currentBid = amount; elHammer.textContent = fmt(amount); }
       if (asking > 0) elAsking.textContent = fmt(asking);
 
-      if (platform === 'BSCB') {
-        // Room bid at Vectis → Saleroom needs catching up: press BID
-        flashBtn('Bid', amount);
-        setMessage('Room Bid (Vectis)');
-        log('bid', 'Room bid ' + fmt(amount) + ' at Vectis → press BID on Saleroom to advance');
-      } else {
-        // Online bid — automatic on Saleroom, no button press
+      if (AUTOMATIC_ON_SALEROOM.has(platform)) {
+        // Vectis online or Saleroom-originated — appears on Saleroom on its own
         setMessage(platformLabel + ' bid ' + fmt(amount));
         log('info', platformLabel + ' bid ' + fmt(amount) + ' — automatic on Saleroom');
+      } else {
+        // Room / Phone / Invaluable / BSCB / other — Saleroom needs catching up
+        flashBtn('Bid', amount);
+        setMessage(platformLabel + ' bid ' + fmt(amount));
+        log('bid', platformLabel + ' ' + fmt(amount) + ' at Vectis → press BID on Saleroom to advance');
       }
       return;
     }
