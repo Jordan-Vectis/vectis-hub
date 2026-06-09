@@ -2,818 +2,919 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Fake Saleroom — Auto Clerk test screen</title>
+<title>Fake Saleroom — Bidpath-driven</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #e6e6e6;
-    color: #1f2937;
-    min-height: 100vh;
-    -webkit-font-smoothing: antialiased;
-    font-size: 13px;
-  }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  -webkit-font-smoothing: antialiased;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  background: rgb(230,230,230);
+  color: black;
+  font-size: 2vmin;
+  overflow: hidden;
+  height: 100vh;
+}
+/* ── Top connection bar ── */
+#topbar {
+  background: #0c1426; color: #cbd5e1;
+  padding: 6px 12px; display: flex; align-items: center; gap: 10px;
+  font-size: 12px; flex-shrink: 0; border-bottom: 1px solid #1e293b;
+}
+#topbar label { color: #94a3b8; font-weight: 600; }
+#topbar input {
+  background: #1e293b; border: 1px solid #334155; border-radius: 4px;
+  padding: 3px 7px; font-size: 12px; color: #f1f5f9; font-family: inherit;
+}
+#topbar input:focus { outline: none; border-color: #60a5fa; }
+#topbar button {
+  background: #2563eb; border: 1px solid #3b82f6; color: white;
+  padding: 3px 11px; font-size: 12px; font-weight: 600;
+  border-radius: 4px; cursor: pointer; font-family: inherit;
+}
+#topbar button.preset {
+  background: transparent; border: 1px solid #334155; color: #7dd3fc;
+  padding: 2px 8px; font-size: 11px; font-family: ui-monospace, monospace;
+}
+#topbar button.disconnect { background: #475569; border-color: #64748b; }
+#topbar .conn-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-weight: 600; margin-left: auto;
+}
+#topbar .conn-pill .dot { width: 8px; height: 8px; border-radius: 50%; }
+#topbar .conn-pill.idle { color: #64748b; } #topbar .conn-pill.idle .dot { background: #475569; }
+#topbar .conn-pill.live { color: #4ade80; } #topbar .conn-pill.live .dot { background: #22c55e; animation: pulsedot 1.4s infinite; }
+#topbar .conn-pill.err  { color: #f87171; } #topbar .conn-pill.err  .dot { background: #ef4444; }
+@keyframes pulsedot { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+/* Make body grid so topbar + wrapper stack neatly */
+body { display: flex; flex-direction: column; }
+#wrapper { flex: 1; min-height: 0; }
+.btn {
+  background: linear-gradient(white, rgb(230,230,230));
+  border: 1px solid rgb(179,179,179);
+  border-radius: 5px;
+  box-shadow: black 0.25vh 0.25vh 0.5vh -0.5vh;
+  margin: 1px; padding: 2px 10px;
+  font-family: inherit; font-size: inherit; font-weight: bold;
+  white-space: nowrap; overflow: hidden; cursor: pointer; width: 7vw;
+}
+.btn:hover  { filter: brightness(0.96); }
+.btn:active { filter: brightness(0.91); }
+.btn:disabled { color: rgb(179,179,179); background: rgb(246,246,246); box-shadow: none; cursor: default; }
+.btn:focus { outline: rgb(77,144,254) auto 5px; outline-offset: -2px; }
+.card {
+  background-color: white; border: 1px solid rgb(179,179,179);
+  border-radius: 5px; box-shadow: black 0.5vh 0.5vh 1vh -1vh;
+  padding: 1vh; width: 100%;
+}
+.tbl-hr { border-top: 1px solid rgb(204,204,204); border-bottom: 0; margin: 0; }
+.row-hr  { border-top: 1px solid rgb(219,219,219); border-bottom: 0; margin: 0; }
 
-  /* ── Connection bar (dark) ──────────────────────────────────────────── */
-  .conn-bar {
-    background: #0c1426;
-    color: #cbd5e1;
-    padding: 8px 16px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-    border-bottom: 2px solid #0a1020;
-    font-size: 12px;
-  }
-  .conn-bar label { color: #94a3b8; font-weight: 600; }
-  .conn-bar input {
-    background: #1e293b;
-    border: 1px solid #334155;
-    border-radius: 5px;
-    padding: 4px 8px;
-    font-size: 12px;
-    color: #f1f5f9;
-    font-family: inherit;
-  }
-  .conn-bar input:focus { outline: none; border-color: #60a5fa; }
-  .conn-bar button {
-    background: #2563eb;
-    border: 1px solid #3b82f6;
-    color: white;
-    padding: 4px 12px;
-    font-size: 12px;
-    font-weight: 600;
-    border-radius: 5px;
-    cursor: pointer;
-    font-family: inherit;
-  }
-  .conn-bar button.disconnect { background: #475569; border-color: #64748b; }
-  .conn-bar .preset {
-    background: transparent;
-    border: 1px solid #334155;
-    color: #7dd3fc;
-    padding: 3px 9px;
-    font-size: 11px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-family: ui-monospace, monospace;
-  }
-  .conn-bar .conn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-weight: 600;
-    margin-left: auto;
-  }
-  .conn-bar .conn .dot { width: 8px; height: 8px; border-radius: 50%; }
-  .conn-bar .conn.idle  { color: #64748b; } .conn-bar .conn.idle  .dot { background: #475569; }
-  .conn-bar .conn.live  { color: #4ade80; } .conn-bar .conn.live  .dot { background: #22c55e; animation: pulse 1.4s infinite; }
-  .conn-bar .conn.err   { color: #f87171; } .conn-bar .conn.err   .dot { background: #ef4444; }
-  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+/* ── STATUS BAR ── */
+#sbar {
+  background: #1c3a5c; color: white;
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 10px; min-height: 28px; flex-shrink: 0;
+  border-bottom: 2px solid #0d2035; font-size: 1.8vmin;
+}
+#sbar-label { font-weight: bold; white-space: nowrap; }
+#sbar-text  { flex: 1; }
+#conn-indicator {
+  font-size: 1.5vmin; padding: 2px 8px; border-radius: 3px; white-space: nowrap;
+  background: #2d3748; color: #a0aec0;
+}
+#conn-indicator.ok { background: #276749; color: #68d391; }
 
-  /* ── AUTO CLERK status bar (navy) ───────────────────────────────────── */
-  .ac-bar {
-    background: #1c3a5c;
-    color: white;
-    padding: 6px 14px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 13px;
-    border-bottom: 2px solid #0d2035;
-  }
-  .ac-bar .ac-label {
-    color: #4ade80;
-    font-weight: 800;
-    letter-spacing: 0.5px;
-  }
-  .ac-bar .ac-status {
-    flex: 1;
-    color: #cbd5e1;
-  }
-  .ac-bar .ac-pill {
-    background: #276749;
-    color: #68d391;
-    padding: 2px 10px;
-    border-radius: 3px;
-    font-size: 11px;
-    font-weight: 600;
-  }
-  .ac-bar .ac-pill.idle {
-    background: #2d3748;
-    color: #a0aec0;
-  }
+/* ── WRAPPER / MAIN ── */
+#wrapper { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+#main { display: flex; gap: 1vh; flex: 1; padding: 2vh; min-height: 0; overflow: hidden; }
 
-  /* ── Main layout (Saleroom-style) ───────────────────────────────────── */
-  .main {
-    padding: 12px;
-    display: grid;
-    grid-template-columns: 360px 280px 1fr;
-    gap: 12px;
-    max-width: 1280px;
-    margin: 0 auto;
-  }
+/* ── LEFT: AUCTION GRID ── */
+#auction {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  grid-template-rows: 1fr 2fr 1fr;
+  gap: 1vh; flex: 2; min-height: 0;
+}
+#cell-curlot   { grid-column: 1 / span 3; min-height: 0; display: flex; flex-direction: column; }
+#cell-bidlog   { grid-column: 4 / span 3; min-height: 0; display: flex; flex-direction: column; }
+#cell-controls { grid-column: 1 / span 6; min-height: 0; display: flex; flex-direction: column; }
+#cell-chat     { grid-column: 1 / span 6; min-height: 0; display: flex; flex-direction: column; }
 
-  .card {
-    background: white;
-    border: 1px solid #b3b3b3;
-    border-radius: 5px;
-    box-shadow: rgba(0,0,0,0.06) 2px 2px 6px -2px;
-  }
+#cell-curlot .card { flex: 1; display: flex; flex-direction: column; padding: 0.5vh; min-height: 0; }
+.curlot-top {
+  display: grid;
+  grid-template: "image info" 1fr "desc desc" 1fr / 1fr 1fr;
+  gap: 0.5vh; flex: 1; min-height: 0;
+}
+.curlot-img  { grid-area: image; display: flex; align-items: center; justify-content: center; font-size: 4vmin; background: #f5f5f5; border: 1px solid rgb(179,179,179); overflow: hidden; }
+.curlot-info { grid-area: info;  display: flex; flex-direction: column; justify-content: center; font-size: 1.9vmin; line-height: 1.5; overflow: hidden; }
+.curlot-desc { grid-area: desc;  font-size: 1.7vmin; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; }
+.action-row  { display: flex; border-top: 1px solid rgb(179,179,179); margin-top: 0.5vh; flex-shrink: 0; }
+.action-row .btn {
+  flex: 1; border-radius: 0; margin: 0; width: auto;
+  border-top: none; border-bottom: none; border-right: none;
+  border-left: 1px solid rgb(179,179,179); padding: 0.6vmin 2px;
+}
+.action-row .btn:first-child { border-left: none; }
 
-  /* ── Left column: Lot card + control panel ──────────────────────────── */
-  .lot-card { padding: 10px; }
-  .lot-card .lot-row {
-    display: grid;
-    grid-template-columns: 64px 1fr;
-    gap: 10px;
-    align-items: flex-start;
-  }
-  .lot-img {
-    width: 64px;
-    height: 64px;
-    background: #f5f5f5;
-    border: 1px solid #b3b3b3;
-    border-radius: 3px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 28px;
-  }
-  .lot-info .lot-no { font-weight: 700; font-size: 13px; }
-  .lot-info .lot-est { font-size: 12px; color: #6b7280; margin-top: 2px; }
-  .lot-info .lot-msg { font-size: 11px; color: #ef4444; margin-top: 4px; min-height: 1.2em; }
+#cell-bidlog .card  { flex: 1; padding: 0; display: flex; flex-direction: column; min-height: 0; }
+.blog-head { display: grid; grid-template-columns: 33% 33% 34%; font-weight: bold; font-size: 1.8vmin; box-shadow: black 0px 0.5vh 1vh -1vh; flex-shrink: 0; padding: 2px 0; }
+.blog-head span { overflow: hidden; padding: 0 0 0 10px; white-space: nowrap; }
+.blog-body { flex: 1; overflow-y: auto; font-size: 1.5vmin; }
+.blog-row  { display: grid; grid-template-columns: 33% 33% 34%; padding: 1px 0; white-space: nowrap; }
+.blog-row span { overflow: hidden; padding: 0 0 0 10px; text-overflow: ellipsis; }
+.blog-row.cur  { background: rgb(93,173,236); }
+.blog-row.sold { background: #d0f5d0; font-weight: bold; }
+.blog-row.room { background: #ede; }
+@keyframes rowflash { from { background: #ffffc0; } }
+.blog-row.new  { animation: rowflash 0.4s; }
 
-  .action-row {
-    display: flex;
-    border-top: 1px solid #b3b3b3;
-    margin-top: 8px;
-  }
-  .action-row .btn {
-    flex: 1;
-    border: none;
-    border-left: 1px solid #b3b3b3;
-    background: linear-gradient(white, #e6e6e6);
-    padding: 6px 4px;
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
-    font-family: inherit;
-    color: #1f2937;
-  }
-  .action-row .btn:first-child { border-left: none; }
-  .action-row .btn:hover { filter: brightness(0.96); }
+#cell-controls .card { flex: 1; padding: 0.5vh 1vh; min-height: 0; display: flex; flex-direction: column; gap: 0.5vh; }
+.ctrl-grid { display: grid; grid-template-columns: auto 1fr auto; gap: 0.5vh 1.5vh; flex: 1; min-height: 0; }
+.ctrl-left  { display: flex; flex-direction: column; gap: 0.4vh; align-self: start; }
+.ctrl-left .btn { width: 9vw; padding: 0.5vmin 0.5vw; font-size: 1.9vmin; }
+.ctrl-center { display: flex; flex-direction: column; gap: 0.4vh; align-self: stretch; min-height: 0; overflow: hidden; }
+.prov-row { display: flex; align-items: center; gap: 4px; font-size: 1.7vmin; white-space: nowrap; }
+.ha-row   { display: flex; align-items: center; gap: 4px; }
+.ha-lbl   { font-weight: bold; font-size: 1.9vmin; width: 1.4vw; }
+.h-field  { width: 6vw; text-align: right; font-family: inherit; font-size: inherit; font-weight: bold; border: 1px solid rgb(153,153,153); padding: 0 2px; }
+.amt-disp { min-width: 6vw; text-align: right; font-weight: bold; font-size: 2.2vmin; border: 1px solid rgb(153,153,153); padding: 0 3px; background: white; transition: background 0.3s; display: inline-block; }
+.amt-disp.lit { background: #c8eeff; }
+.bid-override { width: 4vw; text-align: right; font-family: inherit; font-size: inherit; font-weight: bold; border: 1px solid rgb(153,153,153); padding: 0 2px; }
+.stepper { display: flex; gap: 1px; }
+.stepper .btn { width: auto; min-width: 3vw; padding: 0.2vmin 0.6vw; font-size: 1.8vmin; }
+.inc-scroll { flex: 1; overflow-x: hidden; overflow-y: scroll; min-height: 0; border: 1px solid rgb(200,200,200); background: white; }
+.inc-tbl { width: 100%; border-collapse: collapse; font-size: 1.6vmin; }
+.inc-tbl td { padding: 0 6px; text-align: right; line-height: 1.65; white-space: nowrap; border: none; color: #222; }
+.inc-tbl tr.hi td { background: rgb(173,216,230); }
+.inc-tbl tr.lon td { background: #c55; color: white; font-weight: bold; text-align: center; }
+.man-chk { font-size: 1.6vmin; flex-shrink: 0; }
+.notif-bar { border: 1px solid rgb(176,176,176); background: white; display: flex; align-items: center; justify-content: center; font-size: 1.5vmin; font-weight: bold; transition: background 0.2s; padding: 1px 0; flex-shrink: 0; }
+.notif-bar.ng { background: #4caf50; color: white; }
+.notif-bar.nr { background: #f44336; color: white; }
+.ctrl-right { display: flex; flex-direction: column; gap: 0.4vh; align-self: start; }
+.ctrl-right .btn { width: 9vw; padding: 0.5vmin 0.5vw; font-size: 1.9vmin; }
 
-  .control-card { padding: 10px; }
-  .control-grid {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 8px;
-    align-items: start;
-  }
-  .ctrl-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .btn-saleroom {
-    background: linear-gradient(white, #e6e6e6);
-    border: 1px solid #b3b3b3;
-    border-radius: 4px;
-    padding: 6px 12px;
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
-    font-family: inherit;
-    color: #1f2937;
-    width: 90px;
-    text-align: center;
-    box-shadow: rgba(0,0,0,0.15) 1px 1px 2px -1px;
-  }
-  .btn-saleroom:hover { filter: brightness(0.96); }
+/* FW highlight */
+#bFW.active-fw { background: linear-gradient(#ffe066, #ffbb00); border-color: #cc8800; animation: fwpulse 0.8s infinite alternate; }
+@keyframes fwpulse { from { filter: brightness(1); } to { filter: brightness(1.12); } }
 
-  /* AUTO-PRESSED state — flash on the real button */
-  .btn-press {
-    background: linear-gradient(#fde68a, #fbbf24) !important;
-    border-color: #d97706 !important;
-    color: #422006 !important;
-    box-shadow: 0 0 0 3px rgba(251,191,36,0.45), 0 4px 12px -2px rgba(217,119,6,0.6) !important;
-    transform: scale(1.04);
-    transition: all 0.1s;
-  }
-  /* Distinct colour per action type */
-  .btn-press.bid    { background: linear-gradient(#bfdbfe, #60a5fa) !important; border-color: #2563eb !important; box-shadow: 0 0 0 3px rgba(96,165,250,0.45), 0 4px 12px -2px rgba(37,99,235,0.6) !important; }
-  .btn-press.sell   { background: linear-gradient(#bbf7d0, #4ade80) !important; border-color: #16a34a !important; box-shadow: 0 0 0 3px rgba(74,222,128,0.45), 0 4px 12px -2px rgba(22,163,74,0.6) !important; }
-  .btn-press.next   { background: linear-gradient(#e9d5ff, #c084fc) !important; border-color: #9333ea !important; box-shadow: 0 0 0 3px rgba(192,132,252,0.45), 0 4px 12px -2px rgba(147,51,234,0.6) !important; }
-  .btn-press.fw     { background: linear-gradient(#fde68a, #fbbf24) !important; border-color: #d97706 !important; box-shadow: 0 0 0 3px rgba(251,191,36,0.45), 0 4px 12px -2px rgba(217,119,6,0.6) !important; }
-  .btn-press.room   { background: linear-gradient(#fecdd3, #fb7185) !important; border-color: #e11d48 !important; box-shadow: 0 0 0 3px rgba(251,113,133,0.45), 0 4px 12px -2px rgba(225,29,72,0.6) !important; }
-  .btn-press.undo   { background: linear-gradient(#fde68a, #f59e0b) !important; border-color: #d97706 !important; box-shadow: 0 0 0 3px rgba(245,158,11,0.45), 0 4px 12px -2px rgba(217,119,6,0.6) !important; }
+#cell-chat .card { flex: 1; padding: 0; display: grid; grid-template-columns: 1fr auto; min-height: 0; overflow: hidden; }
+.chat-left { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid rgb(179,179,179); }
+.ann-list  { list-style-type: none; line-height: 3.7vmin; white-space: nowrap; padding-inline-start: 0; margin: 0; overflow-y: auto; flex: 1; }
+.ann-item  { padding-left: 1vh; padding-right: 1vh; background: white; }
+.ann-item:hover { background: lightblue; }
+.chat-foot { display: flex; padding: 0.5vh; border-top: 1px solid rgb(179,179,179); gap: 0.5vh; background: white; position: relative; flex-shrink: 0; }
+.chat-inp  { flex: 1; font-family: inherit; font-size: inherit; border: none; }
+.chat-inp:focus { outline: none; }
+.chat-right { display: flex; flex-direction: column; justify-content: space-between; padding: 0.5vh; gap: 0.5vh; }
+.chat-right .btn { width: auto; padding: 2px 10px; }
 
-  .ctrl-fields {
-    display: grid;
-    grid-template-columns: 14px 1fr 1fr 30px 30px;
-    gap: 4px;
-    align-items: center;
-    font-size: 11px;
-    margin-bottom: 6px;
-  }
-  .ctrl-fields .lbl { font-weight: 700; }
-  .ctrl-fields input {
-    border: 1px solid #b3b3b3;
-    border-radius: 3px;
-    padding: 3px 5px;
-    font-size: 12px;
-    font-family: inherit;
-    text-align: right;
-    background: white;
-    color: #1f2937;
-  }
-  .ctrl-fields .pm {
-    background: linear-gradient(white, #e6e6e6);
-    border: 1px solid #b3b3b3;
-    border-radius: 3px;
-    padding: 2px 6px;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 700;
-  }
-
-  .inc-ladder {
-    border: 1px solid #b3b3b3;
-    border-radius: 4px;
-    background: white;
-    max-height: 140px;
-    overflow-y: auto;
-    margin-top: 4px;
-  }
-  .inc-ladder .row {
-    padding: 2px 8px;
-    font-size: 11px;
-    border-bottom: 1px solid #dbdbdb;
-  }
-  .inc-ladder .row:last-child { border-bottom: none; }
-  .inc-ladder .row.cur { background: #5dadec; color: white; font-weight: 700; }
-
-  .pause-grid {
-    margin-top: 6px;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 4px;
-  }
-  .bidding-msg {
-    margin-top: 6px;
-    text-align: center;
-    font-weight: 700;
-    color: #ef4444;
-    font-size: 11px;
-    padding: 6px;
-    border: 1px solid #b3b3b3;
-    border-radius: 3px;
-    background: white;
-  }
-
-  /* ── Middle column: Current bidder info ─────────────────────────────── */
-  .bidder-card { padding: 0; }
-  .bidder-head {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    padding: 6px 10px;
-    border-bottom: 1px solid #b3b3b3;
-    font-weight: 700;
-    font-size: 11px;
-    background: linear-gradient(white, #f3f4f6);
-  }
-  .bidder-body {
-    padding: 8px 10px;
-    font-size: 12px;
-    color: #6b7280;
-    min-height: 200px;
-  }
-
-  /* ── Right column: lots list + saleroom logo ────────────────────────── */
-  .right-card {
-    background: white;
-    border: 1px solid #b3b3b3;
-    border-radius: 5px;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  .right-head {
-    background: white;
-    border-bottom: 1px solid #b3b3b3;
-    padding: 6px 10px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    font-size: 12px;
-    color: #b91c1c;
-    font-weight: 600;
-  }
-  .right-head .logo {
-    background: #1f2937;
-    color: white;
-    font-style: italic;
-    font-weight: 700;
-    padding: 4px 12px;
-    border-radius: 3px;
-    margin-left: auto;
-    font-size: 13px;
-  }
-  .right-find {
-    padding: 6px 10px;
-    border-bottom: 1px solid #dbdbdb;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 11px;
-  }
-  .right-find input {
-    border: 1px solid #b3b3b3;
-    border-radius: 3px;
-    padding: 3px 6px;
-    font-size: 12px;
-    font-family: inherit;
-    flex: 1;
-  }
-  .lots-list {
-    flex: 1;
-    overflow-y: auto;
-    min-height: 220px;
-  }
-  .lot-row {
-    display: grid;
-    grid-template-columns: 50px 8px 1fr;
-    padding: 6px 10px;
-    border-bottom: 1px solid #f0f0f0;
-    font-size: 12px;
-    gap: 6px;
-    align-items: start;
-  }
-  .lot-row.cur { background: #dbeafe; }
-  .lot-row .ln { font-weight: 700; color: #1f2937; }
-  .lot-row .dot { color: #ef4444; font-weight: 700; }
-  .lot-row .desc { color: #b91c1c; }
-
-  /* ── Activity log ───────────────────────────────────────────────────── */
-  .log-wrap {
-    max-width: 1280px;
-    margin: 12px auto;
-    padding: 0 12px;
-  }
-  .log {
-    background: #0c1220;
-    border: 1px solid #1e293b;
-    border-radius: 6px;
-    padding: 10px 14px;
-    height: 200px;
-    overflow-y: auto;
-    font-family: ui-monospace, monospace;
-    font-size: 12px;
-    color: #94a3b8;
-    line-height: 1.6;
-  }
-  .log .ts { color: #475569; margin-right: 10px; }
-  .log .badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; margin-right: 8px; text-transform: uppercase; }
-  .log .badge.bid  { background: rgba(59,130,246,0.2); color: #93c5fd; }
-  .log .badge.room { background: rgba(244,63,94,0.2);  color: #fda4af; }
-  .log .badge.sell { background: rgba(34,197,94,0.2);  color: #86efac; }
-  .log .badge.next { background: rgba(168,85,247,0.2); color: #d8b4fe; }
-  .log .badge.fw   { background: rgba(245,158,11,0.2); color: #fcd34d; }
-  .log .badge.info { background: rgba(100,116,139,0.2);color: #cbd5e1; }
-  .log .badge.sys  { background: rgba(56,189,248,0.2); color: #7dd3fc; }
-  .log .badge.recv { background: rgba(148,163,184,0.15);color: #94a3b8; }
-  .log .badge.unk  { background: rgba(239,68,68,0.18); color: #fca5a5; }
-  .log .raw       { color: #475569; font-size: 11px; word-break: break-all; display: block; padding: 2px 0 2px 70px; }
+#consoles { display: flex; flex-direction: column; flex: 3; min-height: 0; }
+.tab-row { display: flex; align-items: stretch; flex-shrink: 0; }
+.tab-active   { font-family: inherit; font-weight: 600; background: none; margin: 0; font-size: 1em; cursor: pointer; padding: calc(0.45vh) calc(-0.3vh + 0.8vw) 2vh; outline: 0; border-top: 0.3vh solid rgb(191,191,191); border-right: 0.3vh solid rgb(191,191,191); border-left: 0.3vh solid rgb(191,191,191); border-bottom: none; white-space: nowrap; }
+.tab-inactive { font-family: inherit; font-weight: 600; background: none; border-top: none; border-right: none; border-left: none; margin: 0; padding: 0.75vh 0.8vw 2vh; border-bottom: 0.3vh solid rgb(191,191,191); font-size: 1em; cursor: pointer; white-space: nowrap; }
+.tab-filler { flex: 1; border-bottom: 0.3vh solid rgb(191,191,191); }
+.logo { background: #111; color: white; font-style: italic; font-weight: bold; letter-spacing: 2px; padding: 0.5vh 1.5vw; display: flex; align-items: center; white-space: nowrap; border-bottom: 0.3vh solid rgb(191,191,191); }
+.tab-content { border-right: 0.3vh solid rgb(191,191,191); border-bottom: 0.3vh solid rgb(191,191,191); border-left: 0.3vh solid rgb(191,191,191); border-top: none; flex: 1; padding: 1.5vh; box-shadow: black 0.5vh 0.5vh 1vh -1vh; display: grid; grid-template-areas: "findrow" "lotlist" "selected"; grid-template-rows: auto 6fr 4fr; gap: 1.5vh; min-height: 0; overflow: hidden; }
+.find-row { grid-area: findrow; display: flex; justify-content: flex-end; align-items: center; gap: 1vh; }
+.find-lbl { font-size: 2.2vh; white-space: nowrap; }
+.find-inp { font-family: inherit; font-size: 1em; border: 1px solid rgb(153,153,153); padding: 0.5vh; font-weight: bold; min-width: 5vw; max-width: 6vw; }
+.lot-list-area { grid-area: lotlist; display: flex; flex-direction: column; min-height: 0; }
+.lot-list-card { background-color: white; border: 1px solid rgb(179,179,179); border-radius: 5px; box-shadow: black 0.5vh 0.5vh 1vh -1vh; width: 100%; flex: 1; min-height: 0; display: grid; grid-template-rows: auto 1fr; list-style-type: none; user-select: none; overflow: hidden; }
+.ll-head-shadow { box-shadow: black 0px 0.5vh 1vh -1vh; }
+.ll-body { overflow-y: auto; font-size: 1.7vmin; }
+.ll-row { display: grid; grid-template-columns: 16vmin 1fr; height: 48px; cursor: pointer; }
+.ll-row:hover .ll-highlight { border-top-color: lightblue; background: lightblue; }
+.ll-row.cur .ll-highlight  { background: rgb(93,173,236); border-top: 1px solid rgb(93,173,236); border-bottom: 1px solid rgb(93,173,236); }
+.ll-highlight { display: contents; }
+.ll-left  { display: grid; grid-template-columns: 1fr auto; overflow: hidden; padding: 4px 6px 4px 8px; align-items: start; }
+.ll-num   { font-size: 1.7vmin; font-weight: normal; }
+.ll-dot   { color: rgb(255,51,85); font-size: 1.4vmin; }
+.ll-right { overflow: hidden; display: flex; flex-direction: column; justify-content: center; padding: 3px 6px; }
+.ll-status { display: flex; justify-content: flex-end; gap: 8px; font-weight: 600; font-size: 1.6vmin; }
+.ll-desc   { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1.6vmin; }
+.ll-row-border { border-top: 1px solid white; border-bottom: 1px solid rgb(219,219,219); display: contents; }
+.selected-area { grid-area: selected; min-height: 0; display: flex; flex-direction: column; }
+.selected-card { background-color: white; border: 1px solid rgb(179,179,179); border-radius: 5px; box-shadow: black 0.5vh 0.5vh 1vh -1vh; padding: 1vh; flex: 1; min-height: 0; display: grid; grid-template: "img controls" auto "img table" 1fr / 1fr 1fr; gap: 1.5vh; }
+.sel-img { grid-area: img; display: flex; align-items: center; justify-content: center; font-size: 6vmin; background: #f5f5f5; border: 1px solid rgb(179,179,179); }
+.sel-controls { grid-area: controls; display: flex; gap: 0.5vh; align-items: flex-start; }
+.sel-controls .btn { flex: 1; width: auto; padding: 2px 4px; font-size: 1.7vmin; }
+.sel-table { grid-area: table; min-height: 0; display: flex; flex-direction: column; gap: 0.5vh; }
+.sel-tbl-card { background-color: white; border: 1px solid rgb(179,179,179); border-radius: 5px; box-shadow: black 0.5vh 0.5vh 1vh -1vh; flex: 1; min-height: 0; display: grid; grid-template-rows: auto 1fr; overflow: hidden; }
+.sel-tbl-head { display: grid; grid-template-columns: 33% 33% 34%; font-weight: bold; font-size: 1.8vmin; box-shadow: black 0px 0.5vh 1vh -1vh; padding: 2px 0; }
+.sel-tbl-head span { overflow: hidden; padding: 0 0 0 10px; white-space: nowrap; }
+.sel-tbl-body { overflow-y: auto; font-size: 1.5vmin; }
+.bid-notif { height: 3vh; border: 1px solid rgb(176,176,176); background: white; display: flex; align-items: center; justify-content: center; font-size: 1.5vmin; font-weight: bold; transition: background 0.2s; }
+.bid-notif.ng { background: #4caf50; color: white; }
 </style>
 </head>
 <body>
 
-<!-- ── Connection bar ─────────────────────────────────────────────────── -->
-<div class="conn-bar">
+<!-- ── Bidpath connection bar ── -->
+<div id="topbar">
   <label>WS URL:</label>
   <input type="text" id="wsBase" style="width:280px;font-family:ui-monospace,monospace" />
   <label>Auction ID:</label>
   <input type="text" id="auctionId" style="width:90px" placeholder="e.g. 1137" />
-  <button id="connectBtn" onclick="connect()">Connect</button>
+  <button id="connectBtn" onclick="bpConnect()">Connect</button>
   <button class="preset" data-url="wss://www.vectis.co.uk/wss/">Production</button>
   <button class="preset" data-url="wss://staging.vectis.auctionmarketer.co.uk/wss/">Staging</button>
   <label style="cursor:pointer">
     <input type="checkbox" id="showRaw" style="vertical-align:middle"> Show raw
   </label>
-  <span class="conn idle" id="connState"><span class="dot"></span><span id="connLabel">Not connected</span></span>
+  <span class="conn-pill idle" id="connPill"><span class="dot"></span><span id="connLabel">Not connected</span></span>
 </div>
 
-<!-- ── AUTO CLERK status bar (mimics the real one) ────────────────────── -->
-<div class="ac-bar">
-  <span class="ac-label">AUTO CLERK</span>
-  <span class="ac-status" id="acStatus">Waiting for connection…</span>
-  <span class="ac-pill idle" id="acPill">● Coordinator idle</span>
+<!-- Hidden state element — Playwright reads data-current-bid from here -->
+<div id="sr-state" data-current-bid="0" data-lot-number="" style="display:none"></div>
+
+<div id="wrapper">
+
+<!-- ═══ STATUS BAR ═══ -->
+<div id="sbar">
+  <span id="sbar-label" style="color:#4ade80">AUTO CLERK:</span>
+  <span id="sbar-text">Waiting for coordinator to connect…</span>
+  <div id="conn-indicator">● Coordinator: waiting</div>
 </div>
 
-<!-- ── Saleroom-style main panel ──────────────────────────────────────── -->
-<div class="main">
+<!-- ═══ MAIN ═══ -->
+<div id="main">
 
-  <!-- ── LEFT COLUMN: Lot card + Saleroom control panel ── -->
-  <div>
-    <div class="card lot-card">
-      <div class="lot-row">
-        <div class="lot-img">📦</div>
-        <div class="lot-info">
-          <div class="lot-no">Lot: <span id="curLotNo">—</span></div>
-          <div class="lot-est">Est: <span id="curEst">—</span></div>
-          <div class="lot-msg" id="curMsg">Waiting for auction to start…</div>
+<div id="auction">
+
+  <!-- Current Lot -->
+  <div id="cell-curlot">
+    <div class="card">
+      <div class="curlot-top">
+        <div class="curlot-img" id="limg">📦</div>
+        <div class="curlot-info">
+          <p><b id="lnum">Lot: —</b></p>
+          <p id="lest">Est:</p>
+          <p id="lest2">—</p>
         </div>
+        <div class="curlot-desc" id="ldesc">Waiting for auction to start…</div>
       </div>
       <div class="action-row">
-        <button class="btn" id="btnSell">Sell</button>
-        <button class="btn" id="btnPass">Pass</button>
-        <button class="btn" id="btnUndoTop">Undo</button>
-        <button class="btn" id="btnOffer">Offer</button>
-        <button class="btn" id="btnNext">Next</button>
+        <button class="btn" id="btn-sell" onclick="act('sell')">Sell</button>
+        <button class="btn" id="btn-pass" onclick="act('pass')">Pass</button>
+        <button class="btn" id="btn-undo" onclick="act('undo')">Undo</button>
+        <button class="btn" id="btn-offer" onclick="act('offer')">Offer</button>
+        <button class="btn" id="btn-next" onclick="act('next')">Next</button>
       </div>
     </div>
+  </div>
 
-    <div class="card control-card" style="margin-top:8px">
-      <div class="control-grid">
-        <div class="ctrl-buttons">
-          <button class="btn-saleroom" id="btnFairWarn">Fair warn</button>
-          <button class="btn-saleroom" id="btnBid">Bid</button>
-          <button class="btn-saleroom" id="btnUndo">Undo</button>
-          <button class="btn-saleroom" id="btnRoom">Room</button>
-          <button class="btn-saleroom" id="btnAvCheck">AV Check</button>
+  <!-- Bid Log -->
+  <div id="cell-bidlog">
+    <div class="card">
+      <div class="blog-head">
+        <span>Buyer ID</span><span>Hammer</span><span>Name</span>
+      </div>
+      <hr class="tbl-hr">
+      <div class="blog-body" id="log"></div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div id="cell-controls">
+    <div class="card">
+      <div class="ctrl-grid">
+        <div class="ctrl-left">
+          <button class="btn" id="bFW"   onclick="act('fairwarn')">Fair warn</button>
+          <button class="btn" id="bBid"  onclick="act('bid')">Bid</button>
+          <button class="btn"            onclick="act('undo')">Undo</button>
+          <button class="btn" id="bRoom" onclick="act('room')">Room</button>
+          <button class="btn" style="margin-top:0.5vh">AV Check</button>
         </div>
-        <div>
-          <div class="ctrl-fields">
-            <span class="lbl">H</span>
-            <input type="text" id="inpHammer" readonly value="0" />
-            <span></span><span></span><span></span>
+        <div class="ctrl-center">
+          <div class="prov-row">
+            <input type="checkbox" id="chkProv">
+            <label for="chkProv">Provisional</label>
           </div>
-          <div class="ctrl-fields">
-            <span class="lbl">A</span>
-            <input type="text" id="inpAsking" readonly value="0" />
-            <input type="text" readonly value="" />
-            <button class="pm">−</button>
-            <button class="pm">+</button>
+          <div class="ha-row">
+            <span class="ha-lbl">H</span>
+            <input type="text" id="fH" value="0" class="h-field"
+              oninput="onHInput(this.value)"
+              onkeydown="if(event.key==='Enter'){doSell();event.preventDefault();}">
           </div>
-          <div class="inc-ladder" id="incLadder"></div>
-          <label style="font-size:11px;display:flex;align-items:center;gap:5px;margin-top:6px">
-            <input type="checkbox" disabled> Manual increments
-          </label>
+          <div class="ha-row">
+            <span class="ha-lbl">A</span>
+            <span class="amt-disp" id="amt">0</span>
+            <input type="text" id="bidOverride" class="bid-override" placeholder=""
+              oninput="overrideInput(this.value)"
+              onkeydown="if(event.key==='Enter'){if(this.value.trim()){overrideEnter();}else{act('bid');}event.preventDefault();}">
+            <div class="stepper">
+              <button class="btn" onclick="act('minus')">−</button>
+              <button class="btn" onclick="act('plus')">+</button>
+            </div>
+          </div>
+          <div class="inc-scroll">
+            <table class="inc-tbl" id="itbl"><colgroup><col></colgroup><tbody id="itbl-body"></tbody></table>
+          </div>
+          <div class="man-chk"><label><input type="checkbox"> Manual increments</label></div>
+          <div class="notif-bar" id="notif">Bidding Notification Box</div>
+        </div>
+        <div class="ctrl-right">
+          <button class="btn" id="bPause" onclick="act('pause')">⏸ Pause</button>
+          <button class="btn" id="bOnce"  onclick="act('once')">Once...</button>
         </div>
       </div>
-      <div class="bidding-msg" id="biddingMsg">Bidding Notification Box</div>
-      <div class="pause-grid">
-        <button class="btn-saleroom" style="width:auto">⏸ Pause</button>
-        <button class="btn-saleroom" style="width:auto">Once…</button>
+    </div>
+  </div>
+
+  <!-- Chat -->
+  <div id="cell-chat">
+    <div class="card">
+      <div class="chat-left">
+        <ul class="ann-list" id="chat">
+          <li class="ann-item">Auction starting shortly — bids will appear automatically.</li>
+        </ul>
+        <div class="chat-foot">
+          <input type="text" id="cin" class="chat-inp" placeholder="">
+          <button class="btn" onclick="sendChat()" style="width:auto;padding:2px 10px">Add</button>
+        </div>
+      </div>
+      <div class="chat-right">
+        <button class="btn">Alert</button>
+        <button class="btn" onclick="sendChat()">Send</button>
       </div>
     </div>
   </div>
 
-  <!-- ── MIDDLE COLUMN: Active bidder info ── -->
-  <div>
-    <div class="card bidder-card">
-      <div class="bidder-head">
-        <span>Buyer ID</span>
-        <span>Hammer</span>
-        <span>Name</span>
+</div><!-- end #auction -->
+
+<!-- RIGHT — CONSOLES -->
+<div id="consoles">
+  <div class="tab-row">
+    <button class="tab-active">Lots</button>
+    <button class="tab-inactive">Bidders</button>
+    <button class="tab-inactive">Increments</button>
+    <button class="tab-inactive">Media</button>
+    <button class="tab-inactive">Support</button>
+    <button class="tab-inactive">Displays</button>
+    <button class="tab-inactive">Settings</button>
+    <div class="tab-filler"></div>
+    <div class="logo">the saleroom</div>
+  </div>
+  <div class="tab-content">
+    <div class="find-row">
+      <span class="find-lbl">Find lot:</span>
+      <input type="text" id="findl" class="find-inp" oninput="renderLL()">
+    </div>
+    <div class="lot-list-area">
+      <div class="lot-list-card">
+        <div class="ll-head-shadow"><hr class="tbl-hr"></div>
+        <div class="ll-body" id="ll"></div>
       </div>
-      <div class="bidder-body" id="bidderBody">
-        <em>No active bid</em>
+    </div>
+    <div class="selected-area">
+      <div class="selected-card">
+        <div class="sel-img" id="rphoto"><span id="rphoto-e">📦</span></div>
+        <div class="sel-controls">
+          <button class="btn" disabled>History</button>
+          <button class="btn">New lot</button>
+          <button class="btn">Edit lot</button>
+        </div>
+        <div class="sel-table">
+          <div class="sel-tbl-card">
+            <div class="sel-tbl-head"><span>Buyer ID</span><span>Hammer</span><span>Name</span></div>
+            <hr class="tbl-hr">
+            <div class="sel-tbl-body" id="rlog"></div>
+          </div>
+          <div class="bid-notif" id="bnotif">&nbsp;</div>
+        </div>
       </div>
     </div>
   </div>
-
-  <!-- ── RIGHT COLUMN: lots list (decorative) ── -->
-  <div class="right-card">
-    <div class="right-head">
-      <span>Lots</span>
-      <span style="color:#9ca3af">Bidders</span>
-      <span style="color:#9ca3af">Increments</span>
-      <span style="color:#9ca3af">Media</span>
-      <span style="color:#9ca3af">Support</span>
-      <span style="color:#9ca3af">Displays</span>
-      <span style="color:#9ca3af">Settings</span>
-      <div class="logo">the saleroom</div>
-    </div>
-    <div class="right-find">
-      <span>Find lot:</span>
-      <input type="text" placeholder="" />
-    </div>
-    <div class="lots-list" id="lotsList">
-      <div class="lot-row"><span class="ln">—</span><span class="dot"></span><span class="desc">Connect to a Bidpath auction to populate the live lot</span></div>
-    </div>
-  </div>
-
 </div>
 
-<!-- ── Activity log ───────────────────────────────────────────────────── -->
-<div class="log-wrap">
-  <div class="log" id="log">
-    <div><span class="ts">—</span><span class="badge sys">SYS</span>Enter an auction ID and click Connect to start.</div>
-  </div>
-</div>
+</div><!-- end #main -->
+</div><!-- end #wrapper -->
 
 <script>
-  // ── State refs ────────────────────────────────────────────────────────
-  const elCurLotNo  = document.getElementById('curLotNo');
-  const elCurEst    = document.getElementById('curEst');
-  const elCurMsg    = document.getElementById('curMsg');
-  const elInpHammer = document.getElementById('inpHammer');
-  const elInpAsking = document.getElementById('inpAsking');
-  const elBiddingMsg= document.getElementById('biddingMsg');
-  const elBidderBody= document.getElementById('bidderBody');
-  const elIncLadder = document.getElementById('incLadder');
-  const elAcStatus  = document.getElementById('acStatus');
-  const elAcPill    = document.getElementById('acPill');
-  const elConn      = document.getElementById('connState');
-  const elConnLbl   = document.getElementById('connLabel');
-  const elConnBtn   = document.getElementById('connectBtn');
-  const logEl       = document.getElementById('log');
+/* ─── INCREMENT TABLE ─── */
+const INC_TABLE = [
+  {from:0,    to:50,       inc:5},
+  {from:50,   to:100,      inc:10},
+  {from:100,  to:200,      inc:10},
+  {from:200,  to:500,      inc:20},
+  {from:500,  to:1000,     inc:50},
+  {from:1000, to:2000,     inc:100},
+  {from:2000, to:5000,     inc:200},
+  {from:5000, to:Infinity, inc:500},
+];
+function getInc(b){ for(const r of INC_TABLE) if(b>=r.from&&b<r.to) return r.inc; return 500; }
+function nextBid(b){ return b + getInc(b); }
+function fmt(n){ return '£' + Number(n).toLocaleString('en-GB'); }
 
-  // ── Bidding ladder rendering (RULES.md increments) ────────────────────
-  function nextInc(n) {
-    if (n < 50)    return 5;
-    if (n < 200)   return 10;
-    if (n < 700)   return 20;
-    if (n < 1000)  return 50;
-    if (n < 3000)  return 100;
-    if (n < 7000)  return 200;
-    if (n < 10000) return 500;
-    return 1000;
-  }
-  function renderLadder(currentAsking) {
-    elIncLadder.innerHTML = '';
-    let v = Math.max(0, currentAsking);
-    for (let i = 0; i < 12; i++) {
-      const row = document.createElement('div');
-      row.className = 'row' + (i === 0 ? ' cur' : '');
-      row.textContent = '£' + v.toLocaleString('en-GB');
-      elIncLadder.appendChild(row);
-      v += nextInc(v);
-    }
-  }
-  renderLadder(5);
+/* ─── LOT DATA — same as Bidpath ─── */
+const LOTS = [
+  { number:'508', title:'Corgi Toys 267 Batmobile — red interior, black body, original box',       est:'£30–50'  },
+  { number:'509', title:'Matchbox Models of Yesteryear Y-5 1927 Talbot Van — boxed',               est:'£15–25'  },
+  { number:'510', title:'Dinky Toys 521 Bedford Articulated Lorry — with original box',            est:'£20–30'  },
+  { number:'511', title:'Hornby Dublo Class 8F 2-8-0 Locomotive and tender — boxed',               est:'£50–80'  },
+  { number:'512', title:'Britains Farm Set — tractor, plough and figures',                         est:'£8–15'   },
+  { number:'513', title:'Corgi Toys 497 The Man From U.N.C.L.E. Car — boxed',                     est:'£40–60'  },
+  { number:'514', title:'Scalextric Formula 1 Twin-Track Racing Set — C74',                        est:'£60–100' },
+  { number:'515', title:'Airfix 1:72 Spitfire MkIa — sealed box, unbuilt',                        est:'£5–10'   },
+  { number:'516', title:'Dinky Toys 100 Lady Penelope\'s FAB 1 — pink, boxed',                    est:'£80–120' },
+  { number:'517', title:'Triang Minic Push & Go Police Car — original key and box',                est:'£25–40'  },
+];
 
-  // ── Platform rules (allowlist) ────────────────────────────────────────
-  const PLATFORM_LABEL = {
-    BSCB:       'Room bid (Vectis)',
-    Online:     'Vectis online',
-    Saleroom:   'Saleroom online',
-    Room:       'Room bid',
-    Telephone:  'Telephone bid',
-    Invaluable: 'Invaluable bid',
+/* ─── STATE ─── */
+let S = { li:0, bid:0, hi:0, lbdr:'', lname:'', log:[], sold:{}, once:0 };
+
+/* ─── BIDPATH WEBSOCKET — replaces the old BroadcastChannel ───
+   Reads the live Bidpath feed directly and drives the existing
+   Saleroom UI (calls act(), doSell(), setAmt(), addLog() etc).
+*/
+
+// Allowlist: only Vectis Online and Saleroom Online appear on Saleroom on their own.
+// All other platforms (Room, Telephone, Invaluable, BSCB, third-party) need BID press.
+const AUTOMATIC_ON_SALEROOM = new Set(['Online', 'Saleroom']);
+const PLATFORM_LABEL = {
+  BSCB:       'Room',
+  Online:     'Online',
+  Saleroom:   'Online',
+  Room:       'Room',
+  Telephone:  'Telephone',
+  Invaluable: 'Invaluable',
+};
+const RECOGNISED = new Set([
+  'activeLotChange','liveBidEvent','liveCommissionBidEvent',
+  'setLiveAskingPrice','getFairWarningStatus','lotInformationUpdate',
+  'activeLotLock','sensorNetworkEvent',
+]);
+
+let bpWs = null;
+let bpReconnectTimer = null;
+let bpCurrentLot = '—';
+let bpSoldDebounce = new Set();
+let bpFwActive = false;
+
+function bpLog(text) {
+  const el = document.getElementById('connLabel');
+  // Use the existing status bar for important sync messages
+  setSbarText(text);
+}
+function bpRawLog(raw) {
+  if (!document.getElementById('showRaw').checked) return;
+  console.log('[Bidpath raw]', raw);
+}
+
+function bpSetConn(state, label) {
+  const pill = document.getElementById('connPill');
+  pill.className = 'conn-pill ' + state;
+  document.getElementById('connLabel').textContent = label;
+}
+
+function bpConnect() {
+  const id   = (document.getElementById('auctionId').value || '').trim();
+  let   base = (document.getElementById('wsBase').value || '').trim();
+  if (!id)   { alert('Enter an auction ID first.'); return; }
+  if (!base) { alert('Enter the WS URL first.'); return; }
+  if (!base.endsWith('/')) base = base + '/';
+  localStorage.setItem('fakeSR_wsBase', base);
+  localStorage.setItem('fakeSR_auctionId', id);
+
+  bpDisconnect();
+  bpSoldDebounce.clear();
+
+  const url = base + id;
+  bpSetConn('idle', 'Connecting…');
+  setSbarText('Connecting to ' + url + '…');
+
+  try { bpWs = new WebSocket(url); }
+  catch (e) { bpSetConn('err', 'WS error'); setSbarText('WS error: ' + e.message); return; }
+
+  const btn = document.getElementById('connectBtn');
+
+  bpWs.onopen = () => {
+    bpSetConn('live', 'Live — auction ' + id);
+    document.getElementById('conn-indicator').textContent = '● Coordinator: connected';
+    document.getElementById('conn-indicator').className = 'ok';
+    setSbarText('Connected to Bidpath — observing auction ' + id);
+    btn.textContent = 'Disconnect';
+    btn.onclick = bpDisconnect;
+    btn.classList.add('disconnect');
   };
-  const AUTOMATIC_ON_SALEROOM = new Set(['Online', 'Saleroom']);
+  bpWs.onmessage = (e) => bpHandleMsg(e.data);
+  bpWs.onerror   = () => { bpSetConn('err', 'WebSocket error'); };
+  bpWs.onclose   = (e) => {
+    bpSetConn('idle', 'Disconnected');
+    document.getElementById('conn-indicator').textContent = '● Coordinator: waiting';
+    document.getElementById('conn-indicator').className = '';
+    btn.textContent = 'Connect';
+    btn.onclick = bpConnect;
+    btn.classList.remove('disconnect');
+    if (!e.wasClean) {
+      setSbarText('Connection dropped — auto-reconnect in 5s');
+      bpReconnectTimer = setTimeout(bpConnect, 5000);
+    } else {
+      setSbarText('Connection closed');
+    }
+  };
+}
 
-  // ── WS state ──────────────────────────────────────────────────────────
-  const RECOGNISED = new Set([
-    'activeLotChange','liveBidEvent','liveCommissionBidEvent',
-    'setLiveAskingPrice','getFairWarningStatus','lotInformationUpdate',
-    'activeLotLock','sensorNetworkEvent',
-  ]);
+function bpDisconnect() {
+  if (bpReconnectTimer) { clearTimeout(bpReconnectTimer); bpReconnectTimer = null; }
+  if (bpWs) { bpWs.onclose = null; try { bpWs.close(); } catch {} bpWs = null; }
+  bpSetConn('idle', 'Not connected');
+  document.getElementById('conn-indicator').textContent = '● Coordinator: waiting';
+  document.getElementById('conn-indicator').className = '';
+  const btn = document.getElementById('connectBtn');
+  btn.textContent = 'Connect';
+  btn.onclick = bpConnect;
+  btn.classList.remove('disconnect');
+}
 
-  let ws = null;
-  let currentLot = '—';
-  let currentBid = 0;
-  let currentAsking = 0;
-  let soldDebounce = new Set();
-  let fwActive = false;
-  let reconnectTimer = null;
+function bpHandleMsg(raw) {
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch { bpRawLog(raw); return; }
+  const cmd = parsed.command || parsed.type || '';
+  const d   = parsed.content || parsed;
+  bpRawLog(raw);
 
-  function fmt(n) { return '£' + Number(n || 0).toLocaleString('en-GB'); }
-  function ts() { return new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit' }); }
+  // ── Lot change ─────────────────────────────────────────────────
+  if (cmd === 'activeLotChange') {
+    const lotNo = d.lot_number ?? d.lotNumber ?? '?';
+    bpCurrentLot = String(lotNo);
+    bpFwActive = false;
+    bpSoldDebounce = new Set();
 
-  function setConn(state, label) {
-    elConn.className = 'conn ' + state;
-    elConnLbl.textContent = label;
+    document.getElementById('lnum').textContent  = 'Lot: ' + lotNo;
+    document.getElementById('lest2').textContent = '—';
+    document.getElementById('ldesc').textContent = 'Lot ' + lotNo + ' offered';
+    document.getElementById('fH').value = '0';
+    document.getElementById('bFW').classList.remove('active-fw');
+    document.getElementById('sr-state').dataset.lotNumber = lotNo;
+    clearLogs(); setNotif(''); setAmt(0);
+    S.bid = 0; S.hi = 0;
+    setSbarText('Lot ' + lotNo + ' offered');
+    return;
   }
 
-  function setAcStatus(text, live) {
-    elAcStatus.textContent = text;
-    elAcPill.textContent = live ? '● Coordinator connected' : '● Coordinator idle';
-    elAcPill.className = 'ac-pill' + (live ? '' : ' idle');
+  // ── Bid event ──────────────────────────────────────────────────
+  if (cmd === 'liveBidEvent') {
+    const amount   = Number(d.amount ?? 0);
+    const platform = d.platform ?? '';
+    const label    = PLATFORM_LABEL[platform] ?? platform ?? 'Bidder';
+    const auto     = AUTOMATIC_ON_SALEROOM.has(platform);
+
+    if (amount > 0) {
+      S.bid = amount; S.hi = amount; S.lbdr = label; S.lname = label;
+      addLog(label, amount, label, auto ? '' : 'room');
+      setNotif(auto ? 'ng' : 'nr');
+      setAmt(amount); hiInc(amount);
+      document.getElementById('sr-state').dataset.currentBid = amount;
+      setTimeout(() => setNotif(''), 2000);
+      setSbarText((auto ? 'Auto: ' : 'Press Bid — ') + label + ' ' + fmt(amount));
+      if (!auto) flashBid();
+    }
+    return;
   }
 
-  function log(badge, text) {
-    const div = document.createElement('div');
-    div.innerHTML = '<span class="ts">' + ts() + '</span><span class="badge ' + badge + '">' + badge.toUpperCase() + '</span>' + text;
-    logEl.prepend(div);
-    while (logEl.children.length > 200) logEl.removeChild(logEl.lastChild);
-  }
-  function appendRaw(raw) {
-    const div = document.createElement('div');
-    div.className = 'raw';
-    div.textContent = raw.length > 500 ? raw.slice(0, 500) + '…' : raw;
-    logEl.prepend(div);
-  }
-
-  // ── Button-press animation (the whole point — flash the real buttons) ──
-  let flashTimers = {};
-  function pressButton(id, colourClass) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.classList.add('btn-press');
-    if (colourClass) el.classList.add(colourClass);
-    if (flashTimers[id]) clearTimeout(flashTimers[id]);
-    flashTimers[id] = setTimeout(() => {
-      el.classList.remove('btn-press', 'bid','sell','next','fw','room','undo');
-    }, 1800);
+  // ── Commission bid ─────────────────────────────────────────────
+  if (cmd === 'liveCommissionBidEvent') {
+    const amount = Number(d.amount ?? 0);
+    if (amount > 0) {
+      S.bid = amount; S.hi = amount; S.lbdr = 'Commission'; S.lname = 'Commission';
+      addLog('Commission', amount, 'Commission', 'room');
+      setNotif('nr'); setAmt(amount); hiInc(amount);
+      document.getElementById('sr-state').dataset.currentBid = amount;
+      setTimeout(() => setNotif(''), 2000);
+      setSbarText('Press Bid — Commission ' + fmt(amount));
+      flashBid();
+    }
+    return;
   }
 
-  // ── Message helper ────────────────────────────────────────────────────
-  function setBiddingMsg(text, colour) {
-    elBiddingMsg.textContent = text;
-    elBiddingMsg.style.color = colour || '#ef4444';
+  // ── Asking price update ────────────────────────────────────────
+  if (cmd === 'setLiveAskingPrice') {
+    const asking = Number(d.asking_bid ?? 0);
+    if (asking > 0) hiInc(asking - 1); // highlight the asking row in the ladder
+    return;
   }
 
-  // ── Event handler — mirrors the auto-clerk-live logic ─────────────────
-  function handleMsg(raw) {
-    let parsed;
-    try { parsed = JSON.parse(raw); }
-    catch { log('unk', 'Non-JSON message'); if (document.getElementById('showRaw').checked) appendRaw(raw); return; }
-
-    const cmd = parsed.command || parsed.type || '(no command)';
-    const d   = parsed.content || parsed;
-
-    if (document.getElementById('showRaw').checked) {
-      log(RECOGNISED.has(cmd) ? 'recv' : 'unk', 'Received: ' + cmd);
-      appendRaw(raw);
-    } else if (!RECOGNISED.has(cmd)) {
-      log('unk', 'Unrecognised command: ' + cmd);
+  // ── Fair Warning ───────────────────────────────────────────────
+  if (cmd === 'getFairWarningStatus') {
+    const fw = Boolean(d.fair_warning);
+    if (fw && !bpFwActive) {
+      bpFwActive = true;
+      document.getElementById('bFW').classList.add('active-fw');
+      addChat('⚠️ Fair Warning — lot about to close!');
+      setSbarText('Press Fair warn — Fair Warning called on Bidpath');
+    } else if (!fw && bpFwActive) {
+      bpFwActive = false;
+      document.getElementById('bFW').classList.remove('active-fw');
+      setSbarText('Fair Warning cancelled');
     }
-
-    // ── Lot change ────────────────────────────────────────────────────
-    if (cmd === 'activeLotChange') {
-      const lotNo = d.lot_number ?? d.lotNumber ?? '?';
-      currentLot = String(lotNo);
-      currentBid = 0;
-      currentAsking = Number(d.asking ?? d.asking_price ?? 0);
-      elCurLotNo.textContent = currentLot;
-      elInpHammer.value = '0';
-      elInpAsking.value = String(currentAsking);
-      renderLadder(currentAsking);
-      elCurMsg.textContent = 'Lot ' + lotNo + ' offered';
-      fwActive = false;
-      soldDebounce = new Set();
-      setBiddingMsg('Lot ' + lotNo + ' is live', '#1d4ed8');
-      log('info', 'Lot advance → Lot ' + lotNo);
-      return;
-    }
-
-    // ── Bid event ─────────────────────────────────────────────────────
-    if (cmd === 'liveBidEvent') {
-      const amount   = Number(d.amount ?? 0);
-      const asking   = Number(d.asking ?? 0);
-      const platform = d.platform ?? '';
-      const platformLabel = PLATFORM_LABEL[platform] ?? platform;
-
-      if (amount > 0) { currentBid = amount; elInpHammer.value = String(amount); }
-      if (asking > 0) { currentAsking = asking; elInpAsking.value = String(asking); renderLadder(asking); }
-
-      elBidderBody.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px"><span>—</span><span>' + fmt(amount) + '</span><span>' + platformLabel + '</span></div>';
-
-      if (AUTOMATIC_ON_SALEROOM.has(platform)) {
-        setBiddingMsg(platformLabel + ' bid ' + fmt(amount) + ' — automatic on Saleroom', '#16a34a');
-        log('info', platformLabel + ' bid ' + fmt(amount) + ' — automatic on Saleroom');
-      } else {
-        pressButton('btnBid', 'bid');
-        setBiddingMsg(platformLabel + ' ' + fmt(amount) + ' — press BID on Saleroom', '#1d4ed8');
-        log('bid', platformLabel + ' ' + fmt(amount) + ' at Vectis → press BID on Saleroom to advance');
-      }
-      return;
-    }
-
-    // ── Commission bid ────────────────────────────────────────────────
-    if (cmd === 'liveCommissionBidEvent') {
-      const amount = Number(d.amount ?? 0);
-      if (amount > 0) { currentBid = amount; elInpHammer.value = String(amount); }
-      pressButton('btnBid', 'bid');
-      setBiddingMsg('Commission bid ' + fmt(amount) + ' — press BID on Saleroom', '#1d4ed8');
-      log('bid', 'Commission bid ' + fmt(amount) + ' → press BID on Saleroom');
-      return;
-    }
-
-    // ── Asking price update ───────────────────────────────────────────
-    if (cmd === 'setLiveAskingPrice') {
-      const asking = Number(d.asking_bid ?? 0);
-      if (asking > 0) { currentAsking = asking; elInpAsking.value = String(asking); renderLadder(asking); }
-      return;
-    }
-
-    // ── Fair warning ──────────────────────────────────────────────────
-    if (cmd === 'getFairWarningStatus') {
-      const fw = Boolean(d.fair_warning);
-      if (fw && !fwActive) {
-        fwActive = true;
-        pressButton('btnFairWarn', 'fw');
-        setBiddingMsg('FAIR WARNING', '#d97706');
-        elCurMsg.textContent = 'Fair Warning';
-        log('fw', 'Fair Warning called → press Fair warn on Saleroom');
-      } else if (!fw && fwActive) {
-        fwActive = false;
-        log('info', 'Fair Warning cancelled');
-      }
-      return;
-    }
-
-    // ── Lot sold (Sell + Next sequence) ───────────────────────────────
-    if (cmd === 'lotInformationUpdate') {
-      const keyName  = d.key_name ?? '';
-      const keyValue = d.key_value;
-      if (keyName === 'Sold' && (keyValue === true || keyValue === 'true' || keyValue === 1)) {
-        const hammer = Number(d.hammer_price ?? currentBid);
-        const key = currentLot + ':' + hammer;
-        if (soldDebounce.has(key)) return;
-        soldDebounce.add(key);
-
-        elInpHammer.value = String(hammer);
-        elCurMsg.textContent = 'SOLD ' + fmt(hammer);
-        setBiddingMsg('SOLD ' + fmt(hammer) + ' — press Sell then Next on Saleroom', '#16a34a');
-        pressButton('btnSell', 'sell');
-        log('sell', 'Lot ' + currentLot + ' sold ' + fmt(hammer) + ' → Sell + Next on Saleroom');
-        setTimeout(() => {
-          pressButton('btnNext', 'next');
-          log('next', 'Press Next on Saleroom');
-        }, 2200);
-      }
-      return;
-    }
+    return;
   }
 
-  // ── Connection ────────────────────────────────────────────────────────
-  const DEFAULT_WS = 'wss://www.vectis.co.uk/wss/';
+  // ── Lot sold → Sell + Next sequence ───────────────────────────
+  if (cmd === 'lotInformationUpdate') {
+    const keyName  = d.key_name ?? '';
+    const keyValue = d.key_value;
+    if (keyName === 'Sold' && (keyValue === true || keyValue === 'true' || keyValue === 1)) {
+      const hammer = Number(d.hammer_price ?? S.hi);
+      const key    = bpCurrentLot + ':' + hammer;
+      if (bpSoldDebounce.has(key)) return;
+      bpSoldDebounce.add(key);
 
-  document.getElementById('wsBase').value    = localStorage.getItem('fakeSR_wsBase')    || DEFAULT_WS;
-  document.getElementById('auctionId').value = localStorage.getItem('fakeSR_auctionId') || '';
+      document.getElementById('fH').value = String(hammer);
+      doSell();
+      flashBtn('btn-sell');
+      setSbarText('Lot sold ' + fmt(hammer) + ' — press Sell, then Next');
+      setTimeout(() => {
+        flashBtn('btn-next');
+        setSbarText('Press Next — advance to next lot');
+      }, 2200);
+    }
+    return;
+  }
+}
 
-  document.querySelectorAll('button.preset').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.getElementById('wsBase').value = btn.dataset.url;
-      localStorage.setItem('fakeSR_wsBase', btn.dataset.url);
-    });
+function flashBid() { flashBtn('bBid'); }
+function flashBtn(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const orig = { bg: el.style.background, color: el.style.color, shadow: el.style.boxShadow, scale: el.style.transform };
+  el.style.background = 'linear-gradient(#bfdbfe, #60a5fa)';
+  el.style.color = 'white';
+  el.style.boxShadow = '0 0 0 3px rgba(96,165,250,0.5), 0 6px 14px -2px rgba(37,99,235,0.6)';
+  el.style.transform = 'scale(1.05)';
+  setTimeout(() => {
+    el.style.background = orig.bg;
+    el.style.color = orig.color;
+    el.style.boxShadow = orig.shadow;
+    el.style.transform = orig.scale;
+  }, 1800);
+}
+
+// no-op so older calls to updateSrState don't break
+function updateSrState(amount){
+  document.getElementById('sr-state').dataset.currentBid = amount;
+}
+
+// Restore last URL / auction
+document.getElementById('wsBase').value    = localStorage.getItem('fakeSR_wsBase')    || 'wss://www.vectis.co.uk/wss/';
+document.getElementById('auctionId').value = localStorage.getItem('fakeSR_auctionId') || '';
+document.querySelectorAll('button.preset').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('wsBase').value = btn.dataset.url;
+    localStorage.setItem('fakeSR_wsBase', btn.dataset.url);
   });
+});
+document.getElementById('auctionId').addEventListener('keydown', e => {
+  if (e.key === 'Enter') bpConnect();
+});
 
-  function connect() {
-    const id   = (document.getElementById('auctionId').value || '').trim();
-    let   base = (document.getElementById('wsBase').value || '').trim();
-    if (!id)   { alert('Enter an auction ID first.'); return; }
-    if (!base) { alert('Enter the WS URL first.'); return; }
-    if (!base.endsWith('/')) base = base + '/';
-    localStorage.setItem('fakeSR_wsBase', base);
-    localStorage.setItem('fakeSR_auctionId', id);
-
-    disconnect();
-    soldDebounce.clear();
-
-    const url = base + id;
-    setConn('idle', 'Connecting…');
-    setAcStatus('Connecting to ' + url + '…', false);
-    log('sys', 'Connecting to ' + url);
-
-    try { ws = new WebSocket(url); }
-    catch (e) { setConn('err', 'Failed'); log('sys', 'WS error: ' + e.message); return; }
-
-    ws.onopen = () => {
-      setConn('live', 'Live — auction ' + id);
-      setAcStatus('Coordinator connected — waiting for auction events', true);
-      elConnBtn.textContent = 'Disconnect';
-      elConnBtn.onclick = disconnect;
-      elConnBtn.classList.add('disconnect');
-      log('sys', 'Connected to Bidpath — observing');
-    };
-    ws.onmessage = (e) => handleMsg(e.data);
-    ws.onerror   = () => { setConn('err', 'Error'); log('sys', 'WebSocket error'); };
-    ws.onclose   = (e) => {
-      setConn('idle', 'Disconnected');
-      setAcStatus('Disconnected', false);
-      elConnBtn.textContent = 'Connect';
-      elConnBtn.onclick = connect;
-      elConnBtn.classList.remove('disconnect');
-      if (!e.wasClean) {
-        log('sys', 'Connection dropped — auto-reconnect in 5s');
-        reconnectTimer = setTimeout(connect, 5000);
-      } else {
-        log('sys', 'Connection closed');
-      }
-    };
+/* ─── ACTIONS ─── */
+function act(a){
+  if(a === 'fairwarn'){
+    document.getElementById('bFW').classList.toggle('active-fw');
+    addChat('⚠️ Fair Warning — lot about to close!');
+    setSbarText('Fair Warning issued');
+  } else if(a === 'sell'){
+    doSell();
+  } else if(a === 'pass'){
+    const lot = LOTS[S.li] || {};
+    addLog('—', '—', 'NO SALE', '');
+    S.sold[lot.number] = null;
+    renderLL();
+    document.getElementById('bFW').classList.remove('active-fw');
+    setSbarText('Lot '+(lot.number||'—')+' passed — no sale');
+    
+  } else if(a === 'next'){
+    S.li = Math.min(S.li + 1, LOTS.length - 1);
+    const lot = LOTS[S.li];
+    if(lot){
+      document.getElementById('lnum').textContent  = 'Lot: '+lot.number;
+      document.getElementById('lest2').textContent = lot.est || '—';
+      document.getElementById('ldesc').textContent = lot.title;
+      clearLogs(); setAmt(0); setNotif('');
+      document.getElementById('fH').value = '0';
+      document.getElementById('bFW').classList.remove('active-fw');
+      S.bid = 0; S.hi = 0;
+      updateSrState(0);
+      renderLL();
+      setSbarText('Lot '+lot.number+' — ready');
+    }
+  } else if(a === 'bid'){
+    // Bid button — steps up to next increment (no online bidder — shows as Room)
+    const amount = nextBid(S.hi);
+    S.bid = amount; S.hi = amount; S.lbdr = 'ROOM'; S.lname = 'ROOM';
+    addLog('ROOM', amount, 'ROOM', 'room');
+    setNotif('nr'); setAmt(amount); hiInc(amount);
+    updateSrState(amount);
+    setTimeout(function(){ setNotif(''); }, 2000);
+    setTimeout(focusOverride, 50);
+  } else if(a === 'room'){
+    // Room — keeps current amount, attributes to room bidder
+    S.lbdr = 'ROOM'; S.lname = 'ROOM';
+    addLog('ROOM', S.hi, 'ROOM', 'room');
+    setNotif('nr');
+    setTimeout(function(){ setNotif(''); }, 2000);
+    setSbarText('Room bid at '+fmt(S.hi));
+    
+  } else if(a === 'undo'){
+    if(S.log.length > 0){
+      S.log.pop(); renderLogFull();
+      const prev = S.log.length > 0 && typeof S.log[S.log.length-1].a === 'number' ? S.log[S.log.length-1].a : 0;
+      S.bid = prev; setAmt(prev); hiInc(prev);
+      updateSrState(prev);
+    }
+  } else if(a === 'once'){
+    S.once = (S.once % 3) + 1;
+    const btn = document.getElementById('bOnce');
+    const labels = ['Once...','Twice...','Final!'];
+    const bgs    = ['#ffe0b2','#fb8c00','#d32f2f'];
+    const fgs    = ['#111','white','white'];
+    btn.textContent = labels[S.once-1]; btn.style.background = bgs[S.once-1]; btn.style.color = fgs[S.once-1];
+    if(S.once === 3) setTimeout(resetOnce, 3500);
+  } else if(a === 'pause'){
+    const btn = document.getElementById('bPause');
+    const paused = btn.textContent.includes('Pause');
+    btn.textContent = paused ? '▶ Resume' : '⏸ Pause';
+    btn.style.background = paused ? '#e65100' : '';
+  } else if(a === 'minus'){
+    S.bid = Math.max(0, S.bid - getInc(S.bid)); setAmt(S.bid); hiInc(S.bid); updateSrState(S.bid);
+  } else if(a === 'plus'){
+    S.bid = nextBid(S.bid); setAmt(S.bid); hiInc(S.bid); updateSrState(S.bid);
   }
+}
 
-  function disconnect() {
-    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-    if (ws) { ws.onclose = null; try { ws.close(); } catch {} ws = null; }
-    setConn('idle', 'Not connected');
-    setAcStatus('Disconnected', false);
-    elConnBtn.textContent = 'Connect';
-    elConnBtn.onclick = connect;
-    elConnBtn.classList.remove('disconnect');
+function doSell(){
+  const hVal   = parseInt(document.getElementById('fH').value, 10);
+  const amount = (!isNaN(hVal) && hVal > 0) ? hVal : S.hi;
+  const lot    = LOTS[S.li] || {};
+  S.sold[lot.number] = amount;
+  addLog(S.lbdr || 'ONLINE', amount, S.lname || 'Online', 'sold');
+  document.getElementById('fH').value = String(amount);
+  document.getElementById('bFW').classList.remove('active-fw');
+  renderLL();
+  
+  setSbarText('🔨 SOLD — Lot '+(lot.number||'—')+' at '+fmt(amount));
+}
+
+function onHInput(v){
+  const n = parseInt(v, 10);
+  if(!isNaN(n) && n > 0) document.getElementById('amt').textContent = n;
+}
+function overrideInput(v){
+  const n = parseInt(v, 10);
+  if(!isNaN(n) && n > 0) document.getElementById('amt').textContent = n;
+}
+function overrideEnter(){
+  const el = document.getElementById('bidOverride');
+  const v  = parseInt(el.value, 10);
+  if(isNaN(v) || v <= 0){ focusOverride(); return; }
+  el.value = '';
+  S.bid = v; S.hi = v; S.lbdr = 'ROOM'; S.lname = 'ROOM';
+  addLog('ROOM', v, 'ROOM', 'room');
+  setNotif(''); setAmt(v); hiInc(v); updateSrState(v);
+  setTimeout(focusOverride, 50);
+}
+function focusOverride(){
+  const el = document.getElementById('bidOverride');
+  if(el){ el.focus(); el.select(); }
+}
+
+/* ─── LOG HELPERS ─── */
+function addLog(b, a, n, cls){
+  S.log.push({b,a,n,cls}); renderLogFull();
+}
+function renderLogFull(){
+  const rows = [...S.log].reverse();
+  const html = rows.map((r,i) => {
+    const isTop = i === 0;
+    return '<div class="blog-row '+r.cls+(isTop?' cur':'')+(isTop?' new':'')+'">'+
+      '<span>'+r.b+'</span><span>'+r.a+'</span><span>'+r.n+'</span></div>'+
+      '<hr class="row-hr">';
+  }).join('');
+  document.getElementById('log').innerHTML  = html;
+  document.getElementById('rlog').innerHTML = html;
+}
+function clearLogs(){
+  S.log = [];
+  document.getElementById('log').innerHTML  = '';
+  document.getElementById('rlog').innerHTML = '';
+}
+function setNotif(cls){
+  const bar = document.getElementById('notif');
+  const big = document.getElementById('bnotif');
+  bar.className = 'notif-bar'; big.className = 'bid-notif';
+  if(cls === 'ng'){
+    bar.classList.add('ng'); bar.textContent = '● BID RECEIVED';
+    big.classList.add('ng'); big.textContent = '● BID RECEIVED';
+  } else if(cls === 'nr'){
+    bar.classList.add('nr'); bar.textContent = '● ROOM BID';
+    big.textContent = '● ROOM BID';
+  } else {
+    bar.textContent = 'Bidding Notification Box';
+    big.textContent = '';
   }
+}
+function setAmt(v){
+  const el = document.getElementById('amt');
+  el.textContent = v > 0 ? v : '0';
+  el.classList.add('lit');
+  setTimeout(function(){ el.classList.remove('lit'); }, 600);
+}
+function hiInc(bid){
+  document.querySelectorAll('#itbl-body tr').forEach(r => r.classList.remove('hi'));
+  const next = nextBid(bid);
+  const target = document.querySelector('#itbl-body tr[data-bid="'+next+'"]');
+  if(target){ target.classList.add('hi'); target.scrollIntoView({block:'nearest'}); }
+}
+function resetOnce(){
+  S.once = 0;
+  const b = document.getElementById('bOnce');
+  b.textContent = 'Once...'; b.style.background = ''; b.style.color = '';
+}
+function addChat(m){
+  const c  = document.getElementById('chat');
+  const li = document.createElement('li');
+  li.className = 'ann-item';
+  li.textContent = m;
+  li.style.cssText = 'color:#c00;font-weight:bold';
+  c.appendChild(li);
+  c.scrollTop = c.scrollHeight;
+}
+function sendChat(){
+  const i = document.getElementById('cin');
+  if(i.value.trim()){ addChat(i.value.trim()); i.value = ''; }
+}
+function setSbarText(t){
+  document.getElementById('sbar-text').textContent = t;
+}
 
-  document.getElementById('auctionId').addEventListener('keydown', e => {
-    if (e.key === 'Enter') connect();
+/* ─── LOT LIST ─── */
+function renderLL(){
+  const f   = (document.getElementById('findl').value || '').toLowerCase();
+  const cur = LOTS[S.li];
+  document.getElementById('ll').innerHTML = LOTS
+    .filter(l => !f || String(l.number).includes(f) || l.title.toLowerCase().includes(f))
+    .map(l => {
+      const isCur  = cur && l.number === cur.number;
+      const hammer = S.sold[l.number] !== undefined ? S.sold[l.number] : null;
+      const status = hammer !== null
+        ? '<div class="ll-status"><span>Online</span><span>'+hammer+'.00</span></div>'
+        : '<div class="ll-status"></div>';
+      return '<div class="ll-row'+(isCur?' cur':'')+'">'+
+        '<div class="ll-left"><span class="ll-num">'+l.number+'</span><span class="ll-dot">●</span></div>'+
+        '<div class="ll-right">'+status+'<div class="ll-desc">'+l.title+'</div></div></div>'+
+        '<hr class="row-hr">';
+    }).join('');
+  setTimeout(function(){
+    const curEl = document.querySelector('.ll-row.cur');
+    if(curEl) curEl.scrollIntoView({block:'nearest'});
+  }, 50);
+}
+
+/* ─── INCREMENT TABLE ─── */
+function buildIncTable(){
+  const MAX   = 20000;
+  const tbody = document.getElementById('itbl-body');
+  const rows  = [];
+  for(const band of INC_TABLE){
+    const ceiling = Math.min(band.to === Infinity ? MAX : band.to, MAX);
+    for(let v = band.from + band.inc; v <= ceiling; v += band.inc){
+      rows.push('<tr data-bid="'+v+'" style="cursor:pointer"><td>£'+v.toLocaleString()+'</td></tr>');
+    }
+    if(ceiling >= MAX) break;
+  }
+  rows.push('<tr class="lon"><td>London Bidding</td></tr>');
+  tbody.innerHTML = rows.join('');
+  tbody.addEventListener('click', function(e){
+    const row = e.target.closest('tr[data-bid]');
+    if(!row) return;
+    const v = parseInt(row.dataset.bid, 10);
+    if(isNaN(v)) return;
+    S.bid = v; S.hi = v; S.lbdr = 'ROOM'; S.lname = 'ROOM';
+    addLog('ROOM', v, 'ROOM', 'room');
+    setNotif(''); setAmt(v); hiInc(v); updateSrState(v);
+    setTimeout(focusOverride, 50);
   });
+}
+
+/* ─── KEY BINDING ─── */
+document.addEventListener('keydown', function(e){
+  const el = document.getElementById('bidOverride');
+  if(!el || document.activeElement === el) return;
+  if(e.ctrlKey || e.altKey || e.metaKey) return;
+  if(/^\d$/.test(e.key) || e.key === 'Backspace'){
+    el.focus();
+    if(/^\d$/.test(e.key)) el.setSelectionRange(el.value.length, el.value.length);
+  }
+});
+
+/* ─── INIT ─── */
+buildIncTable();
+renderLL();
+// (no outgoing broadcast — this page is a pure WebSocket observer)
 </script>
-
 </body>
 </html>
