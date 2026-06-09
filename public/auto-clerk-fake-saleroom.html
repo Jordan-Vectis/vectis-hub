@@ -207,6 +207,9 @@
   .log .badge.fw   { background: rgba(245,158,11,0.2); color: #fcd34d; }
   .log .badge.info { background: rgba(100,116,139,0.2);color: #cbd5e1; }
   .log .badge.sys  { background: rgba(56,189,248,0.2); color: #7dd3fc; }
+  .log .badge.recv { background: rgba(148,163,184,0.15);color: #94a3b8; }
+  .log .badge.unk  { background: rgba(239,68,68,0.18); color: #fca5a5; }
+  .log .raw       { color: #475569; font-size: 11px; word-break: break-all; display: block; padding: 2px 0 2px 70px; }
 </style>
 </head>
 <body>
@@ -219,6 +222,10 @@
   <input type="text" id="auctionId" placeholder="e.g. 1392" />
   <button id="connectBtn" onclick="connect()">Connect</button>
   <span class="conn idle" id="connState"><span class="dot"></span><span id="connLabel">Not connected</span></span>
+
+  <label style="font-size:12px;color:#94a3b8;margin-left:10px;cursor:pointer">
+    <input type="checkbox" id="showRaw" style="vertical-align:middle"> Show raw messages
+  </label>
 </div>
 
 <div class="wrap">
@@ -291,7 +298,15 @@
     const div = document.createElement('div');
     div.innerHTML = '<span class="ts">' + ts() + '</span><span class="badge ' + badge + '">' + badge.toUpperCase() + '</span>' + text;
     logEl.prepend(div);
-    while (logEl.children.length > 100) logEl.removeChild(logEl.lastChild);
+    while (logEl.children.length > 200) logEl.removeChild(logEl.lastChild);
+  }
+
+  function appendRaw(raw) {
+    const div = document.createElement('div');
+    div.className = 'raw';
+    const shown = raw.length > 500 ? raw.slice(0, 500) + '…' : raw;
+    div.textContent = shown;
+    logEl.prepend(div);
   }
 
   function setMessage(text, cls) {
@@ -318,11 +333,31 @@
   }
 
   // ── Event handler — mirrors auto-clerk-live logic ─────────────────────
+  const RECOGNISED = new Set([
+    'activeLotChange', 'liveBidEvent', 'liveCommissionBidEvent',
+    'setLiveAskingPrice', 'getFairWarningStatus', 'lotInformationUpdate',
+    'activeLotLock', 'sensorNetworkEvent',
+  ]);
+
   function handleMsg(raw) {
     let parsed;
-    try { parsed = JSON.parse(raw); } catch { return; }
-    const cmd = parsed.command || parsed.type || '';
+    try { parsed = JSON.parse(raw); }
+    catch {
+      log('unk', 'Non-JSON message');
+      if (document.getElementById('showRaw').checked) appendRaw(raw);
+      return;
+    }
+    const cmd = parsed.command || parsed.type || '(no command field)';
     const d   = parsed.content || parsed;
+
+    // Always log every message at a low level so you can see traffic
+    if (document.getElementById('showRaw').checked) {
+      log(RECOGNISED.has(cmd) ? 'recv' : 'unk', 'Received: ' + cmd);
+      appendRaw(raw);
+    } else if (!RECOGNISED.has(cmd)) {
+      // Surface unrecognised commands even with raw off — useful to spot new fields
+      log('unk', 'Unrecognised command: ' + cmd);
+    }
 
     if (cmd === 'activeLotChange') {
       const lotNo = d.lot_number ?? d.lotNumber ?? '?';
