@@ -236,6 +236,8 @@ body { display: flex; flex-direction: column; }
   <label style="cursor:pointer">
     <input type="checkbox" id="showRaw" style="vertical-align:middle"> Show raw
   </label>
+  <button onclick="act('online')" title="Simulate a saleroom.com online customer bidding"
+    style="background:#16a34a;border-color:#22c55e">+ Saleroom online bid</button>
   <span class="conn-pill idle" id="connPill"><span class="dot"></span><span id="connLabel">Not connected</span></span>
 </div>
 
@@ -465,6 +467,7 @@ let bpReconnectTimer = null;
 let bpCurrentLot = '—';
 let bpSoldDebounce = new Set();
 let bpFwActive = false;
+let bpLastBid = 0;   // last bid amount seen — used to detect an undo (amount drops)
 
 function bpLog(text) {
   const el = document.getElementById('connLabel');
@@ -550,21 +553,22 @@ function bpHandleMsg(raw) {
   bpRawLog(raw);
 
   // ── Lot change ─────────────────────────────────────────────────
+  // Vectis has moved to the next lot. Advance the replica by CLICKING Next
+  // (its own act('next') resets its bid/log state the normal way). We don't
+  // click Next on the very first lot we see.
   if (cmd === 'activeLotChange') {
     const lotNo = d.lot_number ?? d.lotNumber ?? '?';
-    bpCurrentLot = String(lotNo);
     bpFwActive = false;
     bpSoldDebounce = new Set();
+    bpLastBid = 0;
 
-    document.getElementById('lnum').textContent  = 'Lot: ' + lotNo;
-    document.getElementById('lest2').textContent = '—';
-    document.getElementById('ldesc').textContent = 'Lot ' + lotNo + ' offered';
-    document.getElementById('fH').value = '0';
-    document.getElementById('bFW').classList.remove('active-fw');
-    document.getElementById('sr-state').dataset.lotNumber = lotNo;
-    clearLogs(); setNotif(''); setAmt(0);
-    S.bid = 0; S.hi = 0;
-    setSbarText('Lot ' + lotNo + ' offered');
+    if (bpCurrentLot !== '—') {
+      setSbarText('Vectis advanced to Lot ' + lotNo + ' → clicking Next on Saleroom');
+      autoClick('btn-next', 'purple');
+    } else {
+      setSbarText('Auction live — Lot ' + lotNo);
+    }
+    bpCurrentLot = String(lotNo);
     return;
   }
 
@@ -577,20 +581,27 @@ function bpHandleMsg(raw) {
 
     if (amount <= 0) return;
 
+    // UNDO — the bid dropped below what we last saw → a bid was retracted on
+    // Vectis. Click Undo on Saleroom to step it back to match.
+    if (amount < bpLastBid) {
+      setSbarText('Bid dropped to ' + fmt(amount) + ' → clicking Undo on Saleroom');
+      autoClick('btn-undo', 'amber');
+      bpLastBid = amount;
+      return;
+    }
+    bpLastBid = amount;
+
     if (auto) {
-      // Online bid — appears on Saleroom on its own, no clerk action
-      S.bid = amount; S.hi = amount; S.lbdr = label; S.lname = label;
-      addLog(label, amount, label, '');
-      setNotif('ng'); setAmt(amount); hiInc(amount);
-      document.getElementById('sr-state').dataset.currentBid = amount;
-      setTimeout(() => setNotif(''), 2000);
-      setSbarText('Auto: ' + label + ' ' + fmt(amount));
+      // AUTOMATIC bid (Vectis Online or Saleroom Online).
+      // These already exist on the Saleroom platform on their own —
+      // the auto-clerk must do NOTHING here. No bid is placed, no button
+      // is pressed. Just note it in the status bar for visibility.
+      setSbarText('No action — ' + label + ' bid ' + fmt(amount) + ' already on Saleroom');
     } else {
-      // Non-automatic source — auto-clerk PHYSICALLY presses Bid here.
-      // Set the bidOverride to the Bidpath amount + simulate Enter so the
-      // existing overrideEnter() handler runs (same code path as a clerk).
-      setSbarText('Press Bid → ' + label + ' ' + fmt(amount));
-      autoPressBid(amount, label);
+      // Non-automatic source (Room / Telephone / Invaluable / BSCB / Commission)
+      // — auto-clerk clicks the real Bid button; the replica advances on its own.
+      setSbarText(label + ' bid ' + fmt(amount) + ' → clicking Bid on Saleroom');
+      autoClick('bBid');
     }
     return;
   }
@@ -599,8 +610,14 @@ function bpHandleMsg(raw) {
   if (cmd === 'liveCommissionBidEvent') {
     const amount = Number(d.amount ?? 0);
     if (amount > 0) {
-      setSbarText('Press Bid → Commission ' + fmt(amount));
-      autoPressBid(amount, 'Commission');
+      if (amount < bpLastBid) {
+        setSbarText('Bid dropped to ' + fmt(amount) + ' → clicking Undo on Saleroom');
+        autoClick('btn-undo', 'amber');
+      } else {
+        setSbarText('Commission bid ' + fmt(amount) + ' → clicking Bid on Saleroom');
+        autoClick('bBid');
+      }
+      bpLastBid = amount;
     }
     return;
   }
@@ -633,26 +650,26 @@ function bpHandleMsg(raw) {
     const keyName  = d.key_name ?? '';
     const keyValue = d.key_value;
     if (keyName === 'Sold' && (keyValue === true || keyValue === 'true' || keyValue === 1)) {
-      const hammer = Number(d.hammer_price ?? S.hi);
+      const hammer = Number(d.hammer_price ?? 0);
       const key    = bpCurrentLot + ':' + hammer;
       if (bpSoldDebounce.has(key)) return;
       bpSoldDebounce.add(key);
 
-      document.getElementById('fH').value = String(hammer);
-      setSbarText('Auto-pressing Sell @ ' + fmt(hammer));
-      autoClick('btn-sell', 'green');      // ← REAL click on Sell (runs doSell)
-      setTimeout(() => {
-        setSbarText('Auto-pressing Next');
-        autoClick('btn-next', 'purple');   // ← REAL click on Next (runs act('next'))
-      }, 2200);
+      // Click Sell — the replica sells at its OWN current bid (no typing).
+      // (Next is clicked when Vectis advances — see activeLotChange.)
+      setSbarText('Lot sold → clicking Sell on Saleroom');
+      autoClick('btn-sell', 'green');
     }
     return;
   }
 }
 
 /* ──────────────────────────────────────────────────────────────────
-   AUTO-PRESS helpers — fire the SAME code path as a clerk's click.
-   Visual press animation + el.click() so the onclick handler runs.
+   AUTO-CLERK → only interacts with the dumb Saleroom replica by
+   CLICKING its real buttons, exactly as a clerk's finger would.
+   No state reaching-in, no log patching, no behind-the-scenes shortcuts.
+   (Pretends we already know the button selectors — for the real GAP
+   page later we'd just swap these IDs for the real ones.)
    ────────────────────────────────────────────────────────────────── */
 
 function autoClick(id, colour) {
@@ -663,28 +680,7 @@ function autoClick(id, colour) {
   setTimeout(() => {
     el.classList.remove('auto-pressing','green','purple','amber');
   }, 250);
-  // Fire the existing click handler (act('sell'), act('next'), act('fairwarn'), etc.)
-  el.click();
-}
-
-// Bid press uses the bidOverride input + Enter so the exact Bidpath amount
-// is registered (act('bid') would just step by one increment which may not match)
-function autoPressBid(amount, label) {
-  const override = document.getElementById('bidOverride');
-  const bBid     = document.getElementById('bBid');
-  // Set override value, run overrideEnter (the real Enter handler)
-  override.value = String(amount);
-  // Visual press on the Bid button
-  bBid.classList.add('auto-pressing');
-  setTimeout(() => bBid.classList.remove('auto-pressing'), 250);
-  overrideEnter();
-  // Patch bidder label after overrideEnter (which hardcodes 'ROOM')
-  if (label && label !== 'ROOM' && S.log.length > 0) {
-    const last = S.log[S.log.length - 1];
-    last.b = label; last.n = label;
-    renderLogFull();
-    S.lbdr = label; S.lname = label;
-  }
+  el.click(); // fires the replica's own onclick (act('bid'/'sell'/'next'/'fairwarn'))
 }
 
 // no-op so older calls to updateSrState don't break
@@ -745,6 +741,16 @@ function act(a){
     updateSrState(amount);
     setTimeout(function(){ setNotif(''); }, 2000);
     setTimeout(focusOverride, 50);
+  } else if(a === 'online'){
+    // A saleroom.com online customer has placed a bid — advances one
+    // increment and shows as an Online bidder (green notification).
+    const amount = nextBid(S.hi);
+    S.bid = amount; S.hi = amount; S.lbdr = 'Online'; S.lname = 'Online';
+    addLog('Online', amount, 'Online', '');
+    setNotif('ng'); setAmt(amount); hiInc(amount);
+    updateSrState(amount);
+    setTimeout(function(){ setNotif(''); }, 2000);
+    setSbarText('Saleroom online bid at '+fmt(amount));
   } else if(a === 'room'){
     // Room — keeps current amount, attributes to room bidder
     S.lbdr = 'ROOM'; S.lname = 'ROOM';
