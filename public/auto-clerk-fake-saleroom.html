@@ -218,14 +218,24 @@
   <h1>🏷 Fake Saleroom</h1>
   <span class="sub">Driven by Bidpath WS — mirrors the actions auto-clerk would take on Saleroom</span>
 
-  <label style="font-size:12px;color:#94a3b8">Bidpath ID:</label>
-  <input type="text" id="auctionId" placeholder="e.g. 1392" />
+  <label style="font-size:12px;color:#94a3b8">WS URL:</label>
+  <input type="text" id="wsBase" style="width:280px;font-family:ui-monospace,monospace;font-size:12px" />
+
+  <label style="font-size:12px;color:#94a3b8;margin-left:6px">Auction ID:</label>
+  <input type="text" id="auctionId" style="width:100px" placeholder="e.g. 1137" />
+
   <button id="connectBtn" onclick="connect()">Connect</button>
   <span class="conn idle" id="connState"><span class="dot"></span><span id="connLabel">Not connected</span></span>
 
   <label style="font-size:12px;color:#94a3b8;margin-left:10px;cursor:pointer">
-    <input type="checkbox" id="showRaw" style="vertical-align:middle"> Show raw messages
+    <input type="checkbox" id="showRaw" style="vertical-align:middle"> Show raw
   </label>
+</div>
+
+<div style="background:#0c1426;border-bottom:1px solid #1e3a5f;padding:6px 24px;font-size:11px;color:#64748b;display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+  <span><strong style="color:#94a3b8">Quick presets:</strong></span>
+  <button class="preset" data-url="wss://www.vectis.co.uk/wss/" style="background:transparent;border:1px solid #334155;color:#7dd3fc;padding:3px 9px;border-radius:4px;font-size:11px;cursor:pointer;font-family:ui-monospace,monospace">Production</button>
+  <span style="color:#475569">— for staging, open DevTools → Network → WS on the test bidstream page and copy the actual <code>wss://…/wss/</code> URL into the WS URL field above.</span>
 </div>
 
 <div class="wrap">
@@ -448,14 +458,34 @@
   }
 
   // ── Connection ────────────────────────────────────────────────────────
+  const DEFAULT_WS = 'wss://www.vectis.co.uk/wss/';
+
+  // Restore last-used URL + auction ID
+  document.getElementById('wsBase').value    = localStorage.getItem('fakeSR_wsBase')    || DEFAULT_WS;
+  document.getElementById('auctionId').value = localStorage.getItem('fakeSR_auctionId') || '';
+
+  // Preset buttons
+  document.querySelectorAll('button.preset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('wsBase').value = btn.dataset.url;
+      localStorage.setItem('fakeSR_wsBase', btn.dataset.url);
+    });
+  });
+
   function connect() {
-    const id = (document.getElementById('auctionId').value || '').trim();
-    if (!id) { alert('Enter a Bidpath auction ID first.'); return; }
+    const id   = (document.getElementById('auctionId').value || '').trim();
+    let   base = (document.getElementById('wsBase').value || '').trim();
+    if (!id)   { alert('Enter an auction ID first.'); return; }
+    if (!base) { alert('Enter the WS URL first.'); return; }
+    // Ensure base ends with a slash so we can append the ID cleanly
+    if (!base.endsWith('/')) base = base + '/';
+    localStorage.setItem('fakeSR_wsBase', base);
+    localStorage.setItem('fakeSR_auctionId', id);
 
     disconnect();
     soldDebounce.clear();
 
-    const url = 'wss://www.vectis.co.uk/wss/' + id;
+    const url = base + id;
     setConn('idle', 'Connecting…');
     log('sys', 'Connecting to ' + url);
 
