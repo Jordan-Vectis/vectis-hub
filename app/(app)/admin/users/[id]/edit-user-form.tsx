@@ -197,23 +197,23 @@ export default function EditUserForm({ userId, name, email, username, role, depa
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full name</label>
             <input name="name" defaultValue={name} required
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Username</label>
             <input name="username" defaultValue={username ?? ""} placeholder="First.Last"
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Used to log in instead of email</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
             <input name="email" type="email" defaultValue={email} required
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Role</label>
             <select name="role" defaultValue={role} disabled={isSelf}
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 dark:bg-gray-800 disabled:text-gray-400 dark:text-gray-500">
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-gray-900 disabled:text-gray-400 dark:disabled:text-gray-500">
               {roles.map(r => (
                 <option key={r} value={r}>{roleLabel(r)}</option>
               ))}
@@ -223,7 +223,7 @@ export default function EditUserForm({ userId, name, email, username, role, depa
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Department</label>
             <select name="departmentId" defaultValue={departmentId ?? ""}
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="">None</option>
               {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
@@ -276,7 +276,7 @@ export default function EditUserForm({ userId, name, email, username, role, depa
                             <select
                               value={warehouseRole}
                               onChange={e => setWarehouseRole(e.target.value as WarehouseRole)}
-                              className="rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             >
                               {WAREHOUSE_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                             </select>
@@ -364,7 +364,7 @@ export default function EditUserForm({ userId, name, email, username, role, depa
                   type="number" min={1} max={59}
                   value={timerYellowMins}
                   onChange={e => setTimerYellowMins(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
                 />
               </div>
               <div>
@@ -373,7 +373,7 @@ export default function EditUserForm({ userId, name, email, username, role, depa
                   type="number" min={1} max={120}
                   value={timerRedMins}
                   onChange={e => setTimerRedMins(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
                 />
               </div>
             </div>
@@ -402,7 +402,7 @@ export default function EditUserForm({ userId, name, email, username, role, depa
             <div className="relative">
               <input type={showPwd ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)}
                 placeholder="New password" minLength={8} required
-                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               <button type="button" onClick={() => setShowPwd(v => !v)}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:text-gray-400 text-xs px-1">
                 {showPwd ? "Hide" : "Show"}
@@ -411,7 +411,7 @@ export default function EditUserForm({ userId, name, email, username, role, depa
             <div className="relative">
               <input type={showPwd ? "text" : "password"} value={confirm} onChange={e => setConfirm(e.target.value)}
                 placeholder="Confirm password" required
-                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             {pwdError && <p className="text-xs text-red-500">{pwdError}</p>}
             <div className="flex gap-2">

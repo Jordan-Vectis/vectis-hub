@@ -62,7 +62,7 @@ export default function ChangePasswordButton({ userId, userName }: { userId: str
         placeholder="New password"
         minLength={8}
         required
-        className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-2 py-1 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
       <input
         type="password"
@@ -70,7 +70,7 @@ export default function ChangePasswordButton({ userId, userName }: { userId: str
         onChange={(e) => setConfirm(e.target.value)}
         placeholder="Confirm password"
         required
-        className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-2 py-1 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
       {error && <span className="text-xs text-red-500">{error}</span>}
       <div className="flex gap-2">

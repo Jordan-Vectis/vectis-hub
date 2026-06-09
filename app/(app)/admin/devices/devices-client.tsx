@@ -118,7 +118,7 @@ export default function DevicesClient({ devices: initial, users }: Props) {
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                 placeholder="e.g. Warehouse iPad 1"
-                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
               />
             </div>
             <div>
@@ -127,7 +127,7 @@ export default function DevicesClient({ devices: initial, users }: Props) {
                 value={form.serialNumber}
                 onChange={e => setForm(f => ({ ...f, serialNumber: e.target.value }))}
                 placeholder="e.g. DMPYQ3NJQ6NV"
-                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-400"
+                className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-400"
               />
             </div>
             <div>
@@ -135,7 +135,7 @@ export default function DevicesClient({ devices: initial, users }: Props) {
               <select
                 value={form.deviceType}
                 onChange={e => setForm(f => ({ ...f, deviceType: e.target.value }))}
-                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
               >
                 <option>iPad</option>
                 <option>iPad Pro</option>
@@ -150,7 +150,7 @@ export default function DevicesClient({ devices: initial, users }: Props) {
               <select
                 value={form.assignedToId}
                 onChange={e => setForm(f => ({ ...f, assignedToId: e.target.value }))}
-                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
               >
                 <option value="">— Unassigned —</option>
                 {users.map(u => (
@@ -164,7 +164,7 @@ export default function DevicesClient({ devices: initial, users }: Props) {
                 value={form.notes}
                 onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                 placeholder="e.g. Cracked screen, kept in warehouse"
-                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
               />
             </div>
           </div>

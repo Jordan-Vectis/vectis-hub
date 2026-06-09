@@ -42,7 +42,7 @@ export default function CreateUserForm({ departments, roles }: Props) {
           name="name"
           required
           onChange={(e) => setUsername(toUsername(e.target.value))}
-          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
       <div>
@@ -52,7 +52,7 @@ export default function CreateUserForm({ departments, roles }: Props) {
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           placeholder="First.Last"
-          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
       <div>
@@ -61,7 +61,7 @@ export default function CreateUserForm({ departments, roles }: Props) {
           name="email"
           type="email"
           required
-          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
       <div>
@@ -71,7 +71,7 @@ export default function CreateUserForm({ departments, roles }: Props) {
           type="password"
           required
           minLength={8}
-          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
       <div>
@@ -80,7 +80,7 @@ export default function CreateUserForm({ departments, roles }: Props) {
           name="role"
           value={role}
           onChange={(e) => setRole(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           {roles.map(r => (
             <option key={r} value={r}>{roleLabel(r)}</option>
@@ -92,7 +92,7 @@ export default function CreateUserForm({ departments, roles }: Props) {
           <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Department</label>
           <select
             name="departmentId"
-            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">No department</option>
             {departments.map((d) => (

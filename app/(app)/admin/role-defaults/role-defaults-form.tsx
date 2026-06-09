@@ -194,7 +194,7 @@ function RolePanel({ roleKey, roleLabel, initial, users }: {
                       <select
                         value={warehouseRole}
                         onChange={e => setWarehouseRole(e.target.value as WarehouseRole)}
-                        className="rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         {WAREHOUSE_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                       </select>
@@ -404,7 +404,7 @@ export default function RoleDefaultsForm({ allRoles, defaults, users }: Props) {
               onKeyDown={e => e.key === "Enter" && handleAdd()}
               placeholder="e.g. Warehouse Manager"
               autoFocus
-              className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button onClick={handleAdd}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg">Add</button>
