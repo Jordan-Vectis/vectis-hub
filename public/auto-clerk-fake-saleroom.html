@@ -241,6 +241,9 @@ body { display: flex; flex-direction: column; }
   <span class="conn-pill idle" id="connPill"><span class="dot"></span><span id="connLabel">Not connected</span></span>
 </div>
 
+<!-- ── Failsafe warning banner (hidden until a sync gets stuck) ── -->
+<div id="syncWarn" style="display:none;background:#dc2626;color:white;font-weight:700;padding:8px 16px;font-size:14px;text-align:center"></div>
+
 <!-- Hidden state element — Playwright reads data-current-bid from here -->
 <div id="sr-state" data-current-bid="0" data-lot-number="" style="display:none"></div>
 
@@ -467,7 +470,53 @@ let bpReconnectTimer = null;
 let bpCurrentLot = '—';
 let bpSoldDebounce = new Set();
 let bpFwActive = false;
-let bpLastBid = 0;   // last bid amount seen — used to detect an undo (amount drops)
+let bpLastBid = 0;     // last bid amount seen — used to detect an undo (amount drops)
+let bpTargetBid = 0;   // the amount Saleroom SHOULD be at (absolute target)
+let bpSyncTries = 0;   // retry counter for the current sync attempt
+let bpWatchdog = null;  // periodic re-sync timer
+const MAX_SYNC_TRIES = 4;
+
+// ── Failsafe sync ───────────────────────────────────────────────────
+// Read what Saleroom is currently registered at. On the real GAP page this
+// would read the on-screen hammer/asking number; here it's the replica's S.hi.
+function readSaleroomBid() { return Number(S.hi) || 0; }
+
+// Drive Saleroom to the absolute bpTargetBid using the custom-amount box.
+// Verifies the press landed; retries up to MAX_SYNC_TRIES; warns if stuck.
+function syncSaleroomToTarget() {
+  const current = readSaleroomBid();
+  if (bpTargetBid <= 0 || current >= bpTargetBid) {
+    bpSyncTries = 0;
+    clearSyncWarning();
+    return;
+  }
+  if (bpSyncTries >= MAX_SYNC_TRIES) {
+    showSyncWarning('Saleroom stuck at ' + fmt(current) + ' — target ' + fmt(bpTargetBid) + '. Press Bid manually.');
+    return;
+  }
+  bpSyncTries++;
+  // Type the exact target into the box next to A, then press Bid (executes at that amount)
+  document.getElementById('bidOverride').value = String(bpTargetBid);
+  autoClick('bBid');
+  // Verify shortly after; retry if it didn't land
+  setTimeout(() => {
+    if (readSaleroomBid() < bpTargetBid) {
+      syncSaleroomToTarget();
+    } else {
+      bpSyncTries = 0;
+      clearSyncWarning();
+    }
+  }, 350);
+}
+
+function showSyncWarning(msg) {
+  const el = document.getElementById('syncWarn');
+  if (el) { el.textContent = '⚠ ' + msg; el.style.display = 'block'; }
+}
+function clearSyncWarning() {
+  const el = document.getElementById('syncWarn');
+  if (el) el.style.display = 'none';
+}
 
 function bpLog(text) {
   const el = document.getElementById('connLabel');
@@ -514,6 +563,14 @@ function bpConnect() {
     btn.textContent = 'Disconnect';
     btn.onclick = bpDisconnect;
     btn.classList.add('disconnect');
+    // Watchdog — every 2s, if Saleroom has fallen behind the target, re-sync
+    if (bpWatchdog) clearInterval(bpWatchdog);
+    bpWatchdog = setInterval(() => {
+      if (bpTargetBid > 0 && readSaleroomBid() < bpTargetBid) {
+        bpSyncTries = 0;
+        syncSaleroomToTarget();
+      }
+    }, 2000);
   };
   bpWs.onmessage = (e) => bpHandleMsg(e.data);
   bpWs.onerror   = () => { bpSetConn('err', 'WebSocket error'); };
@@ -535,6 +592,7 @@ function bpConnect() {
 
 function bpDisconnect() {
   if (bpReconnectTimer) { clearTimeout(bpReconnectTimer); bpReconnectTimer = null; }
+  if (bpWatchdog) { clearInterval(bpWatchdog); bpWatchdog = null; }
   if (bpWs) { bpWs.onclose = null; try { bpWs.close(); } catch {} bpWs = null; }
   bpSetConn('idle', 'Not connected');
   document.getElementById('conn-indicator').textContent = '● Coordinator: waiting';
@@ -561,6 +619,9 @@ function bpHandleMsg(raw) {
     bpFwActive = false;
     bpSoldDebounce = new Set();
     bpLastBid = 0;
+    bpTargetBid = 0;
+    bpSyncTries = 0;
+    clearSyncWarning();
 
     if (bpCurrentLot !== '—') {
       setSbarText('Vectis advanced to Lot ' + lotNo + ' → clicking Next on Saleroom');
@@ -585,6 +646,7 @@ function bpHandleMsg(raw) {
     // Vectis. Click Undo on Saleroom to step it back to match.
     if (amount < bpLastBid) {
       setSbarText('Bid dropped to ' + fmt(amount) + ' → clicking Undo on Saleroom');
+      bpTargetBid = amount;
       autoClick('btn-undo', 'amber');
       bpLastBid = amount;
       return;
@@ -593,29 +655,33 @@ function bpHandleMsg(raw) {
 
     if (auto) {
       // AUTOMATIC bid (Vectis Online or Saleroom Online).
-      // These already exist on the Saleroom platform on their own —
-      // the auto-clerk must do NOTHING here. No bid is placed, no button
-      // is pressed. Just note it in the status bar for visibility.
+      // Already on Saleroom on its own — the auto-clerk does NOTHING.
+      // But still track the target so a later non-auto bid lands correctly
+      // and the watchdog knows the true current level.
+      bpTargetBid = Math.max(bpTargetBid, amount);
       setSbarText('No action — ' + label + ' bid ' + fmt(amount) + ' already on Saleroom');
     } else {
       // Non-automatic source (Room / Telephone / Invaluable / BSCB / Commission)
-      // — auto-clerk clicks the real Bid button; the replica advances on its own.
-      setSbarText(label + ' bid ' + fmt(amount) + ' → clicking Bid on Saleroom');
-      autoClick('bBid');
+      // — drive Saleroom to the EXACT amount via the custom-amount box (no lag).
+      bpTargetBid = amount;
+      setSbarText(label + ' bid ' + fmt(amount) + ' → setting Saleroom to exact amount');
+      syncSaleroomToTarget();
     }
     return;
   }
 
-  // ── Commission bid (treat as room — non-automatic) ─────────────
+  // ── Commission bid (non-automatic) ─────────────────────────────
   if (cmd === 'liveCommissionBidEvent') {
     const amount = Number(d.amount ?? 0);
     if (amount > 0) {
       if (amount < bpLastBid) {
         setSbarText('Bid dropped to ' + fmt(amount) + ' → clicking Undo on Saleroom');
+        bpTargetBid = amount;
         autoClick('btn-undo', 'amber');
       } else {
-        setSbarText('Commission bid ' + fmt(amount) + ' → clicking Bid on Saleroom');
-        autoClick('bBid');
+        bpTargetBid = amount;
+        setSbarText('Commission bid ' + fmt(amount) + ' → setting Saleroom to exact amount');
+        syncSaleroomToTarget();
       }
       bpLastBid = amount;
     }
@@ -655,10 +721,36 @@ function bpHandleMsg(raw) {
       if (bpSoldDebounce.has(key)) return;
       bpSoldDebounce.add(key);
 
-      // Click Sell — the replica sells at its OWN current bid (no typing).
-      // (Next is clicked when Vectis advances — see activeLotChange.)
-      setSbarText('Lot sold → clicking Sell on Saleroom');
-      autoClick('btn-sell', 'green');
+      // PRE-SELL RECONCILE — never sell at the wrong price. If Saleroom is
+      // behind the hammer figure, bring it up to the exact amount FIRST,
+      // then Sell once it matches.
+      const sellAt = hammer > 0 ? hammer : readSaleroomBid();
+      if (hammer > 0 && readSaleroomBid() < hammer) {
+        setSbarText('Saleroom behind — bringing to ' + fmt(hammer) + ' before Sell');
+        bpTargetBid = hammer;
+        document.getElementById('bidOverride').value = String(hammer);
+        autoClick('bBid');
+        // Sell once it's caught up (verify, with a couple of retries)
+        let tries = 0;
+        const trySell = () => {
+          if (readSaleroomBid() >= hammer || tries >= MAX_SYNC_TRIES) {
+            if (readSaleroomBid() < hammer) {
+              showSyncWarning('Could not reach ' + fmt(hammer) + ' before Sell — check manually.');
+            }
+            setSbarText('Lot sold ' + fmt(sellAt) + ' → clicking Sell on Saleroom');
+            autoClick('btn-sell', 'green');
+          } else {
+            tries++;
+            document.getElementById('bidOverride').value = String(hammer);
+            autoClick('bBid');
+            setTimeout(trySell, 350);
+          }
+        };
+        setTimeout(trySell, 350);
+      } else {
+        setSbarText('Lot sold ' + fmt(sellAt) + ' → clicking Sell on Saleroom');
+        autoClick('btn-sell', 'green');
+      }
     }
     return;
   }
@@ -733,8 +825,17 @@ function act(a){
       setSbarText('Lot '+lot.number+' — ready');
     }
   } else if(a === 'bid'){
-    // Bid button — steps up to next increment (no online bidder — shows as Room)
-    const amount = nextBid(S.hi);
+    // Bid button — like the real Saleroom: if a custom amount is typed in the
+    // box next to A, execute at THAT amount; otherwise step one increment.
+    const ovRaw = (document.getElementById('bidOverride').value || '').trim();
+    const ovVal = parseInt(ovRaw, 10);
+    let amount;
+    if (ovRaw && !isNaN(ovVal) && ovVal > 0) {
+      amount = ovVal;
+      document.getElementById('bidOverride').value = '';
+    } else {
+      amount = nextBid(S.hi);
+    }
     S.bid = amount; S.hi = amount; S.lbdr = 'ROOM'; S.lname = 'ROOM';
     addLog('ROOM', amount, 'ROOM', 'room');
     setNotif('nr'); setAmt(amount); hiInc(amount);

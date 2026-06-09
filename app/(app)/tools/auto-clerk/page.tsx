@@ -322,11 +322,12 @@ export default function AutoClerkPage() {
             </div>
 
             <div>
-              <p className="font-semibold">2. Lot start sync — catch the lower platform up</p>
-              <p className="text-blue-700 dark:text-blue-300/80 mt-0.5">Pre-bids can mean platforms open at different amounts.</p>
+              <p className="font-semibold">2. Catch the lower platform up — use the exact amount, not increments</p>
+              <p className="text-blue-700 dark:text-blue-300/80 mt-0.5">Pre-bids mean platforms can open at different amounts, and stepping one increment per bid always lags. Instead drive the lower platform straight to the exact figure:</p>
               <ul className="list-disc list-inside text-blue-700 dark:text-blue-300/80 mt-1 ml-2">
-                <li>If <strong>Vectis is higher</strong> → press <strong>BID</strong> on Saleroom repeatedly until matched</li>
-                <li>If <strong>Saleroom is higher</strong> → press <strong>SALEROOM</strong> button on Vectis repeatedly until matched</li>
+                <li>If <strong>Vectis is higher</strong> → on Saleroom, type the amount in the box next to <strong>A</strong> and press <strong>Bid</strong> to land on the exact figure</li>
+                <li>If <strong>Saleroom is higher</strong> → bring Vectis up via the <strong>Saleroom</strong> button</li>
+                <li>Auto-clerk always sets the driven platform to the <em>current absolute bid</em>, so a missed press self-corrects on the next bid. A verify-and-retry + watchdog + pre-sell reconcile guard against dropped clicks/lag, with a red banner if it ever gets stuck.</li>
               </ul>
             </div>
 
