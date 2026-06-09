@@ -159,6 +159,19 @@ body { display: flex; flex-direction: column; }
 #bFW.active-fw { background: linear-gradient(#ffe066, #ffbb00); border-color: #cc8800; animation: fwpulse 0.8s infinite alternate; }
 @keyframes fwpulse { from { filter: brightness(1); } to { filter: brightness(1.12); } }
 
+/* Auto-press visual — shown briefly when auto-clerk programmatically clicks a real button */
+.btn.auto-pressing {
+  background: linear-gradient(#60a5fa, #2563eb) !important;
+  color: white !important;
+  border-color: #1d4ed8 !important;
+  box-shadow: 0 0 0 3px rgba(96,165,250,0.55), 0 6px 14px -3px rgba(37,99,235,0.7) !important;
+  transform: translateY(1px) scale(0.98);
+  transition: all 0.05s;
+}
+.btn.auto-pressing.green { background: linear-gradient(#4ade80, #16a34a) !important; border-color: #15803d !important; box-shadow: 0 0 0 3px rgba(74,222,128,0.55), 0 6px 14px -3px rgba(22,163,74,0.7) !important; }
+.btn.auto-pressing.purple{ background: linear-gradient(#c084fc, #9333ea) !important; border-color: #7e22ce !important; box-shadow: 0 0 0 3px rgba(192,132,252,0.55), 0 6px 14px -3px rgba(147,51,234,0.7) !important; }
+.btn.auto-pressing.amber { background: linear-gradient(#fbbf24, #d97706) !important; border-color: #b45309 !important; box-shadow: 0 0 0 3px rgba(251,191,36,0.55), 0 6px 14px -3px rgba(217,119,6,0.7) !important; }
+
 #cell-chat .card { flex: 1; padding: 0; display: grid; grid-template-columns: 1fr auto; min-height: 0; overflow: hidden; }
 .chat-left { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid rgb(179,179,179); }
 .ann-list  { list-style-type: none; line-height: 3.7vmin; white-space: nowrap; padding-inline-start: 0; margin: 0; overflow-y: auto; flex: 1; }
@@ -562,30 +575,32 @@ function bpHandleMsg(raw) {
     const label    = PLATFORM_LABEL[platform] ?? platform ?? 'Bidder';
     const auto     = AUTOMATIC_ON_SALEROOM.has(platform);
 
-    if (amount > 0) {
+    if (amount <= 0) return;
+
+    if (auto) {
+      // Online bid — appears on Saleroom on its own, no clerk action
       S.bid = amount; S.hi = amount; S.lbdr = label; S.lname = label;
-      addLog(label, amount, label, auto ? '' : 'room');
-      setNotif(auto ? 'ng' : 'nr');
-      setAmt(amount); hiInc(amount);
+      addLog(label, amount, label, '');
+      setNotif('ng'); setAmt(amount); hiInc(amount);
       document.getElementById('sr-state').dataset.currentBid = amount;
       setTimeout(() => setNotif(''), 2000);
-      setSbarText((auto ? 'Auto: ' : 'Press Bid — ') + label + ' ' + fmt(amount));
-      if (!auto) flashBid();
+      setSbarText('Auto: ' + label + ' ' + fmt(amount));
+    } else {
+      // Non-automatic source — auto-clerk PHYSICALLY presses Bid here.
+      // Set the bidOverride to the Bidpath amount + simulate Enter so the
+      // existing overrideEnter() handler runs (same code path as a clerk).
+      setSbarText('Press Bid → ' + label + ' ' + fmt(amount));
+      autoPressBid(amount, label);
     }
     return;
   }
 
-  // ── Commission bid ─────────────────────────────────────────────
+  // ── Commission bid (treat as room — non-automatic) ─────────────
   if (cmd === 'liveCommissionBidEvent') {
     const amount = Number(d.amount ?? 0);
     if (amount > 0) {
-      S.bid = amount; S.hi = amount; S.lbdr = 'Commission'; S.lname = 'Commission';
-      addLog('Commission', amount, 'Commission', 'room');
-      setNotif('nr'); setAmt(amount); hiInc(amount);
-      document.getElementById('sr-state').dataset.currentBid = amount;
-      setTimeout(() => setNotif(''), 2000);
-      setSbarText('Press Bid — Commission ' + fmt(amount));
-      flashBid();
+      setSbarText('Press Bid → Commission ' + fmt(amount));
+      autoPressBid(amount, 'Commission');
     }
     return;
   }
@@ -593,27 +608,27 @@ function bpHandleMsg(raw) {
   // ── Asking price update ────────────────────────────────────────
   if (cmd === 'setLiveAskingPrice') {
     const asking = Number(d.asking_bid ?? 0);
-    if (asking > 0) hiInc(asking - 1); // highlight the asking row in the ladder
+    if (asking > 0) hiInc(asking - 1);
     return;
   }
 
-  // ── Fair Warning ───────────────────────────────────────────────
+  // ── Fair Warning — auto-clerk CLICKS the Fair warn button ──────
   if (cmd === 'getFairWarningStatus') {
     const fw = Boolean(d.fair_warning);
     if (fw && !bpFwActive) {
       bpFwActive = true;
-      document.getElementById('bFW').classList.add('active-fw');
-      addChat('⚠️ Fair Warning — lot about to close!');
-      setSbarText('Press Fair warn — Fair Warning called on Bidpath');
+      setSbarText('Auto-pressing Fair warn');
+      autoClick('bFW', 'amber');           // ← REAL click on Fair warn
     } else if (!fw && bpFwActive) {
       bpFwActive = false;
-      document.getElementById('bFW').classList.remove('active-fw');
+      // FW cancelled — toggle back off (real click again to remove active-fw)
+      autoClick('bFW', 'amber');
       setSbarText('Fair Warning cancelled');
     }
     return;
   }
 
-  // ── Lot sold → Sell + Next sequence ───────────────────────────
+  // ── Lot sold → CLICK Sell, then CLICK Next 2.2s later ─────────
   if (cmd === 'lotInformationUpdate') {
     const keyName  = d.key_name ?? '';
     const keyValue = d.key_value;
@@ -624,33 +639,52 @@ function bpHandleMsg(raw) {
       bpSoldDebounce.add(key);
 
       document.getElementById('fH').value = String(hammer);
-      doSell();
-      flashBtn('btn-sell');
-      setSbarText('Lot sold ' + fmt(hammer) + ' — press Sell, then Next');
+      setSbarText('Auto-pressing Sell @ ' + fmt(hammer));
+      autoClick('btn-sell', 'green');      // ← REAL click on Sell (runs doSell)
       setTimeout(() => {
-        flashBtn('btn-next');
-        setSbarText('Press Next — advance to next lot');
+        setSbarText('Auto-pressing Next');
+        autoClick('btn-next', 'purple');   // ← REAL click on Next (runs act('next'))
       }, 2200);
     }
     return;
   }
 }
 
-function flashBid() { flashBtn('bBid'); }
-function flashBtn(id) {
+/* ──────────────────────────────────────────────────────────────────
+   AUTO-PRESS helpers — fire the SAME code path as a clerk's click.
+   Visual press animation + el.click() so the onclick handler runs.
+   ────────────────────────────────────────────────────────────────── */
+
+function autoClick(id, colour) {
   const el = document.getElementById(id);
   if (!el) return;
-  const orig = { bg: el.style.background, color: el.style.color, shadow: el.style.boxShadow, scale: el.style.transform };
-  el.style.background = 'linear-gradient(#bfdbfe, #60a5fa)';
-  el.style.color = 'white';
-  el.style.boxShadow = '0 0 0 3px rgba(96,165,250,0.5), 0 6px 14px -2px rgba(37,99,235,0.6)';
-  el.style.transform = 'scale(1.05)';
+  el.classList.add('auto-pressing');
+  if (colour) el.classList.add(colour);
   setTimeout(() => {
-    el.style.background = orig.bg;
-    el.style.color = orig.color;
-    el.style.boxShadow = orig.shadow;
-    el.style.transform = orig.scale;
-  }, 1800);
+    el.classList.remove('auto-pressing','green','purple','amber');
+  }, 250);
+  // Fire the existing click handler (act('sell'), act('next'), act('fairwarn'), etc.)
+  el.click();
+}
+
+// Bid press uses the bidOverride input + Enter so the exact Bidpath amount
+// is registered (act('bid') would just step by one increment which may not match)
+function autoPressBid(amount, label) {
+  const override = document.getElementById('bidOverride');
+  const bBid     = document.getElementById('bBid');
+  // Set override value, run overrideEnter (the real Enter handler)
+  override.value = String(amount);
+  // Visual press on the Bid button
+  bBid.classList.add('auto-pressing');
+  setTimeout(() => bBid.classList.remove('auto-pressing'), 250);
+  overrideEnter();
+  // Patch bidder label after overrideEnter (which hardcodes 'ROOM')
+  if (label && label !== 'ROOM' && S.log.length > 0) {
+    const last = S.log[S.log.length - 1];
+    last.b = label; last.n = label;
+    renderLogFull();
+    S.lbdr = label; S.lname = label;
+  }
 }
 
 // no-op so older calls to updateSrState don't break
