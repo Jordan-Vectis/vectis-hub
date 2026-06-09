@@ -290,14 +290,14 @@ export default function AutoClerkPage() {
         </a>
       </div>
 
-      {/* Test harness — fake Saleroom for dry runs */}
+      {/* Test harness — fake Saleroom driven by Bidpath */}
       <a href="/auto-clerk-fake-saleroom.html" target="_blank" rel="noopener noreferrer"
         className="flex items-center gap-4 bg-gradient-to-r from-sky-900/40 to-cyan-900/40 hover:from-sky-800/40 hover:to-cyan-800/40 border border-sky-700/40 rounded-xl p-4 transition-all group">
         <span className="text-2xl">🧪</span>
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-white text-sm">Fake Saleroom (test harness)</p>
+          <p className="font-bold text-white text-sm">Fake Saleroom (Bidpath-driven test screen)</p>
           <p className="text-xs text-sky-300 mt-0.5">
-            Mimics the GAP DOM — drive lot, hammer, asking and message manually. Paste the console script on this page to dry-run the relay → shadow pipeline.
+            Enter a Bidpath auction ID — a Saleroom-style screen mirrors the auction live and animates the buttons auto-clerk would press.
           </p>
         </div>
         <span className="text-sky-400 text-xs group-hover:translate-x-1 transition-transform">↗</span>

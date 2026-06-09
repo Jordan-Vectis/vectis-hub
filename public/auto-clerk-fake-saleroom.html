@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Fake Saleroom — Auto Clerk Test Harness</title>
+<title>Fake Saleroom — driven by Bidpath</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -10,328 +10,463 @@
     background: #0f172a;
     color: #e2e8f0;
     min-height: 100vh;
-    padding: 24px;
     -webkit-font-smoothing: antialiased;
   }
-  h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; color: #f1f5f9; }
-  .sub { font-size: 13px; color: #94a3b8; margin-bottom: 24px; }
 
-  .wrap { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-
-  .card {
+  /* ── Top connection bar ─────────────────────────────────────────────── */
+  .topbar {
+    background: #0c1426;
+    border-bottom: 1px solid #1e3a5f;
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .topbar h1 {
+    font-size: 15px;
+    font-weight: 700;
+    color: #f1f5f9;
+    margin-right: 8px;
+  }
+  .topbar .sub { font-size: 12px; color: #64748b; margin-right: auto; }
+  .topbar input {
     background: #1e293b;
     border: 1px solid #334155;
-    border-radius: 10px;
-    padding: 18px;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 13px;
+    color: #f1f5f9;
+    width: 130px;
+    font-family: inherit;
   }
-  .card h2 {
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: #94a3b8;
-    margin-bottom: 12px;
+  .topbar input:focus { outline: none; border-color: #60a5fa; }
+  .topbar button {
+    background: #2563eb;
+    border: 1px solid #3b82f6;
+    color: white;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
     font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .topbar button:hover { background: #1d4ed8; }
+  .topbar button.disconnect { background: #475569; border-color: #64748b; }
+
+  .conn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-left: 8px;
+  }
+  .conn .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .conn.idle  { color: #64748b; } .conn.idle  .dot { background: #475569; }
+  .conn.live  { color: #4ade80; } .conn.live  .dot { background: #22c55e; animation: pulse 1.4s infinite; }
+  .conn.err   { color: #f87171; } .conn.err   .dot { background: #ef4444; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+  /* ── Body ───────────────────────────────────────────────────────────── */
+  .wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
   }
 
-  /* ── GAP DOM mirror (the bit the console script watches) ── */
-  .gap-mirror {
-    grid-column: 1 / -1;
+  /* Lot state card */
+  .lot-card {
     background: linear-gradient(180deg, #1e293b 0%, #1a2436 100%);
     border: 1px solid #475569;
-  }
-  .gap-grid {
+    border-radius: 14px;
+    padding: 24px;
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
+    grid-template-columns: 1.2fr 1fr 1fr;
+    gap: 22px;
+    align-items: center;
   }
-  .gap-cell {
-    background: #0f172a;
-    border: 1px solid #334155;
-    border-radius: 8px;
-    padding: 14px 16px;
-  }
-  .gap-cell .label {
+  .lot-card .label {
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 1px;
     color: #64748b;
     margin-bottom: 6px;
   }
-  .gap-cell .value {
-    font-size: 22px;
-    font-weight: 700;
+  .lot-card .big {
+    font-size: 56px;
+    font-weight: 800;
     color: #f1f5f9;
+    line-height: 1;
     font-variant-numeric: tabular-nums;
-    line-height: 1.2;
-    min-height: 1.2em;
-    word-break: break-word;
   }
-  .gap-cell .id { font-family: ui-monospace, monospace; font-size: 10px; color: #475569; margin-top: 4px; }
-
-  /* ── Inputs ── */
-  label { display: block; font-size: 11px; text-transform: uppercase; color: #94a3b8; margin-bottom: 4px; letter-spacing: 0.5px; }
-  input[type="text"], input[type="number"] {
-    width: 100%;
-    background: #0f172a;
-    border: 1px solid #334155;
-    border-radius: 6px;
-    padding: 8px 10px;
-    font-size: 14px;
-    color: #f1f5f9;
-    font-family: inherit;
+  .lot-card .price {
+    font-size: 36px;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
   }
-  input:focus { outline: none; border-color: #60a5fa; }
-
-  .row { display: grid; gap: 10px; margin-bottom: 10px; }
-  .row.two { grid-template-columns: 1fr auto; align-items: end; }
-
-  button {
-    background: #334155;
-    border: 1px solid #475569;
-    color: #f1f5f9;
-    border-radius: 6px;
-    padding: 8px 12px;
+  .lot-card .price.bid    { color: #93c5fd; }
+  .lot-card .price.asking { color: #cbd5e1; }
+  .lot-card .msg {
     font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    font-family: inherit;
-    transition: background 0.1s;
+    color: #cbd5e1;
+    margin-top: 10px;
+    line-height: 1.4;
+    min-height: 1.4em;
   }
-  button:hover { background: #475569; }
-  button.primary { background: #2563eb; border-color: #3b82f6; }
-  button.primary:hover { background: #1d4ed8; }
-  button.green { background: #16a34a; border-color: #22c55e; }
-  button.green:hover { background: #15803d; }
-  button.rose { background: #e11d48; border-color: #f43f5e; }
-  button.rose:hover { background: #be123c; }
-  button.amber { background: #d97706; border-color: #f59e0b; }
-  button.amber:hover { background: #b45309; }
-  button.slate { background: #475569; border-color: #64748b; }
+  .lot-card .msg.fw   { color: #fbbf24; font-weight: 700; }
+  .lot-card .msg.sold { color: #4ade80; font-weight: 700; }
 
-  .btn-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
+  /* Button strip */
+  .btn-strip {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 14px;
+    padding: 18px;
+  }
+  .btn-strip h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: #94a3b8;
+    margin-bottom: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
     gap: 8px;
   }
-  .btn-grid button { width: 100%; }
+  .btn-strip h3 .pulse-dot { width: 6px; height: 6px; border-radius: 50%; background: #38bdf8; }
 
-  .hint {
-    background: #0c1426;
-    border: 1px solid #1e3a5f;
-    border-radius: 8px;
-    padding: 12px 14px;
-    font-size: 12px;
-    color: #cbd5e1;
-    line-height: 1.6;
-    margin-top: 12px;
+  .btn-row {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 10px;
   }
-  .hint code { background: #1e293b; padding: 1px 5px; border-radius: 3px; font-size: 11px; color: #93c5fd; }
+  .btn {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 14px 8px;
+    font-weight: 700;
+    font-size: 13px;
+    color: #64748b;
+    text-align: center;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .btn .amount {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-top: 4px;
+    font-weight: 600;
+  }
+  .btn.active {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 4px rgba(255,255,255,0.06), 0 10px 30px -6px rgba(0,0,0,0.5);
+    color: white;
+  }
+  .btn.bid.active  { background: #2563eb; border-color: #60a5fa; box-shadow: 0 0 0 4px rgba(59,130,246,0.3); }
+  .btn.room.active { background: #e11d48; border-color: #fb7185; box-shadow: 0 0 0 4px rgba(244,63,94,0.3); }
+  .btn.sell.active { background: #16a34a; border-color: #4ade80; box-shadow: 0 0 0 4px rgba(34,197,94,0.3); }
+  .btn.next.active { background: #9333ea; border-color: #c084fc; box-shadow: 0 0 0 4px rgba(168,85,247,0.3); }
+  .btn.fw.active   { background: #d97706; border-color: #fbbf24; box-shadow: 0 0 0 4px rgba(245,158,11,0.3); }
+  .btn.undo.active { background: #b45309; border-color: #f59e0b; }
 
+  /* Activity log */
   .log {
-    grid-column: 1 / -1;
     background: #0c1220;
     border: 1px solid #1e293b;
-    border-radius: 10px;
-    padding: 12px 14px;
-    height: 140px;
+    border-radius: 14px;
+    padding: 14px 18px;
+    height: 240px;
     overflow-y: auto;
     font-family: ui-monospace, monospace;
-    font-size: 11px;
+    font-size: 12px;
     color: #94a3b8;
     line-height: 1.6;
   }
-  .log .ts { color: #475569; margin-right: 8px; }
-  .log .ok { color: #4ade80; }
-  .log .err { color: #f87171; }
+  .log .ts { color: #475569; margin-right: 10px; }
+  .log .badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-right: 8px;
+  }
+  .log .badge.bid  { background: rgba(59,130,246,0.2); color: #93c5fd; }
+  .log .badge.room { background: rgba(244,63,94,0.2);  color: #fda4af; }
+  .log .badge.sell { background: rgba(34,197,94,0.2);  color: #86efac; }
+  .log .badge.next { background: rgba(168,85,247,0.2); color: #d8b4fe; }
+  .log .badge.fw   { background: rgba(245,158,11,0.2); color: #fcd34d; }
+  .log .badge.info { background: rgba(100,116,139,0.2);color: #cbd5e1; }
+  .log .badge.sys  { background: rgba(56,189,248,0.2); color: #7dd3fc; }
 </style>
 </head>
 <body>
 
-<h1>🏷 Fake Saleroom — Auto Clerk Test Harness</h1>
-<p class="sub">
-  This page mimics the GAP (Saleroom) DOM with the four elements the console script watches.
-  Drive the values manually, paste the console script (F12 → Console), and the relay will receive events
-  just like it does from the real Saleroom page.
-</p>
+<div class="topbar">
+  <h1>🏷 Fake Saleroom</h1>
+  <span class="sub">Driven by Bidpath WS — mirrors the actions auto-clerk would take on Saleroom</span>
+
+  <label style="font-size:12px;color:#94a3b8">Bidpath ID:</label>
+  <input type="text" id="auctionId" placeholder="e.g. 1392" />
+  <button id="connectBtn" onclick="connect()">Connect</button>
+  <span class="conn idle" id="connState"><span class="dot"></span><span id="connLabel">Not connected</span></span>
+</div>
 
 <div class="wrap">
 
-  <!-- ── GAP DOM mirror — the bit the console script's MutationObserver watches ── -->
-  <div class="card gap-mirror">
-    <h2>Saleroom (GAP) State — watched by console script</h2>
-    <div class="gap-grid">
-      <div class="gap-cell">
-        <div class="label">Lot Number</div>
-        <div class="value" id="lot-number">—</div>
-        <div class="id">id="lot-number"</div>
-      </div>
-      <div class="gap-cell">
-        <div class="label">Auction Message</div>
-        <div class="value" id="auction-message-content">Welcome</div>
-        <div class="id">id="auction-message-content"</div>
-      </div>
-      <div class="gap-cell">
-        <div class="label">Hammer Price (current bid)</div>
-        <div class="value" id="hammer-price">£0</div>
-        <div class="id">id="hammer-price"</div>
-      </div>
-      <div class="gap-cell">
-        <div class="label">Asking Price (next ask)</div>
-        <div class="value" id="asking-price">£0</div>
-        <div class="id">id="asking-price"</div>
-      </div>
+  <!-- ── Lot state card ── -->
+  <div class="lot-card">
+    <div>
+      <div class="label">Lot</div>
+      <div class="big" id="lotNumber">—</div>
+      <div class="msg" id="message">Awaiting connection…</div>
+    </div>
+    <div>
+      <div class="label">Current Bid (hammer)</div>
+      <div class="price bid" id="hammer">£—</div>
+    </div>
+    <div>
+      <div class="label">Asking</div>
+      <div class="price asking" id="asking">£—</div>
     </div>
   </div>
 
-  <!-- ── Lot + Price controls ── -->
-  <div class="card">
-    <h2>Lot &amp; Price Controls</h2>
-
-    <div class="row two">
-      <div>
-        <label for="lot-input">Lot number</label>
-        <input type="text" id="lot-input" placeholder="e.g. 615" />
-      </div>
-      <button onclick="setLot()">Set lot</button>
-    </div>
-
-    <div class="row two">
-      <div>
-        <label for="hammer-input">Hammer (current bid) £</label>
-        <input type="number" id="hammer-input" min="0" step="1" placeholder="e.g. 80" />
-      </div>
-      <button onclick="setHammer()">Set hammer</button>
-    </div>
-
-    <div class="row two">
-      <div>
-        <label for="asking-input">Asking (next ask) £</label>
-        <input type="number" id="asking-input" min="0" step="1" placeholder="e.g. 90" />
-      </div>
-      <button onclick="setAsking()">Set asking</button>
-    </div>
-
-    <div class="row">
-      <button class="primary" onclick="advance()">
-        + Advance one increment &nbsp;(hammer → asking, asking → next)
-      </button>
-      <button class="slate" onclick="resetLot()">Reset to £0 (new lot)</button>
-    </div>
-
-    <div class="hint">
-      <strong>Increments</strong> follow the standard rules: £0–50 ×£5, £50–200 ×£10, £200–700 ×£20,
-      £700–1000 ×£50, £1k–3k ×£100, £3k–7k ×£200, £7k–10k ×£500, £10k+ ×£1k.
+  <!-- ── Button strip (auto-pressed) ── -->
+  <div class="btn-strip">
+    <h3><span class="pulse-dot"></span> Saleroom Buttons — auto-pressed by Bidpath events</h3>
+    <div class="btn-row">
+      <div class="btn bid"  id="btnBid">BID<div class="amount" id="btnBidAmount"></div></div>
+      <div class="btn room" id="btnRoom">ROOM</div>
+      <div class="btn sell" id="btnSell">SELL<div class="amount" id="btnSellAmount"></div></div>
+      <div class="btn next" id="btnNext">NEXT</div>
+      <div class="btn fw"   id="btnFW">FAIR WARNING</div>
+      <div class="btn undo" id="btnUndo">UNDO</div>
     </div>
   </div>
 
-  <!-- ── Message presets ── -->
-  <div class="card">
-    <h2>Saleroom Messages (auction-message-content)</h2>
-    <p style="font-size:12px;color:#94a3b8;margin-bottom:10px">
-      These mirror the messages the real GAP page emits. The console script classifies them and the relay
-      tells the shadow what to press on Bidpath.
-    </p>
-    <div class="btn-grid">
-      <button class="primary" onclick="setMsg('Internet Bid')">Internet Bid</button>
-      <button class="rose" onclick="setMsg('Room Bid')">Room Bid</button>
-      <button class="primary" onclick="setMsg('Lot offered')">Lot offered (new lot)</button>
-      <button class="green" onclick="setMsg('Sold')">Sold</button>
-      <button class="amber" onclick="setMsg('Fair Warning')">Fair Warning</button>
-      <button class="slate" onclick="setMsg('Lot passed')">Lot passed</button>
-      <button class="slate" onclick="setMsg('Auction paused')">Auction paused</button>
-      <button class="slate" onclick="setMsg('Auction resumed')">Auction resumed</button>
-    </div>
-
-    <div class="hint" style="margin-top:14px">
-      <strong>Setup:</strong> Open <code>/tools/auto-clerk-saleroom</code> on the hub, click
-      <strong>Copy script</strong>, then on THIS page press <strong>F12 → Console</strong>, paste, Enter.
-      Any change above will be POSTed to <code>/api/gap-relay</code>.
-    </div>
-  </div>
-
-  <!-- ── Live log ── -->
+  <!-- ── Live activity log ── -->
   <div class="log" id="log">
-    <div><span class="ts">—</span>Waiting for activity. Paste the console script then click a button or change a price.</div>
+    <div><span class="ts">—</span><span class="badge sys">SYS</span>Enter a Bidpath auction ID and click Connect to start.</div>
   </div>
-
 </div>
 
 <script>
-  // ── Bidding increment rules (match RULES.md) ────────────────────────────────
-  function nextIncrement(n) {
-    if (n < 50)     return 5;
-    if (n < 200)    return 10;
-    if (n < 700)    return 20;
-    if (n < 1000)   return 50;
-    if (n < 3000)   return 100;
-    if (n < 7000)   return 200;
-    if (n < 10000)  return 500;
-    return 1000;
-  }
-
-  // ── Element refs ───────────────────────────────────────────────────────────
-  const elHammer  = document.getElementById('hammer-price');
-  const elAsking  = document.getElementById('asking-price');
-  const elLot     = document.getElementById('lot-number');
-  const elMsg     = document.getElementById('auction-message-content');
+  // ── State ─────────────────────────────────────────────────────────────
+  const elLot     = document.getElementById('lotNumber');
+  const elHammer  = document.getElementById('hammer');
+  const elAsking  = document.getElementById('asking');
+  const elMsg     = document.getElementById('message');
+  const elConn    = document.getElementById('connState');
+  const elConnLbl = document.getElementById('connLabel');
+  const elConnBtn = document.getElementById('connectBtn');
   const logEl     = document.getElementById('log');
+
+  const PLATFORM_LABEL = { BSCB: 'Room bid (Vectis)', Online: 'Vectis online', Saleroom: 'Saleroom online' };
+
+  let ws = null;
+  let currentLot = '—';
+  let currentBid = 0;
+  let soldDebounce = new Set(); // lotNumber:hammer keys we've fired SELL for
+  let fwActive = false;
+  let reconnectTimer = null;
 
   function fmt(n) { return '£' + Number(n || 0).toLocaleString('en-GB'); }
   function ts()   { return new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit' }); }
-  function getNum(el) { return parseFloat((el.textContent || '').replace(/[^0-9.]/g, '')) || 0; }
 
-  function log(line, cls = '') {
+  function setConn(state, label) {
+    elConn.className = 'conn ' + state;
+    elConnLbl.textContent = label;
+  }
+
+  function log(badge, text) {
     const div = document.createElement('div');
-    div.innerHTML = '<span class="ts">' + ts() + '</span><span class="' + cls + '">' + line + '</span>';
+    div.innerHTML = '<span class="ts">' + ts() + '</span><span class="badge ' + badge + '">' + badge.toUpperCase() + '</span>' + text;
     logEl.prepend(div);
-    while (logEl.children.length > 80) logEl.removeChild(logEl.lastChild);
+    while (logEl.children.length > 100) logEl.removeChild(logEl.lastChild);
   }
 
-  // ── Setters (only setting textContent — the MutationObserver in the script will fire) ──
-  function setLot() {
-    const v = (document.getElementById('lot-input').value || '').trim();
-    if (!v) return;
-    elLot.textContent = v;
-    log('lot-number → ' + v);
-  }
-
-  function setHammer() {
-    const v = parseFloat(document.getElementById('hammer-input').value);
-    if (isNaN(v) || v < 0) return;
-    elHammer.textContent = fmt(v);
-    log('hammer-price → ' + fmt(v));
-  }
-
-  function setAsking() {
-    const v = parseFloat(document.getElementById('asking-input').value);
-    if (isNaN(v) || v < 0) return;
-    elAsking.textContent = fmt(v);
-    log('asking-price → ' + fmt(v));
-  }
-
-  function advance() {
-    const current = getNum(elHammer);
-    const askingNow = getNum(elAsking) || current + nextIncrement(current);
-    // New hammer = previous asking; new asking = next increment above that
-    const newHammer = askingNow;
-    const newAsking = newHammer + nextIncrement(newHammer);
-    elHammer.textContent = fmt(newHammer);
-    elAsking.textContent = fmt(newAsking);
-    log('+ advance: hammer ' + fmt(newHammer) + ', asking ' + fmt(newAsking));
-  }
-
-  function resetLot() {
-    elHammer.textContent = '£0';
-    elAsking.textContent = '£0';
-    log('Lot reset (£0 / £0)');
-  }
-
-  function setMsg(text) {
+  function setMessage(text, cls) {
     elMsg.textContent = text;
-    log('auction-message-content → "' + text + '"');
+    elMsg.className = 'msg' + (cls ? ' ' + cls : '');
   }
 
-  log('Fake Saleroom ready. Open DevTools → Console and paste the script from /tools/auto-clerk-saleroom.', 'ok');
+  // ── Button flash ──────────────────────────────────────────────────────
+  let flashTimers = {};
+  function flashBtn(btn, amount) {
+    const el = document.getElementById('btn' + btn);
+    if (!el) return;
+    el.classList.add('active');
+    if (amount != null) {
+      const amtEl = document.getElementById('btn' + btn + 'Amount');
+      if (amtEl) amtEl.textContent = fmt(amount);
+    }
+    if (flashTimers[btn]) clearTimeout(flashTimers[btn]);
+    flashTimers[btn] = setTimeout(() => {
+      el.classList.remove('active');
+      const amtEl = document.getElementById('btn' + btn + 'Amount');
+      if (amtEl) amtEl.textContent = '';
+    }, 1800);
+  }
+
+  // ── Event handler — mirrors auto-clerk-live logic ─────────────────────
+  function handleMsg(raw) {
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch { return; }
+    const cmd = parsed.command || parsed.type || '';
+    const d   = parsed.content || parsed;
+
+    if (cmd === 'activeLotChange') {
+      const lotNo = d.lot_number ?? d.lotNumber ?? '?';
+      currentLot = String(lotNo);
+      currentBid = 0;
+      elLot.textContent = currentLot;
+      elHammer.textContent = '£0';
+      elAsking.textContent = fmt(d.asking ?? d.asking_price ?? 0);
+      fwActive = false;
+      setMessage('Lot ' + lotNo + ' offered');
+      log('info', 'Lot advance → Lot ' + lotNo);
+      return;
+    }
+
+    if (cmd === 'liveBidEvent') {
+      const amount   = Number(d.amount ?? 0);
+      const asking   = Number(d.asking ?? 0);
+      const platform = d.platform ?? '';
+      const platformLabel = PLATFORM_LABEL[platform] ?? platform;
+
+      // Update visible state
+      if (amount > 0) { currentBid = amount; elHammer.textContent = fmt(amount); }
+      if (asking > 0) elAsking.textContent = fmt(asking);
+
+      if (platform === 'BSCB') {
+        // Room bid at Vectis → Saleroom needs catching up: press BID
+        flashBtn('Bid', amount);
+        setMessage('Room Bid (Vectis)');
+        log('bid', 'Room bid ' + fmt(amount) + ' at Vectis → press BID on Saleroom to advance');
+      } else {
+        // Online bid — automatic on Saleroom, no button press
+        setMessage(platformLabel + ' bid ' + fmt(amount));
+        log('info', platformLabel + ' bid ' + fmt(amount) + ' — automatic on Saleroom');
+      }
+      return;
+    }
+
+    if (cmd === 'liveCommissionBidEvent') {
+      const amount = Number(d.amount ?? 0);
+      if (amount > 0) { currentBid = amount; elHammer.textContent = fmt(amount); }
+      flashBtn('Bid', amount);
+      setMessage('Commission bid ' + fmt(amount));
+      log('bid', 'Commission bid ' + fmt(amount) + ' → press BID on Saleroom');
+      return;
+    }
+
+    if (cmd === 'setLiveAskingPrice') {
+      const asking = Number(d.asking_bid ?? 0);
+      if (asking > 0) elAsking.textContent = fmt(asking);
+      return;
+    }
+
+    if (cmd === 'getFairWarningStatus') {
+      const fw = Boolean(d.fair_warning);
+      if (fw && !fwActive) {
+        fwActive = true;
+        flashBtn('FW');
+        setMessage('FAIR WARNING', 'fw');
+        log('fw', 'Fair Warning called → press FAIR WARNING on Saleroom');
+      } else if (!fw && fwActive) {
+        fwActive = false;
+        log('info', 'Fair Warning cancelled');
+      }
+      return;
+    }
+
+    if (cmd === 'lotInformationUpdate') {
+      const keyName  = d.key_name ?? '';
+      const keyValue = d.key_value;
+      if (keyName === 'Sold' && (keyValue === true || keyValue === 'true' || keyValue === 1)) {
+        const hammer = Number(d.hammer_price ?? currentBid);
+        const key = currentLot + ':' + hammer;
+        if (soldDebounce.has(key)) return; // fires twice per lot
+        soldDebounce.add(key);
+
+        elHammer.textContent = fmt(hammer);
+        setMessage('SOLD ' + fmt(hammer), 'sold');
+        flashBtn('Sell', hammer);
+        log('sell', 'Lot ' + currentLot + ' sold ' + fmt(hammer) + ' → press SELL then NEXT on Saleroom');
+        // 2.2s later, NEXT
+        setTimeout(() => {
+          flashBtn('Next');
+          log('next', 'Press NEXT on Saleroom');
+        }, 2200);
+      }
+      return;
+    }
+  }
+
+  // ── Connection ────────────────────────────────────────────────────────
+  function connect() {
+    const id = (document.getElementById('auctionId').value || '').trim();
+    if (!id) { alert('Enter a Bidpath auction ID first.'); return; }
+
+    disconnect();
+    soldDebounce.clear();
+
+    const url = 'wss://www.vectis.co.uk/wss/' + id;
+    setConn('idle', 'Connecting…');
+    log('sys', 'Connecting to ' + url);
+
+    try { ws = new WebSocket(url); }
+    catch (e) { setConn('err', 'Failed to open WS'); log('sys', 'WS error: ' + e.message); return; }
+
+    ws.onopen = () => {
+      setConn('live', 'Live — auction ' + id);
+      elConnBtn.textContent = 'Disconnect';
+      elConnBtn.onclick = disconnect;
+      elConnBtn.classList.add('disconnect');
+      log('sys', 'Connected to Bidpath — observing');
+    };
+    ws.onmessage = (e) => handleMsg(e.data);
+    ws.onerror   = ()  => { setConn('err', 'Error'); log('sys', 'WebSocket error'); };
+    ws.onclose   = (e) => {
+      setConn('idle', 'Disconnected');
+      elConnBtn.textContent = 'Connect';
+      elConnBtn.onclick = connect;
+      elConnBtn.classList.remove('disconnect');
+      if (!e.wasClean) {
+        log('sys', 'Connection dropped — auto-reconnect in 5s');
+        reconnectTimer = setTimeout(connect, 5000);
+      } else {
+        log('sys', 'Connection closed');
+      }
+    };
+  }
+
+  function disconnect() {
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    if (ws) {
+      ws.onclose = null;
+      try { ws.close(); } catch {}
+      ws = null;
+    }
+    setConn('idle', 'Not connected');
+    elConnBtn.textContent = 'Connect';
+    elConnBtn.onclick = connect;
+    elConnBtn.classList.remove('disconnect');
+  }
+
+  // Allow Enter to connect
+  document.getElementById('auctionId').addEventListener('keydown', e => {
+    if (e.key === 'Enter') connect();
+  });
 </script>
 
 </body>

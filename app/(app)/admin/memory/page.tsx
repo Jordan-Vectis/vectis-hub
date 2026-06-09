@@ -529,7 +529,7 @@ Pages:
 - /tools/auto-clerk-live — Bidpath → Saleroom shadow (reads Bidpath WebSocket directly)
 - /tools/auto-clerk-saleroom — Saleroom → Bidpath shadow (reads GAP via relay)
 - /tools/auto-clerk-combined — both side by side in iframes
-- /auto-clerk-fake-saleroom.html — static test harness mimicking the GAP DOM (lot-number, auction-message-content, hammer-price, asking-price). Clerk controls for set-lot/set-hammer/set-asking, + advance increment, and message presets (Internet Bid, Room Bid, Lot offered, Sold, Fair Warning, Lot passed, Auction paused/resumed). Paste the console script from /tools/auto-clerk-saleroom on this page to dry-run the relay → shadow pipeline without a real auction.
+- /auto-clerk-fake-saleroom.html — Bidpath-driven test screen. Enter a Bidpath auction ID, connects directly to wss://www.vectis.co.uk/wss/{id} and shows a Saleroom-style clerking screen (lot, current bid, asking, message) that mirrors the auction live. The six Saleroom buttons (BID, ROOM, SELL, NEXT, FAIR WARNING, UNDO) animate when the auto-clerk logic would press them: room/commission bid → BID; lot sold → SELL then NEXT (2.2s apart); FW → FAIR WARNING. Online bids update state but don't press anything (automatic on Saleroom). Use while clerking a real Vectis test auction.
 
 Data sources:
 - Bidpath: direct WebSocket wss://www.vectis.co.uk/wss/{auctionId}. Message data is in parsed.content (NOT parsed.data — this was a real bug). liveBidEvent has content.amount/asking/platform (BSCB=room, Online, Saleroom)/lot_id.
