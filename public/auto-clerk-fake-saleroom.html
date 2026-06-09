@@ -2,188 +2,372 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Fake Saleroom — driven by Bidpath</title>
+<title>Fake Saleroom — Auto Clerk test screen</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #0f172a;
-    color: #e2e8f0;
+    background: #e6e6e6;
+    color: #1f2937;
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
+    font-size: 13px;
   }
 
-  /* ── Top connection bar ─────────────────────────────────────────────── */
-  .topbar {
+  /* ── Connection bar (dark) ──────────────────────────────────────────── */
+  .conn-bar {
     background: #0c1426;
-    border-bottom: 1px solid #1e3a5f;
-    padding: 12px 24px;
+    color: #cbd5e1;
+    padding: 8px 16px;
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 12px;
     flex-wrap: wrap;
+    border-bottom: 2px solid #0a1020;
+    font-size: 12px;
   }
-  .topbar h1 {
-    font-size: 15px;
-    font-weight: 700;
-    color: #f1f5f9;
-    margin-right: 8px;
-  }
-  .topbar .sub { font-size: 12px; color: #64748b; margin-right: auto; }
-  .topbar input {
+  .conn-bar label { color: #94a3b8; font-weight: 600; }
+  .conn-bar input {
     background: #1e293b;
     border: 1px solid #334155;
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 13px;
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-size: 12px;
     color: #f1f5f9;
-    width: 130px;
     font-family: inherit;
   }
-  .topbar input:focus { outline: none; border-color: #60a5fa; }
-  .topbar button {
+  .conn-bar input:focus { outline: none; border-color: #60a5fa; }
+  .conn-bar button {
     background: #2563eb;
     border: 1px solid #3b82f6;
     color: white;
-    border-radius: 6px;
-    padding: 6px 14px;
-    font-size: 13px;
+    padding: 4px 12px;
+    font-size: 12px;
     font-weight: 600;
+    border-radius: 5px;
     cursor: pointer;
     font-family: inherit;
   }
-  .topbar button:hover { background: #1d4ed8; }
-  .topbar button.disconnect { background: #475569; border-color: #64748b; }
-
-  .conn {
+  .conn-bar button.disconnect { background: #475569; border-color: #64748b; }
+  .conn-bar .preset {
+    background: transparent;
+    border: 1px solid #334155;
+    color: #7dd3fc;
+    padding: 3px 9px;
+    font-size: 11px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: ui-monospace, monospace;
+  }
+  .conn-bar .conn {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-size: 12px;
     font-weight: 600;
-    margin-left: 8px;
+    margin-left: auto;
   }
-  .conn .dot { width: 8px; height: 8px; border-radius: 50%; }
-  .conn.idle  { color: #64748b; } .conn.idle  .dot { background: #475569; }
-  .conn.live  { color: #4ade80; } .conn.live  .dot { background: #22c55e; animation: pulse 1.4s infinite; }
-  .conn.err   { color: #f87171; } .conn.err   .dot { background: #ef4444; }
+  .conn-bar .conn .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .conn-bar .conn.idle  { color: #64748b; } .conn-bar .conn.idle  .dot { background: #475569; }
+  .conn-bar .conn.live  { color: #4ade80; } .conn-bar .conn.live  .dot { background: #22c55e; animation: pulse 1.4s infinite; }
+  .conn-bar .conn.err   { color: #f87171; } .conn-bar .conn.err   .dot { background: #ef4444; }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
 
-  /* ── Body ───────────────────────────────────────────────────────────── */
-  .wrap {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 24px;
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 18px;
+  /* ── AUTO CLERK status bar (navy) ───────────────────────────────────── */
+  .ac-bar {
+    background: #1c3a5c;
+    color: white;
+    padding: 6px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    border-bottom: 2px solid #0d2035;
+  }
+  .ac-bar .ac-label {
+    color: #4ade80;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+  }
+  .ac-bar .ac-status {
+    flex: 1;
+    color: #cbd5e1;
+  }
+  .ac-bar .ac-pill {
+    background: #276749;
+    color: #68d391;
+    padding: 2px 10px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .ac-bar .ac-pill.idle {
+    background: #2d3748;
+    color: #a0aec0;
   }
 
-  /* Lot state card */
-  .lot-card {
-    background: linear-gradient(180deg, #1e293b 0%, #1a2436 100%);
-    border: 1px solid #475569;
-    border-radius: 14px;
-    padding: 24px;
+  /* ── Main layout (Saleroom-style) ───────────────────────────────────── */
+  .main {
+    padding: 12px;
     display: grid;
-    grid-template-columns: 1.2fr 1fr 1fr;
-    gap: 22px;
-    align-items: center;
+    grid-template-columns: 360px 280px 1fr;
+    gap: 12px;
+    max-width: 1280px;
+    margin: 0 auto;
   }
-  .lot-card .label {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: #64748b;
+
+  .card {
+    background: white;
+    border: 1px solid #b3b3b3;
+    border-radius: 5px;
+    box-shadow: rgba(0,0,0,0.06) 2px 2px 6px -2px;
+  }
+
+  /* ── Left column: Lot card + control panel ──────────────────────────── */
+  .lot-card { padding: 10px; }
+  .lot-card .lot-row {
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .lot-img {
+    width: 64px;
+    height: 64px;
+    background: #f5f5f5;
+    border: 1px solid #b3b3b3;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+  }
+  .lot-info .lot-no { font-weight: 700; font-size: 13px; }
+  .lot-info .lot-est { font-size: 12px; color: #6b7280; margin-top: 2px; }
+  .lot-info .lot-msg { font-size: 11px; color: #ef4444; margin-top: 4px; min-height: 1.2em; }
+
+  .action-row {
+    display: flex;
+    border-top: 1px solid #b3b3b3;
+    margin-top: 8px;
+  }
+  .action-row .btn {
+    flex: 1;
+    border: none;
+    border-left: 1px solid #b3b3b3;
+    background: linear-gradient(white, #e6e6e6);
+    padding: 6px 4px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    color: #1f2937;
+  }
+  .action-row .btn:first-child { border-left: none; }
+  .action-row .btn:hover { filter: brightness(0.96); }
+
+  .control-card { padding: 10px; }
+  .control-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px;
+    align-items: start;
+  }
+  .ctrl-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .btn-saleroom {
+    background: linear-gradient(white, #e6e6e6);
+    border: 1px solid #b3b3b3;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    color: #1f2937;
+    width: 90px;
+    text-align: center;
+    box-shadow: rgba(0,0,0,0.15) 1px 1px 2px -1px;
+  }
+  .btn-saleroom:hover { filter: brightness(0.96); }
+
+  /* AUTO-PRESSED state — flash on the real button */
+  .btn-press {
+    background: linear-gradient(#fde68a, #fbbf24) !important;
+    border-color: #d97706 !important;
+    color: #422006 !important;
+    box-shadow: 0 0 0 3px rgba(251,191,36,0.45), 0 4px 12px -2px rgba(217,119,6,0.6) !important;
+    transform: scale(1.04);
+    transition: all 0.1s;
+  }
+  /* Distinct colour per action type */
+  .btn-press.bid    { background: linear-gradient(#bfdbfe, #60a5fa) !important; border-color: #2563eb !important; box-shadow: 0 0 0 3px rgba(96,165,250,0.45), 0 4px 12px -2px rgba(37,99,235,0.6) !important; }
+  .btn-press.sell   { background: linear-gradient(#bbf7d0, #4ade80) !important; border-color: #16a34a !important; box-shadow: 0 0 0 3px rgba(74,222,128,0.45), 0 4px 12px -2px rgba(22,163,74,0.6) !important; }
+  .btn-press.next   { background: linear-gradient(#e9d5ff, #c084fc) !important; border-color: #9333ea !important; box-shadow: 0 0 0 3px rgba(192,132,252,0.45), 0 4px 12px -2px rgba(147,51,234,0.6) !important; }
+  .btn-press.fw     { background: linear-gradient(#fde68a, #fbbf24) !important; border-color: #d97706 !important; box-shadow: 0 0 0 3px rgba(251,191,36,0.45), 0 4px 12px -2px rgba(217,119,6,0.6) !important; }
+  .btn-press.room   { background: linear-gradient(#fecdd3, #fb7185) !important; border-color: #e11d48 !important; box-shadow: 0 0 0 3px rgba(251,113,133,0.45), 0 4px 12px -2px rgba(225,29,72,0.6) !important; }
+  .btn-press.undo   { background: linear-gradient(#fde68a, #f59e0b) !important; border-color: #d97706 !important; box-shadow: 0 0 0 3px rgba(245,158,11,0.45), 0 4px 12px -2px rgba(217,119,6,0.6) !important; }
+
+  .ctrl-fields {
+    display: grid;
+    grid-template-columns: 14px 1fr 1fr 30px 30px;
+    gap: 4px;
+    align-items: center;
+    font-size: 11px;
     margin-bottom: 6px;
   }
-  .lot-card .big {
-    font-size: 56px;
-    font-weight: 800;
-    color: #f1f5f9;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
+  .ctrl-fields .lbl { font-weight: 700; }
+  .ctrl-fields input {
+    border: 1px solid #b3b3b3;
+    border-radius: 3px;
+    padding: 3px 5px;
+    font-size: 12px;
+    font-family: inherit;
+    text-align: right;
+    background: white;
+    color: #1f2937;
   }
-  .lot-card .price {
-    font-size: 36px;
+  .ctrl-fields .pm {
+    background: linear-gradient(white, #e6e6e6);
+    border: 1px solid #b3b3b3;
+    border-radius: 3px;
+    padding: 2px 6px;
+    cursor: pointer;
+    font-size: 12px;
     font-weight: 700;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
   }
-  .lot-card .price.bid    { color: #93c5fd; }
-  .lot-card .price.asking { color: #cbd5e1; }
-  .lot-card .msg {
-    font-size: 13px;
-    color: #cbd5e1;
-    margin-top: 10px;
-    line-height: 1.4;
-    min-height: 1.4em;
-  }
-  .lot-card .msg.fw   { color: #fbbf24; font-weight: 700; }
-  .lot-card .msg.sold { color: #4ade80; font-weight: 700; }
 
-  /* Button strip */
-  .btn-strip {
-    background: #1e293b;
-    border: 1px solid #334155;
-    border-radius: 14px;
-    padding: 18px;
+  .inc-ladder {
+    border: 1px solid #b3b3b3;
+    border-radius: 4px;
+    background: white;
+    max-height: 140px;
+    overflow-y: auto;
+    margin-top: 4px;
   }
-  .btn-strip h3 {
+  .inc-ladder .row {
+    padding: 2px 8px;
     font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 1.2px;
-    color: #94a3b8;
-    margin-bottom: 14px;
+    border-bottom: 1px solid #dbdbdb;
+  }
+  .inc-ladder .row:last-child { border-bottom: none; }
+  .inc-ladder .row.cur { background: #5dadec; color: white; font-weight: 700; }
+
+  .pause-grid {
+    margin-top: 6px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+  .bidding-msg {
+    margin-top: 6px;
+    text-align: center;
+    font-weight: 700;
+    color: #ef4444;
+    font-size: 11px;
+    padding: 6px;
+    border: 1px solid #b3b3b3;
+    border-radius: 3px;
+    background: white;
+  }
+
+  /* ── Middle column: Current bidder info ─────────────────────────────── */
+  .bidder-card { padding: 0; }
+  .bidder-head {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    padding: 6px 10px;
+    border-bottom: 1px solid #b3b3b3;
+    font-weight: 700;
+    font-size: 11px;
+    background: linear-gradient(white, #f3f4f6);
+  }
+  .bidder-body {
+    padding: 8px 10px;
+    font-size: 12px;
+    color: #6b7280;
+    min-height: 200px;
+  }
+
+  /* ── Right column: lots list + saleroom logo ────────────────────────── */
+  .right-card {
+    background: white;
+    border: 1px solid #b3b3b3;
+    border-radius: 5px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .right-head {
+    background: white;
+    border-bottom: 1px solid #b3b3b3;
+    padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 12px;
+    color: #b91c1c;
     font-weight: 600;
+  }
+  .right-head .logo {
+    background: #1f2937;
+    color: white;
+    font-style: italic;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 3px;
+    margin-left: auto;
+    font-size: 13px;
+  }
+  .right-find {
+    padding: 6px 10px;
+    border-bottom: 1px solid #dbdbdb;
     display: flex;
     align-items: center;
     gap: 8px;
-  }
-  .btn-strip h3 .pulse-dot { width: 6px; height: 6px; border-radius: 50%; background: #38bdf8; }
-
-  .btn-row {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 10px;
-  }
-  .btn {
-    background: #1e293b;
-    border: 1px solid #334155;
-    border-radius: 10px;
-    padding: 14px 8px;
-    font-weight: 700;
-    font-size: 13px;
-    color: #64748b;
-    text-align: center;
-    transition: all 0.15s;
-    user-select: none;
-  }
-  .btn .amount {
     font-size: 11px;
-    color: #94a3b8;
-    margin-top: 4px;
-    font-weight: 600;
   }
-  .btn.active {
-    transform: scale(1.06);
-    box-shadow: 0 0 0 4px rgba(255,255,255,0.06), 0 10px 30px -6px rgba(0,0,0,0.5);
-    color: white;
+  .right-find input {
+    border: 1px solid #b3b3b3;
+    border-radius: 3px;
+    padding: 3px 6px;
+    font-size: 12px;
+    font-family: inherit;
+    flex: 1;
   }
-  .btn.bid.active  { background: #2563eb; border-color: #60a5fa; box-shadow: 0 0 0 4px rgba(59,130,246,0.3); }
-  .btn.room.active { background: #e11d48; border-color: #fb7185; box-shadow: 0 0 0 4px rgba(244,63,94,0.3); }
-  .btn.sell.active { background: #16a34a; border-color: #4ade80; box-shadow: 0 0 0 4px rgba(34,197,94,0.3); }
-  .btn.next.active { background: #9333ea; border-color: #c084fc; box-shadow: 0 0 0 4px rgba(168,85,247,0.3); }
-  .btn.fw.active   { background: #d97706; border-color: #fbbf24; box-shadow: 0 0 0 4px rgba(245,158,11,0.3); }
-  .btn.undo.active { background: #b45309; border-color: #f59e0b; }
+  .lots-list {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 220px;
+  }
+  .lot-row {
+    display: grid;
+    grid-template-columns: 50px 8px 1fr;
+    padding: 6px 10px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 12px;
+    gap: 6px;
+    align-items: start;
+  }
+  .lot-row.cur { background: #dbeafe; }
+  .lot-row .ln { font-weight: 700; color: #1f2937; }
+  .lot-row .dot { color: #ef4444; font-weight: 700; }
+  .lot-row .desc { color: #b91c1c; }
 
-  /* Activity log */
+  /* ── Activity log ───────────────────────────────────────────────────── */
+  .log-wrap {
+    max-width: 1280px;
+    margin: 12px auto;
+    padding: 0 12px;
+  }
   .log {
     background: #0c1220;
     border: 1px solid #1e293b;
-    border-radius: 14px;
-    padding: 14px 18px;
-    height: 240px;
+    border-radius: 6px;
+    padding: 10px 14px;
+    height: 200px;
     overflow-y: auto;
     font-family: ui-monospace, monospace;
     font-size: 12px;
@@ -191,15 +375,7 @@
     line-height: 1.6;
   }
   .log .ts { color: #475569; margin-right: 10px; }
-  .log .badge {
-    display: inline-block;
-    padding: 1px 6px;
-    border-radius: 4px;
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    margin-right: 8px;
-  }
+  .log .badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; margin-right: 8px; text-transform: uppercase; }
   .log .badge.bid  { background: rgba(59,130,246,0.2); color: #93c5fd; }
   .log .badge.room { background: rgba(244,63,94,0.2);  color: #fda4af; }
   .log .badge.sell { background: rgba(34,197,94,0.2);  color: #86efac; }
@@ -214,81 +390,173 @@
 </head>
 <body>
 
-<div class="topbar">
-  <h1>🏷 Fake Saleroom</h1>
-  <span class="sub">Driven by Bidpath WS — mirrors the actions auto-clerk would take on Saleroom</span>
-
-  <label style="font-size:12px;color:#94a3b8">WS URL:</label>
-  <input type="text" id="wsBase" style="width:280px;font-family:ui-monospace,monospace;font-size:12px" />
-
-  <label style="font-size:12px;color:#94a3b8;margin-left:6px">Auction ID:</label>
-  <input type="text" id="auctionId" style="width:100px" placeholder="e.g. 1137" />
-
+<!-- ── Connection bar ─────────────────────────────────────────────────── -->
+<div class="conn-bar">
+  <label>WS URL:</label>
+  <input type="text" id="wsBase" style="width:280px;font-family:ui-monospace,monospace" />
+  <label>Auction ID:</label>
+  <input type="text" id="auctionId" style="width:90px" placeholder="e.g. 1137" />
   <button id="connectBtn" onclick="connect()">Connect</button>
-  <span class="conn idle" id="connState"><span class="dot"></span><span id="connLabel">Not connected</span></span>
-
-  <label style="font-size:12px;color:#94a3b8;margin-left:10px;cursor:pointer">
+  <button class="preset" data-url="wss://www.vectis.co.uk/wss/">Production</button>
+  <button class="preset" data-url="wss://staging.vectis.auctionmarketer.co.uk/wss/">Staging</button>
+  <label style="cursor:pointer">
     <input type="checkbox" id="showRaw" style="vertical-align:middle"> Show raw
   </label>
+  <span class="conn idle" id="connState"><span class="dot"></span><span id="connLabel">Not connected</span></span>
 </div>
 
-<div style="background:#0c1426;border-bottom:1px solid #1e3a5f;padding:6px 24px;font-size:11px;color:#64748b;display:flex;gap:18px;flex-wrap:wrap;align-items:center">
-  <span><strong style="color:#94a3b8">Quick presets:</strong></span>
-  <button class="preset" data-url="wss://www.vectis.co.uk/wss/" style="background:transparent;border:1px solid #334155;color:#7dd3fc;padding:3px 9px;border-radius:4px;font-size:11px;cursor:pointer;font-family:ui-monospace,monospace">Production</button>
-  <button class="preset" data-url="wss://staging.vectis.auctionmarketer.co.uk/wss/" style="background:transparent;border:1px solid #334155;color:#7dd3fc;padding:3px 9px;border-radius:4px;font-size:11px;cursor:pointer;font-family:ui-monospace,monospace">Staging</button>
-  <span style="color:#475569">— if the preset fails, open DevTools → Network → WS on the bidstream page and copy the real <code>wss://…/wss/</code> URL into the WS URL field above.</span>
+<!-- ── AUTO CLERK status bar (mimics the real one) ────────────────────── -->
+<div class="ac-bar">
+  <span class="ac-label">AUTO CLERK</span>
+  <span class="ac-status" id="acStatus">Waiting for connection…</span>
+  <span class="ac-pill idle" id="acPill">● Coordinator idle</span>
 </div>
 
-<div class="wrap">
+<!-- ── Saleroom-style main panel ──────────────────────────────────────── -->
+<div class="main">
 
-  <!-- ── Lot state card ── -->
-  <div class="lot-card">
-    <div>
-      <div class="label">Lot</div>
-      <div class="big" id="lotNumber">—</div>
-      <div class="msg" id="message">Awaiting connection…</div>
+  <!-- ── LEFT COLUMN: Lot card + Saleroom control panel ── -->
+  <div>
+    <div class="card lot-card">
+      <div class="lot-row">
+        <div class="lot-img">📦</div>
+        <div class="lot-info">
+          <div class="lot-no">Lot: <span id="curLotNo">—</span></div>
+          <div class="lot-est">Est: <span id="curEst">—</span></div>
+          <div class="lot-msg" id="curMsg">Waiting for auction to start…</div>
+        </div>
+      </div>
+      <div class="action-row">
+        <button class="btn" id="btnSell">Sell</button>
+        <button class="btn" id="btnPass">Pass</button>
+        <button class="btn" id="btnUndoTop">Undo</button>
+        <button class="btn" id="btnOffer">Offer</button>
+        <button class="btn" id="btnNext">Next</button>
+      </div>
     </div>
-    <div>
-      <div class="label">Current Bid (hammer)</div>
-      <div class="price bid" id="hammer">£—</div>
-    </div>
-    <div>
-      <div class="label">Asking</div>
-      <div class="price asking" id="asking">£—</div>
+
+    <div class="card control-card" style="margin-top:8px">
+      <div class="control-grid">
+        <div class="ctrl-buttons">
+          <button class="btn-saleroom" id="btnFairWarn">Fair warn</button>
+          <button class="btn-saleroom" id="btnBid">Bid</button>
+          <button class="btn-saleroom" id="btnUndo">Undo</button>
+          <button class="btn-saleroom" id="btnRoom">Room</button>
+          <button class="btn-saleroom" id="btnAvCheck">AV Check</button>
+        </div>
+        <div>
+          <div class="ctrl-fields">
+            <span class="lbl">H</span>
+            <input type="text" id="inpHammer" readonly value="0" />
+            <span></span><span></span><span></span>
+          </div>
+          <div class="ctrl-fields">
+            <span class="lbl">A</span>
+            <input type="text" id="inpAsking" readonly value="0" />
+            <input type="text" readonly value="" />
+            <button class="pm">−</button>
+            <button class="pm">+</button>
+          </div>
+          <div class="inc-ladder" id="incLadder"></div>
+          <label style="font-size:11px;display:flex;align-items:center;gap:5px;margin-top:6px">
+            <input type="checkbox" disabled> Manual increments
+          </label>
+        </div>
+      </div>
+      <div class="bidding-msg" id="biddingMsg">Bidding Notification Box</div>
+      <div class="pause-grid">
+        <button class="btn-saleroom" style="width:auto">⏸ Pause</button>
+        <button class="btn-saleroom" style="width:auto">Once…</button>
+      </div>
     </div>
   </div>
 
-  <!-- ── Button strip (auto-pressed) ── -->
-  <div class="btn-strip">
-    <h3><span class="pulse-dot"></span> Saleroom Buttons — auto-pressed by Bidpath events</h3>
-    <div class="btn-row">
-      <div class="btn bid"  id="btnBid">BID<div class="amount" id="btnBidAmount"></div></div>
-      <div class="btn room" id="btnRoom">ROOM</div>
-      <div class="btn sell" id="btnSell">SELL<div class="amount" id="btnSellAmount"></div></div>
-      <div class="btn next" id="btnNext">NEXT</div>
-      <div class="btn fw"   id="btnFW">FAIR WARNING</div>
-      <div class="btn undo" id="btnUndo">UNDO</div>
+  <!-- ── MIDDLE COLUMN: Active bidder info ── -->
+  <div>
+    <div class="card bidder-card">
+      <div class="bidder-head">
+        <span>Buyer ID</span>
+        <span>Hammer</span>
+        <span>Name</span>
+      </div>
+      <div class="bidder-body" id="bidderBody">
+        <em>No active bid</em>
+      </div>
     </div>
   </div>
 
-  <!-- ── Live activity log ── -->
+  <!-- ── RIGHT COLUMN: lots list (decorative) ── -->
+  <div class="right-card">
+    <div class="right-head">
+      <span>Lots</span>
+      <span style="color:#9ca3af">Bidders</span>
+      <span style="color:#9ca3af">Increments</span>
+      <span style="color:#9ca3af">Media</span>
+      <span style="color:#9ca3af">Support</span>
+      <span style="color:#9ca3af">Displays</span>
+      <span style="color:#9ca3af">Settings</span>
+      <div class="logo">the saleroom</div>
+    </div>
+    <div class="right-find">
+      <span>Find lot:</span>
+      <input type="text" placeholder="" />
+    </div>
+    <div class="lots-list" id="lotsList">
+      <div class="lot-row"><span class="ln">—</span><span class="dot"></span><span class="desc">Connect to a Bidpath auction to populate the live lot</span></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Activity log ───────────────────────────────────────────────────── -->
+<div class="log-wrap">
   <div class="log" id="log">
-    <div><span class="ts">—</span><span class="badge sys">SYS</span>Enter a Bidpath auction ID and click Connect to start.</div>
+    <div><span class="ts">—</span><span class="badge sys">SYS</span>Enter an auction ID and click Connect to start.</div>
   </div>
 </div>
 
 <script>
-  // ── State ─────────────────────────────────────────────────────────────
-  const elLot     = document.getElementById('lotNumber');
-  const elHammer  = document.getElementById('hammer');
-  const elAsking  = document.getElementById('asking');
-  const elMsg     = document.getElementById('message');
-  const elConn    = document.getElementById('connState');
-  const elConnLbl = document.getElementById('connLabel');
-  const elConnBtn = document.getElementById('connectBtn');
-  const logEl     = document.getElementById('log');
+  // ── State refs ────────────────────────────────────────────────────────
+  const elCurLotNo  = document.getElementById('curLotNo');
+  const elCurEst    = document.getElementById('curEst');
+  const elCurMsg    = document.getElementById('curMsg');
+  const elInpHammer = document.getElementById('inpHammer');
+  const elInpAsking = document.getElementById('inpAsking');
+  const elBiddingMsg= document.getElementById('biddingMsg');
+  const elBidderBody= document.getElementById('bidderBody');
+  const elIncLadder = document.getElementById('incLadder');
+  const elAcStatus  = document.getElementById('acStatus');
+  const elAcPill    = document.getElementById('acPill');
+  const elConn      = document.getElementById('connState');
+  const elConnLbl   = document.getElementById('connLabel');
+  const elConnBtn   = document.getElementById('connectBtn');
+  const logEl       = document.getElementById('log');
 
-  // Platform → friendly label
+  // ── Bidding ladder rendering (RULES.md increments) ────────────────────
+  function nextInc(n) {
+    if (n < 50)    return 5;
+    if (n < 200)   return 10;
+    if (n < 700)   return 20;
+    if (n < 1000)  return 50;
+    if (n < 3000)  return 100;
+    if (n < 7000)  return 200;
+    if (n < 10000) return 500;
+    return 1000;
+  }
+  function renderLadder(currentAsking) {
+    elIncLadder.innerHTML = '';
+    let v = Math.max(0, currentAsking);
+    for (let i = 0; i < 12; i++) {
+      const row = document.createElement('div');
+      row.className = 'row' + (i === 0 ? ' cur' : '');
+      row.textContent = '£' + v.toLocaleString('en-GB');
+      elIncLadder.appendChild(row);
+      v += nextInc(v);
+    }
+  }
+  renderLadder(5);
+
+  // ── Platform rules (allowlist) ────────────────────────────────────────
   const PLATFORM_LABEL = {
     BSCB:       'Room bid (Vectis)',
     Online:     'Vectis online',
@@ -297,25 +565,35 @@
     Telephone:  'Telephone bid',
     Invaluable: 'Invaluable bid',
   };
-
-  // Only Vectis online + Saleroom-originated bids appear automatically on Saleroom.
-  // Every other source (room, phone, Invaluable, third-party platforms…) needs the
-  // clerk to press BID on Saleroom to advance the price.
   const AUTOMATIC_ON_SALEROOM = new Set(['Online', 'Saleroom']);
+
+  // ── WS state ──────────────────────────────────────────────────────────
+  const RECOGNISED = new Set([
+    'activeLotChange','liveBidEvent','liveCommissionBidEvent',
+    'setLiveAskingPrice','getFairWarningStatus','lotInformationUpdate',
+    'activeLotLock','sensorNetworkEvent',
+  ]);
 
   let ws = null;
   let currentLot = '—';
   let currentBid = 0;
-  let soldDebounce = new Set(); // lotNumber:hammer keys we've fired SELL for
+  let currentAsking = 0;
+  let soldDebounce = new Set();
   let fwActive = false;
   let reconnectTimer = null;
 
   function fmt(n) { return '£' + Number(n || 0).toLocaleString('en-GB'); }
-  function ts()   { return new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit' }); }
+  function ts() { return new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit' }); }
 
   function setConn(state, label) {
     elConn.className = 'conn ' + state;
     elConnLbl.textContent = label;
+  }
+
+  function setAcStatus(text, live) {
+    elAcStatus.textContent = text;
+    elAcPill.textContent = live ? '● Coordinator connected' : '● Coordinator idle';
+    elAcPill.className = 'ac-pill' + (live ? '' : ' idle');
   }
 
   function log(badge, text) {
@@ -324,123 +602,115 @@
     logEl.prepend(div);
     while (logEl.children.length > 200) logEl.removeChild(logEl.lastChild);
   }
-
   function appendRaw(raw) {
     const div = document.createElement('div');
     div.className = 'raw';
-    const shown = raw.length > 500 ? raw.slice(0, 500) + '…' : raw;
-    div.textContent = shown;
+    div.textContent = raw.length > 500 ? raw.slice(0, 500) + '…' : raw;
     logEl.prepend(div);
   }
 
-  function setMessage(text, cls) {
-    elMsg.textContent = text;
-    elMsg.className = 'msg' + (cls ? ' ' + cls : '');
-  }
-
-  // ── Button flash ──────────────────────────────────────────────────────
+  // ── Button-press animation (the whole point — flash the real buttons) ──
   let flashTimers = {};
-  function flashBtn(btn, amount) {
-    const el = document.getElementById('btn' + btn);
+  function pressButton(id, colourClass) {
+    const el = document.getElementById(id);
     if (!el) return;
-    el.classList.add('active');
-    if (amount != null) {
-      const amtEl = document.getElementById('btn' + btn + 'Amount');
-      if (amtEl) amtEl.textContent = fmt(amount);
-    }
-    if (flashTimers[btn]) clearTimeout(flashTimers[btn]);
-    flashTimers[btn] = setTimeout(() => {
-      el.classList.remove('active');
-      const amtEl = document.getElementById('btn' + btn + 'Amount');
-      if (amtEl) amtEl.textContent = '';
+    el.classList.add('btn-press');
+    if (colourClass) el.classList.add(colourClass);
+    if (flashTimers[id]) clearTimeout(flashTimers[id]);
+    flashTimers[id] = setTimeout(() => {
+      el.classList.remove('btn-press', 'bid','sell','next','fw','room','undo');
     }, 1800);
   }
 
-  // ── Event handler — mirrors auto-clerk-live logic ─────────────────────
-  const RECOGNISED = new Set([
-    'activeLotChange', 'liveBidEvent', 'liveCommissionBidEvent',
-    'setLiveAskingPrice', 'getFairWarningStatus', 'lotInformationUpdate',
-    'activeLotLock', 'sensorNetworkEvent',
-  ]);
+  // ── Message helper ────────────────────────────────────────────────────
+  function setBiddingMsg(text, colour) {
+    elBiddingMsg.textContent = text;
+    elBiddingMsg.style.color = colour || '#ef4444';
+  }
 
+  // ── Event handler — mirrors the auto-clerk-live logic ─────────────────
   function handleMsg(raw) {
     let parsed;
     try { parsed = JSON.parse(raw); }
-    catch {
-      log('unk', 'Non-JSON message');
-      if (document.getElementById('showRaw').checked) appendRaw(raw);
-      return;
-    }
-    const cmd = parsed.command || parsed.type || '(no command field)';
+    catch { log('unk', 'Non-JSON message'); if (document.getElementById('showRaw').checked) appendRaw(raw); return; }
+
+    const cmd = parsed.command || parsed.type || '(no command)';
     const d   = parsed.content || parsed;
 
-    // Always log every message at a low level so you can see traffic
     if (document.getElementById('showRaw').checked) {
       log(RECOGNISED.has(cmd) ? 'recv' : 'unk', 'Received: ' + cmd);
       appendRaw(raw);
     } else if (!RECOGNISED.has(cmd)) {
-      // Surface unrecognised commands even with raw off — useful to spot new fields
       log('unk', 'Unrecognised command: ' + cmd);
     }
 
+    // ── Lot change ────────────────────────────────────────────────────
     if (cmd === 'activeLotChange') {
       const lotNo = d.lot_number ?? d.lotNumber ?? '?';
       currentLot = String(lotNo);
       currentBid = 0;
-      elLot.textContent = currentLot;
-      elHammer.textContent = '£0';
-      elAsking.textContent = fmt(d.asking ?? d.asking_price ?? 0);
+      currentAsking = Number(d.asking ?? d.asking_price ?? 0);
+      elCurLotNo.textContent = currentLot;
+      elInpHammer.value = '0';
+      elInpAsking.value = String(currentAsking);
+      renderLadder(currentAsking);
+      elCurMsg.textContent = 'Lot ' + lotNo + ' offered';
       fwActive = false;
-      setMessage('Lot ' + lotNo + ' offered');
+      soldDebounce = new Set();
+      setBiddingMsg('Lot ' + lotNo + ' is live', '#1d4ed8');
       log('info', 'Lot advance → Lot ' + lotNo);
       return;
     }
 
+    // ── Bid event ─────────────────────────────────────────────────────
     if (cmd === 'liveBidEvent') {
       const amount   = Number(d.amount ?? 0);
       const asking   = Number(d.asking ?? 0);
       const platform = d.platform ?? '';
       const platformLabel = PLATFORM_LABEL[platform] ?? platform;
 
-      // Update visible state
-      if (amount > 0) { currentBid = amount; elHammer.textContent = fmt(amount); }
-      if (asking > 0) elAsking.textContent = fmt(asking);
+      if (amount > 0) { currentBid = amount; elInpHammer.value = String(amount); }
+      if (asking > 0) { currentAsking = asking; elInpAsking.value = String(asking); renderLadder(asking); }
+
+      elBidderBody.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px"><span>—</span><span>' + fmt(amount) + '</span><span>' + platformLabel + '</span></div>';
 
       if (AUTOMATIC_ON_SALEROOM.has(platform)) {
-        // Vectis online or Saleroom-originated — appears on Saleroom on its own
-        setMessage(platformLabel + ' bid ' + fmt(amount));
+        setBiddingMsg(platformLabel + ' bid ' + fmt(amount) + ' — automatic on Saleroom', '#16a34a');
         log('info', platformLabel + ' bid ' + fmt(amount) + ' — automatic on Saleroom');
       } else {
-        // Room / Phone / Invaluable / BSCB / other — Saleroom needs catching up
-        flashBtn('Bid', amount);
-        setMessage(platformLabel + ' bid ' + fmt(amount));
+        pressButton('btnBid', 'bid');
+        setBiddingMsg(platformLabel + ' ' + fmt(amount) + ' — press BID on Saleroom', '#1d4ed8');
         log('bid', platformLabel + ' ' + fmt(amount) + ' at Vectis → press BID on Saleroom to advance');
       }
       return;
     }
 
+    // ── Commission bid ────────────────────────────────────────────────
     if (cmd === 'liveCommissionBidEvent') {
       const amount = Number(d.amount ?? 0);
-      if (amount > 0) { currentBid = amount; elHammer.textContent = fmt(amount); }
-      flashBtn('Bid', amount);
-      setMessage('Commission bid ' + fmt(amount));
+      if (amount > 0) { currentBid = amount; elInpHammer.value = String(amount); }
+      pressButton('btnBid', 'bid');
+      setBiddingMsg('Commission bid ' + fmt(amount) + ' — press BID on Saleroom', '#1d4ed8');
       log('bid', 'Commission bid ' + fmt(amount) + ' → press BID on Saleroom');
       return;
     }
 
+    // ── Asking price update ───────────────────────────────────────────
     if (cmd === 'setLiveAskingPrice') {
       const asking = Number(d.asking_bid ?? 0);
-      if (asking > 0) elAsking.textContent = fmt(asking);
+      if (asking > 0) { currentAsking = asking; elInpAsking.value = String(asking); renderLadder(asking); }
       return;
     }
 
+    // ── Fair warning ──────────────────────────────────────────────────
     if (cmd === 'getFairWarningStatus') {
       const fw = Boolean(d.fair_warning);
       if (fw && !fwActive) {
         fwActive = true;
-        flashBtn('FW');
-        setMessage('FAIR WARNING', 'fw');
-        log('fw', 'Fair Warning called → press FAIR WARNING on Saleroom');
+        pressButton('btnFairWarn', 'fw');
+        setBiddingMsg('FAIR WARNING', '#d97706');
+        elCurMsg.textContent = 'Fair Warning';
+        log('fw', 'Fair Warning called → press Fair warn on Saleroom');
       } else if (!fw && fwActive) {
         fwActive = false;
         log('info', 'Fair Warning cancelled');
@@ -448,23 +718,24 @@
       return;
     }
 
+    // ── Lot sold (Sell + Next sequence) ───────────────────────────────
     if (cmd === 'lotInformationUpdate') {
       const keyName  = d.key_name ?? '';
       const keyValue = d.key_value;
       if (keyName === 'Sold' && (keyValue === true || keyValue === 'true' || keyValue === 1)) {
         const hammer = Number(d.hammer_price ?? currentBid);
         const key = currentLot + ':' + hammer;
-        if (soldDebounce.has(key)) return; // fires twice per lot
+        if (soldDebounce.has(key)) return;
         soldDebounce.add(key);
 
-        elHammer.textContent = fmt(hammer);
-        setMessage('SOLD ' + fmt(hammer), 'sold');
-        flashBtn('Sell', hammer);
-        log('sell', 'Lot ' + currentLot + ' sold ' + fmt(hammer) + ' → press SELL then NEXT on Saleroom');
-        // 2.2s later, NEXT
+        elInpHammer.value = String(hammer);
+        elCurMsg.textContent = 'SOLD ' + fmt(hammer);
+        setBiddingMsg('SOLD ' + fmt(hammer) + ' — press Sell then Next on Saleroom', '#16a34a');
+        pressButton('btnSell', 'sell');
+        log('sell', 'Lot ' + currentLot + ' sold ' + fmt(hammer) + ' → Sell + Next on Saleroom');
         setTimeout(() => {
-          flashBtn('Next');
-          log('next', 'Press NEXT on Saleroom');
+          pressButton('btnNext', 'next');
+          log('next', 'Press Next on Saleroom');
         }, 2200);
       }
       return;
@@ -474,11 +745,9 @@
   // ── Connection ────────────────────────────────────────────────────────
   const DEFAULT_WS = 'wss://www.vectis.co.uk/wss/';
 
-  // Restore last-used URL + auction ID
   document.getElementById('wsBase').value    = localStorage.getItem('fakeSR_wsBase')    || DEFAULT_WS;
   document.getElementById('auctionId').value = localStorage.getItem('fakeSR_auctionId') || '';
 
-  // Preset buttons
   document.querySelectorAll('button.preset').forEach(btn => {
     btn.addEventListener('click', () => {
       document.getElementById('wsBase').value = btn.dataset.url;
@@ -491,7 +760,6 @@
     let   base = (document.getElementById('wsBase').value || '').trim();
     if (!id)   { alert('Enter an auction ID first.'); return; }
     if (!base) { alert('Enter the WS URL first.'); return; }
-    // Ensure base ends with a slash so we can append the ID cleanly
     if (!base.endsWith('/')) base = base + '/';
     localStorage.setItem('fakeSR_wsBase', base);
     localStorage.setItem('fakeSR_auctionId', id);
@@ -501,22 +769,25 @@
 
     const url = base + id;
     setConn('idle', 'Connecting…');
+    setAcStatus('Connecting to ' + url + '…', false);
     log('sys', 'Connecting to ' + url);
 
     try { ws = new WebSocket(url); }
-    catch (e) { setConn('err', 'Failed to open WS'); log('sys', 'WS error: ' + e.message); return; }
+    catch (e) { setConn('err', 'Failed'); log('sys', 'WS error: ' + e.message); return; }
 
     ws.onopen = () => {
       setConn('live', 'Live — auction ' + id);
+      setAcStatus('Coordinator connected — waiting for auction events', true);
       elConnBtn.textContent = 'Disconnect';
       elConnBtn.onclick = disconnect;
       elConnBtn.classList.add('disconnect');
       log('sys', 'Connected to Bidpath — observing');
     };
     ws.onmessage = (e) => handleMsg(e.data);
-    ws.onerror   = ()  => { setConn('err', 'Error'); log('sys', 'WebSocket error'); };
+    ws.onerror   = () => { setConn('err', 'Error'); log('sys', 'WebSocket error'); };
     ws.onclose   = (e) => {
       setConn('idle', 'Disconnected');
+      setAcStatus('Disconnected', false);
       elConnBtn.textContent = 'Connect';
       elConnBtn.onclick = connect;
       elConnBtn.classList.remove('disconnect');
@@ -531,18 +802,14 @@
 
   function disconnect() {
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-    if (ws) {
-      ws.onclose = null;
-      try { ws.close(); } catch {}
-      ws = null;
-    }
+    if (ws) { ws.onclose = null; try { ws.close(); } catch {} ws = null; }
     setConn('idle', 'Not connected');
+    setAcStatus('Disconnected', false);
     elConnBtn.textContent = 'Connect';
     elConnBtn.onclick = connect;
     elConnBtn.classList.remove('disconnect');
   }
 
-  // Allow Enter to connect
   document.getElementById('auctionId').addEventListener('keydown', e => {
     if (e.key === 'Enter') connect();
   });
