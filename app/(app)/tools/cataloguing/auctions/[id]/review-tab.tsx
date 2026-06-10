@@ -38,7 +38,21 @@ type ReviewLot = {
 
 type KpStatus = "found" | "partial" | "missing"
 type KpMatch = { line: string; status: KpStatus }
-type Range = { start: number; end: number }
+type Range = { start: number; end: number; kp: number } // kp = key-point index → colour
+
+// One colour per key point — dot in the list pairs with the highlight in the text.
+// Static class strings so Tailwind picks them up.
+const KP_COLOURS = [
+  { mark: "bg-teal-200 dark:bg-teal-700/60",       dot: "bg-teal-400 dark:bg-teal-500" },
+  { mark: "bg-amber-200 dark:bg-amber-700/60",     dot: "bg-amber-400 dark:bg-amber-500" },
+  { mark: "bg-sky-200 dark:bg-sky-700/60",         dot: "bg-sky-400 dark:bg-sky-500" },
+  { mark: "bg-fuchsia-200 dark:bg-fuchsia-700/60", dot: "bg-fuchsia-400 dark:bg-fuchsia-500" },
+  { mark: "bg-lime-200 dark:bg-lime-700/60",       dot: "bg-lime-400 dark:bg-lime-500" },
+  { mark: "bg-orange-200 dark:bg-orange-700/60",   dot: "bg-orange-400 dark:bg-orange-500" },
+  { mark: "bg-violet-200 dark:bg-violet-700/60",   dot: "bg-violet-400 dark:bg-violet-500" },
+  { mark: "bg-rose-200 dark:bg-rose-700/60",       dot: "bg-rose-400 dark:bg-rose-500" },
+]
+const kpColour = (i: number) => KP_COLOURS[i % KP_COLOURS.length]
 
 const STOPWORDS = new Set([
   "a", "an", "the", "and", "or", "of", "in", "on", "to", "with", "for", "its",
@@ -72,7 +86,9 @@ function analyseKeyPoints(description: string, keyPoints: string): { matches: Kp
   const matches: KpMatch[] = []
   const ranges: Range[] = []
 
-  for (const line of lines) {
+  for (let kpIdx = 0; kpIdx < lines.length; kpIdx++) {
+    const line = lines[kpIdx]
+
     // 1) Exact phrase match — single contiguous highlight
     let phraseMatched = false
     try {
@@ -80,7 +96,7 @@ function analyseKeyPoints(description: string, keyPoints: string): { matches: Kp
       const m = new RegExp(pattern, "i").exec(description)
       if (m) {
         phraseMatched = true
-        ranges.push({ start: m.index, end: m.index + m[0].length })
+        ranges.push({ start: m.index, end: m.index + m[0].length, kp: kpIdx })
       }
     } catch { /* fall through to word matching */ }
 
@@ -103,7 +119,7 @@ function analyseKeyPoints(description: string, keyPoints: string): { matches: Kp
       let m: RegExpExecArray | null
       while ((m = re.exec(description)) !== null) {
         any = true
-        ranges.push({ start: m.index, end: m.index + m[0].length })
+        ranges.push({ start: m.index, end: m.index + m[0].length, kp: kpIdx })
         if (m.index === re.lastIndex) re.lastIndex++ // safety against zero-width loops
       }
       if (any) matched++
@@ -113,13 +129,18 @@ function analyseKeyPoints(description: string, keyPoints: string): { matches: Kp
     matches.push({ line, status: ratio === 1 ? "found" : ratio >= 0.5 ? "partial" : "missing" })
   }
 
-  // Merge overlapping highlight ranges
-  ranges.sort((a, b) => a.start - b.start)
+  // Resolve overlaps while keeping per-key-point colours: earlier key points win
+  // the overlapping stretch; the later range keeps only its non-overlapping tail.
+  ranges.sort((a, b) => a.start - b.start || a.end - b.end)
   const merged: Range[] = []
   for (const r of ranges) {
     const last = merged[merged.length - 1]
-    if (last && r.start <= last.end) last.end = Math.max(last.end, r.end)
-    else merged.push({ ...r })
+    if (!last || r.start >= last.end) merged.push({ ...r })
+    else if (r.end > last.end) {
+      if (last.kp === r.kp) last.end = r.end
+      else merged.push({ start: last.end, end: r.end, kp: r.kp })
+    }
+    // else fully inside the previous range — drop
   }
 
   return { matches, ranges: merged }
@@ -134,7 +155,7 @@ function HighlightedDescription({ description, ranges }: { description: string; 
   ranges.forEach((r, i) => {
     if (r.start > cursor) parts.push(<span key={`p${i}`}>{description.slice(cursor, r.start)}</span>)
     parts.push(
-      <mark key={`m${i}`} className="bg-teal-200 dark:bg-teal-700/60 text-gray-900 dark:text-white rounded px-0.5">
+      <mark key={`m${i}`} className={`${kpColour(r.kp).mark} text-gray-900 dark:text-white rounded px-0.5`}>
         {description.slice(r.start, r.end)}
       </mark>
     )
@@ -402,6 +423,9 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
                           <span className={`shrink-0 ${m.status === "found" ? "text-green-500" : m.status === "partial" ? "text-amber-500" : "text-red-500"}`}>
                             {m.status === "found" ? "✓" : m.status === "partial" ? "≈" : "⚠"}
                           </span>
+                          {m.status !== "missing" && (
+                            <span className={`shrink-0 w-2.5 h-2.5 rounded-full mt-1.5 ${kpColour(i).dot}`} title="Highlight colour in the description" />
+                          )}
                           <span className={
                             m.status === "found"   ? "text-gray-700 dark:text-gray-300"
                             : m.status === "partial" ? "text-amber-700 dark:text-amber-300 font-medium"
