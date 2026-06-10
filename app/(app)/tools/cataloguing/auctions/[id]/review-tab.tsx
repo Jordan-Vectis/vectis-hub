@@ -29,12 +29,38 @@ type ReviewLot = {
 }
 
 // ─── Key point ↔ description matching ────────────────────────────────────────
-// For each key-point line we look for it inside the description
-// (case-insensitive, whitespace-tolerant). Matches are highlighted in the
-// description text; unmatched points are called out in amber.
+// Descriptions weave key points in naturally (reordered words, extra words in
+// between — "perforated card" → "perforated header card"), so exact-phrase
+// matching is too strict. Strategy per key-point line:
+//   1. Try the exact phrase (case/whitespace-insensitive) — best highlight.
+//   2. Otherwise match word-by-word: every significant word found = ✓ found,
+//      most found = ≈ partial, otherwise ⚠ not found. Matched words highlighted.
 
-type KpMatch = { line: string; found: boolean }
+type KpStatus = "found" | "partial" | "missing"
+type KpMatch = { line: string; status: KpStatus }
 type Range = { start: number; end: number }
+
+const STOPWORDS = new Set([
+  "a", "an", "the", "and", "or", "of", "in", "on", "to", "with", "for", "its",
+  "is", "are", "has", "have", "at", "by", "from", "as", "inside", "within",
+  "all", "this", "that", "it", "be", "been", "etc",
+])
+
+function esc(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") }
+
+function significantWords(line: string): string[] {
+  return line
+    .toLowerCase()
+    .split(/[^a-z0-9£"']+/i)
+    .map(w => w.replace(/^['"]+|['"]+$/g, ""))
+    .filter(w => (w.length >= 3 || /^\d{2,}$/.test(w)) && !STOPWORDS.has(w))
+}
+
+// Regex for one word: word boundary, tolerate simple plural difference
+function wordRegex(word: string): RegExp {
+  const stem = word.endsWith("s") && word.length > 3 ? word.slice(0, -1) : word
+  return new RegExp(`\\b${esc(stem)}(s|es)?\\b`, "gi")
+}
 
 function analyseKeyPoints(description: string, keyPoints: string): { matches: KpMatch[]; ranges: Range[] } {
   const lines = keyPoints.split("\n").map(l => l.trim()).filter(Boolean)
@@ -42,16 +68,44 @@ function analyseKeyPoints(description: string, keyPoints: string): { matches: Kp
   const ranges: Range[] = []
 
   for (const line of lines) {
-    const pattern = line.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+")
-    let found = false
+    // 1) Exact phrase match — single contiguous highlight
+    let phraseMatched = false
     try {
+      const pattern = esc(line).replace(/\\?\s+/g, "\\s+")
       const m = new RegExp(pattern, "i").exec(description)
       if (m) {
-        found = true
+        phraseMatched = true
         ranges.push({ start: m.index, end: m.index + m[0].length })
       }
-    } catch { /* malformed pattern — treat as not found */ }
-    matches.push({ line, found })
+    } catch { /* fall through to word matching */ }
+
+    if (phraseMatched) {
+      matches.push({ line, status: "found" })
+      continue
+    }
+
+    // 2) Word-level match
+    const words = significantWords(line)
+    if (words.length === 0) {
+      matches.push({ line, status: "missing" })
+      continue
+    }
+
+    let matched = 0
+    for (const w of words) {
+      const re = wordRegex(w)
+      let any = false
+      let m: RegExpExecArray | null
+      while ((m = re.exec(description)) !== null) {
+        any = true
+        ranges.push({ start: m.index, end: m.index + m[0].length })
+        if (m.index === re.lastIndex) re.lastIndex++ // safety against zero-width loops
+      }
+      if (any) matched++
+    }
+
+    const ratio = matched / words.length
+    matches.push({ line, status: ratio === 1 ? "found" : ratio >= 0.6 ? "partial" : "missing" })
   }
 
   // Merge overlapping highlight ranges
@@ -204,7 +258,8 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
         const a = analysed.get(lot.id)!
         const est   = fmtEstimate(lot.estimateLow, lot.estimateHigh)
         const aiEst = fmtEstimate(lot.aiEstimateLow, lot.aiEstimateHigh)
-        const missing = a.matches.filter(m => !m.found).length
+        const missing = a.matches.filter(m => m.status === "missing").length
+        const partial = a.matches.filter(m => m.status === "partial").length
         const isFlagOpen = flagOpenId === lot.id
 
         return (
@@ -226,8 +281,13 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 {missing > 0 && (
-                  <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">
+                  <span className="text-xs px-2.5 py-1 rounded-full bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-medium">
                     ⚠ {missing} key point{missing === 1 ? "" : "s"} not found
+                  </span>
+                )}
+                {partial > 0 && (
+                  <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">
+                    ≈ {partial} partial
                   </span>
                 )}
                 <span className="text-xs px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">{lot.status}</span>
@@ -296,9 +356,16 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
                     <ul className="space-y-1">
                       {a.matches.map((m, i) => (
                         <li key={i} className="flex items-start gap-2 text-sm">
-                          <span className={`shrink-0 ${m.found ? "text-green-500" : "text-amber-500"}`}>{m.found ? "✓" : "⚠"}</span>
-                          <span className={m.found ? "text-gray-700 dark:text-gray-300" : "text-amber-700 dark:text-amber-300 font-medium"}>{m.line}</span>
-                          {!m.found && <span className="text-xs text-amber-500/80 shrink-0 mt-0.5">not found</span>}
+                          <span className={`shrink-0 ${m.status === "found" ? "text-green-500" : m.status === "partial" ? "text-amber-500" : "text-red-500"}`}>
+                            {m.status === "found" ? "✓" : m.status === "partial" ? "≈" : "⚠"}
+                          </span>
+                          <span className={
+                            m.status === "found"   ? "text-gray-700 dark:text-gray-300"
+                            : m.status === "partial" ? "text-amber-700 dark:text-amber-300 font-medium"
+                            : "text-red-700 dark:text-red-300 font-medium"
+                          }>{m.line}</span>
+                          {m.status === "partial" && <span className="text-xs text-amber-500/80 shrink-0 mt-0.5">partly worded — check</span>}
+                          {m.status === "missing" && <span className="text-xs text-red-500/80 shrink-0 mt-0.5">not found</span>}
                         </li>
                       ))}
                     </ul>
