@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3"
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 
 export const r2 = new S3Client({
@@ -43,6 +43,17 @@ export async function uploadBufferToR2(
     })
   )
   return key
+}
+
+export async function deleteObjectsFromR2(keys: string[]): Promise<void> {
+  if (keys.length === 0) return
+  for (let i = 0; i < keys.length; i += 1000) {
+    const batch = keys.slice(i, i + 1000)
+    await r2.send(new DeleteObjectsCommand({
+      Bucket: process.env.CLOUDFLARE_R2_BUCKET!,
+      Delete: { Objects: batch.map(k => ({ Key: k })), Quiet: true },
+    }))
+  }
 }
 
 export async function getSignedImageUrl(key: string): Promise<string> {

@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
-import { uploadBufferToR2 } from "@/lib/r2"
+import { uploadBufferToR2, deleteObjectsFromR2 } from "@/lib/r2"
 
 // Derive a lot title from a description — first sentence, max 83 chars with ellipsis
 function titleFromDescription(desc: string): string {
@@ -272,13 +272,22 @@ export async function bulkSetLotsAddedToBC(lotIds: string[], auctionId: string, 
   return { count: r.count }
 }
 
-// Mass action — remove ALL photos from the selected lots in one atomic update.
-// (Same behaviour as single deleteLotPhoto: clears the lot's imageUrls; the
-// underlying R2 objects are left in place.)
-export async function bulkClearLotPhotos(lotIds: string[], auctionId: string) {
+// Mass action — remove ALL photos from the selected lots.
+// deleteFromStorage=true also deletes the underlying R2 objects.
+export async function bulkClearLotPhotos(lotIds: string[], auctionId: string, deleteFromStorage: boolean) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
   if (lotIds.length === 0) return { count: 0 }
+
+  if (deleteFromStorage) {
+    const lots = await prisma.catalogueLot.findMany({
+      where:  { id: { in: lotIds }, auctionId },
+      select: { imageUrls: true },
+    })
+    const allKeys = lots.flatMap(l => l.imageUrls)
+    await deleteObjectsFromR2(allKeys)
+  }
+
   const r = await prisma.catalogueLot.updateMany({
     where: { id: { in: lotIds }, auctionId },
     data:  { imageUrls: [] },

@@ -1181,15 +1181,16 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
     })
   }
 
-  async function handleBulkClearPhotos() {
+  async function handleBulkClearPhotos(deleteFromStorage: boolean) {
     if (selected.size === 0) return
     const photoTotal = lots.filter(l => selected.has(l.id)).reduce((s, l) => s + l.imageUrls.length, 0)
     if (photoTotal === 0) { alert("The selected lots have no photos."); return }
-    if (!confirm(`Delete ALL ${photoTotal} photo${photoTotal !== 1 ? "s" : ""} from ${selected.size} selected lot${selected.size !== 1 ? "s" : ""}? This cannot be undone.`)) return
+    const storageWarning = deleteFromStorage ? " Files will be permanently removed from storage." : " The files will remain in storage."
+    if (!confirm(`${deleteFromStorage ? "Delete" : "Unlink"} ALL ${photoTotal} photo${photoTotal !== 1 ? "s" : ""} from ${selected.size} selected lot${selected.size !== 1 ? "s" : ""}?${storageWarning} This cannot be undone.`)) return
     setPhotosClearing(true)
     start(async () => {
       try {
-        await bulkClearLotPhotos(Array.from(selected), auctionId)
+        await bulkClearLotPhotos(Array.from(selected), auctionId, deleteFromStorage)
         setSelected(new Set())
         onDelete()
       } finally {
@@ -1408,9 +1409,15 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                 className="px-4 py-1.5 text-sm font-medium rounded-lg border border-indigo-700 text-indigo-400 hover:bg-indigo-900/30 transition-colors">
                 ↗ Transfer {selected.size} to another auction
               </button>
-              <button onClick={handleBulkClearPhotos} disabled={photosClearing}
-                className="px-4 py-1.5 text-sm font-medium rounded-lg border border-orange-700 text-orange-400 hover:bg-orange-900/30 transition-colors disabled:opacity-50">
-                {photosClearing ? "Removing…" : `📷🗑 Delete photos from ${selected.size}`}
+              <button onClick={() => handleBulkClearPhotos(false)} disabled={photosClearing}
+                className="px-4 py-1.5 text-sm font-medium rounded-lg border border-orange-700 text-orange-400 hover:bg-orange-900/30 transition-colors disabled:opacity-50"
+                title="Removes photos from these lots but keeps files in storage">
+                {photosClearing ? "Removing…" : `📷🔗 Unlink photos (${selected.size})`}
+              </button>
+              <button onClick={() => handleBulkClearPhotos(true)} disabled={photosClearing}
+                className="px-4 py-1.5 text-sm font-medium rounded-lg border border-red-700 text-red-400 hover:bg-red-900/30 transition-colors disabled:opacity-50"
+                title="Permanently deletes photo files from storage">
+                {photosClearing ? "Removing…" : `📷🗑 Delete from storage (${selected.size})`}
               </button>
               <button onClick={handleBulkDelete} disabled={bulkDeleting}
                 className="px-4 py-1.5 text-sm font-medium rounded-lg border border-red-700 text-red-400 hover:bg-red-900/30 transition-colors disabled:opacity-50">
