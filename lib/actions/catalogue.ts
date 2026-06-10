@@ -272,6 +272,19 @@ export async function bulkSetLotsAddedToBC(lotIds: string[], auctionId: string, 
   return { count: r.count }
 }
 
+// Review tab — raise or clear an error flag on a lot. flag = reason text, null clears it.
+export async function setLotReviewFlag(lotId: string, auctionId: string, flag: string | null) {
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
+  await prisma.catalogueLot.update({
+    where: { id: lotId },
+    data: flag?.trim()
+      ? { reviewFlag: flag.trim(), reviewFlaggedBy: session.user.name ?? session.user.email ?? "Unknown", reviewFlaggedAt: new Date() }
+      : { reviewFlag: null, reviewFlaggedBy: null, reviewFlaggedAt: null },
+  })
+  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+}
+
 export async function saveLotExtraDetails(lotId: string, auctionId: string, extraDetails: string) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)

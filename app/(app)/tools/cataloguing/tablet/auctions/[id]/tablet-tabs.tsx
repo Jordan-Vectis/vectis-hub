@@ -10,10 +10,11 @@ import {
 } from "@/lib/actions/catalogue"
 import LotWizardTab, { CATEGORY_MAP, BRANDS_LIST } from "../../../auctions/[id]/lot-wizard-tab"
 import PhotoOnlyTab from "../../../auctions/[id]/photo-only-tab"
+import ReviewTab from "../../../auctions/[id]/review-tab"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "manage" | "add-lot" | "photo-only"
+type Tab = "manage" | "add-lot" | "photo-only" | "review"
 
 interface Auction {
   id: string
@@ -109,6 +110,7 @@ export default function TabletTabs({ auction, lots, userRole, showScanTimer, tim
           { id: "manage",    label: `Lots (${lots.length})` },
           { id: "add-lot",   label: "Add Lot" },
           { id: "photo-only", label: "Photo Only" },
+          { id: "review",    label: "🔍 Review" },
         ] as { id: Tab; label: string }[]).map(t => (
           <button
             key={t.id}
@@ -178,6 +180,13 @@ export default function TabletTabs({ auction, lots, userRole, showScanTimer, tim
               onCreated={() => router.refresh()}
               tablet
             />
+          </div>
+        )}
+
+        {/* Review */}
+        {tab === "review" && (
+          <div className="p-4 dark">
+            <ReviewTab auctionId={auction.id} />
           </div>
         )}
       </div>

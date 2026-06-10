@@ -369,6 +369,9 @@ model CatalogueLot {
   status        String           @default("ENTERED")
   aiUpgraded    Boolean          @default(false)
   addedToBC     Boolean          @default(false)  // Manually ticked by cataloguers once a lot has been pushed into Business Central
+  reviewFlag      String?        @db.Text         // set from the Review tab when a checker spots an error — the reason text
+  reviewFlaggedBy String?
+  reviewFlaggedAt DateTime?
   createdByName String?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt

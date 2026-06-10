@@ -9,13 +9,14 @@ import ImportTab from "./import-tab"
 import PhotoUploadTab from "./photo-upload-tab"
 import AiUpgradeTab from "./ai-upgrade-tab"
 import StatsTab from "./stats-tab"
+import ReviewTab from "./review-tab"
 import LotHistoryTab from "./lot-history-tab"
 import * as XLSX from "xlsx"
 import JSZip from "jszip"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "settings" | "add-lot" | "manage-lots" | "photo-only" | "import" | "upload-photos" | "ai-upgrade" | "stats" | "lot-history"
+type Tab = "settings" | "add-lot" | "manage-lots" | "photo-only" | "import" | "upload-photos" | "ai-upgrade" | "stats" | "lot-history" | "review"
 
 interface Auction {
   id: string; code: string; name: string; auctionDate: Date | null
@@ -562,6 +563,7 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
     { id: "import",        label: "Import Lots" },
     { id: "upload-photos", label: "Upload Photos" },
     { id: "ai-upgrade",   label: "✨ AI Upgrade" },
+    { id: "review",       label: "🔍 Review" },
     { id: "stats",        label: "📊 Statistics" },
     { id: "lot-history",  label: "📖 Lot History" },
     { id: "settings",     label: "Auction Settings" },
@@ -716,6 +718,7 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
         )}
 
         {tab === "stats" && <StatsTab lots={lots} auction={auction} />}
+        {tab === "review" && <ReviewTab auctionId={auction.id} />}
 
         {tab === "lot-history" && (
           <LotHistoryTab

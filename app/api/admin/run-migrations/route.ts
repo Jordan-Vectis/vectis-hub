@@ -257,6 +257,11 @@ const MIGRATIONS = [
   // 2026-06-01 — Preserve original raw batch text for DC before/after in review
   `ALTER TABLE "PipelineLot" ADD COLUMN IF NOT EXISTS "batchDesc" TEXT`,
 
+  // Review tab — error flags raised by checkers against individual lots
+  `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "reviewFlag" TEXT`,
+  `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "reviewFlaggedBy" TEXT`,
+  `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "reviewFlaggedAt" TIMESTAMP(3)`,
+
   // Auction AI — models disabled by the user (presence = disabled)
   `CREATE TABLE IF NOT EXISTS "DisabledModel" (
     "modelId"   TEXT NOT NULL,
