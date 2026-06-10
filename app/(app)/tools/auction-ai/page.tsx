@@ -3749,7 +3749,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       if (result) {
         const desc = result.description ?? ""
         const { low, high } = parseEstimate(result.estimate ?? "")
-        updated[idx] = { ...updated[idx], batchStatus: "ok", currentDesc: desc, estimate: result.estimate ?? "", appliedDesc: desc, batchDesc: desc,
+        updated[idx] = { ...updated[idx], batchStatus: "ok", currentDesc: desc, estimate: result.estimate ?? "", appliedDesc: desc, batchDesc: desc, kpRevised: desc,
           cataloguerFlag: result.flag || undefined,
           debug: { ...updated[idx].debug, batch: result.debug } }
         setLots([...updated])
