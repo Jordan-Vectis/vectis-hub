@@ -159,6 +159,8 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
   const [error, setError]     = useState<string | null>(null)
   const [search, setSearch]   = useState("")
   const [flaggedOnly, setFlaggedOnly] = useState(false)
+  const [cataloguer, setCataloguer]   = useState("")
+  const [issueFilter, setIssueFilter] = useState<"all" | "issues" | "good">("all")
   const [photoLot, setPhotoLot] = useState<ReviewLot | null>(null)
   const [flagOpenId, setFlagOpenId] = useState<string | null>(null)
   const [flagText, setFlagText]     = useState("")
@@ -184,8 +186,26 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
 
   const flaggedCount = lots.filter(l => l.reviewFlag).length
 
+  const cataloguers = useMemo(() =>
+    [...new Set(lots.map(l => l.createdByName).filter(Boolean))].sort() as string[],
+  [lots])
+
+  // A lot "has issues" if any key point is missing/partial, or it lacks a
+  // description or photos, or it has been flagged.
+  function hasIssues(l: ReviewLot): boolean {
+    if (l.reviewFlag) return true
+    if (!l.description?.trim() || l.imageUrls.length === 0) return true
+    const a = analysed.get(l.id)
+    return !!a && a.matches.some(m => m.status !== "found")
+  }
+
+  const issueCount = lots.filter(hasIssues).length
+
   const filtered = lots.filter(l => {
     if (flaggedOnly && !l.reviewFlag) return false
+    if (cataloguer && l.createdByName !== cataloguer) return false
+    if (issueFilter === "issues" && !hasIssues(l)) return false
+    if (issueFilter === "good"   &&  hasIssues(l)) return false
     if (!search.trim()) return true
     const q = search.toLowerCase()
     return [l.barcode, l.receiptUniqueId, l.title, l.description]
@@ -217,15 +237,33 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
         <div className="flex items-center gap-3 flex-wrap">
           <p className="text-sm text-gray-700 dark:text-gray-300">
             <span className="font-bold text-gray-900 dark:text-white">{filtered.length}</span> of {lots.length} lots
+            {issueCount > 0 && <span className="ml-2 text-amber-500 font-semibold">⚠ {issueCount} with issues</span>}
             {flaggedCount > 0 && <span className="ml-2 text-red-500 font-semibold">🚩 {flaggedCount} flagged</span>}
           </p>
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-2 ml-auto flex-wrap">
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search barcode / ID / text…"
-              className="w-48 sm:w-64 bg-white dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-[#2AB4A6]"
+              className="w-44 sm:w-56 bg-white dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-[#2AB4A6]"
             />
+            <select
+              value={cataloguer}
+              onChange={e => setCataloguer(e.target.value)}
+              className="bg-white dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-[#2AB4A6]"
+            >
+              <option value="">All cataloguers</option>
+              {cataloguers.map(name => <option key={name} value={name}>{name}</option>)}
+            </select>
+            <select
+              value={issueFilter}
+              onChange={e => setIssueFilter(e.target.value as "all" | "issues" | "good")}
+              className="bg-white dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-[#2AB4A6]"
+            >
+              <option value="all">All lots</option>
+              <option value="issues">⚠ With issues</option>
+              <option value="good">✓ All good</option>
+            </select>
             <button
               onClick={() => setFlaggedOnly(v => !v)}
               className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors whitespace-nowrap ${
