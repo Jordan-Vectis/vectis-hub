@@ -272,6 +272,21 @@ export async function bulkSetLotsAddedToBC(lotIds: string[], auctionId: string, 
   return { count: r.count }
 }
 
+// Mass action — remove ALL photos from the selected lots in one atomic update.
+// (Same behaviour as single deleteLotPhoto: clears the lot's imageUrls; the
+// underlying R2 objects are left in place.)
+export async function bulkClearLotPhotos(lotIds: string[], auctionId: string) {
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
+  if (lotIds.length === 0) return { count: 0 }
+  const r = await prisma.catalogueLot.updateMany({
+    where: { id: { in: lotIds }, auctionId },
+    data:  { imageUrls: [] },
+  })
+  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+  return { count: r.count }
+}
+
 // Review tab — raise or clear an error flag on a lot. flag = reason text, null clears it.
 export async function setLotReviewFlag(lotId: string, auctionId: string, flag: string | null) {
   const session = await requireCataloguer()

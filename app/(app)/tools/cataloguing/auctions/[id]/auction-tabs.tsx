@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, fillLotsFromTotes, togglePublished, generateTitlesFromDescriptions, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, transferLots } from "@/lib/actions/catalogue"
+import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, fillLotsFromTotes, togglePublished, generateTitlesFromDescriptions, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, transferLots, bulkClearLotPhotos } from "@/lib/actions/catalogue"
 import LotWizardTab, { CATEGORY_MAP, BRANDS_LIST } from "./lot-wizard-tab"
 import PhotoOnlyTab from "./photo-only-tab"
 import ImportTab from "./import-tab"
@@ -912,6 +912,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
   const [deleting, setDeleting]     = useState<string | null>(null)
   const [selected, setSelected]     = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [photosClearing, setPhotosClearing] = useState(false)
   const [pending, start]            = useTransition()
   const [fillPending, startFill]    = useTransition()
   const [fillMsg, setFillMsg]       = useState<string | null>(null)
@@ -1180,6 +1181,23 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
     })
   }
 
+  async function handleBulkClearPhotos() {
+    if (selected.size === 0) return
+    const photoTotal = lots.filter(l => selected.has(l.id)).reduce((s, l) => s + l.imageUrls.length, 0)
+    if (photoTotal === 0) { alert("The selected lots have no photos."); return }
+    if (!confirm(`Delete ALL ${photoTotal} photo${photoTotal !== 1 ? "s" : ""} from ${selected.size} selected lot${selected.size !== 1 ? "s" : ""}? This cannot be undone.`)) return
+    setPhotosClearing(true)
+    start(async () => {
+      try {
+        await bulkClearLotPhotos(Array.from(selected), auctionId)
+        setSelected(new Set())
+        onDelete()
+      } finally {
+        setPhotosClearing(false)
+      }
+    })
+  }
+
   async function handleGenerateTitles() {
     if (selected.size === 0) return
     startTitles(async () => {
@@ -1389,6 +1407,10 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                 onClick={() => onTransfer(Array.from(selected))}
                 className="px-4 py-1.5 text-sm font-medium rounded-lg border border-indigo-700 text-indigo-400 hover:bg-indigo-900/30 transition-colors">
                 ↗ Transfer {selected.size} to another auction
+              </button>
+              <button onClick={handleBulkClearPhotos} disabled={photosClearing}
+                className="px-4 py-1.5 text-sm font-medium rounded-lg border border-orange-700 text-orange-400 hover:bg-orange-900/30 transition-colors disabled:opacity-50">
+                {photosClearing ? "Removing…" : `📷🗑 Delete photos from ${selected.size}`}
               </button>
               <button onClick={handleBulkDelete} disabled={bulkDeleting}
                 className="px-4 py-1.5 text-sm font-medium rounded-lg border border-red-700 text-red-400 hover:bg-red-900/30 transition-colors disabled:opacity-50">
