@@ -478,7 +478,6 @@ export async function uploadLotPhoto(lotId: string, auctionId: string, formData:
     select: { imageUrls: true },
   })
 
-  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
   return lot.imageUrls
 }
 
