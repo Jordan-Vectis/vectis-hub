@@ -56,10 +56,15 @@ function significantWords(line: string): string[] {
     .filter(w => (w.length >= 3 || /^\d{2,}$/.test(w)) && !STOPWORDS.has(w))
 }
 
-// Regex for one word: word boundary, tolerate simple plural difference
+// Regex for one word: word boundary on the stem, tolerate suffix differences —
+// "electronic" matches "Electronico", "carded" matches "card", "screams" matches
+// "scream", "packaging" matches "packaged".
 function wordRegex(word: string): RegExp {
-  const stem = word.endsWith("s") && word.length > 3 ? word.slice(0, -1) : word
-  return new RegExp(`\\b${esc(stem)}(s|es)?\\b`, "gi")
+  let stem = word
+  for (const suf of ["ing", "ed", "es", "s"]) {
+    if (stem.endsWith(suf) && stem.length - suf.length >= 4) { stem = stem.slice(0, -suf.length); break }
+  }
+  return new RegExp(`\\b${esc(stem)}\\w{0,4}\\b`, "gi")
 }
 
 function analyseKeyPoints(description: string, keyPoints: string): { matches: KpMatch[]; ranges: Range[] } {
@@ -105,7 +110,7 @@ function analyseKeyPoints(description: string, keyPoints: string): { matches: Kp
     }
 
     const ratio = matched / words.length
-    matches.push({ line, status: ratio === 1 ? "found" : ratio >= 0.6 ? "partial" : "missing" })
+    matches.push({ line, status: ratio === 1 ? "found" : ratio >= 0.5 ? "partial" : "missing" })
   }
 
   // Merge overlapping highlight ranges
