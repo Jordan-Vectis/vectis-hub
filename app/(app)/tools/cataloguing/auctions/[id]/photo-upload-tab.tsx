@@ -243,8 +243,8 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
           const fd = new FormData()
           fd.set("photo", photo)
           await uploadLotPhoto(group.lotId!, auctionId, fd)
-        } catch {
-          failedList.push(`${group.label}/${photo.name}`)
+        } catch (e: any) {
+          failedList.push(`${group.label}/${photo.name} — ${e?.message ?? "unknown error"}`)
         }
         done++
         setUploadProgress({ done, total })
