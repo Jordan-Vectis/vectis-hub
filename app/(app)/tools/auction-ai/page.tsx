@@ -5191,8 +5191,7 @@ function UpgradeTab({ model: globalModel, fallbackModel }: { model: string; fall
             )}
           </div>
           <div className="space-y-3">
-            {lots.filter(l => l.status === "done" && l.revised).map(lot => (
-              {(() => {
+            {lots.filter(l => l.status === "done" && l.revised).map(lot => {
                 const a = lot.keyPoints?.trim() ? analyseKeyPoints(lot.revised ?? lot.description, lot.keyPoints) : null
                 return (
                   <div key={lot.id} className={`border rounded-xl p-4 space-y-3 transition-colors ${lot.accepted ? "border-green-700/50 bg-green-950/10" : "border-indigo-700/50 bg-indigo-950/10"}`}>
@@ -5237,8 +5236,8 @@ function UpgradeTab({ model: globalModel, fallbackModel }: { model: string; fall
                     </div>
                   </div>
                 )
-              })()}
-            ))}
+              })}
+
           </div>
         </div>
       )}
