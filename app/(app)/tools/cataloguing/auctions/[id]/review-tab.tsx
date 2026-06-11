@@ -185,7 +185,8 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
   const [search, setSearch]   = useState("")
-  const [flaggedOnly, setFlaggedOnly] = useState(false)
+  const [flaggedOnly, setFlaggedOnly]       = useState(false)
+  const [aiFlaggedOnly, setAiFlaggedOnly]   = useState(false)
   const [cataloguer, setCataloguer]   = useState("")
   const [issueFilter, setIssueFilter] = useState<"all" | "issues" | "good">("all")
   const [photoLot, setPhotoLot] = useState<ReviewLot | null>(null)
@@ -233,6 +234,7 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
 
   const filtered = lots.filter(l => {
     if (flaggedOnly && !l.reviewFlag) return false
+    if (aiFlaggedOnly && !l.aiFlagNote) return false
     if (cataloguer && l.createdByName !== cataloguer) return false
     if (issueFilter === "issues" && !hasIssues(l)) return false
     if (issueFilter === "good"   &&  hasIssues(l)) return false
@@ -317,6 +319,16 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
               }`}
             >
               🚩 Flagged only
+            </button>
+            <button
+              onClick={() => setAiFlaggedOnly(v => !v)}
+              className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors whitespace-nowrap ${
+                aiFlaggedOnly
+                  ? "bg-orange-600/20 border-orange-500 text-orange-400"
+                  : "bg-white dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400"
+              }`}
+            >
+              ⚠️ AI-flagged only
             </button>
           </div>
         </div>
