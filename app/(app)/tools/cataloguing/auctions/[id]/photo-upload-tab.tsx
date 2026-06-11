@@ -81,7 +81,11 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       groupMap.get(key)!.photos.push(file)
     }
 
-    const result = orderedKeys.map(k => groupMap.get(k)!)
+    const result = orderedKeys.map(k => {
+      const g = groupMap.get(k)!
+      g.photos.reverse()
+      return g
+    })
 
     if (result.length === 0) {
       setError("No files selected.")
