@@ -1868,7 +1868,25 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
   const [signedUrls, setSignedUrls]  = useState<Record<string, string>>({})
   const [loadingPhotos, setLoadingPhotos] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
-  const photoRef = useRef<HTMLInputElement>(null)
+  const photoRef    = useRef<HTMLInputElement>(null)
+  const formRef     = useRef<HTMLFormElement>(null)
+  const saveTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Clear pending auto-save on unmount
+  useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current) }, [])
+
+  function triggerAutoSave() {
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => {
+      if (!lot || !formRef.current) return
+      const fd = new FormData(formRef.current)
+      start(async () => {
+        await updateLot(lot.id, auctionId, fd)
+        setSaved(true)
+        setTimeout(() => setSaved(false), 2000)
+      })
+    }, 800)
+  }
 
   const [titleVal, setTitleVal] = useState(lot?.title ?? "")
   const [descVal,  setDescVal]  = useState(lot?.description ?? "")
@@ -1978,18 +1996,21 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
           className="px-3 py-1.5 rounded-lg bg-[#2AB4A6] hover:bg-[#24a090] text-white text-xs font-semibold disabled:opacity-25 transition-colors flex-shrink-0">
           Next →
         </button>
+        <span className={`text-xs transition-opacity flex-shrink-0 ${pending ? "opacity-100 text-gray-500" : saved ? "opacity-100 text-[#2AB4A6]" : "opacity-0"}`}>
+          {pending ? "Saving…" : "✓ Saved"}
+        </span>
       </div>
 
       {/* Animated content */}
       <div ref={contentRef}>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form ref={formRef} onSubmit={handleSubmit} className="space-y-5">
         <div className="grid grid-cols-2 gap-6">
           {/* Left */}
           <div className="space-y-4">
             <div>
               <label className={lbl}>Barcode</label>
-              <input name="barcode" defaultValue={lot.barcode ?? ""} className={input} placeholder="BC internal barcode" />
+              <input name="barcode" defaultValue={lot.barcode ?? ""} className={input} placeholder="BC internal barcode" onChange={triggerAutoSave} />
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -1998,13 +2019,13 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
                   {titleVal.length}/{TITLE_LIMIT}
                 </span>
               </div>
-              <input name="title" required value={titleVal} onChange={e => setTitleVal(e.target.value.slice(0, TITLE_LIMIT))}
+              <input name="title" required value={titleVal} onChange={e => { setTitleVal(e.target.value.slice(0, TITLE_LIMIT)); triggerAutoSave() }}
                 maxLength={TITLE_LIMIT} className={input} />
             </div>
             <div>
               <label className={lbl}>Key Points</label>
               <textarea name="keyPoints" rows={4} defaultValue={lot.keyPoints}
-                className={`${input} resize-none`} />
+                className={`${input} resize-none`} onChange={triggerAutoSave} />
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -2016,13 +2037,13 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
                   </button>
                 )}
               </div>
-              <textarea name="description" rows={4} value={descVal} onChange={e => setDescVal(e.target.value)}
+              <textarea name="description" rows={4} value={descVal} onChange={e => { setDescVal(e.target.value); triggerAutoSave() }}
                 className={`${input} resize-none`} />
             </div>
             <div>
               <label className={lbl}>Extra Details <span className="text-gray-600 font-normal">(SEO paragraph — generated on Lot History tab)</span></label>
               <textarea name="extraDetails" rows={5} defaultValue={lot.extraDetails ?? ""}
-                className={`${input} resize-none`} placeholder="No extra details yet — generate them on the Lot History tab." />
+                className={`${input} resize-none`} placeholder="No extra details yet — generate them on the Lot History tab." onChange={triggerAutoSave} />
             </div>
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -2031,7 +2052,7 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
               </div>
               <div className="flex flex-wrap gap-1.5 mb-2">
                 {CONDITIONS.map(c => (
-                  <button key={c} type="button" onClick={() => setCond1(c)}
+                  <button key={c} type="button" onClick={() => { setCond1(c); triggerAutoSave() }}
                     className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${cond1 === c ? "border-[#2AB4A6] bg-[#2AB4A6]/20 text-[#2AB4A6]" : "border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
                     {c}
                   </button>
@@ -2043,7 +2064,7 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {CONDITIONS.map(c => (
-                  <button key={c} type="button" onClick={() => setCond2(c)}
+                  <button key={c} type="button" onClick={() => { setCond2(c); triggerAutoSave() }}
                     className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${cond2 === c ? "border-[#2AB4A6] bg-[#2AB4A6]/20 text-[#2AB4A6]" : "border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
                     {c}
                   </button>
@@ -2054,7 +2075,7 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
             </div>
             <div>
               <label className={lbl}>Status</label>
-              <select name="status" defaultValue={lot.status} className={input}>
+              <select name="status" defaultValue={lot.status} className={input} onChange={triggerAutoSave}>
                 {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
@@ -2062,7 +2083,7 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
               <label className={lbl}>Parcel Size</label>
               <div className="flex flex-wrap gap-1.5">
                 {PARCEL_OPTIONS.map(opt => (
-                  <button key={opt} type="button" onClick={() => setParcel(v => v === opt ? "" : opt)}
+                  <button key={opt} type="button" onClick={() => { setParcel(v => v === opt ? "" : opt); triggerAutoSave() }}
                     className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${parcel === opt ? "border-[#2AB4A6] bg-[#2AB4A6]/20 text-[#2AB4A6]" : "border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
                     {opt}
                   </button>
@@ -2077,11 +2098,11 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={lbl}>Estimate Low (£)</label>
-                <input name="estimateLow" type="number" min="0" defaultValue={lot.estimateLow ?? ""} className={input} />
+                <input name="estimateLow" type="number" min="0" defaultValue={lot.estimateLow ?? ""} className={input} onChange={triggerAutoSave} />
               </div>
               <div>
                 <label className={lbl}>Estimate High (£)</label>
-                <input name="estimateHigh" type="number" min="0" defaultValue={lot.estimateHigh ?? ""} className={input} />
+                <input name="estimateHigh" type="number" min="0" defaultValue={lot.estimateHigh ?? ""} className={input} onChange={triggerAutoSave} />
               </div>
             </div>
             {(lot.aiEstimateLow != null || lot.aiEstimateHigh != null) && (
@@ -2099,42 +2120,42 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={lbl}>Starting Bid (£)</label>
-                <input name="startingBid" type="number" min="0" defaultValue={lot.startingBid ?? ""} className={input} />
+                <input name="startingBid" type="number" min="0" defaultValue={lot.startingBid ?? ""} className={input} onChange={triggerAutoSave} />
               </div>
               <div>
                 <label className={lbl}>Reserve (£)</label>
-                <input name="reserve" type="number" min="0" defaultValue={lot.reserve ?? ""} className={input} />
+                <input name="reserve" type="number" min="0" defaultValue={lot.reserve ?? ""} className={input} onChange={triggerAutoSave} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={lbl}>Hammer Price (£)</label>
-                <input name="hammerPrice" type="number" min="0" defaultValue={lot.hammerPrice ?? ""} className={input} />
+                <input name="hammerPrice" type="number" min="0" defaultValue={lot.hammerPrice ?? ""} className={input} onChange={triggerAutoSave} />
               </div>
               <div />
             </div>
             <div>
               <label className={lbl}>Vendor</label>
-              <input name="vendor" defaultValue={lot.vendor ?? ""} className={input} />
+              <input name="vendor" defaultValue={lot.vendor ?? ""} className={input} onChange={triggerAutoSave} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={lbl}>Tote</label>
-                <input name="tote" defaultValue={lot.tote ?? ""} className={input} />
+                <input name="tote" defaultValue={lot.tote ?? ""} className={input} onChange={triggerAutoSave} />
               </div>
               <div>
                 <label className={lbl}>Receipt</label>
-                <input name="receipt" defaultValue={lot.receipt ?? ""} className={input} />
+                <input name="receipt" defaultValue={lot.receipt ?? ""} className={input} onChange={triggerAutoSave} />
               </div>
             </div>
             <div>
               <label className={lbl}>Receipt Unique ID</label>
               <input name="receiptUniqueId" defaultValue={lot.receiptUniqueId ?? ""} className={input}
-                placeholder="e.g. R007523-1 (auto-assigned on create)" />
+                placeholder="e.g. R007523-1 (auto-assigned on create)" onChange={triggerAutoSave} />
             </div>
             <div>
               <label className={lbl}>Category</label>
-              <select value={mainCat} onChange={e => { setMainCat(e.target.value); setSubCat("") }} className={input}>
+              <select value={mainCat} onChange={e => { setMainCat(e.target.value); setSubCat(""); triggerAutoSave() }} className={input}>
                 <option value="">— Select —</option>
                 {mainCatList.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -2142,7 +2163,7 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
             </div>
             <div>
               <label className={lbl}>Sub-Category</label>
-              <select value={subCat} onChange={e => setSubCat(e.target.value)} className={input} disabled={!mainCat}>
+              <select value={subCat} onChange={e => { setSubCat(e.target.value); triggerAutoSave() }} className={input} disabled={!mainCat}>
                 <option value="">— Select —</option>
                 {subCatList.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -2152,7 +2173,7 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
               <label className={lbl}>Brand</label>
               <input
                 value={brandSearch}
-                onChange={e => { setBrandSearch(e.target.value); setBrand(e.target.value) }}
+                onChange={e => { setBrandSearch(e.target.value); setBrand(e.target.value); triggerAutoSave() }}
                 onFocus={() => setBrandFocused(true)}
                 onBlur={() => setTimeout(() => setBrandFocused(false), 150)}
                 placeholder="Search brand…"
@@ -2180,10 +2201,6 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
           <button onClick={onDone} type="button"
             className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#2C2C2E] text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#3C3C3E] transition-colors">
             ← Back
-          </button>
-          <button type="submit" disabled={pending}
-            className="bg-[#2AB4A6] hover:bg-[#24a090] disabled:opacity-50 text-white font-semibold text-sm px-6 py-2 rounded-lg transition-colors">
-            {pending ? "Saving…" : saved ? "✓ Saved" : "Save Changes"}
           </button>
         </div>
       </form>
