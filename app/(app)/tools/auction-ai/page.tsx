@@ -3871,7 +3871,13 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   // ── Stage 3: Key Points Check (auto-apply) ──────────────────────────────────
   async function runKPStage(currentLots: PLot[], aid: string): Promise<PLot[]> {
     const toRun = currentLots.filter(l => !l.kpStatus && l.currentDesc && l.keyPoints)
-    addLog(`── Stage 3: Key Points Check — ${toRun.length} to process`)
+    const alreadyDone  = currentLots.filter(l => l.kpStatus).length
+    const noDesc       = currentLots.filter(l => !l.kpStatus && !l.currentDesc?.trim()).length
+    const noKpField    = currentLots.filter(l => !l.kpStatus && l.currentDesc?.trim() && !l.keyPoints?.trim()).length
+    addLog(`── Stage 2: Key Points Check — ${toRun.length} to process`)
+    if (alreadyDone > 0) addLog(`   (${alreadyDone} already done from previous run)`)
+    if (noDesc > 0)      addLog(`   (${noDesc} skipped — no description generated)`)
+    if (noKpField > 0)   addLog(`   (${noKpField} skipped — no key points recorded on lot)`)
     let done = 0
     const updated = [...currentLots]
 
