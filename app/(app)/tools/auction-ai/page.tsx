@@ -4851,6 +4851,7 @@ const UPGRADE_MODES = [
   { key: "condition",        label: "Expand condition notes", desc: "More specific about defects and completeness" },
   { key: "no_hyperbole",     label: "Remove hyperbole",       desc: "Strip vague positives and sales-speak" },
   { key: "auction_language", label: "Auction language",       desc: "Reinforce lot/catalogue-appropriate terminology" },
+  { key: "brand_first",      label: "Brand first",            desc: "Move the brand/maker name to the very start of the description" },
 ]
 
 function UpgradeTab({ model: globalModel, fallbackModel }: { model: string; fallbackModel: string }) {

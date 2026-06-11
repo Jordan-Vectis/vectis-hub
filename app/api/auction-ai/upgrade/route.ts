@@ -12,6 +12,7 @@ const MODE_INSTRUCTIONS: Record<string, string> = {
   no_hyperbole:     "Remove hyperbole and sales-speak — replace vague positive language with specific factual statements.",
   auction_language: "Ensure auction-appropriate terminology throughout — use lot/catalogue language as appropriate.",
   seo:              "Improve search visibility (SEO) — naturally weave in the specific terms a buyer would search for (brand, maker, model/range name, character, theme, era, format). Do not keyword-stuff, repeat unnaturally, or change any facts.",
+  brand_first:      "Move the brand or maker name to the very start of the description — the first word or phrase must be the brand/maker. If the brand is already first, leave it unchanged.",
 }
 
 // POST /api/auction-ai/upgrade
