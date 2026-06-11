@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, fillLotsFromTotes, togglePublished, generateTitlesFromDescriptions, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, transferLots, bulkClearLotPhotos } from "@/lib/actions/catalogue"
+import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, fillLotsFromTotes, togglePublished, generateTitlesFromDescriptions, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, bulkSetLotsAiExcluded, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, transferLots, bulkClearLotPhotos } from "@/lib/actions/catalogue"
 import LotWizardTab, { CATEGORY_MAP, BRANDS_LIST } from "./lot-wizard-tab"
 import PhotoOnlyTab from "./photo-only-tab"
 import ImportTab from "./import-tab"
@@ -937,6 +937,10 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
   const [bcMsg, setBcMsg]           = useState<string | null>(null)
   const [bcPending, startBc]        = useTransition()
 
+  // Mark/unmark selected as AI excluded
+  const [excludeMsg, setExcludeMsg] = useState<string | null>(null)
+  const [excludePending, startExclude] = useTransition()
+
   // Autolotter panel
   const [showMassAdd,    setShowMassAdd]    = useState(false)
   const [massCount,      setMassCount]      = useState(10)
@@ -992,6 +996,8 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
   const [fPhotos,        setFPhotos]        = useState("")   // "any" | "none" | ""
   const [fAiUpgraded,    setFAiUpgraded]    = useState("")   // "yes" | "no" | ""
   const [fAddedToBC,     setFAddedToBC]     = useState("")   // "yes" | "no" | ""
+  const [fAiExcluded,    setFAiExcluded]    = useState("")   // "yes" | "no" | ""
+  const [fKeyPoints,     setFKeyPoints]     = useState("")   // "yes" | "no" | ""
   const [fStatus,        setFStatus]        = useState("")
 
   const uniqueStatuses = useMemo(() => Array.from(new Set(lots.map(l => l.status))).sort(), [lots])
@@ -1008,6 +1014,8 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
       (fPhotos === "" || (fPhotos === "any" ? l.imageUrls.length > 0 : l.imageUrls.length === 0)) &&
       (fAiUpgraded === "" || (fAiUpgraded === "yes" ? l.aiUpgraded : !l.aiUpgraded)) &&
       (fAddedToBC === ""  || (fAddedToBC  === "yes" ? l.addedToBC  : !l.addedToBC )) &&
+      (fAiExcluded === "" || (fAiExcluded === "yes" ? l.aiExcluded : !l.aiExcluded)) &&
+      (fKeyPoints === ""  || (fKeyPoints  === "yes" ? !!l.keyPoints?.trim() : !l.keyPoints?.trim())) &&
       (fStatus === "" || l.status === fStatus)
     )
     return f.sort((a, b) => {
@@ -1033,13 +1041,14 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
       }
       return sortDir === "asc" ? cmp : -cmp
     })
-  }, [lots, fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAiUpgraded, fAddedToBC, fStatus, sortCol, sortDir])
+  }, [lots, fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAiUpgraded, fAddedToBC, fAiExcluded, fKeyPoints, fStatus, sortCol, sortDir])
 
-  const filtersActive = [fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAiUpgraded, fAddedToBC, fStatus].some(f => f !== "")
+  const filtersActive = [fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAiUpgraded, fAddedToBC, fAiExcluded, fKeyPoints, fStatus].some(f => f !== "")
 
   function clearFilters() {
     setFBarcode(""); setFUniqueId(""); setFTitle(""); setFVendor(""); setFReceipt("")
-    setFTote(""); setFCategory(""); setFPhotos(""); setFAiUpgraded(""); setFAddedToBC(""); setFStatus("")
+    setFTote(""); setFCategory(""); setFPhotos(""); setFAiUpgraded(""); setFAddedToBC("")
+    setFAiExcluded(""); setFKeyPoints(""); setFStatus("")
   }
 
   function exportExcel() {
@@ -1227,6 +1236,20 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
     })
   }
 
+  async function handleBulkToggleAiExcluded() {
+    if (selected.size === 0) return
+    const selectedLots = lots.filter(l => selected.has(l.id))
+    const anyNotExcluded = selectedLots.some(l => !l.aiExcluded)
+    const newValue = anyNotExcluded
+    startExclude(async () => {
+      const { count } = await bulkSetLotsAiExcluded(Array.from(selected), auctionId, newValue)
+      setExcludeMsg(`${newValue ? "🚫 Excluded" : "✓ Unexcluded"} ${count} lot${count === 1 ? "" : "s"} from AI`)
+      setSelected(new Set())
+      onDelete()
+      setTimeout(() => setExcludeMsg(null), 3500)
+    })
+  }
+
   function handleSetStartingBids() {
     const eligible = (selected.size > 0 ? lots.filter(l => selected.has(l.id)) : lots)
       .filter(l => l.estimateLow != null)
@@ -1400,6 +1423,17 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                   </button>
                 )
               })()}
+              {(() => {
+                const anyNotExcluded = lots.some(l => selected.has(l.id) && !l.aiExcluded)
+                return (
+                  <button onClick={handleBulkToggleAiExcluded} disabled={excludePending}
+                    className="px-4 py-1.5 text-sm font-medium rounded-lg border border-amber-700 text-amber-400 hover:bg-amber-900/30 transition-colors disabled:opacity-50">
+                    {excludePending ? "Updating…" : anyNotExcluded
+                      ? `🚫 Exclude ${selected.size} from AI`
+                      : `✓ Unexclude ${selected.size} from AI`}
+                  </button>
+                )
+              })()}
               <button onClick={handleGenerateTitles} disabled={titlesPending}
                 className="px-4 py-1.5 text-sm font-medium rounded-lg border border-blue-700 text-blue-400 hover:bg-blue-900/30 transition-colors disabled:opacity-50">
                 {titlesPending ? "Generating…" : `✏️ Generate Titles (${selected.size})`}
@@ -1426,6 +1460,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
             </>
           )}
           {bcMsg && <span className="text-xs text-emerald-400">{bcMsg}</span>}
+          {excludeMsg && <span className="text-xs text-amber-400">{excludeMsg}</span>}
           {filtersActive && (
             <span className="text-xs text-gray-600 dark:text-gray-500">
               {filtered.length} / {lots.length} lots
@@ -1697,6 +1732,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                   {sortCol === col ? (sortDir === "asc" ? " ▲" : " ▼") : <span className="text-gray-700"> ⇅</span>}
                 </th>
               ))}
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-500 uppercase tracking-wide whitespace-nowrap">KP</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-500 uppercase tracking-wide whitespace-nowrap">AI</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-500 uppercase tracking-wide whitespace-nowrap">BC</th>
               <th className="px-4 py-3" />
@@ -1725,6 +1761,13 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                 </select>
               </td>
               <td className="px-2 py-1.5" />
+              <td className="px-2 py-1.5">
+                <select value={fKeyPoints} onChange={e => setFKeyPoints(e.target.value)} className={COL_SELECT}>
+                  <option value="">All</option>
+                  <option value="yes">✓ Has KP</option>
+                  <option value="no">— No KP</option>
+                </select>
+              </td>
               <td className="px-2 py-1.5">
                 <select value={fAiUpgraded} onChange={e => setFAiUpgraded(e.target.value)} className={COL_SELECT}>
                   <option value="">All</option>
@@ -1783,15 +1826,29 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                 <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-500 whitespace-nowrap">
                   {lot.createdByName ?? "—"}
                 </td>
+                <td className="px-4 py-3 text-center">
+                  {lot.keyPoints?.trim()
+                    ? <span className="text-green-500 text-xs" title="Has key points">✓</span>
+                    : <span className="text-gray-700 text-xs">—</span>}
+                </td>
                 <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
-                  <button
-                    onClick={() => toggleLotAiUpgraded(lot.id, auctionId, !lot.aiUpgraded)}
-                    title={lot.aiUpgraded ? "Click to mark as not upgraded" : "Click to mark as AI upgraded"}
-                    className="transition-opacity hover:opacity-60">
-                    {lot.aiUpgraded
-                      ? <span>✨</span>
-                      : <span className="text-gray-700 text-xs">—</span>}
-                  </button>
+                  {lot.aiExcluded ? (
+                    <button
+                      onClick={() => toggleLotAiUpgraded(lot.id, auctionId, false)}
+                      title="AI excluded — click to toggle AI upgraded status"
+                      className="transition-opacity hover:opacity-60">
+                      <span title="Excluded from AI runs">🚫</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => toggleLotAiUpgraded(lot.id, auctionId, !lot.aiUpgraded)}
+                      title={lot.aiUpgraded ? "Click to mark as not upgraded" : "Click to mark as AI upgraded"}
+                      className="transition-opacity hover:opacity-60">
+                      {lot.aiUpgraded
+                        ? <span>✨</span>
+                        : <span className="text-gray-700 text-xs">—</span>}
+                    </button>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
                   <button
@@ -1814,7 +1871,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={12} className="px-4 py-8 text-center text-gray-600 text-sm">No lots match your filters</td></tr>
+              <tr><td colSpan={13} className="px-4 py-8 text-center text-gray-600 text-sm">No lots match your filters</td></tr>
             )}
           </tbody>
         </table>

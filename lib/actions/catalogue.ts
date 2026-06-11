@@ -259,6 +259,18 @@ export async function toggleLotAddedToBC(lotId: string, auctionId: string, value
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
+// Bulk set AI excluded — used by the mass-select action on Manage Lots.
+export async function bulkSetLotsAiExcluded(lotIds: string[], auctionId: string, value: boolean) {
+  await requireCataloguer()
+  if (lotIds.length === 0) return { count: 0 }
+  const r = await prisma.catalogueLot.updateMany({
+    where: { id: { in: lotIds }, auctionId },
+    data:  { aiExcluded: value },
+  })
+  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+  return { count: r.count }
+}
+
 // Bulk set — used by the mass-select action on Manage Lots.
 export async function bulkSetLotsAddedToBC(lotIds: string[], auctionId: string, value: boolean) {
   const session = await requireCataloguer()
