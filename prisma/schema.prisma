@@ -367,6 +367,7 @@ model CatalogueLot {
   extraDetails String?  @db.Text
   imageUrls    String[]         @default([])
   status        String           @default("ENTERED")
+  aiExcluded    Boolean          @default(false)  // Lot description was typed manually — exclude from all AI runs
   aiUpgraded    Boolean          @default(false)
   addedToBC     Boolean          @default(false)  // Manually ticked by cataloguers once a lot has been pushed into Business Central
   reviewFlag      String?        @db.Text         // set from the Review tab when a checker spots an error — the reason text

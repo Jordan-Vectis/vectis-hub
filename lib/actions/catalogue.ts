@@ -730,5 +730,6 @@ function extractLotData(formData: FormData) {
     notes:        str("notes"),
     extraDetails: str("extraDetails"),
     status:       (formData.get("status") as string) || "ENTERED",
+    aiExcluded:   formData.get("aiExcluded") === "true",
   }
 }

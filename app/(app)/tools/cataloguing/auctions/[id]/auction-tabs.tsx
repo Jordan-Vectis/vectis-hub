@@ -32,7 +32,7 @@ interface Lot {
   hammerPrice: number | null; condition: string | null; vendor: string | null
   tote: string | null; receipt: string | null; receiptUniqueId: string | null; category: string | null
   subCategory: string | null; brand: string | null; notes: string | null
-  status: string; aiUpgraded: boolean; addedToBC: boolean; createdByName: string | null; imageUrls: string[]
+  status: string; aiUpgraded: boolean; addedToBC: boolean; aiExcluded: boolean; createdByName: string | null; imageUrls: string[]
   extraDetails: string | null
 }
 
@@ -2026,6 +2026,13 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
               <label className={lbl}>Key Points</label>
               <textarea name="keyPoints" rows={4} defaultValue={lot.keyPoints}
                 className={`${input} resize-none`} onChange={triggerAutoSave} />
+            </div>
+            <div>
+              <label className="flex items-center gap-2 cursor-pointer w-fit">
+                <input type="checkbox" name="aiExcluded" value="true" defaultChecked={lot.aiExcluded ?? false}
+                  className="w-4 h-4 accent-amber-500" />
+                <span className="text-sm text-gray-400">Exclude from AI — description typed manually</span>
+              </label>
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">

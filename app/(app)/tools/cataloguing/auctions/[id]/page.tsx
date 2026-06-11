@@ -124,6 +124,7 @@ export default async function AuctionDetailPage({
           status: l.status,
           aiUpgraded: l.aiUpgraded,
           addedToBC: l.addedToBC,
+          aiExcluded: l.aiExcluded,
           createdByName: l.createdByName,
           imageUrls: l.imageUrls,
           extraDetails: l.extraDetails ?? null,

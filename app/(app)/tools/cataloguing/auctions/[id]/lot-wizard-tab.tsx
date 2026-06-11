@@ -590,6 +590,8 @@ export default function LotWizardTab({
     try { localStorage.setItem(LAST_BARCODE_KEY, val) } catch {}
   }
   const [keyPoints,   setKeyPoints]   = useState("")
+  const [aiExcluded,  setAiExcluded]  = useState(false)
+  const [manualDesc,  setManualDesc]  = useState("")
   const [mainCat,     setMainCat]     = useState("")
   const [subCat,      setSubCat]      = useState("")
   const [brand,       setBrand]       = useState("")
@@ -708,12 +710,16 @@ export default function LotWizardTab({
     const condArr = [cond1, cond2].filter(Boolean).sort((a, b) => CONDITIONS.indexOf(b) - CONDITIONS.indexOf(a))
     const condition = condArr.join(" to ")
     const autoTitle = [brand, mainCat, subCat].filter(Boolean).join(" – ") || barcode || "Lot"
-    const title = keyPoints.split("\n")[0]?.trim() || autoTitle
+    const title = aiExcluded
+      ? (manualDesc.split("\n")[0]?.trim() || autoTitle)
+      : (keyPoints.split("\n")[0]?.trim() || autoTitle)
 
     const fd = new FormData()
     fd.append("barcode",      barcode)
     fd.append("title",        title)
-    fd.append("keyPoints",    keyPoints)
+    fd.append("keyPoints",    aiExcluded ? "" : keyPoints)
+    fd.append("description",  aiExcluded ? manualDesc : "")
+    fd.append("aiExcluded",   String(aiExcluded))
     fd.append("estimateLow",  estLow.replace(/[£,]/g, "").trim())
     fd.append("estimateHigh", estHigh.replace(/[£,]/g, "").trim())
     fd.append("condition",    condition)
@@ -757,7 +763,7 @@ export default function LotWizardTab({
       setTote(pinnedTote || tote)
       setReceipt(pinnedReceipt || receipt)
       setVendorHint(null)
-      setBarcode(""); setKeyPoints("")
+      setBarcode(""); setKeyPoints(""); setAiExcluded(false); setManualDesc("")
       setMainCat(pinnedMain); setSubCat(pinnedSub); setBrand("")
       setEstLow(""); setEstHigh(""); setCond1(""); setCond2(""); setParcel("")
       photoFiles.forEach(p => URL.revokeObjectURL(p.preview))
@@ -1085,11 +1091,27 @@ export default function LotWizardTab({
         )}
 
         {step === 3 && (
-          <div className="max-w-lg">
-            <label className={`${lbl} block mb-1`}>Key Points <span className="text-gray-600">(optional)</span></label>
-            <textarea value={keyPoints} onChange={e => setKeyPoints(e.target.value)} rows={6}
-              placeholder="Describe any key points about this lot…"
-              className={`${inpFocus} resize-none`} autoFocus />
+          <div className="max-w-lg space-y-4">
+            <label className={`flex items-center gap-3 cursor-pointer px-3 py-2.5 rounded-lg border transition-colors w-fit ${aiExcluded ? "bg-amber-950/40 border-amber-600/60 text-amber-300" : "border-gray-700 text-gray-500 hover:border-gray-500"}`}>
+              <input type="checkbox" checked={aiExcluded} onChange={e => setAiExcluded(e.target.checked)}
+                className="w-4 h-4 accent-amber-500" />
+              <span className={tablet ? "text-base font-medium" : "text-sm font-medium"}>Exclude from AI — description typed manually</span>
+            </label>
+            {aiExcluded ? (
+              <div>
+                <label className={`${lbl} block mb-1`}>Description <span className="text-gray-500">(typed manually — will not be sent to AI)</span></label>
+                <textarea value={manualDesc} onChange={e => setManualDesc(e.target.value)} rows={7}
+                  placeholder="Type the full description for this lot…"
+                  className={`${inpFocus} resize-none`} autoFocus />
+              </div>
+            ) : (
+              <div>
+                <label className={`${lbl} block mb-1`}>Key Points <span className="text-gray-600">(optional)</span></label>
+                <textarea value={keyPoints} onChange={e => setKeyPoints(e.target.value)} rows={6}
+                  placeholder="Describe any key points about this lot…"
+                  className={`${inpFocus} resize-none`} autoFocus />
+              </div>
+            )}
           </div>
         )}
 
