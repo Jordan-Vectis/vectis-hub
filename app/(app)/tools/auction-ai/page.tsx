@@ -4295,7 +4295,34 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                     {"pending" in s && s.pending! > 0 && <p className="text-amber-400">⏳ {s.pending} awaiting review</p>}
                     {"issues" in s && s.issues! > 0 && <p className="text-yellow-400">⚑ {s.issues} descriptions corrected — review below</p>}
                     {s.skipped > 0 && <p className="text-red-400">✗ {s.skipped} content blocked by AI</p>}
-                    {processed < s.total && <p className="text-gray-500">— {s.total - processed} not processed</p>}
+                    {processed < s.total && (() => {
+                      const unprocessed = s.total - processed
+                      if (key === "kpcheck") {
+                        const batchFailed = lots.filter(l => !l.kpStatus && l.batchStatus !== "ok").length
+                        const noKpField   = lots.filter(l => !l.kpStatus && l.batchStatus === "ok" && !l.keyPoints?.trim()).length
+                        const noDesc      = lots.filter(l => !l.kpStatus && l.batchStatus === "ok" && l.keyPoints?.trim() && !l.currentDesc?.trim()).length
+                        return (
+                          <>
+                            <p className="text-gray-500">— {unprocessed} not processed:</p>
+                            {noKpField  > 0 && <p className="text-gray-500 pl-3">· {noKpField} no key points recorded</p>}
+                            {batchFailed > 0 && <p className="text-gray-500 pl-3">· {batchFailed} batch did not succeed</p>}
+                            {noDesc     > 0 && <p className="text-gray-500 pl-3">· {noDesc} no description generated</p>}
+                          </>
+                        )
+                      }
+                      if (key === "doublecheck") {
+                        const batchFailed = lots.filter(l => !l.dcStatus && l.batchStatus !== "ok").length
+                        const noDesc      = lots.filter(l => !l.dcStatus && l.batchStatus === "ok" && !l.currentDesc?.trim()).length
+                        return (
+                          <>
+                            <p className="text-gray-500">— {unprocessed} not processed:</p>
+                            {batchFailed > 0 && <p className="text-gray-500 pl-3">· {batchFailed} batch did not succeed</p>}
+                            {noDesc     > 0 && <p className="text-gray-500 pl-3">· {noDesc} no description available</p>}
+                          </>
+                        )
+                      }
+                      return <p className="text-gray-500">— {unprocessed} not processed</p>
+                    })()}
                   </div>
                 )}
                 {isActive && progress && key === stage && (
