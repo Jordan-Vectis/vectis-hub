@@ -2290,21 +2290,31 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
 
         {!loadingPhotos && imageKeys.length > 0 && (
           <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-            {imageKeys.map(key => (
-              <div key={key} className="relative aspect-square group">
-                {signedUrls[key] ? (
-                  <a href={signedUrls[key]} target="_blank" rel="noopener noreferrer">
-                    <img src={signedUrls[key]} alt="Lot photo" className="w-full h-full object-cover rounded-lg border border-gray-700" />
-                  </a>
-                ) : (
-                  <div className="w-full h-full rounded-lg bg-gray-800 animate-pulse" />
-                )}
-                <button onClick={() => handlePhotoDelete(key)}
-                  className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-700 rounded-full text-white text-xs items-center justify-center hidden group-hover:flex">
-                  ✕
-                </button>
-              </div>
-            ))}
+            {imageKeys.map((key, idx) => {
+              const basename = key.split("/").pop() ?? key
+              const nameMatch = basename.match(/^\d{10,}-(.+)$/)
+              const displayName = nameMatch ? nameMatch[1] : basename
+              return (
+                <div key={key} className="relative group">
+                  <div className="relative aspect-square">
+                    {signedUrls[key] ? (
+                      <a href={signedUrls[key]} target="_blank" rel="noopener noreferrer">
+                        <img src={signedUrls[key]} alt="Lot photo" className={`w-full h-full object-cover rounded-lg border ${idx === 0 ? "border-[#2AB4A6]" : "border-gray-700"}`} />
+                      </a>
+                    ) : (
+                      <div className="w-full h-full rounded-lg bg-gray-800 animate-pulse" />
+                    )}
+                    <button onClick={() => handlePhotoDelete(key)}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-700 rounded-full text-white text-xs items-center justify-center hidden group-hover:flex">
+                      ✕
+                    </button>
+                  </div>
+                  <p className={`text-[9px] truncate mt-0.5 text-center ${idx === 0 ? "text-[#2AB4A6]" : "text-gray-600"}`} title={displayName}>
+                    {displayName}
+                  </p>
+                </div>
+              )
+            })}
           </div>
         )}
 

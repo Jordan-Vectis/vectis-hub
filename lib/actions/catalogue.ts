@@ -491,11 +491,11 @@ export async function uploadLotPhoto(lotId: string, auctionId: string, formData:
   const file = formData.get("photo") as File
   if (!file || file.size === 0) throw new Error("No file provided")
 
-  const ext = file.name.split(".").pop() || "jpg"
   const buf = Buffer.from(await file.arrayBuffer())
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
   const key = await uploadBufferToR2(
     buf,
-    `lot-photos/${auctionId}/${lotId}/${Date.now()}.${ext}`,
+    `lot-photos/${auctionId}/${lotId}/${Date.now()}-${safeName}`,
     file.type || "image/jpeg"
   )
 
