@@ -309,6 +309,21 @@ export async function setLotReviewFlag(lotId: string, auctionId: string, flag: s
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
+// Pipeline — save the AI's potential-cataloguer-mistake note to the lot.
+export async function saveAiFlagNote(lotId: string, flagNote: string | null) {
+  await requireCataloguer()
+  await prisma.catalogueLot.update({ where: { id: lotId }, data: { aiFlagNote: flagNote ?? null } })
+}
+
+// Review tab — save a manually edited description for a lot.
+export async function saveLotDescription(lotId: string, auctionId: string, description: string) {
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
+  const title = description.split("\n")[0]?.trim().slice(0, 83) || "Untitled"
+  await prisma.catalogueLot.update({ where: { id: lotId }, data: { description, title, aiFlagNote: null } })
+  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+}
+
 export async function saveLotExtraDetails(lotId: string, auctionId: string, extraDetails: string) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)

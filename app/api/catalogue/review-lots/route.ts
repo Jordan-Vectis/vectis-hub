@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
         condition: true, category: true, subCategory: true, brand: true,
         status: true, imageUrls: true, createdByName: true,
         reviewFlag: true, reviewFlaggedBy: true, reviewFlaggedAt: true,
+        aiFlagNote: true,
       },
       orderBy: { createdAt: "asc" },
     })

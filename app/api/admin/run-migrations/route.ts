@@ -285,6 +285,9 @@ const MIGRATIONS = [
   // 2026-06-11 — AI exclusion flag: lot description typed manually, skip all AI runs
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "aiExcluded" BOOLEAN NOT NULL DEFAULT FALSE`,
 
+  // 2026-06-11 — AI flag note: potential cataloguer mistake flagged by the batch pipeline
+  `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "aiFlagNote" TEXT`,
+
   // 2026-04-29 — MacroFile: stores uploaded macro/instruction files for Auction AI
   `CREATE TABLE IF NOT EXISTS "MacroFile" (
     "id"          TEXT         NOT NULL,

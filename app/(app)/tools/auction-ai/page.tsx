@@ -5,7 +5,7 @@ import * as XLSX from "xlsx"
 import { PRESETS } from "@/lib/auction-ai-presets"
 import { DOUBLE_CHECK_INSTRUCTION } from "@/lib/double-check-instruction"
 import { KEY_POINTS_INSTRUCTION } from "@/lib/key-points-instruction"
-import { applyAiDescriptionOne } from "@/lib/actions/catalogue"
+import { applyAiDescriptionOne, saveAiFlagNote } from "@/lib/actions/catalogue"
 import { showError } from "@/lib/error-modal"
 import { MacroTab } from "./macro-tab"
 
@@ -3769,6 +3769,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         }
         // Save to pipeline + existing saved runs
         await saveLot(lot.id, { batchStatus: "ok", description: desc, batchDesc: desc, estimate: result.estimate ?? "" })
+        if (result.flag) saveAiFlagNote(lot.id, result.flag).catch(() => {})
         fetch("/api/auction-ai/runs", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ code: code.trim().toUpperCase(), preset, lot: lot.label, description: desc, estimate: result.estimate ?? "" }),

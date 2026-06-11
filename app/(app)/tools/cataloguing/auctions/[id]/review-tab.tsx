@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState, useTransition } from "react"
-import { setLotReviewFlag } from "@/lib/actions/catalogue"
+import { setLotReviewFlag, saveLotDescription } from "@/lib/actions/catalogue"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,6 +26,7 @@ type ReviewLot = {
   reviewFlag: string | null
   reviewFlaggedBy: string | null
   reviewFlaggedAt: string | null
+  aiFlagNote: string | null
 }
 
 // ─── Key point ↔ description matching ────────────────────────────────────────
@@ -190,6 +191,8 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
   const [photoLot, setPhotoLot] = useState<ReviewLot | null>(null)
   const [flagOpenId, setFlagOpenId] = useState<string | null>(null)
   const [flagText, setFlagText]     = useState("")
+  const [editDescId, setEditDescId] = useState<string | null>(null)
+  const [editDescText, setEditDescText] = useState("")
   const [pending, start] = useTransition()
 
   useEffect(() => {
@@ -211,6 +214,7 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
   [lots])
 
   const flaggedCount = lots.filter(l => l.reviewFlag).length
+  const aiFlagCount  = lots.filter(l => l.aiFlagNote).length
 
   const cataloguers = useMemo(() =>
     [...new Set(lots.map(l => l.createdByName).filter(Boolean))].sort() as string[],
@@ -253,6 +257,19 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
     })
   }
 
+  function saveDesc(lot: ReviewLot, description: string) {
+    start(async () => {
+      try {
+        await saveLotDescription(lot.id, auctionId, description)
+        setLots(prev => prev.map(l => l.id === lot.id ? { ...l, description, aiFlagNote: null } : l))
+        setEditDescId(null)
+        setEditDescText("")
+      } catch (e: any) {
+        setError(e?.message ?? "Failed to save description")
+      }
+    })
+  }
+
   if (loading) return <p className="text-sm text-gray-500 dark:text-gray-400 py-8 text-center">Loading lots…</p>
 
   return (
@@ -265,6 +282,7 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
             <span className="font-bold text-gray-900 dark:text-white">{filtered.length}</span> of {lots.length} lots
             {issueCount > 0 && <span className="ml-2 text-amber-500 font-semibold">⚠ {issueCount} with issues</span>}
             {flaggedCount > 0 && <span className="ml-2 text-red-500 font-semibold">🚩 {flaggedCount} flagged</span>}
+            {aiFlagCount > 0 && <span className="ml-2 text-orange-400 font-semibold">⚠️ {aiFlagCount} AI-flagged</span>}
           </p>
           <div className="flex items-center gap-2 ml-auto flex-wrap">
             <input
@@ -372,6 +390,41 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
                     Remove flag
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* AI-flagged potential cataloguer mistake */}
+            {lot.aiFlagNote && (
+              <div className="rounded-xl bg-orange-50 dark:bg-orange-950/30 border border-orange-300 dark:border-orange-700 px-4 py-3">
+                <p className="text-xs uppercase tracking-wider text-orange-500 dark:text-orange-400 font-semibold mb-1">⚠️ Possible cataloguer mistake (flagged by AI)</p>
+                <p className="text-sm text-orange-800 dark:text-orange-200 whitespace-pre-wrap mb-2">{lot.aiFlagNote}</p>
+                {editDescId === lot.id ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={editDescText}
+                      onChange={e => setEditDescText(e.target.value)}
+                      rows={5}
+                      autoFocus
+                      className="w-full bg-white dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-orange-400"
+                    />
+                    <div className="flex gap-2">
+                      <button onClick={() => saveDesc(lot, editDescText)} disabled={pending || !editDescText.trim()}
+                        className="px-4 py-2 text-sm font-semibold rounded-lg bg-orange-600 hover:bg-orange-500 disabled:opacity-40 text-white transition-colors">
+                        {pending ? "Saving…" : "Save description"}
+                      </button>
+                      <button onClick={() => { setEditDescId(null); setEditDescText("") }}
+                        className="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 transition-colors">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setEditDescId(lot.id); setEditDescText(lot.description ?? "") }}
+                    className="text-sm font-medium text-orange-600 dark:text-orange-400 hover:underline">
+                    Edit description to fix…
+                  </button>
+                )}
               </div>
             )}
 
