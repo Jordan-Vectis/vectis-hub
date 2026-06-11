@@ -2209,6 +2209,10 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
             className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#2C2C2E] text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#3C3C3E] transition-colors">
             ← Back
           </button>
+          <button type="submit" disabled={pending}
+            className="bg-[#2AB4A6] hover:bg-[#24a090] disabled:opacity-50 text-white font-semibold text-sm px-6 py-2 rounded-lg transition-colors">
+            {pending ? "Saving…" : saved ? "✓ Saved" : "Save"}
+          </button>
         </div>
       </form>
 
