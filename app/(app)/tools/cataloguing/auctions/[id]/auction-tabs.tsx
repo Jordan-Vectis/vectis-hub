@@ -583,22 +583,24 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
     <div className="flex flex-col h-full min-h-0 p-6 gap-0">
 
       {/* Header */}
-      <div className="flex items-center gap-3 mb-5 flex-shrink-0">
-        <button onClick={() => router.push("/tools/cataloguing/auctions")}
-          className="text-sm text-[#2AB4A6] hover:text-[#24a090] transition-colors">
-          ← Auctions
-        </button>
-        <span className="text-gray-700">/</span>
-        <span className="font-mono font-bold text-[#2AB4A6]">{auction.code}</span>
-        <span className="text-gray-600 dark:text-gray-300 font-medium">{auction.name}</span>
-        {auction.catalogued  && <span className="text-xs px-2 py-0.5 rounded-full bg-blue-900/50 text-blue-300">Catalogued</span>}
-        {auction.addedToBC   && <span className="text-xs px-2 py-0.5 rounded-full bg-orange-900/50 text-orange-300">Added to BC</span>}
-        {auction.photography && <span className="text-xs px-2 py-0.5 rounded-full bg-purple-900/50 text-purple-300">Photography</span>}
-        {auction.aiRan       && <span className="text-xs px-2 py-0.5 rounded-full bg-pink-900/50 text-pink-300">Ran through AI</span>}
-        {auction.complete    && <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/50 text-green-300">Complete</span>}
-        {published && <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-900/50 text-emerald-300">● Live on Site</span>}
+      <div className="flex items-center gap-3 mb-5 flex-shrink-0 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap flex-1 min-w-0">
+          <button onClick={() => router.push("/tools/cataloguing/auctions")}
+            className="text-sm text-[#2AB4A6] hover:text-[#24a090] transition-colors flex-shrink-0">
+            ← Auctions
+          </button>
+          <span className="text-gray-700 flex-shrink-0">/</span>
+          <span className="font-mono font-bold text-[#2AB4A6] flex-shrink-0">{auction.code}</span>
+          <span className="text-gray-600 dark:text-gray-300 font-medium flex-shrink-0">{auction.name}</span>
+          {auction.catalogued  && <span className="text-xs px-2 py-0.5 rounded-full bg-blue-900/50 text-blue-300 flex-shrink-0">Catalogued</span>}
+          {auction.addedToBC   && <span className="text-xs px-2 py-0.5 rounded-full bg-orange-900/50 text-orange-300 flex-shrink-0">Added to BC</span>}
+          {auction.photography && <span className="text-xs px-2 py-0.5 rounded-full bg-purple-900/50 text-purple-300 flex-shrink-0">Photography</span>}
+          {auction.aiRan       && <span className="text-xs px-2 py-0.5 rounded-full bg-pink-900/50 text-pink-300 flex-shrink-0">Ran through AI</span>}
+          {auction.complete    && <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/50 text-green-300 flex-shrink-0">Complete</span>}
+          {published && <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-900/50 text-emerald-300 flex-shrink-0">● Live on Site</span>}
+        </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2 flex-shrink-0">
           <button onClick={() => setShowDupeChecker(true)}
             className="relative text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-400 dark:border-yellow-700/40 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900/40">
             🔍 Check Duplicates
