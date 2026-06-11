@@ -4162,6 +4162,11 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   const stageOrder: PipelineStage[] = ["batch", "kpcheck", "doublecheck", "complete"]
   const stageIndex = stageOrder.indexOf(stage)
 
+  const batchOkLots = lots.filter(l => l.batchStatus === "ok")
+  const kpIncomplete  = stageIndex > stageOrder.indexOf("kpcheck")  && batchOkLots.some(l => !l.kpStatus)
+  const dcIncomplete  = stageIndex > stageOrder.indexOf("doublecheck") && batchOkLots.some(l => !l.dcStatus)
+  const pipelineIncomplete = kpIncomplete || dcIncomplete
+
   const filtered = auctionList.filter(a => {
     const q = code.toLowerCase()
     return a.code.toLowerCase().includes(q) || a.name.toLowerCase().includes(q)
@@ -4256,25 +4261,27 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       {lots.length > 0 && (
         <div className="grid grid-cols-3 gap-3">
           {([
-            { key: "batch",       label: "1. Batch Run",          s: batchSummary, stageVal: "batch" as const,       icon: "⚡" },
-            { key: "kpcheck",     label: "2. Key Points Check",    s: kpSummary,    stageVal: "kpcheck" as const,     icon: "✓"  },
-            { key: "doublecheck", label: "3. Double Check",        s: dcSummary,    stageVal: "doublecheck" as const, icon: "🔎" },
-          ] as const).map(({ key, label, s, stageVal, icon }) => {
+            { key: "batch",       label: "1. Batch Run",          s: batchSummary, stageVal: "batch" as const,       icon: "⚡", incomplete: false },
+            { key: "kpcheck",     label: "2. Key Points Check",    s: kpSummary,    stageVal: "kpcheck" as const,     icon: "✓",  incomplete: kpIncomplete },
+            { key: "doublecheck", label: "3. Double Check",        s: dcSummary,    stageVal: "doublecheck" as const, icon: "🔎", incomplete: dcIncomplete },
+          ] as const).map(({ key, label, s, stageVal, icon, incomplete }) => {
             const isActive   = stage === stageVal && running
             const isDone     = stageOrder.indexOf(stageVal) < stageIndex
             const isUpcoming = stageOrder.indexOf(stageVal) > stageIndex && !running
             const processed  = s.ok + s.skipped + ("issues" in s ? s.issues! : 0) + ("fixed" in s ? s.fixed! : 0)
             return (
               <div key={key} className={`rounded-xl border p-4 space-y-2 transition-colors ${
-                isActive   ? "border-[#C8A96E]/60 bg-[#C8A96E]/10"
-                : isDone   ? "border-green-700/50 bg-green-950/20"
+                isActive     ? "border-[#C8A96E]/60 bg-[#C8A96E]/10"
+                : incomplete ? "border-amber-600/60 bg-amber-950/20"
+                : isDone     ? "border-green-700/50 bg-green-950/20"
                 : isUpcoming ? "border-gray-700 bg-gray-900/20 opacity-50"
                 : "border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#1C1C1E]"
               }`}>
                 <div className="flex items-center gap-2">
                   <span>{icon}</span>
                   <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{label}</p>
-                  {isDone    && <span className="ml-auto text-xs text-green-400">✓ Done</span>}
+                  {incomplete && <span className="ml-auto text-xs text-amber-400">⚠ Incomplete</span>}
+                  {!incomplete && isDone && <span className="ml-auto text-xs text-green-400">✓ Done</span>}
                   {isActive  && <span className="ml-auto text-xs text-[#C8A96E] animate-pulse">Running…</span>}
                 </div>
                 {processed > 0 && (
@@ -4327,7 +4334,12 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
 
       {stage === "complete" && (
         <>
-          {reviewLots.length > 0 ? (
+          {pipelineIncomplete ? (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-950/30 border border-amber-600/50 text-amber-300 text-sm">
+              <span className="text-xl">⚠</span>
+              <span>Pipeline did not fully complete — some lots were not processed. Use the buttons below to re-run the missing stages.</span>
+            </div>
+          ) : reviewLots.length > 0 ? (
             <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-950/30 border border-amber-600/50 text-amber-300 text-sm">
               <span className="text-xl">⏳</span>
               <span>{reviewLots.length} lots need reviewing & applying to the catalogue — see below</span>
