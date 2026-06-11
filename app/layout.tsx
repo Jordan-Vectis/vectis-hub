@@ -25,12 +25,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full`} suppressHydrationWarning>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full dark`} suppressHydrationWarning>
       <body className="h-full bg-gray-50">
         <Script id="theme-init" strategy="beforeInteractive">{`
           (function() {
             var t = localStorage.getItem('theme');
-            if (t !== 'light') document.documentElement.classList.add('dark');
+            if (t === 'light') document.documentElement.classList.remove('dark');
           })();
         `}</Script>
         {/* Polyfills for older iPads (iOS < 17.4) — React 19 requires these */}
