@@ -194,6 +194,7 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
   const [flagText, setFlagText]     = useState("")
   const [editDescId, setEditDescId] = useState<string | null>(null)
   const [editDescText, setEditDescText] = useState("")
+  const [fullscreenImg, setFullscreenImg] = useState<string | null>(null)
   const [pending, start] = useTransition()
 
   useEffect(() => {
@@ -547,6 +548,14 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
         )
       })}
 
+      {/* Fullscreen image overlay */}
+      {fullscreenImg && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/95" onClick={() => setFullscreenImg(null)}>
+          <button onClick={() => setFullscreenImg(null)} className="absolute top-4 right-4 text-white/70 hover:text-white text-3xl leading-none px-3">✕</button>
+          <img src={fullscreenImg} alt="Fullscreen photo" className="max-w-full max-h-full object-contain" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
+
       {/* Photo viewer */}
       {photoLot && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setPhotoLot(null)}>
@@ -557,8 +566,11 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {photoLot.imageUrls.map((key, i) => (
-                <img key={key} src={proxyUrl(key)} alt={`Photo ${i + 1}`} loading="lazy"
-                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 object-contain" />
+                <button key={key} onClick={() => setFullscreenImg(proxyUrl(key))} className="relative group block w-full text-left">
+                  <img src={proxyUrl(key)} alt={`Photo ${i + 1}`} loading="lazy"
+                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 object-contain" />
+                  <span className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 text-white text-xs px-2 py-1 rounded-lg">⛶ Fullscreen</span>
+                </button>
               ))}
             </div>
           </div>
