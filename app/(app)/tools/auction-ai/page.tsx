@@ -3619,7 +3619,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           label:       l.barcode || l.receiptUniqueId || l.id,
           keyPoints:   l.keyPoints ?? "",
           imageUrls:   l.imageUrls ?? [],
-          currentDesc: saved?.description ?? l.description ?? "",
+          currentDesc: saved?.description || l.description || "",
           batchStatus: saved?.batchStatus,
           estimate:    saved?.estimate,
           batchDesc:   saved?.batchDesc || undefined,
@@ -4321,6 +4321,20 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
             <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-green-950/30 border border-green-700/50 text-green-300 text-sm">
               <span className="text-xl">🎉</span>
               <span>Pipeline complete — all descriptions applied for <span className="font-mono font-bold">{code.trim().toUpperCase()}</span></span>
+            </div>
+          )}
+          {lots.some(l => !l.kpStatus && l.batchStatus === "ok") && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-950/20 border border-amber-700/50 text-amber-300 text-sm">
+              <span className="text-xl">✓</span>
+              <div className="flex-1">
+                <p>{lots.filter(l => !l.kpStatus && l.batchStatus === "ok").length} lots were not key-point checked — descriptions applied but key points not verified.</p>
+              </div>
+              <button
+                onClick={async () => { await advanceStage("kpcheck") }}
+                className="px-3 py-1.5 bg-amber-700 hover:bg-amber-600 text-white text-xs font-semibold rounded-lg transition-colors whitespace-nowrap"
+              >
+                Re-run Key Points
+              </button>
             </div>
           )}
           {lots.some(l => !l.dcStatus && l.batchStatus === "ok") && (
