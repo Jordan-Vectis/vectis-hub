@@ -4134,9 +4134,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     const fixed   = lots.filter(l => l.kpStatus === "fixed").length
     const pending = lots.filter(l => l.kpStatus === "pending").length
     const skipped = lots.filter(l => l.kpStatus === "skipped").length
-    // Lots excluded from KP because no key points were recorded for them
-    const noKp    = lots.filter(l => !l.kpStatus && !l.keyPoints?.trim()).length
-    return { ok, skipped, total: lots.length, fixed, pending, noKp }
+    return { ok, skipped, total: lots.length, fixed, pending }
   }
 
   const batchSummary = stageSummary(lots, "batch")
@@ -4268,7 +4266,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                     {"pending" in s && s.pending! > 0 && <p className="text-amber-400">⏳ {s.pending} awaiting review</p>}
                     {"issues" in s && s.issues! > 0 && <p className="text-yellow-400">⚑ {s.issues} descriptions corrected — review below</p>}
                     {s.skipped > 0 && <p className="text-red-400">✗ {s.skipped} content blocked by AI</p>}
-                    {"noKp" in s && s.noKp! > 0 && <p className="text-gray-500">— {s.noKp} skipped (no key points recorded)</p>}
+                    {processed < s.total && <p className="text-gray-500">— {s.total - processed} not processed</p>}
                   </div>
                 )}
                 {isActive && progress && key === stage && (
