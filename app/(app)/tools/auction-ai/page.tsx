@@ -8,6 +8,7 @@ import { KEY_POINTS_INSTRUCTION } from "@/lib/key-points-instruction"
 import { applyAiDescriptionOne, saveAiFlagNote } from "@/lib/actions/catalogue"
 import { showError } from "@/lib/error-modal"
 import { MacroTab } from "./macro-tab"
+import { analyseKeyPoints, HighlightedDescription, kpColour } from "@/lib/kp-analysis"
 
 // ─── Show Instruction Toggle ──────────────────────────────────────────────────
 
@@ -5191,28 +5192,52 @@ function UpgradeTab({ model: globalModel, fallbackModel }: { model: string; fall
           </div>
           <div className="space-y-3">
             {lots.filter(l => l.status === "done" && l.revised).map(lot => (
-              <div key={lot.id} className={`border rounded-xl p-4 space-y-3 transition-colors ${lot.accepted ? "border-green-700/50 bg-green-950/10" : "border-indigo-700/50 bg-indigo-950/10"}`}>
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-sm font-semibold text-white">{lot.label}</span>
-                  {lot.accepted
-                    ? <span className="text-xs text-green-400 font-medium">✓ Accepted</span>
-                    : <button onClick={() => acceptLot(lot)}
-                        className="px-3 py-1 text-xs bg-green-700 hover:bg-green-600 text-white font-semibold rounded-lg transition-colors">
-                        Accept
-                      </button>
-                  }
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Before</p>
-                    <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap">{lot.description}</p>
+              {(() => {
+                const a = lot.keyPoints?.trim() ? analyseKeyPoints(lot.revised ?? lot.description, lot.keyPoints) : null
+                return (
+                  <div key={lot.id} className={`border rounded-xl p-4 space-y-3 transition-colors ${lot.accepted ? "border-green-700/50 bg-green-950/10" : "border-indigo-700/50 bg-indigo-950/10"}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-sm font-semibold text-white">{lot.label}</span>
+                      {lot.accepted
+                        ? <span className="text-xs text-green-400 font-medium">✓ Accepted</span>
+                        : <button onClick={() => acceptLot(lot)}
+                            className="px-3 py-1 text-xs bg-green-700 hover:bg-green-600 text-white font-semibold rounded-lg transition-colors">
+                            Accept
+                          </button>
+                      }
+                    </div>
+                    {a && a.matches.length > 0 && (
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1.5">Key Points</p>
+                        <ul className="space-y-0.5">
+                          {a.matches.map((m, i) => (
+                            <li key={i} className="flex items-center gap-2 text-xs">
+                              <span className={`text-[10px] font-bold w-3 text-center flex-shrink-0 ${m.status === "found" ? "text-green-400" : m.status === "partial" ? "text-amber-400" : "text-red-400"}`}>
+                                {m.status === "found" ? "✓" : m.status === "partial" ? "≈" : "⚠"}
+                              </span>
+                              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${kpColour(i).dot}`} />
+                              <span className="text-gray-300">{m.line}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Before</p>
+                        <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap">{lot.description}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-indigo-400 mb-1">After</p>
+                        {a
+                          ? <HighlightedDescription description={lot.revised ?? ""} ranges={a.ranges} />
+                          : <p className="text-xs text-gray-200 leading-relaxed whitespace-pre-wrap">{lot.revised}</p>
+                        }
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-indigo-400 mb-1">After</p>
-                    <p className="text-xs text-gray-200 leading-relaxed whitespace-pre-wrap">{lot.revised}</p>
-                  </div>
-                </div>
-              </div>
+                )
+              })()}
             ))}
           </div>
         </div>
