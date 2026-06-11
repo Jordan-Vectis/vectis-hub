@@ -4311,17 +4311,33 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       )}
 
       {stage === "complete" && (
-        reviewLots.length > 0 ? (
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-950/30 border border-amber-600/50 text-amber-300 text-sm">
-            <span className="text-xl">⏳</span>
-            <span>{reviewLots.length} lots need reviewing & applying to the catalogue — see below</span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-green-950/30 border border-green-700/50 text-green-300 text-sm">
-            <span className="text-xl">🎉</span>
-            <span>Pipeline complete — all descriptions applied for <span className="font-mono font-bold">{code.trim().toUpperCase()}</span></span>
-          </div>
-        )
+        <>
+          {reviewLots.length > 0 ? (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-950/30 border border-amber-600/50 text-amber-300 text-sm">
+              <span className="text-xl">⏳</span>
+              <span>{reviewLots.length} lots need reviewing & applying to the catalogue — see below</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-green-950/30 border border-green-700/50 text-green-300 text-sm">
+              <span className="text-xl">🎉</span>
+              <span>Pipeline complete — all descriptions applied for <span className="font-mono font-bold">{code.trim().toUpperCase()}</span></span>
+            </div>
+          )}
+          {lots.some(l => !l.dcStatus && l.batchStatus === "ok") && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-indigo-950/30 border border-indigo-700/50 text-indigo-300 text-sm">
+              <span className="text-xl">🔎</span>
+              <div className="flex-1">
+                <p>{lots.filter(l => !l.dcStatus && l.batchStatus === "ok").length} lots were not double-checked — descriptions are applied but unverified.</p>
+              </div>
+              <button
+                onClick={async () => { await advanceStage("doublecheck") }}
+                className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-600 text-white text-xs font-semibold rounded-lg transition-colors whitespace-nowrap"
+              >
+                Re-run Double Check
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* Optional final step — AI Upgrade */}
