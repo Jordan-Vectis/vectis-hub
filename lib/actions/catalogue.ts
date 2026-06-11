@@ -522,6 +522,14 @@ export async function deleteLotPhoto(lotId: string, auctionId: string, key: stri
   return updated
 }
 
+export async function reorderLotPhotos(lotId: string, auctionId: string, imageUrls: string[]) {
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
+  await prisma.catalogueLot.update({ where: { id: lotId }, data: { imageUrls } })
+  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+  return imageUrls
+}
+
 export async function importLots(auctionId: string, rows: {
   title: string; description: string
   keyPoints?: string; barcode?: string

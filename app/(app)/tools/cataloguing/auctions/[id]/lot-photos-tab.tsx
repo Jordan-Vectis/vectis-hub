@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef } from "react"
-import { uploadLotPhoto, deleteLotPhoto } from "@/lib/actions/catalogue"
+import { uploadLotPhoto, deleteLotPhoto, reorderLotPhotos } from "@/lib/actions/catalogue"
 
 interface LotRow {
   id: string
@@ -80,6 +80,12 @@ export default function LotPhotosTab({ auctionId, lots: initialLots }: Props) {
     setLots(prev => prev.map(l => l.id === lotId ? { ...l, imageUrls: updatedKeys } : l))
   }
 
+  async function handleReverse(lot: LotRow) {
+    const reversed = [...lot.imageUrls].reverse()
+    setLots(prev => prev.map(l => l.id === lot.id ? { ...l, imageUrls: reversed } : l))
+    await reorderLotPhotos(lot.id, auctionId, reversed)
+  }
+
   const filtered = lots.filter(l =>
     search === "" ||
     (l.barcode ?? l.receiptUniqueId ?? "").toLowerCase().includes(search.toLowerCase()) ||
@@ -155,28 +161,43 @@ export default function LotPhotosTab({ auctionId, lots: initialLots }: Props) {
                   )}
 
                   {!isLoading && lot.imageUrls.length > 0 && (
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 mb-3">
-                      {lot.imageUrls.map(key => (
-                        <div key={key} className="relative aspect-square group">
-                          {signedUrls[key] ? (
-                            <a href={signedUrls[key]} target="_blank" rel="noopener noreferrer">
-                              <img
-                                src={signedUrls[key]}
-                                alt="Lot photo"
-                                className="w-full h-full object-cover rounded-lg border border-gray-700"
-                              />
-                            </a>
-                          ) : (
-                            <div className="w-full h-full rounded-lg bg-gray-800 flex items-center justify-center">
-                              <span className="text-gray-600 text-xs">Loading</span>
+                    <div className="mb-3">
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 mb-2">
+                        {lot.imageUrls.map((key, idx) => (
+                          <div key={key} className="relative group">
+                            <div className="relative aspect-square">
+                              {signedUrls[key] ? (
+                                <a href={signedUrls[key]} target="_blank" rel="noopener noreferrer">
+                                  <img
+                                    src={signedUrls[key]}
+                                    alt="Lot photo"
+                                    className={`w-full h-full object-cover rounded-lg border ${idx === 0 ? "border-[#2AB4A6]" : "border-gray-700"}`}
+                                  />
+                                </a>
+                              ) : (
+                                <div className="w-full h-full rounded-lg bg-gray-800 flex items-center justify-center">
+                                  <span className="text-gray-600 text-xs">Loading</span>
+                                </div>
+                              )}
+                              <button
+                                onClick={() => handleDelete(lot.id, key)}
+                                className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-700 rounded-full text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                              >✕</button>
                             </div>
-                          )}
-                          <button
-                            onClick={() => handleDelete(lot.id, key)}
-                            className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-700 rounded-full text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                          >✕</button>
-                        </div>
-                      ))}
+                            <p className={`text-[10px] text-center mt-0.5 ${idx === 0 ? "text-[#2AB4A6] font-semibold" : "text-gray-600"}`}>
+                              {idx === 0 ? "Main" : `Photo ${idx + 1}`}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                      {lot.imageUrls.length > 1 && (
+                        <button
+                          onClick={() => handleReverse(lot)}
+                          className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                        >
+                          ↕ Reverse order
+                        </button>
+                      )}
                     </div>
                   )}
 
