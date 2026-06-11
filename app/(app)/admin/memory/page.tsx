@@ -3,7 +3,7 @@
 import { useState } from "react"
 
 // ─── Static memory content ────────────────────────────────────────────────────
-// Updated by Claude alongside memory file changes. Last synced: 2026-05-29
+// Updated by Claude alongside memory file changes. Last synced: 2026-06-11
 
 type Entry = { filename: string; content: string }
 
@@ -223,11 +223,11 @@ Customer database. Paginated list + search. Detail overlay: Details / Seller / B
 
 ### Cataloguing (/tools/cataloguing)
 - Per-auction tabs: Manage Lots, Add Lot, Photo Only Cataloguing, Import Lots, Upload Photos, AI Upgrade, Review, Statistics (incl. Lots Missing Photos), Lot History, Auction Settings
-- Review tab (shared review-tab.tsx, also on tablet): scrolling card per lot — photo (tap for modal), key points with ✓ found / ≈ partial / ⚠ missing markers (word-level stem matching, 50% partial threshold), description highlights in a DIFFERENT COLOUR per key point (8-colour palette, colour dot on each key point pairs with its marks; earlier key point wins overlaps), estimate/condition/category/brand/cataloguer. Filters: search, cataloguer dropdown (from createdByName), issues dropdown (All / With issues / All good — issues = missing/partial KP, no desc, no photos, or flagged), Flagged-only toggle. Checkers can flag errors with a reason → CatalogueLot.reviewFlag/reviewFlaggedBy/reviewFlaggedAt; setLotReviewFlag action; data from /api/catalogue/review-lots (separate from catalogue-lots). AI flag note: lots with CatalogueLot.aiFlagNote (set by pipeline batch stage) show amber ⚠️ banner with inline "Edit description to fix…" → saves via saveLotDescription action, clears aiFlagNote.
-- Auctions list page (Auction Manager): split into two tables — Active Auctions (!complete) and Completed Auctions (complete). The Complete column is an interactive toggle (CompleteToggle client component → toggleAuctionComplete action); ticking moves the auction between tables.
-- Manage Lots table: columns include Added By (createdByName, sortable), KP column (✓/— shows if lot has key points, filterable: Has KP / No KP). AI column shows 🚫 for aiExcluded lots, ✨ for upgraded, — otherwise.
-- Manage Lots mass actions (on selection): mark/unmark added to BC, generate titles, transfer, delete lots, 📷🗑 Delete photos (bulkClearLotPhotos), and 🚫 Exclude/Unexclude from AI (bulkSetLotsAiExcluded)
-- Lots have addedToBC boolean, aiExcluded boolean (exclude from all AI runs — set in wizard + manage lots), aliases for Unique ID matcher
+- Review tab (shared review-tab.tsx, also on tablet): photo (tap for modal; each image has hover "⛶ Fullscreen" → full-screen overlay), key points with ✓/≈/⚠ markers (word-level stem matching), description with per-KP colour highlights. Filters: search, cataloguer, issues dropdown, Flagged-only, **AI-flagged only toggle** (filters to lots with aiFlagNote). Error flagging: setLotReviewFlag action. **AI flag note:** CatalogueLot.aiFlagNote (TEXT nullable) — set by pipeline batch when AI spots a potential cataloguer mistake; shown as amber ⚠️ banner with inline edit textarea → saveLotDescription action clears flag + regenerates title. saveAiFlagNote writes flag without BC-lock check (used by pipeline and re-check route).
+- Auctions list page: split into Active and Completed tables. Complete column is an interactive toggle (CompleteToggle → toggleAuctionComplete).
+- Manage Lots table: Added By (createdByName, sortable), **KP column** (✓/— with Has KP / No KP filter), **AI column** (🚫 excluded / ✨ upgraded), **AI Excluded filter**.
+- Manage Lots mass actions: mark/unmark added to BC, generate titles, transfer, delete lots, 📷🗑 Delete photos (bulkClearLotPhotos), **🚫 Exclude/Unexclude from AI** (bulkSetLotsAiExcluded)
+- Lots have addedToBC boolean, aiExcluded boolean, aliases for Unique ID matcher
 - bcLocked = auction.addedToBC && userRole !== "ADMIN" — gates mutations
 - Export/Import xlsx on auctions list page
 - Lotting Up (/tools/cataloguing/lotting-up): AI photo → proposed lot groups with bounding boxes
@@ -240,7 +240,7 @@ Chat Window, Batch Run, Key Points Check, Double Check, Auto Pipeline, AI Upgrad
 
 Key Points Check: validates descriptions against key points, returns verdict/contradictions/unsupported claims/revised description. Stored in KPCheckRun/KPCheckLot tables. Partial match rule: a key point is only satisfied if its exact meaning is explicitly present — partial word matches do not count.
 Double Check: second-pass AI validation. Uses React 18 batching fix pattern.
-Auto Pipeline: chains Batch → Key Points → Double Check (TEST ORDER as of 2026-06-05 — swapped from Batch→DC→KP to let DC clean up duplications KP introduces). Batch & Key Points AUTO-APPLY; Double Check is the final MANUAL Review & Apply gate. Key points are passed to DC so it keeps cataloguer facts and only removes duplication. Content blocks = skipped, errors retry infinitely. Has Google Search toggle (off by default). Stored in PipelineRun/PipelineLot tables. Revert: single commit, easy to roll back if quality worse. Per-lot 🔍 AI log button in Results table shows exact prompt sent + raw response for each stage (debug field returned by each route, client-only). Stage instructions in shared lib files (lib/double-check-instruction.ts, lib/key-points-instruction.ts), viewable via toggles on the tab. Batch prompt preserves exact wording of condition/completeness key points (e.g. Sealed Mint), no paraphrasing. Google Search grounding (toggle) uses googleSearch tool — model decides per-lot whether to search; when grounded, prompt nudges it to verify catalogue/set numbers; search queries shown in AI log. Cataloguer mistake flag: when grounded + highly confident a key-point number is wrong, AI keeps cataloguer wording but appends FLAG: line → parsed to PLot.cataloguerFlag → ⚠️ badge on Results row + expandable detail + red summary banner. Also saved to CatalogueLot.aiFlagNote (TEXT, nullable — cleared on description edit from Review tab). Review tab shows amber ⚠️ banner per flagged lot with inline "Edit description to fix…" → textarea → Save (saveLotDescription action). NEEDS run-migrations (aiFlagNote column + aiExcluded column). Optional final AI Upgrade step (purple panel when stage=complete): multi-select transformation chips (incl. Improve SEO), runs /api/auction-ai/upgrade per lot with keyPoints protection, results go to Review & Apply (never auto-applied). Models tab (Reference group): lists all Gemini models w/ descriptions + token limits, enable/disable toggle (DisabledModel table, presence=disabled, hidden from all selectors), per-model + Test-all buttons. /api/auction-ai/model-config GET/POST. NEEDS run-migrations for DisabledModel table.
+Auto Pipeline: chains Batch → Key Points → Double Check (TEST ORDER from 2026-06-05). Batch & KP AUTO-APPLY; Double Check is the final MANUAL Review & Apply gate. Content blocks = skipped, errors retry infinitely. Google Search toggle (off by default). Stored in PipelineRun/PipelineLot tables. Per-lot 🔍 AI log button shows exact prompt + raw response per stage. Batch prompt preserves exact wording of condition/completeness key points. Google Search grounding nudges verification of catalogue/set numbers. Cataloguer mistake flag: AI appends FLAG: line → saved to CatalogueLot.aiFlagNote (TEXT nullable, cleared on description edit). Stage card "not processed" shows per-reason breakdown (no key points / batch failed / no description). **Re-check Cataloguer Flags button** (below stage cards): text-only AI scan on all lots with descriptions + key points — no images, no full re-run — saves results to aiFlagNote. Route: /api/auction-ai/recheck-flags. Optional final AI Upgrade step (purple panel when stage=complete). Models tab: lists all Gemini models, enable/disable toggle (DisabledModel table). NEEDS run-migrations: aiFlagNote, aiExcluded, DisabledModel, PipelineLot.batchDesc columns.
 
 Deploy/update banner (components/deploy-banner.tsx) polls /api/version every 30s; shows "app updated" warning when token changes. Version token MUST be RAILWAY_GIT_COMMIT_SHA (stable across replicas + restarts) — NOT Date.now() at process start (that fired false warnings on every OOM/crash/scaling/health-check restart and differed between replicas).
 
@@ -491,9 +491,9 @@ Follow-ups (/follow-ups): Submissions with DECLINED or FOLLOW_UP status.
 
 Contacts (/contacts): Customer database with paginated list, create modal, detail overlay (Details/Seller/Buyer/Documents tabs).
 
-Cataloguing (/tools/cataloguing): Auction list with Export/Import xlsx. Per-auction tabs: Manage Lots, Add Lot, Photo Only, Import Lots, Upload Photos, AI Upgrade, Review (key points highlighted in description, error flagging — also on tablet), Statistics (Lots Missing Photos), Lot History, Auction Settings. bcLocked = auction.addedToBC && userRole !== "ADMIN". Lotting Up (AI photo → lot groups with bounding boxes). Research (quick-launch + invisible timer). Tablet Mode (iPad UI).
+Cataloguing (/tools/cataloguing): Auction list (Active/Completed split, Complete toggle) with Export/Import xlsx. Per-auction tabs: Manage Lots (KP column ✓/— + Has KP/No KP filter; AI column 🚫 excluded/✨ upgraded; AI Excluded filter; Added By column; bulk Exclude/Unexclude from AI via bulkSetLotsAiExcluded), Add Lot, Photo Only, Import Lots, Upload Photos, AI Upgrade, Review (key points highlighted, error flagging, AI flag note amber banners + inline edit, AI-flagged only filter, fullscreen photo viewer — also on tablet), Statistics (Lots Missing Photos), Lot History, Auction Settings. CatalogueLot.aiFlagNote (TEXT nullable) — set by pipeline/recheck, cleared by saveLotDescription. bcLocked = auction.addedToBC && userRole !== "ADMIN". Lotting Up, Research, Tablet Mode.
 
-Auction AI (/tools/auction-ai) — 12 tabs, grouped sidebar (Chat/Run/History/Tools/Reference): Chat Window, Batch Run, Key Points Check, Double Check, Auto Pipeline, AI Upgrade, Saved Runs, KP Check Runs, Description Copier, Barcode Sorter, Instructions, Macro Downloader. All run tabs alternate primary/fallback model on retries. applyAiDescriptionOne estimate fields optional — only Batch sets estimates. KP Check: validates descriptions (partial word matches don't count), stored in KPCheckRun/KPCheckLot. Double Check: second-pass validation (counts boxes not vehicles in a set title), uses React 18 batching fix. AI Upgrade: mass rewrite with before/after review (/api/auction-ai/upgrade). Auto Pipeline: chains Batch→Key Points→Double Check (TEST ORDER from 2026-06-05, swapped from Batch→DC→KP); Batch applies desc+estimate to catalogue, Key Points auto-applies, Double Check is final MANUAL Review & Apply gate (keyPoints passed to DC to protect cataloguer facts, DC only removes duplication); PipelineLot.batchDesc preserves pre-DC text. Stored in PipelineRun/PipelineLot. React 18 fix: use local working[] + setState([...working]) full replace — never setState(prev=>prev.map(...)) in 100+ item loop.
+Auction AI (/tools/auction-ai) — 12 tabs, grouped sidebar (Chat/Run/History/Tools/Reference): Chat Window, Batch Run, Key Points Check, Double Check, Auto Pipeline, AI Upgrade, Saved Runs, KP Check Runs, Description Copier, Barcode Sorter, Instructions, Macro Downloader. All run tabs alternate primary/fallback model on retries. applyAiDescriptionOne estimate fields optional — only Batch sets estimates. KP Check: validates descriptions (partial word matches don't count), stored in KPCheckRun/KPCheckLot. Double Check: second-pass validation, uses React 18 batching fix. AI Upgrade: mass rewrite (/api/auction-ai/upgrade). Auto Pipeline: chains Batch→Key Points→Double Check (TEST ORDER 2026-06-05); Batch applies desc+estimate to catalogue + saves aiFlagNote; KP auto-applies; DC is final MANUAL Review & Apply gate. Stage cards show per-reason "not processed" breakdown. Re-check Cataloguer Flags button (text-only AI scan on existing descriptions, /api/auction-ai/recheck-flags). React 18 fix: use local working[] + setState([...working]) full replace — never setState(prev=>prev.map(...)) in 100+ item loop.
 
 BC Marketing (/tools/bc-marketing): 9 tabs — Content Generator (16 types), Paste & Generate, Insights, Saved Drafts, Hashtag Bank, Web Descriptions, Social Auto Posts, Social Media Images, Email Lists (buyer emails from BC AttendenceRegister by keyword+date, CSV export with sale codes). BC codes never in AI output.
 
@@ -700,6 +700,76 @@ Inconsistent across machines/browsers. Generate server-side and return as downlo
 Divide the usable page area into a **fixed number of slots** rather than autosizing. Small groups should not produce giant rows.`,
   },
   {
+    filename: "reference_new_claude_account.md",
+    content: `---
+name: New Claude Account Setup
+description: Steps to replicate the full working Claude Code setup on a new account — permissions, hooks, memory files, project config
+metadata:
+  type: reference
+---
+
+# Setting up Claude Code on a new account
+
+If you're starting fresh (new machine, new Anthropic account, or reinstalled Claude Code), follow these steps to get the same working setup.
+
+## 1. Permissions — stop Claude asking for approval on everything
+
+Edit C:\\Users\\<YourUser>\\.claude\\settings.json and add this permissions block:
+
+\`\`\`json
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)", "Edit(*)", "Write(*)", "Read(*)", "Glob(*)", "Grep(*)", "PowerShell(*)"
+    ]
+  }
+}
+\`\`\`
+
+This lets Claude read/edit/write files and run shell commands without asking permission every time.
+
+## 2. Hook — mandatory rules check before every response
+
+In settings.json, add a hooks block (see the full file below). This fires before Claude responds and injects a reminder to check rules, not suggest things already built, and update memory after building.
+
+\`\`\`json
+{
+  "hooks": {
+    "UserPromptSubmit": [{
+      "hooks": [{
+        "type": "command",
+        "command": "echo '{\"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\", \"additionalContext\": \"BEFORE RESPONDING — mandatory rules check: (1) Re-read RULES.md and the opening message memory files before making any observation, suggestion, or writing any code. (2) Do NOT suggest features, patterns, or fixes that are already documented as built or in place. (3) Do NOT suggest things that conflict with any rule. (4) If unsure whether something exists, look it up — never assume it is missing. AFTER BUILDING ANYTHING — memory update is mandatory: update the relevant memory files in C:\\\\\\\\Users\\\\\\\\Jordan.Orange\\\\\\\\.claude\\\\\\\\projects\\\\\\\\C--Dev-apps\\\\\\\\memory\\\\\\\\ AND the ENTRIES array in app/(app)/admin/memory/page.tsx to reflect what was built, then push both to staging.\"}}'",
+        "statusMessage": "Checking rules…"
+      }]
+    }]
+  }
+}
+\`\`\`
+
+## 3. Project files in the repo root
+
+CLAUDE.md (tells Claude which files to load):
+\`\`\`
+@AGENTS.md
+@RULES.md
+\`\`\`
+
+AGENTS.md — Next.js version warning. RULES.md — the full working rules (deployment, branch rules, lot identifiers, BC API fields, batch AI rules, PDF patterns, route patterns, etc.). Both already exist in C:\\Dev apps\\vectis-hub\\.
+
+## 4. Memory files
+
+Copy C:\\Users\\Jordan.Orange\\.claude\\projects\\C--Dev-apps\\memory\\ to the same path on the new machine. Key files: MEMORY.md (index), opening_message.md, project_vectis_hub.md, user_profile.md, vectis_company_facts.md, bc_api_reference.md, feedback_*.md, reference_*.md.
+
+## 5. Opening message
+
+At the start of every new session, open the Claude Memory page (/admin/memory), hit Copy on "Opening Message", and paste it as the first message. This sets all the rules, tech stack context, and feature surface.
+
+## 6. Settings.json location
+
+Windows: C:\\Users\\<YourUser>\\.claude\\settings.json
+Mac: ~/.claude/settings.json`,
+  },
+  {
     filename: "MEMORY.md",
     content: `---
 name: Memory Index
@@ -719,7 +789,8 @@ type: reference
 - [File Saving Preference](feedback_file_saving.md) — Always ask where to save files before saving them
 - [App Naming](feedback_naming.md) — Don't call it a CRM; it's "the app"
 - [Migration Pattern](feedback_migrations.md) — Always add new migrations to run-migrations endpoint; prisma migrate deploy unreliable on Railway
-- [Git Workflow](feedback_git_workflow.md) — Pull from remote staging before every push; another dev works on the same branch`,
+- [Git Workflow](feedback_git_workflow.md) — Pull from remote staging before every push; another dev works on the same branch
+- [New Claude Account Setup](reference_new_claude_account.md) — Steps to replicate this full Claude Code setup on a new account (permissions, hooks, memory, project files)`,
   },
 ]
 
