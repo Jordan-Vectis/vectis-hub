@@ -3528,6 +3528,9 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   const [upgradeModes, setUpgradeModes] = useState<Set<string>>(new Set(["expand"]))
   const [upgrading,    setUpgrading]   = useState(false)
   const [signedUrls,   setSignedUrls]  = useState<Record<string, string>>({})
+  const [recheckRunning,  setRecheckRunning]  = useState(false)
+  const [recheckProgress, setRecheckProgress] = useState<{ done: number; total: number } | null>(null)
+  const [recheckMsg,      setRecheckMsg]      = useState<string | null>(null)
   const [autoApply,    setAutoApply]   = useState(() => {
     try { return localStorage.getItem("pipeline_auto_apply") !== "false" } catch { return true }
   })
@@ -4126,6 +4129,48 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     setSignedUrls(prev => ({ ...prev, ...Object.fromEntries(results) }))
   }
 
+  // ── Re-check cataloguer flags (text-only, no images) ───────────────────────
+  async function handleRecheckFlags() {
+    if (!auctionId) return
+    const toCheck = lots.filter(l => l.currentDesc?.trim() && l.keyPoints?.trim())
+    if (!toCheck.length) { setRecheckMsg("No lots with both a description and key points to check."); return }
+    setRecheckRunning(true); setRecheckMsg(null); setRecheckProgress({ done: 0, total: toCheck.length })
+    let flagCount = 0
+    for (let i = 0; i < toCheck.length; i++) {
+      const lot = toCheck[i]
+      setRecheckProgress({ done: i, total: toCheck.length })
+      let attempt = 0
+      while (true) {
+        attempt++
+        try {
+          const res = await fetch("/api/auction-ai/recheck-flags", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ keyPoints: lot.keyPoints, description: lot.currentDesc, model: localModel }),
+          })
+          if (res.status === 429) {
+            const wait = Math.min(60000 * Math.pow(2, attempt - 1), 300000)
+            await new Promise(r => setTimeout(r, wait))
+            continue
+          }
+          const data = await res.json()
+          if (data.flag) {
+            flagCount++
+            saveAiFlagNote(lot.id, data.flag).catch(() => {})
+          }
+          break
+        } catch {
+          if (attempt >= 3) break
+          await new Promise(r => setTimeout(r, attempt * 5000))
+        }
+      }
+      if (i < toCheck.length - 1) await new Promise(r => setTimeout(r, 2000))
+    }
+    setRecheckProgress({ done: toCheck.length, total: toCheck.length })
+    setRecheckRunning(false)
+    setRecheckMsg(flagCount > 0 ? `Done — ${flagCount} potential cataloguer mistake${flagCount !== 1 ? "s" : ""} flagged. Open the Review tab to see them.` : `Done — no issues found across ${toCheck.length} lots.`)
+  }
+
   // ── Stage summary helpers ───────────────────────────────────────────────────
   function stageSummary(lots: PLot[], stage: "batch" | "dc" | "kp") {
     if (stage === "batch") {
@@ -4334,6 +4379,31 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Re-check cataloguer flags */}
+      {lots.length > 0 && auctionId && (
+        <div className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl p-4 space-y-2">
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">⚠️ Re-check Cataloguer Flags</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Scans every lot that already has a description and key points using a quick text-only AI check —
+            no images, no full pipeline re-run. Useful if you ran the pipeline before flags were introduced.
+            Any issues found will appear in the Review tab as amber warnings.
+          </p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={handleRecheckFlags}
+              disabled={recheckRunning || running}
+              className="px-4 py-2 text-sm font-semibold rounded-lg transition-colors disabled:opacity-40 bg-amber-600/20 border border-amber-500/60 text-amber-300 hover:bg-amber-600/30"
+            >
+              {recheckRunning ? "Checking…" : "⚠️ Re-check flags"}
+            </button>
+            {recheckRunning && recheckProgress && (
+              <span className="text-xs text-gray-500">{recheckProgress.done} / {recheckProgress.total}</span>
+            )}
+          </div>
+          {recheckMsg && <p className="text-xs text-gray-400">{recheckMsg}</p>}
         </div>
       )}
 
