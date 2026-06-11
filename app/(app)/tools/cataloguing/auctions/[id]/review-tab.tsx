@@ -234,6 +234,7 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
   const issueCount = lots.filter(hasIssues).length
 
   const filtered = lots.filter(l => {
+    if (l.id === editDescId) return true
     if (flaggedOnly && !l.reviewFlag) return false
     if (aiFlaggedOnly && !l.aiFlagNote) return false
     if (cataloguer && l.createdByName !== cataloguer) return false
