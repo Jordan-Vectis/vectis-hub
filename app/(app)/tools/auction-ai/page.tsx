@@ -3528,6 +3528,9 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   const [upgradeModes, setUpgradeModes] = useState<Set<string>>(new Set(["expand"]))
   const [upgrading,    setUpgrading]   = useState(false)
   const [signedUrls,   setSignedUrls]  = useState<Record<string, string>>({})
+  const [autoApply,    setAutoApply]   = useState(() => {
+    try { return localStorage.getItem("pipeline_auto_apply") !== "false" } catch { return true }
+  })
   const codeRef  = useRef<HTMLDivElement>(null)
   const logRef   = useRef<HTMLDivElement>(null)
   const cancelRef = useRef(false)
@@ -3754,8 +3757,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           debug: { ...updated[idx].debug, batch: result.debug } }
         setLots([...updated])
         addLog(`  ✓ ${lot.label} — OK`)
-        // Apply the generated description + estimate straight to the catalogue lot
-        if (auctionId && desc) {
+        // Apply the generated description + estimate straight to the catalogue lot (skipped in manual-review mode)
+        if (autoApply && auctionId && desc) {
           try {
             await applyAiDescriptionOne(auctionId, {
               id: lot.id,
@@ -4214,12 +4217,24 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           </div>
         </div>
 
-        {/* Google Search grounding */}
-        <label className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-colors w-fit ${grounded ? "bg-blue-950/50 border-blue-600/60 text-blue-300" : "bg-gray-100 dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
-          <input type="checkbox" checked={grounded} onChange={e => setGrounded(e.target.checked)}
-            className="w-3.5 h-3.5 accent-blue-500" />
-          <span className="text-xs font-medium">🔍 Google Search</span>
-        </label>
+        {/* Options row */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Google Search grounding */}
+          <label className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-colors ${grounded ? "bg-blue-950/50 border-blue-600/60 text-blue-300" : "bg-gray-100 dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
+            <input type="checkbox" checked={grounded} onChange={e => setGrounded(e.target.checked)}
+              className="w-3.5 h-3.5 accent-blue-500" />
+            <span className="text-xs font-medium">🔍 Google Search</span>
+          </label>
+
+          {/* Auto-apply vs manual review toggle */}
+          <label className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-colors ${autoApply ? "bg-green-950/40 border-green-700/60 text-green-300" : "bg-amber-950/40 border-amber-700/60 text-amber-300"}`}
+            title={autoApply ? "Descriptions apply to the catalogue as each lot completes" : "All descriptions held for your review before anything is applied"}>
+            <input type="checkbox" checked={autoApply}
+              onChange={e => { setAutoApply(e.target.checked); try { localStorage.setItem("pipeline_auto_apply", String(e.target.checked)) } catch {} }}
+              className="w-3.5 h-3.5 accent-green-500" />
+            <span className="text-xs font-medium">{autoApply ? "⚡ Auto-apply" : "👁 Review all before applying"}</span>
+          </label>
+        </div>
 
         <div className="flex items-center gap-3 flex-wrap">
           <button onClick={handleLoad} disabled={loading || !code.trim()}
