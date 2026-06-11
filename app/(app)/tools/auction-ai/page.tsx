@@ -4833,6 +4833,7 @@ type UpgradeLot = {
   id:          string
   label:       string
   description: string
+  keyPoints:   string
   selected:    boolean
   status:      "idle" | "running" | "done" | "skipped"
   revised?:    string
@@ -4914,6 +4915,7 @@ function UpgradeTab({ model: globalModel, fallbackModel }: { model: string; fall
           id:          l.id,
           label:       l.barcode || l.receiptUniqueId || l.id,
           description: l.description,
+          keyPoints:   l.keyPoints ?? "",
           selected:    true,
           status:      "idle" as const,
           accepted:    false,
@@ -4969,7 +4971,7 @@ function UpgradeTab({ model: globalModel, fallbackModel }: { model: string; fall
           const res  = await fetch("/api/auction-ai/upgrade", {
             method:  "POST",
             headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify({ description: lot.description, modes: Array.from(modes), model: modelToUse }),
+            body:    JSON.stringify({ description: lot.description, modes: Array.from(modes), model: modelToUse, keyPoints: lot.keyPoints }),
           })
           const json = await res.json()
           if (json.error) throw new Error(json.error)
