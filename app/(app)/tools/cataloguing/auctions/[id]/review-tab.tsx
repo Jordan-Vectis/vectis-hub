@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState, useTransition } from "react"
-import { setLotReviewFlag, saveLotDescription } from "@/lib/actions/catalogue"
+import { setLotReviewFlag, saveLotDescription, saveAiFlagNote } from "@/lib/actions/catalogue"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -261,6 +261,17 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
     })
   }
 
+  function ignoreAiFlag(lot: ReviewLot) {
+    start(async () => {
+      try {
+        await saveAiFlagNote(lot.id, null)
+        setLots(prev => prev.map(l => l.id === lot.id ? { ...l, aiFlagNote: null } : l))
+      } catch (e: any) {
+        setError(e?.message ?? "Failed to dismiss flag")
+      }
+    })
+  }
+
   function saveDesc(lot: ReviewLot, description: string) {
     start(async () => {
       try {
@@ -433,11 +444,19 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
                     </div>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => { setEditDescId(lot.id); setEditDescText(lot.description ?? "") }}
-                    className="text-sm font-medium text-orange-600 dark:text-orange-400 hover:underline">
-                    Edit description to fix…
-                  </button>
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={() => { setEditDescId(lot.id); setEditDescText(lot.description ?? "") }}
+                      className="text-sm font-medium text-orange-600 dark:text-orange-400 hover:underline">
+                      Edit description to fix…
+                    </button>
+                    <button
+                      onClick={() => ignoreAiFlag(lot)}
+                      disabled={pending}
+                      className="text-sm text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-40 transition-colors">
+                      Ignore (AI is wrong)
+                    </button>
+                  </div>
                 )}
               </div>
             )}
