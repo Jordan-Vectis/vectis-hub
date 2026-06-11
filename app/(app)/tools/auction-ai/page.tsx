@@ -4357,7 +4357,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                 <p>{lots.filter(l => !l.kpStatus && l.batchStatus === "ok").length} lots were not key-point checked — descriptions applied but key points not verified.</p>
               </div>
               <button
-                onClick={async () => { await advanceStage("kpcheck") }}
+                onClick={async () => { await advanceStage("kpcheck"); await handleLoad() }}
                 className="px-3 py-1.5 bg-amber-700 hover:bg-amber-600 text-white text-xs font-semibold rounded-lg transition-colors whitespace-nowrap"
               >
                 Re-run Key Points
@@ -4371,7 +4371,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                 <p>{lots.filter(l => !l.dcStatus && l.batchStatus === "ok").length} lots were not double-checked — descriptions are applied but unverified.</p>
               </div>
               <button
-                onClick={async () => { await advanceStage("doublecheck") }}
+                onClick={async () => { await advanceStage("doublecheck"); await handleLoad() }}
                 className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-600 text-white text-xs font-semibold rounded-lg transition-colors whitespace-nowrap"
               >
                 Re-run Double Check
