@@ -4134,7 +4134,9 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     const fixed   = lots.filter(l => l.kpStatus === "fixed").length
     const pending = lots.filter(l => l.kpStatus === "pending").length
     const skipped = lots.filter(l => l.kpStatus === "skipped").length
-    return { ok, skipped, total: lots.length, fixed, pending }
+    // Lots excluded from KP because no key points were recorded for them
+    const noKp    = lots.filter(l => !l.kpStatus && !l.keyPoints?.trim()).length
+    return { ok, skipped, total: lots.length, fixed, pending, noKp }
   }
 
   const batchSummary = stageSummary(lots, "batch")
@@ -4257,11 +4259,16 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                   {isActive  && <span className="ml-auto text-xs text-[#C8A96E] animate-pulse">Running…</span>}
                 </div>
                 {processed > 0 && (
-                  <div className="space-y-0.5 text-xs text-gray-600 dark:text-gray-500">
-                    {s.ok > 0          && <p className="text-green-400">✓ {s.ok} OK{"fixed" in s && s.fixed! > 0 ? ` · ${s.fixed} accepted` : ""}</p>}
+                  <div className="space-y-0.5 text-xs">
+                    <p className="text-gray-500">{processed} of {s.total} ran</p>
+                    {s.ok > 0 && (
+                      <p className="text-green-400">✓ {s.ok} {key === "kpcheck" ? "all key points present" : key === "doublecheck" ? "no issues found" : "generated OK"}</p>
+                    )}
+                    {"fixed" in s && s.fixed! > 0 && <p className="text-amber-400">⚑ {s.fixed} missing key points added</p>}
                     {"pending" in s && s.pending! > 0 && <p className="text-amber-400">⏳ {s.pending} awaiting review</p>}
-                    {"issues" in s && s.issues! > 0 && <p className="text-yellow-400">⚑ {s.issues} cleaned — review below</p>}
-                    {s.skipped > 0     && <p className="text-gray-500">— {s.skipped} skipped</p>}
+                    {"issues" in s && s.issues! > 0 && <p className="text-yellow-400">⚑ {s.issues} descriptions corrected — review below</p>}
+                    {s.skipped > 0 && <p className="text-red-400">✗ {s.skipped} content blocked by AI</p>}
+                    {"noKp" in s && s.noKp! > 0 && <p className="text-gray-500">— {s.noKp} skipped (no key points recorded)</p>}
                   </div>
                 )}
                 {isActive && progress && key === stage && (
