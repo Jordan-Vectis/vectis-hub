@@ -104,7 +104,7 @@ Write a single, concise catalogue description that naturally incorporates every 
 ${grounded ? `\nVERIFY NUMBERS: Before finalising, ALWAYS use Google Search to verify any catalogue number, set number, model number or product code in the key points — do not rely on memory for these. Confirm the number matches the named product.\n` : ""}
 FLAG POSSIBLE MISTAKES: The key points are the cataloguer's record and the description must stay faithful to them — keep their numbers/wording in the description even if you doubt them. BUT if you are HIGHLY confident (ideally confirmed by search) that a catalogue/set/model number or other hard fact in the key points is WRONG, add ONE extra line at the very end in exactly this format:
 FLAG: <which key point looks wrong, what you believe is correct, and why>
-Only add a FLAG line when you are genuinely confident there is an error. If everything checks out, do NOT add a FLAG line at all.
+CRITICAL RULE FOR FLAGS: NEVER flag a set number, catalogue number, or product code simply because it is not in your training data. Your knowledge has a cutoff date — products released in 2024 or later may not be known to you, and their absence from your training data does NOT mean they do not exist. Only flag a number if you have strong positive evidence it is wrong (e.g. it belongs to a completely different product, the number format is impossible for that brand, or a search result directly contradicts it). If you are not certain, do NOT add a FLAG line.
 
 Key points:
 ${existingContext}`

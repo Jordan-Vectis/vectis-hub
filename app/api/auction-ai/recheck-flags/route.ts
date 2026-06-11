@@ -16,8 +16,9 @@ Do NOT flag:
 - Style or wording preferences
 - Vague estimates or condition descriptions
 - Anything you are not highly confident about
+- A set number, catalogue number, or product code simply because it is not in your training data — your knowledge has a cutoff date and products released in 2024 or later may not be known to you. Absence from your training data does NOT mean the product does not exist. Only flag a number if you have strong positive evidence it is wrong (e.g. it belongs to a completely different product, the number format is impossible for that brand, or it clearly contradicts something else in the entry).
 
-If you are HIGHLY confident a key point contains an error, respond with exactly:
+If you are HIGHLY confident a key point contains an error (based on positive evidence, not absence of knowledge), respond with exactly:
 FLAG: <which key point looks wrong, what you believe is correct, and why>
 
 If everything looks correct, respond with exactly:
