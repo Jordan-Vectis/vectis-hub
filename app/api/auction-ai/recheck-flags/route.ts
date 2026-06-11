@@ -10,7 +10,9 @@ You will be given:
 - Key points: the cataloguer's raw notes (catalogue numbers, condition, completeness, etc.)
 - Description: the AI-generated catalogue description based on those key points
 
-Your job is to check whether any key point contains a hard factual error — for example, a wrong catalogue number, set number, model number, or product name that conflicts with the description or that you are highly confident is incorrect based on your knowledge.
+Your job is to check whether any key point contains a hard factual error — for example, a wrong catalogue number, set number, model number, or product name that conflicts with the description or that you are highly confident is incorrect.
+
+IMPORTANT: Use Google Search to verify any catalogue number, set number, model number, or product code before flagging it. Do not rely on memory alone — always search first.
 
 Do NOT flag:
 - Style or wording preferences
@@ -39,7 +41,11 @@ export async function POST(req: NextRequest) {
     }
 
     const genai = new GoogleGenerativeAI(apiKey)
-    const model = genai.getGenerativeModel({ model: modelId, systemInstruction: PROMPT })
+    const model = genai.getGenerativeModel({
+      model: modelId,
+      systemInstruction: PROMPT,
+      tools: [{ googleSearch: {} } as any],
+    })
 
     const prompt = `Key points:\n${keyPoints.trim()}\n\nDescription:\n${description.trim()}`
 
