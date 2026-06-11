@@ -514,35 +514,68 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
               </div>
             </div>
 
-            {/* Flag an error */}
-            {!lot.reviewFlag && (
-              isFlagOpen ? (
-                <div className="rounded-xl border border-red-300 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20 p-3 space-y-2">
-                  <textarea
-                    value={flagText}
-                    onChange={e => setFlagText(e.target.value)}
-                    rows={3}
-                    autoFocus
-                    placeholder="What's wrong with this lot? e.g. wrong set number, key point missing from description…"
-                    className="w-full bg-white dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-red-400"
-                  />
-                  <div className="flex gap-2">
-                    <button onClick={() => saveFlag(lot, flagText)} disabled={pending || !flagText.trim()}
-                      className="px-4 py-2 text-sm font-semibold rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white transition-colors">
-                      {pending ? "Saving…" : "Save flag"}
-                    </button>
-                    <button onClick={() => { setFlagOpenId(null); setFlagText("") }}
-                      className="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 transition-colors">
-                      Cancel
-                    </button>
-                  </div>
+            {/* Edit description (available on all lots) */}
+            {editDescId === lot.id && !lot.aiFlagNote ? (
+              <div className="rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#2C2C2E]/50 p-3 space-y-2">
+                <textarea
+                  value={editDescText}
+                  onChange={e => setEditDescText(e.target.value)}
+                  rows={6}
+                  autoFocus
+                  className="w-full bg-white dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-[#C8A96E]"
+                />
+                <div className="flex gap-2">
+                  <button onClick={() => saveDesc(lot, editDescText)} disabled={pending || !editDescText.trim()}
+                    className="px-4 py-2 text-sm font-semibold rounded-lg bg-[#C8A96E] hover:bg-[#b8945a] disabled:opacity-40 text-black transition-colors">
+                    {pending ? "Saving…" : "Save description"}
+                  </button>
+                  <button onClick={() => { setEditDescId(null); setEditDescText("") }}
+                    className="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 transition-colors">
+                    Cancel
+                  </button>
                 </div>
-              ) : (
-                <button onClick={() => { setFlagOpenId(lot.id); setFlagText("") }}
-                  className="text-sm text-gray-500 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors">
-                  🚩 Flag an error…
-                </button>
-              )
+              </div>
+            ) : null}
+
+            {/* Flag an error + edit buttons row */}
+            {(editDescId !== lot.id || lot.aiFlagNote) && (
+              <div className="flex items-center gap-4 flex-wrap">
+                {!lot.reviewFlag && (
+                  isFlagOpen ? (
+                    <div className="rounded-xl border border-red-300 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20 p-3 space-y-2 w-full">
+                      <textarea
+                        value={flagText}
+                        onChange={e => setFlagText(e.target.value)}
+                        rows={3}
+                        autoFocus
+                        placeholder="What's wrong with this lot? e.g. wrong set number, key point missing from description…"
+                        className="w-full bg-white dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-red-400"
+                      />
+                      <div className="flex gap-2">
+                        <button onClick={() => saveFlag(lot, flagText)} disabled={pending || !flagText.trim()}
+                          className="px-4 py-2 text-sm font-semibold rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white transition-colors">
+                          {pending ? "Saving…" : "Save flag"}
+                        </button>
+                        <button onClick={() => { setFlagOpenId(null); setFlagText("") }}
+                          className="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 transition-colors">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setFlagOpenId(lot.id); setFlagText("") }}
+                      className="text-sm text-gray-500 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors">
+                      🚩 Flag an error…
+                    </button>
+                  )
+                )}
+                {!isFlagOpen && !lot.aiFlagNote && (
+                  <button onClick={() => { setEditDescId(lot.id); setEditDescText(lot.description ?? "") }}
+                    className="text-sm text-gray-500 dark:text-gray-500 hover:text-[#C8A96E] dark:hover:text-[#C8A96E] transition-colors">
+                    ✏ Edit description
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )
