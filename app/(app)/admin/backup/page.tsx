@@ -90,6 +90,33 @@ export default function BackupPage() {
   const [restorePct, setRestorePct] = useState(0)
   const [restoreMessage, setRestoreMessage] = useState("")
 
+  // ── Batch barcode restore state ─────────────────────────────────────────────
+  const [batchKey,      setBatchKey]      = useState("")
+  const [batchBarcodes, setBatchBarcodes] = useState("")
+  const [batchRestoring, setBatchRestoring] = useState(false)
+  const [batchResult,   setBatchResult]   = useState<string | null>(null)
+  const [batchError,    setBatchError]    = useState<string | null>(null)
+
+  async function handleBatchRestore() {
+    const barcodes = batchBarcodes.split(/[\n,\s]+/).map(b => b.trim()).filter(Boolean)
+    if (!batchKey || barcodes.length === 0) return
+    setBatchRestoring(true); setBatchResult(null); setBatchError(null)
+    try {
+      const res = await fetch("/api/admin/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: batchKey, mode: "batch-by-field", tableName: "catalogueLots", fieldName: "barcode", values: barcodes }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? "Restore failed")
+      setBatchResult(`✓ Restored ${data.restored} of ${data.total} lots${data.errors?.length ? ` — ${data.errors.length} error(s): ${data.errors.join(", ")}` : ""}`)
+    } catch (e: any) {
+      setBatchError(e.message)
+    } finally {
+      setBatchRestoring(false)
+    }
+  }
+
   // ── Record lookup state ─────────────────────────────────────────────────────
   const [lookupKey, setLookupKey] = useState("")
   const [lookupSearch, setLookupSearch] = useState("")
@@ -536,6 +563,45 @@ export default function BackupPage() {
             {restoreError}
           </div>
         )}
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          Batch Restore by Barcodes
+      ════════════════════════════════════════════════════════════════════════ */}
+      <div className="bg-white dark:bg-gray-900 border border-amber-300 dark:border-amber-700 rounded-xl p-6 space-y-5">
+        <div>
+          <h2 className="text-base font-bold text-gray-900 dark:text-white">Batch Restore Lots by Barcode</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Restore specific catalogue lots from a backup by barcode. Only the listed lots are affected — nothing else is touched.
+          </p>
+        </div>
+
+        <div className="space-y-1">
+          <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Backup file</label>
+          <select value={batchKey} onChange={e => { setBatchKey(e.target.value); setBatchResult(null); setBatchError(null) }}
+            className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-500">
+            <option value="">— Select a backup —</option>
+            {files.map(f => (
+              <option key={f.key} value={f.key}>{keyToDate(f.key)}{f.partial ? " (partial)" : ""} — {formatBytes(f.sizeBytes)}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Barcodes (one per line, or comma-separated)</label>
+          <textarea value={batchBarcodes} onChange={e => setBatchBarcodes(e.target.value)} rows={6}
+            placeholder={"F082586\nF082587\nF082588\n..."}
+            className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm font-mono text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none" />
+          <p className="text-xs text-gray-400">{batchBarcodes.split(/[\n,\s]+/).filter(b => b.trim()).length} barcodes entered</p>
+        </div>
+
+        <button onClick={handleBatchRestore} disabled={batchRestoring || !batchKey || !batchBarcodes.trim()}
+          className="px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors">
+          {batchRestoring ? "Restoring…" : "Restore lots from backup"}
+        </button>
+
+        {batchResult && <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-700">{batchResult}</div>}
+        {batchError  && <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{batchError}</div>}
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════════

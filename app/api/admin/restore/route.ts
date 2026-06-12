@@ -104,14 +104,44 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Single-record restore mode ───────────────────────────────────────────
-    // Upserts one record supplied by the client (from a prior search result).
-    // Does not re-download the backup — saves time and bandwidth.
     if (mode === "single") {
       if (!singleTable || !singleRecord) {
         return NextResponse.json({ error: "tableName and record are required for single mode" }, { status: 400 })
       }
       await upsertRow(singleTable, singleRecord)
       return NextResponse.json({ ok: true })
+    }
+
+    // ── Batch restore by field values ────────────────────────────────────────
+    // Downloads the backup, filters a table by a field value list, upserts matches.
+    // Body: { key, mode: "batch-by-field", tableName, fieldName, values: string[] }
+    if (mode === "batch-by-field") {
+      const { tableName: batchTable, fieldName, values } = body as {
+        tableName: string
+        fieldName: string
+        values: string[]
+      }
+      if (!batchTable || !fieldName || !Array.isArray(values) || values.length === 0) {
+        return NextResponse.json({ error: "tableName, fieldName and values are required" }, { status: 400 })
+      }
+      const dump = await downloadJson(key)
+      const rows: any[] = dump.tables?.[batchTable] ?? []
+      const valueSet = new Set(values.map(v => String(v).toLowerCase()))
+      const matching = rows.filter(r => valueSet.has(String(r[fieldName] ?? "").toLowerCase()))
+      if (matching.length === 0) {
+        return NextResponse.json({ ok: true, restored: 0, message: "No matching records found in this backup" })
+      }
+      let restored = 0
+      const errors: string[] = []
+      for (const row of matching) {
+        try {
+          await upsertRow(batchTable, row)
+          restored++
+        } catch (e: any) {
+          errors.push(`${row[fieldName]}: ${e?.message ?? "unknown error"}`)
+        }
+      }
+      return NextResponse.json({ ok: true, restored, total: matching.length, errors })
     }
 
     const dump = await downloadJson(key)
