@@ -30,7 +30,7 @@ export default function ContactForm({ submissionId }: { submissionId: string }) 
           <select
             value={method}
             onChange={(e) => setMethod(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="phone">Phone</option>
             <option value="email">Email</option>
@@ -43,7 +43,7 @@ export default function ContactForm({ submissionId }: { submissionId: string }) 
             value={outcome}
             onChange={(e) => setOutcome(e.target.value)}
             required
-            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Select outcome...</option>
             <option value="approved">Approved — happy to proceed</option>
@@ -62,7 +62,7 @@ export default function ContactForm({ submissionId }: { submissionId: string }) 
           onChange={(e) => setNotes(e.target.value)}
           rows={3}
           placeholder="Any notes from the conversation..."
-          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
         />
       </div>
 
@@ -74,7 +74,7 @@ export default function ContactForm({ submissionId }: { submissionId: string }) 
         >
           {isPending ? "Logging..." : "Log Contact"}
         </button>
-        {done && <span className="text-sm text-green-600">Logged successfully.</span>}
+        {done && <span className="text-sm text-green-600 dark:text-green-400">Logged successfully.</span>}
       </div>
     </form>
   )

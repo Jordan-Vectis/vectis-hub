@@ -11,15 +11,15 @@ import PhotoViewer from "./photo-viewer"
 
 const statusLabels: Record<SubmissionStatus, { label: string; color: string }> = {
   PENDING_ASSIGNMENT: { label: "Pending Assignment", color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300" },
-  PENDING_VALUATION: { label: "Pending Valuation", color: "bg-yellow-100 text-yellow-700" },
-  VALUATION_COMPLETE: { label: "Valuation Complete", color: "bg-blue-100 text-blue-700" },
-  PENDING_CUSTOMER_DECISION: { label: "Awaiting Decision", color: "bg-purple-100 text-purple-700" },
-  APPROVED: { label: "Approved", color: "bg-green-100 text-green-700" },
-  DECLINED: { label: "Declined", color: "bg-red-100 text-red-700" },
-  FOLLOW_UP: { label: "Follow-up", color: "bg-orange-100 text-orange-700" },
-  COLLECTION_PENDING: { label: "Collection Pending", color: "bg-indigo-100 text-indigo-700" },
-  ARRIVED: { label: "Arrived", color: "bg-teal-100 text-teal-700" },
-  COMPLETED: { label: "Completed", color: "bg-emerald-100 text-emerald-700" },
+  PENDING_VALUATION: { label: "Pending Valuation", color: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" },
+  VALUATION_COMPLETE: { label: "Valuation Complete", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+  PENDING_CUSTOMER_DECISION: { label: "Awaiting Decision", color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" },
+  APPROVED: { label: "Approved", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  DECLINED: { label: "Declined", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+  FOLLOW_UP: { label: "Follow-up", color: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" },
+  COLLECTION_PENDING: { label: "Collection Pending", color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400" },
+  ARRIVED: { label: "Arrived", color: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400" },
+  COMPLETED: { label: "Completed", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" },
 }
 
 export default async function SubmissionDetailPage({
@@ -109,7 +109,7 @@ export default async function SubmissionDetailPage({
               </div>
             </dl>
             {submission.notes && (
-              <div className="mt-3 pt-3 border-t border-gray-100">
+              <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
                 <p className="text-xs text-gray-400 mb-1">Notes</p>
                 <p className="text-sm text-gray-700 dark:text-gray-300">{submission.notes}</p>
               </div>
@@ -128,7 +128,7 @@ export default async function SubmissionDetailPage({
             </div>
             <div className="space-y-3">
               {submission.items.map((item) => (
-                <div key={item.id} className="border border-gray-100 rounded-lg p-3">
+                <div key={item.id} className="border border-gray-100 dark:border-gray-700 rounded-lg p-3">
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="font-medium text-gray-800 dark:text-gray-100 text-sm">{item.name}</p>
@@ -286,19 +286,19 @@ export default async function SubmissionDetailPage({
                 {submission.contactLogs.map((log) => (
                   <div key={log.id} className="border-l-2 border-gray-200 dark:border-gray-700 pl-3">
                     <div className="flex items-center gap-2 text-xs text-gray-400">
-                      <span className="font-medium text-gray-600 capitalize">{log.method}</span>
+                      <span className="font-medium text-gray-600 dark:text-gray-400 capitalize">{log.method}</span>
                       <span>&middot;</span>
                       <span>{log.user.name}</span>
                       <span>&middot;</span>
                       <span>{new Date(log.createdAt).toLocaleDateString("en-GB")}</span>
                       {log.isFollowUp && (
-                        <span className="bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded text-xs">follow-up</span>
+                        <span className="bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 px-1.5 py-0.5 rounded text-xs">follow-up</span>
                       )}
                     </div>
                     {log.outcome && (
                       <p className="text-sm text-gray-700 dark:text-gray-300 mt-0.5 capitalize">{log.outcome.replace("_", " ")}</p>
                     )}
-                    {log.notes && <p className="text-sm text-gray-600 mt-0.5">{log.notes}</p>}
+                    {log.notes && <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">{log.notes}</p>}
                   </div>
                 ))}
               </div>
@@ -332,12 +332,12 @@ export default async function SubmissionDetailPage({
           </div>
 
           {submission.followUpCount > 0 && (
-            <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
-              <p className="text-sm font-medium text-orange-700">
+            <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700/40 rounded-xl p-4">
+              <p className="text-sm font-medium text-orange-700 dark:text-orange-400">
                 {submission.followUpCount} follow-up{submission.followUpCount !== 1 ? "s" : ""} sent
               </p>
               {submission.lastFollowUpAt && (
-                <p className="text-xs text-orange-500 mt-0.5">
+                <p className="text-xs text-orange-500 dark:text-orange-400/70 mt-0.5">
                   Last: {new Date(submission.lastFollowUpAt).toLocaleDateString("en-GB")}
                 </p>
               )}
