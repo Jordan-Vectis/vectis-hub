@@ -4,10 +4,6 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { r2 } from "@/lib/r2"
 import { prisma } from "@/lib/prisma"
 
-const ALLOWED_TYPES = [
-  "image/jpeg", "image/png", "image/jpg", "image/webp",
-  "image/heic", "image/heif",
-]
 const CLOSED_STATUSES = ["COMPLETED", "DECLINED"]
 
 export async function POST(
@@ -16,11 +12,12 @@ export async function POST(
 ) {
   try {
     const { token } = await params
-    const { itemId, filename, contentType } = await req.json()
+    const { itemId, filename, contentType: rawContentType } = await req.json()
 
-    if (!ALLOWED_TYPES.includes(contentType)) {
-      return NextResponse.json({ error: "File type not allowed" }, { status: 400 })
-    }
+    // Accept any image type — some older devices send blank or non-standard content types
+    const contentType = (rawContentType && rawContentType.startsWith("image/"))
+      ? rawContentType
+      : "image/jpeg"
 
     const submission = await prisma.submission.findUnique({
       where:   { photoUploadToken: token },

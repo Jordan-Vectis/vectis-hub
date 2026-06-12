@@ -21,27 +21,28 @@ export default async function SubmitPhotosPage({
   const expired = CLOSED_STATUSES.includes(submission.status)
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-[#0A0A0C] flex flex-col items-center justify-start py-12 px-4">
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-start py-10 px-4">
       {/* Header */}
-      <div className="text-center mb-8">
-        <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Vectis Auctions</p>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          {expired ? "This link has expired" : "We'd like a few more photos"}
-        </h1>
-        {!expired && (
-          <p className="text-sm text-gray-500 mt-2 max-w-sm mx-auto">
-            Please upload photos of your item{submission.items.length !== 1 ? "s" : ""} below.
-            The clearer the better — good lighting and multiple angles help us give you the most accurate valuation.
-          </p>
+      <div className="text-center mb-6">
+        <p className="text-sm font-bold uppercase tracking-widest text-blue-600 mb-1">Vectis Auctions</p>
+        {expired && (
+          <h1 className="text-2xl font-bold text-gray-900">This link has expired</h1>
         )}
       </div>
 
       {expired ? (
-        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center max-w-sm w-full">
-          <p className="text-gray-500 text-sm">
-            This photo upload link is no longer active. Please contact Vectis Auctions if you need to send photos.
+        <div className="bg-white rounded-3xl border border-gray-100 p-8 text-center max-w-sm w-full shadow-sm">
+          <div className="text-5xl mb-4">🔒</div>
+          <h2 className="text-xl font-bold text-gray-900 mb-3">Link no longer active</h2>
+          <p className="text-gray-600 text-base leading-relaxed mb-4">
+            This photo upload link has expired. Please contact Vectis Auctions directly if you still need to send photos.
           </p>
-          <p className="text-xs text-gray-400 mt-3">01983 520 722</p>
+          <a
+            href="tel:01983520722"
+            className="inline-flex items-center gap-2 bg-blue-600 text-white font-bold text-lg px-6 py-4 rounded-2xl"
+          >
+            📞 01983 520 722
+          </a>
         </div>
       ) : (
         <UploadClient token={token} items={submission.items} />
