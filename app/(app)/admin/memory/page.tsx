@@ -214,6 +214,8 @@ Password-gated Socket.IO clerk interface. Control panel: current lot, asking/inc
 
 ### Submissions (/submissions)
 Customer submission pipeline. Statuses: PENDING_ASSIGNMENT → PENDING_VALUATION → VALUATION_COMPLETE → PENDING_CUSTOMER_DECISION → APPROVED/DECLINED/FOLLOW_UP → COLLECTION_PENDING → ARRIVED → COMPLETED. Channels: Email, Web Form, Phone, Walk-in.
+- New submission form (/submissions/new): each item has "Add photos" — uploads to R2 via /api/upload-url immediately; keys passed as item_N_imageKey form fields on submit.
+- Customer photo request link: Submission.photoUploadToken (String? @unique). Collections/admin see "Photo Request Link" sidebar card — "Generate photo link" button calls generatePhotoUploadToken server action. Link goes to /submit/[token] (public, no auth). Customer sees friendly upload page; photos save to submission-photos/[token]/ R2 prefix. Public API: GET/POST /api/public/submission/[token]/. Link expires once COMPLETED or DECLINED.
 
 ### Follow-ups (/follow-ups)
 Submissions with DECLINED or FOLLOW_UP status, ordered by lastFollowUpAt.
