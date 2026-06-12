@@ -51,6 +51,7 @@ export async function createSubmission(formData: FormData) {
         create: itemNames.map((name, i) => ({
           name,
           description: itemDescriptions[i] || null,
+          imageUrls: formData.getAll(`item_${i}_imageKey`) as string[],
         })),
       },
     },
@@ -58,6 +59,19 @@ export async function createSubmission(formData: FormData) {
 
   revalidatePath("/submissions")
   return { id: submission.id }
+}
+
+export async function generatePhotoUploadToken(submissionId: string) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorised")
+
+  const token = crypto.randomUUID().replace(/-/g, "")
+  await prisma.submission.update({
+    where: { id: submissionId },
+    data:  { photoUploadToken: token },
+  })
+  revalidatePath(`/submissions/${submissionId}`)
+  return { token }
 }
 
 export async function assignSubmission(

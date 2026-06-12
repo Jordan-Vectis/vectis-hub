@@ -140,9 +140,10 @@ model Submission {
   reference      String            @unique @default(cuid())
   channel        SubmissionChannel
   status         SubmissionStatus  @default(PENDING_ASSIGNMENT)
-  notes          String?
-  followUpCount  Int               @default(0)
-  lastFollowUpAt DateTime?
+  notes            String?
+  followUpCount    Int               @default(0)
+  lastFollowUpAt   DateTime?
+  photoUploadToken String?           @unique
 
   contactId    String
   contact      Contact     @relation("ContactSubmissions", fields: [contactId], references: [id])

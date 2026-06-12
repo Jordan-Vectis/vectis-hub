@@ -320,6 +320,10 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS "CatalogueLotEvent_auctionId_idx" ON "CatalogueLotEvent"("auctionId")`,
   `CREATE INDEX IF NOT EXISTS "CatalogueLotEvent_changedAt_idx" ON "CatalogueLotEvent"("changedAt")`,
   `CREATE INDEX IF NOT EXISTS "CatalogueLotEvent_field_idx"    ON "CatalogueLotEvent"("field")`,
+
+  // 2026-06-12 — Submission photo upload token for customer-facing photo request links
+  `ALTER TABLE "Submission" ADD COLUMN IF NOT EXISTS "photoUploadToken" TEXT`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Submission_photoUploadToken_key" ON "Submission"("photoUploadToken")`,
 ]
 
 export async function POST() {

@@ -8,6 +8,7 @@ import ContactForm from "./contact-form"
 import LogisticsForm from "./logistics-form"
 import ValuationSection from "./valuation-section"
 import PhotoViewer from "./photo-viewer"
+import PhotoLink from "./photo-link"
 
 const statusLabels: Record<SubmissionStatus, { label: string; color: string }> = {
   PENDING_ASSIGNMENT: { label: "Pending Assignment", color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300" },
@@ -330,6 +331,10 @@ export default async function SubmissionDetailPage({
               </div>
             </dl>
           </div>
+
+          {isCollectionsOrAdmin && (
+            <PhotoLink submissionId={submission.id} token={submission.photoUploadToken ?? null} />
+          )}
 
           {submission.followUpCount > 0 && (
             <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700/40 rounded-xl p-4">
