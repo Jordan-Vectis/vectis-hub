@@ -3516,7 +3516,8 @@ const PIPELINE_UPGRADE_MODES: { id: string; label: string }[] = [
 function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fallbackModel: string }) {
   const [code,        setCode]        = useState("")
   const [auctionId,   setAuctionId]   = useState<string | null>(null)
-  const [lots,        setLots]        = useState<PLot[]>([])
+  const [lots,         setLots]         = useState<PLot[]>([])
+  const [excludedCount, setExcludedCount] = useState<number | null>(null)
   const [loading,     setLoading]     = useState(false)
   const [error,       setError]       = useState<string | null>(null)
   const [running,     setRunning]     = useState(false)
@@ -3609,13 +3610,14 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   async function handleLoad() {
     const upper = code.trim().toUpperCase()
     if (!upper) return
-    setLoading(true); setError(null); setLots([]); setAuctionId(null); setLog([]); setStage("batch"); setProgress(null)
+    setLoading(true); setError(null); setLots([]); setAuctionId(null); setLog([]); setStage("batch"); setProgress(null); setExcludedCount(null)
     try {
       // Load catalogue lots
       const catRes = await fetch(`/api/auction-ai/catalogue-lots?code=${encodeURIComponent(upper)}`)
       if (!catRes.ok) throw new Error((await catRes.json()).error ?? "Catalogue not found")
       const catData = await catRes.json()
       setAuctionId(catData.auctionId ?? null)
+      setExcludedCount(catData.excludedCount ?? 0)
 
       // Load existing pipeline state
       const pipeRes = await fetch(`/api/auction-ai/pipeline?code=${encodeURIComponent(upper)}`)
@@ -4310,6 +4312,20 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         </div>
 
         {error && <p className="text-sm text-red-400">{error}</p>}
+
+        {lots.length > 0 && (
+          <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 pt-1">
+            <span className="text-gray-700 dark:text-gray-300 font-medium">{lots.length} lots loaded</span>
+            {excludedCount != null && excludedCount > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-orange-950/40 border border-orange-700/40 text-orange-400">
+                {excludedCount} excluded from AI
+              </span>
+            )}
+            {excludedCount === 0 && (
+              <span className="text-gray-500">· none excluded from AI</span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Stage cards */}
