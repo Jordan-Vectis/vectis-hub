@@ -331,8 +331,7 @@ export async function saveAiFlagNote(lotId: string, flagNote: string | null) {
 export async function saveLotDescription(lotId: string, auctionId: string, description: string) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
-  const title = description.split("\n")[0]?.trim().slice(0, 83) || "Untitled"
-  await prisma.catalogueLot.update({ where: { id: lotId }, data: { description, title, aiFlagNote: null } })
+  await prisma.catalogueLot.update({ where: { id: lotId }, data: { description, title: titleFromDescription(description), aiFlagNote: null } })
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 

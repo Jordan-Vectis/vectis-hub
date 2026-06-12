@@ -1772,7 +1772,11 @@ function KPRunsTab() {
       if (!match) throw new Error(`Lot ${lotLabel} not found in catalogue`)
       const runLot  = detail?.lots.find(l => l.id === lotId)
       const { low, high } = parseEstimate(runLot?.estimate ?? "")
-      await applyAiDescriptionOne(data.auctionId, { id: match.id, description: desc, aiEstimateLow: low || null, aiEstimateHigh: high || null })
+      await applyAiDescriptionOne(data.auctionId, {
+        id: match.id, description: desc,
+        ...(low  != null ? { aiEstimateLow:  low  } : {}),
+        ...(high != null ? { aiEstimateHigh: high } : {}),
+      })
       showToast(`✓ Lot ${lotLabel} saved to catalogue`, "ok")
     } catch (e: any) {
       showError("Failed to apply to catalogue", e.message)
@@ -1798,7 +1802,11 @@ function KPRunsTab() {
         if (!match) { fail++; continue }
         try {
           const { low, high } = parseEstimate(l.estimate ?? "")
-          await applyAiDescriptionOne(data.auctionId, { id: match.id, description: revised[l.id] ?? l.description, aiEstimateLow: low || null, aiEstimateHigh: high || null })
+          await applyAiDescriptionOne(data.auctionId, {
+            id: match.id, description: revised[l.id] ?? l.description,
+            ...(low  != null ? { aiEstimateLow:  low  } : {}),
+            ...(high != null ? { aiEstimateHigh: high } : {}),
+          })
           ok++
         } catch { fail++ }
       }
