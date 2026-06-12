@@ -215,7 +215,8 @@ Password-gated Socket.IO clerk interface. Control panel: current lot, asking/inc
 ### Submissions (/submissions)
 Customer submission pipeline. Statuses: PENDING_ASSIGNMENT → PENDING_VALUATION → VALUATION_COMPLETE → PENDING_CUSTOMER_DECISION → APPROVED/DECLINED/FOLLOW_UP → COLLECTION_PENDING → ARRIVED → COMPLETED. Channels: Email, Web Form, Phone, Walk-in.
 - New submission form (/submissions/new): each item has "Add photos" — uploads to R2 via /api/upload-url immediately; keys passed as item_N_imageKey form fields on submit.
-- Customer photo request link: Submission.photoUploadToken (String? @unique). Collections/admin see "Photo Request Link" sidebar card — "Generate photo link" button calls generatePhotoUploadToken server action. Link goes to /submit/[token] (public, no auth). Customer sees friendly upload page; photos save to submission-photos/[token]/ R2 prefix. Public API: GET/POST /api/public/submission/[token]/. Link expires once COMPLETED or DECLINED.
+- Customer photo request link: Submission.photoUploadToken (String? @unique). Collections/admin see "Photo Request Link" sidebar card. Link /submit/[token] — public step-by-step wizard (Take a Photo / Choose from Gallery), no size limits, accepts any image type. Both public pages show Vectis logo.
+- External cataloguer valuation link: Submission.valuationToken (String? @unique). Collections/admin see "Valuation Request Link" sidebar card — generate link, copy, or "Send email" opens Outlook via mailto with item list pre-filled. Recipient = pick from staff list or type custom email. Public page /value/[token] shows items + photos (presigned GET URLs), per-item estimate + notes, overall comments. Saves to Item.externalEstimate/externalNotes + Submission.valuationNotes/valuationSubmittedAt. Server action: generateValuationToken. API: POST /api/public/submission/[token]/save-valuation.
 
 ### Follow-ups (/follow-ups)
 Submissions with DECLINED or FOLLOW_UP status, ordered by lastFollowUpAt.
