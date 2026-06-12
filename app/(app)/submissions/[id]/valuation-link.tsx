@@ -53,7 +53,11 @@ export default function ValuationLink({
     const body = encodeURIComponent(
       `Dear Colleague,\n\nVectis Auctions would like to request your expert valuation on the following items submitted by ${customerName}:\n\n${itemList}\n\nPlease use the link below to submit your valuation. No login is required:\n\n${link}\n\nIf you have any questions, please contact us on 01983 520 722.\n\nKind regards,\nVectis Auctions`
     )
-    window.open(`mailto:${recipient}?subject=${subject}&body=${body}`)
+    // Opens directly in Outlook 365 web (business account) rather than the system default mail client
+    window.open(
+      `https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(recipient)}&subject=${subject}&body=${body}`,
+      "_blank"
+    )
   }
 
   return (
