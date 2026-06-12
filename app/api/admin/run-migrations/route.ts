@@ -300,6 +300,26 @@ const MIGRATIONS = [
     "createdAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "MacroFile_pkey" PRIMARY KEY ("id")
   )`,
+
+  // 2026-06-12 — Lot change log: records every field change made via updateLot
+  `CREATE TABLE IF NOT EXISTS "CatalogueLotEvent" (
+    "id"          TEXT         NOT NULL,
+    "lotId"       TEXT         NOT NULL,
+    "auctionId"   TEXT         NOT NULL,
+    "auctionCode" TEXT         NOT NULL,
+    "lotBarcode"  TEXT,
+    "lotTitle"    TEXT,
+    "field"       TEXT         NOT NULL,
+    "oldValue"    TEXT,
+    "newValue"    TEXT,
+    "changedBy"   TEXT         NOT NULL,
+    "changedAt"   TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "CatalogueLotEvent_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "CatalogueLotEvent_lotId_idx"    ON "CatalogueLotEvent"("lotId")`,
+  `CREATE INDEX IF NOT EXISTS "CatalogueLotEvent_auctionId_idx" ON "CatalogueLotEvent"("auctionId")`,
+  `CREATE INDEX IF NOT EXISTS "CatalogueLotEvent_changedAt_idx" ON "CatalogueLotEvent"("changedAt")`,
+  `CREATE INDEX IF NOT EXISTS "CatalogueLotEvent_field_idx"    ON "CatalogueLotEvent"("field")`,
 ]
 
 export async function POST() {

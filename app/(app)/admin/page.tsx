@@ -70,6 +70,12 @@ const sections = [
     description: "Upload and access invoices. Accepts any file type.",
     icon:        "🧾",
   },
+  {
+    href:        "/admin/lot-log",
+    label:       "Lot Change Log",
+    description: "Full audit trail of every field changed on every lot — who changed what, when, and what it was before.",
+    icon:        "📋",
+  },
 ]
 
 export default async function AdminOverviewPage() {

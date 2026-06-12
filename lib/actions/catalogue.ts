@@ -229,11 +229,69 @@ export async function createPhotoOnlyLot(auctionId: string, formData: FormData) 
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
+const LOT_FIELD_LABELS: Record<string, string> = {
+  barcode:        "Barcode",
+  title:          "Title",
+  keyPoints:      "Key Points",
+  description:    "Description",
+  estimateLow:    "Estimate Low",
+  estimateHigh:   "Estimate High",
+  startingBid:    "Starting Bid",
+  reserve:        "Reserve",
+  hammerPrice:    "Hammer Price",
+  condition:      "Condition",
+  vendor:         "Vendor",
+  tote:           "Tote",
+  receipt:        "Receipt",
+  receiptUniqueId:"Receipt Unique ID",
+  category:       "Category",
+  subCategory:    "Sub-Category",
+  brand:          "Brand",
+  notes:          "Parcel Size",
+  extraDetails:   "Extra Details",
+  status:         "Status",
+  aiExcluded:     "AI Excluded",
+}
+
 export async function updateLot(lotId: string, auctionId: string, formData: FormData) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
   const data = extractLotData(formData)
+
+  const old = await prisma.catalogueLot.findUnique({
+    where: { id: lotId },
+    select: {
+      barcode: true, title: true, keyPoints: true, description: true,
+      estimateLow: true, estimateHigh: true, startingBid: true, reserve: true,
+      hammerPrice: true, condition: true, vendor: true, tote: true, receipt: true,
+      receiptUniqueId: true, category: true, subCategory: true, brand: true,
+      notes: true, extraDetails: true, status: true, aiExcluded: true,
+      auction: { select: { code: true } },
+    },
+  })
+
   await prisma.catalogueLot.update({ where: { id: lotId }, data })
+
+  if (old) {
+    const events: { lotId: string; auctionId: string; auctionCode: string; lotBarcode: string | null; lotTitle: string | null; field: string; oldValue: string | null; newValue: string | null; changedBy: string }[] = []
+    const changedBy = session.user.name ?? session.user.email ?? "Unknown"
+    const auctionCode = old.auction?.code ?? ""
+    const lotBarcode  = data.barcode ?? old.barcode ?? null
+    const lotTitle    = data.title ?? old.title ?? null
+
+    for (const key of Object.keys(LOT_FIELD_LABELS) as (keyof typeof LOT_FIELD_LABELS)[]) {
+      const oldVal = String(old[key as keyof typeof old] ?? "")
+      const newVal = String((data as Record<string, unknown>)[key] ?? "")
+      if (oldVal !== newVal) {
+        events.push({ lotId, auctionId, auctionCode, lotBarcode, lotTitle: lotTitle?.slice(0, 83) ?? null, field: LOT_FIELD_LABELS[key], oldValue: oldVal || null, newValue: newVal || null, changedBy })
+      }
+    }
+
+    if (events.length > 0) {
+      await prisma.catalogueLotEvent.createMany({ data: events.map(e => ({ ...e, id: crypto.randomUUID() })) })
+    }
+  }
+
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 

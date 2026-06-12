@@ -957,3 +957,25 @@ model SocialImage {
 
   @@index([createdAt])
 }
+
+
+// Lot change log — every field change made via updateLot, with old/new values.
+// Used by /admin/lot-log to audit edits and track down data issues.
+model CatalogueLotEvent {
+  id          String   @id @default(cuid())
+  lotId       String
+  auctionId   String
+  auctionCode String
+  lotBarcode  String?
+  lotTitle    String?
+  field       String
+  oldValue    String?
+  newValue    String?
+  changedBy   String
+  changedAt   DateTime @default(now())
+
+  @@index([lotId])
+  @@index([auctionId])
+  @@index([changedAt])
+  @@index([field])
+}
