@@ -4,11 +4,11 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { uploadBufferToR2, deleteObjectsFromR2 } from "@/lib/r2"
 
-// Derive a lot title from a description — first sentence, max 83 chars with ellipsis
+// First 83 characters of the description — no sentence splitting, full stops do not break title
 function titleFromDescription(desc: string): string {
-  const first = (desc ?? "").split(/\.\s|\n/)[0].trim()
-  if (!first) return "Untitled"
-  return first.length > 83 ? first.slice(0, 82) + "…" : first
+  const text = (desc ?? "").replace(/[\r\n]+/g, " ").trim()
+  if (!text) return "Untitled"
+  return text.length > 83 ? text.slice(0, 82) + "…" : text
 }
 
 async function requireCataloguer() {

@@ -11,11 +11,11 @@ function parseEstimate(est: string): { low: number | null; high: number | null }
   }
 }
 
-// First sentence of the description, capped at 83 chars — matches lib/actions/catalogue.ts
+// First 83 characters of the description — no sentence splitting, full stops do not break title
 function titleFromDescription(desc: string): string {
-  const first = (desc ?? "").split(/\.\s|\n/)[0].trim()
-  if (!first) return "Untitled"
-  return first.length > 83 ? first.slice(0, 82) + "…" : first
+  const text = (desc ?? "").replace(/[\r\n]+/g, " ").trim()
+  if (!text) return "Untitled"
+  return text.length > 83 ? text.slice(0, 82) + "…" : text
 }
 
 // POST /api/auction-ai/runs/[id]/apply
