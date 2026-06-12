@@ -258,6 +258,13 @@ export async function updateLot(lotId: string, auctionId: string, formData: Form
   await requireNotBCLocked(auctionId, session)
   const data = extractLotData(formData)
 
+  // receiptUniqueId is auto-assigned on creation and managed by dedicated routes (bulk-assign,
+  // sequencing). If the form doesn't include this field, preserve the existing value rather than
+  // overwriting it with null — which is what happens when the wizard is saved without the field.
+  const hasUniqueIdField = formData.has("receiptUniqueId")
+  const { receiptUniqueId, ...dataWithoutUniqueId } = data
+  const updateData = hasUniqueIdField ? data : dataWithoutUniqueId
+
   const old = await prisma.catalogueLot.findUnique({
     where: { id: lotId },
     select: {
@@ -270,7 +277,7 @@ export async function updateLot(lotId: string, auctionId: string, formData: Form
     },
   })
 
-  await prisma.catalogueLot.update({ where: { id: lotId }, data })
+  await prisma.catalogueLot.update({ where: { id: lotId }, data: updateData })
 
   if (old) {
     const events: { lotId: string; auctionId: string; auctionCode: string; lotBarcode: string | null; lotTitle: string | null; field: string; oldValue: string | null; newValue: string | null; changedBy: string }[] = []
@@ -280,6 +287,8 @@ export async function updateLot(lotId: string, auctionId: string, formData: Form
     const lotTitle    = data.title ?? old.title ?? null
 
     for (const key of Object.keys(LOT_FIELD_LABELS) as (keyof typeof LOT_FIELD_LABELS)[]) {
+      // Skip receiptUniqueId comparison when it wasn't in the form — it wasn't updated
+      if (key === "receiptUniqueId" && !hasUniqueIdField) continue
       const oldVal = String(old[key as keyof typeof old] ?? "")
       const newVal = String((data as Record<string, unknown>)[key] ?? "")
       if (oldVal !== newVal) {
