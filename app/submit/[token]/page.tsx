@@ -24,6 +24,7 @@ export default async function SubmitPhotosPage({
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-start py-10 px-4">
       {/* Header */}
       <div className="text-center mb-6">
+        <img src="/vectis-logo.svg" alt="Vectis Auctions" className="h-10 object-contain mx-auto mb-4" />
         <p className="text-sm font-bold uppercase tracking-widest text-blue-600 mb-1">Vectis Auctions</p>
         {expired && (
           <h1 className="text-2xl font-bold text-gray-900">This link has expired</h1>

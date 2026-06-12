@@ -324,6 +324,14 @@ const MIGRATIONS = [
   // 2026-06-12 — Submission photo upload token for customer-facing photo request links
   `ALTER TABLE "Submission" ADD COLUMN IF NOT EXISTS "photoUploadToken" TEXT`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "Submission_photoUploadToken_key" ON "Submission"("photoUploadToken")`,
+
+  // 2026-06-12 — External cataloguer valuation link
+  `ALTER TABLE "Submission" ADD COLUMN IF NOT EXISTS "valuationToken" TEXT`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Submission_valuationToken_key" ON "Submission"("valuationToken")`,
+  `ALTER TABLE "Submission" ADD COLUMN IF NOT EXISTS "valuationNotes" TEXT`,
+  `ALTER TABLE "Submission" ADD COLUMN IF NOT EXISTS "valuationSubmittedAt" TIMESTAMP(3)`,
+  `ALTER TABLE "Item" ADD COLUMN IF NOT EXISTS "externalEstimate" INTEGER`,
+  `ALTER TABLE "Item" ADD COLUMN IF NOT EXISTS "externalNotes" TEXT`,
 ]
 
 export async function POST() {

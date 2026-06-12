@@ -9,6 +9,7 @@ import LogisticsForm from "./logistics-form"
 import ValuationSection from "./valuation-section"
 import PhotoViewer from "./photo-viewer"
 import PhotoLink from "./photo-link"
+import ValuationLink from "./valuation-link"
 
 const statusLabels: Record<SubmissionStatus, { label: string; color: string }> = {
   PENDING_ASSIGNMENT: { label: "Pending Assignment", color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300" },
@@ -50,6 +51,10 @@ export default async function SubmissionDetailPage({
   const cataloguers = await prisma.user.findMany({
     where: { role: "CATALOGUER" },
     include: { department: true },
+    orderBy: { name: "asc" },
+  })
+  const allUsers = await prisma.user.findMany({
+    select: { id: true, name: true, email: true },
     orderBy: { name: "asc" },
   })
 
@@ -138,19 +143,32 @@ export default async function SubmissionDetailPage({
                       )}
                     <PhotoViewer imageUrls={item.imageUrls} />
                     </div>
-                    {item.valuation ? (
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-green-700">
-                          &pound;{item.valuation.estimatedValue.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
-                        </p>
-                        {item.valuation.comments && (
-                          <p className="text-xs text-gray-500 mt-0.5 max-w-xs text-right">{item.valuation.comments}</p>
-                        )}
-                        <p className="text-xs text-gray-400 mt-0.5">by {item.valuation.cataloguer.name}</p>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-gray-400">No valuation yet</span>
-                    )}
+                    <div className="text-right space-y-2">
+                      {item.valuation ? (
+                        <div>
+                          <p className="text-sm font-semibold text-green-700">
+                            &pound;{item.valuation.estimatedValue.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
+                          </p>
+                          {item.valuation.comments && (
+                            <p className="text-xs text-gray-500 mt-0.5 max-w-xs text-right">{item.valuation.comments}</p>
+                          )}
+                          <p className="text-xs text-gray-400 mt-0.5">by {item.valuation.cataloguer.name}</p>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">No valuation yet</span>
+                      )}
+                      {(item as any).externalEstimate != null && (
+                        <div className="border-t border-gray-100 dark:border-gray-700 pt-2">
+                          <p className="text-xs text-gray-400 mb-0.5">External</p>
+                          <p className="text-sm font-semibold text-blue-700">
+                            &pound;{((item as any).externalEstimate as number).toLocaleString("en-GB")}
+                          </p>
+                          {(item as any).externalNotes && (
+                            <p className="text-xs text-gray-500 mt-0.5 max-w-xs text-right">{(item as any).externalNotes}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   {isCataloguer && !item.valuation && submission.cataloguerId === session?.user.id && (
                     <ValuationSection item={item} submissionId={submission.id} />
@@ -334,6 +352,28 @@ export default async function SubmissionDetailPage({
 
           {isCollectionsOrAdmin && (
             <PhotoLink submissionId={submission.id} token={submission.photoUploadToken ?? null} />
+          )}
+
+          {isCollectionsOrAdmin && (
+            <ValuationLink
+              submissionId={submission.id}
+              token={(submission as any).valuationToken ?? null}
+              customerName={submission.contact.name}
+              items={submission.items.map(i => ({ name: i.name }))}
+              users={allUsers}
+            />
+          )}
+
+          {(submission as any).valuationNotes && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/40 rounded-xl p-4">
+              <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide mb-1">External Valuation Notes</p>
+              <p className="text-sm text-blue-800 dark:text-blue-300">{(submission as any).valuationNotes}</p>
+              {(submission as any).valuationSubmittedAt && (
+                <p className="text-xs text-blue-400 mt-1">
+                  Received {new Date((submission as any).valuationSubmittedAt).toLocaleDateString("en-GB")}
+                </p>
+              )}
+            </div>
           )}
 
           {submission.followUpCount > 0 && (

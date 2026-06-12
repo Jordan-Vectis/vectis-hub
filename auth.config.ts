@@ -12,7 +12,7 @@ export const authConfig: NextAuthConfig = {
       const isLoggedIn = !!auth?.user
       const pathname = nextUrl.pathname
 
-      const publicPaths = ["/login", "/setup", "/submit", "/auctions", "/portal", "/account", "/api/public", "/search", "/api/gap-relay"]
+      const publicPaths = ["/login", "/setup", "/submit", "/value", "/auctions", "/portal", "/account", "/api/public", "/search", "/api/gap-relay"]
       // Root path "/" is the public website homepage
       if (pathname === "/") return true
       if (publicPaths.some((p) => pathname.startsWith(p))) return true
