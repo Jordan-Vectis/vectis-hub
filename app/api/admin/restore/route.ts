@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { key, mode, search, tableName: singleTable, record: singleRecord } = body as {
       key: string
-      mode: "full" | "search" | "single"
+      mode: "full" | "search" | "single" | "batch-by-field"
       search?: string
       tableName?: string
       record?: any
