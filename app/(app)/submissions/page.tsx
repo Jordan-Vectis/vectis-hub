@@ -175,12 +175,10 @@ export default async function SubmissionsPage({
                       {label}
                     </span>
                     {isCollectionsOrAdmin && (
-                      <div onClick={e => e.preventDefault()}>
-                        <DeleteSubmissionButton
-                          id={sub.id}
-                          reference={sub.reference.slice(0, 8).toUpperCase()}
-                        />
-                      </div>
+                      <DeleteSubmissionButton
+                        id={sub.id}
+                        reference={sub.reference.slice(0, 8).toUpperCase()}
+                      />
                     )}
                   </div>
                 </div>
