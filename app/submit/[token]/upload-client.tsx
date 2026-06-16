@@ -124,24 +124,6 @@ export default function UploadClient({ token, items }: { token: string; items: I
             </p>
           </div>
 
-          {items.length > 0 && (
-            <div className="bg-blue-50 rounded-2xl p-4 mb-6">
-              <p className="text-sm font-semibold text-blue-800 mb-3 uppercase tracking-wide">
-                {items.length === 1 ? "You are sending photos for:" : "You are sending photos for:"}
-              </p>
-              <div className="space-y-2">
-                {items.map((item, i) => (
-                  <div key={item.id} className="flex items-center gap-3">
-                    <span className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
-                      {i + 1}
-                    </span>
-                    <span className="text-gray-800 font-medium">{item.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           <div className="bg-gray-50 rounded-2xl p-4 mb-6 space-y-3">
             <div className="flex items-start gap-3">
               <span className="text-xl flex-shrink-0">💡</span>
