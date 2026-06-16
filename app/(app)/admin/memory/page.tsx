@@ -185,8 +185,8 @@ last_updated: 2026-05-29
 - D-ID API for AI Presenter avatar
 - pdf-lib + sharp + bwip-js for server-side PDF generation (NOT pdfkit)
 
-## Accessibility — text/spacing scale, Submissions section only
-.a11y-zoom { font-size: 145% } in app/globals.css, applied via app/(app)/submissions/layout.tsx wrapping /submissions pages in a div. Scoped to Submissions only (not the whole app) — scales text/padding/gaps for everyone using that section, not a per-user toggle.
+## Accessibility — Submissions section redesigned (not a CSS scale hack)
+First attempt used a .a11y-zoom wrapper div with font-size: 145% — didn't work, rem units resolve against html not the nearest parent. Reverted. Replaced with a real UI redesign across all /submissions pages: list page is now large cards instead of a table, detail page is single-column with bigger headings/buttons/inputs, all forms sized up to match. Permanent for everyone using that section.
 
 ## Key config notes
 - \`prisma generate\` runs as part of \`npm run build\`
