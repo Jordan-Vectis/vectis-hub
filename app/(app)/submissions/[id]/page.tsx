@@ -3,7 +3,6 @@ import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { SubmissionStatus } from "@/app/generated/prisma/enums"
-import AssignForm from "./assign-form"
 import ContactForm from "./contact-form"
 import LogisticsForm from "./logistics-form"
 import ValuationSection from "./valuation-section"
@@ -36,9 +35,6 @@ export default async function SubmissionDetailPage({
     where: { id },
     include: {
       contact: true,
-      department: true,
-      cataloguer: true,
-      createdBy: true,
       items: { include: { valuation: { include: { cataloguer: true } } } },
       contactLogs: { include: { user: true }, orderBy: { createdAt: "desc" } },
       logistics: true,
@@ -47,12 +43,6 @@ export default async function SubmissionDetailPage({
 
   if (!submission) notFound()
 
-  const departments = await prisma.department.findMany({ orderBy: { name: "asc" } })
-  const cataloguers = await prisma.user.findMany({
-    where: { role: "CATALOGUER" },
-    include: { department: true },
-    orderBy: { name: "asc" },
-  })
   const allUsers = await prisma.user.findMany({
     select: { id: true, name: true, email: true },
     orderBy: { name: "asc" },
@@ -180,32 +170,36 @@ export default async function SubmissionDetailPage({
         </div>
       </section>
 
-      {/* Assignment - collections/admin only */}
-      {isCollectionsOrAdmin && submission.status === "PENDING_ASSIGNMENT" && (
+      {/* Accept / Decline - collections/admin only */}
+      {isCollectionsOrAdmin && !["APPROVED", "DECLINED", "COMPLETED"].includes(submission.status) && (
         <section className={sectionCard}>
-          <h2 className={sectionTitle}>Assign to Department & Cataloguer</h2>
-          <AssignForm
-            submissionId={submission.id}
-            departments={departments}
-            cataloguers={cataloguers}
-          />
-          <div className="flex items-center gap-3 my-5">
-            <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
-            <span className="text-sm text-gray-400">or</span>
-            <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
+          <h2 className={sectionTitle}>Accept or Decline</h2>
+          <div className="flex gap-3">
+            <form action={async () => {
+              "use server"
+              const { updateSubmissionStatus } = await import("@/lib/actions/submissions")
+              await updateSubmissionStatus(submission.id, SubmissionStatus.APPROVED)
+            }} className="flex-1">
+              <button
+                type="submit"
+                className="w-full text-base bg-green-600 hover:bg-green-700 text-white font-semibold px-5 py-3 rounded-xl transition-colors"
+              >
+                ✓ Accept
+              </button>
+            </form>
+            <form action={async () => {
+              "use server"
+              const { updateSubmissionStatus } = await import("@/lib/actions/submissions")
+              await updateSubmissionStatus(submission.id, SubmissionStatus.DECLINED)
+            }} className="flex-1">
+              <button
+                type="submit"
+                className="w-full text-base bg-red-600 hover:bg-red-700 text-white font-semibold px-5 py-3 rounded-xl transition-colors"
+              >
+                ✕ Decline
+              </button>
+            </form>
           </div>
-          <form action={async () => {
-            "use server"
-            const { updateSubmissionStatus } = await import("@/lib/actions/submissions")
-            await updateSubmissionStatus(submission.id, SubmissionStatus.APPROVED)
-          }}>
-            <button
-              type="submit"
-              className="w-full text-base bg-green-600 hover:bg-green-700 text-white font-semibold px-5 py-3 rounded-xl transition-colors"
-            >
-              Accept without valuation
-            </button>
-          </form>
         </section>
       )}
 
@@ -298,29 +292,6 @@ export default async function SubmissionDetailPage({
           </dl>
         </section>
       )}
-
-      {/* Assignment / meta info */}
-      <section className={sectionCard}>
-        <h2 className={sectionTitle}>Assignment</h2>
-        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-base">
-          <div>
-            <dt className="text-gray-400 text-sm">Department</dt>
-            <dd className="text-gray-800 dark:text-gray-100">{submission.department?.name ?? "—"}</dd>
-          </div>
-          <div>
-            <dt className="text-gray-400 text-sm">Cataloguer</dt>
-            <dd className="text-gray-800 dark:text-gray-100">{submission.cataloguer?.name ?? "—"}</dd>
-          </div>
-          <div>
-            <dt className="text-gray-400 text-sm">Created by</dt>
-            <dd className="text-gray-800 dark:text-gray-100">{submission.createdBy.name}</dd>
-          </div>
-          <div>
-            <dt className="text-gray-400 text-sm">Created</dt>
-            <dd className="text-gray-800 dark:text-gray-100">{new Date(submission.createdAt).toLocaleDateString("en-GB")}</dd>
-          </div>
-        </dl>
-      </section>
 
       {isCollectionsOrAdmin && (
         <PhotoLink submissionId={submission.id} token={submission.photoUploadToken ?? null} />

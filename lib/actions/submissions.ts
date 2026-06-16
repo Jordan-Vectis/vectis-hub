@@ -87,27 +87,6 @@ export async function generatePhotoUploadToken(submissionId: string) {
   return { token }
 }
 
-export async function assignSubmission(
-  submissionId: string,
-  departmentId: string,
-  cataloguerId: string
-) {
-  const session = await auth()
-  if (!session) throw new Error("Unauthorised")
-
-  await prisma.submission.update({
-    where: { id: submissionId },
-    data: {
-      departmentId,
-      cataloguerId,
-      status: SubmissionStatus.PENDING_VALUATION,
-    },
-  })
-
-  revalidatePath(`/submissions/${submissionId}`)
-  revalidatePath("/submissions")
-}
-
 export async function logContact(
   submissionId: string,
   method: string,
