@@ -7,13 +7,6 @@
   --foreground: #171717;
 }
 
-/* Accessibility: scales every rem-based Tailwind utility (text sizes,
-   padding, gaps, rounded corners) up proportionally. Applied only within
-   the Submissions section via .a11y-zoom wrapper — see
-   app/(app)/submissions/layout.tsx — not app-wide. */
-.a11y-zoom {
-  font-size: 145%;
-}
 
 @theme inline {
   --color-background: var(--background);
