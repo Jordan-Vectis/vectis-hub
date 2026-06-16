@@ -185,8 +185,8 @@ last_updated: 2026-05-29
 - D-ID API for AI Presenter avatar
 - pdf-lib + sharp + bwip-js for server-side PDF generation (NOT pdfkit)
 
-## Accessibility — global text/spacing scale
-app/globals.css has \`html { font-size: 145%; }\` — permanent app-wide increase (everyone, not a toggle) so an 80-year-old user can use the app comfortably. Scales all rem-based text, padding, gaps and rounded corners since Tailwind spacing + the existing @theme font tokens are rem-based.
+## Accessibility — text/spacing scale, Submissions section only
+.a11y-zoom { font-size: 145% } in app/globals.css, applied via app/(app)/submissions/layout.tsx wrapping /submissions pages in a div. Scoped to Submissions only (not the whole app) — scales text/padding/gaps for everyone using that section, not a per-user toggle.
 
 ## Key config notes
 - \`prisma generate\` runs as part of \`npm run build\`
