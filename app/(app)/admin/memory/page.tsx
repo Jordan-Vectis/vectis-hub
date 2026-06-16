@@ -378,7 +378,7 @@ I (Jordan) never run the app locally. I always use the Railway staging URL. Any 
 Key config notes:
 - prisma generate runs as part of npm run build
 - trustHost: true in auth.config.ts — required for Railway domain
-- proxy.ts (not middleware.ts) — Next.js renamed middleware
+- proxy.ts (not middleware.ts) — Next.js renamed middleware. Matcher excludes static image extensions (svg/png/jpg/etc) so /public images load on public pages (/submit, /value) without being redirected to /login. New public-page assets must have their extension in the exclusion.
 - Auth split: auth.config.ts (Edge-safe) + auth.ts (full, uses Prisma)
 - Prisma client generated at app/generated/prisma/
 - DATABASE_URL, AUTH_SECRET, NEXTAUTH_URL set in Railway Variables
