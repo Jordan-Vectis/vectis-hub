@@ -102,7 +102,7 @@ export default function UploadClient({ token, items }: { token: string; items: I
             Thank you — we have received your photos.
           </p>
           <p className="text-gray-500 text-base leading-relaxed">
-            We will be in touch soon with your valuation.
+            We will be in touch soon.
           </p>
           <p className="text-sm text-gray-400 mt-6">You can now close this page.</p>
         </div>
