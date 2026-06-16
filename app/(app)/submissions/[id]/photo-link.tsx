@@ -34,8 +34,8 @@ export default function PhotoLink({
   }
 
   return (
-    <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
-      <h3 className="text-base font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">Photo Request Link</h3>
+    <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-5">
+      <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Photo Request Link</h3>
       {link ? (
         <div className="space-y-3">
           <p className="text-sm text-gray-400 break-all font-mono bg-gray-50 dark:bg-gray-800 rounded-xl p-3">{link}</p>
