@@ -434,6 +434,7 @@ export default function LotWizardTab({
   const router = useRouter()
   const [pending, start] = useTransition()
   const [barcodeWarning, setBarcodeWarning] = useState(false)
+  const [step1LengthWarning, setStep1LengthWarning] = useState(false)
 
   const barcodeStartedAt   = useRef<number | null>(null)
   const keyPointsEnteredAt = useRef<number | null>(null)
@@ -680,6 +681,16 @@ export default function LotWizardTab({
     const err = validateStep(step)
     if (err) { setValidErr(err); return }
     setValidErr("")
+    // Warn if Tote/Vendor/Receipt aren't exactly 7 characters
+    if (step === 1) {
+      const shortTote    = tote.trim().length !== 7
+      const shortVendor  = vendor.trim().length !== 7
+      const shortReceipt = receipt.trim().length > 0 && receipt.trim().length !== 7
+      if (shortTote || shortVendor || shortReceipt) {
+        setStep1LengthWarning(true)
+        return
+      }
+    }
     // Warn if barcode prefix doesn't match auction code
     if (step === 2 && barcode.trim()) {
       const code = auction.code.toUpperCase()
@@ -932,7 +943,7 @@ export default function LotWizardTab({
         </button>
         <span className={`text-gray-600 ${tablet ? "text-base" : "text-xs"}`}>{step} / 8</span>
         {step < 8 ? (
-          <button onClick={goNext} disabled={barcodeWarning}
+          <button onClick={goNext} disabled={barcodeWarning || step1LengthWarning}
             className={`font-semibold rounded transition-colors disabled:opacity-40 ${tablet ? "px-6 py-3 text-base" : "px-4 py-1.5 text-sm"}`}
             style={{ background: CAT_ACCENT, color: "#1C1C1E", touchAction: tablet ? "manipulation" : undefined }}>
             Next →
@@ -961,7 +972,7 @@ export default function LotWizardTab({
                 <div className="flex gap-2">
                   <input
                     value={tote}
-                    onChange={e => { setTote(e.target.value); searchTotes(e.target.value) }}
+                    onChange={e => { setTote(e.target.value); searchTotes(e.target.value); setStep1LengthWarning(false) }}
                     onFocus={e => { if (e.target.value) searchTotes(e.target.value) }}
                     onBlur={e => {
                       setTimeout(() => setToteOpen(false), 150)
@@ -1007,7 +1018,7 @@ export default function LotWizardTab({
                 <PinBtn pinned={pinnedVendor === vendor && !!vendor} onPin={() => setPinnedVendor(v => v === vendor ? "" : vendor)} tablet={tablet} />
               </div>
               <div className="flex gap-2">
-                <input value={vendor} onChange={e => { setVendor(e.target.value); setVendorHint(null) }} className={`flex-1 ${inpFocus}`} placeholder="e.g. C224521" maxLength={7} />
+                <input value={vendor} onChange={e => { setVendor(e.target.value); setVendorHint(null); setStep1LengthWarning(false) }} className={`flex-1 ${inpFocus}`} placeholder="e.g. C224521" maxLength={7} />
                 {vendor && <button type="button" onClick={() => { setVendor(""); setVendorHint(null) }} className="px-3 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
               </div>
               {vendorHint && <p className="text-xs text-[#2AB4A6] mt-1">{vendorHint}</p>}
@@ -1020,7 +1031,7 @@ export default function LotWizardTab({
               <div className="flex gap-2">
                 <input
                   value={receipt}
-                  onChange={e => setReceipt(e.target.value)}
+                  onChange={e => { setReceipt(e.target.value); setStep1LengthWarning(false) }}
                   onBlur={e => { if (e.target.value.trim()) lookupVendorFromBC({ receipt: e.target.value.trim() }) }}
                   className={`flex-1 ${inpFocus}`}
                   placeholder="e.g. R007523"
@@ -1034,6 +1045,19 @@ export default function LotWizardTab({
                 </p>
               )}
             </div>
+
+            {step1LengthWarning && (
+              <div className="rounded-xl border border-amber-600/50 bg-amber-950/40 px-4 py-3 space-y-3">
+                <p className="text-sm text-amber-300">
+                  ⚠ Tote, Vendor and Receipt numbers are normally exactly 7 characters. Please double-check before continuing.
+                </p>
+                <button type="button"
+                  onClick={() => { setStep1LengthWarning(false); setStep(2) }}
+                  className="px-3 py-1.5 text-sm font-medium rounded-lg bg-amber-700/40 hover:bg-amber-700/60 text-amber-200 border border-amber-600/40 transition-colors">
+                  Continue anyway
+                </button>
+              </div>
+            )}
           </div>
         )}
 
