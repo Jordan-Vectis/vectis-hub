@@ -971,6 +971,7 @@ export default function LotWizardTab({
                     placeholder="Search BC tote ID…"
                     autoComplete="off"
                     autoFocus
+                    maxLength={7}
                   />
                   {tote && <button type="button" onClick={() => { setTote(""); setToteInfo(null); setToteResults([]); setToteOpen(false); setToteIgnored(false); setVendorHint(null) }} className="px-3 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
                 </div>
@@ -1006,7 +1007,7 @@ export default function LotWizardTab({
                 <PinBtn pinned={pinnedVendor === vendor && !!vendor} onPin={() => setPinnedVendor(v => v === vendor ? "" : vendor)} tablet={tablet} />
               </div>
               <div className="flex gap-2">
-                <input value={vendor} onChange={e => { setVendor(e.target.value); setVendorHint(null) }} className={`flex-1 ${inpFocus}`} placeholder="e.g. C224521" />
+                <input value={vendor} onChange={e => { setVendor(e.target.value); setVendorHint(null) }} className={`flex-1 ${inpFocus}`} placeholder="e.g. C224521" maxLength={7} />
                 {vendor && <button type="button" onClick={() => { setVendor(""); setVendorHint(null) }} className="px-3 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
               </div>
               {vendorHint && <p className="text-xs text-[#2AB4A6] mt-1">{vendorHint}</p>}
@@ -1023,6 +1024,7 @@ export default function LotWizardTab({
                   onBlur={e => { if (e.target.value.trim()) lookupVendorFromBC({ receipt: e.target.value.trim() }) }}
                   className={`flex-1 ${inpFocus}`}
                   placeholder="e.g. R007523"
+                  maxLength={7}
                 />
                 {receipt && <button type="button" onClick={() => setReceipt("")} className="px-3 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
               </div>
