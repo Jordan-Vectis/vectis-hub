@@ -7,6 +7,13 @@
   --foreground: #171717;
 }
 
+/* Accessibility: scale the root font-size up so every rem-based Tailwind
+   utility (text sizes, padding, gaps, rounded corners) grows proportionally
+   app-wide — a single change instead of editing every page individually. */
+html {
+  font-size: 145%;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
