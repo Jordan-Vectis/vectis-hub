@@ -136,7 +136,7 @@ export default async function SubmissionsPage({
 
       {/* Card list */}
       {submissions.length === 0 ? (
-        <div className="text-center py-16 text-gray-400 text-base bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700">
+        <div className="text-center py-16 text-gray-400 text-base bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800">
           No submissions found.
         </div>
       ) : (
@@ -147,7 +147,7 @@ export default async function SubmissionsPage({
               <Link
                 key={sub.id}
                 href={`/submissions/${sub.id}`}
-                className="block bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-500 transition-colors p-5"
+                className="block bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 hover:border-blue-400 dark:hover:border-blue-500 transition-colors p-5"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">

@@ -104,7 +104,7 @@ export default function NewSubmissionPage() {
       <form onSubmit={handleSubmit} className="space-y-5">
 
         {/* Customer details */}
-        <section className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-6">
+        <section className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
           <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-4">Customer Details</h2>
           <div className="space-y-4">
             <div>
@@ -125,7 +125,7 @@ export default function NewSubmissionPage() {
         </section>
 
         {/* Submission details */}
-        <section className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-6">
+        <section className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
           <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-4">Submission Details</h2>
           <div className="space-y-4">
             <div>
@@ -151,11 +151,11 @@ export default function NewSubmissionPage() {
         </section>
 
         {/* Items */}
-        <section className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-6">
+        <section className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
           <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-4">Items</h2>
           <div className="space-y-4">
             {items.map((item, index) => (
-              <div key={index} className="border border-gray-100 dark:border-gray-700 rounded-xl p-4">
+              <div key={index} className="border border-gray-100 dark:border-gray-800 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm font-semibold text-gray-500">Item {index + 1}</span>
                   {items.length > 1 && (
@@ -189,7 +189,7 @@ export default function NewSubmissionPage() {
                     {item.photos.length > 0 && (
                       <div className="flex flex-wrap gap-2 mb-3">
                         {item.photos.map((photo, pi) => (
-                          <div key={pi} className="relative w-20 h-20 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 group">
+                          <div key={pi} className="relative w-20 h-20 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 group">
                             <img src={photo.preview} alt="" className="w-full h-full object-cover" />
                             {photo.uploading && (
                               <div className="absolute inset-0 bg-black/50 flex items-center justify-center">

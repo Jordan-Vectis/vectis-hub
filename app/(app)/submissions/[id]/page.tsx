@@ -56,7 +56,7 @@ export default async function SubmissionDetailPage({
     .filter((i) => i.valuation)
     .reduce((sum, i) => sum + (i.valuation?.estimatedValue ?? 0), 0)
 
-  const sectionCard = "bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-6"
+  const sectionCard = "bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-6"
   const sectionTitle = "text-xl font-bold text-gray-900 dark:text-white mb-4"
 
   return (
@@ -107,7 +107,7 @@ export default async function SubmissionDetailPage({
           </div>
         </dl>
         {submission.notes && (
-          <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+          <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
             <p className="text-sm text-gray-400 mb-1">Notes</p>
             <p className="text-base text-gray-700 dark:text-gray-300">{submission.notes}</p>
           </div>
@@ -124,44 +124,37 @@ export default async function SubmissionDetailPage({
             </span>
           )}
         </div>
-        <div className="space-y-4">
+        <div className="space-y-3">
           {submission.items.map((item) => (
-            <div key={item.id} className="border border-gray-100 dark:border-gray-700 rounded-xl p-4">
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div>
-                  <p className="font-semibold text-gray-800 dark:text-gray-100 text-base">{item.name}</p>
-                  {item.description && (
-                    <p className="text-sm text-gray-500 mt-1">{item.description}</p>
+            <div key={item.id} className="border border-gray-100 dark:border-gray-800 rounded-xl p-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
+                <p className="font-semibold text-gray-800 dark:text-gray-100 text-base">{item.name}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {item.valuation && (
+                    <span className="text-base font-bold text-green-700">
+                      &pound;{item.valuation.estimatedValue.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
+                    </span>
                   )}
-                  <PhotoViewer imageUrls={item.imageUrls} />
-                </div>
-                <div className="text-right space-y-2">
-                  {item.valuation ? (
-                    <div>
-                      <p className="text-base font-bold text-green-700">
-                        &pound;{item.valuation.estimatedValue.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
-                      </p>
-                      {item.valuation.comments && (
-                        <p className="text-sm text-gray-500 mt-0.5 max-w-xs text-right">{item.valuation.comments}</p>
-                      )}
-                      <p className="text-sm text-gray-400 mt-0.5">by {item.valuation.cataloguer.name}</p>
-                    </div>
-                  ) : (
+                  {!item.valuation && (
                     <span className="text-sm text-gray-400">No valuation yet</span>
                   )}
                   {(item as any).externalEstimate != null && (
-                    <div className="border-t border-gray-100 dark:border-gray-700 pt-2">
-                      <p className="text-sm text-gray-400 mb-0.5">External</p>
-                      <p className="text-base font-bold text-blue-700">
-                        &pound;{((item as any).externalEstimate as number).toLocaleString("en-GB")}
-                      </p>
-                      {(item as any).externalNotes && (
-                        <p className="text-sm text-gray-500 mt-0.5 max-w-xs text-right">{(item as any).externalNotes}</p>
-                      )}
-                    </div>
+                    <span className="text-base font-bold text-blue-700">
+                      External &pound;{((item as any).externalEstimate as number).toLocaleString("en-GB")}
+                    </span>
                   )}
                 </div>
               </div>
+              {item.description && (
+                <p className="text-sm text-gray-500 mb-2">{item.description}</p>
+              )}
+              {item.valuation?.comments && (
+                <p className="text-sm text-gray-500 mb-1">{item.valuation.comments} <span className="text-gray-400">— {item.valuation.cataloguer.name}</span></p>
+              )}
+              {(item as any).externalNotes && (
+                <p className="text-sm text-gray-500 mb-1">{(item as any).externalNotes} <span className="text-gray-400">— external</span></p>
+              )}
+              <PhotoViewer imageUrls={item.imageUrls} />
               {isCataloguer && !item.valuation && submission.cataloguerId === session?.user.id && (
                 <ValuationSection item={item} submissionId={submission.id} />
               )}
@@ -338,7 +331,7 @@ export default async function SubmissionDetailPage({
           <h2 className={sectionTitle}>Contact History</h2>
           <div className="space-y-4">
             {submission.contactLogs.map((log) => (
-              <div key={log.id} className="border-l-2 border-gray-200 dark:border-gray-700 pl-4">
+              <div key={log.id} className="border-l-2 border-gray-200 dark:border-gray-800 pl-4">
                 <div className="flex items-center gap-2 text-sm text-gray-400 flex-wrap">
                   <span className="font-semibold text-gray-600 dark:text-gray-400 capitalize">{log.method}</span>
                   <span>&middot;</span>

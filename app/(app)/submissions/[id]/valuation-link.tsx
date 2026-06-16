@@ -61,7 +61,7 @@ export default function ValuationLink({
   }
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-6">
+    <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
       <h3 className="text-base font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">Valuation Request Link</h3>
 
       {!currentToken ? (
@@ -91,7 +91,7 @@ export default function ValuationLink({
           </div>
 
           {showEmail && (
-            <div className="pt-3 space-y-3 border-t border-gray-100 dark:border-gray-700 mt-3">
+            <div className="pt-3 space-y-3 border-t border-gray-100 dark:border-gray-800 mt-3">
               {/* Toggle */}
               <div className="flex rounded-xl overflow-hidden border border-gray-200 dark:border-gray-600 text-sm">
                 <button

@@ -36,7 +36,7 @@ export default function ValuationSection({ item, submissionId }: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 space-y-3">
+    <form onSubmit={handleSubmit} className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 space-y-3">
       <div>
         <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Estimated value (&pound;)</label>
         <input
