@@ -7,10 +7,11 @@
   --foreground: #171717;
 }
 
-/* Accessibility: scale the root font-size up so every rem-based Tailwind
-   utility (text sizes, padding, gaps, rounded corners) grows proportionally
-   app-wide — a single change instead of editing every page individually. */
-html {
+/* Accessibility: scales every rem-based Tailwind utility (text sizes,
+   padding, gaps, rounded corners) up proportionally. Applied only within
+   the Submissions section via .a11y-zoom wrapper — see
+   app/(app)/submissions/layout.tsx — not app-wide. */
+.a11y-zoom {
   font-size: 145%;
 }
 
