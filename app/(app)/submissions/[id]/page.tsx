@@ -133,40 +133,58 @@ export default async function SubmissionDetailPage({
               )}
             </div>
             <div className="space-y-3">
-              {submission.items.map((item) => (
+              {submission.items.map((item) => {
+                const hasExternal = (item as any).externalEstimate != null
+                const hasAnyValuation = !!item.valuation || hasExternal
+                return (
                 <div key={item.id} className="border border-gray-100 dark:border-gray-800 rounded-xl p-4">
-                  <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
                     <p className="font-semibold text-gray-800 dark:text-gray-100 text-base">{item.name}</p>
-                    <div className="flex items-center gap-3 flex-wrap">
-                      {item.valuation ? (
-                        <span className="text-base font-bold text-green-700 dark:text-green-400">
-                          &pound;{item.valuation.estimatedValue.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
-                        </span>
-                      ) : (
-                        <span className="text-sm text-gray-400">No valuation yet</span>
-                      )}
-                      {(item as any).externalEstimate != null && (
-                        <span className="text-base font-bold text-blue-700 dark:text-blue-400">
-                          Ext &pound;{((item as any).externalEstimate as number).toLocaleString("en-GB")}
-                        </span>
-                      )}
-                    </div>
+                    {!hasAnyValuation && (
+                      <span className="text-sm text-gray-400">Awaiting valuation</span>
+                    )}
                   </div>
                   {item.description && (
-                    <p className="text-sm text-gray-500 mb-2">{item.description}</p>
-                  )}
-                  {item.valuation?.comments && (
-                    <p className="text-sm text-gray-500 mb-1">{item.valuation.comments} <span className="text-gray-400">— {item.valuation.cataloguer.name}</span></p>
-                  )}
-                  {(item as any).externalNotes && (
-                    <p className="text-sm text-gray-500 mb-1">{(item as any).externalNotes} <span className="text-gray-400">— external</span></p>
+                    <p className="text-sm text-gray-500 mt-1">{item.description}</p>
                   )}
                   <PhotoViewer imageUrls={item.imageUrls} />
+
+                  {/* Internal cataloguer valuation */}
+                  {item.valuation && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <p className="text-xs font-semibold text-green-600 dark:text-green-500 uppercase tracking-wide">Valuation</p>
+                        <p className="text-lg font-bold text-green-700 dark:text-green-400">
+                          &pound;{item.valuation.estimatedValue.toLocaleString("en-GB", { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                      {item.valuation.comments && (
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{item.valuation.comments}</p>
+                      )}
+                      <p className="text-xs text-gray-400 mt-1">by {item.valuation.cataloguer.name}</p>
+                    </div>
+                  )}
+
+                  {/* External valuer's estimate */}
+                  {hasExternal && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">Valuer&apos;s Estimate</p>
+                        <p className="text-lg font-bold text-blue-700 dark:text-blue-400">
+                          &pound;{((item as any).externalEstimate as number).toLocaleString("en-GB")}
+                        </p>
+                      </div>
+                      {(item as any).externalNotes && (
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{(item as any).externalNotes}</p>
+                      )}
+                    </div>
+                  )}
+
                   {isCataloguer && !item.valuation && submission.cataloguerId === session?.user.id && (
                     <ValuationSection item={item} submissionId={submission.id} />
                   )}
                 </div>
-              ))}
+              )})}
             </div>
           </section>
 
