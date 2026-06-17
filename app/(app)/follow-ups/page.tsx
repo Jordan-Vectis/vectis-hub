@@ -9,7 +9,7 @@ export default async function FollowUpsPage() {
   const session = await auth()
   if (!session) redirect("/login")
 
-  if (session.user.role === "CATALOGUER") redirect("/cataloguer")
+  if (session.user.role === "CATALOGUER") redirect("/submissions")
 
   const submissions = await prisma.submission.findMany({
     where: {
