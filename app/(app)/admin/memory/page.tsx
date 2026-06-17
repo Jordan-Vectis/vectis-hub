@@ -414,6 +414,8 @@ Two active fields. Never interchange them.
 
 (lotNumber has been removed from the schema. Folder in Description Copier is receiptUniqueId || barcode.)
 
+receiptUniqueId assignment ({receipt}-N): NEVER count-based. createLot assigns it inside a prisma.$transaction holding a per-receipt advisory lock (pg_advisory_xact_lock) and uses MAX(existing suffix)+1. Earlier count-based + non-atomic scheme caused recurring skipped/duplicate/blank IDs from concurrent tablet saves (fixed 2026-06-17). Shared helper maxReceiptSuffix used by importLots/massCreateLots/fillLotsFromTotes. No DB unique constraint (existing dupes would block it). Backfill blanks via fillLotsFromTotes; fix is forward-only.
+
 Detection regex:
 - Unique ID: /^[A-Za-z]\\d{4,7}-\\d{1,6}$/
 - Barcode: /^[A-Za-z]\\d{6,7}$/ or unique ID pattern
