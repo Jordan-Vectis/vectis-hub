@@ -369,6 +369,27 @@ const MIGRATIONS = [
     "updatedAt"    TIMESTAMP(3) NOT NULL DEFAULT NOW(),
     CONSTRAINT "ITMailboxAuth_pkey" PRIMARY KEY ("id")
   )`,
+
+  // 2026-06-17 — IT Job Board upgrade: assignees, replies/threading, internal chat
+  `ALTER TABLE "ITJob" ADD COLUMN IF NOT EXISTS "threadKey"      TEXT`,
+  `ALTER TABLE "ITJob" ADD COLUMN IF NOT EXISTS "assignedToId"   TEXT`,
+  `ALTER TABLE "ITJob" ADD COLUMN IF NOT EXISTS "assignedToName" TEXT`,
+  `ALTER TABLE "ITJob" ADD COLUMN IF NOT EXISTS "hasNewReply"    BOOLEAN NOT NULL DEFAULT FALSE`,
+  `CREATE INDEX IF NOT EXISTS "ITJob_threadKey_idx" ON "ITJob"("threadKey")`,
+  `ALTER TABLE "User"  ADD COLUMN IF NOT EXISTS "isITStaff"      BOOLEAN NOT NULL DEFAULT FALSE`,
+  `CREATE TABLE IF NOT EXISTS "ITJobMessage" (
+    "id"          TEXT         NOT NULL,
+    "jobId"       TEXT         NOT NULL,
+    "kind"        TEXT         NOT NULL DEFAULT 'NOTE',
+    "authorName"  TEXT,
+    "authorEmail" TEXT,
+    "body"        TEXT         NOT NULL,
+    "createdAt"   TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "ITJobMessage_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "ITJobMessage_jobId_fkey" FOREIGN KEY ("jobId")
+      REFERENCES "ITJob"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "ITJobMessage_jobId_idx" ON "ITJobMessage"("jobId")`,
 ]
 
 export async function POST() {
