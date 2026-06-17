@@ -691,7 +691,9 @@ Another developer works on the same staging branch. Always pull before pushing, 
 
 **Why:** Git rejects pushes when the remote is ahead of local. Pulling first avoids force-pushing which would overwrite the other developer's work.
 
-**How to apply:** Every time I'm about to push to staging, pull first. At the start of a session is ideal.`,
+**How to apply:** Every time I'm about to push to staging, pull first. At the start of a session is ideal.
+
+**Releasing staging → main (production):** A plain fast-forward often fails because hotfixes get committed straight to \`main\` and never back-merged, so the branches diverge. Procedure that worked (2026-06-17): (1) \`git merge --no-ff origin/staging\` into \`main\`, (2) push \`main\`, (3) then \`git checkout staging; git merge --ff-only main; git push origin staging\` so both branches realign and don't drift again. Always do a trial \`git merge --no-commit --no-ff\` first to confirm no conflicts before pushing to production. Only do this when Jordan explicitly says "push to main".`,
   },
   {
     filename: "feedback_pdf_patterns.md",
