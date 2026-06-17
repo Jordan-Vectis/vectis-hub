@@ -3,14 +3,13 @@
 import { useState, useTransition } from "react"
 import { generateValuationToken, setValuationSentTo } from "@/lib/actions/submissions"
 
-type User = { id: string; name: string; email: string | null }
+type Cataloguer = { id: string; name: string; email: string | null }
 
 export default function ValuationLink({
   submissionId,
   token: initialToken,
   customerName,
   items,
-  users,
   cataloguers,
   sentTo,
 }: {
@@ -18,15 +17,14 @@ export default function ValuationLink({
   token: string | null
   customerName: string
   items: { name: string }[]
-  users: User[]
-  cataloguers: { id: string; name: string }[]
+  cataloguers: Cataloguer[]
   sentTo: string | null
 }) {
   const [currentToken, setCurrentToken] = useState(initialToken)
   const [copied, setCopied] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [recipientMode, setRecipientMode] = useState<"list" | "custom">("list")
-  const [selectedEmail, setSelectedEmail] = useState(users[0]?.email ?? "")
+  const [selectedEmail, setSelectedEmail] = useState(cataloguers[0]?.email ?? "")
   const [customEmail, setCustomEmail] = useState("")
   const [showEmail, setShowEmail] = useState(false)
   const [sentToValue, setSentToValue] = useState(sentTo ?? "")
@@ -133,9 +131,9 @@ export default function ValuationLink({
                   onChange={e => setSelectedEmail(e.target.value)}
                   className="w-full text-base rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  {users.map(u => (
-                    <option key={u.id} value={u.email ?? ""} disabled={!u.email}>
-                      {u.name}{u.email ? ` — ${u.email}` : " (no email)"}
+                  {cataloguers.map(c => (
+                    <option key={c.id} value={c.email ?? ""} disabled={!c.email}>
+                      {c.name}{c.email ? ` — ${c.email}` : " (no email)"}
                     </option>
                   ))}
                 </select>

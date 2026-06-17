@@ -45,13 +45,9 @@ export default async function SubmissionDetailPage({
 
   if (!submission) notFound()
 
-  const allUsers = await prisma.user.findMany({
-    select: { id: true, name: true, email: true },
-    orderBy: { name: "asc" },
-  })
   const cataloguers = await prisma.user.findMany({
     where: { role: "CATALOGUER" },
-    select: { id: true, name: true },
+    select: { id: true, name: true, email: true },
     orderBy: { name: "asc" },
   })
 
@@ -330,7 +326,6 @@ export default async function SubmissionDetailPage({
               token={(submission as any).valuationToken ?? null}
               customerName={submission.contact.name}
               items={submission.items.map(i => ({ name: i.name }))}
-              users={allUsers}
               cataloguers={cataloguers}
               sentTo={(submission as any).valuationSentTo ?? null}
             />
