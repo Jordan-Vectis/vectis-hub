@@ -76,6 +76,13 @@ export default function JobDetailModal({
     })
   }
 
+  function emailCustomer() {
+    if (!requesterEmail) return
+    const subject = encodeURIComponent(`RE: ${job.title}`)
+    // Outlook 365 web compose (business account) — not the desktop mail client
+    window.open(`https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(requesterEmail)}&subject=${subject}`, "_blank")
+  }
+
   const run = (fn: () => Promise<any>) => startTransition(async () => { await fn() })
 
   function postNote() {
@@ -86,13 +93,13 @@ export default function JobDetailModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-start sm:items-center justify-center p-0 sm:p-6 overflow-y-auto" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-0 sm:p-6" onClick={onClose}>
       <div
-        className="bg-white dark:bg-[#1C1C1E] w-full max-w-3xl sm:rounded-2xl border border-gray-200 dark:border-gray-800 min-h-screen sm:min-h-0 sm:my-6"
+        className="bg-white dark:bg-[#1C1C1E] w-full max-w-3xl sm:rounded-2xl border border-gray-200 dark:border-gray-800 flex flex-col max-h-[100dvh] sm:max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 p-6 border-b border-gray-100 dark:border-gray-800">
+        <div className="flex items-start justify-between gap-4 p-6 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
           <div className="min-w-0">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white break-words">{job.title}</h2>
             <p className="text-sm text-gray-400 mt-1">
@@ -102,7 +109,7 @@ export default function JobDetailModal({
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none flex-shrink-0" aria-label="Close">&times;</button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-6 overflow-y-auto">
           {/* New reply banner */}
           {job.hasNewReply && (
             <div className="flex items-center justify-between gap-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 px-4 py-3">
@@ -151,12 +158,12 @@ export default function JobDetailModal({
                 >
                   {copied ? "Copied!" : "Copy"}
                 </button>
-                <a
-                  href={`mailto:${requesterEmail}`}
+                <button
+                  onClick={emailCustomer}
                   className="text-sm bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-semibold px-4 py-2.5 rounded-xl transition-colors whitespace-nowrap"
                 >
                   Email
-                </a>
+                </button>
               </div>
             ) : (
               <p className="text-sm text-gray-400">No email address</p>
