@@ -92,6 +92,19 @@ export async function POST(req: NextRequest) {
     const headersRaw = pick(body, ["Headers", "headers_raw", "RawHeaders"])
     const headerLine = (name: string): string | null => {
       if (!headersRaw) return null
+      const t = headersRaw.trim()
+      // Make may send headers as a JSON array [{name,value}] / map, or as raw text.
+      if (t.startsWith("[") || t.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(t)
+          const arr = Array.isArray(parsed)
+            ? parsed
+            : Object.entries(parsed).map(([k, v]) => ({ name: k, value: v }))
+          const found = arr.find((h: any) => (h.name || h.key || h.Name || "").toString().toLowerCase() === name.toLowerCase())
+          if (found) return (found.value ?? found.Value ?? "").toString().replace(/\s+/g, " ").trim() || null
+          return null
+        } catch { /* fall through to text parse */ }
+      }
       const m = headersRaw.match(new RegExp(`^${name}:\\s*(.+(?:\\r?\\n[ \\t]+.+)*)`, "im"))
       return m ? m[1].replace(/\s+/g, " ").trim() : null
     }
