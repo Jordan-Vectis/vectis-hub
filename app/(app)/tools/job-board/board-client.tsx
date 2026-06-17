@@ -49,13 +49,17 @@ export default function BoardClient({
 
   function JobCard({ job }: { job: Job }) {
     const replyCount = job.messages.filter((m) => m.kind === "REPLY").length
+    const isEmail = job.source === "EMAIL"
     return (
       <button
         onClick={() => setSelectedId(job.id)}
-        className={`${card} w-full text-left p-4 hover:border-blue-400 dark:hover:border-blue-500 transition-colors ${job.hasNewReply ? "ring-2 ring-amber-400/60" : ""}`}
+        className={`${card} border-l-4 ${isEmail ? "border-l-blue-500" : "border-l-emerald-500"} w-full text-left p-4 transition-shadow hover:shadow-md dark:hover:shadow-black/40 ${job.hasNewReply ? "ring-2 ring-amber-400/60" : ""}`}
       >
         <div className="flex items-start justify-between gap-2">
-          <p className="font-semibold text-gray-900 dark:text-white text-sm break-words">{job.title}</p>
+          <p className="font-semibold text-gray-900 dark:text-white text-sm break-words flex items-start gap-1.5">
+            <span className="flex-shrink-0" title={isEmail ? "From mailbox" : "Added manually"}>{isEmail ? "✉️" : "✏️"}</span>
+            <span>{job.title}</span>
+          </p>
           {job.hasNewReply && <span className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">reply</span>}
         </div>
         {job.body && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2 break-words">{job.body}</p>}
