@@ -97,12 +97,12 @@ export default function BoardClient({
     )
   }
 
-  function Column({ label, dot, head, list }: { label: string; dot: string; head: string; list: Job[] }) {
+  function Column({ label, icon, head, list }: { label: string; icon: string; head: string; list: Job[] }) {
     return (
-      <div className="rounded-2xl bg-gray-100/70 dark:bg-white/[0.02] border border-gray-200 dark:border-gray-800 p-3 flex flex-col min-h-[calc(100vh-13rem)]">
+      <div className="rounded-2xl bg-gray-100/70 dark:bg-black/20 border border-gray-200 dark:border-gray-800 p-3 flex flex-col min-h-[calc(100vh-13rem)]">
         <div className="flex items-center justify-between mb-3 px-1">
           <div className="flex items-center gap-2 min-w-0">
-            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dot}`} />
+            <span className="text-base leading-none flex-shrink-0" aria-hidden>{icon}</span>
             <span className={`text-sm font-bold uppercase tracking-wide truncate ${head}`}>{label}</span>
           </div>
           <span className="text-sm font-semibold text-gray-400 flex-shrink-0">{list.length}</span>
@@ -170,11 +170,11 @@ export default function BoardClient({
 
       {/* Board — full-width kanban; New split into Mailbox / Manual lanes */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
-        <Column label="New · Mailbox" dot="bg-blue-500"    head="text-blue-600 dark:text-blue-400"     list={inStatus("NEW").filter((j) => j.source === "EMAIL")} />
-        <Column label="New · Manual"  dot="bg-emerald-500" head="text-emerald-600 dark:text-emerald-400" list={inStatus("NEW").filter((j) => j.source === "MANUAL")} />
-        <Column label="In Progress"   dot="bg-amber-500"   head="text-amber-600 dark:text-amber-400"   list={inStatus("IN_PROGRESS")} />
-        <Column label="Waiting"       dot="bg-purple-500"  head="text-purple-600 dark:text-purple-400" list={inStatus("WAITING")} />
-        <Column label="Done"          dot="bg-green-500"   head="text-green-600 dark:text-green-400"   list={inStatus("DONE")} />
+        <Column label="New · Mailbox" icon="📥" head="text-blue-600 dark:text-blue-400"     list={inStatus("NEW").filter((j) => j.source === "EMAIL")} />
+        <Column label="New · Manual"  icon="✏️" head="text-emerald-600 dark:text-emerald-400" list={inStatus("NEW").filter((j) => j.source === "MANUAL")} />
+        <Column label="In Progress"   icon="🔧" head="text-amber-600 dark:text-amber-400"   list={inStatus("IN_PROGRESS")} />
+        <Column label="Waiting"       icon="⏳" head="text-purple-600 dark:text-purple-400" list={inStatus("WAITING")} />
+        <Column label="Done"          icon="✅" head="text-green-600 dark:text-green-400"   list={inStatus("DONE")} />
       </div>
 
       {/* Job detail modal */}
