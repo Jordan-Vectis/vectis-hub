@@ -158,6 +158,19 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     // no appKey — admin-only
   },
   {
+    key:                "JOB_BOARD",
+    href:               "/tools/job-board",
+    defaultLabel:       "Job Board",
+    defaultDescription: "IT job board — emails to IT@vectis.co.uk land here automatically as jobs to work through (New → In Progress → Waiting → Done).",
+    icon:               "🧰",
+    border:             "border-cyan-500",
+    iconBg:             "text-cyan-400",
+    btnBg:              "bg-cyan-600 hover:bg-cyan-500",
+    glow:               "hover:shadow-cyan-900/40",
+    group:              "IT_ADMIN",
+    // no appKey, no allUsers — admin-only
+  },
+  {
     key:                "TICKETS",
     href:               "/tools/tickets",
     defaultLabel:       "Ticket System",

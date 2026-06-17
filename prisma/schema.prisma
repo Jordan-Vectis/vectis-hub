@@ -987,3 +987,36 @@ model CatalogueLotEvent {
   @@index([changedAt])
   @@index([field])
 }
+
+// IT Job Board — jobs auto-created from the IT@vectis.co.uk inbox (or added
+// manually). graphMessageId dedupes against the Microsoft Graph message id.
+model ITJob {
+  id             String    @id @default(cuid())
+  title          String
+  body           String    @db.Text @default("")
+  fromName       String?
+  fromEmail      String?
+  status         String    @default("NEW")   // NEW | IN_PROGRESS | WAITING | DONE
+  source         String    @default("EMAIL") // EMAIL | MANUAL
+  graphMessageId String?   @unique
+  webLink        String?                      // Outlook deep link to the original email
+  receivedAt     DateTime?
+  createdByName  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status])
+  @@index([receivedAt])
+}
+
+// Singleton (id = "global") — stores the delegated OAuth tokens for the shared
+// IT mailbox connection. Connected once by an admin via the sign-in flow.
+model ITMailboxAuth {
+  id           String   @id @default("global")
+  accessToken  String   @db.Text
+  refreshToken String   @db.Text
+  expiresAt    DateTime
+  connectedBy  String?
+  lastSyncAt   DateTime?
+  updatedAt    DateTime @updatedAt
+}

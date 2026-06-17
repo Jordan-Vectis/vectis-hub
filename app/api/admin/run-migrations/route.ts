@@ -338,6 +338,37 @@ const MIGRATIONS = [
 
   // 2026-06-17 — Note of which cataloguer the valuation request was sent to (display only)
   `ALTER TABLE "Submission" ADD COLUMN IF NOT EXISTS "valuationSentTo" TEXT`,
+
+  // 2026-06-17 — IT Job Board: jobs from the IT@vectis.co.uk inbox + the mailbox OAuth connection
+  `CREATE TABLE IF NOT EXISTS "ITJob" (
+    "id"             TEXT         NOT NULL,
+    "title"          TEXT         NOT NULL,
+    "body"           TEXT         NOT NULL DEFAULT '',
+    "fromName"       TEXT,
+    "fromEmail"      TEXT,
+    "status"         TEXT         NOT NULL DEFAULT 'NEW',
+    "source"         TEXT         NOT NULL DEFAULT 'EMAIL',
+    "graphMessageId" TEXT,
+    "webLink"        TEXT,
+    "receivedAt"     TIMESTAMP(3),
+    "createdByName"  TEXT,
+    "createdAt"      TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt"      TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "ITJob_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "ITJob_graphMessageId_key" ON "ITJob"("graphMessageId")`,
+  `CREATE INDEX IF NOT EXISTS "ITJob_status_idx"     ON "ITJob"("status")`,
+  `CREATE INDEX IF NOT EXISTS "ITJob_receivedAt_idx" ON "ITJob"("receivedAt")`,
+  `CREATE TABLE IF NOT EXISTS "ITMailboxAuth" (
+    "id"           TEXT         NOT NULL,
+    "accessToken"  TEXT         NOT NULL,
+    "refreshToken" TEXT         NOT NULL,
+    "expiresAt"    TIMESTAMP(3) NOT NULL,
+    "connectedBy"  TEXT,
+    "lastSyncAt"   TIMESTAMP(3),
+    "updatedAt"    TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "ITMailboxAuth_pkey" PRIMARY KEY ("id")
+  )`,
 ]
 
 export async function POST() {

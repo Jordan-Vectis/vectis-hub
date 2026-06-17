@@ -301,6 +301,9 @@ IT utilities + ModelPingTester component for Gemini model availability testing.
 ### Tickets (/tools/tickets)
 Internal IT helpdesk. Statuses: OPEN/IN_PROGRESS/AWAITING_RESPONSE/RESOLVED/CLOSED. Priorities: LOW/MEDIUM/HIGH/URGENT. Configurable categories. Comments + resolution notes.
 
+### Job Board (/tools/job-board) — admin-only
+Separate from Tickets. ITJob model (NEW/IN_PROGRESS/WAITING/DONE, source EMAIL|MANUAL, graphMessageId @unique for dedupe). Kanban board, per-card status select, manual add. Auto-imports emails from the IT@vectis.co.uk SHARED mailbox via Microsoft Graph DELEGATED Mail.Read.Shared (no admin consent — read as the connecting admin). lib/it-mailbox.ts (token refresh singleton ITMailboxAuth + syncITMailbox). OAuth: /api/it-mailbox/auth + /callback. Poll cron /api/cron/it-mailbox every 5 min (server.js). Needs env GRAPH_CLIENT_ID/GRAPH_TENANT_ID/GRAPH_CLIENT_SECRET/IT_MAILBOX + run-migrations + Azure redirect URI + one-time Connect.
+
 ### Reports (/tools/reports)
 Cataloguing performance with time ranges (7d/30d/90d/6m/1y/all). Per-user stats + charts + research time.
 
