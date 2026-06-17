@@ -60,10 +60,9 @@ export default function ValuationLink({
   function handleOpenEmail() {
     if (!link) return
     const recipient = recipientMode === "list" ? selectedEmail : customEmail
-    const itemList = items.map((i, n) => `${n + 1}. ${i.name}`).join("\n")
     const subject = encodeURIComponent(`Valuation Request — ${customerName}`)
     const body = encodeURIComponent(
-      `Dear Colleague,\n\nVectis Auctions would like to request your expert valuation on the following items submitted by ${customerName}:\n\n${itemList}\n\nPlease use the link below to submit your valuation. No login is required:\n\n${link}\n\nIf you have any questions, please contact us on 01983 520 722.\n\nKind regards,\nVectis Auctions`
+      `Hello,\n\nPlease can you give me a valuation using the following link:\n\n${link}`
     )
     // Opens directly in Outlook 365 web (business account) rather than the system default mail client
     window.open(
