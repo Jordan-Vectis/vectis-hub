@@ -61,6 +61,17 @@ export async function createSubmission(formData: FormData) {
   return { id: submission.id }
 }
 
+export async function setValuationSentTo(submissionId: string, name: string) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorised")
+
+  await prisma.submission.update({
+    where: { id: submissionId },
+    data:  { valuationSentTo: name || null },
+  })
+  revalidatePath(`/submissions/${submissionId}`)
+}
+
 export async function setNeedsFollowUp(submissionId: string, value: boolean) {
   const session = await auth()
   if (!session) throw new Error("Unauthorised")

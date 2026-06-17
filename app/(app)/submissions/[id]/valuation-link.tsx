@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { generateValuationToken } from "@/lib/actions/submissions"
+import { generateValuationToken, setValuationSentTo } from "@/lib/actions/submissions"
 
 type User = { id: string; name: string; email: string | null }
 
@@ -11,12 +11,16 @@ export default function ValuationLink({
   customerName,
   items,
   users,
+  cataloguers,
+  sentTo,
 }: {
   submissionId: string
   token: string | null
   customerName: string
   items: { name: string }[]
   users: User[]
+  cataloguers: { id: string; name: string }[]
+  sentTo: string | null
 }) {
   const [currentToken, setCurrentToken] = useState(initialToken)
   const [copied, setCopied] = useState(false)
@@ -25,6 +29,14 @@ export default function ValuationLink({
   const [selectedEmail, setSelectedEmail] = useState(users[0]?.email ?? "")
   const [customEmail, setCustomEmail] = useState("")
   const [showEmail, setShowEmail] = useState(false)
+  const [sentToValue, setSentToValue] = useState(sentTo ?? "")
+
+  function handleSentToChange(name: string) {
+    setSentToValue(name)
+    startTransition(async () => {
+      await setValuationSentTo(submissionId, name)
+    })
+  }
 
   const link = currentToken
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/value/${currentToken}`
@@ -149,6 +161,22 @@ export default function ValuationLink({
           )}
         </div>
       )}
+
+      {/* Sent to — note only, no action */}
+      <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Sent to</label>
+        <select
+          value={sentToValue}
+          onChange={(e) => handleSentToChange(e.target.value)}
+          disabled={isPending}
+          className="w-full text-base rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+        >
+          <option value="">— Not recorded —</option>
+          {cataloguers.map((c) => (
+            <option key={c.id} value={c.name}>{c.name}</option>
+          ))}
+        </select>
+      </div>
     </div>
   )
 }

@@ -335,6 +335,9 @@ const MIGRATIONS = [
 
   // 2026-06-17 — Manual follow-up flag on submissions (to be automated later)
   `ALTER TABLE "Submission" ADD COLUMN IF NOT EXISTS "needsFollowUp" BOOLEAN NOT NULL DEFAULT FALSE`,
+
+  // 2026-06-17 — Note of which cataloguer the valuation request was sent to (display only)
+  `ALTER TABLE "Submission" ADD COLUMN IF NOT EXISTS "valuationSentTo" TEXT`,
 ]
 
 export async function POST() {

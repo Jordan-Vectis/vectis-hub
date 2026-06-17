@@ -147,6 +147,7 @@ model Submission {
   valuationToken       String?  @unique
   valuationNotes       String?
   valuationSubmittedAt DateTime?
+  valuationSentTo      String?
   needsFollowUp        Boolean  @default(false)
 
   contactId    String
