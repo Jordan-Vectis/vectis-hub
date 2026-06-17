@@ -18,6 +18,26 @@ const STATUSES: [string, string][] = [
   ["NEW", "New"], ["IN_PROGRESS", "In Progress"], ["WAITING", "Waiting"], ["DONE", "Done"],
 ]
 
+// Trim an email body down to just the new message: drop quoted reply chains,
+// Outlook's external-sender banner, and signature dividers.
+function trimQuoted(text: string): string {
+  if (!text) return ""
+  let t = text
+    .replace(/\[?\s*You don't often get email from[^\]]*\]?/gi, "")
+    .replace(/https:\/\/aka\.ms\/LearnAboutSenderIdentification\s*/gi, "")
+  const lines = t.split(/\r?\n/)
+  const out: string[] = []
+  for (const line of lines) {
+    if (/^\s*on .+wrote:\s*$/i.test(line)) break
+    if (/^\s*-{2,}\s*original message\s*-{2,}/i.test(line)) break
+    if (/^\s*from:\s.+\b(sent|to):/i.test(line)) break
+    if (/^\s*_{5,}\s*$/.test(line)) break
+    if (/^\s*>/.test(line)) continue
+    out.push(line)
+  }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim() || text.trim()
+}
+
 // Clean an address value that might be a JSON blob, "Name <email>", or plain.
 function parseAddr(raw: string | null): { name: string | null; email: string | null } {
   if (!raw) return { name: null, email: null }
@@ -147,7 +167,7 @@ export default function JobDetailModal({
           <div>
             <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Original message</p>
             <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 p-4 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words max-h-72 overflow-y-auto">
-              {job.body || <span className="text-gray-400">No content</span>}
+              {trimQuoted(job.body) || <span className="text-gray-400">No content</span>}
             </div>
           </div>
 
@@ -161,21 +181,30 @@ export default function JobDetailModal({
               {job.messages.map((m) => (
                 <div
                   key={m.id}
-                  className={`rounded-xl p-3 border ${
+                  className={`rounded-xl p-4 border ${
                     m.kind === "REPLY"
                       ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700/40"
                       : "bg-gray-50 dark:bg-gray-800/50 border-gray-100 dark:border-gray-800"
                   }`}
                 >
-                  <div className="flex items-center gap-2 text-xs text-gray-400 mb-1">
-                    <span className={`font-semibold ${m.kind === "REPLY" ? "text-blue-600 dark:text-blue-400" : "text-gray-600 dark:text-gray-300"}`}>
-                      {m.authorName ?? "Unknown"}
-                    </span>
-                    <span>·</span>
-                    <span>{m.when}</span>
-                    {m.kind === "REPLY" && <span className="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 px-1.5 py-0.5 rounded text-xs">customer reply</span>}
+                  <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={`font-semibold text-sm truncate ${m.kind === "REPLY" ? "text-blue-700 dark:text-blue-300" : "text-gray-700 dark:text-gray-200"}`}>
+                        {m.authorName ?? "Unknown"}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${
+                        m.kind === "REPLY"
+                          ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                          : "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+                      }`}>
+                        {m.kind === "REPLY" ? "Customer reply" : "IT note"}
+                      </span>
+                    </div>
+                    <span className="text-xs text-gray-400 flex-shrink-0">{m.when}</span>
                   </div>
-                  <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">{m.body}</p>
+                  <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
+                    {m.kind === "REPLY" ? trimQuoted(m.body) : m.body}
+                  </p>
                 </div>
               ))}
             </div>
