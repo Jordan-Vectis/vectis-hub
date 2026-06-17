@@ -1,27 +1,16 @@
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
-import { itMailboxConfigured } from "@/lib/it-mailbox"
 import BoardClient from "./board-client"
 
-export default async function JobBoardPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ mb_connected?: string; mb_error?: string }>
-}) {
+export default async function JobBoardPage() {
   const session = await auth()
   if (!session) redirect("/login")
   if (session.user.role !== "ADMIN") redirect("/hub")
 
-  const sp = await searchParams
-
-  const [jobs, mailbox] = await Promise.all([
-    prisma.iTJob.findMany({ orderBy: [{ receivedAt: "desc" }, { createdAt: "desc" }] }),
-    prisma.iTMailboxAuth.findUnique({
-      where:  { id: "global" },
-      select: { connectedBy: true, lastSyncAt: true },
-    }),
-  ])
+  const jobs = await prisma.iTJob.findMany({
+    orderBy: [{ receivedAt: "desc" }, { createdAt: "desc" }],
+  })
 
   const jobsPlain = jobs.map((j) => ({
     id:        j.id,
@@ -37,15 +26,10 @@ export default async function JobBoardPage({
     }),
   }))
 
-  return (
-    <BoardClient
-      jobs={jobsPlain}
-      configured={itMailboxConfigured()}
-      connected={!!mailbox}
-      connectedBy={mailbox?.connectedBy ?? null}
-      lastSync={mailbox?.lastSyncAt ? mailbox.lastSyncAt.toLocaleString("en-GB") : null}
-      mbConnected={sp.mb_connected === "1"}
-      mbError={sp.mb_error ?? null}
-    />
-  )
+  // Inbound email webhook — emails forwarded to an inbound-mail service POST here.
+  const secret = process.env.IT_INBOUND_SECRET
+  const appUrl = process.env.NEXTAUTH_URL ?? "https://vectis-staging.up.railway.app"
+  const inboundUrl = secret ? `${appUrl}/api/it-mailbox/inbound?key=${secret}` : null
+
+  return <BoardClient jobs={jobsPlain} inboundUrl={inboundUrl} />
 }

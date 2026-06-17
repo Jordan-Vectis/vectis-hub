@@ -1,8 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import Link from "next/link"
-import { createITJob, updateITJobStatus, deleteITJob, syncITMailboxNow } from "@/lib/actions/it-jobs"
+import { createITJob, updateITJobStatus, deleteITJob } from "@/lib/actions/it-jobs"
 
 type Job = {
   id: string
@@ -25,24 +24,15 @@ const COLUMNS: { key: string; label: string; dot: string; head: string }[] = [
 
 export default function BoardClient({
   jobs,
-  configured,
-  connected,
-  connectedBy,
-  lastSync,
-  mbConnected,
-  mbError,
+  inboundUrl,
 }: {
   jobs: Job[]
-  configured: boolean
-  connected: boolean
-  connectedBy: string | null
-  lastSync: string | null
-  mbConnected: boolean
-  mbError: string | null
+  inboundUrl: string | null
 }) {
   const [isPending, startTransition] = useTransition()
   const [showAdd, setShowAdd] = useState(false)
-  const [syncMsg, setSyncMsg] = useState<string | null>(null)
+  const [showSetup, setShowSetup] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   function moveJob(id: string, status: string) {
     startTransition(async () => { await updateITJobStatus(id, status) })
@@ -51,11 +41,11 @@ export default function BoardClient({
     if (!confirm("Delete this job?")) return
     startTransition(async () => { await deleteITJob(id) })
   }
-  function syncNow() {
-    setSyncMsg(null)
-    startTransition(async () => {
-      const r = await syncITMailboxNow()
-      setSyncMsg(r.ok ? `Synced — ${r.created} new job${r.created !== 1 ? "s" : ""}.` : `Error: ${r.error}`)
+  function copyUrl() {
+    if (!inboundUrl) return
+    navigator.clipboard.writeText(inboundUrl).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
     })
   }
 
@@ -69,62 +59,50 @@ export default function BoardClient({
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Job Board</h1>
           <p className="text-base text-gray-500 mt-1">IT jobs from the IT@vectis.co.uk inbox, plus anything added by hand.</p>
         </div>
-        <button
-          onClick={() => setShowAdd((s) => !s)}
-          className="bg-blue-600 hover:bg-blue-700 text-white text-base font-semibold px-6 py-3 rounded-xl transition-colors"
-        >
-          + Add job
-        </button>
-      </div>
-
-      {/* Banners */}
-      {mbConnected && (
-        <div className="mb-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700/40 px-4 py-3 text-green-800 dark:text-green-300 text-sm">
-          Mailbox connected. New emails will appear here automatically.
-        </div>
-      )}
-      {mbError && (
-        <div className="mb-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/40 px-4 py-3 text-red-800 dark:text-red-300 text-sm break-words">
-          Mailbox error: {mbError}
-        </div>
-      )}
-
-      {/* Mailbox connection bar */}
-      <div className={`${card} p-4 mb-5 flex items-center justify-between gap-4 flex-wrap`}>
-        <div className="flex items-center gap-3">
-          <span className={`w-2.5 h-2.5 rounded-full ${connected ? "bg-green-500" : "bg-gray-400"}`} />
-          <div>
-            <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-              {connected ? "IT mailbox connected" : "IT mailbox not connected"}
-            </p>
-            <p className="text-xs text-gray-400">
-              {!configured
-                ? "Graph credentials not set on the server yet."
-                : connected
-                  ? `Connected by ${connectedBy ?? "—"}${lastSync ? ` · last checked ${lastSync}` : ""}`
-                  : "Connect once to start pulling emails in automatically."}
-            </p>
-          </div>
-        </div>
         <div className="flex items-center gap-2">
-          {connected && (
-            <button
-              onClick={syncNow}
-              disabled={isPending}
-              className="text-sm bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-semibold px-4 py-2 rounded-xl transition-colors disabled:opacity-50"
-            >
-              {isPending ? "Working…" : "Sync now"}
-            </button>
-          )}
-          <a
-            href="/api/it-mailbox/auth"
-            className="text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-xl transition-colors"
+          <button
+            onClick={() => setShowSetup((s) => !s)}
+            className="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-base font-semibold px-5 py-3 rounded-xl transition-colors"
           >
-            {connected ? "Reconnect" : "Connect IT mailbox"}
-          </a>
+            Email setup
+          </button>
+          <button
+            onClick={() => setShowAdd((s) => !s)}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-base font-semibold px-6 py-3 rounded-xl transition-colors"
+          >
+            + Add job
+          </button>
         </div>
       </div>
-      {syncMsg && <p className="text-sm text-gray-500 mb-4">{syncMsg}</p>}
+
+      {/* Email import setup */}
+      {showSetup && (
+        <div className={`${card} p-5 mb-5`}>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Email import setup</h2>
+          {inboundUrl ? (
+            <>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-3 leading-relaxed">
+                Forward IT@vectis.co.uk mail to your inbound-email service (e.g. Postmark), then point that
+                service&apos;s webhook at the address below. Every forwarded email becomes a job automatically.
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <code className="flex-1 min-w-0 text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 rounded-xl px-3 py-2.5 break-all">{inboundUrl}</code>
+                <button
+                  onClick={copyUrl}
+                  className="text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2.5 rounded-xl transition-colors whitespace-nowrap"
+                >
+                  {copied ? "Copied!" : "Copy URL"}
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 mt-2">Treat this URL like a password — anyone with it can create jobs.</p>
+            </>
+          ) : (
+            <p className="text-sm text-amber-600 dark:text-amber-400">
+              Email import isn&apos;t switched on yet — the <code>IT_INBOUND_SECRET</code> value needs setting on the server first.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Add job form */}
       {showAdd && (
