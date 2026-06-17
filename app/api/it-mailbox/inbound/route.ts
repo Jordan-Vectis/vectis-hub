@@ -68,9 +68,17 @@ export async function POST(req: NextRequest) {
     const fromName  = pick(body, ["FromFull.Name", "FromName", "from_name", "Sender"])
     const text      = pick(body, ["StrippedTextReply", "TextBody", "plain", "text", "body-plain"])
     const html      = pick(body, ["HtmlBody", "html", "body-html"])
-    const messageId = pick(body, ["MessageID", "MessageId", "message_id", "Message-Id", "Message-ID"])?.replace(/[<>]/g, "") ?? null
-    const inReplyTo = pick(body, ["InReplyTo", "In-Reply-To", "in_reply_to"])
-    const references = pick(body, ["References", "references"])
+    // Thread IDs can come as explicit fields OR be dug out of a raw "Headers" blob
+    // (Make's mailhook exposes the whole header block as a single "Headers" value).
+    const headersRaw = pick(body, ["Headers", "headers_raw", "RawHeaders"])
+    const headerLine = (name: string): string | null => {
+      if (!headersRaw) return null
+      const m = headersRaw.match(new RegExp(`^${name}:\\s*(.+(?:\\r?\\n[ \\t]+.+)*)`, "im"))
+      return m ? m[1].replace(/\s+/g, " ").trim() : null
+    }
+    const messageId = (pick(body, ["MessageID", "MessageId", "message_id", "Message-Id", "Message-ID"]) || headerLine("Message-ID"))?.replace(/[<>]/g, "") ?? null
+    const inReplyTo  = pick(body, ["InReplyTo", "In-Reply-To", "in_reply_to"]) || headerLine("In-Reply-To")
+    const references = pick(body, ["References", "references"]) || headerLine("References")
 
     const fromEmailClean = fromEmail?.replace(/^.*<([^>]+)>.*$/, "$1") ?? null
     let content = text || (html ? stripHtml(html) : "")
