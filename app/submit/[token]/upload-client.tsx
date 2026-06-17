@@ -168,7 +168,7 @@ export default function UploadClient({ token, items }: { token: string; items: I
               Item {step + 1} of {items.length}
             </p>
           )}
-          <h2 className="text-xl font-bold text-gray-900 mb-1">{item.name}</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-1">Add your photos</h2>
           <p className="text-gray-500 text-sm mb-6 leading-relaxed">
             Take photos from different angles — front, back, top, and any labels or markings.
           </p>
@@ -281,11 +281,11 @@ export default function UploadClient({ token, items }: { token: string; items: I
         <p className="text-gray-500 text-sm mb-5">Here's a summary of what you're sending to Vectis Auctions:</p>
 
         <div className="space-y-3 mb-4">
-          {items.map(item => {
+          {items.map((item, i) => {
             const count = (uploads[item.id] ?? []).filter(u => u.key).length
             return (
               <div key={item.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                <span className="text-gray-800 font-medium text-sm">{item.name}</span>
+                <span className="text-gray-800 font-medium text-sm">{items.length > 1 ? `Item ${i + 1}` : "Your photos"}</span>
                 <span className={`text-sm font-semibold ${count > 0 ? "text-green-600" : "text-gray-400"}`}>
                   {count > 0 ? `${count} photo${count !== 1 ? "s" : ""} ✓` : "No photos"}
                 </span>
