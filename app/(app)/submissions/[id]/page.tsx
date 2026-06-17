@@ -10,6 +10,7 @@ import PhotoViewer from "./photo-viewer"
 import PhotoLink from "./photo-link"
 import ValuationLink from "./valuation-link"
 import StatusSelect from "./status-select"
+import FollowUpToggle from "./follow-up-toggle"
 
 const statusLabels: Record<SubmissionStatus, { label: string; color: string }> = {
   PENDING_ASSIGNMENT: { label: "Pending", color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300" },
@@ -308,6 +309,9 @@ export default async function SubmissionDetailPage({
             <div className={cardPad}>
               <p className={railLabel}>Status</p>
               <StatusSelect submissionId={submission.id} current={submission.status} />
+              <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                <FollowUpToggle submissionId={submission.id} initial={(submission as any).needsFollowUp ?? false} />
+              </div>
             </div>
           )}
 

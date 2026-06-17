@@ -147,6 +147,7 @@ model Submission {
   valuationToken       String?  @unique
   valuationNotes       String?
   valuationSubmittedAt DateTime?
+  needsFollowUp        Boolean  @default(false)
 
   contactId    String
   contact      Contact     @relation("ContactSubmissions", fields: [contactId], references: [id])

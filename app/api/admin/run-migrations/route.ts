@@ -332,6 +332,9 @@ const MIGRATIONS = [
   `ALTER TABLE "Submission" ADD COLUMN IF NOT EXISTS "valuationSubmittedAt" TIMESTAMP(3)`,
   `ALTER TABLE "Item" ADD COLUMN IF NOT EXISTS "externalEstimate" INTEGER`,
   `ALTER TABLE "Item" ADD COLUMN IF NOT EXISTS "externalNotes" TEXT`,
+
+  // 2026-06-17 — Manual follow-up flag on submissions (to be automated later)
+  `ALTER TABLE "Submission" ADD COLUMN IF NOT EXISTS "needsFollowUp" BOOLEAN NOT NULL DEFAULT FALSE`,
 ]
 
 export async function POST() {
