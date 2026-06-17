@@ -27,6 +27,25 @@ function stripHtml(html: string): string {
     .trim()
 }
 
+// Parse an address value that might be a plain email, "Name <email>", or a
+// JSON object like {"address":"x@y.com","name":"X"} (Make sends Sender as JSON).
+function parseAddress(raw: string | null): { name: string | null; email: string | null } {
+  if (!raw) return { name: null, email: null }
+  const s = raw.trim()
+  if (s.startsWith("{")) {
+    try {
+      const o = JSON.parse(s)
+      const email = (o.address || o.email || o.Address || o.Email || "").toString().trim() || null
+      const name  = (o.name || o.Name || "").toString().trim() || null
+      if (email) return { name, email }
+    } catch { /* fall through */ }
+  }
+  const m = s.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/)
+  if (m) return { name: m[1].trim() || null, email: m[2].trim() }
+  if (s.includes("@")) return { name: null, email: s.replace(/[<>]/g, "").trim() }
+  return { name: null, email: null }
+}
+
 // Normalise a subject for thread matching: drop leading Re:/Fw:/Fwd: and case.
 function normaliseSubject(s: string): string {
   let out = s.toLowerCase().trim()
@@ -64,8 +83,8 @@ export async function POST(req: NextRequest) {
     }
 
     const subject   = pick(body, ["Subject", "subject", "headers.Subject"]) || "(no subject)"
-    const fromEmail = pick(body, ["FromFull.Email", "From", "from", "sender", "envelope.from"])
-    const fromName  = pick(body, ["FromFull.Name", "FromName", "from_name", "Sender"])
+    const fromRaw   = pick(body, ["FromFull.Email", "From", "from", "sender", "Sender", "envelope.from"])
+    const explicitName = pick(body, ["FromName", "from_name", "FromFull.Name"])
     const text      = pick(body, ["StrippedTextReply", "TextBody", "plain", "text", "body-plain"])
     const html      = pick(body, ["HtmlBody", "html", "body-html"])
     // Thread IDs can come as explicit fields OR be dug out of a raw "Headers" blob
@@ -80,20 +99,13 @@ export async function POST(req: NextRequest) {
     const inReplyTo  = pick(body, ["InReplyTo", "In-Reply-To", "in_reply_to"]) || headerLine("In-Reply-To")
     const references = pick(body, ["References", "references"]) || headerLine("References")
 
-    // When relayed by Power Automate the email is "from" IT@vectis.co.uk, so the
+    // When relayed by Power Automate the email is "from" the relay account, so the
     // real requester is carried in Reply-To. Prefer it for the requester details.
-    const replyTo = pick(body, ["ReplyTo", "Reply-To", "reply_to"]) || headerLine("Reply-To")
-    let replyToName: string | null = null
-    let replyToEmail: string | null = null
-    if (replyTo) {
-      const m = replyTo.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/)
-      if (m) { replyToName = m[1].trim() || null; replyToEmail = m[2].trim() }
-      else { replyToEmail = replyTo.replace(/[<>]/g, "").trim() }
-    }
+    const fromParsed    = parseAddress(fromRaw)
+    const replyToParsed = parseAddress(pick(body, ["ReplyTo", "Reply-To", "reply_to"]) || headerLine("Reply-To"))
 
-    const fromEmailClean = fromEmail?.replace(/^.*<([^>]+)>.*$/, "$1") ?? null
-    const senderEmail = replyToEmail || fromEmailClean
-    const senderName  = replyToName  || fromName
+    const senderEmail = replyToParsed.email || fromParsed.email
+    const senderName  = replyToParsed.name  || explicitName || fromParsed.name
     let content = text || (html ? stripHtml(html) : "")
     if (content.length > 8000) content = content.slice(0, 8000) + "…"
     const threadKey = normaliseSubject(subject)
