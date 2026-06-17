@@ -164,8 +164,29 @@ export async function createLot(auctionId: string, formData: FormData) {
     }
   }
 
-  const receiptUniqueId = data.receipt ? await sequencedReceiptUid(data.receipt) : null
-  const lot = await prisma.catalogueLot.create({ data: { ...data, auctionId, createdByName, imageUrls, receiptUniqueId } })
+  // Assign the receipt unique ID and create the lot atomically. A per-receipt
+  // Postgres advisory lock serialises concurrent saves — rapid tablet
+  // cataloguing fires these in parallel, and a plain count-then-create let two
+  // saves read the same number and collide (the cause of skipped / duplicated
+  // unique IDs). MAX(existing suffix)+1 — never COUNT — so a deleted lot or a
+  // gap in the sequence never causes a number to be reused or skipped.
+  const lot = await prisma.$transaction(async (tx) => {
+    let receiptUniqueId: string | null = null
+    if (data.receipt) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('vectis_receipt_uid'), hashtext(${data.receipt}))`
+      const existing = await tx.catalogueLot.findMany({
+        where:  { receiptUniqueId: { startsWith: data.receipt + "-" } },
+        select: { receiptUniqueId: true },
+      })
+      let max = 0
+      for (const e of existing) {
+        const m = e.receiptUniqueId?.match(/-(\d+)$/)
+        if (m) { const n = parseInt(m[1], 10); if (!isNaN(n) && n > max) max = n }
+      }
+      receiptUniqueId = `${data.receipt}-${max + 1}`
+    }
+    return tx.catalogueLot.create({ data: { ...data, auctionId, createdByName, imageUrls, receiptUniqueId } })
+  })
 
   // Log timing if provided
   const durationMs  = parseInt(formData.get("durationMs")  as string ?? "0") || 0
@@ -258,6 +279,13 @@ export async function updateLot(lotId: string, auctionId: string, formData: Form
   await requireNotBCLocked(auctionId, session)
   const data = extractLotData(formData)
 
+  // receiptUniqueId is auto-assigned on creation and managed by dedicated routes (bulk-assign,
+  // sequencing). If the form doesn't include this field, preserve the existing value rather than
+  // overwriting it with null — which is what happens when the wizard is saved without the field.
+  const hasUniqueIdField = formData.has("receiptUniqueId")
+  const { receiptUniqueId, ...dataWithoutUniqueId } = data
+  const updateData = hasUniqueIdField ? data : dataWithoutUniqueId
+
   const old = await prisma.catalogueLot.findUnique({
     where: { id: lotId },
     select: {
@@ -270,7 +298,7 @@ export async function updateLot(lotId: string, auctionId: string, formData: Form
     },
   })
 
-  await prisma.catalogueLot.update({ where: { id: lotId }, data })
+  await prisma.catalogueLot.update({ where: { id: lotId }, data: updateData })
 
   if (old) {
     const events: { lotId: string; auctionId: string; auctionCode: string; lotBarcode: string | null; lotTitle: string | null; field: string; oldValue: string | null; newValue: string | null; changedBy: string }[] = []
@@ -280,6 +308,8 @@ export async function updateLot(lotId: string, auctionId: string, formData: Form
     const lotTitle    = data.title ?? old.title ?? null
 
     for (const key of Object.keys(LOT_FIELD_LABELS) as (keyof typeof LOT_FIELD_LABELS)[]) {
+      // Skip receiptUniqueId comparison when it wasn't in the form — it wasn't updated
+      if (key === "receiptUniqueId" && !hasUniqueIdField) continue
       const oldVal = String(old[key as keyof typeof old] ?? "")
       const newVal = String((data as Record<string, unknown>)[key] ?? "")
       if (oldVal !== newVal) {
@@ -495,9 +525,7 @@ export async function fillLotsFromTotes(auctionId: string) {
     const targetReceipt = lot.receipt || toteMap.get(lot.tote!)?.receipt
     if (!targetReceipt) continue
     if (!(targetReceipt in receiptOffset)) {
-      receiptOffset[targetReceipt] = await prisma.catalogueLot.count({
-        where: { receiptUniqueId: { startsWith: targetReceipt + "-" } },
-      })
+      receiptOffset[targetReceipt] = await maxReceiptSuffix(targetReceipt)
     }
   }
 
@@ -598,10 +626,12 @@ export async function importLots(auctionId: string, rows: {
   const session = await requireCataloguer()
   const createdByName = session.user.name ?? session.user.email ?? "Unknown"
 
-  // Pre-count existing sequenced lots per receipt base, then track in-batch additions
+  // Seed each receipt base from its highest existing suffix (MAX, not COUNT),
+  // then track in-batch additions. Keyed by UPPERCASE base to match the
+  // per-row receiptBase below — otherwise the lookup misses and restarts at 0.
   const receiptOffset: Record<string, number> = {}
-  for (const base of [...new Set(rows.map(r => r.receipt).filter(Boolean))]) {
-    receiptOffset[base] = await prisma.catalogueLot.count({ where: { receiptUniqueId: { startsWith: base + "-" } } })
+  for (const base of [...new Set(rows.map(r => r.receipt?.toUpperCase()).filter(Boolean) as string[])]) {
+    receiptOffset[base] = await maxReceiptSuffix(base)
   }
 
   for (const r of rows) {
@@ -720,13 +750,22 @@ export async function bulkAddConditionsToDescriptions(
   return { updated, skipped }
 }
 
-// Returns the next receiptUniqueId for a base receipt, e.g. "R000123" → "R000123-4"
-// Counts existing lots whose receiptUniqueId starts with "{base}-"
-async function sequencedReceiptUid(base: string, extra = 0): Promise<string> {
-  const count = await prisma.catalogueLot.count({
-    where: { receiptUniqueId: { startsWith: base + "-" } },
+// Highest existing line number for a receipt base, e.g. "R000123" → 4 when
+// R000123-4 is the largest. Parses the numeric suffix and takes MAX — not
+// COUNT — so deleted lots / gaps never cause a number to be reused. Used by the
+// batch import / mass-create paths; the tablet wizard (createLot) does the same
+// thing inside a transaction with an advisory lock for full race safety.
+async function maxReceiptSuffix(base: string): Promise<number> {
+  const existing = await prisma.catalogueLot.findMany({
+    where:  { receiptUniqueId: { startsWith: base + "-" } },
+    select: { receiptUniqueId: true },
   })
-  return `${base}-${count + extra + 1}`
+  let max = 0
+  for (const e of existing) {
+    const m = e.receiptUniqueId?.match(/-(\d+)$/)
+    if (m) { const n = parseInt(m[1], 10); if (!isNaN(n) && n > max) max = n }
+  }
+  return max
 }
 
 export async function transferLots(lotIds: string[], sourceAuctionId: string, targetAuctionId: string) {
@@ -773,9 +812,7 @@ export async function massCreateLots(
   }, 0)
 
   const receiptBase = opts.receipt ? opts.receipt.toUpperCase() : null
-  const receiptStart = receiptBase
-    ? await prisma.catalogueLot.count({ where: { receiptUniqueId: { startsWith: receiptBase + "-" } } })
-    : 0
+  const receiptStart = receiptBase ? await maxReceiptSuffix(receiptBase) : 0
 
   const data = Array.from({ length: opts.count }, (_, i) => ({
     auctionId,

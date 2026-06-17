@@ -8,7 +8,9 @@ export default function DeleteSubmissionButton({ id, reference }: { id: string; 
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
 
-  function handleClick() {
+  function handleClick(e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
     if (!confirm(`Delete submission ${reference}? This cannot be undone.`)) return
     startTransition(async () => {
       await deleteSubmission(id)

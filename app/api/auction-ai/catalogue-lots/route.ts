@@ -19,15 +19,17 @@ export async function GET(req: NextRequest) {
         where: { aiExcluded: false },
         orderBy: { createdAt: "asc" },
       },
+      _count: { select: { lots: { where: { aiExcluded: true } } } },
     },
   })
 
   if (!auction) return NextResponse.json({ error: `No catalogue auction found for code "${code}"` }, { status: 404 })
 
   return NextResponse.json({
-    auctionId: auction.id,
-    code:      auction.code,
-    lots:      auction.lots.map(l => ({
+    auctionId:     auction.id,
+    code:          auction.code,
+    excludedCount: auction._count.lots,
+    lots:          auction.lots.map(l => ({
       id:          l.id,
       title:       l.title,
       keyPoints:   l.keyPoints ?? "",

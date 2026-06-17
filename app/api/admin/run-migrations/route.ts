@@ -320,6 +320,80 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS "CatalogueLotEvent_auctionId_idx" ON "CatalogueLotEvent"("auctionId")`,
   `CREATE INDEX IF NOT EXISTS "CatalogueLotEvent_changedAt_idx" ON "CatalogueLotEvent"("changedAt")`,
   `CREATE INDEX IF NOT EXISTS "CatalogueLotEvent_field_idx"    ON "CatalogueLotEvent"("field")`,
+
+  // 2026-06-12 — Submission photo upload token for customer-facing photo request links
+  `ALTER TABLE "Submission" ADD COLUMN IF NOT EXISTS "photoUploadToken" TEXT`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Submission_photoUploadToken_key" ON "Submission"("photoUploadToken")`,
+
+  // 2026-06-12 — External cataloguer valuation link
+  `ALTER TABLE "Submission" ADD COLUMN IF NOT EXISTS "valuationToken" TEXT`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Submission_valuationToken_key" ON "Submission"("valuationToken")`,
+  `ALTER TABLE "Submission" ADD COLUMN IF NOT EXISTS "valuationNotes" TEXT`,
+  `ALTER TABLE "Submission" ADD COLUMN IF NOT EXISTS "valuationSubmittedAt" TIMESTAMP(3)`,
+  `ALTER TABLE "Item" ADD COLUMN IF NOT EXISTS "externalEstimate" INTEGER`,
+  `ALTER TABLE "Item" ADD COLUMN IF NOT EXISTS "externalNotes" TEXT`,
+
+  // 2026-06-17 — Manual follow-up flag on submissions (to be automated later)
+  `ALTER TABLE "Submission" ADD COLUMN IF NOT EXISTS "needsFollowUp" BOOLEAN NOT NULL DEFAULT FALSE`,
+
+  // 2026-06-17 — Note of which cataloguer the valuation request was sent to (display only)
+  `ALTER TABLE "Submission" ADD COLUMN IF NOT EXISTS "valuationSentTo" TEXT`,
+
+  // 2026-06-17 — IT Job Board: jobs from the IT@vectis.co.uk inbox + the mailbox OAuth connection
+  `CREATE TABLE IF NOT EXISTS "ITJob" (
+    "id"             TEXT         NOT NULL,
+    "title"          TEXT         NOT NULL,
+    "body"           TEXT         NOT NULL DEFAULT '',
+    "fromName"       TEXT,
+    "fromEmail"      TEXT,
+    "status"         TEXT         NOT NULL DEFAULT 'NEW',
+    "source"         TEXT         NOT NULL DEFAULT 'EMAIL',
+    "graphMessageId" TEXT,
+    "webLink"        TEXT,
+    "receivedAt"     TIMESTAMP(3),
+    "createdByName"  TEXT,
+    "createdAt"      TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt"      TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "ITJob_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "ITJob_graphMessageId_key" ON "ITJob"("graphMessageId")`,
+  `CREATE INDEX IF NOT EXISTS "ITJob_status_idx"     ON "ITJob"("status")`,
+  `CREATE INDEX IF NOT EXISTS "ITJob_receivedAt_idx" ON "ITJob"("receivedAt")`,
+  `CREATE TABLE IF NOT EXISTS "ITMailboxAuth" (
+    "id"           TEXT         NOT NULL,
+    "accessToken"  TEXT         NOT NULL,
+    "refreshToken" TEXT         NOT NULL,
+    "expiresAt"    TIMESTAMP(3) NOT NULL,
+    "connectedBy"  TEXT,
+    "lastSyncAt"   TIMESTAMP(3),
+    "updatedAt"    TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "ITMailboxAuth_pkey" PRIMARY KEY ("id")
+  )`,
+
+  // 2026-06-17 — IT Job Board upgrade: assignees, replies/threading, internal chat
+  `ALTER TABLE "ITJob" ADD COLUMN IF NOT EXISTS "threadKey"      TEXT`,
+  `ALTER TABLE "ITJob" ADD COLUMN IF NOT EXISTS "assignedToId"   TEXT`,
+  `ALTER TABLE "ITJob" ADD COLUMN IF NOT EXISTS "assignedToName" TEXT`,
+  `ALTER TABLE "ITJob" ADD COLUMN IF NOT EXISTS "hasNewReply"    BOOLEAN NOT NULL DEFAULT FALSE`,
+  `CREATE INDEX IF NOT EXISTS "ITJob_threadKey_idx" ON "ITJob"("threadKey")`,
+  `ALTER TABLE "User"  ADD COLUMN IF NOT EXISTS "isITStaff"      BOOLEAN NOT NULL DEFAULT FALSE`,
+  `CREATE TABLE IF NOT EXISTS "ITJobMessage" (
+    "id"          TEXT         NOT NULL,
+    "jobId"       TEXT         NOT NULL,
+    "kind"        TEXT         NOT NULL DEFAULT 'NOTE',
+    "authorName"  TEXT,
+    "authorEmail" TEXT,
+    "body"        TEXT         NOT NULL,
+    "createdAt"   TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "ITJobMessage_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "ITJobMessage_jobId_fkey" FOREIGN KEY ("jobId")
+      REFERENCES "ITJob"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "ITJobMessage_jobId_idx" ON "ITJobMessage"("jobId")`,
+
+  // 2026-06-17 — precise reply matching via Office 365 Conversation Id
+  `ALTER TABLE "ITJob" ADD COLUMN IF NOT EXISTS "conversationId" TEXT`,
+  `CREATE INDEX IF NOT EXISTS "ITJob_conversationId_idx" ON "ITJob"("conversationId")`,
 ]
 
 export async function POST() {

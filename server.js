@@ -124,5 +124,24 @@ app.prepare().then(async () => {
       runDbBackup()
       setInterval(runDbBackup, 24 * 60 * 60 * 1000)
     }, msUntilMidnight)
+
+    // IT mailbox poll — turns new IT@vectis.co.uk emails into Job Board jobs.
+    // Every 5 minutes, first run delayed 90s. No-op until the mailbox is connected.
+    const IT_MAILBOX_INTERVAL_MS = 5 * 60 * 1000
+    function runITMailboxSync() {
+      const secret = process.env.CRON_SECRET
+      if (!secret) return
+      fetch(`http://localhost:${port}/api/cron/it-mailbox`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
+      })
+        .then(r => r.json())
+        .then(d => { if (d && d.created) console.log(`[cron/it-mailbox] created ${d.created} job(s)`) })
+        .catch(e => console.warn('[cron/it-mailbox] error:', e.message))
+    }
+    setTimeout(() => {
+      runITMailboxSync()
+      setInterval(runITMailboxSync, IT_MAILBOX_INTERVAL_MS)
+    }, 90 * 1000)
   })
 })

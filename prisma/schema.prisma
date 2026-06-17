@@ -48,6 +48,7 @@ model User {
   showScanTimer  Boolean     @default(true)
   timerYellowMins Int       @default(4)
   timerRedMins    Int       @default(10)
+  isITStaff      Boolean     @default(false)  // can be assigned IT Job Board jobs
   departmentId   String?
   department     Department? @relation(fields: [departmentId], references: [id])
   createdAt      DateTime    @default(now())
@@ -140,9 +141,15 @@ model Submission {
   reference      String            @unique @default(cuid())
   channel        SubmissionChannel
   status         SubmissionStatus  @default(PENDING_ASSIGNMENT)
-  notes          String?
-  followUpCount  Int               @default(0)
-  lastFollowUpAt DateTime?
+  notes            String?
+  followUpCount    Int               @default(0)
+  lastFollowUpAt   DateTime?
+  photoUploadToken     String?  @unique
+  valuationToken       String?  @unique
+  valuationNotes       String?
+  valuationSubmittedAt DateTime?
+  valuationSentTo      String?
+  needsFollowUp        Boolean  @default(false)
 
   contactId    String
   contact      Contact     @relation("ContactSubmissions", fields: [contactId], references: [id])
@@ -166,6 +173,8 @@ model Item {
   name        String
   description String?
   imageUrls   String[]
+  externalEstimate    Int?
+  externalNotes       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -978,4 +987,62 @@ model CatalogueLotEvent {
   @@index([auctionId])
   @@index([changedAt])
   @@index([field])
+}
+
+// IT Job Board — jobs auto-created from the IT@vectis.co.uk inbox (or added
+// manually). graphMessageId holds the email Message-ID for dedupe/threading;
+// threadKey (normalised subject) is the fallback reply-matching key.
+model ITJob {
+  id             String    @id @default(cuid())
+  title          String
+  body           String    @db.Text @default("")
+  fromName       String?
+  fromEmail      String?
+  status         String    @default("NEW")   // NEW | IN_PROGRESS | WAITING | DONE
+  source         String    @default("EMAIL") // EMAIL | MANUAL
+  graphMessageId String?   @unique            // email Message-ID
+  conversationId String?                      // Office 365 Conversation Id — precise reply matching
+  threadKey      String?                      // normalised subject — reply matching fallback
+  webLink        String?                      // Outlook deep link to the original email
+  assignedToId   String?
+  assignedToName String?
+  hasNewReply    Boolean   @default(false)    // a customer reply arrived that IT hasn't seen
+  receivedAt     DateTime?
+  createdByName  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  messages       ITJobMessage[]
+
+  @@index([status])
+  @@index([receivedAt])
+  @@index([threadKey])
+  @@index([conversationId])
+}
+
+// A message on a job — either an internal IT staff note (kind=NOTE) or an
+// incoming customer email reply on the same thread (kind=REPLY).
+model ITJobMessage {
+  id          String   @id @default(cuid())
+  jobId       String
+  job         ITJob    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  kind        String   @default("NOTE")  // NOTE | REPLY
+  authorName  String?
+  authorEmail String?
+  body        String   @db.Text
+  createdAt   DateTime @default(now())
+
+  @@index([jobId])
+}
+
+// Singleton (id = "global") — stores the delegated OAuth tokens for the shared
+// IT mailbox connection. Connected once by an admin via the sign-in flow.
+model ITMailboxAuth {
+  id           String   @id @default("global")
+  accessToken  String   @db.Text
+  refreshToken String   @db.Text
+  expiresAt    DateTime
+  connectedBy  String?
+  lastSyncAt   DateTime?
+  updatedAt    DateTime @updatedAt
 }

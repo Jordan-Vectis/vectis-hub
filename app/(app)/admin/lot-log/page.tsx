@@ -115,14 +115,18 @@ export default async function LotLogPage({ searchParams }: { searchParams: Promi
                         {e.field}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 max-w-[220px]">
+                    <td className="px-4 py-2.5 max-w-[280px]">
                       {e.oldValue
-                        ? <span className="text-gray-400 text-xs line-through break-words">{e.oldValue.length > 120 ? e.oldValue.slice(0, 120) + "…" : e.oldValue}</span>
+                        ? e.oldValue.length > 120
+                          ? <details className="text-xs"><summary className="text-gray-400 line-through cursor-pointer select-none">{e.oldValue.slice(0, 120)}…</summary><span className="text-gray-400 line-through break-words whitespace-pre-wrap">{e.oldValue}</span></details>
+                          : <span className="text-gray-400 text-xs line-through break-words whitespace-pre-wrap">{e.oldValue}</span>
                         : <span className="text-gray-700 text-xs italic">empty</span>}
                     </td>
-                    <td className="px-4 py-2.5 max-w-[220px]">
+                    <td className="px-4 py-2.5 max-w-[280px]">
                       {e.newValue
-                        ? <span className="text-gray-200 text-xs break-words">{e.newValue.length > 120 ? e.newValue.slice(0, 120) + "…" : e.newValue}</span>
+                        ? e.newValue.length > 120
+                          ? <details className="text-xs"><summary className="text-gray-200 cursor-pointer select-none">{e.newValue.slice(0, 120)}…</summary><span className="text-gray-200 break-words whitespace-pre-wrap">{e.newValue}</span></details>
+                          : <span className="text-gray-200 text-xs break-words whitespace-pre-wrap">{e.newValue}</span>
                         : <span className="text-red-400 text-xs italic">cleared</span>}
                     </td>
                     <td className="px-4 py-2.5 text-gray-400 text-xs whitespace-nowrap">{e.changedBy}</td>

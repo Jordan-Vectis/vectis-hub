@@ -45,5 +45,4 @@ export async function saveValuation(
   }
 
   revalidatePath(`/submissions/${submissionId}`)
-  revalidatePath("/cataloguer")
 }

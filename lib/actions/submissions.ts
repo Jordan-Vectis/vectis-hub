@@ -51,6 +51,7 @@ export async function createSubmission(formData: FormData) {
         create: itemNames.map((name, i) => ({
           name,
           description: itemDescriptions[i] || null,
+          imageUrls: formData.getAll(`item_${i}_imageKey`) as string[],
         })),
       },
     },
@@ -60,25 +61,53 @@ export async function createSubmission(formData: FormData) {
   return { id: submission.id }
 }
 
-export async function assignSubmission(
-  submissionId: string,
-  departmentId: string,
-  cataloguerId: string
-) {
+export async function setValuationSentTo(submissionId: string, name: string) {
   const session = await auth()
   if (!session) throw new Error("Unauthorised")
 
   await prisma.submission.update({
     where: { id: submissionId },
-    data: {
-      departmentId,
-      cataloguerId,
-      status: SubmissionStatus.PENDING_VALUATION,
-    },
+    data:  { valuationSentTo: name || null },
   })
-
   revalidatePath(`/submissions/${submissionId}`)
-  revalidatePath("/submissions")
+}
+
+export async function setNeedsFollowUp(submissionId: string, value: boolean) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorised")
+
+  await prisma.submission.update({
+    where: { id: submissionId },
+    data:  { needsFollowUp: value },
+  })
+  revalidatePath(`/submissions/${submissionId}`)
+  revalidatePath("/follow-ups")
+}
+
+export async function generateValuationToken(submissionId: string) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorised")
+
+  const token = crypto.randomUUID().replace(/-/g, "")
+  await prisma.submission.update({
+    where: { id: submissionId },
+    data:  { valuationToken: token },
+  })
+  revalidatePath(`/submissions/${submissionId}`)
+  return { token }
+}
+
+export async function generatePhotoUploadToken(submissionId: string) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorised")
+
+  const token = crypto.randomUUID().replace(/-/g, "")
+  await prisma.submission.update({
+    where: { id: submissionId },
+    data:  { photoUploadToken: token },
+  })
+  revalidatePath(`/submissions/${submissionId}`)
+  return { token }
 }
 
 export async function logContact(

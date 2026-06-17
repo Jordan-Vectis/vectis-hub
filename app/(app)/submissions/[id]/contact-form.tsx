@@ -24,13 +24,13 @@ export default function ContactForm({ submissionId }: { submissionId: string }) 
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Contact method</label>
+          <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-1">Contact method</label>
           <select
             value={method}
             onChange={(e) => setMethod(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="phone">Phone</option>
             <option value="email">Email</option>
@@ -38,12 +38,12 @@ export default function ContactForm({ submissionId }: { submissionId: string }) 
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Outcome</label>
+          <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-1">Outcome</label>
           <select
             value={outcome}
             onChange={(e) => setOutcome(e.target.value)}
             required
-            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Select outcome...</option>
             <option value="approved">Approved — happy to proceed</option>
@@ -56,25 +56,25 @@ export default function ContactForm({ submissionId }: { submissionId: string }) 
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</label>
+        <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</label>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={3}
           placeholder="Any notes from the conversation..."
-          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          className="w-full rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
         />
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <button
           type="submit"
           disabled={isPending || !outcome}
-          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+          className="bg-blue-600 hover:bg-blue-700 text-white text-base font-semibold px-5 py-3 rounded-xl transition-colors disabled:opacity-50"
         >
           {isPending ? "Logging..." : "Log Contact"}
         </button>
-        {done && <span className="text-sm text-green-600">Logged successfully.</span>}
+        {done && <span className="text-base text-green-600 dark:text-green-400">Logged successfully.</span>}
       </div>
     </form>
   )

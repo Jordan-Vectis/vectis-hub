@@ -11,12 +11,14 @@ import AiUpgradeTab from "./ai-upgrade-tab"
 import StatsTab from "./stats-tab"
 import ReviewTab from "./review-tab"
 import LotHistoryTab from "./lot-history-tab"
+import LockingCheckTab from "./locking-check-tab"
+import BcCheckTab from "./bc-check-tab"
 import * as XLSX from "xlsx"
 import JSZip from "jszip"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "settings" | "add-lot" | "manage-lots" | "photo-only" | "import" | "upload-photos" | "ai-upgrade" | "stats" | "lot-history" | "review"
+type Tab = "settings" | "add-lot" | "manage-lots" | "photo-only" | "import" | "upload-photos" | "ai-upgrade" | "stats" | "lot-history" | "review" | "locking-check" | "bc-check"
 
 interface Auction {
   id: string; code: string; name: string; auctionDate: Date | null
@@ -551,6 +553,11 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
     router.push(`/tools/cataloguing/auctions/${auction.id}?lot=${id}`)
   }
 
+  function openLotInManager(id: string) {
+    setTab("manage-lots")
+    openLot(id)
+  }
+
   function closeLot() {
     setNavDir(null)
     router.push(`/tools/cataloguing/auctions/${auction.id}`)
@@ -565,8 +572,10 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
     { id: "ai-upgrade",   label: "✨ AI Upgrade" },
     { id: "review",       label: "🔍 Review" },
     { id: "stats",        label: "📊 Statistics" },
-    { id: "lot-history",  label: "📖 Lot History" },
-    { id: "settings",     label: "Auction Settings" },
+    { id: "lot-history",    label: "📖 Lot History" },
+    { id: "locking-check", label: "🔒 Locking Check" },
+    { id: "bc-check",      label: "📋 BC Check" },
+    { id: "settings",      label: "Auction Settings" },
   ]
 
   function switchTab(t: Tab) { setTab(t) }
@@ -721,6 +730,35 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
 
         {tab === "stats" && <StatsTab lots={lots} auction={auction} />}
         {tab === "review" && <ReviewTab auctionId={auction.id} />}
+
+        {tab === "locking-check" && (
+          <LockingCheckTab
+            lots={lots.map(l => ({
+              id:              l.id,
+              barcode:         l.barcode,
+              receiptUniqueId: l.receiptUniqueId,
+              title:           l.title,
+              description:     l.description,
+              estimateLow:     l.estimateLow,
+              estimateHigh:    l.estimateHigh,
+              imageUrls:       l.imageUrls,
+            }))}
+            onOpenLot={openLotInManager}
+          />
+        )}
+
+        {tab === "bc-check" && (
+          <BcCheckTab
+            lots={lots.map(l => ({
+              id:              l.id,
+              barcode:         l.barcode,
+              receiptUniqueId: l.receiptUniqueId,
+              title:           l.title,
+              estimateLow:     l.estimateLow,
+              estimateHigh:    l.estimateHigh,
+            }))}
+          />
+        )}
 
         {tab === "lot-history" && (
           <LotHistoryTab

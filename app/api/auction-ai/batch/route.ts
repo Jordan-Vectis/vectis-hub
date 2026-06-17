@@ -107,9 +107,11 @@ FLAG: <which key point looks wrong, what you believe is correct, and why>
 CRITICAL RULE FOR FLAGS: NEVER flag a set number, catalogue number, or product code simply because it is not in your training data. Your knowledge has a cutoff date — products released in 2024 or later may not be known to you, and their absence from your training data does NOT mean they do not exist. Only flag a number if you have strong positive evidence it is wrong (e.g. it belongs to a completely different product, the number format is impossible for that brand, or a search result directly contradicts it). If you are not certain, do NOT add a FLAG line.
 
 Key points:
-${existingContext}`
+${existingContext}
+
+After the description (and optional FLAG line), include the estimate on its own line exactly as your instructions specify.`
       } else {
-        userPrompt = `Existing description: ${existingContext}\n\nImprove and enhance this description based on the photos. Only use information present in the existing description or directly visible in the photos — do not add details from training data. Keep the same output format. Do not repeat the same information twice.`
+        userPrompt = `Existing description: ${existingContext}\n\nImprove and enhance this description based on the photos. Only use information present in the existing description or directly visible in the photos — do not add details from training data. Keep the same output format. Do not repeat the same information twice.\n\nAfter the description, include the estimate on its own line exactly as your instructions specify.`
       }
 
       const { text, searchQueries } = await generateWithRetry([
