@@ -74,15 +74,15 @@ export default function BoardClient({
 
   function Column({ label, dot, head, list }: { label: string; dot: string; head: string; list: Job[] }) {
     return (
-      <div className="flex-shrink-0 w-80">
+      <div className="rounded-2xl bg-gray-100/70 dark:bg-white/[0.02] border border-gray-200 dark:border-gray-800 p-3 flex flex-col min-h-[calc(100vh-13rem)]">
         <div className="flex items-center justify-between mb-3 px-1">
-          <div className="flex items-center gap-2">
-            <span className={`w-2.5 h-2.5 rounded-full ${dot}`} />
-            <span className={`text-sm font-bold uppercase tracking-wide ${head}`}>{label}</span>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dot}`} />
+            <span className={`text-sm font-bold uppercase tracking-wide truncate ${head}`}>{label}</span>
           </div>
-          <span className="text-sm font-semibold text-gray-400">{list.length}</span>
+          <span className="text-sm font-semibold text-gray-400 flex-shrink-0">{list.length}</span>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-2 flex-1">
           {list.map((job) => <JobCard key={job.id} job={job} />)}
           {list.length === 0 && <div className="text-xs text-gray-300 dark:text-gray-600 px-1 py-3">No jobs</div>}
         </div>
@@ -93,7 +93,7 @@ export default function BoardClient({
   const inStatus = (s: string) => jobs.filter((j) => j.status === s)
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
         <div>
@@ -143,8 +143,8 @@ export default function BoardClient({
         </form>
       )}
 
-      {/* Board — New is split into two side-by-side columns (Mailbox / Manual) */}
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      {/* Board — full-width kanban; New split into Mailbox / Manual lanes */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
         <Column label="New · Mailbox" dot="bg-blue-500"    head="text-blue-600 dark:text-blue-400"     list={inStatus("NEW").filter((j) => j.source === "EMAIL")} />
         <Column label="New · Manual"  dot="bg-emerald-500" head="text-emerald-600 dark:text-emerald-400" list={inStatus("NEW").filter((j) => j.source === "MANUAL")} />
         <Column label="In Progress"   dot="bg-amber-500"   head="text-amber-600 dark:text-amber-400"   list={inStatus("IN_PROGRESS")} />
