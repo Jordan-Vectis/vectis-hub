@@ -120,6 +120,15 @@ export async function POST(req: NextRequest) {
     const senderEmail = replyToParsed.email || fromParsed.email
     const senderName  = replyToParsed.name  || explicitName || fromParsed.name
     let content = text || (html ? stripHtml(html) : "")
+
+    // Office 365 Conversation Id — same across an original email and all its
+    // replies. Power Automate stamps it into the body as "VH-CID: <id>" (it
+    // survives the relay, unlike the hidden thread headers). Strip it from view.
+    let conversationId = pick(body, ["ConversationId", "conversationId", "Conversation-Id"])
+    const cidMatch = content.match(/VH-CID:\s*(\S+)/i)
+    if (cidMatch) { conversationId = conversationId || cidMatch[1] }
+    content = content.replace(/^\s*VH-CID:\s*\S+\s*/i, "").trim()
+
     if (content.length > 8000) content = content.slice(0, 8000) + "…"
     const threadKey = normaliseSubject(subject)
 
@@ -130,15 +139,25 @@ export async function POST(req: NextRequest) {
     }
 
     // Is this a reply on an existing thread?
+    // 1) Conversation Id — exact, reliable (preferred).
+    // 2) In-Reply-To/References headers — exact, when present.
+    // 3) Normalised subject — last-resort fallback only.
     let parent: { id: string } | null = null
+    if (conversationId) {
+      parent = await prisma.iTJob.findFirst({
+        where:  { conversationId, status: { not: "DONE" } },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
+      })
+    }
     const refIds = [...extractIds(inReplyTo), ...extractIds(references)]
-    if (refIds.length) {
+    if (!parent && refIds.length) {
       parent = await prisma.iTJob.findFirst({
         where:  { graphMessageId: { in: refIds } },
         select: { id: true },
       })
     }
-    if (!parent && threadKey) {
+    if (!parent && !conversationId && threadKey) {
       parent = await prisma.iTJob.findFirst({
         where:  { threadKey, status: { not: "DONE" } },
         orderBy: { createdAt: "desc" },
@@ -172,6 +191,7 @@ export async function POST(req: NextRequest) {
         status:         "NEW",
         source:         "EMAIL",
         graphMessageId: messageId,
+        conversationId: conversationId ?? null,
         threadKey,
         receivedAt:     new Date(),
       },

@@ -1001,6 +1001,7 @@ model ITJob {
   status         String    @default("NEW")   // NEW | IN_PROGRESS | WAITING | DONE
   source         String    @default("EMAIL") // EMAIL | MANUAL
   graphMessageId String?   @unique            // email Message-ID
+  conversationId String?                      // Office 365 Conversation Id — precise reply matching
   threadKey      String?                      // normalised subject — reply matching fallback
   webLink        String?                      // Outlook deep link to the original email
   assignedToId   String?
@@ -1016,6 +1017,7 @@ model ITJob {
   @@index([status])
   @@index([receivedAt])
   @@index([threadKey])
+  @@index([conversationId])
 }
 
 // A message on a job — either an internal IT staff note (kind=NOTE) or an

@@ -390,6 +390,10 @@ const MIGRATIONS = [
       REFERENCES "ITJob"("id") ON DELETE CASCADE ON UPDATE CASCADE
   )`,
   `CREATE INDEX IF NOT EXISTS "ITJobMessage_jobId_idx" ON "ITJobMessage"("jobId")`,
+
+  // 2026-06-17 — precise reply matching via Office 365 Conversation Id
+  `ALTER TABLE "ITJob" ADD COLUMN IF NOT EXISTS "conversationId" TEXT`,
+  `CREATE INDEX IF NOT EXISTS "ITJob_conversationId_idx" ON "ITJob"("conversationId")`,
 ]
 
 export async function POST() {
