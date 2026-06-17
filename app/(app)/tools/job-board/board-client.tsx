@@ -13,6 +13,16 @@ type Job = {
   hasNewReply: boolean; date: string; messages: Message[]
 }
 
+const AVATAR_COLORS = [
+  "bg-indigo-500", "bg-rose-500", "bg-amber-500", "bg-emerald-500",
+  "bg-sky-500", "bg-purple-500", "bg-pink-500", "bg-teal-500",
+]
+function avatarColor(name: string): string {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
+  return AVATAR_COLORS[h % AVATAR_COLORS.length]
+}
+
 
 export default function BoardClient({
   jobs,
@@ -44,30 +54,45 @@ export default function BoardClient({
   function JobCard({ job }: { job: Job }) {
     const replyCount = job.messages.filter((m) => m.kind === "REPLY").length
     const isEmail = job.source === "EMAIL"
+    const done = job.status === "DONE"
+    const initials = (job.assignedToName ?? "").split(/\s+/).filter(Boolean).slice(0, 2).map((s) => s[0]?.toUpperCase()).join("")
     return (
       <button
         onClick={() => setSelectedId(job.id)}
-        className={`${card} border-l-4 ${isEmail ? "border-l-blue-500" : "border-l-emerald-500"} w-full text-left p-4 transition-shadow hover:shadow-md dark:hover:shadow-black/40 ${job.hasNewReply ? "ring-2 ring-amber-400/60" : ""}`}
+        className={`w-full text-left bg-white dark:bg-[#202125] rounded-xl border border-gray-200 dark:border-gray-700/60 border-l-4 ${isEmail ? "border-l-blue-500" : "border-l-emerald-500"} p-3.5 shadow-sm hover:shadow-md transition-shadow ${job.hasNewReply ? "ring-2 ring-amber-400/70" : ""}`}
       >
-        <div className="flex items-start justify-between gap-2">
-          <p className="font-semibold text-gray-900 dark:text-white text-sm break-words flex items-start gap-1.5">
-            <span className="flex-shrink-0" title={isEmail ? "From mailbox" : "Added manually"}>{isEmail ? "✉️" : "✏️"}</span>
-            <span>{job.title}</span>
-          </p>
-          {job.hasNewReply && <span className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">reply</span>}
+        {/* Title + completion circle */}
+        <div className="flex items-start gap-2.5">
+          <span className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center ${done ? "bg-green-500" : "border-2 border-gray-300 dark:border-gray-600"}`}>
+            {done && <span className="text-white text-[9px] leading-none">✓</span>}
+          </span>
+          <p className="flex-1 min-w-0 font-medium text-sm text-gray-900 dark:text-gray-100 break-words">{job.title}</p>
+          {job.hasNewReply && <span className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 px-1.5 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">reply</span>}
         </div>
-        {job.body && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2 break-words">{job.body}</p>}
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-2 text-xs text-gray-400">
-          {job.fromName && <span>{job.fromName}</span>}
-          {job.fromName && <span>·</span>}
-          <span>{job.date}</span>
-          {replyCount > 0 && <><span>·</span><span>{replyCount} repl{replyCount === 1 ? "y" : "ies"}</span></>}
+
+        {job.body && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 ml-[26px] line-clamp-2 break-words">{job.body}</p>}
+
+        {/* Source tag */}
+        <div className="ml-[26px] mt-2">
+          <span className={`inline-block text-[11px] px-2 py-0.5 rounded-md font-medium ${isEmail ? "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"}`}>
+            {isEmail ? "✉ Email" : "✎ Manual"}
+          </span>
         </div>
-        {job.assignedToName && (
-          <div className="mt-2">
-            <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded-full">👤 {job.assignedToName}</span>
+
+        {/* Footer: assignee avatar + date · reply count */}
+        <div className="flex items-center justify-between mt-3 ml-[26px]">
+          <div className="flex items-center gap-2 min-w-0">
+            {initials ? (
+              <span className={`w-6 h-6 rounded-full ${avatarColor(job.assignedToName ?? "")} text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0`} title={job.assignedToName ?? ""}>{initials}</span>
+            ) : (
+              <span className="w-6 h-6 rounded-full border border-dashed border-gray-300 dark:border-gray-600 flex-shrink-0" title="Unassigned" />
+            )}
+            <span className="text-xs text-gray-400 truncate">{job.date}</span>
           </div>
-        )}
+          {replyCount > 0 && (
+            <span className="text-xs text-gray-400 flex items-center gap-1 flex-shrink-0">💬 {replyCount}</span>
+          )}
+        </div>
       </button>
     )
   }
