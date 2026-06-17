@@ -9,6 +9,7 @@ import ValuationSection from "./valuation-section"
 import PhotoViewer from "./photo-viewer"
 import PhotoLink from "./photo-link"
 import ValuationLink from "./valuation-link"
+import StatusSelect from "./status-select"
 
 const statusLabels: Record<SubmissionStatus, { label: string; color: string }> = {
   PENDING_ASSIGNMENT: { label: "Pending", color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300" },
@@ -68,7 +69,6 @@ export default async function SubmissionDetailPage({
     submission.status === "APPROVED" ||
     submission.status === "DECLINED"
   )
-  const canDecide = isCollectionsOrAdmin && !["APPROVED", "DECLINED", "COMPLETED"].includes(submission.status)
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -303,36 +303,11 @@ export default async function SubmissionDetailPage({
         {/* ── Sticky action rail ────────────────────────────────── */}
         <div className="space-y-4 lg:sticky lg:top-6 self-start">
 
-          {/* Accept / Decline */}
-          {canDecide && (
+          {/* Status */}
+          {isCollectionsOrAdmin && (
             <div className={cardPad}>
-              <p className={railLabel}>Decision</p>
-              <div className="flex gap-3">
-                <form action={async () => {
-                  "use server"
-                  const { updateSubmissionStatus } = await import("@/lib/actions/submissions")
-                  await updateSubmissionStatus(submission.id, SubmissionStatus.APPROVED)
-                }} className="flex-1">
-                  <button
-                    type="submit"
-                    className="w-full text-base bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-3 rounded-xl transition-colors"
-                  >
-                    ✓ Accept
-                  </button>
-                </form>
-                <form action={async () => {
-                  "use server"
-                  const { updateSubmissionStatus } = await import("@/lib/actions/submissions")
-                  await updateSubmissionStatus(submission.id, SubmissionStatus.DECLINED)
-                }} className="flex-1">
-                  <button
-                    type="submit"
-                    className="w-full text-base bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-3 rounded-xl transition-colors"
-                  >
-                    ✕ Decline
-                  </button>
-                </form>
-              </div>
+              <p className={railLabel}>Status</p>
+              <StatusSelect submissionId={submission.id} current={submission.status} />
             </div>
           )}
 
