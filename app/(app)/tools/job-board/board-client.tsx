@@ -13,12 +13,6 @@ type Job = {
   hasNewReply: boolean; date: string; messages: Message[]
 }
 
-const COLUMNS: { key: string; label: string; dot: string; head: string }[] = [
-  { key: "NEW",         label: "New",         dot: "bg-blue-500",   head: "text-blue-600 dark:text-blue-400" },
-  { key: "IN_PROGRESS", label: "In Progress", dot: "bg-amber-500",  head: "text-amber-600 dark:text-amber-400" },
-  { key: "WAITING",     label: "Waiting",     dot: "bg-purple-500", head: "text-purple-600 dark:text-purple-400" },
-  { key: "DONE",        label: "Done",        dot: "bg-green-500",  head: "text-green-600 dark:text-green-400" },
-]
 
 export default function BoardClient({
   jobs,
@@ -78,6 +72,26 @@ export default function BoardClient({
     )
   }
 
+  function Column({ label, dot, head, list }: { label: string; dot: string; head: string; list: Job[] }) {
+    return (
+      <div className="flex-shrink-0 w-80">
+        <div className="flex items-center justify-between mb-3 px-1">
+          <div className="flex items-center gap-2">
+            <span className={`w-2.5 h-2.5 rounded-full ${dot}`} />
+            <span className={`text-sm font-bold uppercase tracking-wide ${head}`}>{label}</span>
+          </div>
+          <span className="text-sm font-semibold text-gray-400">{list.length}</span>
+        </div>
+        <div className="space-y-2">
+          {list.map((job) => <JobCard key={job.id} job={job} />)}
+          {list.length === 0 && <div className="text-xs text-gray-300 dark:text-gray-600 px-1 py-3">No jobs</div>}
+        </div>
+      </div>
+    )
+  }
+
+  const inStatus = (s: string) => jobs.filter((j) => j.status === s)
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -129,49 +143,13 @@ export default function BoardClient({
         </form>
       )}
 
-      {/* Board */}
+      {/* Board — New is split into two side-by-side columns (Mailbox / Manual) */}
       <div className="flex gap-4 overflow-x-auto pb-4">
-        {COLUMNS.map((col) => {
-          const colJobs = jobs.filter((j) => j.status === col.key)
-          const isNew = col.key === "NEW"
-          const mailboxJobs = colJobs.filter((j) => j.source === "EMAIL")
-          const manualJobs  = colJobs.filter((j) => j.source === "MANUAL")
-          return (
-            <div key={col.key} className="flex-shrink-0 w-80">
-              <div className="flex items-center justify-between mb-3 px-1">
-                <div className="flex items-center gap-2">
-                  <span className={`w-2.5 h-2.5 rounded-full ${col.dot}`} />
-                  <span className={`text-sm font-bold uppercase tracking-wide ${col.head}`}>{col.label}</span>
-                </div>
-                <span className="text-sm font-semibold text-gray-400">{colJobs.length}</span>
-              </div>
-
-              {isNew ? (
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 px-1">From mailbox</p>
-                    <div className="space-y-2">
-                      {mailboxJobs.map((job) => <JobCard key={job.id} job={job} />)}
-                      {mailboxJobs.length === 0 && <div className="text-xs text-gray-300 dark:text-gray-600 px-1 py-2">None</div>}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 px-1">Added manually</p>
-                    <div className="space-y-2">
-                      {manualJobs.map((job) => <JobCard key={job.id} job={job} />)}
-                      {manualJobs.length === 0 && <div className="text-xs text-gray-300 dark:text-gray-600 px-1 py-2">None</div>}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {colJobs.map((job) => <JobCard key={job.id} job={job} />)}
-                  {colJobs.length === 0 && <div className="text-xs text-gray-300 dark:text-gray-600 px-1 py-3">No jobs</div>}
-                </div>
-              )}
-            </div>
-          )
-        })}
+        <Column label="New · Mailbox" dot="bg-blue-500"    head="text-blue-600 dark:text-blue-400"     list={inStatus("NEW").filter((j) => j.source === "EMAIL")} />
+        <Column label="New · Manual"  dot="bg-emerald-500" head="text-emerald-600 dark:text-emerald-400" list={inStatus("NEW").filter((j) => j.source === "MANUAL")} />
+        <Column label="In Progress"   dot="bg-amber-500"   head="text-amber-600 dark:text-amber-400"   list={inStatus("IN_PROGRESS")} />
+        <Column label="Waiting"       dot="bg-purple-500"  head="text-purple-600 dark:text-purple-400" list={inStatus("WAITING")} />
+        <Column label="Done"          dot="bg-green-500"   head="text-green-600 dark:text-green-400"   list={inStatus("DONE")} />
       </div>
 
       {/* Job detail modal */}
