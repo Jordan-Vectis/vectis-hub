@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import ZoomableLightbox from "@/components/zoomable-lightbox"
 
 type Item = {
   id: string
@@ -185,23 +186,7 @@ export default function ValueClient({
 
       {/* Lightbox */}
       {lightboxSrc && (
-        <div
-          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
-          onClick={() => setLightboxSrc(null)}
-        >
-          <img
-            src={lightboxSrc}
-            alt=""
-            className="max-w-full max-h-full rounded-xl object-contain"
-            onClick={e => e.stopPropagation()}
-          />
-          <button
-            onClick={() => setLightboxSrc(null)}
-            className="absolute top-4 right-4 text-white text-2xl font-bold bg-black/40 rounded-full w-10 h-10 flex items-center justify-center"
-          >
-            ✕
-          </button>
-        </div>
+        <ZoomableLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
       )}
     </>
   )

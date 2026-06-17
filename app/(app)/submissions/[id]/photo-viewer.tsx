@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import ZoomableLightbox from "@/components/zoomable-lightbox"
 
 export default function PhotoViewer({ imageUrls }: { imageUrls: string[] }) {
   const [signedUrls, setSignedUrls] = useState<string[]>([])
@@ -56,23 +57,7 @@ export default function PhotoViewer({ imageUrls }: { imageUrls: string[] }) {
       )}
 
       {lightbox && (
-        <div
-          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
-          onClick={() => setLightbox(null)}
-        >
-          <img
-            src={lightbox}
-            alt="Full size"
-            className="max-w-full max-h-full rounded-lg object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-          <button
-            onClick={() => setLightbox(null)}
-            className="absolute top-4 right-4 text-white text-2xl font-bold hover:text-gray-300"
-          >
-            &times;
-          </button>
-        </div>
+        <ZoomableLightbox src={lightbox} onClose={() => setLightbox(null)} />
       )}
     </div>
   )
