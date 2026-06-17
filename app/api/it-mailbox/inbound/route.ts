@@ -46,6 +46,24 @@ function parseAddress(raw: string | null): { name: string | null; email: string 
   return { name: null, email: null }
 }
 
+// When an internal mailbox (admin@, accounts@, returns@ …) forwards a customer
+// email in, the real customer sits in the quoted "From: Name <email>" in the
+// body. Return the first EXTERNAL (non-@vectis.co.uk) one found.
+function extractOriginalSender(body: string | null): { name: string | null; email: string | null } | null {
+  if (!body) return null
+  const isInternal = (e: string) => e.toLowerCase().endsWith("@vectis.co.uk")
+  let m: RegExpExecArray | null
+  const re = /From:\s*"?([^"<\n]*?)"?\s*<([^>\s@]+@[^>\s]+)>/gi
+  while ((m = re.exec(body))) {
+    if (!isInternal(m[2])) return { name: m[1].trim() || null, email: m[2].trim() }
+  }
+  const re2 = /From:\s*([^\s<>@]+@[^\s<>]+)/gi
+  while ((m = re2.exec(body))) {
+    if (!isInternal(m[1])) return { name: null, email: m[1].trim() }
+  }
+  return null
+}
+
 // Normalise a subject for thread matching: drop leading Re:/Fw:/Fwd: and case.
 function normaliseSubject(s: string): string {
   let out = s.toLowerCase().trim()
@@ -117,8 +135,8 @@ export async function POST(req: NextRequest) {
     const fromParsed    = parseAddress(fromRaw)
     const replyToParsed = parseAddress(pick(body, ["ReplyTo", "Reply-To", "reply_to"]) || headerLine("Reply-To"))
 
-    const senderEmail = replyToParsed.email || fromParsed.email
-    const senderName  = replyToParsed.name  || explicitName || fromParsed.name
+    let senderEmail = replyToParsed.email || fromParsed.email
+    let senderName  = replyToParsed.name  || explicitName || fromParsed.name
     let content = text || (html ? stripHtml(html) : "")
 
     // Office 365 Conversation Id — same across an original email and all its
@@ -130,6 +148,14 @@ export async function POST(req: NextRequest) {
     content = content.replace(/^\s*VH-CID:\s*\S+\s*/i, "").trim()
 
     if (content.length > 20000) content = content.slice(0, 20000) + "…"
+
+    // If forwarded in by an internal mailbox, resolve the real customer from the
+    // quoted "From:" inside the body.
+    if (senderEmail && senderEmail.toLowerCase().endsWith("@vectis.co.uk")) {
+      const orig = extractOriginalSender(content)
+      if (orig?.email) { senderEmail = orig.email; senderName = orig.name ?? senderName }
+    }
+
     const threadKey = normaliseSubject(subject)
 
     // Duplicate of an email we've already turned into a job?
