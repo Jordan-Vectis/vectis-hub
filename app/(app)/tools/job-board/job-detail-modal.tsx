@@ -18,6 +18,19 @@ const STATUSES: [string, string][] = [
   ["NEW", "New"], ["IN_PROGRESS", "In Progress"], ["WAITING", "Waiting"], ["DONE", "Done"],
 ]
 
+// Clean an address value that might be a JSON blob, "Name <email>", or plain.
+function parseAddr(raw: string | null): { name: string | null; email: string | null } {
+  if (!raw) return { name: null, email: null }
+  const s = raw.trim()
+  if (s.startsWith("{")) {
+    try { const o = JSON.parse(s); return { name: o.name || o.Name || null, email: o.address || o.email || null } } catch {}
+  }
+  const m = s.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/)
+  if (m) return { name: m[1].trim() || null, email: m[2].trim() }
+  if (s.includes("@")) return { name: null, email: s.replace(/[<>]/g, "").trim() }
+  return { name: null, email: null }
+}
+
 export default function JobDetailModal({
   job,
   itStaff,
@@ -29,6 +42,19 @@ export default function JobDetailModal({
 }) {
   const [isPending, startTransition] = useTransition()
   const [note, setNote] = useState("")
+  const [copied, setCopied] = useState(false)
+
+  const addr = parseAddr(job.fromEmail)
+  const requesterEmail = addr.email
+  const requesterName  = (job.fromName && !job.fromName.trim().startsWith("{")) ? job.fromName : (addr.name ?? job.fromName)
+
+  function copyEmail() {
+    if (!requesterEmail) return
+    navigator.clipboard.writeText(requesterEmail).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
 
   const run = (fn: () => Promise<any>) => startTransition(async () => { await fn() })
 
@@ -50,7 +76,7 @@ export default function JobDetailModal({
           <div className="min-w-0">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white break-words">{job.title}</h2>
             <p className="text-sm text-gray-400 mt-1">
-              {job.fromName ?? job.fromEmail ?? "Manual job"}{job.fromEmail && job.fromName ? ` · ${job.fromEmail}` : ""} · {job.date} · {job.source === "EMAIL" ? "from mailbox" : "added manually"}
+              {requesterName ?? "Manual job"} · {job.date} · {job.source === "EMAIL" ? "from mailbox" : "added manually"}
             </p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none flex-shrink-0" aria-label="Close">&times;</button>
@@ -91,6 +117,30 @@ export default function JobDetailModal({
                 {itStaff.length === 0 && <option disabled>No IT staff set up yet</option>}
               </select>
             </div>
+          </div>
+
+          {/* Customer email */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Customer email</p>
+            {requesterEmail ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                <code className="flex-1 min-w-0 text-sm text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 rounded-xl px-4 py-2.5 break-all">{requesterEmail}</code>
+                <button
+                  onClick={copyEmail}
+                  className="text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2.5 rounded-xl transition-colors whitespace-nowrap"
+                >
+                  {copied ? "Copied!" : "Copy"}
+                </button>
+                <a
+                  href={`mailto:${requesterEmail}`}
+                  className="text-sm bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-semibold px-4 py-2.5 rounded-xl transition-colors whitespace-nowrap"
+                >
+                  Email
+                </a>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">No email address</p>
+            )}
           </div>
 
           {/* Original message */}
