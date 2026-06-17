@@ -80,7 +80,20 @@ export async function POST(req: NextRequest) {
     const inReplyTo  = pick(body, ["InReplyTo", "In-Reply-To", "in_reply_to"]) || headerLine("In-Reply-To")
     const references = pick(body, ["References", "references"]) || headerLine("References")
 
+    // When relayed by Power Automate the email is "from" IT@vectis.co.uk, so the
+    // real requester is carried in Reply-To. Prefer it for the requester details.
+    const replyTo = pick(body, ["ReplyTo", "Reply-To", "reply_to"]) || headerLine("Reply-To")
+    let replyToName: string | null = null
+    let replyToEmail: string | null = null
+    if (replyTo) {
+      const m = replyTo.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/)
+      if (m) { replyToName = m[1].trim() || null; replyToEmail = m[2].trim() }
+      else { replyToEmail = replyTo.replace(/[<>]/g, "").trim() }
+    }
+
     const fromEmailClean = fromEmail?.replace(/^.*<([^>]+)>.*$/, "$1") ?? null
+    const senderEmail = replyToEmail || fromEmailClean
+    const senderName  = replyToName  || fromName
     let content = text || (html ? stripHtml(html) : "")
     if (content.length > 8000) content = content.slice(0, 8000) + "…"
     const threadKey = normaliseSubject(subject)
@@ -113,8 +126,8 @@ export async function POST(req: NextRequest) {
         data: {
           jobId:       parent.id,
           kind:        "REPLY",
-          authorName:  fromName ?? null,
-          authorEmail: fromEmailClean,
+          authorName:  senderName ?? null,
+          authorEmail: senderEmail,
           body:        content,
         },
       })
@@ -129,8 +142,8 @@ export async function POST(req: NextRequest) {
       data: {
         title:          subject.slice(0, 300),
         body:           content,
-        fromName:       fromName ?? null,
-        fromEmail:      fromEmailClean,
+        fromName:       senderName ?? null,
+        fromEmail:      senderEmail,
         status:         "NEW",
         source:         "EMAIL",
         graphMessageId: messageId,
