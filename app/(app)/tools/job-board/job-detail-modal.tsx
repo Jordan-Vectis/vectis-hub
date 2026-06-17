@@ -18,14 +18,24 @@ const STATUSES: [string, string][] = [
   ["NEW", "New"], ["IN_PROGRESS", "In Progress"], ["WAITING", "Waiting"], ["DONE", "Done"],
 ]
 
-// Trim an email body down to just the new message: drop quoted reply chains,
-// Outlook's external-sender banner, and signature dividers.
-function trimQuoted(text: string): string {
+// Remove obvious noise (external-sender banner, the Vectis confidentiality
+// footer) without touching the actual message. Safe to apply everywhere.
+function stripNoise(text: string): string {
   if (!text) return ""
-  let t = text
+  return text
     .replace(/\[?\s*You don't often get email from[^\]]*\]?/gi, "")
     .replace(/https:\/\/aka\.ms\/LearnAboutSenderIdentification\s*/gi, "")
-  const lines = t.split(/\r?\n/)
+    .replace(/This email and any files transmitted[\s\S]*?TS17\s*9JZ\.?/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
+// Trim a REPLY down to just the new message: drop the quoted thread underneath.
+// Only used on replies — never on the original message (a forward can have its
+// real content below a "From:" header, which this would wrongly cut).
+function trimQuoted(text: string): string {
+  if (!text) return ""
+  const lines = stripNoise(text).split(/\r?\n/)
   const out: string[] = []
   for (const line of lines) {
     if (/^\s*on .+wrote:\s*$/i.test(line)) break
@@ -35,7 +45,9 @@ function trimQuoted(text: string): string {
     if (/^\s*>/.test(line)) continue
     out.push(line)
   }
-  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim() || text.trim()
+  const trimmed = out.join("\n").replace(/\n{3,}/g, "\n\n").trim()
+  // If trimming nuked almost everything, the markers misfired — show the lot.
+  return trimmed.length >= 10 ? trimmed : stripNoise(text)
 }
 
 // Clean an address value that might be a JSON blob, "Name <email>", or plain.
@@ -174,7 +186,7 @@ export default function JobDetailModal({
           <div>
             <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Original message</p>
             <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 p-4 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words max-h-72 overflow-y-auto">
-              {trimQuoted(job.body) || <span className="text-gray-400">No content</span>}
+              {stripNoise(job.body) || <span className="text-gray-400">No content</span>}
             </div>
           </div>
 

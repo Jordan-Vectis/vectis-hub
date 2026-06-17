@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
     if (cidMatch) { conversationId = conversationId || cidMatch[1] }
     content = content.replace(/^\s*VH-CID:\s*\S+\s*/i, "").trim()
 
-    if (content.length > 8000) content = content.slice(0, 8000) + "…"
+    if (content.length > 20000) content = content.slice(0, 20000) + "…"
     const threadKey = normaliseSubject(subject)
 
     // Duplicate of an email we've already turned into a job?
