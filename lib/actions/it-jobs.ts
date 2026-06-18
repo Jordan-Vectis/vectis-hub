@@ -112,17 +112,30 @@ export async function setITStaff(userId: string, value: boolean) {
   revalidatePath("/tools/job-board")
 }
 
-// Spin up a realistic sample job for testing the rendering (HTML body, an inline
-// signature logo via cid, two screenshot attachments, a [image.jpeg] placeholder
-// and a forwarded section) — no email/Make round-trip needed.
-export async function createTestITJob() {
+// Spin up a realistic sample job for testing the rendering — no email/Make
+// round-trip. mode "html" = a formatted email (signature + inline cid logo +
+// Outlook forwarded section); mode "text" = a plain-text forwarded email. Both
+// get two screenshot attachments, a [image.jpeg] placeholder and a forwarded quote.
+export async function createTestITJob(mode: "html" | "text" = "html") {
   await requireAdmin()
   const stamp = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
 
-  // HTML email with a signature (inline cid logo) and an Outlook-style forwarded
-  // section — exercises HTML rendering, inline-image rewriting, the forwarded-quote
-  // split and the parsed "From/Sent/Subject" header box.
-  const html = `
+  let title: string
+  let body: string
+  let bodyHtml: string | undefined
+
+  if (mode === "text") {
+    body = [
+      "Hi IT,",
+      "My laptop won't connect to the WiFi this morning — see the screenshots attached.",
+      "[image0.jpeg]",
+      "Thanks,\nTest Customer",
+      "From: someone@example.com\nSent: 12 June 2026 09:00\nTo: IT\nSubject: Original request",
+      "This is the earlier forwarded message in the thread.",
+    ].join("\n\n")
+    title = `🧪 TEST plain — ${stamp}`
+  } else {
+    bodyHtml = `
 <div style="font-family:Arial,sans-serif;font-size:14px;color:#222">
   <p>Hi IT,</p>
   <p>My laptop won't connect to the <b>WiFi</b> this morning — see the screenshots attached. It started after yesterday's update.</p>
@@ -139,14 +152,15 @@ export async function createTestITJob() {
     <p>This is the earlier forwarded message in the thread — it should drop into the collapsible "Forwarded / earlier email" with its own header box.</p>
   </div>
 </div>`.trim()
-
-  const body = "Hi IT,\n\nMy laptop won't connect to the WiFi this morning — see the screenshots attached.\n\nThanks,\nTest Customer"
+    body = "Hi IT,\n\nMy laptop won't connect to the WiFi this morning — see the screenshots attached.\n\nThanks,\nTest Customer"
+    title = `🧪 TEST HTML — ${stamp}`
+  }
 
   const job = await prisma.iTJob.create({
     data: {
-      title:      `🧪 TEST email — ${stamp}`,
+      title,
       body,
-      bodyHtml:   html,
+      bodyHtml:   bodyHtml ?? null,
       fromName:   "Test Customer",
       fromEmail:  "test.customer@example.com",
       status:     "NEW",
@@ -156,13 +170,15 @@ export async function createTestITJob() {
     select: { id: true },
   })
 
-  // Inline signature logo (referenced by cid:test-inline-logo in the HTML).
-  const logo = await sharp({ create: { width: 220, height: 90, channels: 4, background: { r: 230, g: 232, b: 245, alpha: 1 } } }).png().toBuffer()
-  const logoKey = `it-jobs/${job.id}/test-logo.png`
-  await uploadBufferToR2(logo, logoKey, "image/png")
-  await prisma.iTJobAttachment.create({
-    data: { jobId: job.id, filename: "signature-logo.png", mimeType: "image/png", size: logo.length, r2Key: logoKey, contentId: "test-inline-logo" },
-  })
+  // Inline signature logo — only the HTML variant references it (cid:test-inline-logo).
+  if (mode === "html") {
+    const logo = await sharp({ create: { width: 220, height: 90, channels: 4, background: { r: 230, g: 232, b: 245, alpha: 1 } } }).png().toBuffer()
+    const logoKey = `it-jobs/${job.id}/test-logo.png`
+    await uploadBufferToR2(logo, logoKey, "image/png")
+    await prisma.iTJobAttachment.create({
+      data: { jobId: job.id, filename: "signature-logo.png", mimeType: "image/png", size: logo.length, r2Key: logoKey, contentId: "test-inline-logo" },
+    })
+  }
 
   // Two screenshot attachments (no Content-ID => shown as thumbnails).
   const colours = [{ r: 70, g: 110, b: 190 }, { r: 200, g: 95, b: 95 }]
