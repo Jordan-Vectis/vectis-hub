@@ -119,21 +119,34 @@ export async function createTestITJob() {
   await requireAdmin()
   const stamp = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
 
-  // Plain-text forwarded email — exercises placeholder-stripping, the quoted/
-  // forwarded split, and the parsed "From/Sent/Subject" header box.
-  const body = [
-    "Hi IT,",
-    "My laptop won't connect to the WiFi this morning — see the screenshots attached.",
-    "[image0.jpeg]",
-    "Thanks,\nTest Customer",
-    "From: someone@example.com\nSent: 12 June 2026 09:00\nTo: IT\nSubject: Original request",
-    "This is the earlier forwarded message in the thread.",
-  ].join("\n\n")
+  // HTML email with a signature (inline cid logo) and an Outlook-style forwarded
+  // section — exercises HTML rendering, inline-image rewriting, the forwarded-quote
+  // split and the parsed "From/Sent/Subject" header box.
+  const html = `
+<div style="font-family:Arial,sans-serif;font-size:14px;color:#222">
+  <p>Hi IT,</p>
+  <p>My laptop won't connect to the <b>WiFi</b> this morning — see the screenshots attached. It started after yesterday's update.</p>
+  <p>[image0.jpeg]</p>
+  <p>Thanks,<br>Test Customer</p>
+  <hr>
+  <div style="color:#666;font-size:12px">
+    <p><b>Test Customer</b><br>Sample Department</p>
+    <img src="cid:test-inline-logo" alt="logo" width="180">
+    <p>The Hambleton Group Ltd · Fleck Way, Thornaby</p>
+  </div>
+  <div style="border-top:1px solid #ccc;margin-top:12px;padding-top:8px;color:#444;font-size:13px">
+    <p><b>From:</b> someone@example.com<br><b>Sent:</b> 12 June 2026 09:00<br><b>To:</b> IT<br><b>Subject:</b> Original request</p>
+    <p>This is the earlier forwarded message in the thread — it should drop into the collapsible "Forwarded / earlier email" with its own header box.</p>
+  </div>
+</div>`.trim()
+
+  const body = "Hi IT,\n\nMy laptop won't connect to the WiFi this morning — see the screenshots attached.\n\nThanks,\nTest Customer"
 
   const job = await prisma.iTJob.create({
     data: {
       title:      `🧪 TEST email — ${stamp}`,
       body,
+      bodyHtml:   html,
       fromName:   "Test Customer",
       fromEmail:  "test.customer@example.com",
       status:     "NEW",
@@ -141,6 +154,14 @@ export async function createTestITJob() {
       receivedAt: new Date(),
     },
     select: { id: true },
+  })
+
+  // Inline signature logo (referenced by cid:test-inline-logo in the HTML).
+  const logo = await sharp({ create: { width: 220, height: 90, channels: 4, background: { r: 230, g: 232, b: 245, alpha: 1 } } }).png().toBuffer()
+  const logoKey = `it-jobs/${job.id}/test-logo.png`
+  await uploadBufferToR2(logo, logoKey, "image/png")
+  await prisma.iTJobAttachment.create({
+    data: { jobId: job.id, filename: "signature-logo.png", mimeType: "image/png", size: logo.length, r2Key: logoKey, contentId: "test-inline-logo" },
   })
 
   // Two screenshot attachments (no Content-ID => shown as thumbnails).

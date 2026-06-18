@@ -2,32 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { uploadBufferToR2 } from "@/lib/r2"
 import sharp from "sharp"
-import sanitizeHtml from "sanitize-html"
-
-// Sanitise untrusted email HTML for safe rendering. Keeps formatting + images
-// (inline cid: refs survive — rewritten to signed R2 URLs at render time),
-// strips scripts/styles/iframes/event-handlers. Inline styles are kept (emails
-// rely on them) but the rendered block is isolated in the modal.
-function cleanEmailHtml(html: string): string {
-  const cleaned = sanitizeHtml(html, {
-    allowedTags: sanitizeHtml.defaults.allowedTags.concat([
-      "img", "h1", "h2", "u", "s", "span", "font", "center", "hr",
-      "table", "thead", "tbody", "tfoot", "tr", "td", "th", "caption", "col", "colgroup",
-    ]),
-    allowedAttributes: {
-      "*": ["style", "align", "valign", "dir", "width", "height", "bgcolor", "colspan", "rowspan"],
-      a: ["href", "name", "target", "rel"],
-      img: ["src", "alt", "title", "width", "height", "style"],
-      font: ["color", "face", "size"],
-    },
-    allowedSchemes: ["http", "https", "mailto", "tel"],
-    allowedSchemesByTag: { img: ["http", "https", "cid", "data"] },
-    transformTags: { a: sanitizeHtml.simpleTransform("a", { target: "_blank", rel: "noopener noreferrer" }) },
-    // Drop the PA-stamped thread id if it leaked into the HTML.
-    textFilter: (t) => t.replace(/VH-CID:\s*\S+/gi, ""),
-  })
-  return cleaned.trim()
-}
+import { cleanEmailHtml } from "@/lib/email-html"
 
 export const maxDuration = 60
 

@@ -6,7 +6,7 @@ import {
 } from "@/lib/actions/it-jobs"
 
 type JobImage = { id: string; filename: string; url: string }
-type Quoted = { from: string | null; date: string | null; subject: string | null; body: string }
+type Quoted = { from: string | null; date: string | null; subject: string | null; body: string; isHtml: boolean }
 type Message = { id: string; kind: string; authorName: string | null; body: string; bodyHtml: string | null; bodyQuoted: Quoted | null; when: string; images: JobImage[] }
 type Job = {
   id: string; title: string; body: string; bodyHtml: string | null; bodyQuoted: Quoted | null
@@ -21,21 +21,19 @@ type Job = {
 // Render the email body: the real (sanitised) HTML on a white email-style panel
 // when we have it, otherwise the plain text — with any quoted/forwarded history
 // tucked into a collapsible block. HTML is sanitised server-side.
+const HTML_BODY_CLASS = "bg-white text-gray-900 rounded-lg p-4 border border-gray-200 text-[15px] leading-relaxed break-words overflow-x-auto [&_img]:max-w-full [&_img]:h-auto [&_img]:max-h-[420px] [&_a]:text-blue-700 [&_a]:underline [&_table]:max-w-full [&_p]:my-1"
+
 function EmailBody({ html, text, quoted }: { html: string | null; text: string; quoted?: Quoted | null }) {
-  if (html) {
-    return (
-      <div
-        className="bg-white text-gray-900 rounded-lg p-4 border border-gray-200 text-[15px] leading-relaxed break-words overflow-x-auto [&_img]:max-w-full [&_img]:h-auto [&_img]:max-h-[420px] [&_a]:text-blue-700 [&_a]:underline [&_table]:max-w-full [&_p]:my-1"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-    )
-  }
   const hasHeader = quoted && (quoted.from || quoted.date || quoted.subject)
   return (
     <>
-      <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
-        {text || <span className="text-gray-400">No content</span>}
-      </div>
+      {html ? (
+        <div className={HTML_BODY_CLASS} dangerouslySetInnerHTML={{ __html: html }} />
+      ) : (
+        <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+          {text || <span className="text-gray-400">No content</span>}
+        </div>
+      )}
       {quoted && (
         <details className="mt-3">
           <summary className="text-xs font-semibold text-gray-500 dark:text-gray-400 cursor-pointer hover:underline select-none">
@@ -49,9 +47,13 @@ function EmailBody({ html, text, quoted }: { html: string | null; text: string; 
                 {quoted.subject && <div><span className="font-semibold text-gray-600 dark:text-gray-300">Subject:</span> <span className="text-gray-700 dark:text-gray-200">{quoted.subject}</span></div>}
               </div>
             )}
-            <div className="text-sm leading-relaxed whitespace-pre-wrap break-words text-gray-500 dark:text-gray-400">
-              {quoted.body}
-            </div>
+            {quoted.isHtml ? (
+              <div className={HTML_BODY_CLASS} dangerouslySetInnerHTML={{ __html: quoted.body }} />
+            ) : (
+              <div className="text-sm leading-relaxed whitespace-pre-wrap break-words text-gray-500 dark:text-gray-400">
+                {quoted.body}
+              </div>
+            )}
           </div>
         </details>
       )}

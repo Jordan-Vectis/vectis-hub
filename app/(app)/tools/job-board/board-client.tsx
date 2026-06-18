@@ -5,7 +5,7 @@ import { createITJob, setITStaff, createTestITJob } from "@/lib/actions/it-jobs"
 import JobDetailModal from "./job-detail-modal"
 
 type JobImage = { id: string; filename: string; url: string }
-type Quoted = { from: string | null; date: string | null; subject: string | null; body: string }
+type Quoted = { from: string | null; date: string | null; subject: string | null; body: string; isHtml: boolean }
 type Message = { id: string; kind: string; authorName: string | null; body: string; bodyHtml: string | null; bodyQuoted: Quoted | null; when: string; images: JobImage[] }
 type Job = {
   id: string; title: string; body: string; bodyHtml: string | null; bodyQuoted: Quoted | null

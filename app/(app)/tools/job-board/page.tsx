@@ -2,7 +2,10 @@ import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { getSignedImageUrl } from "@/lib/r2"
+import { cleanEmailHtml, htmlToText } from "@/lib/email-html"
 import BoardClient from "./board-client"
+
+type Quoted = { from: string | null; date: string | null; subject: string | null; body: string; isHtml: boolean }
 
 export default async function JobBoardPage() {
   const session = await auth()
@@ -108,13 +111,38 @@ export default async function JobBoardPage() {
     return { from, date, subject, body }
   }
 
-  // Build the display fields for a body: stripped HTML (if any) wins; else split
-  // the plain text into main + collapsible quoted history.
+  // Best-effort: split a forwarded/quoted email out of HTML at the earliest
+  // boundary (blockquote, gmail_quote, or an Outlook "From: … Subject:" header),
+  // re-balancing each half with the sanitiser, and parse the quoted header.
+  function splitHtmlQuote(html: string): { mainHtml: string; quoted: Quoted | null } {
+    const candidates: number[] = []
+    const bq = html.search(/<blockquote[\s>]/i); if (bq >= 0) candidates.push(bq)
+    const gq = html.search(/class=["']?[^"'>]*gmail_quote/i); if (gq >= 0) candidates.push(gq)
+    const fm = /\bFrom:\s/i.exec(html)
+    if (fm && /Subject:/i.test(htmlToText(html.slice(fm.index, fm.index + 1500)))) candidates.push(fm.index)
+    const idx = candidates.length ? Math.min(...candidates) : -1
+    if (idx <= 0) return { mainHtml: html, quoted: null }
+
+    const mainHtml = cleanEmailHtml(html.slice(0, idx))
+    const quotedHtml = cleanEmailHtml(html.slice(idx))
+    const head = htmlToText(quotedHtml).slice(0, 600)
+    const get = (label: string) => { const x = head.match(new RegExp("^[ \\t]*" + label + ":[ \\t]*(.+)$", "im")); return x ? x[1].trim() : null }
+    return {
+      mainHtml,
+      quoted: { from: get("From"), date: get("Sent") || get("Date"), subject: get("Subject"), body: quotedHtml, isHtml: true },
+    }
+  }
+
+  // Build the display fields for a body. HTML (if any) wins — split off any
+  // forwarded quote; else split the plain text into main + collapsible quoted.
   function emailFields(text: string, html: string | null, atts: { id: string; contentId: string | null }[]) {
     const renderedHtml = renderHtml(html, atts)
-    if (renderedHtml) return { body: stripPlaceholders(text), bodyQuoted: null as ReturnType<typeof parseQuoted> | null, bodyHtml: renderedHtml }
+    if (renderedHtml) {
+      const { mainHtml, quoted } = splitHtmlQuote(renderedHtml)
+      return { body: stripPlaceholders(text), bodyHtml: mainHtml, bodyQuoted: quoted }
+    }
     const { main, quoted } = splitQuote(stripPlaceholders(text))
-    return { body: main, bodyQuoted: quoted ? parseQuoted(quoted) : null, bodyHtml: null as string | null }
+    return { body: main, bodyHtml: null as string | null, bodyQuoted: quoted ? { ...parseQuoted(quoted), isHtml: false } : null }
   }
 
   // Date-only due info, computed server-side to keep board colours stable (no client/SSR drift).
