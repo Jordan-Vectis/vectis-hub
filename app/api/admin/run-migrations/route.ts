@@ -394,6 +394,10 @@ const MIGRATIONS = [
   // 2026-06-17 — precise reply matching via Office 365 Conversation Id
   `ALTER TABLE "ITJob" ADD COLUMN IF NOT EXISTS "conversationId" TEXT`,
   `CREATE INDEX IF NOT EXISTS "ITJob_conversationId_idx" ON "ITJob"("conversationId")`,
+
+  // 2026-06-18 — Job Board due dates
+  `ALTER TABLE "ITJob" ADD COLUMN IF NOT EXISTS "dueDate" TIMESTAMP(3)`,
+  `CREATE INDEX IF NOT EXISTS "ITJob_dueDate_idx" ON "ITJob"("dueDate")`,
 ]
 
 export async function POST() {

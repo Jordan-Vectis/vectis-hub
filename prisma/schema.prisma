@@ -1007,6 +1007,7 @@ model ITJob {
   assignedToId   String?
   assignedToName String?
   hasNewReply    Boolean   @default(false)    // a customer reply arrived that IT hasn't seen
+  dueDate        DateTime?                     // optional target date for the job (date only)
   receivedAt     DateTime?
   createdByName  String?
   createdAt      DateTime  @default(now())
@@ -1018,6 +1019,7 @@ model ITJob {
   @@index([receivedAt])
   @@index([threadKey])
   @@index([conversationId])
+  @@index([dueDate])
 }
 
 // A message on a job — either an internal IT staff note (kind=NOTE) or an

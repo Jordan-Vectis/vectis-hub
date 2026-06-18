@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react"
 import {
-  updateITJobStatus, assignITJob, addITJobNote, clearITJobReplyFlag, deleteITJob,
+  updateITJobStatus, assignITJob, addITJobNote, clearITJobReplyFlag, deleteITJob, setITJobDueDate,
 } from "@/lib/actions/it-jobs"
 
 type Message = { id: string; kind: string; authorName: string | null; body: string; when: string }
@@ -11,7 +11,9 @@ type Job = {
   fromName: string | null; fromEmail: string | null
   status: string; source: string; webLink: string | null
   assignedToId: string | null; assignedToName: string | null
-  hasNewReply: boolean; date: string; messages: Message[]
+  hasNewReply: boolean
+  dueDate: string | null; dueLabel: string | null; dueStatus: string | null
+  date: string; messages: Message[]
 }
 
 const STATUSES: [string, string][] = [
@@ -99,7 +101,7 @@ export default function JobDetailModal({
           )}
 
           {/* Controls */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">Status</label>
               <select
@@ -123,6 +125,35 @@ export default function JobDetailModal({
                 {itStaff.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
                 {itStaff.length === 0 && <option disabled>No IT staff set up yet</option>}
               </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">Due date</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={job.dueDate ?? ""}
+                  disabled={isPending}
+                  onChange={(e) => run(() => setITJobDueDate(job.id, e.target.value || null))}
+                  className="w-full rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {job.dueDate && (
+                  <button
+                    type="button"
+                    onClick={() => run(() => setITJobDueDate(job.id, null))}
+                    disabled={isPending}
+                    className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl leading-none flex-shrink-0 px-1"
+                    aria-label="Clear due date"
+                    title="Clear due date"
+                  >
+                    &times;
+                  </button>
+                )}
+              </div>
+              {job.dueLabel && job.status !== "DONE" && (
+                <p className={`text-xs font-semibold mt-1.5 ${job.dueStatus === "overdue" ? "text-red-600 dark:text-red-400" : job.dueStatus === "today" || job.dueStatus === "soon" ? "text-amber-600 dark:text-amber-400" : "text-gray-400"}`}>
+                  📅 {job.dueLabel}
+                </p>
+              )}
             </div>
           </div>
 

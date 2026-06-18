@@ -17,6 +17,25 @@ export default async function JobBoardPage() {
     prisma.user.findMany({ select: { id: true, name: true, isITStaff: true }, orderBy: { name: "asc" } }),
   ])
 
+  // Date-only due info, computed server-side to keep board colours stable (no client/SSR drift).
+  const todayUTC = new Date()
+  todayUTC.setUTCHours(0, 0, 0, 0)
+  function dueInfo(due: Date | null) {
+    if (!due) return { dueDate: null as string | null, dueLabel: null as string | null, dueStatus: null as string | null }
+    const d = new Date(due)
+    d.setUTCHours(0, 0, 0, 0)
+    const diffDays = Math.round((d.getTime() - todayUTC.getTime()) / 86400000)
+    const dueDate = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`
+    const short = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "UTC" })
+    let dueStatus: string, dueLabel: string
+    if (diffDays < 0)       { dueStatus = "overdue"; dueLabel = `Overdue · ${short}` }
+    else if (diffDays === 0){ dueStatus = "today";   dueLabel = "Due today" }
+    else if (diffDays === 1){ dueStatus = "soon";    dueLabel = "Due tomorrow" }
+    else if (diffDays <= 3) { dueStatus = "soon";    dueLabel = `Due ${short}` }
+    else                    { dueStatus = "later";   dueLabel = `Due ${short}` }
+    return { dueDate, dueLabel, dueStatus }
+  }
+
   const jobsPlain = jobs.map((j) => ({
     id:             j.id,
     title:          j.title,
@@ -29,6 +48,7 @@ export default async function JobBoardPage() {
     assignedToId:   j.assignedToId,
     assignedToName: j.assignedToName,
     hasNewReply:    j.hasNewReply,
+    ...dueInfo(j.dueDate),
     date: (j.receivedAt ?? j.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
     messages: j.messages.map((m) => ({
       id:         m.id,

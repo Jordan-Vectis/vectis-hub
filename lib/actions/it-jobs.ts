@@ -72,6 +72,20 @@ export async function addITJobNote(jobId: string, body: string) {
   revalidatePath("/tools/job-board")
 }
 
+export async function setITJobDueDate(id: string, dueDate: string | null) {
+  await requireUser()
+  // dueDate arrives as a "YYYY-MM-DD" string from the date input (or null to clear).
+  // Stored at midnight UTC so the date-only comparison on the board stays stable.
+  let value: Date | null = null
+  if (dueDate) {
+    const d = new Date(`${dueDate}T00:00:00.000Z`)
+    if (isNaN(d.getTime())) throw new Error("Invalid date")
+    value = d
+  }
+  await prisma.iTJob.update({ where: { id }, data: { dueDate: value } })
+  revalidatePath("/tools/job-board")
+}
+
 export async function clearITJobReplyFlag(id: string) {
   await requireUser()
   await prisma.iTJob.update({ where: { id }, data: { hasNewReply: false } })

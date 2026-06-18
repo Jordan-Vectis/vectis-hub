@@ -10,7 +10,16 @@ type Job = {
   fromName: string | null; fromEmail: string | null
   status: string; source: string; webLink: string | null
   assignedToId: string | null; assignedToName: string | null
-  hasNewReply: boolean; date: string; messages: Message[]
+  hasNewReply: boolean
+  dueDate: string | null; dueLabel: string | null; dueStatus: string | null
+  date: string; messages: Message[]
+}
+
+const DUE_BADGE: Record<string, string> = {
+  overdue: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+  today:   "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  soon:    "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  later:   "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300",
 }
 
 const AVATAR_COLORS = [
@@ -56,10 +65,12 @@ export default function BoardClient({
     const isEmail = job.source === "EMAIL"
     const done = job.status === "DONE"
     const initials = (job.assignedToName ?? "").split(/\s+/).filter(Boolean).slice(0, 2).map((s) => s[0]?.toUpperCase()).join("")
+    const overdue = !done && job.dueStatus === "overdue"
+    const ring = overdue ? "ring-2 ring-red-400/70" : job.hasNewReply ? "ring-2 ring-amber-400/70" : ""
     return (
       <button
         onClick={() => setSelectedId(job.id)}
-        className={`w-full text-left bg-white dark:bg-[#202125] rounded-xl border border-gray-200 dark:border-gray-700/60 border-l-4 ${isEmail ? "border-l-blue-500" : "border-l-emerald-500"} p-3.5 shadow-sm hover:shadow-md transition-shadow ${job.hasNewReply ? "ring-2 ring-amber-400/70" : ""}`}
+        className={`w-full text-left bg-white dark:bg-[#202125] rounded-xl border border-gray-200 dark:border-gray-700/60 border-l-4 ${isEmail ? "border-l-blue-500" : "border-l-emerald-500"} p-3.5 shadow-sm hover:shadow-md transition-shadow ${ring}`}
       >
         {/* Title + completion circle */}
         <div className="flex items-start gap-2.5">
@@ -72,11 +83,16 @@ export default function BoardClient({
 
         {job.body && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 ml-[26px] line-clamp-2 break-words">{job.body}</p>}
 
-        {/* Source tag */}
-        <div className="ml-[26px] mt-2">
+        {/* Source tag + due date */}
+        <div className="ml-[26px] mt-2 flex items-center gap-1.5 flex-wrap">
           <span className={`inline-block text-[11px] px-2 py-0.5 rounded-md font-medium ${isEmail ? "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"}`}>
             {isEmail ? "✉ Email" : "✎ Manual"}
           </span>
+          {!done && job.dueLabel && (
+            <span className={`inline-block text-[11px] px-2 py-0.5 rounded-md font-medium ${DUE_BADGE[job.dueStatus ?? "later"]}`}>
+              📅 {job.dueLabel}
+            </span>
+          )}
         </div>
 
         {/* Footer: assignee avatar + date · reply count */}
