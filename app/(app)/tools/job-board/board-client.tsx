@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { createITJob, setITStaff } from "@/lib/actions/it-jobs"
+import { createITJob, setITStaff, createTestITJob } from "@/lib/actions/it-jobs"
 import JobDetailModal from "./job-detail-modal"
 
 type JobImage = { id: string; filename: string; url: string }
@@ -149,6 +149,7 @@ export default function BoardClient({
           <p className="text-base text-gray-500 mt-1">IT jobs from the IT@vectis.co.uk inbox, plus anything added by hand.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={() => startTransition(async () => { await createTestITJob() })} disabled={isPending} className="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 text-base font-semibold px-5 py-3 rounded-xl transition-colors disabled:opacity-50" title="Create a sample job for testing the layout">🧪 Test email</button>
           <button onClick={() => setShowStaff(true)} className="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-base font-semibold px-5 py-3 rounded-xl transition-colors">IT staff</button>
           <button onClick={() => setShowSetup((s) => !s)} className="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-base font-semibold px-5 py-3 rounded-xl transition-colors">Email setup</button>
           <button onClick={() => setShowAdd((s) => !s)} className="bg-blue-600 hover:bg-blue-700 text-white text-base font-semibold px-6 py-3 rounded-xl transition-colors">+ Add job</button>

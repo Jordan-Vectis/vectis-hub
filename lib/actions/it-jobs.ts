@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { syncITMailbox } from "@/lib/it-mailbox"
-import { deleteObjectsFromR2 } from "@/lib/r2"
+import { deleteObjectsFromR2, uploadBufferToR2 } from "@/lib/r2"
+import sharp from "sharp"
 
 const STATUSES = ["NEW", "IN_PROGRESS", "WAITING", "DONE"]
 
@@ -108,6 +109,76 @@ export async function deleteITJob(id: string) {
 export async function setITStaff(userId: string, value: boolean) {
   await requireAdmin()
   await prisma.user.update({ where: { id: userId }, data: { isITStaff: value } })
+  revalidatePath("/tools/job-board")
+}
+
+// Spin up a realistic sample job for testing the rendering (HTML body, an inline
+// signature logo via cid, two screenshot attachments, a [image.jpeg] placeholder
+// and a forwarded section) — no email/Make round-trip needed.
+export async function createTestITJob() {
+  await requireAdmin()
+  const stamp = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+
+  const html = `
+<div style="font-family:Arial,sans-serif;font-size:14px;color:#222">
+  <p>Hi IT,</p>
+  <p>My laptop won't connect to the <b>WiFi</b> this morning — see the screenshots attached. It started after yesterday's update.</p>
+  <p>[image0.jpeg]</p>
+  <p>Thanks,<br>Test Customer</p>
+  <hr>
+  <div style="color:#666;font-size:12px">
+    <p><b>Test Customer</b><br>Sample Department</p>
+    <img src="cid:test-inline-logo" alt="logo" width="180">
+    <p>The Hambleton Group Ltd · Fleck Way, Thornaby</p>
+  </div>
+  <div style="border-top:1px solid #ccc;margin-top:12px;padding-top:8px;color:#888;font-size:12px">
+    <p>From: someone@example.com<br>Sent: 12 June 2026 09:00<br>To: IT<br>Subject: Original request</p>
+    <p>This is the earlier forwarded message in the thread.</p>
+  </div>
+</div>`.trim()
+
+  const body = [
+    "Hi IT,",
+    "My laptop won't connect to the WiFi this morning — see the screenshots attached.",
+    "[image0.jpeg]",
+    "Thanks,\nTest Customer",
+    "From: someone@example.com\nSent: 12 June 2026 09:00\nTo: IT\nSubject: Original request",
+    "This is the earlier forwarded message in the thread.",
+  ].join("\n\n")
+
+  const job = await prisma.iTJob.create({
+    data: {
+      title:      `🧪 TEST email — ${stamp}`,
+      body,
+      bodyHtml:   html,
+      fromName:   "Test Customer",
+      fromEmail:  "test.customer@example.com",
+      status:     "NEW",
+      source:     "EMAIL",
+      receivedAt: new Date(),
+    },
+    select: { id: true },
+  })
+
+  // Inline signature logo (referenced by cid:test-inline-logo in the HTML).
+  const logo = await sharp({ create: { width: 220, height: 90, channels: 4, background: { r: 230, g: 232, b: 245, alpha: 1 } } }).png().toBuffer()
+  const logoKey = `it-jobs/${job.id}/test-logo.png`
+  await uploadBufferToR2(logo, logoKey, "image/png")
+  await prisma.iTJobAttachment.create({
+    data: { jobId: job.id, filename: "signature-logo.png", mimeType: "image/png", size: logo.length, r2Key: logoKey, contentId: "test-inline-logo" },
+  })
+
+  // Two screenshot attachments (no Content-ID => shown as thumbnails).
+  const colours = [{ r: 70, g: 110, b: 190 }, { r: 200, g: 95, b: 95 }]
+  for (let i = 0; i < colours.length; i++) {
+    const photo = await sharp({ create: { width: 800, height: 600, channels: 3, background: colours[i] } }).jpeg().toBuffer()
+    const key = `it-jobs/${job.id}/test-photo-${i}.jpg`
+    await uploadBufferToR2(photo, key, "image/jpeg")
+    await prisma.iTJobAttachment.create({
+      data: { jobId: job.id, filename: `screenshot-${i + 1}.jpg`, mimeType: "image/jpeg", size: photo.length, r2Key: key, contentId: null },
+    })
+  }
+
   revalidatePath("/tools/job-board")
 }
 
