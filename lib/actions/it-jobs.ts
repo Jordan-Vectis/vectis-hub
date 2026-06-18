@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { syncITMailbox } from "@/lib/it-mailbox"
+import { deleteObjectsFromR2 } from "@/lib/r2"
 
 const STATUSES = ["NEW", "IN_PROGRESS", "WAITING", "DONE"]
 
@@ -94,7 +95,13 @@ export async function clearITJobReplyFlag(id: string) {
 
 export async function deleteITJob(id: string) {
   await requireUser()
+  // Pull the R2 keys first; deleting the job cascades the attachment rows away.
+  const atts = await prisma.iTJobAttachment.findMany({ where: { jobId: id }, select: { r2Key: true } })
   await prisma.iTJob.delete({ where: { id } })
+  if (atts.length) {
+    try { await deleteObjectsFromR2(atts.map((a) => a.r2Key)) }
+    catch (e) { console.error("deleteITJob: R2 cleanup failed", e) }
+  }
   revalidatePath("/tools/job-board")
 }
 

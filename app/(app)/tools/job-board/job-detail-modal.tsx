@@ -5,7 +5,8 @@ import {
   updateITJobStatus, assignITJob, addITJobNote, clearITJobReplyFlag, deleteITJob, setITJobDueDate,
 } from "@/lib/actions/it-jobs"
 
-type Message = { id: string; kind: string; authorName: string | null; body: string; when: string }
+type JobImage = { id: string; filename: string; url: string }
+type Message = { id: string; kind: string; authorName: string | null; body: string; when: string; images: JobImage[] }
 type Job = {
   id: string; title: string; body: string
   fromName: string | null; fromEmail: string | null
@@ -13,7 +14,24 @@ type Job = {
   assignedToId: string | null; assignedToName: string | null
   hasNewReply: boolean
   dueDate: string | null; dueLabel: string | null; dueStatus: string | null
-  date: string; messages: Message[]
+  date: string; images: JobImage[]; messages: Message[]
+}
+
+function Thumbs({ images }: { images: JobImage[] }) {
+  if (!images.length) return null
+  return (
+    <div className="flex flex-wrap gap-2 mt-3">
+      {images.map((img) => (
+        <a key={img.id} href={img.url} target="_blank" rel="noopener noreferrer" title={img.filename} className="block">
+          <img
+            src={img.url}
+            alt={img.filename}
+            className="h-24 w-24 object-cover rounded-lg border border-gray-200 dark:border-gray-700 hover:opacity-80 transition-opacity"
+          />
+        </a>
+      ))}
+    </div>
+  )
 }
 
 const STATUSES: [string, string][] = [
@@ -187,6 +205,7 @@ export default function JobDetailModal({
             <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 p-4 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words max-h-72 overflow-y-auto">
               {job.body || <span className="text-gray-400">No content</span>}
             </div>
+            <Thumbs images={job.images} />
           </div>
 
           {/* Conversation */}
@@ -223,6 +242,7 @@ export default function JobDetailModal({
                   <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
                     {m.body}
                   </p>
+                  <Thumbs images={m.images} />
                 </div>
               ))}
             </div>

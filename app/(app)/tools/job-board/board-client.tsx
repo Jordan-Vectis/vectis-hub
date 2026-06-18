@@ -4,7 +4,8 @@ import { useState, useTransition } from "react"
 import { createITJob, setITStaff } from "@/lib/actions/it-jobs"
 import JobDetailModal from "./job-detail-modal"
 
-type Message = { id: string; kind: string; authorName: string | null; body: string; when: string }
+type JobImage = { id: string; filename: string; url: string }
+type Message = { id: string; kind: string; authorName: string | null; body: string; when: string; images: JobImage[] }
 type Job = {
   id: string; title: string; body: string
   fromName: string | null; fromEmail: string | null
@@ -12,7 +13,7 @@ type Job = {
   assignedToId: string | null; assignedToName: string | null
   hasNewReply: boolean
   dueDate: string | null; dueLabel: string | null; dueStatus: string | null
-  date: string; messages: Message[]
+  date: string; images: JobImage[]; messages: Message[]
 }
 
 const DUE_BADGE: Record<string, string> = {
@@ -62,6 +63,7 @@ export default function BoardClient({
 
   function JobCard({ job }: { job: Job }) {
     const replyCount = job.messages.filter((m) => m.kind === "REPLY").length
+    const imageCount = job.images.length + job.messages.reduce((n, m) => n + m.images.length, 0)
     const isEmail = job.source === "EMAIL"
     const done = job.status === "DONE"
     const initials = (job.assignedToName ?? "").split(/\s+/).filter(Boolean).slice(0, 2).map((s) => s[0]?.toUpperCase()).join("")
@@ -105,9 +107,14 @@ export default function BoardClient({
             )}
             <span className="text-xs text-gray-400 truncate">{job.date}</span>
           </div>
-          {replyCount > 0 && (
-            <span className="text-xs text-gray-400 flex items-center gap-1 flex-shrink-0">💬 {replyCount}</span>
-          )}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {imageCount > 0 && (
+              <span className="text-xs text-gray-400 flex items-center gap-1" title={`${imageCount} image${imageCount === 1 ? "" : "s"}`}>🖼 {imageCount}</span>
+            )}
+            {replyCount > 0 && (
+              <span className="text-xs text-gray-400 flex items-center gap-1">💬 {replyCount}</span>
+            )}
+          </div>
         </div>
       </button>
     )

@@ -1014,6 +1014,7 @@ model ITJob {
   updatedAt      DateTime  @updatedAt
 
   messages       ITJobMessage[]
+  attachments    ITJobAttachment[]
 
   @@index([status])
   @@index([receivedAt])
@@ -1034,7 +1035,27 @@ model ITJobMessage {
   body        String   @db.Text
   createdAt   DateTime @default(now())
 
+  attachments ITJobAttachment[]
+
   @@index([jobId])
+}
+
+// An image attached to a job. messageId is null for the original email's
+// images, or set when the image arrived on a reply (ITJobMessage). Stored in R2.
+model ITJobAttachment {
+  id        String        @id @default(cuid())
+  jobId     String
+  job       ITJob         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  messageId String?
+  message   ITJobMessage? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  filename  String
+  mimeType  String
+  size      Int
+  r2Key     String
+  createdAt DateTime      @default(now())
+
+  @@index([jobId])
+  @@index([messageId])
 }
 
 // Singleton (id = "global") — stores the delegated OAuth tokens for the shared

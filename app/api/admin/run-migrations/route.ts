@@ -398,6 +398,25 @@ const MIGRATIONS = [
   // 2026-06-18 — Job Board due dates
   `ALTER TABLE "ITJob" ADD COLUMN IF NOT EXISTS "dueDate" TIMESTAMP(3)`,
   `CREATE INDEX IF NOT EXISTS "ITJob_dueDate_idx" ON "ITJob"("dueDate")`,
+
+  // 2026-06-18 — Job Board image attachments (email images stored in R2)
+  `CREATE TABLE IF NOT EXISTS "ITJobAttachment" (
+    "id"        TEXT         NOT NULL,
+    "jobId"     TEXT         NOT NULL,
+    "messageId" TEXT,
+    "filename"  TEXT         NOT NULL,
+    "mimeType"  TEXT         NOT NULL,
+    "size"      INTEGER      NOT NULL,
+    "r2Key"     TEXT         NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "ITJobAttachment_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "ITJobAttachment_jobId_fkey" FOREIGN KEY ("jobId")
+      REFERENCES "ITJob"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "ITJobAttachment_messageId_fkey" FOREIGN KEY ("messageId")
+      REFERENCES "ITJobMessage"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "ITJobAttachment_jobId_idx"     ON "ITJobAttachment"("jobId")`,
+  `CREATE INDEX IF NOT EXISTS "ITJobAttachment_messageId_idx" ON "ITJobAttachment"("messageId")`,
 ]
 
 export async function POST() {

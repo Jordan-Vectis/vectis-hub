@@ -1,7 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { uploadBufferToR2 } from "@/lib/r2"
 
-export const maxDuration = 30
+export const maxDuration = 60
+
+const MAX_FILES = 20
+const MAX_FILE_BYTES = 25 * 1024 * 1024 // 25 MB per image
+
+type IncomingFile = { filename: string; mimeType: string; size: number; buffer: Buffer }
+
+// Treat as an image if the content type says so, or the filename extension does
+// (Make sometimes forwards files as application/octet-stream).
+function isImage(name: string, type: string): boolean {
+  if (type && type.toLowerCase().startsWith("image/")) return true
+  return /\.(jpe?g|png|gif|webp|heic|heif|bmp|tiff?|avif)$/i.test(name || "")
+}
 
 // POST /api/it-mailbox/inbound?key=SECRET
 // Public webhook hit by the inbound-email service (Make) when an email is
@@ -93,11 +106,24 @@ export async function POST(req: NextRequest) {
 
     const ct = req.headers.get("content-type") || ""
     let body: any
+    const files: IncomingFile[] = []
     if (ct.includes("application/json")) {
       body = await req.json()
     } else {
       const form = await req.formData()
-      body = Object.fromEntries(Array.from(form.entries()).map(([k, v]) => [k, typeof v === "string" ? v : ""]))
+      const entries = Array.from(form.entries())
+      body = Object.fromEntries(entries.filter(([, v]) => typeof v === "string").map(([k, v]) => [k, v as string]))
+      // File parts = image attachments forwarded by Make (one File field per image;
+      // empty/oversized/non-image parts are skipped silently).
+      for (const [, v] of entries) {
+        if (files.length >= MAX_FILES) break
+        if (typeof v === "string" || !v || typeof (v as any).arrayBuffer !== "function") continue
+        const f = v as File
+        if (!f.size || f.size > MAX_FILE_BYTES) continue
+        if (!isImage(f.name, f.type)) continue
+        const buffer = Buffer.from(await f.arrayBuffer())
+        files.push({ filename: f.name || "image", mimeType: f.type || "application/octet-stream", size: f.size, buffer })
+      }
     }
 
     const subject   = pick(body, ["Subject", "subject", "headers.Subject"]) || "(no subject)"
@@ -164,6 +190,26 @@ export async function POST(req: NextRequest) {
       if (dupe) return NextResponse.json({ ok: true, duplicate: true })
     }
 
+    // Upload the collected image files to R2 and link them to a job (and, for a
+    // reply, to that message). Returns how many were stored.
+    const saveFiles = async (jobId: string, messageId: string | null): Promise<number> => {
+      let n = 0
+      for (const f of files) {
+        const safe = (f.filename || "image").replace(/[^\w.\-]+/g, "_").slice(-80)
+        const key = `it-jobs/${jobId}/${Date.now()}-${n}-${safe}`
+        try {
+          await uploadBufferToR2(f.buffer, key, f.mimeType)
+          await prisma.iTJobAttachment.create({
+            data: { jobId, messageId, filename: f.filename.slice(0, 200), mimeType: f.mimeType, size: f.size, r2Key: key },
+          })
+          n++
+        } catch (err) {
+          console.error("it-mailbox inbound: attachment upload failed", f.filename, err)
+        }
+      }
+      return n
+    }
+
     // Is this a reply on an existing thread?
     // 1) Conversation Id — exact, reliable (preferred).
     // 2) In-Reply-To/References headers — exact, when present.
@@ -192,7 +238,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (parent) {
-      await prisma.iTJobMessage.create({
+      const msg = await prisma.iTJobMessage.create({
         data: {
           jobId:       parent.id,
           kind:        "REPLY",
@@ -200,15 +246,17 @@ export async function POST(req: NextRequest) {
           authorEmail: senderEmail,
           body:        content,
         },
+        select: { id: true },
       })
+      const images = await saveFiles(parent.id, msg.id)
       await prisma.iTJob.update({
         where: { id: parent.id },
         data:  { hasNewReply: true, updatedAt: new Date() },
       })
-      return NextResponse.json({ ok: true, reply: true })
+      return NextResponse.json({ ok: true, reply: true, images })
     }
 
-    await prisma.iTJob.create({
+    const job = await prisma.iTJob.create({
       data: {
         title:          subject.slice(0, 300),
         body:           content,
@@ -221,9 +269,11 @@ export async function POST(req: NextRequest) {
         threadKey,
         receivedAt:     new Date(),
       },
+      select: { id: true },
     })
+    const images = await saveFiles(job.id, null)
 
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, images })
   } catch (e: any) {
     console.error("it-mailbox inbound error:", e)
     return NextResponse.json({ error: e?.message ?? "Error" }, { status: 500 })

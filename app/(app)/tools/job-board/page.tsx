@@ -1,6 +1,7 @@
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
+import { getSignedImageUrl } from "@/lib/r2"
 import BoardClient from "./board-client"
 
 export default async function JobBoardPage() {
@@ -11,11 +12,26 @@ export default async function JobBoardPage() {
   const [jobs, itStaff, allUsers] = await Promise.all([
     prisma.iTJob.findMany({
       orderBy: [{ receivedAt: "desc" }, { createdAt: "desc" }],
-      include: { messages: { orderBy: { createdAt: "asc" } } },
+      include: {
+        // Job-level images = the original email's (messageId null). Reply images
+        // hang off their own message.
+        attachments: { where: { messageId: null }, orderBy: { createdAt: "asc" } },
+        messages: { orderBy: { createdAt: "asc" }, include: { attachments: { orderBy: { createdAt: "asc" } } } },
+      },
     }),
     prisma.user.findMany({ where: { isITStaff: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.user.findMany({ select: { id: true, name: true, isITStaff: true }, orderBy: { name: "asc" } }),
   ])
+
+  // Pre-sign every attachment's R2 key (URLs valid 1h) so the client can <img> them directly.
+  const allAttachments = jobs.flatMap((j) => [...j.attachments, ...j.messages.flatMap((m) => m.attachments)])
+  const urlById = new Map<string, string>()
+  await Promise.all(
+    allAttachments.map(async (a) => {
+      try { urlById.set(a.id, await getSignedImageUrl(a.r2Key)) } catch { /* skip broken keys */ }
+    })
+  )
+  const toImage = (a: { id: string; filename: string }) => ({ id: a.id, filename: a.filename, url: urlById.get(a.id) ?? "" })
 
   // Date-only due info, computed server-side to keep board colours stable (no client/SSR drift).
   const todayUTC = new Date()
@@ -50,12 +66,14 @@ export default async function JobBoardPage() {
     hasNewReply:    j.hasNewReply,
     ...dueInfo(j.dueDate),
     date: (j.receivedAt ?? j.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+    images: j.attachments.filter((a) => urlById.has(a.id)).map(toImage),
     messages: j.messages.map((m) => ({
       id:         m.id,
       kind:       m.kind,
       authorName: m.authorName,
       body:       m.body,
       when:       m.createdAt.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+      images:     m.attachments.filter((a) => urlById.has(a.id)).map(toImage),
     })),
   }))
 
