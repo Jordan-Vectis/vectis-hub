@@ -118,8 +118,19 @@ export default async function JobBoardPage() {
     const candidates: number[] = []
     const bq = html.search(/<blockquote[\s>]/i); if (bq >= 0) candidates.push(bq)
     const gq = html.search(/class=["']?[^"'>]*gmail_quote/i); if (gq >= 0) candidates.push(gq)
-    const fm = /\bFrom:\s/i.exec(html)
-    if (fm && /Subject:/i.test(htmlToText(html.slice(fm.index, fm.index + 1500)))) candidates.push(fm.index)
+    // "From:" header — may be wrapped in tags (e.g. <b>From:</b>); only treat it
+    // as a forward boundary if a Subject: follows close behind.
+    const fm = /From:\s*(?:<[^>]*>\s*)*\S/i.exec(html)
+    if (fm && /Subject:/i.test(htmlToText(html.slice(fm.index, fm.index + 1500)))) {
+      // Back up to the start of the block element wrapping the header (so the whole
+      // forwarded chunk comes out together) if one sits just before it.
+      const before = html.slice(0, fm.index)
+      const blockStart = Math.max(
+        before.lastIndexOf("<div"), before.lastIndexOf("<blockquote"),
+        before.lastIndexOf("<table"), before.lastIndexOf("<hr"),
+      )
+      candidates.push(blockStart > 0 && fm.index - blockStart < 400 ? blockStart : fm.index)
+    }
     const idx = candidates.length ? Math.min(...candidates) : -1
     if (idx <= 0) return { mainHtml: html, quoted: null }
 
