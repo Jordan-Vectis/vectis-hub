@@ -5,6 +5,7 @@ import {
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, LabelList,
 } from "recharts"
 import type { MarketingReport } from "@/lib/ga"
+import InfoTip from "./info-tip"
 
 const TOOLTIP = { background: "#2C2C2E", border: "1px solid #374151", borderRadius: 8, color: "#f3f4f6", fontSize: 13 }
 const PIE_COLOURS = ["#ec4899", "#2AB4A6", "#6366f1", "#f59e0b", "#22c55e", "#06b6d4", "#a855f7"]
@@ -29,11 +30,11 @@ function downloadCsv(rows: { name: string; value: number; secondary?: number }[]
   URL.revokeObjectURL(url)
 }
 
-function Card({ title, children, csv }: { title: string; children: React.ReactNode; csv?: { rows: { name: string; value: number; secondary?: number }[]; filename: string } }) {
+function Card({ title, children, csv, help }: { title: string; children: React.ReactNode; csv?: { rows: { name: string; value: number; secondary?: number }[]; filename: string }; help?: string }) {
   return (
     <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-2xl p-5">
       <div className="flex items-center justify-between gap-2 mb-4">
-        <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{title}</h2>
+        <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{title}{help && <InfoTip text={help} />}</h2>
         {csv && csv.rows.length > 0 && (
           <button
             onClick={() => downloadCsv(csv.rows, csv.filename)}
@@ -91,7 +92,7 @@ export default function MarketingCharts({ data }: { data: MarketingReport }) {
 
   return (
     <div className="space-y-6">
-      <Card title="Visitors over time">
+      <Card title="Visitors over time" help="Daily visitors (active users) and visits (sessions) across the selected period. The two lines usually track closely.">
         <div style={{ height: 300 }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={series} margin={{ top: 6, right: 16, left: 0, bottom: 4 }}>
@@ -107,14 +108,14 @@ export default function MarketingCharts({ data }: { data: MarketingReport }) {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card title="Traffic by channel" csv={{ rows: data.channels, filename: "channels.csv" }}><HBars data={data.channels} colour="#ec4899" suffix="sessions" /></Card>
-        <Card title="Top sources" csv={{ rows: data.sources, filename: "sources.csv" }}><HBars data={data.sources} colour="#6366f1" suffix="sessions" /></Card>
-        <Card title="Top pages" csv={{ rows: data.pages, filename: "top-pages.csv" }}><HBars data={data.pages} colour="#2AB4A6" suffix="views" /></Card>
-        <Card title="Top landing pages" csv={{ rows: data.landingPages, filename: "landing-pages.csv" }}><HBars data={data.landingPages} colour="#06b6d4" suffix="sessions" /></Card>
-        <Card title="Events" csv={{ rows: data.events, filename: "events.csv" }}><HBars data={data.events} colour="#a855f7" suffix="count" /></Card>
-        <Card title="Top countries" csv={{ rows: data.countries, filename: "countries.csv" }}><HBars data={data.countries} colour="#f59e0b" suffix="users" /></Card>
-        <Card title="Devices"><Donut data={data.devices} /></Card>
-        <Card title="New vs returning"><Donut data={data.newReturning} /></Card>
+        <Card title="Traffic by channel" csv={{ rows: data.channels, filename: "channels.csv" }} help="Where visits came from, grouped into broad buckets. Direct = typed your web address, used a bookmark, or the source couldn't be detected. Organic Search = found you through an unpaid Google/Bing result. Paid Search = clicked one of your paid Google ads. Organic/Paid Social = came from social media, unpaid or paid. Referral = clicked a link to you on another website. Email = came from an email."><HBars data={data.channels} colour="#ec4899" suffix="sessions" /></Card>
+        <Card title="Top sources" csv={{ rows: data.sources, filename: "sources.csv" }} help="The exact source and medium each visit came from, e.g. 'google / organic' (an unpaid Google result) or 'facebook / cpc' (a paid Facebook click)."><HBars data={data.sources} colour="#6366f1" suffix="sessions" /></Card>
+        <Card title="Top pages" csv={{ rows: data.pages, filename: "top-pages.csv" }} help="The pages on your site that were viewed the most."><HBars data={data.pages} colour="#2AB4A6" suffix="views" /></Card>
+        <Card title="Top landing pages" csv={{ rows: data.landingPages, filename: "landing-pages.csv" }} help="The first page people arrived on — where their visit began. Good for seeing which pages pull people in."><HBars data={data.landingPages} colour="#06b6d4" suffix="sessions" /></Card>
+        <Card title="Events" csv={{ rows: data.events, filename: "events.csv" }} help="Things visitors did on the site. Google automatically tracks page views, scrolls, clicks and similar; this counts how often each happened."><HBars data={data.events} colour="#a855f7" suffix="count" /></Card>
+        <Card title="Top countries" csv={{ rows: data.countries, filename: "countries.csv" }} help="Which countries your visitors are in. Heavy traffic from far-away regions is often bots — use the 'Hide bot traffic' toggle to strip it out."><HBars data={data.countries} colour="#f59e0b" suffix="users" /></Card>
+        <Card title="Devices" help="The split between desktop computers, mobiles and tablets."><Donut data={data.devices} /></Card>
+        <Card title="New vs returning" help="First-time visitors versus people who have visited before."><Donut data={data.newReturning} /></Card>
       </div>
     </div>
   )

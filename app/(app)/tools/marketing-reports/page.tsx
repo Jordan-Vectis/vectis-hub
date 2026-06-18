@@ -3,6 +3,9 @@ import { redirect } from "next/navigation"
 import Link from "next/link"
 import { isGaConfigured, getMarketingReport, realtimeActiveUsers, rangeDays, type GaRange, type MetricKey } from "@/lib/ga"
 import MarketingCharts from "./marketing-charts"
+import InfoTip from "./info-tip"
+
+const BOT_TIP = "When on, hides traffic from countries that are mostly automated bots/scrapers (currently China, Hong Kong, Taiwan, Singapore, India, Vietnam, Indonesia, Philippines, Thailand, Pakistan and Bangladesh) so the figures better reflect real visitors. Japan and Korea are deliberately kept in (likely genuine collectors). Ask IT to adjust the list if needed."
 
 export const dynamic = "force-dynamic"
 export const metadata = { title: "Marketing Reports" }
@@ -29,16 +32,16 @@ function fmtPct(rate: number): string {
 
 const card = "bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800"
 
-const STATS: { key: MetricKey; label: string; fmt: (n: number) => string; higherBetter: boolean }[] = [
-  { key: "activeUsers",            label: "Active users",     fmt: fmtNum,      higherBetter: true },
-  { key: "newUsers",               label: "New users",        fmt: fmtNum,      higherBetter: true },
-  { key: "sessions",               label: "Sessions",         fmt: fmtNum,      higherBetter: true },
-  { key: "screenPageViews",        label: "Page views",       fmt: fmtNum,      higherBetter: true },
-  { key: "averageSessionDuration", label: "Avg session",      fmt: fmtDuration, higherBetter: true },
-  { key: "engagementRate",         label: "Engagement",       fmt: fmtPct,      higherBetter: true },
-  { key: "bounceRate",             label: "Bounce rate",      fmt: fmtPct,      higherBetter: false },
-  { key: "engagedSessions",        label: "Engaged sessions", fmt: fmtNum,      higherBetter: true },
-  { key: "keyEvents",              label: "Key events",       fmt: fmtNum,      higherBetter: true },
+const STATS: { key: MetricKey; label: string; fmt: (n: number) => string; higherBetter: boolean; help: string }[] = [
+  { key: "activeUsers",            label: "Active users",     fmt: fmtNum,      higherBetter: true,  help: "The number of different people who visited the site in this period. Someone who comes back several times is still counted once." },
+  { key: "newUsers",               label: "New users",        fmt: fmtNum,      higherBetter: true,  help: "People visiting for the first time — Google has no record of them before now." },
+  { key: "sessions",               label: "Sessions",         fmt: fmtNum,      higherBetter: true,  help: "Individual visits. One person can have several sessions if they come back. A session ends after 30 minutes of inactivity." },
+  { key: "screenPageViews",        label: "Page views",       fmt: fmtNum,      higherBetter: true,  help: "The total number of pages viewed across all visits." },
+  { key: "averageSessionDuration", label: "Avg session",      fmt: fmtDuration, higherBetter: true,  help: "How long the average visit lasts." },
+  { key: "engagementRate",         label: "Engagement",       fmt: fmtPct,      higherBetter: true,  help: "The share of visits where someone actually did something — stayed over 10 seconds, viewed more than one page, or triggered a key event — rather than leaving immediately. Higher is better." },
+  { key: "bounceRate",             label: "Bounce rate",      fmt: fmtPct,      higherBetter: false, help: "The opposite of engagement — the share of visits where someone left almost straight away without doing anything. Lower is better." },
+  { key: "engagedSessions",        label: "Engaged sessions", fmt: fmtNum,      higherBetter: true,  help: "The count of visits that were 'engaged' (lasted over 10 seconds, had a key event, or viewed 2+ pages)." },
+  { key: "keyEvents",              label: "Key events",       fmt: fmtNum,      higherBetter: true,  help: "Important actions you've told Google to track — e.g. a contact form sent or a phone-number click. Google used to call these 'conversions'." },
 ]
 
 function Delta({ pct, higherBetter }: { pct: number | null; higherBetter: boolean }) {
@@ -55,13 +58,15 @@ function Delta({ pct, higherBetter }: { pct: number | null; higherBetter: boolea
 export default async function MarketingReportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string }>
+  searchParams: Promise<{ range?: string; bots?: string }>
 }) {
   const session = await auth()
   if (!session) redirect("/login")
 
-  const { range: rangeParam } = await searchParams
-  const range: GaRange = (["7d", "28d", "90d", "365d"].includes(rangeParam ?? "") ? rangeParam : "28d") as GaRange
+  const sp = await searchParams
+  const range: GaRange = (["7d", "28d", "90d", "365d"].includes(sp.range ?? "") ? sp.range : "28d") as GaRange
+  const excludeBots = sp.bots === "hide"
+  const linkFor = (r: GaRange, bots: boolean) => `/tools/marketing-reports?range=${r}${bots ? "&bots=hide" : ""}`
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -72,18 +77,31 @@ export default async function MarketingReportsPage({
           <p className="text-base text-gray-500 mt-1">Website analytics for vectis.co.uk, live from Google Analytics.</p>
         </div>
         {isGaConfigured() && (
-          <div className="flex gap-1.5 bg-gray-100 dark:bg-[#2C2C2E] rounded-xl p-1">
-            {RANGES.map((r) => (
-              <Link
-                key={r.key}
-                href={`/tools/marketing-reports?range=${r.key}`}
-                className={`px-3.5 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                  range === r.key ? "bg-pink-600 text-white" : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-                }`}
-              >
-                {r.label}
-              </Link>
-            ))}
+          <div className="flex items-center gap-2 flex-wrap">
+            <Link
+              href={linkFor(range, !excludeBots)}
+              className={`px-3.5 py-2 rounded-xl text-sm font-semibold border transition-colors ${
+                excludeBots
+                  ? "bg-pink-600 border-pink-600 text-white"
+                  : "bg-gray-100 dark:bg-[#2C2C2E] border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+              }`}
+            >
+              {excludeBots ? "✓ Bot traffic hidden" : "Hide bot traffic"}
+            </Link>
+            <InfoTip text={BOT_TIP} />
+            <div className="flex gap-1.5 bg-gray-100 dark:bg-[#2C2C2E] rounded-xl p-1 ml-1">
+              {RANGES.map((r) => (
+                <Link
+                  key={r.key}
+                  href={linkFor(r.key, excludeBots)}
+                  className={`px-3.5 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                    range === r.key ? "bg-pink-600 text-white" : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                  }`}
+                >
+                  {r.label}
+                </Link>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -91,7 +109,7 @@ export default async function MarketingReportsPage({
       {!isGaConfigured() ? (
         <SetupCard />
       ) : (
-        <ReportBody range={range} />
+        <ReportBody range={range} excludeBots={excludeBots} />
       )}
     </div>
   )
@@ -119,12 +137,12 @@ function SetupCard() {
   )
 }
 
-async function ReportBody({ range }: { range: GaRange }) {
+async function ReportBody({ range, excludeBots }: { range: GaRange; excludeBots: boolean }) {
   let data: Awaited<ReturnType<typeof getMarketingReport>> | null = null
   let realtime: number | null = null
   let error: string | null = null
   try {
-    [data, realtime] = await Promise.all([getMarketingReport(range), realtimeActiveUsers()])
+    [data, realtime] = await Promise.all([getMarketingReport(range, excludeBots), realtimeActiveUsers(excludeBots)])
   } catch (e: any) {
     error = e?.message ?? "Failed to load analytics"
   }
@@ -158,7 +176,7 @@ async function ReportBody({ range }: { range: GaRange }) {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {STATS.map((st) => (
           <div key={st.key} className={`${card} p-4`}>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{st.label}</p>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{st.label}<InfoTip text={st.help} /></p>
             <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{st.fmt(data!.summary[st.key])}</p>
             <div className="mt-1"><Delta pct={data!.deltas[st.key]} higherBetter={st.higherBetter} /></div>
           </div>
