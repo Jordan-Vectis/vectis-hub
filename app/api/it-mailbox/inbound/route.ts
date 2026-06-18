@@ -2,6 +2,32 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { uploadBufferToR2 } from "@/lib/r2"
 import sharp from "sharp"
+import sanitizeHtml from "sanitize-html"
+
+// Sanitise untrusted email HTML for safe rendering. Keeps formatting + images
+// (inline cid: refs survive — rewritten to signed R2 URLs at render time),
+// strips scripts/styles/iframes/event-handlers. Inline styles are kept (emails
+// rely on them) but the rendered block is isolated in the modal.
+function cleanEmailHtml(html: string): string {
+  const cleaned = sanitizeHtml(html, {
+    allowedTags: sanitizeHtml.defaults.allowedTags.concat([
+      "img", "h1", "h2", "u", "s", "span", "font", "center", "hr",
+      "table", "thead", "tbody", "tfoot", "tr", "td", "th", "caption", "col", "colgroup",
+    ]),
+    allowedAttributes: {
+      "*": ["style", "align", "valign", "dir", "width", "height", "bgcolor", "colspan", "rowspan"],
+      a: ["href", "name", "target", "rel"],
+      img: ["src", "alt", "title", "width", "height", "style"],
+      font: ["color", "face", "size"],
+    },
+    allowedSchemes: ["http", "https", "mailto", "tel"],
+    allowedSchemesByTag: { img: ["http", "https", "cid", "data"] },
+    transformTags: { a: sanitizeHtml.simpleTransform("a", { target: "_blank", rel: "noopener noreferrer" }) },
+    // Drop the PA-stamped thread id if it leaked into the HTML.
+    textFilter: (t) => t.replace(/VH-CID:\s*\S+/gi, ""),
+  })
+  return cleaned.trim()
+}
 
 export const maxDuration = 60
 
@@ -137,7 +163,7 @@ export async function POST(req: NextRequest) {
 
     // Upload the collected image files to R2 and link them to a job (and, for a
     // reply, to that message). Returns how many were stored.
-    const saveFiles = async (jobId: string, msgId: string | null): Promise<number> => {
+    const saveFiles = async (jobId: string, msgId: string | null, contentId: string | null = null): Promise<number> => {
       let n = 0
       for (const f of files) {
         const safe = (f.filename || "image").replace(/[^\w.\-]+/g, "_").slice(-80)
@@ -145,7 +171,7 @@ export async function POST(req: NextRequest) {
         try {
           await uploadBufferToR2(f.buffer, key, f.mimeType)
           await prisma.iTJobAttachment.create({
-            data: { jobId, messageId: msgId, filename: f.filename.slice(0, 200), mimeType: f.mimeType, size: f.size, r2Key: key },
+            data: { jobId, messageId: msgId, filename: f.filename.slice(0, 200), mimeType: f.mimeType, size: f.size, r2Key: key, contentId },
           })
           n++
         } catch (err) {
@@ -185,6 +211,11 @@ export async function POST(req: NextRequest) {
     const inReplyTo  = pick(body, ["InReplyTo", "In-Reply-To", "in_reply_to"]) || headerLine("In-Reply-To")
     const references = pick(body, ["References", "references"]) || headerLine("References")
 
+    // Sanitised HTML body (when the text module forwards it) for in-place rendering.
+    const htmlClean = html ? (cleanEmailHtml(html) || null) : null
+    // Content-ID of the image in an image-module delivery (inline => signature).
+    const fileCid = (pick(body, ["cid", "ContentId", "contentId", "Content-ID", "ContentID"]) || "").replace(/[<>]/g, "").trim() || null
+
     // When relayed by Power Automate the email is "from" the relay account, so the
     // real requester is carried in Reply-To. Prefer it for the requester details.
     const fromParsed    = parseAddress(fromRaw)
@@ -219,7 +250,7 @@ export async function POST(req: NextRequest) {
       if (dupe) {
         // Same email arriving again carrying another image (Make sends one image
         // per delivery) — attach it to the existing job rather than dropping it.
-        const images = files.length ? await saveFiles(dupe.id, null) : 0
+        const images = files.length ? await saveFiles(dupe.id, null, fileCid) : 0
         return NextResponse.json({ ok: true, duplicate: true, images })
       }
     }
@@ -256,7 +287,7 @@ export async function POST(req: NextRequest) {
     // the one job. The first delivery of a brand-new email has no parent yet — it
     // falls through to create the job below, and later deliveries land here.
     if (files.length && parent) {
-      const images = await saveFiles(parent.id, null)
+      const images = await saveFiles(parent.id, null, fileCid)
       await prisma.iTJob.update({ where: { id: parent.id }, data: { updatedAt: new Date() } })
       return NextResponse.json({ ok: true, appendedTo: "job", images })
     }
@@ -266,8 +297,13 @@ export async function POST(req: NextRequest) {
       // and the image module both fire, in any order). If we've already stored this
       // exact text — as the job body or an earlier message — don't make a duplicate.
       if (content) {
-        const parentJob = await prisma.iTJob.findUnique({ where: { id: parent.id }, select: { body: true } })
-        if (parentJob?.body === content) return NextResponse.json({ ok: true, duplicateText: "job" })
+        const parentJob = await prisma.iTJob.findUnique({ where: { id: parent.id }, select: { body: true, bodyHtml: true } })
+        if (parentJob?.body === content) {
+          // Same original email (e.g. arrived image-first). Backfill the HTML if we
+          // now have it but the job didn't.
+          if (htmlClean && !parentJob.bodyHtml) await prisma.iTJob.update({ where: { id: parent.id }, data: { bodyHtml: htmlClean } })
+          return NextResponse.json({ ok: true, duplicateText: "job" })
+        }
         const existing = await prisma.iTJobMessage.findFirst({ where: { jobId: parent.id, body: content }, select: { id: true } })
         if (existing) return NextResponse.json({ ok: true, duplicateText: "message" })
       }
@@ -279,6 +315,7 @@ export async function POST(req: NextRequest) {
           authorName:  senderName ?? null,
           authorEmail: senderEmail,
           body:        content,
+          bodyHtml:    htmlClean,
         },
         select: { id: true },
       })
@@ -293,6 +330,7 @@ export async function POST(req: NextRequest) {
       data: {
         title:          subject.slice(0, 300),
         body:           content,
+        bodyHtml:       htmlClean,
         fromName:       senderName ?? null,
         fromEmail:      senderEmail,
         status:         "NEW",
@@ -304,7 +342,7 @@ export async function POST(req: NextRequest) {
       },
       select: { id: true },
     })
-    const images = await saveFiles(job.id, null)
+    const images = await saveFiles(job.id, null, fileCid)
 
     return NextResponse.json({ ok: true, images })
   } catch (e: any) {

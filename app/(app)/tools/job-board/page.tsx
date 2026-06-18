@@ -33,6 +33,21 @@ export default async function JobBoardPage() {
   )
   const toImage = (a: { id: string; filename: string }) => ({ id: a.id, filename: a.filename, url: urlById.get(a.id) ?? "" })
 
+  // Rewrite inline cid: image refs in email HTML to signed R2 URLs. Inline images
+  // are the attachments carrying a Content-ID; all hang off the job (messageId null),
+  // so a job's attachment list resolves cids for the original email and its replies.
+  function renderHtml(html: string | null, atts: { id: string; contentId: string | null }[]): string | null {
+    if (!html) return null
+    let out = html
+    for (const a of atts) {
+      if (!a.contentId) continue
+      const url = urlById.get(a.id)
+      if (!url) continue
+      out = out.replace(new RegExp("cid:" + a.contentId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), url)
+    }
+    return out
+  }
+
   // Date-only due info, computed server-side to keep board colours stable (no client/SSR drift).
   const todayUTC = new Date()
   todayUTC.setUTCHours(0, 0, 0, 0)
@@ -66,14 +81,17 @@ export default async function JobBoardPage() {
     hasNewReply:    j.hasNewReply,
     ...dueInfo(j.dueDate),
     date: (j.receivedAt ?? j.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-    images: j.attachments.filter((a) => urlById.has(a.id)).map(toImage),
+    // Thumbnails = genuine attachments only (no Content-ID); inline images render in the HTML.
+    images: j.attachments.filter((a) => !a.contentId && urlById.has(a.id)).map(toImage),
+    bodyHtml: renderHtml(j.bodyHtml, j.attachments),
     messages: j.messages.map((m) => ({
       id:         m.id,
       kind:       m.kind,
       authorName: m.authorName,
       body:       m.body,
       when:       m.createdAt.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
-      images:     m.attachments.filter((a) => urlById.has(a.id)).map(toImage),
+      images:     m.attachments.filter((a) => !a.contentId && urlById.has(a.id)).map(toImage),
+      bodyHtml:   renderHtml(m.bodyHtml, j.attachments),
     })),
   }))
 

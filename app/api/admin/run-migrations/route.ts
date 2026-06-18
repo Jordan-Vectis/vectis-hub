@@ -417,6 +417,11 @@ const MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS "ITJobAttachment_jobId_idx"     ON "ITJobAttachment"("jobId")`,
   `CREATE INDEX IF NOT EXISTS "ITJobAttachment_messageId_idx" ON "ITJobAttachment"("messageId")`,
+
+  // 2026-06-18 — Job Board: render original email HTML + mark inline images by Content-ID
+  `ALTER TABLE "ITJob"           ADD COLUMN IF NOT EXISTS "bodyHtml"  TEXT`,
+  `ALTER TABLE "ITJobMessage"    ADD COLUMN IF NOT EXISTS "bodyHtml"  TEXT`,
+  `ALTER TABLE "ITJobAttachment" ADD COLUMN IF NOT EXISTS "contentId" TEXT`,
 ]
 
 export async function POST() {

@@ -996,6 +996,7 @@ model ITJob {
   id             String    @id @default(cuid())
   title          String
   body           String    @db.Text @default("")
+  bodyHtml       String?   @db.Text                  // sanitised HTML of the original email (if sent)
   fromName       String?
   fromEmail      String?
   status         String    @default("NEW")   // NEW | IN_PROGRESS | WAITING | DONE
@@ -1033,6 +1034,7 @@ model ITJobMessage {
   authorName  String?
   authorEmail String?
   body        String   @db.Text
+  bodyHtml    String?  @db.Text   // sanitised HTML of the reply (if sent)
   createdAt   DateTime @default(now())
 
   attachments ITJobAttachment[]
@@ -1052,6 +1054,7 @@ model ITJobAttachment {
   mimeType  String
   size      Int
   r2Key     String
+  contentId String?       // email Content-ID (set => inline image, e.g. signature; rendered in the HTML, not as a thumbnail)
   createdAt DateTime      @default(now())
 
   @@index([jobId])

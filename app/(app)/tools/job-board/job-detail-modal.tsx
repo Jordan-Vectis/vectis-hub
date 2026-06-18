@@ -6,15 +6,33 @@ import {
 } from "@/lib/actions/it-jobs"
 
 type JobImage = { id: string; filename: string; url: string }
-type Message = { id: string; kind: string; authorName: string | null; body: string; when: string; images: JobImage[] }
+type Message = { id: string; kind: string; authorName: string | null; body: string; bodyHtml: string | null; when: string; images: JobImage[] }
 type Job = {
-  id: string; title: string; body: string
+  id: string; title: string; body: string; bodyHtml: string | null
   fromName: string | null; fromEmail: string | null
   status: string; source: string; webLink: string | null
   assignedToId: string | null; assignedToName: string | null
   hasNewReply: boolean
   dueDate: string | null; dueLabel: string | null; dueStatus: string | null
   date: string; images: JobImage[]; messages: Message[]
+}
+
+// Render the email body: the real (sanitised) HTML on a white email-style panel
+// when we have it, otherwise the plain text. HTML is sanitised server-side.
+function EmailBody({ html, text }: { html: string | null; text: string }) {
+  if (html) {
+    return (
+      <div
+        className="bg-white text-gray-900 rounded-lg p-4 border border-gray-200 text-[15px] leading-relaxed break-words overflow-x-auto [&_img]:max-w-full [&_img]:h-auto [&_a]:text-blue-700 [&_a]:underline [&_table]:max-w-full [&_p]:my-1"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    )
+  }
+  return (
+    <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+      {text || <span className="text-gray-400">No content</span>}
+    </div>
+  )
 }
 
 function Thumbs({ images }: { images: JobImage[] }) {
@@ -91,6 +109,11 @@ export default function JobDetailModal({
     setNote("")
     run(() => addITJobNote(job.id, text))
   }
+
+  // Customer correspondence (original email + their replies) lives in the email
+  // thread; IT notes are internal-only and live in their own section.
+  const replies = job.messages.filter((m) => m.kind === "REPLY")
+  const notes   = job.messages.filter((m) => m.kind === "NOTE")
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-0 sm:p-6" onClick={onClose}>
@@ -199,56 +222,49 @@ export default function JobDetailModal({
             )}
           </div>
 
-          {/* Original message — customer's first email */}
+          {/* Customer email thread — original email + their replies (correspondence) */}
           <div>
-            <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide mb-2">Customer · original message</p>
-            <div className="rounded-xl bg-blue-50/60 dark:bg-blue-900/15 border border-blue-100 dark:border-blue-800/40 p-5 text-[15px] leading-relaxed text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words">
-              {job.body || <span className="text-gray-400">No content</span>}
+            <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide mb-2">Customer · email thread</p>
+            <div className="space-y-3">
+              <div className="rounded-xl bg-blue-50/60 dark:bg-blue-900/15 border border-blue-100 dark:border-blue-800/40 p-5 text-gray-800 dark:text-gray-200">
+                <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                  <span className="text-xs font-bold text-blue-700 dark:text-blue-300">{requesterName ?? "Customer"} · original</span>
+                  <span className="text-xs text-gray-400">{job.date}</span>
+                </div>
+                <EmailBody html={job.bodyHtml} text={job.body} />
+                <Thumbs images={job.images} />
+              </div>
+              {replies.map((m) => (
+                <div key={m.id} className="rounded-xl bg-blue-50/60 dark:bg-blue-900/15 border border-blue-100 dark:border-blue-800/40 p-5 text-gray-800 dark:text-gray-200">
+                  <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                    <span className="text-xs font-bold text-blue-700 dark:text-blue-300">↩ {m.authorName ?? "Customer"} · reply</span>
+                    <span className="text-xs text-gray-400">{m.when}</span>
+                  </div>
+                  <EmailBody html={m.bodyHtml} text={m.body} />
+                  <Thumbs images={m.images} />
+                </div>
+              ))}
             </div>
-            <Thumbs images={job.images} />
           </div>
 
-          {/* Conversation */}
+          {/* IT notes — internal only, never sent to the customer */}
           <div>
-            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Conversation</p>
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+              IT notes <span className="font-normal normal-case text-gray-400">· internal — not sent to the customer</span>
+            </p>
             <div className="space-y-3 mb-3">
-              {job.messages.length === 0 && (
-                <p className="text-sm text-gray-400">No replies or notes yet.</p>
+              {notes.length === 0 && (
+                <p className="text-sm text-gray-400">No notes yet — jot anything the IT team needs to remember here.</p>
               )}
-              {job.messages.map((m) => {
-                const isCustomer = m.kind === "REPLY"
-                return (
-                  <div key={m.id} className={`flex ${isCustomer ? "justify-start" : "justify-end"}`}>
-                    <div
-                      className={`max-w-[85%] rounded-2xl p-4 border ${
-                        isCustomer
-                          ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700/40 rounded-tl-sm"
-                          : "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-700/40 rounded-tr-sm"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-bold flex-shrink-0 ${
-                            isCustomer
-                              ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
-                              : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-                          }`}>
-                            {isCustomer ? "Customer" : "IT team"}
-                          </span>
-                          <span className={`font-semibold text-sm truncate ${isCustomer ? "text-blue-700 dark:text-blue-300" : "text-emerald-700 dark:text-emerald-300"}`}>
-                            {m.authorName ?? "Unknown"}
-                          </span>
-                        </div>
-                        <span className="text-xs text-gray-400 flex-shrink-0">{m.when}</span>
-                      </div>
-                      <p className="text-[15px] leading-relaxed text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words">
-                        {m.body}
-                      </p>
-                      <Thumbs images={m.images} />
-                    </div>
+              {notes.map((m) => (
+                <div key={m.id} className="rounded-xl bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800/40 p-4 text-gray-800 dark:text-gray-200">
+                  <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
+                    <span className="font-semibold text-sm text-amber-800 dark:text-amber-300">📝 {m.authorName ?? "IT"}</span>
+                    <span className="text-xs text-gray-400">{m.when}</span>
                   </div>
-                )
-              })}
+                  <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">{m.body}</p>
+                </div>
+              ))}
             </div>
 
             {/* Add note */}

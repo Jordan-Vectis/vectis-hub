@@ -5,9 +5,9 @@ import { createITJob, setITStaff } from "@/lib/actions/it-jobs"
 import JobDetailModal from "./job-detail-modal"
 
 type JobImage = { id: string; filename: string; url: string }
-type Message = { id: string; kind: string; authorName: string | null; body: string; when: string; images: JobImage[] }
+type Message = { id: string; kind: string; authorName: string | null; body: string; bodyHtml: string | null; when: string; images: JobImage[] }
 type Job = {
-  id: string; title: string; body: string
+  id: string; title: string; body: string; bodyHtml: string | null
   fromName: string | null; fromEmail: string | null
   status: string; source: string; webLink: string | null
   assignedToId: string | null; assignedToName: string | null
