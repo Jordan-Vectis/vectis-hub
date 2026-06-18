@@ -82,7 +82,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
   {
     key:                "REPORTS",
     href:               "/tools/reports",
-    defaultLabel:       "Reports",
+    defaultLabel:       "Cataloguing Reports",
     defaultDescription: "Performance reports — cataloguing speed, lots per day and team leaderboards.",
     icon:               "📊",
     border:             "border-purple-500",
@@ -91,6 +91,19 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     glow:               "hover:shadow-purple-900/40",
     group:              "CATALOGUING_AI",
     appKey:             "REPORTS",
+  },
+  {
+    key:                "MARKETING_REPORTS",
+    href:               "/tools/marketing-reports",
+    defaultLabel:       "Marketing Reports",
+    defaultDescription: "Website analytics from Google Analytics — visitors, traffic sources, top pages, devices and locations.",
+    icon:               "📈",
+    border:             "border-pink-500",
+    iconBg:             "text-pink-400",
+    btnBg:              "bg-pink-600 hover:bg-pink-500",
+    glow:               "hover:shadow-pink-900/40",
+    group:              "CATALOGUING_AI",
+    appKey:             "MARKETING_REPORTS",
   },
   {
     key:                "BC_REPORTS",
