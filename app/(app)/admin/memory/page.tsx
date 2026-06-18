@@ -166,7 +166,7 @@ last_updated: 2026-05-29
 
 # Vectis Hub
 
-**Production URL:** https://vectis-crm-production.up.railway.app
+**Production URL:** https://vectis-production.up.railway.app
 **Staging URL:** https://vectis-staging.up.railway.app
 **GitHub repo:** https://github.com/Jordan-Vectis/vectis-hub
 **Local path:** C:\\Dev apps\\vectis-hub
@@ -357,7 +357,7 @@ Hi Claude. Before we start, here are the rules for working with me:
 
 This is the **Vectis Hub** — an internal tool for Vectis Auctions. It is NOT a CRM. Never call it a CRM. British English throughout (colour, unauthorised, etc.).
 
-**Production:** https://vectis-crm-production.up.railway.app
+**Production:** https://vectis-production.up.railway.app
 **Staging:** https://vectis-staging.up.railway.app
 **Reports-only:** Separate Railway environment, deploys from reports-only branch (DIVERGED — has its own server.js and Logo handling)
 **GitHub:** https://github.com/Jordan-Vectis/vectis-hub

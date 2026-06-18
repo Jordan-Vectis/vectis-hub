@@ -27,7 +27,7 @@ Update this file whenever a rule genuinely changes.
 
 The app is hosted on **Railway**, not Vercel. Never reference a `.vercel.app` URL.
 
-- Production: https://vectis-crm-production.up.railway.app
+- Production: https://vectis-production.up.railway.app
 - Staging: https://vectis-staging.up.railway.app
 - Auto-deploys: push to `main` → production, push to `staging` → staging environment on Railway
 - Never tell the user to open a `vercel.app` URL for any reason

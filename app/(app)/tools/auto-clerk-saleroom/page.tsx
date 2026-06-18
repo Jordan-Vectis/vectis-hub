@@ -87,7 +87,7 @@ function mapEvent(e: GapEvent): Action | null {
 // ── Relay endpoint options ────────────────────────────────────────────────────
 
 const RELAY_PRESETS = [
-  { label: 'Production', url: 'https://vectis-crm-production.up.railway.app/api/gap-relay' },
+  { label: 'Production', url: 'https://vectis-production.up.railway.app/api/gap-relay' },
   { label: 'Staging',    url: 'https://vectis-staging.up.railway.app/api/gap-relay' },
 ]
 
