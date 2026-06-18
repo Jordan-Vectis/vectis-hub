@@ -45,6 +45,14 @@ export default async function JobBoardPage() {
       if (!url) continue
       out = out.replace(new RegExp("cid:" + a.contentId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), url)
     }
+    // Drop <img> tags we can't actually load (bare filenames or unmatched cid refs —
+    // e.g. iPhone inline photos that also arrive as real attachments/thumbnails),
+    // so they don't render as broken icons. Keep http/https/data (incl. the
+    // signature logos we just rewrote).
+    out = out.replace(/<img\b[^>]*>/gi, (tag) => {
+      const m = tag.match(/\ssrc\s*=\s*["']?([^"'\s>]+)/i)
+      return /^(https?:|data:)/i.test(m?.[1] ?? "") ? tag : ""
+    })
     return stripPlaceholders(out)
   }
 
