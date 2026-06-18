@@ -5,9 +5,10 @@ import { createITJob, setITStaff, createTestITJob } from "@/lib/actions/it-jobs"
 import JobDetailModal from "./job-detail-modal"
 
 type JobImage = { id: string; filename: string; url: string }
-type Message = { id: string; kind: string; authorName: string | null; body: string; bodyHtml: string | null; bodyQuoted: string | null; when: string; images: JobImage[] }
+type Quoted = { from: string | null; date: string | null; subject: string | null; body: string }
+type Message = { id: string; kind: string; authorName: string | null; body: string; bodyHtml: string | null; bodyQuoted: Quoted | null; when: string; images: JobImage[] }
 type Job = {
-  id: string; title: string; body: string; bodyHtml: string | null; bodyQuoted: string | null
+  id: string; title: string; body: string; bodyHtml: string | null; bodyQuoted: Quoted | null
   fromName: string | null; fromEmail: string | null
   status: string; source: string; webLink: string | null
   assignedToId: string | null; assignedToName: string | null

@@ -6,9 +6,10 @@ import {
 } from "@/lib/actions/it-jobs"
 
 type JobImage = { id: string; filename: string; url: string }
-type Message = { id: string; kind: string; authorName: string | null; body: string; bodyHtml: string | null; bodyQuoted: string | null; when: string; images: JobImage[] }
+type Quoted = { from: string | null; date: string | null; subject: string | null; body: string }
+type Message = { id: string; kind: string; authorName: string | null; body: string; bodyHtml: string | null; bodyQuoted: Quoted | null; when: string; images: JobImage[] }
 type Job = {
-  id: string; title: string; body: string; bodyHtml: string | null; bodyQuoted: string | null
+  id: string; title: string; body: string; bodyHtml: string | null; bodyQuoted: Quoted | null
   fromName: string | null; fromEmail: string | null
   status: string; source: string; webLink: string | null
   assignedToId: string | null; assignedToName: string | null
@@ -20,7 +21,7 @@ type Job = {
 // Render the email body: the real (sanitised) HTML on a white email-style panel
 // when we have it, otherwise the plain text — with any quoted/forwarded history
 // tucked into a collapsible block. HTML is sanitised server-side.
-function EmailBody({ html, text, quoted }: { html: string | null; text: string; quoted?: string | null }) {
+function EmailBody({ html, text, quoted }: { html: string | null; text: string; quoted?: Quoted | null }) {
   if (html) {
     return (
       <div
@@ -29,6 +30,7 @@ function EmailBody({ html, text, quoted }: { html: string | null; text: string; 
       />
     )
   }
+  const hasHeader = quoted && (quoted.from || quoted.date || quoted.subject)
   return (
     <>
       <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
@@ -36,9 +38,20 @@ function EmailBody({ html, text, quoted }: { html: string | null; text: string; 
       </div>
       {quoted && (
         <details className="mt-3">
-          <summary className="text-xs font-semibold text-gray-500 dark:text-gray-400 cursor-pointer hover:underline select-none">Show quoted / forwarded email ▾</summary>
-          <div className="mt-2 pl-3 border-l-2 border-gray-300 dark:border-gray-600 text-sm leading-relaxed whitespace-pre-wrap break-words text-gray-500 dark:text-gray-400">
-            {quoted}
+          <summary className="text-xs font-semibold text-gray-500 dark:text-gray-400 cursor-pointer hover:underline select-none">
+            ↩ Forwarded / earlier email{quoted.from ? ` — from ${quoted.from}` : ""}
+          </summary>
+          <div className="mt-2 pl-3 border-l-2 border-gray-300 dark:border-gray-600">
+            {hasHeader && (
+              <div className="rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 text-sm space-y-0.5 mb-2">
+                {quoted.from && <div><span className="font-semibold text-gray-600 dark:text-gray-300">From:</span> <span className="text-gray-700 dark:text-gray-200">{quoted.from}</span></div>}
+                {quoted.date && <div><span className="font-semibold text-gray-600 dark:text-gray-300">Date:</span> <span className="text-gray-700 dark:text-gray-200">{quoted.date}</span></div>}
+                {quoted.subject && <div><span className="font-semibold text-gray-600 dark:text-gray-300">Subject:</span> <span className="text-gray-700 dark:text-gray-200">{quoted.subject}</span></div>}
+              </div>
+            )}
+            <div className="text-sm leading-relaxed whitespace-pre-wrap break-words text-gray-500 dark:text-gray-400">
+              {quoted.body}
+            </div>
           </div>
         </details>
       )}

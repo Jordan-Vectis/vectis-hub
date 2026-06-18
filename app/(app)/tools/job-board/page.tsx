@@ -87,13 +87,34 @@ export default async function JobBoardPage() {
     return { main: s.slice(0, idx).trim(), quoted: s.slice(idx).trim() || null }
   }
 
+  // Parse a quoted/forwarded block's header (From / Sent|Date / Subject) into
+  // fields, and strip that header off the body so it can be shown in its own box.
+  function parseQuoted(q: string): { from: string | null; date: string | null; subject: string | null; body: string } {
+    const get = (label: string) => {
+      const m = q.match(new RegExp("^[ \\t]*" + label + ":[ \\t]*(.+)$", "im"))
+      return m ? m[1].trim() : null
+    }
+    let from = get("From")
+    const date = get("Sent") || get("Date")
+    const subject = get("Subject")
+    let body = q
+      .replace(/^[ \t]*(?:-{2,}\s*Original Message\s*-{2,}|_{5,})\s*\r?\n?/i, "")
+      .replace(/^(?:[ \t]*(?:From|Sent|Date|To|Cc|Reply-To|Subject)[ \t]*:.*\r?\n?)+/im, "")
+      .trim()
+    if (!from) {
+      const m = q.match(/^On (.+?) wrote:\s*$/im)
+      if (m) { from = m[1].trim(); body = q.replace(/^On .+? wrote:\s*\r?\n?/im, "").trim() }
+    }
+    return { from, date, subject, body }
+  }
+
   // Build the display fields for a body: stripped HTML (if any) wins; else split
   // the plain text into main + collapsible quoted history.
   function emailFields(text: string, html: string | null, atts: { id: string; contentId: string | null }[]) {
     const renderedHtml = renderHtml(html, atts)
-    if (renderedHtml) return { body: stripPlaceholders(text), bodyQuoted: null as string | null, bodyHtml: renderedHtml }
+    if (renderedHtml) return { body: stripPlaceholders(text), bodyQuoted: null as ReturnType<typeof parseQuoted> | null, bodyHtml: renderedHtml }
     const { main, quoted } = splitQuote(stripPlaceholders(text))
-    return { body: main, bodyQuoted: quoted, bodyHtml: null as string | null }
+    return { body: main, bodyQuoted: quoted ? parseQuoted(quoted) : null, bodyHtml: null as string | null }
   }
 
   // Date-only due info, computed server-side to keep board colours stable (no client/SSR drift).
