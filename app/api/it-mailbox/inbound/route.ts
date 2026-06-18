@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { uploadBufferToR2 } from "@/lib/r2"
+import sharp from "sharp"
 
 export const maxDuration = 60
 
@@ -122,6 +123,14 @@ export async function POST(req: NextRequest) {
         if (!f.size || f.size > MAX_FILE_BYTES) continue
         if (!isImage(f.name, f.type)) continue
         const buffer = Buffer.from(await f.arrayBuffer())
+        // Only keep parts that are genuinely decodable images. Some mail clients
+        // tack corrupt/placeholder copies of inline images alongside the real
+        // photos; those would store and render as broken thumbnails. Drop them.
+        try {
+          await sharp(buffer).metadata()
+        } catch {
+          continue
+        }
         files.push({ filename: f.name || "image", mimeType: f.type || "application/octet-stream", size: f.size, buffer })
       }
     }
