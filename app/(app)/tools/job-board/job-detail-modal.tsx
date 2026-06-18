@@ -6,9 +6,9 @@ import {
 } from "@/lib/actions/it-jobs"
 
 type JobImage = { id: string; filename: string; url: string }
-type Message = { id: string; kind: string; authorName: string | null; body: string; bodyHtml: string | null; when: string; images: JobImage[] }
+type Message = { id: string; kind: string; authorName: string | null; body: string; bodyHtml: string | null; bodyQuoted: string | null; when: string; images: JobImage[] }
 type Job = {
-  id: string; title: string; body: string; bodyHtml: string | null
+  id: string; title: string; body: string; bodyHtml: string | null; bodyQuoted: string | null
   fromName: string | null; fromEmail: string | null
   status: string; source: string; webLink: string | null
   assignedToId: string | null; assignedToName: string | null
@@ -18,20 +18,31 @@ type Job = {
 }
 
 // Render the email body: the real (sanitised) HTML on a white email-style panel
-// when we have it, otherwise the plain text. HTML is sanitised server-side.
-function EmailBody({ html, text }: { html: string | null; text: string }) {
+// when we have it, otherwise the plain text — with any quoted/forwarded history
+// tucked into a collapsible block. HTML is sanitised server-side.
+function EmailBody({ html, text, quoted }: { html: string | null; text: string; quoted?: string | null }) {
   if (html) {
     return (
       <div
-        className="bg-white text-gray-900 rounded-lg p-4 border border-gray-200 text-[15px] leading-relaxed break-words overflow-x-auto [&_img]:max-w-full [&_img]:h-auto [&_a]:text-blue-700 [&_a]:underline [&_table]:max-w-full [&_p]:my-1"
+        className="bg-white text-gray-900 rounded-lg p-4 border border-gray-200 text-[15px] leading-relaxed break-words overflow-x-auto [&_img]:max-w-full [&_img]:h-auto [&_img]:max-h-[420px] [&_a]:text-blue-700 [&_a]:underline [&_table]:max-w-full [&_p]:my-1"
         dangerouslySetInnerHTML={{ __html: html }}
       />
     )
   }
   return (
-    <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
-      {text || <span className="text-gray-400">No content</span>}
-    </div>
+    <>
+      <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+        {text || <span className="text-gray-400">No content</span>}
+      </div>
+      {quoted && (
+        <details className="mt-3">
+          <summary className="text-xs font-semibold text-gray-500 dark:text-gray-400 cursor-pointer hover:underline select-none">Show quoted / forwarded email ▾</summary>
+          <div className="mt-2 pl-3 border-l-2 border-gray-300 dark:border-gray-600 text-sm leading-relaxed whitespace-pre-wrap break-words text-gray-500 dark:text-gray-400">
+            {quoted}
+          </div>
+        </details>
+      )}
+    </>
   )
 }
 
@@ -44,7 +55,7 @@ function Thumbs({ images }: { images: JobImage[] }) {
           <img
             src={img.url}
             alt={img.filename}
-            className="h-24 w-24 object-cover rounded-lg border border-gray-200 dark:border-gray-700 hover:opacity-80 transition-opacity"
+            className="max-h-56 max-w-[280px] w-auto object-contain rounded-lg border border-gray-200 dark:border-gray-700 hover:opacity-80 transition-opacity"
           />
         </a>
       ))}
@@ -231,7 +242,7 @@ export default function JobDetailModal({
                   <span className="text-xs font-bold text-blue-700 dark:text-blue-300">{requesterName ?? "Customer"} · original</span>
                   <span className="text-xs text-gray-400">{job.date}</span>
                 </div>
-                <EmailBody html={job.bodyHtml} text={job.body} />
+                <EmailBody html={job.bodyHtml} text={job.body} quoted={job.bodyQuoted} />
                 <Thumbs images={job.images} />
               </div>
               {replies.map((m) => (
@@ -240,7 +251,7 @@ export default function JobDetailModal({
                     <span className="text-xs font-bold text-blue-700 dark:text-blue-300">↩ {m.authorName ?? "Customer"} · reply</span>
                     <span className="text-xs text-gray-400">{m.when}</span>
                   </div>
-                  <EmailBody html={m.bodyHtml} text={m.body} />
+                  <EmailBody html={m.bodyHtml} text={m.body} quoted={m.bodyQuoted} />
                   <Thumbs images={m.images} />
                 </div>
               ))}

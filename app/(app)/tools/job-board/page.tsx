@@ -45,7 +45,47 @@ export default async function JobBoardPage() {
       if (!url) continue
       out = out.replace(new RegExp("cid:" + a.contentId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), url)
     }
-    return out
+    return stripPlaceholders(out)
+  }
+
+  // Strip the leftover "[image0.jpeg]" / "[cid:…]" / "[logo.png]" placeholders mail
+  // clients drop into the body where inline images sat (they aren't real content).
+  function stripPlaceholders(s: string): string {
+    return s
+      .replace(/\[cid:[^\]]*\]/gi, "")
+      .replace(/\[image\d+\.[a-z0-9]+\]/gi, "")
+      .replace(/\[[\w .\-]+\.(?:jpe?g|png|gif|webp|heic|heif|bmp|tiff?|avif)\]/gi, "")
+      .replace(/[ \t]{2,}/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+  }
+
+  // Split a plain-text email into the latest message and the quoted/forwarded
+  // history below it, so the older chain can be collapsed. Splits at the earliest
+  // Outlook forward header / "Original Message" divider / "On … wrote:" marker.
+  function splitQuote(s: string): { main: string; quoted: string | null } {
+    const patterns = [
+      /^[ \t]*-{2,}\s*Original Message\s*-{2,}/im,
+      /^_{5,}\s*$/m,
+      /^[ \t]*From:[ \t]*\S.*\r?\n(?:.*\r?\n){0,2}?[ \t]*(?:Sent|Date):[ \t]*\S/im,
+      /^[ \t]*On .{0,120}\bwrote:\s*$/im,
+    ]
+    let idx = -1
+    for (const p of patterns) {
+      const m = s.match(p)
+      if (m && m.index !== undefined && m.index > 0) idx = idx === -1 ? m.index : Math.min(idx, m.index)
+    }
+    if (idx <= 0) return { main: s, quoted: null }
+    return { main: s.slice(0, idx).trim(), quoted: s.slice(idx).trim() || null }
+  }
+
+  // Build the display fields for a body: stripped HTML (if any) wins; else split
+  // the plain text into main + collapsible quoted history.
+  function emailFields(text: string, html: string | null, atts: { id: string; contentId: string | null }[]) {
+    const renderedHtml = renderHtml(html, atts)
+    if (renderedHtml) return { body: stripPlaceholders(text), bodyQuoted: null as string | null, bodyHtml: renderedHtml }
+    const { main, quoted } = splitQuote(stripPlaceholders(text))
+    return { body: main, bodyQuoted: quoted, bodyHtml: null as string | null }
   }
 
   // Date-only due info, computed server-side to keep board colours stable (no client/SSR drift).
@@ -70,7 +110,6 @@ export default async function JobBoardPage() {
   const jobsPlain = jobs.map((j) => ({
     id:             j.id,
     title:          j.title,
-    body:           j.body,
     fromName:       j.fromName,
     fromEmail:      j.fromEmail,
     status:         j.status,
@@ -83,15 +122,14 @@ export default async function JobBoardPage() {
     date: (j.receivedAt ?? j.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
     // Thumbnails = genuine attachments only (no Content-ID); inline images render in the HTML.
     images: j.attachments.filter((a) => !a.contentId && urlById.has(a.id)).map(toImage),
-    bodyHtml: renderHtml(j.bodyHtml, j.attachments),
+    ...emailFields(j.body, j.bodyHtml, j.attachments),
     messages: j.messages.map((m) => ({
       id:         m.id,
       kind:       m.kind,
       authorName: m.authorName,
-      body:       m.body,
       when:       m.createdAt.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
       images:     m.attachments.filter((a) => !a.contentId && urlById.has(a.id)).map(toImage),
-      bodyHtml:   renderHtml(m.bodyHtml, j.attachments),
+      ...emailFields(m.body, m.bodyHtml, j.attachments),
     })),
   }))
 
