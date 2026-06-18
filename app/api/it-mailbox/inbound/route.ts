@@ -126,6 +126,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Upload the collected image files to R2 and link them to a job (and, for a
+    // reply, to that message). Returns how many were stored.
+    const saveFiles = async (jobId: string, msgId: string | null): Promise<number> => {
+      let n = 0
+      for (const f of files) {
+        const safe = (f.filename || "image").replace(/[^\w.\-]+/g, "_").slice(-80)
+        const key = `it-jobs/${jobId}/${Date.now()}-${n}-${safe}`
+        try {
+          await uploadBufferToR2(f.buffer, key, f.mimeType)
+          await prisma.iTJobAttachment.create({
+            data: { jobId, messageId: msgId, filename: f.filename.slice(0, 200), mimeType: f.mimeType, size: f.size, r2Key: key },
+          })
+          n++
+        } catch (err) {
+          console.error("it-mailbox inbound: attachment upload failed", f.filename, err)
+        }
+      }
+      return n
+    }
+
     const subject   = pick(body, ["Subject", "subject", "headers.Subject"]) || "(no subject)"
     const fromRaw   = pick(body, ["FromFull.Email", "From", "from", "sender", "Sender", "envelope.from"])
     const explicitName = pick(body, ["FromName", "from_name", "FromFull.Name"])
@@ -187,27 +207,12 @@ export async function POST(req: NextRequest) {
     // Duplicate of an email we've already turned into a job?
     if (messageId) {
       const dupe = await prisma.iTJob.findUnique({ where: { graphMessageId: messageId }, select: { id: true } })
-      if (dupe) return NextResponse.json({ ok: true, duplicate: true })
-    }
-
-    // Upload the collected image files to R2 and link them to a job (and, for a
-    // reply, to that message). Returns how many were stored.
-    const saveFiles = async (jobId: string, messageId: string | null): Promise<number> => {
-      let n = 0
-      for (const f of files) {
-        const safe = (f.filename || "image").replace(/[^\w.\-]+/g, "_").slice(-80)
-        const key = `it-jobs/${jobId}/${Date.now()}-${n}-${safe}`
-        try {
-          await uploadBufferToR2(f.buffer, key, f.mimeType)
-          await prisma.iTJobAttachment.create({
-            data: { jobId, messageId, filename: f.filename.slice(0, 200), mimeType: f.mimeType, size: f.size, r2Key: key },
-          })
-          n++
-        } catch (err) {
-          console.error("it-mailbox inbound: attachment upload failed", f.filename, err)
-        }
+      if (dupe) {
+        // Same email arriving again carrying another image (Make sends one image
+        // per delivery) — attach it to the existing job rather than dropping it.
+        const images = files.length ? await saveFiles(dupe.id, null) : 0
+        return NextResponse.json({ ok: true, duplicate: true, images })
       }
-      return n
     }
 
     // Is this a reply on an existing thread?
@@ -237,6 +242,16 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    // Image delivery: Make loops the email's attachments and sends one image per
+    // request. Attach each to the matching job (not as a reply) so they gather on
+    // the one job. The first delivery of a brand-new email has no parent yet — it
+    // falls through to create the job below, and later deliveries land here.
+    if (files.length && parent) {
+      const images = await saveFiles(parent.id, null)
+      await prisma.iTJob.update({ where: { id: parent.id }, data: { updatedAt: new Date() } })
+      return NextResponse.json({ ok: true, appendedTo: "job", images })
+    }
+
     if (parent) {
       const msg = await prisma.iTJobMessage.create({
         data: {
@@ -248,12 +263,11 @@ export async function POST(req: NextRequest) {
         },
         select: { id: true },
       })
-      const images = await saveFiles(parent.id, msg.id)
       await prisma.iTJob.update({
         where: { id: parent.id },
         data:  { hasNewReply: true, updatedAt: new Date() },
       })
-      return NextResponse.json({ ok: true, reply: true, images })
+      return NextResponse.json({ ok: true, reply: true })
     }
 
     const job = await prisma.iTJob.create({
