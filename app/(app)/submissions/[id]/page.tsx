@@ -11,6 +11,7 @@ import PhotoLink from "./photo-link"
 import ValuationLink from "./valuation-link"
 import StatusSelect from "./status-select"
 import FollowUpToggle from "./follow-up-toggle"
+import NotesSection from "./notes-section"
 
 const statusLabels: Record<SubmissionStatus, { label: string; color: string }> = {
   PENDING_ASSIGNMENT: { label: "Pending", color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300" },
@@ -40,6 +41,7 @@ export default async function SubmissionDetailPage({
       items: { include: { valuation: { include: { cataloguer: true } } } },
       contactLogs: { include: { user: true }, orderBy: { createdAt: "desc" } },
       logistics: true,
+      staffNotes: { orderBy: { createdAt: "desc" } },
     },
   })
 
@@ -118,10 +120,26 @@ export default async function SubmissionDetailPage({
             </dl>
             {submission.notes && (
               <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-                <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Notes</p>
+                <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Customer note</p>
                 <p className="text-base text-gray-700 dark:text-gray-300">{submission.notes}</p>
               </div>
             )}
+          </section>
+
+          {/* Internal staff notes */}
+          <section className={cardPad}>
+            <h2 className={`${title} mb-4`}>
+              Notes <span className="text-sm font-normal text-gray-400">· internal</span>
+            </h2>
+            <NotesSection
+              submissionId={submission.id}
+              notes={submission.staffNotes.map((n) => ({
+                id: n.id,
+                body: n.body,
+                authorName: n.authorName,
+                when: new Date(n.createdAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+              }))}
+            />
           </section>
 
           {/* Items */}

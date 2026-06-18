@@ -422,6 +422,20 @@ const MIGRATIONS = [
   `ALTER TABLE "ITJob"           ADD COLUMN IF NOT EXISTS "bodyHtml"  TEXT`,
   `ALTER TABLE "ITJobMessage"    ADD COLUMN IF NOT EXISTS "bodyHtml"  TEXT`,
   `ALTER TABLE "ITJobAttachment" ADD COLUMN IF NOT EXISTS "contentId" TEXT`,
+
+  // 2026-06-18 — Submissions: internal staff notes (running log)
+  `CREATE TABLE IF NOT EXISTS "SubmissionNote" (
+    "id"           TEXT         NOT NULL,
+    "submissionId" TEXT         NOT NULL,
+    "body"         TEXT         NOT NULL,
+    "authorId"     TEXT,
+    "authorName"   TEXT         NOT NULL,
+    "createdAt"    TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "SubmissionNote_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "SubmissionNote_submissionId_fkey" FOREIGN KEY ("submissionId")
+      REFERENCES "Submission"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "SubmissionNote_submissionId_idx" ON "SubmissionNote"("submissionId")`,
 ]
 
 export async function POST() {

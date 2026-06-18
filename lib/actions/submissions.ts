@@ -200,6 +200,30 @@ export async function updateSubmissionStatus(
   revalidatePath("/submissions")
 }
 
+export async function addSubmissionNote(submissionId: string, body: string) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorised")
+  const text = body?.trim()
+  if (!text) throw new Error("Empty note")
+
+  await prisma.submissionNote.create({
+    data: {
+      submissionId,
+      body:       text,
+      authorId:   session.user.id,
+      authorName: session.user.name ?? session.user.email ?? "Unknown",
+    },
+  })
+  revalidatePath(`/submissions/${submissionId}`)
+}
+
+export async function deleteSubmissionNote(noteId: string, submissionId: string) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorised")
+  await prisma.submissionNote.delete({ where: { id: noteId } })
+  revalidatePath(`/submissions/${submissionId}`)
+}
+
 export async function deleteSubmission(submissionId: string) {
   const session = await auth()
   if (!session) throw new Error("Unauthorised")
