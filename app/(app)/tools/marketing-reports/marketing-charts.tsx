@@ -17,10 +17,33 @@ function fmtDate(d: string) {
 }
 const trunc = (s: string, n = 30) => (s.length > n ? s.slice(0, n - 1) + "…" : s)
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function downloadCsv(rows: { name: string; value: number; secondary?: number }[], filename: string) {
+  const header = "Name,Value,Secondary\n"
+  const body = rows.map((r) => `"${String(r.name).replace(/"/g, '""')}",${r.value},${r.secondary ?? ""}`).join("\n")
+  const blob = new Blob([header + body], { type: "text/csv;charset=utf-8" })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function Card({ title, children, csv }: { title: string; children: React.ReactNode; csv?: { rows: { name: string; value: number; secondary?: number }[]; filename: string } }) {
   return (
     <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-2xl p-5">
-      <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">{title}</h2>
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{title}</h2>
+        {csv && csv.rows.length > 0 && (
+          <button
+            onClick={() => downloadCsv(csv.rows, csv.filename)}
+            className="text-xs font-semibold text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors flex-shrink-0"
+            title="Download as CSV"
+          >
+            ⬇ CSV
+          </button>
+        )}
+      </div>
       {children}
     </div>
   )
@@ -84,10 +107,12 @@ export default function MarketingCharts({ data }: { data: MarketingReport }) {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card title="Traffic by channel"><HBars data={data.channels} colour="#ec4899" suffix="sessions" /></Card>
-        <Card title="Top sources"><HBars data={data.sources} colour="#6366f1" suffix="sessions" /></Card>
-        <Card title="Top pages"><HBars data={data.pages} colour="#2AB4A6" suffix="views" /></Card>
-        <Card title="Top countries"><HBars data={data.countries} colour="#f59e0b" suffix="users" /></Card>
+        <Card title="Traffic by channel" csv={{ rows: data.channels, filename: "channels.csv" }}><HBars data={data.channels} colour="#ec4899" suffix="sessions" /></Card>
+        <Card title="Top sources" csv={{ rows: data.sources, filename: "sources.csv" }}><HBars data={data.sources} colour="#6366f1" suffix="sessions" /></Card>
+        <Card title="Top pages" csv={{ rows: data.pages, filename: "top-pages.csv" }}><HBars data={data.pages} colour="#2AB4A6" suffix="views" /></Card>
+        <Card title="Top landing pages" csv={{ rows: data.landingPages, filename: "landing-pages.csv" }}><HBars data={data.landingPages} colour="#06b6d4" suffix="sessions" /></Card>
+        <Card title="Events" csv={{ rows: data.events, filename: "events.csv" }}><HBars data={data.events} colour="#a855f7" suffix="count" /></Card>
+        <Card title="Top countries" csv={{ rows: data.countries, filename: "countries.csv" }}><HBars data={data.countries} colour="#f59e0b" suffix="users" /></Card>
         <Card title="Devices"><Donut data={data.devices} /></Card>
         <Card title="New vs returning"><Donut data={data.newReturning} /></Card>
       </div>

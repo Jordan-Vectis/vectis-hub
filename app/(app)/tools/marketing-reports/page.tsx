@@ -1,7 +1,7 @@
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { isGaConfigured, getMarketingReport, rangeDays, type GaRange } from "@/lib/ga"
+import { isGaConfigured, getMarketingReport, realtimeActiveUsers, rangeDays, type GaRange, type MetricKey } from "@/lib/ga"
 import MarketingCharts from "./marketing-charts"
 
 export const dynamic = "force-dynamic"
@@ -28,6 +28,29 @@ function fmtPct(rate: number): string {
 }
 
 const card = "bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800"
+
+const STATS: { key: MetricKey; label: string; fmt: (n: number) => string; higherBetter: boolean }[] = [
+  { key: "activeUsers",            label: "Active users",     fmt: fmtNum,      higherBetter: true },
+  { key: "newUsers",               label: "New users",        fmt: fmtNum,      higherBetter: true },
+  { key: "sessions",               label: "Sessions",         fmt: fmtNum,      higherBetter: true },
+  { key: "screenPageViews",        label: "Page views",       fmt: fmtNum,      higherBetter: true },
+  { key: "averageSessionDuration", label: "Avg session",      fmt: fmtDuration, higherBetter: true },
+  { key: "engagementRate",         label: "Engagement",       fmt: fmtPct,      higherBetter: true },
+  { key: "bounceRate",             label: "Bounce rate",      fmt: fmtPct,      higherBetter: false },
+  { key: "engagedSessions",        label: "Engaged sessions", fmt: fmtNum,      higherBetter: true },
+  { key: "keyEvents",              label: "Key events",       fmt: fmtNum,      higherBetter: true },
+]
+
+function Delta({ pct, higherBetter }: { pct: number | null; higherBetter: boolean }) {
+  if (pct === null || !isFinite(pct)) return null
+  const up = pct >= 0
+  const good = up === higherBetter
+  return (
+    <span className={`text-xs font-semibold ${good ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+      {up ? "↑" : "↓"} {Math.abs(pct * 100).toFixed(1)}%
+    </span>
+  )
+}
 
 export default async function MarketingReportsPage({
   searchParams,
@@ -98,9 +121,10 @@ function SetupCard() {
 
 async function ReportBody({ range }: { range: GaRange }) {
   let data: Awaited<ReturnType<typeof getMarketingReport>> | null = null
+  let realtime: number | null = null
   let error: string | null = null
   try {
-    data = await getMarketingReport(range)
+    [data, realtime] = await Promise.all([getMarketingReport(range), realtimeActiveUsers()])
   } catch (e: any) {
     error = e?.message ?? "Failed to load analytics"
   }
@@ -115,27 +139,28 @@ async function ReportBody({ range }: { range: GaRange }) {
     )
   }
 
-  const s = data.summary
-  const stats = [
-    { label: "Active users",   value: fmtNum(s.activeUsers) },
-    { label: "New users",      value: fmtNum(s.newUsers) },
-    { label: "Sessions",       value: fmtNum(s.sessions) },
-    { label: "Page views",     value: fmtNum(s.pageViews) },
-    { label: "Avg session",    value: fmtDuration(s.avgSessionDuration) },
-    { label: "Engagement",     value: fmtPct(s.engagementRate) },
-    { label: "Key events",     value: fmtNum(s.keyEvents) },
-  ]
-
   return (
     <div className="space-y-6">
-      <p className="text-sm text-gray-400 -mt-2">Last {rangeDays(range)} days</p>
+      <div className="flex items-center justify-between gap-3 flex-wrap -mt-2">
+        <p className="text-sm text-gray-400">Last {rangeDays(range)} days <span className="text-gray-500">· change vs the previous {rangeDays(range)} days</span></p>
+        {realtime !== null && (
+          <div className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 animate-ping" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
+            </span>
+            {fmtNum(realtime)} active right now
+          </div>
+        )}
+      </div>
 
-      {/* Headline stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-        {stats.map((st) => (
-          <div key={st.label} className={`${card} p-4`}>
+      {/* Headline stats with change vs previous period */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {STATS.map((st) => (
+          <div key={st.key} className={`${card} p-4`}>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{st.label}</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{st.value}</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{st.fmt(data!.summary[st.key])}</p>
+            <div className="mt-1"><Delta pct={data!.deltas[st.key]} higherBetter={st.higherBetter} /></div>
           </div>
         ))}
       </div>

@@ -56,37 +56,52 @@ async function report(
   }))
 }
 
-// Totals (no dimension) for the headline stat cards.
-async function totals(range: GaRange) {
+// Headline metrics fetched as a keyed object so current vs previous can be diffed.
+const METRIC_KEYS = [
+  "activeUsers", "newUsers", "sessions", "screenPageViews", "averageSessionDuration",
+  "engagementRate", "bounceRate", "engagedSessions", "keyEvents", "eventCount",
+] as const
+export type MetricKey = typeof METRIC_KEYS[number]
+export type Totals = Record<MetricKey, number>
+
+async function totalsFor(startDate: string, endDate: string): Promise<Totals> {
   const [res] = await client().runReport({
     property: propertyPath(),
-    dateRanges: [{ startDate: `${rangeDays(range)}daysAgo`, endDate: "today" }],
-    metrics: [
-      { name: "activeUsers" }, { name: "newUsers" }, { name: "sessions" },
-      { name: "screenPageViews" }, { name: "averageSessionDuration" },
-      { name: "engagementRate" }, { name: "keyEvents" }, { name: "eventCount" },
-    ],
+    dateRanges: [{ startDate, endDate }],
+    metrics: METRIC_KEYS.map((name) => ({ name })),
   })
   const v = res.rows?.[0]?.metricValues ?? []
-  const num = (i: number) => Number(v[i]?.value ?? 0)
-  return {
-    activeUsers: num(0), newUsers: num(1), sessions: num(2), pageViews: num(3),
-    avgSessionDuration: num(4), engagementRate: num(5), keyEvents: num(6), eventCount: num(7),
-  }
+  const out = {} as Totals
+  METRIC_KEYS.forEach((k, i) => { out[k] = Number(v[i]?.value ?? 0) })
+  return out
+}
+
+// Active users in the last 30 minutes (GA4 realtime). null if unavailable.
+export async function realtimeActiveUsers(): Promise<number | null> {
+  try {
+    const [res] = await client().runRealtimeReport({ property: propertyPath(), metrics: [{ name: "activeUsers" }] })
+    return Number(res.rows?.[0]?.metricValues?.[0]?.value ?? 0)
+  } catch { return null }
 }
 
 export type MarketingReport = Awaited<ReturnType<typeof getMarketingReport>>
 
 export async function getMarketingReport(range: GaRange) {
-  const [summary, series, channels, sources, pages, devices, countries, newReturning] = await Promise.all([
-    totals(range),
+  const days = rangeDays(range)
+  const [current, previous, series, channels, sources, pages, landingPages, events, devices, countries, newReturning] = await Promise.all([
+    totalsFor(`${days}daysAgo`, "today"),
+    totalsFor(`${days * 2}daysAgo`, `${days + 1}daysAgo`),
     report(range, "date", "activeUsers", { secondaryMetric: "sessions" }),
     report(range, "sessionDefaultChannelGroup", "sessions", { secondaryMetric: "activeUsers" }),
     report(range, "sessionSourceMedium", "sessions", { limit: 12 }),
     report(range, "pageTitle", "screenPageViews", { limit: 12, secondaryMetric: "activeUsers" }),
+    report(range, "landingPagePlusQueryString", "sessions", { limit: 12, secondaryMetric: "activeUsers" }),
+    report(range, "eventName", "eventCount", { limit: 12 }),
     report(range, "deviceCategory", "activeUsers"),
     report(range, "country", "activeUsers", { limit: 12 }),
     report(range, "newVsReturning", "activeUsers"),
   ])
-  return { summary, series, channels, sources, pages, devices, countries, newReturning }
+  const deltas = {} as Record<MetricKey, number | null>
+  METRIC_KEYS.forEach((k) => { deltas[k] = previous[k] > 0 ? (current[k] - previous[k]) / previous[k] : null })
+  return { summary: current, previous, deltas, series, channels, sources, pages, landingPages, events, devices, countries, newReturning }
 }
