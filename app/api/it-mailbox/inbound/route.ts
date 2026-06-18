@@ -253,6 +253,16 @@ export async function POST(req: NextRequest) {
     }
 
     if (parent) {
+      // Order-proofing: the same email can reach us more than once (the text module
+      // and the image module both fire, in any order). If we've already stored this
+      // exact text — as the job body or an earlier message — don't make a duplicate.
+      if (content) {
+        const parentJob = await prisma.iTJob.findUnique({ where: { id: parent.id }, select: { body: true } })
+        if (parentJob?.body === content) return NextResponse.json({ ok: true, duplicateText: "job" })
+        const existing = await prisma.iTJobMessage.findFirst({ where: { jobId: parent.id, body: content }, select: { id: true } })
+        if (existing) return NextResponse.json({ ok: true, duplicateText: "message" })
+      }
+
       const msg = await prisma.iTJobMessage.create({
         data: {
           jobId:       parent.id,
