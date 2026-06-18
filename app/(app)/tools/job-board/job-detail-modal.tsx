@@ -95,7 +95,7 @@ export default function JobDetailModal({
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-0 sm:p-6" onClick={onClose}>
       <div
-        className="bg-white dark:bg-[#1C1C1E] w-full max-w-3xl sm:rounded-2xl border border-gray-200 dark:border-gray-800 flex flex-col max-h-[100dvh] sm:max-h-[90vh]"
+        className="bg-white dark:bg-[#1C1C1E] w-full max-w-5xl sm:rounded-2xl border border-gray-200 dark:border-gray-800 flex flex-col max-h-[100dvh] sm:max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -199,10 +199,10 @@ export default function JobDetailModal({
             )}
           </div>
 
-          {/* Original message */}
+          {/* Original message — customer's first email */}
           <div>
-            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Original message</p>
-            <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 p-4 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words max-h-72 overflow-y-auto">
+            <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide mb-2">Customer · original message</p>
+            <div className="rounded-xl bg-blue-50/60 dark:bg-blue-900/15 border border-blue-100 dark:border-blue-800/40 p-5 text-[15px] leading-relaxed text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words">
               {job.body || <span className="text-gray-400">No content</span>}
             </div>
             <Thumbs images={job.images} />
@@ -215,36 +215,40 @@ export default function JobDetailModal({
               {job.messages.length === 0 && (
                 <p className="text-sm text-gray-400">No replies or notes yet.</p>
               )}
-              {job.messages.map((m) => (
-                <div
-                  key={m.id}
-                  className={`rounded-xl p-4 border ${
-                    m.kind === "REPLY"
-                      ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700/40"
-                      : "bg-gray-50 dark:bg-gray-800/50 border-gray-100 dark:border-gray-800"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className={`font-semibold text-sm truncate ${m.kind === "REPLY" ? "text-blue-700 dark:text-blue-300" : "text-gray-700 dark:text-gray-200"}`}>
-                        {m.authorName ?? "Unknown"}
-                      </span>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${
-                        m.kind === "REPLY"
-                          ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
-                          : "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
-                      }`}>
-                        {m.kind === "REPLY" ? "Customer reply" : "IT note"}
-                      </span>
+              {job.messages.map((m) => {
+                const isCustomer = m.kind === "REPLY"
+                return (
+                  <div key={m.id} className={`flex ${isCustomer ? "justify-start" : "justify-end"}`}>
+                    <div
+                      className={`max-w-[85%] rounded-2xl p-4 border ${
+                        isCustomer
+                          ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700/40 rounded-tl-sm"
+                          : "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-700/40 rounded-tr-sm"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-bold flex-shrink-0 ${
+                            isCustomer
+                              ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                              : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                          }`}>
+                            {isCustomer ? "Customer" : "IT team"}
+                          </span>
+                          <span className={`font-semibold text-sm truncate ${isCustomer ? "text-blue-700 dark:text-blue-300" : "text-emerald-700 dark:text-emerald-300"}`}>
+                            {m.authorName ?? "Unknown"}
+                          </span>
+                        </div>
+                        <span className="text-xs text-gray-400 flex-shrink-0">{m.when}</span>
+                      </div>
+                      <p className="text-[15px] leading-relaxed text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words">
+                        {m.body}
+                      </p>
+                      <Thumbs images={m.images} />
                     </div>
-                    <span className="text-xs text-gray-400 flex-shrink-0">{m.when}</span>
                   </div>
-                  <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
-                    {m.body}
-                  </p>
-                  <Thumbs images={m.images} />
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             {/* Add note */}
