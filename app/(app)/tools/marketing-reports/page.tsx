@@ -1,9 +1,11 @@
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
+import { cookies } from "next/headers"
 import Link from "next/link"
-import { isGaConfigured, getMarketingReport, realtimeActiveUsers, rangeDays, type GaRange, type MetricKey } from "@/lib/ga"
+import { isGaConfigured, getMarketingReport, realtimeActiveUsers, rangeDays, SECTION_CATALOG, DEFAULT_SECTION_IDS, type GaRange, type MetricKey } from "@/lib/ga"
 import MarketingCharts from "./marketing-charts"
 import InfoTip from "./info-tip"
+import SectionSelector from "./section-selector"
 
 const BOT_TIP = "When on, hides traffic from countries that are mostly automated bots/scrapers (currently China, Hong Kong, Taiwan, Singapore, India, Vietnam, Indonesia, Philippines, Thailand, Pakistan and Bangladesh) so the figures better reflect real visitors. Japan and Korea are deliberately kept in (likely genuine collectors). Ask IT to adjust the list if needed."
 
@@ -68,6 +70,13 @@ export default async function MarketingReportsPage({
   const excludeBots = sp.bots === "hide"
   const linkFor = (r: GaRange, bots: boolean) => `/tools/marketing-reports?range=${r}${bots ? "&bots=hide" : ""}`
 
+  // Which report sections to show — saved per browser in the mr_sections cookie.
+  const validIds = new Set(SECTION_CATALOG.map((s) => s.id))
+  const cookieSections = (await cookies()).get("mr_sections")?.value
+  const selectedSections = cookieSections !== undefined
+    ? cookieSections.split(",").map((s) => s.trim()).filter((s) => validIds.has(s))
+    : DEFAULT_SECTION_IDS
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -78,6 +87,7 @@ export default async function MarketingReportsPage({
         </div>
         {isGaConfigured() && (
           <div className="flex items-center gap-2 flex-wrap">
+            <SectionSelector catalog={SECTION_CATALOG.map((s) => ({ id: s.id, title: s.title }))} selected={selectedSections} />
             <Link
               href={linkFor(range, !excludeBots)}
               className={`px-3.5 py-2 rounded-xl text-sm font-semibold border transition-colors ${
@@ -109,7 +119,7 @@ export default async function MarketingReportsPage({
       {!isGaConfigured() ? (
         <SetupCard />
       ) : (
-        <ReportBody range={range} excludeBots={excludeBots} />
+        <ReportBody range={range} excludeBots={excludeBots} sections={selectedSections} />
       )}
     </div>
   )
@@ -137,12 +147,12 @@ function SetupCard() {
   )
 }
 
-async function ReportBody({ range, excludeBots }: { range: GaRange; excludeBots: boolean }) {
+async function ReportBody({ range, excludeBots, sections }: { range: GaRange; excludeBots: boolean; sections: string[] }) {
   let data: Awaited<ReturnType<typeof getMarketingReport>> | null = null
   let realtime: number | null = null
   let error: string | null = null
   try {
-    [data, realtime] = await Promise.all([getMarketingReport(range, excludeBots), realtimeActiveUsers(excludeBots)])
+    [data, realtime] = await Promise.all([getMarketingReport(range, excludeBots, sections), realtimeActiveUsers(excludeBots)])
   } catch (e: any) {
     error = e?.message ?? "Failed to load analytics"
   }

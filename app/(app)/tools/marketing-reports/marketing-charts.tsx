@@ -9,6 +9,7 @@ import InfoTip from "./info-tip"
 
 const TOOLTIP = { background: "#2C2C2E", border: "1px solid #374151", borderRadius: 8, color: "#f3f4f6", fontSize: 13 }
 const PIE_COLOURS = ["#ec4899", "#2AB4A6", "#6366f1", "#f59e0b", "#22c55e", "#06b6d4", "#a855f7"]
+const BAR_COLOURS = ["#ec4899", "#6366f1", "#2AB4A6", "#06b6d4", "#a855f7", "#f59e0b", "#22c55e", "#ef4444"]
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 const fmtNum = (n: number) => Math.round(n).toLocaleString("en-GB")
@@ -107,16 +108,23 @@ export default function MarketingCharts({ data }: { data: MarketingReport }) {
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card title="Traffic by channel" csv={{ rows: data.channels, filename: "channels.csv" }} help="Where visits came from, grouped into broad buckets. Direct = typed your web address, used a bookmark, or the source couldn't be detected. Organic Search = found you through an unpaid Google/Bing result. Paid Search = clicked one of your paid Google ads. Organic/Paid Social = came from social media, unpaid or paid. Referral = clicked a link to you on another website. Email = came from an email."><HBars data={data.channels} colour="#ec4899" suffix="sessions" /></Card>
-        <Card title="Top sources" csv={{ rows: data.sources, filename: "sources.csv" }} help="The exact source and medium each visit came from, e.g. 'google / organic' (an unpaid Google result) or 'facebook / cpc' (a paid Facebook click)."><HBars data={data.sources} colour="#6366f1" suffix="sessions" /></Card>
-        <Card title="Top pages" csv={{ rows: data.pages, filename: "top-pages.csv" }} help="The pages on your site that were viewed the most."><HBars data={data.pages} colour="#2AB4A6" suffix="views" /></Card>
-        <Card title="Top landing pages" csv={{ rows: data.landingPages, filename: "landing-pages.csv" }} help="The first page people arrived on — where their visit began. Good for seeing which pages pull people in."><HBars data={data.landingPages} colour="#06b6d4" suffix="sessions" /></Card>
-        <Card title="Events" csv={{ rows: data.events, filename: "events.csv" }} help="Things visitors did on the site. Google automatically tracks page views, scrolls, clicks and similar; this counts how often each happened."><HBars data={data.events} colour="#a855f7" suffix="count" /></Card>
-        <Card title="Top countries" csv={{ rows: data.countries, filename: "countries.csv" }} help="Which countries your visitors are in. Heavy traffic from far-away regions is often bots — use the 'Hide bot traffic' toggle to strip it out."><HBars data={data.countries} colour="#f59e0b" suffix="users" /></Card>
-        <Card title="Devices" help="The split between desktop computers, mobiles and tablets."><Donut data={data.devices} /></Card>
-        <Card title="New vs returning" help="First-time visitors versus people who have visited before."><Donut data={data.newReturning} /></Card>
-      </div>
+      {data.sections.length === 0 ? (
+        <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-2xl p-6 text-sm text-gray-400 text-center">
+          No sections selected — use <span className="font-semibold text-gray-500 dark:text-gray-300">Customise</span> at the top to choose what to show.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {data.sections.map((s, i) =>
+            s.kind === "donut" ? (
+              <Card key={s.id} title={s.title} help={s.help}><Donut data={s.rows} /></Card>
+            ) : (
+              <Card key={s.id} title={s.title} help={s.help} csv={{ rows: s.rows, filename: `${s.id}.csv` }}>
+                <HBars data={s.rows} colour={BAR_COLOURS[i % BAR_COLOURS.length]} suffix={s.suffix} />
+              </Card>
+            )
+          )}
+        </div>
+      )}
     </div>
   )
 }

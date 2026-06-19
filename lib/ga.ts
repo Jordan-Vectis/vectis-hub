@@ -102,25 +102,74 @@ export async function realtimeActiveUsers(excludeBots?: boolean): Promise<number
   } catch { return null }
 }
 
+// ─── Report-section catalog ──────────────────────────────────────────────────
+// Each entry is one selectable report card. Add to this list to offer more.
+export type SectionKind = "bars" | "donut"
+export type SectionDef = {
+  id: string
+  title: string
+  kind: SectionKind
+  dimension: string
+  metric: string
+  secondaryMetric?: string
+  limit?: number
+  suffix?: string
+  help: string
+}
+
+export const SECTION_CATALOG: SectionDef[] = [
+  { id: "channels",     title: "Traffic by channel", kind: "bars",  dimension: "sessionDefaultChannelGroup", metric: "sessions",        secondaryMetric: "activeUsers", suffix: "sessions", help: "Where visits came from, grouped into broad buckets. Direct = typed your web address or used a bookmark. Organic Search = an unpaid Google/Bing result. Paid Search = a paid Google ad. Organic/Paid Social = social media, unpaid or paid. Referral = a link on another website. Email = from an email." },
+  { id: "sources",      title: "Top sources",        kind: "bars",  dimension: "sessionSourceMedium",        metric: "sessions",        limit: 12, suffix: "sessions", help: "The exact source and medium each visit came from, e.g. 'google / organic' (unpaid Google) or 'facebook / cpc' (a paid Facebook click)." },
+  { id: "referrers",    title: "Referring sites",    kind: "bars",  dimension: "pageReferrer",               metric: "sessions",        limit: 12, suffix: "sessions", help: "The other websites that linked visitors to you (the full referring page)." },
+  { id: "pages",        title: "Top pages",          kind: "bars",  dimension: "pageTitle",                  metric: "screenPageViews", limit: 12, secondaryMetric: "activeUsers", suffix: "views", help: "The pages (by their title) that were viewed the most." },
+  { id: "pagePaths",    title: "Top page URLs",      kind: "bars",  dimension: "pagePath",                   metric: "screenPageViews", limit: 12, suffix: "views", help: "The most-viewed pages by their web address (URL), rather than title." },
+  { id: "landingPages", title: "Top landing pages",  kind: "bars",  dimension: "landingPagePlusQueryString", metric: "sessions",        limit: 12, secondaryMetric: "activeUsers", suffix: "sessions", help: "The first page people arrived on — where their visit began. Good for seeing which pages pull people in." },
+  { id: "events",       title: "Events",             kind: "bars",  dimension: "eventName",                  metric: "eventCount",      limit: 12, suffix: "count", help: "Things visitors did on the site. Google automatically tracks page views, scrolls, clicks and similar; this counts how often each happened." },
+  { id: "keyEvents",    title: "Key events",         kind: "bars",  dimension: "eventName",                  metric: "keyEvents",       limit: 12, suffix: "count", help: "Your important tracked actions (key events, formerly 'conversions') broken down by which one fired." },
+  { id: "siteSearch",   title: "Site search terms",  kind: "bars",  dimension: "searchTerm",                 metric: "eventCount",      limit: 15, suffix: "searches", help: "What people typed into the search box on the site. Only shows data if site-search tracking is set up in GA." },
+  { id: "countries",    title: "Top countries",      kind: "bars",  dimension: "country",                    metric: "activeUsers",     limit: 12, suffix: "users", help: "Which countries your visitors are in. Heavy far-away traffic is often bots — use the 'Hide bot traffic' toggle." },
+  { id: "regions",      title: "Top regions",        kind: "bars",  dimension: "region",                     metric: "activeUsers",     limit: 12, suffix: "users", help: "Which regions/counties your visitors are in." },
+  { id: "cities",       title: "Top cities",         kind: "bars",  dimension: "city",                       metric: "activeUsers",     limit: 12, suffix: "users", help: "Which towns/cities your visitors are in." },
+  { id: "languages",    title: "Languages",          kind: "bars",  dimension: "language",                   metric: "activeUsers",     limit: 10, suffix: "users", help: "The language setting of visitors' browsers." },
+  { id: "devices",      title: "Devices",            kind: "donut", dimension: "deviceCategory",             metric: "activeUsers",     help: "The split between desktop computers, mobiles and tablets." },
+  { id: "browsers",     title: "Browsers",           kind: "bars",  dimension: "browser",                    metric: "activeUsers",     limit: 10, suffix: "users", help: "Which web browsers visitors use (Chrome, Safari, etc.)." },
+  { id: "os",           title: "Operating systems",  kind: "bars",  dimension: "operatingSystem",            metric: "activeUsers",     limit: 10, suffix: "users", help: "Which operating systems visitors use (Windows, iOS, Android, etc.)." },
+  { id: "screens",      title: "Screen sizes",       kind: "bars",  dimension: "screenResolution",           metric: "activeUsers",     limit: 10, suffix: "users", help: "Common screen resolutions — useful for checking the site looks right on popular sizes." },
+  { id: "newReturning", title: "New vs returning",   kind: "donut", dimension: "newVsReturning",             metric: "activeUsers",     help: "First-time visitors versus people who have visited before." },
+  { id: "hour",         title: "Busiest hours",      kind: "bars",  dimension: "hour",                       metric: "activeUsers",     limit: 24, suffix: "users", help: "Which hours of the day are busiest (24-hour clock). Useful for timing emails and posts." },
+  { id: "dayOfWeek",    title: "Busiest days",       kind: "bars",  dimension: "dayOfWeekName",              metric: "sessions",        limit: 7,  suffix: "sessions", help: "Which days of the week are busiest." },
+]
+
+export const DEFAULT_SECTION_IDS = ["channels", "sources", "pages", "landingPages", "events", "countries", "devices", "newReturning"]
+
+// Run async work in capped-concurrency batches (GA4 allows ~10 concurrent requests).
+async function mapLimit<T, R>(items: T[], limit: number, fn: (x: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = []
+  for (let i = 0; i < items.length; i += limit) {
+    out.push(...await Promise.all(items.slice(i, i + limit).map(fn)))
+  }
+  return out
+}
+
+export type ReportSection = SectionDef & { rows: Row[] }
 export type MarketingReport = Awaited<ReturnType<typeof getMarketingReport>>
 
-export async function getMarketingReport(range: GaRange, excludeBots = false) {
+export async function getMarketingReport(range: GaRange, excludeBots = false, sectionIds: string[] = DEFAULT_SECTION_IDS) {
   const days = rangeDays(range)
   const b = excludeBots
-  const [current, previous, series, channels, sources, pages, landingPages, events, devices, countries, newReturning] = await Promise.all([
+  const [current, previous, series] = await Promise.all([
     totalsFor(`${days}daysAgo`, "today", b),
     totalsFor(`${days * 2}daysAgo`, `${days + 1}daysAgo`, b),
     report(range, "date", "activeUsers", { secondaryMetric: "sessions", excludeBots: b }),
-    report(range, "sessionDefaultChannelGroup", "sessions", { secondaryMetric: "activeUsers", excludeBots: b }),
-    report(range, "sessionSourceMedium", "sessions", { limit: 12, excludeBots: b }),
-    report(range, "pageTitle", "screenPageViews", { limit: 12, secondaryMetric: "activeUsers", excludeBots: b }),
-    report(range, "landingPagePlusQueryString", "sessions", { limit: 12, secondaryMetric: "activeUsers", excludeBots: b }),
-    report(range, "eventName", "eventCount", { limit: 12, excludeBots: b }),
-    report(range, "deviceCategory", "activeUsers", { excludeBots: b }),
-    report(range, "country", "activeUsers", { limit: 12, excludeBots: b }),
-    report(range, "newVsReturning", "activeUsers", { excludeBots: b }),
   ])
+
+  const defs = sectionIds.map((id) => SECTION_CATALOG.find((s) => s.id === id)).filter(Boolean) as SectionDef[]
+  const sections: ReportSection[] = await mapLimit(defs, 6, async (def) => ({
+    ...def,
+    rows: await report(range, def.dimension, def.metric, { secondaryMetric: def.secondaryMetric, limit: def.limit, excludeBots: b }),
+  }))
+
   const deltas = {} as Record<MetricKey, number | null>
   METRIC_KEYS.forEach((k) => { deltas[k] = previous[k] > 0 ? (current[k] - previous[k]) / previous[k] : null })
-  return { summary: current, previous, deltas, series, channels, sources, pages, landingPages, events, devices, countries, newReturning }
+  return { summary: current, previous, deltas, series, sections }
 }
