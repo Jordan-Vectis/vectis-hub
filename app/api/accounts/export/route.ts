@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
 
     // ── Main sheet (April-26 style): grouped by cardholder, net in nominal cols ──
     const rows: (string | number)[][] = []
-    rows.push(["", "", "Vat", "Value", "VAT", ...NOMINAL_COLUMNS.map((c) => c.label)])
+    rows.push(["", "Date", "Vat", "Value", "VAT", ...NOMINAL_COLUMNS.map((c) => c.label)])
     rows.push(["", "", "", "", "", ...NOMINAL_COLUMNS.map((c) => c.code)])
 
     for (const ch of cardholderOrder) {
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
       const colTot: Record<string, number> = {}
       for (const d of chDocs) {
         const cols = NOMINAL_COLUMNS.map((c) => (c.key === d.column ? round(d.net) : ""))
-        rows.push([d.supplier || "(no description)", "", d.vatCode, round(d.gross), d.vat ? round(d.vat) : "", ...cols])
+        rows.push([d.supplier || "(no description)", fmtDate(d.docDate), d.vatCode, round(d.gross), d.vat ? round(d.vat) : "", ...cols])
         gTot += d.gross; vTot += d.vat
         colTot[d.column] = (colTot[d.column] ?? 0) + d.net
       }
@@ -62,15 +62,15 @@ export async function GET(req: NextRequest) {
     const vatRows: (string | number)[][] = []
     vatRows.push(["VAT summary —", month.label])
     vatRows.push([])
-    vatRows.push(["", "", "Vat", "Value", "VAT"])
-    for (const d of code1) vatRows.push([d.supplier || "(no description)", "", 1, round(d.gross), round(d.vat)])
+    vatRows.push(["", "Date", "Vat", "Value", "VAT"])
+    for (const d of code1) vatRows.push([d.supplier || "(no description)", fmtDate(d.docDate), 1, round(d.gross), round(d.vat)])
     vatRows.push(["Subtotal (code 1)", "", "", round(sum(code1.map((d) => d.gross))), round(sum(code1.map((d) => d.vat)))])
     vatRows.push([])
-    for (const d of code2) vatRows.push([d.supplier || "(no description)", "", 2, round(d.gross), ""])
+    for (const d of code2) vatRows.push([d.supplier || "(no description)", fmtDate(d.docDate), 2, round(d.gross), ""])
     vatRows.push(["Subtotal (code 2)", "", "", round(sum(code2.map((d) => d.gross))), ""])
     if (code7.length) {
       vatRows.push([])
-      for (const d of code7) vatRows.push([d.supplier || "(no description)", "", 7, round(d.gross), ""])
+      for (const d of code7) vatRows.push([d.supplier || "(no description)", fmtDate(d.docDate), 7, round(d.gross), ""])
       vatRows.push(["Subtotal (code 7)", "", "", round(sum(code7.map((d) => d.gross))), ""])
     }
     vatRows.push([])
@@ -98,3 +98,8 @@ export async function GET(req: NextRequest) {
 
 function round(n: number): number { return Math.round((n ?? 0) * 100) / 100 }
 function sum(arr: number[]): number { return arr.reduce((a, b) => a + (b ?? 0), 0) }
+function fmtDate(dt: Date | null): string {
+  if (!dt) return ""
+  const [y, m, d] = dt.toISOString().slice(0, 10).split("-")
+  return `${d}/${m}/${y}`
+}
