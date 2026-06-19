@@ -36,6 +36,7 @@ export default function AccountsMonthClient({
   const modalFiles = useRef<HTMLInputElement>(null)
   const [viewId, setViewId] = useState<string | null>(null)
   const [addingPage, setAddingPage] = useState(false)
+  const [viewer, setViewer] = useState<{ images: string[]; index: number } | null>(null)
 
   // Each photo/file becomes a BLANK line straight away (image only); the AI is run
   // afterwards over all the un-read lines.
@@ -367,9 +368,9 @@ export default function AccountsMonthClient({
                 {viewRow.images.length === 0 && <p className="text-sm text-gray-400 text-center py-8">No image (manual line)</p>}
                 {viewRow.images.map((url, i) => (
                   <div key={i} className="relative">
-                    <a href={url} target="_blank" rel="noreferrer" title={`Page ${i + 1} — open full size`}>
+                    <button onClick={() => setViewer({ images: viewRow.images, index: i })} title={`Page ${i + 1} — view & zoom`} className="block w-full cursor-zoom-in">
                       <img src={url} alt={`Page ${i + 1}`} className="w-full rounded-lg border border-gray-200 dark:border-gray-700" />
-                    </a>
+                    </button>
                     {viewRow.images.length > 1 && <span className="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">Page {i + 1}</span>}
                     <button onClick={() => removePage(viewRow.id, i)} disabled={busy} className="absolute top-1 right-1 bg-black/60 hover:bg-red-600 text-white text-sm rounded-full w-6 h-6 leading-none disabled:opacity-50" title="Remove this page">×</button>
                   </div>
@@ -430,6 +431,100 @@ export default function AccountsMonthClient({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Full-screen zoomable image viewer */}
+      {viewer && <ImageViewer images={viewer.images} startIndex={viewer.index} onClose={() => setViewer(null)} />}
+    </div>
+  )
+}
+
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
+
+function ImageViewer({ images, startIndex, onClose }: { images: string[]; startIndex: number; onClose: () => void }) {
+  const [i, setI] = useState(startIndex)
+  const [zoom, setZoom] = useState(1)
+  const [pos, setPos] = useState({ x: 0, y: 0 })
+  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map())
+  const pinch = useRef<{ dist: number; zoom: number } | null>(null)
+  const panLast = useRef<{ x: number; y: number } | null>(null)
+
+  useEffect(() => { setZoom(1); setPos({ x: 0, y: 0 }) }, [i])
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose()
+      else if (e.key === "ArrowRight") setI((p) => Math.min(p + 1, images.length - 1))
+      else if (e.key === "ArrowLeft") setI((p) => Math.max(p - 1, 0))
+      else if (e.key === "+" || e.key === "=") setZoom((z) => clamp(z + 0.25, 1, 6))
+      else if (e.key === "-" || e.key === "_") setZoom((z) => clamp(z - 0.25, 1, 6))
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [images.length, onClose])
+
+  function spread() {
+    const pts = [...pointers.current.values()]
+    return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
+  }
+  function onPointerDown(e: React.PointerEvent) {
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (pointers.current.size === 2) pinch.current = { dist: spread(), zoom }
+    else if (pointers.current.size === 1 && zoom > 1) panLast.current = { x: e.clientX, y: e.clientY }
+  }
+  function onPointerMove(e: React.PointerEvent) {
+    if (!pointers.current.has(e.pointerId)) return
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (pointers.current.size === 2 && pinch.current) {
+      setZoom(clamp(pinch.current.zoom * (spread() / pinch.current.dist), 1, 6))
+    } else if (pointers.current.size === 1 && zoom > 1 && panLast.current) {
+      setPos((p) => ({ x: p.x + (e.clientX - panLast.current!.x), y: p.y + (e.clientY - panLast.current!.y) }))
+      panLast.current = { x: e.clientX, y: e.clientY }
+    }
+  }
+  function onPointerUp(e: React.PointerEvent) {
+    pointers.current.delete(e.pointerId)
+    if (pointers.current.size < 2) pinch.current = null
+    if (pointers.current.size === 0) { panLast.current = null; if (zoom <= 1) setPos({ x: 0, y: 0 }) }
+  }
+
+  const btn = "bg-white/15 hover:bg-white/30 text-white rounded-lg w-9 h-9 flex items-center justify-center text-lg leading-none"
+  return (
+    <div className="fixed inset-0 z-[70] bg-black/90 flex flex-col" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="flex items-center justify-between p-3 text-white">
+        <span className="text-sm">{images.length > 1 ? `Page ${i + 1} of ${images.length}` : "Invoice"} · {Math.round(zoom * 100)}%</span>
+        <div className="flex items-center gap-2">
+          <button className={btn} onClick={() => setZoom((z) => clamp(z - 0.5, 1, 6))} title="Zoom out">−</button>
+          <button className={btn} onClick={() => { setZoom(1); setPos({ x: 0, y: 0 }) }} title="Fit">⤢</button>
+          <button className={btn} onClick={() => setZoom((z) => clamp(z + 0.5, 1, 6))} title="Zoom in">+</button>
+          <a className={btn} href={images[i]} target="_blank" rel="noreferrer" title="Open in new tab">↗</a>
+          <button className={btn} onClick={onClose} title="Close">×</button>
+        </div>
+      </div>
+      <div
+        className="flex-1 overflow-hidden flex items-center justify-center select-none"
+        style={{ touchAction: "none", cursor: zoom > 1 ? "grab" : "zoom-in" }}
+        onWheel={(e) => setZoom((z) => clamp(z - e.deltaY * 0.0015, 1, 6))}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onDoubleClick={() => setZoom((z) => (z > 1 ? 1 : 2.5))}
+      >
+        <img
+          src={images[i]}
+          alt={`Page ${i + 1}`}
+          draggable={false}
+          className="max-h-full max-w-full object-contain"
+          style={{ transform: `translate(${pos.x}px, ${pos.y}px) scale(${zoom})`, transition: pinch.current || panLast.current ? "none" : "transform 0.08s" }}
+        />
+      </div>
+      {images.length > 1 && (
+        <>
+          <button onClick={() => setI((p) => Math.max(p - 1, 0))} disabled={i === 0}
+            className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/15 hover:bg-white/30 disabled:opacity-30 text-white rounded-full w-11 h-11 text-2xl leading-none">‹</button>
+          <button onClick={() => setI((p) => Math.min(p + 1, images.length - 1))} disabled={i === images.length - 1}
+            className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/15 hover:bg-white/30 disabled:opacity-30 text-white rounded-full w-11 h-11 text-2xl leading-none">›</button>
+        </>
       )}
     </div>
   )
