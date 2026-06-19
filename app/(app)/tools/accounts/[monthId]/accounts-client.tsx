@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { VAT_CODES, NOMINAL_COLUMNS } from "@/lib/accounting"
+import { VAT_CODES, NOMINAL_COLUMNS, columnLabel } from "@/lib/accounting"
 import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, removeDocumentPage, saveAccountingDocuments } from "@/lib/actions/accounting"
 
 type Row = {
@@ -40,6 +40,8 @@ export default function AccountsMonthClient({
   const [addingPage, setAddingPage] = useState(false)
   const [modalBusy, setModalBusy] = useState(false)
   const [viewer, setViewer] = useState<{ images: string[]; index: number } | null>(null)
+  const [aiPreview, setAiPreview] = useState<{ docId: string; receipts: any[] }[] | null>(null)
+  const [applying, setApplying] = useState(false)
 
   // Each photo/file becomes a BLANK line straight away (image only); the AI is run
   // afterwards over all the un-read lines.
@@ -85,12 +87,22 @@ export default function AccountsMonthClient({
   const aiTarget = unread.length ? unread : rereadable
   const aiLabel = unread.length ? `Run AI (${unread.length})` : rereadable.length ? `Re-read AI (${rereadable.length})` : "Run AI"
 
-  // Read one document with AI and patch the row. Used by the batch run + the
-  // per-line "Re-read" in the detail modal.
-  async function aiRead(docId: string): Promise<boolean> {
+  // Preview: ask the AI what it proposes for a document — returns receipts but
+  // writes nothing. The user approves before anything is committed.
+  async function previewOne(docId: string): Promise<{ docId: string; receipts: any[] } | null> {
     try {
       const res = await fetch("/api/accounts/extract", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ docId }),
+      })
+      if (res.ok) return await res.json()
+    } catch { /* skip */ }
+    return null
+  }
+  // Apply an approved proposal — receipt[0] updates the line; the rest split into new lines.
+  async function applyOne(docId: string, receipts: any[]): Promise<boolean> {
+    try {
+      const res = await fetch("/api/accounts/apply", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ docId, receipts }),
       })
       if (res.ok) {
         const { extra, ...fields } = await res.json()
@@ -125,18 +137,31 @@ export default function AccountsMonthClient({
     startBusy(async () => { await removeDocumentPage(docId, index) })
   }
 
+  // Run AI = read everything (no writes) then show the proposals for approval.
   async function runAi() {
     const target = aiTarget
     if (running || target.length === 0) return
     setRunning(true)
     setAiProg({ done: 0, total: target.length, errors: 0 })
+    const previews: { docId: string; receipts: any[] }[] = []
     let errors = 0
     for (let i = 0; i < target.length; i++) {
-      const ok = await aiRead(target[i].id)
-      if (!ok) errors++
+      const p = await previewOne(target[i].id)
+      if (p && Array.isArray(p.receipts)) previews.push(p)
+      else errors++
       setAiProg({ done: i + 1, total: target.length, errors })
     }
     setRunning(false)
+    if (previews.length) setAiPreview(previews)
+  }
+
+  // Approve the previewed proposals → commit them.
+  async function applyPreview() {
+    if (!aiPreview) return
+    setApplying(true)
+    for (const p of aiPreview) await applyOne(p.docId, p.receipts)
+    setApplying(false)
+    setAiPreview(null)
   }
 
   // ── Row editing ─────────────────────────────────────────────────────────────
@@ -469,7 +494,17 @@ export default function AccountsMonthClient({
                 <div className="flex gap-2 pt-2 flex-wrap">
                   <button onClick={() => { saveAll(); setViewId(null) }} disabled={saving} className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2 rounded-xl disabled:opacity-50">Save changes</button>
                   {viewRow.images.length > 0 && (
-                    <button onClick={async () => { setModalBusy(true); await aiRead(viewRow.id); setModalBusy(false) }} disabled={modalBusy} className="text-sm font-semibold text-gray-600 dark:text-gray-300 px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 disabled:opacity-50">{modalBusy ? "Reading…" : "↻ Re-read with AI"}</button>
+                    <button
+                      onClick={async () => {
+                        setModalBusy(true)
+                        const p = await previewOne(viewRow.id)
+                        const r = p?.receipts?.[0]
+                        if (r) setRows((rs) => rs.map((x) => x.id === viewRow.id ? { ...x, supplier: r.supplier, item: r.item, website: r.website, docDate: r.docDate, vatCode: r.vatCode, gross: r.gross, vat: r.vat, net: r.net, column: r.column, aiNotes: r.aiNotes } : x))
+                        setModalBusy(false)
+                      }}
+                      disabled={modalBusy}
+                      className="text-sm font-semibold text-gray-600 dark:text-gray-300 px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 disabled:opacity-50"
+                    >{modalBusy ? "Reading…" : "↻ Re-read with AI"}</button>
                   )}
                   <button onClick={() => setViewId(null)} className="text-sm font-semibold text-gray-600 dark:text-gray-300 px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700">Close</button>
                 </div>
@@ -481,6 +516,43 @@ export default function AccountsMonthClient({
 
       {/* Full-screen zoomable image viewer */}
       {viewer && <ImageViewer images={viewer.images} startIndex={viewer.index} onClose={() => setViewer(null)} />}
+
+      {/* AI proposal — approve before anything is written */}
+      {aiPreview && (
+        <div className="fixed inset-0 z-[65] bg-black/70 flex items-start justify-center p-4 sm:p-8 overflow-y-auto" onClick={() => { if (!applying) setAiPreview(null) }}>
+          <div className="bg-white dark:bg-[#1C1C1E] w-full max-w-2xl rounded-2xl border border-gray-200 dark:border-gray-800" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-800">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Approve AI results</h2>
+              <button onClick={() => { if (!applying) setAiPreview(null) }} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none">&times;</button>
+            </div>
+            <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto">
+              <p className="text-xs text-gray-400">The AI read {aiPreview.length} {aiPreview.length === 1 ? "document" : "documents"}. Here&apos;s what it will fill in — approve to apply, or cancel to discard. Nothing is saved until you approve.</p>
+              {aiPreview.map((p) => {
+                const row = rows.find((r) => r.id === p.docId)
+                return (
+                  <div key={p.docId} className="flex gap-3 items-start border border-gray-200 dark:border-gray-800 rounded-xl p-3">
+                    {row?.images[0] && <img src={row.images[0]} alt="" className="w-12 h-12 object-cover rounded border border-gray-200 dark:border-gray-700 flex-shrink-0" />}
+                    <div className="text-sm flex-1 min-w-0">
+                      {p.receipts.length > 1 && <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mb-1">Splits into {p.receipts.length} separate receipts:</p>}
+                      {p.receipts.map((r: any, i: number) => (
+                        <div key={i} className="flex justify-between gap-2">
+                          <span className="truncate text-gray-800 dark:text-gray-200">{r.supplier || "(no supplier read)"} <span className="text-gray-400">· VAT {r.vatCode} · {columnLabel(r.column)}</span></span>
+                          <span className="tabular-nums text-gray-600 dark:text-gray-300 flex-shrink-0">{gbp(r.gross)}</span>
+                        </div>
+                      ))}
+                      {p.receipts[0]?.aiNotes && <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">{p.receipts[0].aiNotes}</p>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="flex gap-2 justify-end p-4 border-t border-gray-200 dark:border-gray-800">
+              <button onClick={() => setAiPreview(null)} disabled={applying} className="text-sm font-semibold text-gray-600 dark:text-gray-300 px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 disabled:opacity-50">Cancel</button>
+              <button onClick={applyPreview} disabled={applying} className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-5 py-2 rounded-xl disabled:opacity-50">{applying ? "Applying…" : "✓ Approve & apply"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

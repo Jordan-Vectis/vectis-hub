@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { prisma } from "@/lib/prisma"
-import { getObjectBuffer, uploadBufferToR2, getSignedImageUrl } from "@/lib/r2"
+import { getObjectBuffer } from "@/lib/r2"
 import {
   NOMINAL_KEYS, isValidColumn, isValidVatCode,
   vatFromGross, netFromGross, normaliseSupplier,
@@ -84,8 +84,11 @@ async function normalise(p: any, extraNote: string | null) {
   return { supplier, item, website, docDate, vatCode, gross, vat, net: netFromGross(gross, vat), column, aiNotes: notes }
 }
 
-// Reads ONE already-uploaded document (by id). A single-photo line being read for
-// the first time may be split into several lines if it shows multiple receipts.
+// PREVIEW only: reads ONE already-uploaded document (by id) with AI and returns
+// the proposed receipt(s) WITHOUT writing anything. The client shows these for
+// approval, then calls /api/accounts/apply to commit. A single-photo line on its
+// first read may propose several receipts (split); a multi-page invoice or a
+// re-read always proposes exactly one.
 export async function POST(req: NextRequest) {
   try {
     const session = await auth()
@@ -104,8 +107,6 @@ export async function POST(req: NextRequest) {
     const keys = (doc.images && doc.images.length) ? doc.images : (doc.imageKey ? [doc.imageKey] : [])
     if (!keys.length) return NextResponse.json({ error: "No scan to read" }, { status: 400 })
 
-    // Only auto-split a SINGLE-photo line on its FIRST read — never a multi-page
-    // invoice, and never on a re-read (avoids creating duplicate split lines).
     const allowSplit = keys.length === 1 && !doc.aiRun
 
     const buffers = await Promise.all(keys.slice(0, 12).map((k) => getObjectBuffer(k)))
@@ -132,45 +133,20 @@ export async function POST(req: NextRequest) {
     } catch (e: any) {
       aiError = e?.message ?? "AI could not read this document"
     }
-    if (receipts.length === 0) receipts = [{}]            // still update the existing line (blank)
-    if (!allowSplit) receipts = receipts.slice(0, 1)       // never split
+    if (receipts.length === 0) receipts = [{}]
+    if (!allowSplit) receipts = receipts.slice(0, 1)
 
-    // First receipt updates the existing line.
-    const first = await normalise(receipts[0], aiError)
-    await prisma.accountingDocument.update({
-      where: { id: doc.id },
-      data: { ...first, aiRun: true },
-    })
-
-    // Any further receipts become new lines, each with its own COPY of the photo
-    // (so deleting one line never removes another line's image).
-    const extra: any[] = []
-    for (let i = 1; i < receipts.length && i < 20; i++) {
-      const f = await normalise(receipts[i], null)
-      const mime = mimeForKey(keys[0])
-      const newKey = `accounts/${doc.monthId}/${Date.now()}-${i}-split.${mime === "application/pdf" ? "pdf" : "jpg"}`
-      await uploadBufferToR2(buffers[0], newKey, mime)
-      const created = await prisma.accountingDocument.create({
-        data: { monthId: doc.monthId, cardholder: doc.cardholder, source: "SCAN", images: [newKey], aiRun: true, ...f },
-      })
-      extra.push({
-        id: created.id, cardholder: created.cardholder, source: "SCAN",
-        images: [await getSignedImageUrl(newKey)],
+    const proposals = []
+    for (let i = 0; i < receipts.length && i < 20; i++) {
+      const f = await normalise(receipts[i], i === 0 ? aiError : null)
+      proposals.push({
         supplier: f.supplier, item: f.item, website: f.website,
         docDate: f.docDate ? f.docDate.toISOString().slice(0, 10) : "",
-        vatCode: f.vatCode, gross: f.gross, vat: f.vat, net: f.net, column: f.column,
-        reviewed: false, aiRun: true, aiNotes: f.aiNotes,
+        vatCode: f.vatCode, gross: f.gross, vat: f.vat, net: f.net, column: f.column, aiNotes: f.aiNotes,
       })
     }
 
-    return NextResponse.json({
-      id: doc.id,
-      supplier: first.supplier, item: first.item, website: first.website,
-      docDate: first.docDate ? first.docDate.toISOString().slice(0, 10) : "",
-      vatCode: first.vatCode, gross: first.gross, vat: first.vat, net: first.net, column: first.column,
-      aiNotes: first.aiNotes,
-      extra,
-    })
+    return NextResponse.json({ docId: doc.id, receipts: proposals })
   } catch (e: any) {
     console.error("accounts/extract error:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
