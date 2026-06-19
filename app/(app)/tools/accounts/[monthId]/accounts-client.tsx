@@ -38,6 +38,7 @@ export default function AccountsMonthClient({
   const modalFiles = useRef<HTMLInputElement>(null)
   const [viewId, setViewId] = useState<string | null>(null)
   const [addingPage, setAddingPage] = useState(false)
+  const [modalBusy, setModalBusy] = useState(false)
   const [viewer, setViewer] = useState<{ images: string[]; index: number } | null>(null)
 
   // Each photo/file becomes a BLANK line straight away (image only); the AI is run
@@ -76,7 +77,29 @@ export default function AccountsMonthClient({
     setUploadProg(null)
   }
 
-  const pending = rows.filter((r) => r.images.length > 0 && !r.aiRun)
+  // Lines that still need an AI read: brand-new scans first; if there are none,
+  // any already-read line that hasn't been ticked "OK" yet can be re-read (so a
+  // wrong/failed read isn't stuck forever). Reviewed lines are left alone.
+  const unread = rows.filter((r) => r.images.length > 0 && !r.aiRun)
+  const rereadable = rows.filter((r) => r.images.length > 0 && r.aiRun && !r.reviewed)
+  const aiTarget = unread.length ? unread : rereadable
+  const aiLabel = unread.length ? `Run AI (${unread.length})` : rereadable.length ? `Re-read AI (${rereadable.length})` : "Run AI"
+
+  // Read one document with AI and patch the row. Used by the batch run + the
+  // per-line "Re-read" in the detail modal.
+  async function aiRead(docId: string): Promise<boolean> {
+    try {
+      const res = await fetch("/api/accounts/extract", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ docId }),
+      })
+      if (res.ok) {
+        const d = await res.json()
+        setRows((rs) => rs.map((x) => x.id === docId ? { ...x, ...d, aiRun: true } : x))
+        return true
+      }
+    } catch { /* skip */ }
+    return false
+  }
 
   // Add more pages to an existing line (multi-page invoices).
   async function addPages(docId: string, list: FileList | null) {
@@ -100,22 +123,15 @@ export default function AccountsMonthClient({
   }
 
   async function runAi() {
-    if (running || pending.length === 0) return
+    const target = aiTarget
+    if (running || target.length === 0) return
     setRunning(true)
-    setAiProg({ done: 0, total: pending.length, errors: 0 })
+    setAiProg({ done: 0, total: target.length, errors: 0 })
     let errors = 0
-    for (let i = 0; i < pending.length; i++) {
-      const r = pending[i]
-      try {
-        const res = await fetch("/api/accounts/extract", {
-          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ docId: r.id }),
-        })
-        if (res.ok) {
-          const d = await res.json()
-          setRows((rs) => rs.map((x) => x.id === r.id ? { ...x, ...d, aiRun: true } : x))
-        } else { errors++ }
-      } catch { errors++ }
-      setAiProg({ done: i + 1, total: pending.length, errors })
+    for (let i = 0; i < target.length; i++) {
+      const ok = await aiRead(target[i].id)
+      if (!ok) errors++
+      setAiProg({ done: i + 1, total: target.length, errors })
     }
     setRunning(false)
   }
@@ -234,9 +250,9 @@ export default function AccountsMonthClient({
             </span>
           )}
 
-          <button onClick={runAi} disabled={running || pending.length === 0}
+          <button onClick={runAi} disabled={running || aiTarget.length === 0}
             className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2 rounded-xl disabled:opacity-50">
-            {running ? `Reading ${aiProg.done}/${aiProg.total}…` : `Run AI${pending.length ? ` (${pending.length})` : ""}`}
+            {running ? `Reading ${aiProg.done}/${aiProg.total}…` : aiLabel}
           </button>
           <button onClick={addManual} disabled={busy} className="text-sm font-semibold text-gray-600 dark:text-gray-300 hover:text-emerald-500 px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-700">
             + Add line manually
@@ -447,8 +463,11 @@ export default function AccountsMonthClient({
                   </label>
                 </div>
                 {viewRow.aiNotes && <p className="text-xs text-amber-600 dark:text-amber-400">{viewRow.aiNotes}</p>}
-                <div className="flex gap-2 pt-2">
+                <div className="flex gap-2 pt-2 flex-wrap">
                   <button onClick={() => { saveAll(); setViewId(null) }} disabled={saving} className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2 rounded-xl disabled:opacity-50">Save changes</button>
+                  {viewRow.images.length > 0 && (
+                    <button onClick={async () => { setModalBusy(true); await aiRead(viewRow.id); setModalBusy(false) }} disabled={modalBusy} className="text-sm font-semibold text-gray-600 dark:text-gray-300 px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 disabled:opacity-50">{modalBusy ? "Reading…" : "↻ Re-read with AI"}</button>
+                  )}
                   <button onClick={() => setViewId(null)} className="text-sm font-semibold text-gray-600 dark:text-gray-300 px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700">Close</button>
                 </div>
               </div>
