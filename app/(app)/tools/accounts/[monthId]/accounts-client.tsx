@@ -15,6 +15,7 @@ type Row = {
 
 const round = (n: number) => Math.round((n || 0) * 100) / 100
 const gbp = (n: number) => "£" + (n || 0).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const isPdf = (u: string) => u.split("?")[0].toLowerCase().endsWith(".pdf")
 
 export default function AccountsMonthClient({
   monthId, monthLabel, documents, cardholders,
@@ -245,7 +246,7 @@ export default function AccountsMonthClient({
       {/* Scan */}
       <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-5 mb-6">
         <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Scan documents</h2>
-        <p className="text-xs text-gray-400 mb-3">Pick whose card it is, then take a photo or choose files. Each one is added as a line straight away — take them all, then press <span className="font-semibold">Run AI</span> to read them. For an invoice over several pages, tick <span className="font-semibold">Multi-page invoice</span> and every photo goes onto the same invoice; press <span className="font-semibold">New invoice</span> to start the next. If one photo has several separate receipts on it, Run AI splits them into separate lines automatically.</p>
+        <p className="text-xs text-gray-400 mb-3">Pick whose card it is, then take a photo or choose files. Each one is added as a line straight away — take them all, then press <span className="font-semibold">Run AI</span> to read them. For an invoice over several pages, tick <span className="font-semibold">Multi-page invoice</span> and every photo goes onto the same invoice; press <span className="font-semibold">New invoice</span> to start the next. If one photo has several receipts on it — or you upload a PDF scanned from a stack of different invoices — Run AI detects each one and splits them into separate lines automatically.</p>
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm text-gray-600 dark:text-gray-300">Whose card / account:</label>
           <select value={cardholder} onChange={(e) => setCardholder(e.target.value)} className={`${input} text-sm`}>
@@ -344,10 +345,12 @@ export default function AccountsMonthClient({
                       <tr key={r.id} className={`border-b border-gray-100 dark:border-gray-800/60 align-top ${r.reviewed ? "" : "bg-amber-50/40 dark:bg-amber-500/5"}`}>
                         <td className="p-1.5">
                           <button onClick={() => setViewId(r.id)} title="Open invoice" className="relative block">
-                            {r.images[0] ? (
-                              <img src={r.images[0]} alt="scan" className="w-9 h-9 object-cover rounded border border-gray-200 dark:border-gray-700 hover:ring-2 hover:ring-emerald-500" />
-                            ) : (
+                            {!r.images[0] ? (
                               <span className="w-9 h-9 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 text-xs flex items-center justify-center hover:ring-2 hover:ring-emerald-500">✎</span>
+                            ) : isPdf(r.images[0]) ? (
+                              <span className="w-9 h-9 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-300 text-[9px] font-bold flex items-center justify-center hover:ring-2 hover:ring-emerald-500">PDF</span>
+                            ) : (
+                              <img src={r.images[0]} alt="scan" className="w-9 h-9 object-cover rounded border border-gray-200 dark:border-gray-700 hover:ring-2 hover:ring-emerald-500" />
                             )}
                             {r.images.length > 1 && <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[9px] font-bold rounded-full px-1 leading-tight">{r.images.length}</span>}
                           </button>
@@ -437,7 +440,11 @@ export default function AccountsMonthClient({
                 {viewRow.images.map((url, i) => (
                   <div key={i} className="relative">
                     <button onClick={() => setViewer({ images: viewRow.images, index: i })} title={`Page ${i + 1} — view & zoom`} className="block w-full cursor-zoom-in">
-                      <img src={url} alt={`Page ${i + 1}`} className="w-full rounded-lg border border-gray-200 dark:border-gray-700" />
+                      {isPdf(url) ? (
+                        <span className="flex items-center justify-center gap-2 w-full py-6 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-semibold text-gray-600 dark:text-gray-300">📄 View PDF</span>
+                      ) : (
+                        <img src={url} alt={`Page ${i + 1}`} className="w-full rounded-lg border border-gray-200 dark:border-gray-700" />
+                      )}
                     </button>
                     {viewRow.images.length > 1 && <span className="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">Page {i + 1}</span>}
                     <button onClick={() => removePage(viewRow.id, i)} disabled={busy} className="absolute top-1 right-1 bg-black/60 hover:bg-red-600 text-white text-sm rounded-full w-6 h-6 leading-none disabled:opacity-50" title="Remove this page">×</button>
@@ -531,7 +538,9 @@ export default function AccountsMonthClient({
                 const row = rows.find((r) => r.id === p.docId)
                 return (
                   <div key={p.docId} className="flex gap-3 items-start border border-gray-200 dark:border-gray-800 rounded-xl p-3">
-                    {row?.images[0] && <img src={row.images[0]} alt="" className="w-12 h-12 object-cover rounded border border-gray-200 dark:border-gray-700 flex-shrink-0" />}
+                    {row?.images[0] && (isPdf(row.images[0])
+                      ? <span className="w-12 h-12 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-300 text-[9px] font-bold flex items-center justify-center flex-shrink-0">PDF</span>
+                      : <img src={row.images[0]} alt="" className="w-12 h-12 object-cover rounded border border-gray-200 dark:border-gray-700 flex-shrink-0" />)}
                     <div className="text-sm flex-1 min-w-0">
                       {p.receipts.length > 1 && <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mb-1">Splits into {p.receipts.length} separate receipts:</p>}
                       {p.receipts.map((r: any, i: number) => (
@@ -606,36 +615,43 @@ function ImageViewer({ images, startIndex, onClose }: { images: string[]; startI
   }
 
   const btn = "bg-white/15 hover:bg-white/30 text-white rounded-lg w-9 h-9 flex items-center justify-center text-lg leading-none"
+  const pdf = isPdf(images[i])
   return (
     <div className="fixed inset-0 z-[70] bg-black/90 flex flex-col" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="flex items-center justify-between p-3 text-white">
-        <span className="text-sm">{images.length > 1 ? `Page ${i + 1} of ${images.length}` : "Invoice"} · {Math.round(zoom * 100)}%</span>
+        <span className="text-sm">{images.length > 1 ? `Page ${i + 1} of ${images.length}` : "Invoice"}{pdf ? " · PDF" : ` · ${Math.round(zoom * 100)}%`}</span>
         <div className="flex items-center gap-2">
-          <button className={btn} onClick={() => setZoom((z) => clamp(z - 0.5, 1, 6))} title="Zoom out">−</button>
-          <button className={btn} onClick={() => { setZoom(1); setPos({ x: 0, y: 0 }) }} title="Fit">⤢</button>
-          <button className={btn} onClick={() => setZoom((z) => clamp(z + 0.5, 1, 6))} title="Zoom in">+</button>
+          {!pdf && <button className={btn} onClick={() => setZoom((z) => clamp(z - 0.5, 1, 6))} title="Zoom out">−</button>}
+          {!pdf && <button className={btn} onClick={() => { setZoom(1); setPos({ x: 0, y: 0 }) }} title="Fit">⤢</button>}
+          {!pdf && <button className={btn} onClick={() => setZoom((z) => clamp(z + 0.5, 1, 6))} title="Zoom in">+</button>}
           <a className={btn} href={images[i]} target="_blank" rel="noreferrer" title="Open in new tab">↗</a>
           <button className={btn} onClick={onClose} title="Close">×</button>
         </div>
       </div>
-      <div
-        className="flex-1 overflow-hidden flex items-center justify-center select-none"
-        style={{ touchAction: "none", cursor: zoom > 1 ? "grab" : "zoom-in" }}
-        onWheel={(e) => setZoom((z) => clamp(z - e.deltaY * 0.0015, 1, 6))}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        onDoubleClick={() => setZoom((z) => (z > 1 ? 1 : 2.5))}
-      >
-        <img
-          src={images[i]}
-          alt={`Page ${i + 1}`}
-          draggable={false}
-          className="max-h-full max-w-full object-contain"
-          style={{ transform: `translate(${pos.x}px, ${pos.y}px) scale(${zoom})`, transition: pinch.current || panLast.current ? "none" : "transform 0.08s" }}
-        />
-      </div>
+      {pdf ? (
+        <div className="flex-1 bg-white" onClick={(e) => e.stopPropagation()}>
+          <iframe src={images[i]} title={`Page ${i + 1}`} className="w-full h-full border-0" />
+        </div>
+      ) : (
+        <div
+          className="flex-1 overflow-hidden flex items-center justify-center select-none"
+          style={{ touchAction: "none", cursor: zoom > 1 ? "grab" : "zoom-in" }}
+          onWheel={(e) => setZoom((z) => clamp(z - e.deltaY * 0.0015, 1, 6))}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          onDoubleClick={() => setZoom((z) => (z > 1 ? 1 : 2.5))}
+        >
+          <img
+            src={images[i]}
+            alt={`Page ${i + 1}`}
+            draggable={false}
+            className="max-h-full max-w-full object-contain"
+            style={{ transform: `translate(${pos.x}px, ${pos.y}px) scale(${zoom})`, transition: pinch.current || panLast.current ? "none" : "transform 0.08s" }}
+          />
+        </div>
+      )}
       {images.length > 1 && (
         <>
           <button onClick={() => setI((p) => Math.max(p - 1, 0))} disabled={i === 0}

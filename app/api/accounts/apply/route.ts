@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     if (list.length > 1 && keys.length) {
       const buf = await getObjectBuffer(keys[0])
       const mime = mimeForKey(keys[0])
-      for (let i = 1; i < list.length && i < 20; i++) {
+      for (let i = 1; i < list.length && i < 50; i++) {
         const f = clean(list[i])
         const newKey = `accounts/${doc.monthId}/${Date.now()}-${i}-split.${mime === "application/pdf" ? "pdf" : "jpg"}`
         await uploadBufferToR2(buf, newKey, mime)

@@ -24,7 +24,7 @@ const COLUMN_GUIDE = `Choose ONE allocation column (use the key in brackets):
 
 function buildPrompt(cardholder: string, allowSplit: boolean): string {
   const splitRule = allowSplit
-    ? `This single photo may show ONE receipt or SEVERAL separate small receipts laid out together. Return one object per SEPARATE physical receipt/invoice you can see. Most photos have just one — only return multiple objects if there are clearly distinct, separate receipts in the image.`
+    ? `The supplied image OR PDF may contain ONE invoice/receipt or SEVERAL separate ones — e.g. small receipts laid out together in a photo, or a multi-page PDF scanned from a stack of different invoices. Return one object per SEPARATE invoice/receipt. IMPORTANT: a single invoice can itself run over several pages — keep those pages together as ONE object (its total and VAT are usually on its last page); do NOT make a separate object per page. Only return multiple objects when there are genuinely different invoices/receipts. Many uploads are just one.`
     : `Treat all the supplied images as the PAGES OF ONE document and return exactly ONE object (totals/VAT are usually on the last page).`
   return `You are reading UK business expense receipts/invoices for an auction house. The card/account they belong to is "${cardholder}".
 ${splitRule}
@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
     if (!allowSplit) receipts = receipts.slice(0, 1)
 
     const proposals = []
-    for (let i = 0; i < receipts.length && i < 20; i++) {
+    for (let i = 0; i < receipts.length && i < 50; i++) {
       const f = await normalise(receipts[i], i === 0 ? aiError : null)
       proposals.push({
         supplier: f.supplier, item: f.item, website: f.website,
