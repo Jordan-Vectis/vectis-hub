@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { PDFDocument } from "pdf-lib"
 import { prisma } from "@/lib/prisma"
 import { getObjectBuffer } from "@/lib/r2"
 import {
@@ -24,8 +25,8 @@ const COLUMN_GUIDE = `Choose ONE allocation column (use the key in brackets):
 
 function buildPrompt(cardholder: string, allowSplit: boolean): string {
   const splitRule = allowSplit
-    ? `The supplied image OR PDF may contain ONE invoice/receipt or SEVERAL separate ones — e.g. small receipts laid out together in a photo, or a multi-page PDF scanned from a stack of different invoices. Return one object per SEPARATE invoice/receipt. IMPORTANT: a single invoice can itself run over several pages — keep those pages together as ONE object (its total and VAT are usually on its last page); do NOT make a separate object per page. Only return multiple objects when there are genuinely different invoices/receipts. Many uploads are just one.`
-    : `Treat all the supplied images as the PAGES OF ONE document and return exactly ONE object (totals/VAT are usually on the last page).`
+    ? `This photo may show ONE receipt or SEVERAL separate small receipts laid out together. Return one object per SEPARATE physical receipt. Most photos have just one — only return multiple if there are clearly distinct, separate receipts.`
+    : `Read the supplied page(s) as ONE single invoice/receipt and return exactly ONE object (a multi-page invoice's total/VAT is usually on the last page).`
   return `You are reading UK business expense receipts/invoices for an auction house. The card/account they belong to is "${cardholder}".
 ${splitRule}
 
@@ -61,8 +62,6 @@ function mimeForKey(key: string): string {
 
 const r2p = (n: number) => Math.round(n * 100) / 100
 
-// Turn one raw AI receipt object into clean, validated fields (+ apply a learned
-// supplier rule and the VAT fallback).
 async function normalise(p: any, extraNote: string | null) {
   let vatCode = isValidVatCode(Number(p?.vatCode)) ? Number(p.vatCode) : 2
   let column  = isValidColumn(p?.column) ? p.column : "vectis"
@@ -84,11 +83,11 @@ async function normalise(p: any, extraNote: string | null) {
   return { supplier, item, website, docDate, vatCode, gross, vat, net: netFromGross(gross, vat), column, aiNotes: notes }
 }
 
-// PREVIEW only: reads ONE already-uploaded document (by id) with AI and returns
-// the proposed receipt(s) WITHOUT writing anything. The client shows these for
-// approval, then calls /api/accounts/apply to commit. A single-photo line on its
-// first read may propose several receipts (split); a multi-page invoice or a
-// re-read always proposes exactly one.
+// READER (preview, no writes). Reads ONE invoice and returns the proposed fields.
+//  - `pages` given: slice the document's PDF to just those pages and read that one
+//    invoice (used by the two-stage flow after /api/accounts/split).
+//  - no `pages`: read the whole document. A single photo on its first read may
+//    return several receipts (multi-receipt photo); otherwise exactly one.
 export async function POST(req: NextRequest) {
   try {
     const session = await auth()
@@ -99,7 +98,7 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
 
-    const { docId, model: modelId } = await req.json()
+    const { docId, pages, model: modelId } = await req.json()
     if (!docId) return NextResponse.json({ error: "docId required" }, { status: 400 })
 
     const doc = await prisma.accountingDocument.findUnique({ where: { id: docId } })
@@ -107,10 +106,29 @@ export async function POST(req: NextRequest) {
     const keys = (doc.images && doc.images.length) ? doc.images : (doc.imageKey ? [doc.imageKey] : [])
     if (!keys.length) return NextResponse.json({ error: "No scan to read" }, { status: 400 })
 
-    const allowSplit = keys.length === 1 && !doc.aiRun
+    const isPdfFile = keys.length === 1 && keys[0].toLowerCase().endsWith(".pdf")
+    const wantPages = Array.isArray(pages) && pages.length > 0 && isPdfFile
 
-    const buffers = await Promise.all(keys.slice(0, 12).map((k) => getObjectBuffer(k)))
-    const imageParts = buffers.map((buf, idx) => ({ inlineData: { data: buf.toString("base64"), mimeType: mimeForKey(keys[idx]) } }))
+    let imageParts: any[]
+    let allowSplit: boolean
+    if (wantPages) {
+      // Slice the PDF to the requested pages and read just that invoice.
+      const buf = await getObjectBuffer(keys[0])
+      const src = await PDFDocument.load(buf)
+      const count = src.getPageCount()
+      const idx = (pages as any[]).map((n) => Number(n) - 1).filter((n) => Number.isInteger(n) && n >= 0 && n < count)
+      const out = await PDFDocument.create()
+      const copied = await out.copyPages(src, idx.length ? idx : [0])
+      copied.forEach((pg) => out.addPage(pg))
+      const bytes = Buffer.from(await out.save())
+      imageParts = [{ inlineData: { data: bytes.toString("base64"), mimeType: "application/pdf" } }]
+      allowSplit = false
+    } else {
+      const buffers = await Promise.all(keys.slice(0, 12).map((k) => getObjectBuffer(k)))
+      imageParts = buffers.map((buf, idx) => ({ inlineData: { data: buf.toString("base64"), mimeType: mimeForKey(keys[idx]) } }))
+      // Photos can hold several receipts; PDFs are split by /api/accounts/split instead.
+      allowSplit = keys.length === 1 && !doc.aiRun && !isPdfFile
+    }
 
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
@@ -135,9 +153,11 @@ export async function POST(req: NextRequest) {
     }
     if (receipts.length === 0) receipts = [{}]
     if (!allowSplit) receipts = receipts.slice(0, 1)
+    let capped = false
+    if (receipts.length > 200) { capped = true; receipts = receipts.slice(0, 200) }
 
     const proposals = []
-    for (let i = 0; i < receipts.length && i < 200; i++) {
+    for (let i = 0; i < receipts.length; i++) {
       const f = await normalise(receipts[i], i === 0 ? aiError : null)
       proposals.push({
         supplier: f.supplier, item: f.item, website: f.website,
@@ -146,7 +166,7 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    return NextResponse.json({ docId: doc.id, receipts: proposals })
+    return NextResponse.json({ docId: doc.id, receipts: proposals, capped })
   } catch (e: any) {
     console.error("accounts/extract error:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })

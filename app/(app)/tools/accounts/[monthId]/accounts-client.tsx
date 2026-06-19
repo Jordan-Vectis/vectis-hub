@@ -41,7 +41,7 @@ export default function AccountsMonthClient({
   const [addingPage, setAddingPage] = useState(false)
   const [modalBusy, setModalBusy] = useState(false)
   const [viewer, setViewer] = useState<{ images: string[]; index: number } | null>(null)
-  const [aiPreview, setAiPreview] = useState<{ docId: string; receipts: any[] }[] | null>(null)
+  const [aiPreview, setAiPreview] = useState<{ docId: string; receipts: any[]; capped?: boolean }[] | null>(null)
   const [applying, setApplying] = useState(false)
 
   // Each photo/file becomes a BLANK line straight away (image only); the AI is run
@@ -90,10 +90,10 @@ export default function AccountsMonthClient({
 
   // Preview: ask the AI what it proposes for a document — returns receipts but
   // writes nothing. The user approves before anything is committed.
-  async function previewOne(docId: string): Promise<{ docId: string; receipts: any[] } | null> {
+  async function previewOne(docId: string, pages?: number[]): Promise<{ docId: string; receipts: any[]; capped?: boolean } | null> {
     try {
       const res = await fetch("/api/accounts/extract", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ docId }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ docId, pages }),
       })
       if (res.ok) return await res.json()
     } catch { /* skip */ }
@@ -139,17 +139,41 @@ export default function AccountsMonthClient({
   }
 
   // Run AI = read everything (no writes) then show the proposals for approval.
+  // PDFs go through a two-stage pass: split into page groups, then read each
+  // invoice on its own pages. Photos are read in one pass (may be multi-receipt).
   async function runAi() {
     const target = aiTarget
     if (running || target.length === 0) return
     setRunning(true)
     setAiProg({ done: 0, total: target.length, errors: 0 })
-    const previews: { docId: string; receipts: any[] }[] = []
+    const previews: { docId: string; receipts: any[]; capped?: boolean }[] = []
     let errors = 0
     for (let i = 0; i < target.length; i++) {
-      const p = await previewOne(target[i].id)
-      if (p && Array.isArray(p.receipts)) previews.push(p)
-      else errors++
+      const r = target[i]
+      try {
+        const canSplit = r.images.length === 1 && isPdf(r.images[0]) && !r.aiRun
+        if (canSplit) {
+          const s = await fetch("/api/accounts/split", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ docId: r.id }) }).then((x) => x.ok ? x.json() : null)
+          const groups: number[][] = s?.groups ?? []
+          if (groups.length > 1) {
+            const receipts: any[] = []
+            for (const g of groups) {
+              const d = await previewOne(r.id, g)
+              if (d?.receipts?.[0]) receipts.push({ ...d.receipts[0], pages: g })
+            }
+            if (receipts.length) previews.push({ docId: r.id, receipts, capped: !!s?.capped })
+            else errors++
+          } else {
+            const d = await previewOne(r.id)
+            if (d?.receipts?.length) previews.push({ docId: r.id, receipts: d.receipts.map((x: any) => ({ ...x, pages: groups[0] ?? [] })), capped: !!d.capped })
+            else errors++
+          }
+        } else {
+          const d = await previewOne(r.id)
+          if (d?.receipts) previews.push({ docId: r.id, receipts: d.receipts, capped: !!d.capped })
+          else errors++
+        }
+      } catch { errors++ }
       setAiProg({ done: i + 1, total: target.length, errors })
     }
     setRunning(false)
@@ -534,6 +558,9 @@ export default function AccountsMonthClient({
             </div>
             <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto">
               <p className="text-xs text-gray-400">The AI read {aiPreview.length} {aiPreview.length === 1 ? "document" : "documents"}. Here&apos;s what it will fill in — approve to apply, or cancel to discard. Nothing is saved until you approve.</p>
+              {aiPreview.some((p) => p.capped) && (
+                <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-3 py-2">⚠ A file held more than 200 invoices — only the first 200 were read. Split very large scans into smaller files and run them separately.</p>
+              )}
               {aiPreview.map((p) => {
                 const row = rows.find((r) => r.id === p.docId)
                 return (
