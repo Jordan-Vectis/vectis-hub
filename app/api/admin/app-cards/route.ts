@@ -29,6 +29,7 @@ export async function GET() {
       defaultLabel:       def.defaultLabel,
       defaultDescription: def.defaultDescription,
       icon:               def.icon,
+      group:              def.group ?? null,
     }
   }).sort((a, b) => a.order - b.order)
 
