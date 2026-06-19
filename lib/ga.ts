@@ -35,13 +35,14 @@ export function rangeDays(range: GaRange): number { return RANGE_DAYS[range] ?? 
 // likely genuine diecast/model collectors. Adjust this list as needed.
 export const BOT_COUNTRY_IDS = ["CN", "HK", "TW", "SG", "IN", "VN", "ID", "PH", "TH", "PK", "BD"]
 
-// Build a GA4 dimensionFilter combining the bot-country exclusion (when the
-// toggle is on) and an optional eventName match (for event-specific reports like
-// "registrations by source"). Returns undefined when neither applies.
-function buildFilter(excludeBots?: boolean, eventName?: string) {
+// Build a GA4 dimensionFilter combining a country filter (UK-only, or the
+// bot-country exclusion) and an optional eventName match. Returns undefined when
+// nothing applies. UK-only takes precedence over the bot exclusion (it's stricter).
+function buildFilter(excludeBots?: boolean, eventName?: string, ukOnly?: boolean) {
   const exprs: any[] = []
-  if (excludeBots) exprs.push({ notExpression: { filter: { fieldName: "countryId", inListFilter: { values: BOT_COUNTRY_IDS } } } })
-  if (eventName)   exprs.push({ filter: { fieldName: "eventName", stringFilter: { value: eventName } } })
+  if (ukOnly) exprs.push({ filter: { fieldName: "countryId", stringFilter: { value: "GB" } } })
+  else if (excludeBots) exprs.push({ notExpression: { filter: { fieldName: "countryId", inListFilter: { values: BOT_COUNTRY_IDS } } } })
+  if (eventName) exprs.push({ filter: { fieldName: "eventName", stringFilter: { value: eventName } } })
   if (exprs.length === 0) return undefined
   if (exprs.length === 1) return exprs[0]
   return { andGroup: { expressions: exprs } }
@@ -54,14 +55,14 @@ async function report(
   range: GaRange,
   dimension: string,
   metric: string,
-  opts: { limit?: number; secondaryMetric?: string; excludeBots?: boolean; eventName?: string } = {},
+  opts: { limit?: number; secondaryMetric?: string; excludeBots?: boolean; eventName?: string; ukOnly?: boolean } = {},
 ): Promise<Row[]> {
   const [res] = await client().runReport({
     property: propertyPath(),
     dateRanges: [{ startDate: `${rangeDays(range)}daysAgo`, endDate: "today" }],
     dimensions: [{ name: dimension }],
     metrics: [{ name: metric }, ...(opts.secondaryMetric ? [{ name: opts.secondaryMetric }] : [])],
-    dimensionFilter: buildFilter(opts.excludeBots, opts.eventName) as any,
+    dimensionFilter: buildFilter(opts.excludeBots, opts.eventName, opts.ukOnly) as any,
     orderBys: dimension === "date"
       ? [{ dimension: { dimensionName: "date" } }]
       : [{ metric: { metricName: metric }, desc: true }],
@@ -82,12 +83,12 @@ const METRIC_KEYS = [
 export type MetricKey = typeof METRIC_KEYS[number]
 export type Totals = Record<MetricKey, number>
 
-async function totalsFor(startDate: string, endDate: string, excludeBots?: boolean): Promise<Totals> {
+async function totalsFor(startDate: string, endDate: string, excludeBots?: boolean, ukOnly?: boolean): Promise<Totals> {
   const [res] = await client().runReport({
     property: propertyPath(),
     dateRanges: [{ startDate, endDate }],
     metrics: METRIC_KEYS.map((name) => ({ name })),
-    dimensionFilter: buildFilter(excludeBots) as any,
+    dimensionFilter: buildFilter(excludeBots, undefined, ukOnly) as any,
   })
   const v = res.rows?.[0]?.metricValues ?? []
   const out = {} as Totals
@@ -96,12 +97,12 @@ async function totalsFor(startDate: string, endDate: string, excludeBots?: boole
 }
 
 // Active users in the last 30 minutes (GA4 realtime). null if unavailable.
-export async function realtimeActiveUsers(excludeBots?: boolean): Promise<number | null> {
+export async function realtimeActiveUsers(excludeBots?: boolean, ukOnly?: boolean): Promise<number | null> {
   try {
     const [res] = await client().runRealtimeReport({
       property: propertyPath(),
       metrics: [{ name: "activeUsers" }],
-      dimensionFilter: buildFilter(excludeBots) as any,
+      dimensionFilter: buildFilter(excludeBots, undefined, ukOnly) as any,
     })
     return Number(res.rows?.[0]?.metricValues?.[0]?.value ?? 0)
   } catch { return null }
@@ -162,19 +163,19 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (x: T) => Promise<R
 export type ReportSection = SectionDef & { rows: Row[] }
 export type MarketingReport = Awaited<ReturnType<typeof getMarketingReport>>
 
-export async function getMarketingReport(range: GaRange, excludeBots = false, sectionIds: string[] = DEFAULT_SECTION_IDS) {
+export async function getMarketingReport(range: GaRange, excludeBots = false, sectionIds: string[] = DEFAULT_SECTION_IDS, ukOnly = false) {
   const days = rangeDays(range)
   const b = excludeBots
   const [current, previous, series] = await Promise.all([
-    totalsFor(`${days}daysAgo`, "today", b),
-    totalsFor(`${days * 2}daysAgo`, `${days + 1}daysAgo`, b),
-    report(range, "date", "activeUsers", { secondaryMetric: "sessions", excludeBots: b }),
+    totalsFor(`${days}daysAgo`, "today", b, ukOnly),
+    totalsFor(`${days * 2}daysAgo`, `${days + 1}daysAgo`, b, ukOnly),
+    report(range, "date", "activeUsers", { secondaryMetric: "sessions", excludeBots: b, ukOnly }),
   ])
 
   const defs = sectionIds.map((id) => SECTION_CATALOG.find((s) => s.id === id)).filter(Boolean) as SectionDef[]
   const sections: ReportSection[] = await mapLimit(defs, 6, async (def) => ({
     ...def,
-    rows: await report(range, def.dimension, def.metric, { secondaryMetric: def.secondaryMetric, limit: def.limit, excludeBots: b, eventName: def.eventName }),
+    rows: await report(range, def.dimension, def.metric, { secondaryMetric: def.secondaryMetric, limit: def.limit, excludeBots: b, eventName: def.eventName, ukOnly }),
   }))
 
   const deltas = {} as Record<MetricKey, number | null>

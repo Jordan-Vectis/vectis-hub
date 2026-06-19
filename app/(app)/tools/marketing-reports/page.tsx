@@ -9,6 +9,7 @@ import InfoTip from "./info-tip"
 import LayoutBar from "./layout-bar"
 
 const BOT_TIP = "When on, hides traffic from countries that are mostly automated bots/scrapers (currently China, Hong Kong, Taiwan, Singapore, India, Vietnam, Indonesia, Philippines, Thailand, Pakistan and Bangladesh) so the figures better reflect real visitors. Japan and Korea are deliberately kept in (likely genuine collectors). Ask IT to adjust the list if needed."
+const UK_TIP = "When on, shows only visitors based in the United Kingdom — every figure and report on the page is restricted to UK traffic. This is stricter than 'Hide bot traffic' (it already excludes everywhere else), so you don't need both on at once."
 
 export const dynamic = "force-dynamic"
 export const metadata = { title: "Marketing Reports" }
@@ -61,7 +62,7 @@ function Delta({ pct, higherBetter }: { pct: number | null; higherBetter: boolea
 export default async function MarketingReportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string; bots?: string }>
+  searchParams: Promise<{ range?: string; bots?: string; uk?: string }>
 }) {
   const session = await auth()
   if (!session) redirect("/login")
@@ -70,7 +71,16 @@ export default async function MarketingReportsPage({
   const sp = await searchParams
   const range: GaRange = (["7d", "28d", "90d", "365d"].includes(sp.range ?? "") ? sp.range : "28d") as GaRange
   const excludeBots = sp.bots === "hide"
-  const linkFor = (r: GaRange, bots: boolean) => `/tools/marketing-reports?range=${r}${bots ? "&bots=hide" : ""}`
+  const ukOnly = sp.uk === "1"
+  const linkFor = (opts: { range?: GaRange; bots?: boolean; uk?: boolean }) => {
+    const r = opts.range ?? range
+    const b = opts.bots ?? excludeBots
+    const u = opts.uk ?? ukOnly
+    const parts = [`range=${r}`]
+    if (b) parts.push("bots=hide")
+    if (u) parts.push("uk=1")
+    return `/tools/marketing-reports?${parts.join("&")}`
+  }
 
   // Saved shared layouts. The one shown = the user's picked layout (mr_layout
   // cookie) → the default → the first → the hardcoded fallback set.
@@ -98,7 +108,18 @@ export default async function MarketingReportsPage({
               isAdmin={isAdmin}
             />
             <Link
-              href={linkFor(range, !excludeBots)}
+              href={linkFor({ uk: !ukOnly })}
+              className={`px-3.5 py-2 rounded-xl text-sm font-semibold border transition-colors ${
+                ukOnly
+                  ? "bg-pink-600 border-pink-600 text-white"
+                  : "bg-gray-100 dark:bg-[#2C2C2E] border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+              }`}
+            >
+              {ukOnly ? "✓ UK only" : "🇬🇧 UK only"}
+            </Link>
+            <InfoTip text={UK_TIP} />
+            <Link
+              href={linkFor({ bots: !excludeBots })}
               className={`px-3.5 py-2 rounded-xl text-sm font-semibold border transition-colors ${
                 excludeBots
                   ? "bg-pink-600 border-pink-600 text-white"
@@ -112,7 +133,7 @@ export default async function MarketingReportsPage({
               {RANGES.map((r) => (
                 <Link
                   key={r.key}
-                  href={linkFor(r.key, excludeBots)}
+                  href={linkFor({ range: r.key })}
                   className={`px-3.5 py-2 rounded-lg text-sm font-semibold transition-colors ${
                     range === r.key ? "bg-pink-600 text-white" : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
                   }`}
@@ -128,7 +149,7 @@ export default async function MarketingReportsPage({
       {!isGaConfigured() ? (
         <SetupCard />
       ) : (
-        <ReportBody range={range} excludeBots={excludeBots} sections={selectedSections} />
+        <ReportBody range={range} excludeBots={excludeBots} ukOnly={ukOnly} sections={selectedSections} />
       )}
     </div>
   )
@@ -156,12 +177,12 @@ function SetupCard() {
   )
 }
 
-async function ReportBody({ range, excludeBots, sections }: { range: GaRange; excludeBots: boolean; sections: string[] }) {
+async function ReportBody({ range, excludeBots, ukOnly, sections }: { range: GaRange; excludeBots: boolean; ukOnly: boolean; sections: string[] }) {
   let data: Awaited<ReturnType<typeof getMarketingReport>> | null = null
   let realtime: number | null = null
   let error: string | null = null
   try {
-    [data, realtime] = await Promise.all([getMarketingReport(range, excludeBots, sections), realtimeActiveUsers(excludeBots)])
+    [data, realtime] = await Promise.all([getMarketingReport(range, excludeBots, sections, ukOnly), realtimeActiveUsers(excludeBots, ukOnly)])
   } catch (e: any) {
     error = e?.message ?? "Failed to load analytics"
   }
