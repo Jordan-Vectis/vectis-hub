@@ -80,13 +80,14 @@ export default function AccountsMonthClient({
     setUploadProg(null)
   }
 
-  // Lines that still need an AI read: brand-new scans first; if there are none,
-  // any already-read line that hasn't been ticked "OK" yet can be re-read (so a
-  // wrong/failed read isn't stuck forever). Reviewed lines are left alone.
-  const unread = rows.filter((r) => r.images.length > 0 && !r.aiRun)
-  const rereadable = rows.filter((r) => r.images.length > 0 && r.aiRun && !r.reviewed)
-  const aiTarget = unread.length ? unread : rereadable
-  const aiLabel = unread.length ? `Run AI (${unread.length})` : rereadable.length ? `Re-read AI (${rereadable.length})` : "Run AI"
+  // Un-read scans sit in their own "To read" area; everything else (AI-read lines
+  // + manual lines) is the main table. Run AI works through the un-read ones first;
+  // with none left it can re-read any read-but-not-OK'd line.
+  const toRead = rows.filter((r) => r.images.length > 0 && !r.aiRun)
+  const mainRows = rows.filter((r) => !(r.images.length > 0 && !r.aiRun))
+  const rereadable = mainRows.filter((r) => r.images.length > 0 && r.aiRun && !r.reviewed)
+  const aiTarget = toRead.length ? toRead : rereadable
+  const aiLabel = toRead.length ? `Run AI (${toRead.length})` : rereadable.length ? `Re-read AI (${rereadable.length})` : "Run AI"
 
   // Preview: ask the AI what it proposes for a document — returns receipts but
   // writes nothing. The user approves before anything is committed.
@@ -231,13 +232,13 @@ export default function AccountsMonthClient({
     startBusy(async () => { await deleteAccountingMonth(monthId); router.push("/tools/accounts") })
   }
 
-  // ── Totals + grouping ─────────────────────────────────────────────────────────
-  const grandGross = round(rows.reduce((a, r) => a + r.gross, 0))
-  const vatReclaim  = round(rows.filter((r) => r.vatCode === 1).reduce((a, r) => a + r.vat, 0))
-  const unreviewed  = rows.filter((r) => !r.reviewed).length
+  // ── Totals + grouping (main table only; un-read scans excluded) ────────────────
+  const grandGross = round(mainRows.reduce((a, r) => a + r.gross, 0))
+  const vatReclaim  = round(mainRows.filter((r) => r.vatCode === 1).reduce((a, r) => a + r.vat, 0))
+  const unreviewed  = mainRows.filter((r) => !r.reviewed).length
 
-  const groupOrder = Array.from(new Set([...cardholders, ...rows.map((r) => r.cardholder)].filter(Boolean)))
-  const groups = groupOrder.map((name) => ({ name, items: rows.filter((r) => r.cardholder === name) })).filter((g) => g.items.length)
+  const groupOrder = Array.from(new Set([...cardholders, ...mainRows.map((r) => r.cardholder)].filter(Boolean)))
+  const groups = groupOrder.map((name) => ({ name, items: mainRows.filter((r) => r.cardholder === name) })).filter((g) => g.items.length)
   const colSum = (items: Row[], key: string) => round(items.filter((r) => r.column === key).reduce((a, r) => a + r.net, 0))
   const TOTAL_COLS = NOMINAL_COLUMNS.length + 9
 
@@ -331,6 +332,24 @@ export default function AccountsMonthClient({
         {!running && aiProg.total > 0 && <p className="text-xs text-gray-400 mt-2">Read {aiProg.total - aiProg.errors} of {aiProg.total}{aiProg.errors ? `, ${aiProg.errors} failed` : ""}.</p>}
       </div>
 
+      {/* To read — scans not yet processed by AI */}
+      {toRead.length > 0 && (
+        <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-amber-300/60 dark:border-amber-500/30 p-4 mb-6">
+          <h2 className="text-sm font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">To read ({toRead.length})</h2>
+          <p className="text-xs text-gray-400 mb-3">These scans haven&apos;t been read yet. Press <span className="font-semibold">Run AI</span> above and approve — they&apos;ll drop into the table below. Click one to view or remove it.</p>
+          <div className="flex flex-wrap gap-2">
+            {toRead.map((r) => (
+              <button key={r.id} onClick={() => setViewId(r.id)} title="View / remove" className="relative">
+                {isPdf(r.images[0])
+                  ? <span className="w-14 h-14 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-300 text-[10px] font-bold flex items-center justify-center hover:ring-2 hover:ring-amber-500">PDF</span>
+                  : <img src={r.images[0]} alt="scan" className="w-14 h-14 object-cover rounded-lg border border-gray-200 dark:border-gray-700 hover:ring-2 hover:ring-amber-500" />}
+                {r.images.length > 1 && <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[9px] font-bold rounded-full px-1 leading-tight">{r.images.length}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Totals */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
         <Stat label="Total value" value={gbp(grandGross)} />
@@ -339,9 +358,9 @@ export default function AccountsMonthClient({
       </div>
 
       {/* Review grid — laid out like the spreadsheet, grouped per card, fits the screen */}
-      {rows.length === 0 ? (
+      {mainRows.length === 0 ? (
         <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-8 text-center text-sm text-gray-400">
-          No lines yet — scan some documents above, or add one manually.
+          {toRead.length > 0 ? "Press Run AI above and approve to read the scans waiting in “To read”." : "No lines yet — add some documents above, or add a line manually."}
         </div>
       ) : (
         <>
@@ -548,7 +567,7 @@ export default function AccountsMonthClient({
                         setModalBusy(true)
                         const p = await previewOne(viewRow.id)
                         const r = p?.receipts?.[0]
-                        if (r) setRows((rs) => rs.map((x) => x.id === viewRow.id ? { ...x, supplier: r.supplier, item: r.item, website: r.website, docDate: r.docDate, vatCode: r.vatCode, gross: r.gross, vat: r.vat, net: r.net, column: r.column, aiNotes: r.aiNotes } : x))
+                        if (r) await applyOne(viewRow.id, [r])
                         setModalBusy(false)
                       }}
                       disabled={modalBusy}
