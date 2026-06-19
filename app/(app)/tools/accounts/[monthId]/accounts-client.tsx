@@ -27,6 +27,8 @@ export default function AccountsMonthClient({
   const cardOptions = Array.from(new Set([...cardholders, ...rows.map((d) => d.cardholder)].filter(Boolean)))
 
   const [cardholder, setCardholder] = useState<string>(cardholders[0] ?? "Vectis")
+  const [multiPage, setMultiPage] = useState(false)
+  const [currentDocId, setCurrentDocId] = useState<string | null>(null)   // the invoice new photos attach to in multi-page mode
   const [uploadProg, setUploadProg] = useState<{ done: number; total: number } | null>(null)
   const [running, setRunning] = useState(false)
   const [aiProg, setAiProg] = useState<{ done: number; total: number; errors: number }>({ done: 0, total: 0, errors: 0 })
@@ -44,19 +46,29 @@ export default function AccountsMonthClient({
     const fileArr = list ? Array.from(list) : []
     if (!fileArr.length) return
     setUploadProg({ done: 0, total: fileArr.length })
+    // In multi-page mode, the first photo starts a new invoice and the rest attach
+    // to it (until "New invoice" is pressed). Otherwise every photo is its own line.
+    let curId = multiPage ? currentDocId : null
     for (let i = 0; i < fileArr.length; i++) {
       try {
-        const fd = new FormData()
-        fd.append("monthId", monthId)
-        fd.append("cardholder", cardholder)
-        fd.append("file", fileArr[i])
-        const res = await fetch("/api/accounts/upload", { method: "POST", body: fd })
-        if (res.ok) {
-          const { id, images } = await res.json()
-          setRows((rs) => [...rs, {
-            id, cardholder, source: "SCAN", images, supplier: "", item: "", website: "", docDate: "",
-            vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiRun: false, aiNotes: null,
-          }])
+        if (curId) {
+          const fd = new FormData(); fd.append("docId", curId); fd.append("file", fileArr[i])
+          const res = await fetch("/api/accounts/add-page", { method: "POST", body: fd })
+          if (res.ok) {
+            const { id, images } = await res.json()
+            setRows((rs) => rs.map((r) => r.id === id ? { ...r, images, aiRun: false } : r))
+          }
+        } else {
+          const fd = new FormData(); fd.append("monthId", monthId); fd.append("cardholder", cardholder); fd.append("file", fileArr[i])
+          const res = await fetch("/api/accounts/upload", { method: "POST", body: fd })
+          if (res.ok) {
+            const { id, images } = await res.json()
+            setRows((rs) => [...rs, {
+              id, cardholder, source: "SCAN", images, supplier: "", item: "", website: "", docDate: "",
+              vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiRun: false, aiNotes: null,
+            }])
+            if (multiPage) { curId = id; setCurrentDocId(id) }
+          }
         }
       } catch { /* skip a failed upload */ }
       setUploadProg({ done: i + 1, total: fileArr.length })
@@ -189,12 +201,17 @@ export default function AccountsMonthClient({
       {/* Scan */}
       <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-5 mb-6">
         <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Scan documents</h2>
-        <p className="text-xs text-gray-400 mb-3">Pick whose card it is, then take a photo or choose files. Each one is added as a line straight away — take them all, then press <span className="font-semibold">Run AI</span> to read them.</p>
+        <p className="text-xs text-gray-400 mb-3">Pick whose card it is, then take a photo or choose files. Each one is added as a line straight away — take them all, then press <span className="font-semibold">Run AI</span> to read them. For an invoice over several pages, tick <span className="font-semibold">Multi-page invoice</span> and every photo goes onto the same invoice; press <span className="font-semibold">New invoice</span> to start the next.</p>
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm text-gray-600 dark:text-gray-300">Whose card / account:</label>
           <select value={cardholder} onChange={(e) => setCardholder(e.target.value)} className={`${input} text-sm`}>
             {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
+
+          <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 cursor-pointer">
+            <input type="checkbox" checked={multiPage} onChange={(e) => { setMultiPage(e.target.checked); setCurrentDocId(null) }} className="w-4 h-4 accent-emerald-600" />
+            Multi-page invoice
+          </label>
 
           <input ref={cameraInput} type="file" accept="image/*" capture="environment" className="hidden"
             onChange={(e) => { uploadFiles(e.target.files); e.currentTarget.value = "" }} />
@@ -209,6 +226,13 @@ export default function AccountsMonthClient({
             className="text-sm font-semibold px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-emerald-500 disabled:opacity-50">
             Choose files
           </button>
+
+          {multiPage && currentDocId && (
+            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+              Adding pages to this invoice ({rows.find((r) => r.id === currentDocId)?.images.length ?? 0})
+              <button onClick={() => setCurrentDocId(null)} className="ml-2 underline text-gray-500 hover:text-gray-800 dark:hover:text-gray-200">New invoice</button>
+            </span>
+          )}
 
           <button onClick={runAi} disabled={running || pending.length === 0}
             className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2 rounded-xl disabled:opacity-50">
