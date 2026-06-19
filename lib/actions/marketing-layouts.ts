@@ -55,3 +55,17 @@ export async function setDefaultMarketingLayout(id: string) {
   ])
   revalidatePath("/tools/marketing-reports")
 }
+
+// Shared favourites — admin-gated, since starring changes what every user sees
+// pinned to the top of the page. Toggles the section on/off.
+export async function toggleMarketingFavourite(sectionId: string) {
+  await requireAdmin()
+  if (!SECTION_CATALOG.some((s) => s.id === sectionId)) throw new Error("Unknown section")
+  const existing = await prisma.marketingFavourite.findUnique({ where: { sectionId } })
+  if (existing) {
+    await prisma.marketingFavourite.delete({ where: { sectionId } })
+  } else {
+    await prisma.marketingFavourite.create({ data: { sectionId } })
+  }
+  revalidatePath("/tools/marketing-reports")
+}

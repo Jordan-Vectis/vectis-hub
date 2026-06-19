@@ -447,6 +447,13 @@ const MIGRATIONS = [
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
     CONSTRAINT "MarketingLayout_pkey" PRIMARY KEY ("id")
   )`,
+
+  // 2026-06-19 — Marketing Reports: shared favourite sections
+  `CREATE TABLE IF NOT EXISTS "MarketingFavourite" (
+    "sectionId" TEXT         NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "MarketingFavourite_pkey" PRIMARY KEY ("sectionId")
+  )`,
 ]
 
 export async function POST() {

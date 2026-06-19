@@ -4,8 +4,11 @@ import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, LabelList,
 } from "recharts"
+import { useTransition } from "react"
+import { useRouter } from "next/navigation"
 import type { MarketingReport } from "@/lib/ga"
 import InfoTip from "./info-tip"
+import { toggleMarketingFavourite } from "@/lib/actions/marketing-layouts"
 
 const TOOLTIP = { background: "#2C2C2E", border: "1px solid #374151", borderRadius: 8, color: "#f3f4f6", fontSize: 13 }
 const PIE_COLOURS = ["#ec4899", "#2AB4A6", "#6366f1", "#f59e0b", "#22c55e", "#06b6d4", "#a855f7"]
@@ -31,22 +34,59 @@ function downloadCsv(rows: { name: string; value: number; secondary?: number }[]
   URL.revokeObjectURL(url)
 }
 
-function Card({ title, children, csv, help }: { title: string; children: React.ReactNode; csv?: { rows: { name: string; value: number; secondary?: number }[]; filename: string }; help?: string }) {
+function Card({ title, children, csv, help, star }: { title: string; children: React.ReactNode; csv?: { rows: { name: string; value: number; secondary?: number }[]; filename: string }; help?: string; star?: React.ReactNode }) {
   return (
     <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-2xl p-5">
       <div className="flex items-center justify-between gap-2 mb-4">
         <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{title}{help && <InfoTip text={help} />}</h2>
-        {csv && csv.rows.length > 0 && (
-          <button
-            onClick={() => downloadCsv(csv.rows, csv.filename)}
-            className="text-xs font-semibold text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors flex-shrink-0"
-            title="Download as CSV"
-          >
-            ⬇ CSV
-          </button>
-        )}
+        <div className="flex items-center gap-2.5 flex-shrink-0">
+          {star}
+          {csv && csv.rows.length > 0 && (
+            <button
+              onClick={() => downloadCsv(csv.rows, csv.filename)}
+              className="text-xs font-semibold text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+              title="Download as CSV"
+            >
+              ⬇ CSV
+            </button>
+          )}
+        </div>
       </div>
       {children}
+    </div>
+  )
+}
+
+// Star toggle on each report tile. Admin-only (the parent decides whether to
+// render it); toggling changes the shared favourites everyone sees.
+function FavStar({ sectionId, on }: { sectionId: string; on: boolean }) {
+  const router = useRouter()
+  const [pending, start] = useTransition()
+  return (
+    <button
+      onClick={() => start(async () => { await toggleMarketingFavourite(sectionId); router.refresh() })}
+      disabled={pending}
+      title={on ? "Remove from favourites" : "Add to favourites"}
+      className={`text-base leading-none transition-colors disabled:opacity-40 ${on ? "text-yellow-400 hover:text-yellow-500" : "text-gray-300 dark:text-gray-600 hover:text-yellow-400"}`}
+    >
+      {on ? "★" : "☆"}
+    </button>
+  )
+}
+
+function SectionGrid({ sections, favouriteIds, canEditFavourites }: { sections: MarketingReport["sections"]; favouriteIds: string[]; canEditFavourites: boolean }) {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {sections.map((s, i) => {
+        const star = canEditFavourites ? <FavStar sectionId={s.id} on={favouriteIds.includes(s.id)} /> : null
+        return s.kind === "donut" ? (
+          <Card key={s.id} title={s.title} help={s.help} star={star}><Donut data={s.rows} /></Card>
+        ) : (
+          <Card key={s.id} title={s.title} help={s.help} star={star} csv={{ rows: s.rows, filename: `${s.id}.csv` }}>
+            <HBars data={s.rows} colour={BAR_COLOURS[i % BAR_COLOURS.length]} suffix={s.suffix} />
+          </Card>
+        )
+      })}
     </div>
   )
 }
@@ -88,8 +128,12 @@ function Donut({ data }: { data: { name: string; value: number }[] }) {
   )
 }
 
-export default function MarketingCharts({ data }: { data: MarketingReport }) {
+export default function MarketingCharts({ data, favouriteIds, favOnly, canEditFavourites }: { data: MarketingReport; favouriteIds: string[]; favOnly: boolean; canEditFavourites: boolean }) {
   const series = data.series.map((r) => ({ name: fmtDate(r.name), users: r.value, sessions: r.secondary ?? 0 }))
+  const favSections = data.sections.filter((s) => favouriteIds.includes(s.id))
+  const restSections = data.sections.filter((s) => !favouriteIds.includes(s.id))
+  const heading = "text-xs font-bold uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5"
+  const emptyBox = "bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-2xl p-6 text-sm text-gray-400 text-center"
 
   return (
     <div className="space-y-6">
@@ -108,22 +152,33 @@ export default function MarketingCharts({ data }: { data: MarketingReport }) {
         </div>
       </Card>
 
-      {data.sections.length === 0 ? (
-        <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-2xl p-6 text-sm text-gray-400 text-center">
-          No sections selected — use <span className="font-semibold text-gray-500 dark:text-gray-300">Customise</span> at the top to choose what to show.
+      {favOnly ? (
+        favSections.length === 0 ? (
+          <div className={emptyBox}>
+            No favourites yet. {canEditFavourites ? "Tap the ☆ on any report to pin it here." : "Ask an admin to star the reports to pin here."}
+          </div>
+        ) : (
+          <SectionGrid sections={favSections} favouriteIds={favouriteIds} canEditFavourites={canEditFavourites} />
+        )
+      ) : data.sections.length === 0 ? (
+        <div className={emptyBox}>
+          No reports in this layout — use <span className="font-semibold text-gray-500 dark:text-gray-300">⚙ Layouts</span> at the top to choose what to show.
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {data.sections.map((s, i) =>
-            s.kind === "donut" ? (
-              <Card key={s.id} title={s.title} help={s.help}><Donut data={s.rows} /></Card>
-            ) : (
-              <Card key={s.id} title={s.title} help={s.help} csv={{ rows: s.rows, filename: `${s.id}.csv` }}>
-                <HBars data={s.rows} colour={BAR_COLOURS[i % BAR_COLOURS.length]} suffix={s.suffix} />
-              </Card>
-            )
+        <>
+          {favSections.length > 0 && (
+            <div>
+              <h3 className={heading}><span className="text-yellow-400">★</span> Favourites</h3>
+              <SectionGrid sections={favSections} favouriteIds={favouriteIds} canEditFavourites={canEditFavourites} />
+            </div>
           )}
-        </div>
+          {restSections.length > 0 && (
+            <div>
+              {favSections.length > 0 && <h3 className={heading}>All reports</h3>}
+              <SectionGrid sections={restSections} favouriteIds={favouriteIds} canEditFavourites={canEditFavourites} />
+            </div>
+          )}
+        </>
       )}
     </div>
   )

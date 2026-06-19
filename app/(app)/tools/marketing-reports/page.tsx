@@ -62,7 +62,7 @@ function Delta({ pct, higherBetter }: { pct: number | null; higherBetter: boolea
 export default async function MarketingReportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string; bots?: string; uk?: string }>
+  searchParams: Promise<{ range?: string; bots?: string; uk?: string; fav?: string }>
 }) {
   const session = await auth()
   if (!session) redirect("/login")
@@ -72,13 +72,16 @@ export default async function MarketingReportsPage({
   const range: GaRange = (["7d", "28d", "90d", "365d"].includes(sp.range ?? "") ? sp.range : "28d") as GaRange
   const excludeBots = sp.bots === "hide"
   const ukOnly = sp.uk === "1"
-  const linkFor = (opts: { range?: GaRange; bots?: boolean; uk?: boolean }) => {
+  const favOnly = sp.fav === "1"
+  const linkFor = (opts: { range?: GaRange; bots?: boolean; uk?: boolean; fav?: boolean }) => {
     const r = opts.range ?? range
     const b = opts.bots ?? excludeBots
     const u = opts.uk ?? ukOnly
+    const f = opts.fav ?? favOnly
     const parts = [`range=${r}`]
     if (b) parts.push("bots=hide")
     if (u) parts.push("uk=1")
+    if (f) parts.push("fav=1")
     return `/tools/marketing-reports?${parts.join("&")}`
   }
 
@@ -90,6 +93,15 @@ export default async function MarketingReportsPage({
   const cookieLayoutId = (await cookies()).get("mr_layout")?.value
   const activeLayout = layouts.find((l) => l.id === cookieLayoutId) ?? layouts.find((l) => l.isDefault) ?? layouts[0] ?? null
   const selectedSections = activeLayout ? activeLayout.sections.filter((id) => validIds.has(id)) : DEFAULT_SECTION_IDS
+
+  // Shared favourites — starred sections are pinned to the top for everyone, and
+  // always shown even if not in the active layout. The "favourites only" toggle
+  // shows just these. Ordered by catalog position for stability.
+  const dbFavourites = await prisma.marketingFavourite.findMany()
+  const favSet = new Set(dbFavourites.map((f) => f.sectionId).filter((id) => validIds.has(id)))
+  const favouriteIds = SECTION_CATALOG.map((s) => s.id).filter((id) => favSet.has(id))
+  const restSections = selectedSections.filter((id) => !favSet.has(id))
+  const sectionsToShow = favOnly ? favouriteIds : [...favouriteIds, ...restSections]
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -107,6 +119,17 @@ export default async function MarketingReportsPage({
               catalog={SECTION_CATALOG.map((s) => ({ id: s.id, title: s.title }))}
               isAdmin={isAdmin}
             />
+            <Link
+              href={linkFor({ fav: !favOnly })}
+              className={`px-3.5 py-2 rounded-xl text-sm font-semibold border transition-colors ${
+                favOnly
+                  ? "bg-pink-600 border-pink-600 text-white"
+                  : "bg-gray-100 dark:bg-[#2C2C2E] border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+              }`}
+              title="Show only the favourited reports"
+            >
+              {favOnly ? "★ Favourites only" : "☆ Favourites only"}
+            </Link>
             <Link
               href={linkFor({ uk: !ukOnly })}
               className={`px-3.5 py-2 rounded-xl text-sm font-semibold border transition-colors ${
@@ -149,7 +172,15 @@ export default async function MarketingReportsPage({
       {!isGaConfigured() ? (
         <SetupCard />
       ) : (
-        <ReportBody range={range} excludeBots={excludeBots} ukOnly={ukOnly} sections={selectedSections} />
+        <ReportBody
+          range={range}
+          excludeBots={excludeBots}
+          ukOnly={ukOnly}
+          sections={sectionsToShow}
+          favouriteIds={favouriteIds}
+          favOnly={favOnly}
+          canEditFavourites={isAdmin}
+        />
       )}
     </div>
   )
@@ -177,7 +208,7 @@ function SetupCard() {
   )
 }
 
-async function ReportBody({ range, excludeBots, ukOnly, sections }: { range: GaRange; excludeBots: boolean; ukOnly: boolean; sections: string[] }) {
+async function ReportBody({ range, excludeBots, ukOnly, sections, favouriteIds, favOnly, canEditFavourites }: { range: GaRange; excludeBots: boolean; ukOnly: boolean; sections: string[]; favouriteIds: string[]; favOnly: boolean; canEditFavourites: boolean }) {
   let data: Awaited<ReturnType<typeof getMarketingReport>> | null = null
   let realtime: number | null = null
   let error: string | null = null
@@ -223,7 +254,7 @@ async function ReportBody({ range, excludeBots, ukOnly, sections }: { range: GaR
         ))}
       </div>
 
-      <MarketingCharts data={data} />
+      <MarketingCharts data={data} favouriteIds={favouriteIds} favOnly={favOnly} canEditFavourites={canEditFavourites} />
     </div>
   )
 }

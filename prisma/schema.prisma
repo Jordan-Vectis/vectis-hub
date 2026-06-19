@@ -1087,6 +1087,13 @@ model MarketingLayout {
   updatedAt DateTime @updatedAt
 }
 
+// Shared (not per-user) — a starred report-section is pinned to the top of the
+// Marketing Reports page for everyone. One row per favourited section id.
+model MarketingFavourite {
+  sectionId String   @id
+  createdAt DateTime @default(now())
+}
+
 // Singleton (id = "global") — stores the delegated OAuth tokens for the shared
 // IT mailbox connection. Connected once by an admin via the sign-in flow.
 model ITMailboxAuth {
