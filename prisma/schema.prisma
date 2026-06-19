@@ -1113,6 +1113,8 @@ model AccountingDocument {
   source     String          @default("SCAN")    // SCAN | MANUAL
   imageKey   String?                             // R2 key of the scan (null for manual lines)
   supplier   String          @default("")        // description / who it was paid to
+  item       String          @default("")        // item/service purchased — only if clearly stated on the doc
+  website    String          @default("")        // supplier website/URL — only if shown on the doc
   docDate    DateTime?
   vatCode    Int             @default(1)          // 1 = 20% reclaimable, 2 = none/zero, 7 = personal
   gross      Float           @default(0)          // Value (inc VAT)
@@ -1120,6 +1122,7 @@ model AccountingDocument {
   net        Float           @default(0)          // gross - vat
   column     String          @default("vectis")   // nominal allocation column key (see lib/accounting.ts)
   reviewed   Boolean         @default(false)
+  aiRun      Boolean         @default(false)      // has AI been run on this scan yet? (blank scans wait for a batch Run AI)
   aiNotes    String?                             // anything the AI flagged for attention
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt

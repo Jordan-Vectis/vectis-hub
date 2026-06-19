@@ -8,8 +8,9 @@ import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, sav
 
 type Row = {
   id: string; cardholder: string; source: string; imageUrl: string | null
-  supplier: string; docDate: string; vatCode: number; gross: number; vat: number; net: number
-  column: string; reviewed: boolean; aiNotes: string | null
+  supplier: string; item: string; website: string; docDate: string
+  vatCode: number; gross: number; vat: number; net: number
+  column: string; reviewed: boolean; aiRun: boolean; aiNotes: string | null
 }
 
 const round = (n: number) => Math.round((n || 0) * 100) / 100
@@ -22,45 +23,64 @@ export default function AccountsMonthClient({
   const [rows, setRows] = useState<Row[]>(documents)
   useEffect(() => { setRows(documents) }, [documents])
 
-  // Options for the per-row card dropdowns: the managed list plus any historical
-  // value still on a document (so a renamed/removed card never gets lost).
-  const cardOptions = Array.from(new Set([...cardholders, ...documents.map((d) => d.cardholder)].filter(Boolean)))
+  // Per-row card dropdown options: the managed list + any historical value still on a doc.
+  const cardOptions = Array.from(new Set([...cardholders, ...rows.map((d) => d.cardholder)].filter(Boolean)))
 
-  // ── Upload / AI batch ──────────────────────────────────────────────────────
   const [cardholder, setCardholder] = useState<string>(cardholders[0] ?? "Vectis")
-  const [files, setFiles] = useState<File[]>([])
+  const [uploadProg, setUploadProg] = useState<{ done: number; total: number } | null>(null)
   const [running, setRunning] = useState(false)
-  const [progress, setProgress] = useState<{ done: number; total: number; errors: number }>({ done: 0, total: 0, errors: 0 })
+  const [aiProg, setAiProg] = useState<{ done: number; total: number; errors: number }>({ done: 0, total: 0, errors: 0 })
   const fileInput = useRef<HTMLInputElement>(null)
   const cameraInput = useRef<HTMLInputElement>(null)
   const [viewId, setViewId] = useState<string | null>(null)
 
-  // Both "Take photo" and "Choose files" add to the same pending batch, so you
-  // can snap several invoices (one at a time) and/or pick PDFs, then Run AI.
-  function addFiles(list: FileList | null) {
-    if (list && list.length) setFiles((f) => [...f, ...Array.from(list)])
-  }
-
-  async function runBatch() {
-    if (files.length === 0 || running) return
-    setRunning(true)
-    setProgress({ done: 0, total: files.length, errors: 0 })
-    let errors = 0
-    for (let i = 0; i < files.length; i++) {
+  // Each photo/file becomes a BLANK line straight away (image only); the AI is run
+  // afterwards over all the un-read lines.
+  async function uploadFiles(list: FileList | null) {
+    const fileArr = list ? Array.from(list) : []
+    if (!fileArr.length) return
+    setUploadProg({ done: 0, total: fileArr.length })
+    for (let i = 0; i < fileArr.length; i++) {
       try {
         const fd = new FormData()
         fd.append("monthId", monthId)
         fd.append("cardholder", cardholder)
-        fd.append("file", files[i])
-        const res = await fetch("/api/accounts/extract", { method: "POST", body: fd })
-        if (!res.ok) errors++
+        fd.append("file", fileArr[i])
+        const res = await fetch("/api/accounts/upload", { method: "POST", body: fd })
+        if (res.ok) {
+          const { id, imageUrl } = await res.json()
+          setRows((rs) => [...rs, {
+            id, cardholder, source: "SCAN", imageUrl, supplier: "", item: "", website: "", docDate: "",
+            vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiRun: false, aiNotes: null,
+          }])
+        }
+      } catch { /* skip a failed upload */ }
+      setUploadProg({ done: i + 1, total: fileArr.length })
+    }
+    setUploadProg(null)
+  }
+
+  const pending = rows.filter((r) => r.imageUrl && !r.aiRun)
+
+  async function runAi() {
+    if (running || pending.length === 0) return
+    setRunning(true)
+    setAiProg({ done: 0, total: pending.length, errors: 0 })
+    let errors = 0
+    for (let i = 0; i < pending.length; i++) {
+      const r = pending[i]
+      try {
+        const res = await fetch("/api/accounts/extract", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ docId: r.id }),
+        })
+        if (res.ok) {
+          const d = await res.json()
+          setRows((rs) => rs.map((x) => x.id === r.id ? { ...x, ...d, aiRun: true } : x))
+        } else { errors++ }
       } catch { errors++ }
-      setProgress({ done: i + 1, total: files.length, errors })
+      setAiProg({ done: i + 1, total: pending.length, errors })
     }
     setRunning(false)
-    setFiles([])
-    if (fileInput.current) fileInput.current.value = ""
-    router.refresh()
   }
 
   // ── Row editing ─────────────────────────────────────────────────────────────
@@ -79,7 +99,7 @@ export default function AccountsMonthClient({
   function saveAll() {
     startSave(async () => {
       await saveAccountingDocuments(monthId, rows.map((r) => ({
-        id: r.id, cardholder: r.cardholder, supplier: r.supplier, docDate: r.docDate || null,
+        id: r.id, cardholder: r.cardholder, supplier: r.supplier, item: r.item, website: r.website, docDate: r.docDate || null,
         vatCode: r.vatCode, gross: r.gross, vat: r.vat, column: r.column, reviewed: r.reviewed,
       })))
       router.refresh()
@@ -88,17 +108,16 @@ export default function AccountsMonthClient({
 
   const [busy, startBusy] = useTransition()
   function addManual() {
-    // Append locally (don't refresh) so any unsaved edits on other rows survive.
     startBusy(async () => {
       const { id } = await addManualDocument(monthId, cardholder)
       setRows((rs) => [...rs, {
-        id, cardholder, source: "MANUAL", imageUrl: null, supplier: "", docDate: "",
-        vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiNotes: null,
+        id, cardholder, source: "MANUAL", imageUrl: null, supplier: "", item: "", website: "", docDate: "",
+        vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiRun: true, aiNotes: null,
       }])
     })
   }
   function removeRow(id: string) {
-    setRows((rs) => rs.filter((r) => r.id !== id))   // optimistic; no refresh
+    setRows((rs) => rs.filter((r) => r.id !== id))
     startBusy(async () => { await deleteAccountingDocument(id) })
   }
   function deleteMonth() {
@@ -106,22 +125,22 @@ export default function AccountsMonthClient({
     startBusy(async () => { await deleteAccountingMonth(monthId); router.push("/tools/accounts") })
   }
 
-  // ── Totals ──────────────────────────────────────────────────────────────────
+  // ── Totals + grouping ─────────────────────────────────────────────────────────
   const grandGross = round(rows.reduce((a, r) => a + r.gross, 0))
   const vatReclaim  = round(rows.filter((r) => r.vatCode === 1).reduce((a, r) => a + r.vat, 0))
   const unreviewed  = rows.filter((r) => !r.reviewed).length
 
-  // Group rows by card (managed order first, then any other value present), like the sheet's sections.
   const groupOrder = Array.from(new Set([...cardholders, ...rows.map((r) => r.cardholder)].filter(Boolean)))
   const groups = groupOrder.map((name) => ({ name, items: rows.filter((r) => r.cardholder === name) })).filter((g) => g.items.length)
   const colSum = (items: Row[], key: string) => round(items.filter((r) => r.column === key).reduce((a, r) => a + r.net, 0))
-  const TOTAL_COLS = NOMINAL_COLUMNS.length + 7
+  const TOTAL_COLS = NOMINAL_COLUMNS.length + 9
 
-  const input = "px-2 py-1 rounded-lg text-sm border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+  const input = "px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+  const cell = `${input} w-full text-xs`
   const viewRow = rows.find((r) => r.id === viewId) ?? null
 
   return (
-    <div className="p-6 max-w-[1400px] mx-auto">
+    <div className="p-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
         <div>
@@ -133,10 +152,7 @@ export default function AccountsMonthClient({
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <a
-            href={`/api/accounts/export?monthId=${monthId}`}
-            className="px-3.5 py-2 rounded-xl text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white"
-          >
+          <a href={`/api/accounts/export?monthId=${monthId}`} className="px-3.5 py-2 rounded-xl text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white">
             ⬇ Export to Excel
           </a>
           <button onClick={deleteMonth} disabled={busy} className="px-3 py-2 rounded-xl text-sm font-semibold text-red-500 hover:bg-red-500/10">
@@ -145,56 +161,41 @@ export default function AccountsMonthClient({
         </div>
       </div>
 
-      {/* Upload / scan */}
+      {/* Scan */}
       <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-5 mb-6">
-        <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Scan a batch</h2>
-        <p className="text-xs text-gray-400 mb-3">Pick whose card it is, snap a photo or choose files (photos/PDFs), and AI reads each one. Tip: hit <span className="font-semibold">Save changes</span> before scanning another batch.</p>
+        <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Scan documents</h2>
+        <p className="text-xs text-gray-400 mb-3">Pick whose card it is, then take a photo or choose files. Each one is added as a line straight away — take them all, then press <span className="font-semibold">Run AI</span> to read them.</p>
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm text-gray-600 dark:text-gray-300">Whose card / account:</label>
-          <select value={cardholder} onChange={(e) => setCardholder(e.target.value)} className={input}>
+          <select value={cardholder} onChange={(e) => setCardholder(e.target.value)} className={`${input} text-sm`}>
             {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
 
-          {/* Camera — opens the device camera on phone/iPad; on desktop it's a file picker */}
           <input ref={cameraInput} type="file" accept="image/*" capture="environment" className="hidden"
-            onChange={(e) => { addFiles(e.target.files); e.currentTarget.value = "" }} />
-          <button onClick={() => cameraInput.current?.click()} disabled={running}
+            onChange={(e) => { uploadFiles(e.target.files); e.currentTarget.value = "" }} />
+          <button onClick={() => cameraInput.current?.click()} disabled={!!uploadProg}
             className="text-sm font-semibold px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-emerald-500 disabled:opacity-50">
             📷 Take photo
           </button>
 
-          {/* Files — photos from gallery or PDFs, multiple */}
           <input ref={fileInput} type="file" accept="image/*,application/pdf" multiple className="hidden"
-            onChange={(e) => { addFiles(e.target.files); e.currentTarget.value = "" }} />
-          <button onClick={() => fileInput.current?.click()} disabled={running}
+            onChange={(e) => { uploadFiles(e.target.files); e.currentTarget.value = "" }} />
+          <button onClick={() => fileInput.current?.click()} disabled={!!uploadProg}
             className="text-sm font-semibold px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-emerald-500 disabled:opacity-50">
             Choose files
           </button>
 
-          {files.length > 0 && (
-            <span className="text-sm text-gray-500">
-              {files.length} ready
-              <button onClick={() => setFiles([])} className="ml-2 text-gray-400 hover:text-red-500 underline">clear</button>
-            </span>
-          )}
-
-          <button
-            onClick={runBatch}
-            disabled={running || files.length === 0}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2 rounded-xl disabled:opacity-50"
-          >
-            {running ? `Reading ${progress.done}/${progress.total}…` : `Run AI${files.length ? ` on ${files.length}` : ""}`}
+          <button onClick={runAi} disabled={running || pending.length === 0}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2 rounded-xl disabled:opacity-50">
+            {running ? `Reading ${aiProg.done}/${aiProg.total}…` : `Run AI${pending.length ? ` (${pending.length})` : ""}`}
           </button>
           <button onClick={addManual} disabled={busy} className="text-sm font-semibold text-gray-600 dark:text-gray-300 hover:text-emerald-500 px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-700">
             + Add line manually
           </button>
         </div>
-        {running && (
-          <p className="text-xs text-gray-400 mt-2">Reading each document with AI and adding it as “{cardholder}” — leave this page open until it finishes.</p>
-        )}
-        {!running && progress.total > 0 && (
-          <p className="text-xs text-gray-400 mt-2">Done — added {progress.total - progress.errors} of {progress.total}{progress.errors ? `, ${progress.errors} failed` : ""}.</p>
-        )}
+        {uploadProg && <p className="text-xs text-gray-400 mt-2">Adding {uploadProg.done}/{uploadProg.total}…</p>}
+        {running && <p className="text-xs text-gray-400 mt-2">Reading each document with AI — leave this page open until it finishes.</p>}
+        {!running && aiProg.total > 0 && <p className="text-xs text-gray-400 mt-2">Read {aiProg.total - aiProg.errors} of {aiProg.total}{aiProg.errors ? `, ${aiProg.errors} failed` : ""}.</p>}
       </div>
 
       {/* Totals */}
@@ -204,42 +205,50 @@ export default function AccountsMonthClient({
         <Stat label="Lines to review" value={String(unreviewed)} amber={unreviewed > 0} />
       </div>
 
-      {/* Review grid — laid out like the spreadsheet: grouped per card, each line's
-          net shown in its nominal column. Click a nominal cell to allocate the line there. */}
+      {/* Review grid — laid out like the spreadsheet, grouped per card, fits the screen */}
       {rows.length === 0 ? (
         <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-8 text-center text-sm text-gray-400">
-          No lines yet — scan a batch above, or add one manually.
+          No lines yet — scan some documents above, or add one manually.
         </div>
       ) : (
         <>
           <p className="text-xs text-gray-400 mb-2">Tip: click a column cell to file a line under that nominal code. Open a line (its image) to change its card or date.</p>
-          <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 overflow-x-auto">
-            <table className="text-sm border-collapse min-w-full">
+          <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-1">
+            <table className="w-full table-fixed border-collapse">
+              <colgroup>
+                <col style={{ width: "2.5%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "3%" }} />
+                <col style={{ width: "5.5%" }} />
+                <col style={{ width: "5.5%" }} />
+                {NOMINAL_COLUMNS.map((c) => <col key={c.key} />)}
+                <col style={{ width: "3%" }} />
+                <col style={{ width: "2.5%" }} />
+              </colgroup>
               <thead>
-                <tr className="text-xs uppercase tracking-wider text-gray-400 border-b border-gray-200 dark:border-gray-800">
-                  <th className="p-2 font-semibold text-left"></th>
-                  <th className="p-2 font-semibold text-left">Supplier</th>
-                  <th className="p-2 font-semibold text-center">Vat</th>
-                  <th className="p-2 font-semibold text-right">Value</th>
-                  <th className="p-2 font-semibold text-right">VAT</th>
-                  {NOMINAL_COLUMNS.map((c) => <th key={c.key} className="p-2 font-semibold text-right whitespace-nowrap">{c.label}</th>)}
-                  <th className="p-2 font-semibold text-center">OK</th>
-                  <th className="p-2"></th>
-                </tr>
-                <tr className="text-[11px] text-gray-400 border-b border-gray-200 dark:border-gray-800">
-                  <th colSpan={5}></th>
-                  {NOMINAL_COLUMNS.map((c) => <th key={c.key} className="px-2 pb-1 text-right font-normal">{c.code}</th>)}
-                  <th colSpan={2}></th>
+                <tr className="text-[10px] uppercase tracking-wide text-gray-400 border-b border-gray-200 dark:border-gray-800 align-bottom">
+                  <th className="p-1.5"></th>
+                  <th className="p-1.5 text-left">Supplier</th>
+                  <th className="p-1.5 text-left">Item / service</th>
+                  <th className="p-1.5 text-left">Website</th>
+                  <th className="p-1.5 text-center">Vat</th>
+                  <th className="p-1.5 text-right">Value</th>
+                  <th className="p-1.5 text-right">VAT</th>
+                  {NOMINAL_COLUMNS.map((c) => <th key={c.key} className="p-1.5 text-right leading-tight break-words">{c.label}<br /><span className="text-gray-500 font-normal">{c.code}</span></th>)}
+                  <th className="p-1.5 text-center">OK</th>
+                  <th className="p-1.5"></th>
                 </tr>
               </thead>
               <tbody>
                 {groups.map((g) => (
                   <Fragment key={g.name}>
                     <tr className="bg-gray-50 dark:bg-gray-800/40">
-                      <td colSpan={TOTAL_COLS} className="px-3 py-1.5 font-bold text-gray-700 dark:text-gray-200">{g.name}</td>
+                      <td colSpan={TOTAL_COLS} className="px-3 py-1.5 font-bold text-gray-700 dark:text-gray-200 text-sm">{g.name}</td>
                     </tr>
                     {g.items.map((r) => (
-                      <tr key={r.id} className={`border-b border-gray-100 dark:border-gray-800/60 ${r.reviewed ? "" : "bg-amber-50/40 dark:bg-amber-500/5"}`}>
+                      <tr key={r.id} className={`border-b border-gray-100 dark:border-gray-800/60 align-top ${r.reviewed ? "" : "bg-amber-50/40 dark:bg-amber-500/5"}`}>
                         <td className="p-1.5">
                           <button onClick={() => setViewId(r.id)} title="Open invoice">
                             {r.imageUrl ? (
@@ -250,29 +259,32 @@ export default function AccountsMonthClient({
                           </button>
                         </td>
                         <td className="p-1.5">
-                          <input value={r.supplier} onChange={(e) => patch(r.id, { supplier: e.target.value })} className={`${input} w-44`} placeholder="Supplier" />
-                          {r.aiNotes && <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5 max-w-44">{r.aiNotes}</p>}
+                          <input value={r.supplier} onChange={(e) => patch(r.id, { supplier: e.target.value })} className={cell} placeholder="Supplier" />
+                          {r.aiNotes && <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5 break-words">{r.aiNotes}</p>}
                         </td>
-                        <td className="p-1.5 text-center">
-                          <select value={r.vatCode} onChange={(e) => patch(r.id, { vatCode: Number(e.target.value) })} className={`${input} w-14`}>
+                        <td className="p-1.5">
+                          <input value={r.item} onChange={(e) => patch(r.id, { item: e.target.value })} className={cell} placeholder="—" />
+                        </td>
+                        <td className="p-1.5">
+                          <input value={r.website} onChange={(e) => patch(r.id, { website: e.target.value })} className={cell} placeholder="—" />
+                        </td>
+                        <td className="p-1.5">
+                          <select value={r.vatCode} onChange={(e) => patch(r.id, { vatCode: Number(e.target.value) })} className={cell}>
                             {VAT_CODES.map((v) => <option key={v.code} value={v.code}>{v.code}</option>)}
                           </select>
                         </td>
                         <td className="p-1.5">
-                          <input type="number" step="0.01" value={r.gross} onChange={(e) => patch(r.id, { gross: Number(e.target.value) })} className={`${input} w-20 text-right`} />
+                          <input type="number" step="0.01" value={r.gross} onChange={(e) => patch(r.id, { gross: Number(e.target.value) })} className={`${cell} text-right`} />
                         </td>
                         <td className="p-1.5">
-                          <input type="number" step="0.01" value={r.vat} onChange={(e) => patch(r.id, { vat: Number(e.target.value), net: round(r.gross - Number(e.target.value)) })} className={`${input} w-20 text-right`} />
+                          <input type="number" step="0.01" value={r.vat} onChange={(e) => patch(r.id, { vat: Number(e.target.value), net: round(r.gross - Number(e.target.value)) })} className={`${cell} text-right`} />
                         </td>
                         {NOMINAL_COLUMNS.map((c) => {
                           const active = r.column === c.key
                           return (
                             <td key={c.key} className="p-1 text-right">
-                              <button
-                                onClick={() => patch(r.id, { column: c.key })}
-                                title={`File under ${c.label}`}
-                                className={`w-full min-w-[58px] px-1.5 py-1 rounded text-xs tabular-nums ${active ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-semibold" : "text-gray-300 dark:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
-                              >
+                              <button onClick={() => patch(r.id, { column: c.key })} title={`File under ${c.label}`}
+                                className={`w-full px-1 py-1 rounded text-xs tabular-nums ${active ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-semibold" : "text-gray-300 dark:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
                                 {active ? gbp(r.net) : "·"}
                               </button>
                             </td>
@@ -286,15 +298,17 @@ export default function AccountsMonthClient({
                         </td>
                       </tr>
                     ))}
-                    <tr className="border-b-2 border-gray-200 dark:border-gray-700 font-semibold text-gray-600 dark:text-gray-300">
+                    <tr className="border-b-2 border-gray-200 dark:border-gray-700 font-semibold text-gray-600 dark:text-gray-300 text-xs">
                       <td></td>
                       <td className="p-1.5">Total</td>
+                      <td></td>
+                      <td></td>
                       <td></td>
                       <td className="p-1.5 text-right tabular-nums">{gbp(round(g.items.reduce((a, r) => a + r.gross, 0)))}</td>
                       <td className="p-1.5 text-right tabular-nums">{gbp(round(g.items.reduce((a, r) => a + r.vat, 0)))}</td>
                       {NOMINAL_COLUMNS.map((c) => {
                         const s = colSum(g.items, c.key)
-                        return <td key={c.key} className="p-1.5 text-right tabular-nums text-xs">{s ? gbp(s) : ""}</td>
+                        return <td key={c.key} className="p-1 text-right tabular-nums">{s ? gbp(s) : ""}</td>
                       })}
                       <td colSpan={2}></td>
                     </tr>
@@ -309,17 +323,13 @@ export default function AccountsMonthClient({
       {/* Save bar */}
       {rows.length > 0 && (
         <div className="sticky bottom-4 mt-4 flex justify-end">
-          <button
-            onClick={saveAll}
-            disabled={saving}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-6 py-3 rounded-xl shadow-lg disabled:opacity-50"
-          >
+          <button onClick={saveAll} disabled={saving} className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-6 py-3 rounded-xl shadow-lg disabled:opacity-50">
             {saving ? "Saving…" : "Save changes"}
           </button>
         </div>
       )}
 
-      {/* Invoice detail — image alongside the saved details (auction-manager style) */}
+      {/* Invoice detail — image alongside the saved details */}
       {viewRow && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-start justify-center p-4 sm:p-8 overflow-y-auto" onClick={() => setViewId(null)}>
           <div className="bg-white dark:bg-[#1C1C1E] w-full max-w-4xl rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden" onClick={(e) => e.stopPropagation()}>
@@ -337,19 +347,19 @@ export default function AccountsMonthClient({
                   <p className="text-sm text-gray-400">No image (manual line)</p>
                 )}
               </div>
-              <div className="p-5 space-y-3">
-                <Field label="Supplier / description">
-                  <input value={viewRow.supplier} onChange={(e) => patch(viewRow.id, { supplier: e.target.value })} className={`${input} w-full`} placeholder="Supplier" />
-                </Field>
+              <div className="p-5 space-y-3 text-sm">
+                <Field label="Supplier"><input value={viewRow.supplier} onChange={(e) => patch(viewRow.id, { supplier: e.target.value })} className={`${input} w-full`} placeholder="Supplier" /></Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Item / service"><input value={viewRow.item} onChange={(e) => patch(viewRow.id, { item: e.target.value })} className={`${input} w-full`} /></Field>
+                  <Field label="Website"><input value={viewRow.website} onChange={(e) => patch(viewRow.id, { website: e.target.value })} className={`${input} w-full`} /></Field>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Card / account">
                     <select value={viewRow.cardholder} onChange={(e) => patch(viewRow.id, { cardholder: e.target.value })} className={`${input} w-full`}>
                       {cardOptions.map((c) => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </Field>
-                  <Field label="Date">
-                    <input type="date" value={viewRow.docDate} onChange={(e) => patch(viewRow.id, { docDate: e.target.value })} className={`${input} w-full`} />
-                  </Field>
+                  <Field label="Date"><input type="date" value={viewRow.docDate} onChange={(e) => patch(viewRow.id, { docDate: e.target.value })} className={`${input} w-full`} /></Field>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <Field label="VAT code">
@@ -357,12 +367,8 @@ export default function AccountsMonthClient({
                       {VAT_CODES.map((v) => <option key={v.code} value={v.code}>{v.code}</option>)}
                     </select>
                   </Field>
-                  <Field label="Value">
-                    <input type="number" step="0.01" value={viewRow.gross} onChange={(e) => patch(viewRow.id, { gross: Number(e.target.value) })} className={`${input} w-full text-right`} />
-                  </Field>
-                  <Field label="VAT £">
-                    <input type="number" step="0.01" value={viewRow.vat} onChange={(e) => patch(viewRow.id, { vat: Number(e.target.value), net: round(viewRow.gross - Number(e.target.value)) })} className={`${input} w-full text-right`} />
-                  </Field>
+                  <Field label="Value"><input type="number" step="0.01" value={viewRow.gross} onChange={(e) => patch(viewRow.id, { gross: Number(e.target.value) })} className={`${input} w-full text-right`} /></Field>
+                  <Field label="VAT £"><input type="number" step="0.01" value={viewRow.vat} onChange={(e) => patch(viewRow.id, { vat: Number(e.target.value), net: round(viewRow.gross - Number(e.target.value)) })} className={`${input} w-full text-right`} /></Field>
                 </div>
                 <Field label="Nominal column">
                   <select value={viewRow.column} onChange={(e) => patch(viewRow.id, { column: e.target.value })} className={`${input} w-full`}>

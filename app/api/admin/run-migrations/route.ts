@@ -511,6 +511,11 @@ const MIGRATIONS = [
      ('seed_michael','Michael',4),
      ('seed_vectis','Vectis',5)
    ON CONFLICT ("name") DO NOTHING`,
+
+  // 2026-06-19 — Accounts: extra capture fields + AI-run flag
+  `ALTER TABLE "AccountingDocument" ADD COLUMN IF NOT EXISTS "item"    TEXT    NOT NULL DEFAULT ''`,
+  `ALTER TABLE "AccountingDocument" ADD COLUMN IF NOT EXISTS "website" TEXT    NOT NULL DEFAULT ''`,
+  `ALTER TABLE "AccountingDocument" ADD COLUMN IF NOT EXISTS "aiRun"   BOOLEAN NOT NULL DEFAULT FALSE`,
 ]
 
 export async function POST() {

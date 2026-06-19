@@ -63,3 +63,12 @@ export async function getSignedImageUrl(key: string): Promise<string> {
   })
   return getSignedUrl(r2, command, { expiresIn: 3600 })
 }
+
+export async function getObjectBuffer(key: string): Promise<Buffer> {
+  const res = await r2.send(new GetObjectCommand({
+    Bucket: process.env.CLOUDFLARE_R2_BUCKET!,
+    Key: key,
+  }))
+  const bytes = await (res.Body as any).transformToByteArray()
+  return Buffer.from(bytes)
+}

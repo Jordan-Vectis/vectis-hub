@@ -86,6 +86,8 @@ type DocEdit = {
   id: string
   cardholder: string
   supplier: string
+  item: string
+  website: string
   docDate: string | null
   vatCode: number
   gross: number
@@ -107,11 +109,13 @@ export async function saveAccountingDocuments(monthId: string, edits: DocEdit[])
     const vat        = Number.isFinite(e.vat) ? Math.round(e.vat * 100) / 100 : 0
     const net        = netFromGross(gross, vat)
     const supplier   = (e.supplier ?? "").trim().slice(0, 200)
+    const item       = (e.item ?? "").trim().slice(0, 200)
+    const website    = (e.website ?? "").trim().slice(0, 200)
     const docDate    = e.docDate ? new Date(e.docDate) : null
 
     await prisma.accountingDocument.update({
       where: { id: e.id },
-      data: { cardholder, supplier, docDate, vatCode, gross, vat, net, column, reviewed: !!e.reviewed },
+      data: { cardholder, supplier, item, website, docDate, vatCode, gross, vat, net, column, reviewed: !!e.reviewed },
     })
 
     // Learn from confirmed lines only.

@@ -30,6 +30,8 @@ export default async function AccountsMonthPage({ params }: { params: Promise<{ 
       source: d.source,
       imageUrl: d.imageKey ? await getSignedImageUrl(d.imageKey) : null,
       supplier: d.supplier,
+      item: d.item,
+      website: d.website,
       docDate: d.docDate ? d.docDate.toISOString().slice(0, 10) : "",
       vatCode: d.vatCode,
       gross: d.gross,
@@ -37,6 +39,7 @@ export default async function AccountsMonthPage({ params }: { params: Promise<{ 
       net: d.net,
       column: d.column,
       reviewed: d.reviewed,
+      aiRun: d.aiRun,
       aiNotes: d.aiNotes,
     }))
   )
