@@ -56,11 +56,23 @@ export async function createAccountingMonth(label: string) {
 
 export async function deleteAccountingMonth(id: string) {
   await requireAdmin()
-  const docs = await prisma.accountingDocument.findMany({ where: { monthId: id }, select: { imageKey: true } })
-  const keys = docs.map((d) => d.imageKey).filter((k): k is string => !!k)
+  const docs = await prisma.accountingDocument.findMany({ where: { monthId: id }, select: { imageKey: true, images: true } })
+  const keys = docs.flatMap((d) => [...(d.images ?? []), d.imageKey].filter((k): k is string => !!k))
   await deleteObjectsFromR2(keys)
   await prisma.accountingMonth.delete({ where: { id } })
   revalidatePath("/tools/accounts")
+}
+
+// Remove one page (by index) from a multi-page document.
+export async function removeDocumentPage(docId: string, index: number) {
+  await requireAdmin()
+  const doc = await prisma.accountingDocument.findUnique({ where: { id: docId }, select: { images: true } })
+  if (!doc) return
+  const images = [...(doc.images ?? [])]
+  if (index < 0 || index >= images.length) return
+  const [removed] = images.splice(index, 1)
+  if (removed) await deleteObjectsFromR2([removed])
+  await prisma.accountingDocument.update({ where: { id: docId }, data: { images } })
 }
 
 export async function addManualDocument(monthId: string, cardholder: string) {
@@ -75,9 +87,10 @@ export async function addManualDocument(monthId: string, cardholder: string) {
 
 export async function deleteAccountingDocument(id: string) {
   await requireAdmin()
-  const doc = await prisma.accountingDocument.findUnique({ where: { id }, select: { monthId: true, imageKey: true } })
+  const doc = await prisma.accountingDocument.findUnique({ where: { id }, select: { monthId: true, imageKey: true, images: true } })
   if (!doc) return
-  if (doc.imageKey) await deleteObjectsFromR2([doc.imageKey])
+  const keys = [...(doc.images ?? []), doc.imageKey].filter((k): k is string => !!k)
+  if (keys.length) await deleteObjectsFromR2(keys)
   await prisma.accountingDocument.delete({ where: { id } })
   revalidatePath(`/tools/accounts/${doc.monthId}`)
 }

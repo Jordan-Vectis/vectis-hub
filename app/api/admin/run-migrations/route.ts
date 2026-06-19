@@ -516,6 +516,10 @@ const MIGRATIONS = [
   `ALTER TABLE "AccountingDocument" ADD COLUMN IF NOT EXISTS "item"    TEXT    NOT NULL DEFAULT ''`,
   `ALTER TABLE "AccountingDocument" ADD COLUMN IF NOT EXISTS "website" TEXT    NOT NULL DEFAULT ''`,
   `ALTER TABLE "AccountingDocument" ADD COLUMN IF NOT EXISTS "aiRun"   BOOLEAN NOT NULL DEFAULT FALSE`,
+
+  // 2026-06-19 — Accounts: multi-page invoices (multiple images per document)
+  `ALTER TABLE "AccountingDocument" ADD COLUMN IF NOT EXISTS "images" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
+  `UPDATE "AccountingDocument" SET "images" = ARRAY["imageKey"] WHERE "imageKey" IS NOT NULL AND ("images" IS NULL OR array_length("images",1) IS NULL)`,
 ]
 
 export async function POST() {

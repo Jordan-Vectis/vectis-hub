@@ -1111,7 +1111,8 @@ model AccountingDocument {
   month      AccountingMonth @relation(fields: [monthId], references: [id], onDelete: Cascade)
   cardholder String                              // "B Goodall" | "J Goodall" | "James" | "Michael" | "Vectis"
   source     String          @default("SCAN")    // SCAN | MANUAL
-  imageKey   String?                             // R2 key of the scan (null for manual lines)
+  imageKey   String?                             // legacy single-image key (superseded by images[])
+  images     String[]        @default([])         // R2 keys of every page of this document (multi-page invoices)
   supplier   String          @default("")        // description / who it was paid to
   item       String          @default("")        // item/service purchased — only if clearly stated on the doc
   website    String          @default("")        // supplier website/URL — only if shown on the doc

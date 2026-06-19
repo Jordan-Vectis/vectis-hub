@@ -23,7 +23,7 @@ const COLUMN_GUIDE = `Choose ONE allocation column (use the key in brackets):
 - Vectis (vectis): general Vectis business purchases — use this as the default when unsure`
 
 function buildPrompt(cardholder: string): string {
-  return `You are reading a single UK business expense document (an invoice, bill or receipt) for an auction house. The card/account it belongs to is "${cardholder}".
+  return `You are reading a UK business expense document (an invoice, bill or receipt) for an auction house. The card/account it belongs to is "${cardholder}". If more than one image is supplied, they are the PAGES OF THE SAME document — read them together as one invoice (totals/VAT are usually on the last page).
 
 Extract the following and return STRICT JSON only (no prose, no markdown):
 {
@@ -73,10 +73,14 @@ export async function POST(req: NextRequest) {
 
     const doc = await prisma.accountingDocument.findUnique({ where: { id: docId } })
     if (!doc) return NextResponse.json({ error: "Document not found" }, { status: 404 })
-    if (!doc.imageKey) return NextResponse.json({ error: "No scan to read" }, { status: 400 })
+    const keys = (doc.images && doc.images.length) ? doc.images : (doc.imageKey ? [doc.imageKey] : [])
+    if (!keys.length) return NextResponse.json({ error: "No scan to read" }, { status: 400 })
 
-    const buffer = await getObjectBuffer(doc.imageKey)
-    const mimeType = mimeForKey(doc.imageKey)
+    // Send every page of the document (capped) to the model together.
+    const imageParts = await Promise.all(keys.slice(0, 12).map(async (k) => {
+      const buf = await getObjectBuffer(k)
+      return { inlineData: { data: buf.toString("base64"), mimeType: mimeForKey(k) } }
+    }))
 
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
@@ -88,7 +92,7 @@ export async function POST(req: NextRequest) {
     let aiError: string | null = null
     try {
       const result = await model.generateContent([
-        { inlineData: { data: buffer.toString("base64"), mimeType } },
+        ...imageParts,
         { text: buildPrompt(doc.cardholder) },
       ])
       const response = result.response

@@ -22,13 +22,15 @@ export default async function AccountsMonthPage({ params }: { params: Promise<{ 
   const chRows = await prisma.accountingCardholder.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] })
   const cardholders = chRows.length ? chRows.map((c) => c.name) : DEFAULT_CARDHOLDERS
 
-  // Sign the scan thumbnails server-side (1h URLs).
+  // Sign every page's URL server-side (1h URLs).
   const documents = await Promise.all(
-    month.documents.map(async (d) => ({
+    month.documents.map(async (d) => {
+      const keys = (d.images && d.images.length) ? d.images : (d.imageKey ? [d.imageKey] : [])
+      return {
       id: d.id,
       cardholder: d.cardholder,
       source: d.source,
-      imageUrl: d.imageKey ? await getSignedImageUrl(d.imageKey) : null,
+      images: await Promise.all(keys.map((k) => getSignedImageUrl(k))),
       supplier: d.supplier,
       item: d.item,
       website: d.website,
@@ -41,7 +43,8 @@ export default async function AccountsMonthPage({ params }: { params: Promise<{ 
       reviewed: d.reviewed,
       aiRun: d.aiRun,
       aiNotes: d.aiNotes,
-    }))
+      }
+    })
   )
 
   return <AccountsMonthClient monthId={month.id} monthLabel={month.label} documents={documents} cardholders={cardholders} />

@@ -4,10 +4,10 @@ import { Fragment, useEffect, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { VAT_CODES, NOMINAL_COLUMNS } from "@/lib/accounting"
-import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, saveAccountingDocuments } from "@/lib/actions/accounting"
+import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, removeDocumentPage, saveAccountingDocuments } from "@/lib/actions/accounting"
 
 type Row = {
-  id: string; cardholder: string; source: string; imageUrl: string | null
+  id: string; cardholder: string; source: string; images: string[]
   supplier: string; item: string; website: string; docDate: string
   vatCode: number; gross: number; vat: number; net: number
   column: string; reviewed: boolean; aiRun: boolean; aiNotes: string | null
@@ -32,7 +32,10 @@ export default function AccountsMonthClient({
   const [aiProg, setAiProg] = useState<{ done: number; total: number; errors: number }>({ done: 0, total: 0, errors: 0 })
   const fileInput = useRef<HTMLInputElement>(null)
   const cameraInput = useRef<HTMLInputElement>(null)
+  const modalCamera = useRef<HTMLInputElement>(null)
+  const modalFiles = useRef<HTMLInputElement>(null)
   const [viewId, setViewId] = useState<string | null>(null)
+  const [addingPage, setAddingPage] = useState(false)
 
   // Each photo/file becomes a BLANK line straight away (image only); the AI is run
   // afterwards over all the un-read lines.
@@ -48,9 +51,9 @@ export default function AccountsMonthClient({
         fd.append("file", fileArr[i])
         const res = await fetch("/api/accounts/upload", { method: "POST", body: fd })
         if (res.ok) {
-          const { id, imageUrl } = await res.json()
+          const { id, images } = await res.json()
           setRows((rs) => [...rs, {
-            id, cardholder, source: "SCAN", imageUrl, supplier: "", item: "", website: "", docDate: "",
+            id, cardholder, source: "SCAN", images, supplier: "", item: "", website: "", docDate: "",
             vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiRun: false, aiNotes: null,
           }])
         }
@@ -60,7 +63,28 @@ export default function AccountsMonthClient({
     setUploadProg(null)
   }
 
-  const pending = rows.filter((r) => r.imageUrl && !r.aiRun)
+  const pending = rows.filter((r) => r.images.length > 0 && !r.aiRun)
+
+  // Add more pages to an existing line (multi-page invoices).
+  async function addPages(docId: string, list: FileList | null) {
+    const arr = list ? Array.from(list) : []
+    if (!arr.length) return
+    setAddingPage(true)
+    let latest: string[] | null = null
+    for (const f of arr) {
+      try {
+        const fd = new FormData(); fd.append("docId", docId); fd.append("file", f)
+        const res = await fetch("/api/accounts/add-page", { method: "POST", body: fd })
+        if (res.ok) latest = (await res.json()).images
+      } catch { /* skip */ }
+    }
+    if (latest) setRows((rs) => rs.map((r) => r.id === docId ? { ...r, images: latest!, aiRun: false } : r))
+    setAddingPage(false)
+  }
+  function removePage(docId: string, index: number) {
+    setRows((rs) => rs.map((r) => r.id === docId ? { ...r, images: r.images.filter((_, i) => i !== index) } : r))
+    startBusy(async () => { await removeDocumentPage(docId, index) })
+  }
 
   async function runAi() {
     if (running || pending.length === 0) return
@@ -111,7 +135,7 @@ export default function AccountsMonthClient({
     startBusy(async () => {
       const { id } = await addManualDocument(monthId, cardholder)
       setRows((rs) => [...rs, {
-        id, cardholder, source: "MANUAL", imageUrl: null, supplier: "", item: "", website: "", docDate: "",
+        id, cardholder, source: "MANUAL", images: [], supplier: "", item: "", website: "", docDate: "",
         vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiRun: true, aiNotes: null,
       }])
     })
@@ -212,7 +236,7 @@ export default function AccountsMonthClient({
         </div>
       ) : (
         <>
-          <p className="text-xs text-gray-400 mb-2">Tip: click a column cell to file a line under that nominal code. Open a line (its image) to change its card or date.</p>
+          <p className="text-xs text-gray-400 mb-2">Tip: click a column cell to file a line under that nominal code. Open a line (its image) to change its card/date or add more pages for a multi-page invoice.</p>
           <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-1">
             <table className="w-full table-fixed border-collapse">
               <colgroup>
@@ -250,12 +274,13 @@ export default function AccountsMonthClient({
                     {g.items.map((r) => (
                       <tr key={r.id} className={`border-b border-gray-100 dark:border-gray-800/60 align-top ${r.reviewed ? "" : "bg-amber-50/40 dark:bg-amber-500/5"}`}>
                         <td className="p-1.5">
-                          <button onClick={() => setViewId(r.id)} title="Open invoice">
-                            {r.imageUrl ? (
-                              <img src={r.imageUrl} alt="scan" className="w-9 h-9 object-cover rounded border border-gray-200 dark:border-gray-700 hover:ring-2 hover:ring-emerald-500" />
+                          <button onClick={() => setViewId(r.id)} title="Open invoice" className="relative block">
+                            {r.images[0] ? (
+                              <img src={r.images[0]} alt="scan" className="w-9 h-9 object-cover rounded border border-gray-200 dark:border-gray-700 hover:ring-2 hover:ring-emerald-500" />
                             ) : (
                               <span className="w-9 h-9 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 text-xs flex items-center justify-center hover:ring-2 hover:ring-emerald-500">✎</span>
                             )}
+                            {r.images.length > 1 && <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[9px] font-bold rounded-full px-1 leading-tight">{r.images.length}</span>}
                           </button>
                         </td>
                         <td className="p-1.5">
@@ -338,14 +363,28 @@ export default function AccountsMonthClient({
               <button onClick={() => setViewId(null)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none">&times;</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2">
-              <div className="bg-gray-50 dark:bg-black/30 flex items-center justify-center p-3 min-h-[280px]">
-                {viewRow.imageUrl ? (
-                  <a href={viewRow.imageUrl} target="_blank" rel="noreferrer" title="Open full size">
-                    <img src={viewRow.imageUrl} alt="invoice" className="max-h-[70vh] w-auto rounded-lg" />
-                  </a>
-                ) : (
-                  <p className="text-sm text-gray-400">No image (manual line)</p>
-                )}
+              <div className="bg-gray-50 dark:bg-black/30 p-3 min-h-[280px] max-h-[80vh] overflow-y-auto space-y-2">
+                {viewRow.images.length === 0 && <p className="text-sm text-gray-400 text-center py-8">No image (manual line)</p>}
+                {viewRow.images.map((url, i) => (
+                  <div key={i} className="relative">
+                    <a href={url} target="_blank" rel="noreferrer" title={`Page ${i + 1} — open full size`}>
+                      <img src={url} alt={`Page ${i + 1}`} className="w-full rounded-lg border border-gray-200 dark:border-gray-700" />
+                    </a>
+                    {viewRow.images.length > 1 && <span className="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">Page {i + 1}</span>}
+                    <button onClick={() => removePage(viewRow.id, i)} disabled={busy} className="absolute top-1 right-1 bg-black/60 hover:bg-red-600 text-white text-sm rounded-full w-6 h-6 leading-none disabled:opacity-50" title="Remove this page">×</button>
+                  </div>
+                ))}
+                <input ref={modalCamera} type="file" accept="image/*" capture="environment" className="hidden"
+                  onChange={(e) => { addPages(viewRow.id, e.target.files); e.currentTarget.value = "" }} />
+                <input ref={modalFiles} type="file" accept="image/*,application/pdf" multiple className="hidden"
+                  onChange={(e) => { addPages(viewRow.id, e.target.files); e.currentTarget.value = "" }} />
+                <div className="flex gap-2 pt-1">
+                  <button onClick={() => modalCamera.current?.click()} disabled={addingPage}
+                    className="flex-1 text-xs font-semibold px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-emerald-500 disabled:opacity-50">📷 Add page</button>
+                  <button onClick={() => modalFiles.current?.click()} disabled={addingPage}
+                    className="flex-1 text-xs font-semibold px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-emerald-500 disabled:opacity-50">Add files</button>
+                </div>
+                {addingPage && <p className="text-xs text-gray-400">Adding page…</p>}
               </div>
               <div className="p-5 space-y-3 text-sm">
                 <Field label="Supplier"><input value={viewRow.supplier} onChange={(e) => patch(viewRow.id, { supplier: e.target.value })} className={`${input} w-full`} placeholder="Supplier" /></Field>

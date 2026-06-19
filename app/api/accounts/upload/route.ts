@@ -33,10 +33,10 @@ export async function POST(req: NextRequest) {
     await uploadBufferToR2(buffer, key, file.type || "image/jpeg")
 
     const doc = await prisma.accountingDocument.create({
-      data: { monthId, cardholder, source: "SCAN", imageKey: key, vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", aiRun: false },
+      data: { monthId, cardholder, source: "SCAN", images: [key], vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", aiRun: false },
     })
 
-    return NextResponse.json({ id: doc.id, imageUrl: await getSignedImageUrl(key) })
+    return NextResponse.json({ id: doc.id, images: [await getSignedImageUrl(key)] })
   } catch (e: any) {
     console.error("accounts/upload error:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
