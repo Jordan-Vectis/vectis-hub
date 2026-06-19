@@ -5,13 +5,42 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { deleteObjectsFromR2 } from "@/lib/r2"
 import {
-  netFromGross, normaliseSupplier, isValidCardholder, isValidColumn, isValidVatCode,
+  netFromGross, normaliseSupplier, cleanCardholder, isValidColumn, isValidVatCode,
 } from "@/lib/accounting"
 
 async function requireAdmin() {
   const session = await auth()
   if (!session || session.user.role !== "ADMIN") throw new Error("Unauthorised")
   return session
+}
+
+// ── Cardholders (the "whose card / account" list) ────────────────────────────
+export async function createCardholder(name: string) {
+  await requireAdmin()
+  const n = cleanCardholder(name)
+  if (!n) throw new Error("Name required")
+  const existing = await prisma.accountingCardholder.findUnique({ where: { name: n } })
+  if (existing) return { id: existing.id }
+  const max = await prisma.accountingCardholder.aggregate({ _max: { sortOrder: true } })
+  const ch = await prisma.accountingCardholder.create({ data: { name: n, sortOrder: (max._max.sortOrder ?? 0) + 1 } })
+  revalidatePath("/tools/accounts")
+  return { id: ch.id }
+}
+
+export async function renameCardholder(id: string, name: string) {
+  await requireAdmin()
+  const n = cleanCardholder(name)
+  if (!n) throw new Error("Name required")
+  await prisma.accountingCardholder.update({ where: { id }, data: { name: n } })
+  revalidatePath("/tools/accounts")
+}
+
+export async function deleteCardholder(id: string) {
+  await requireAdmin()
+  // Existing documents keep their stored cardholder name (history is preserved);
+  // this only removes it from the pick-list going forward.
+  await prisma.accountingCardholder.delete({ where: { id } })
+  revalidatePath("/tools/accounts")
 }
 
 export async function createAccountingMonth(label: string) {
@@ -36,9 +65,9 @@ export async function deleteAccountingMonth(id: string) {
 
 export async function addManualDocument(monthId: string, cardholder: string) {
   await requireAdmin()
-  if (!isValidCardholder(cardholder)) throw new Error("Unknown cardholder")
+  const ch = cleanCardholder(cardholder) || "Vectis"
   const doc = await prisma.accountingDocument.create({
-    data: { monthId, cardholder, source: "MANUAL", supplier: "", vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis" },
+    data: { monthId, cardholder: ch, source: "MANUAL", supplier: "", vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis" },
   })
   revalidatePath(`/tools/accounts/${monthId}`)
   return { id: doc.id }
@@ -71,7 +100,7 @@ export async function saveAccountingDocuments(monthId: string, edits: DocEdit[])
   await requireAdmin()
 
   for (const e of edits) {
-    const cardholder = isValidCardholder(e.cardholder) ? e.cardholder : "Vectis"
+    const cardholder = cleanCardholder(e.cardholder) || "Vectis"
     const column     = isValidColumn(e.column) ? e.column : "vectis"
     const vatCode    = isValidVatCode(Number(e.vatCode)) ? Number(e.vatCode) : 2
     const gross      = Number.isFinite(e.gross) ? Math.round(e.gross * 100) / 100 : 0

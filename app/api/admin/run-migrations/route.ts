@@ -496,6 +496,21 @@ const MIGRATIONS = [
     CONSTRAINT "AccountingSupplierRule_pkey" PRIMARY KEY ("id")
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "AccountingSupplierRule_match_key" ON "AccountingSupplierRule"("match")`,
+  `CREATE TABLE IF NOT EXISTS "AccountingCardholder" (
+    "id"        TEXT         NOT NULL,
+    "name"      TEXT         NOT NULL,
+    "sortOrder" INTEGER      NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "AccountingCardholder_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "AccountingCardholder_name_key" ON "AccountingCardholder"("name")`,
+  `INSERT INTO "AccountingCardholder" ("id","name","sortOrder") VALUES
+     ('seed_bgoodall','B Goodall',1),
+     ('seed_jgoodall','J Goodall',2),
+     ('seed_james','James',3),
+     ('seed_michael','Michael',4),
+     ('seed_vectis','Vectis',5)
+   ON CONFLICT ("name") DO NOTHING`,
 ]
 
 export async function POST() {

@@ -1137,6 +1137,14 @@ model AccountingSupplierRule {
   updatedAt DateTime @updatedAt
 }
 
+// The cards / accounts a document can be tagged to (managed by admins).
+model AccountingCardholder {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
 // Singleton (id = "global") — stores the delegated OAuth tokens for the shared
 // IT mailbox connection. Connected once by an admin via the sign-in flow.
 model ITMailboxAuth {

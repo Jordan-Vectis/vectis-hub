@@ -4,7 +4,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { prisma } from "@/lib/prisma"
 import { uploadBufferToR2 } from "@/lib/r2"
 import {
-  NOMINAL_KEYS, isValidCardholder, isValidColumn, isValidVatCode,
+  NOMINAL_KEYS, cleanCardholder, isValidColumn, isValidVatCode,
   vatFromGross, netFromGross, normaliseSupplier,
 } from "@/lib/accounting"
 
@@ -57,12 +57,12 @@ export async function POST(req: NextRequest) {
 
     const form = await req.formData()
     const monthId    = form.get("monthId") as string
-    const cardholder = form.get("cardholder") as string
+    const cardholder = cleanCardholder(form.get("cardholder") as string)
     const file       = form.get("file")
     const modelId    = (form.get("model") as string) || "gemini-3-flash-preview"
 
     if (!monthId) return NextResponse.json({ error: "monthId required" }, { status: 400 })
-    if (!isValidCardholder(cardholder)) return NextResponse.json({ error: "Unknown cardholder" }, { status: 400 })
+    if (!cardholder) return NextResponse.json({ error: "Cardholder required" }, { status: 400 })
     if (!(file instanceof File)) return NextResponse.json({ error: "No file" }, { status: 400 })
 
     const month = await prisma.accountingMonth.findUnique({ where: { id: monthId } })

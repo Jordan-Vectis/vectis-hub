@@ -2,10 +2,14 @@
 // built from scanned invoices/receipts and manual lines, exported to the
 // "April 26"-style spreadsheet).
 
-// The people whose cards/expenses feed in each month. Each scan batch is tagged
-// to one of these. "Vectis" = the company NatWest account itself.
-export const CARDHOLDERS = ["B Goodall", "J Goodall", "James", "Michael", "Vectis"] as const
-export type Cardholder = (typeof CARDHOLDERS)[number]
+// The cards / accounts a document can be tagged to. These are now managed in the
+// DB (AccountingCardholder) and editable in the UI; this list only seeds the
+// initial set (see the run-migrations seed) and is a fallback if none exist.
+export const DEFAULT_CARDHOLDERS = ["B Goodall", "J Goodall", "James", "Michael", "Vectis"]
+
+export function cleanCardholder(s: string): string {
+  return (s ?? "").trim().slice(0, 60)
+}
 
 // VAT codes used on the sheet.
 //  1 = standard-rated (20% VAT reclaimable)
@@ -60,9 +64,6 @@ export function normaliseSupplier(s: string): string {
   return s.toLowerCase().replace(/\s+/g, " ").trim()
 }
 
-export function isValidCardholder(s: string): s is Cardholder {
-  return (CARDHOLDERS as readonly string[]).includes(s)
-}
 export function isValidColumn(s: string): boolean {
   return NOMINAL_KEYS.includes(s)
 }

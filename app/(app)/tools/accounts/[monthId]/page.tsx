@@ -2,6 +2,7 @@ import { auth } from "@/auth"
 import { redirect, notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { getSignedImageUrl } from "@/lib/r2"
+import { DEFAULT_CARDHOLDERS } from "@/lib/accounting"
 import AccountsMonthClient from "./accounts-client"
 
 export const dynamic = "force-dynamic"
@@ -17,6 +18,9 @@ export default async function AccountsMonthPage({ params }: { params: Promise<{ 
     include: { documents: { orderBy: { createdAt: "asc" } } },
   })
   if (!month) notFound()
+
+  const chRows = await prisma.accountingCardholder.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] })
+  const cardholders = chRows.length ? chRows.map((c) => c.name) : DEFAULT_CARDHOLDERS
 
   // Sign the scan thumbnails server-side (1h URLs).
   const documents = await Promise.all(
@@ -37,5 +41,5 @@ export default async function AccountsMonthPage({ params }: { params: Promise<{ 
     }))
   )
 
-  return <AccountsMonthClient monthId={month.id} monthLabel={month.label} documents={documents} />
+  return <AccountsMonthClient monthId={month.id} monthLabel={month.label} documents={documents} cardholders={cardholders} />
 }

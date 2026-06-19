@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import NewMonthForm from "./new-month-form"
+import ManageCardholders from "./manage-cardholders"
 
 export const dynamic = "force-dynamic"
 export const metadata = { title: "Accounts" }
@@ -18,6 +19,7 @@ export default async function AccountsPage() {
     orderBy: { createdAt: "desc" },
     include: { _count: { select: { documents: true } } },
   })
+  const cardholders = await prisma.accountingCardholder.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] })
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -28,9 +30,15 @@ export default async function AccountsPage() {
         </p>
       </div>
 
-      <div className={`${card} p-5 mb-6`}>
-        <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">New month</h2>
-        <NewMonthForm />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div className={`${card} p-5`}>
+          <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">New month</h2>
+          <NewMonthForm />
+        </div>
+        <div className={`${card} p-5`}>
+          <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Cards &amp; accounts</h2>
+          <ManageCardholders cardholders={cardholders.map((c) => ({ id: c.id, name: c.name }))} />
+        </div>
       </div>
 
       <div className="space-y-3">

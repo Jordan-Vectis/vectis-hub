@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import * as XLSX from "xlsx"
 import { prisma } from "@/lib/prisma"
-import { CARDHOLDERS, NOMINAL_COLUMNS } from "@/lib/accounting"
+import { NOMINAL_COLUMNS } from "@/lib/accounting"
 
 export async function GET(req: NextRequest) {
   try {
@@ -23,12 +23,17 @@ export async function GET(req: NextRequest) {
     const docs = month.documents
     const blank = NOMINAL_COLUMNS.map(() => "")
 
+    // Cardholder grouping order: managed list first, then any historical value
+    // still on a document (so nothing is dropped if a card was renamed/removed).
+    const chRows = await prisma.accountingCardholder.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] })
+    const cardholderOrder = Array.from(new Set([...chRows.map((c) => c.name), ...docs.map((d) => d.cardholder)].filter(Boolean)))
+
     // ── Main sheet (April-26 style): grouped by cardholder, net in nominal cols ──
     const rows: (string | number)[][] = []
     rows.push(["", "", "Vat", "Value", "VAT", ...NOMINAL_COLUMNS.map((c) => c.label)])
     rows.push(["", "", "", "", "", ...NOMINAL_COLUMNS.map((c) => c.code)])
 
-    for (const ch of CARDHOLDERS) {
+    for (const ch of cardholderOrder) {
       const chDocs = docs.filter((d) => d.cardholder === ch)
       if (chDocs.length === 0) continue
       rows.push([ch])

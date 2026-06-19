@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
-  CARDHOLDERS, VAT_CODES, NOMINAL_COLUMNS, columnLabel,
+  VAT_CODES, NOMINAL_COLUMNS, columnLabel,
 } from "@/lib/accounting"
 import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, saveAccountingDocuments } from "@/lib/actions/accounting"
 
@@ -18,14 +18,18 @@ const round = (n: number) => Math.round((n || 0) * 100) / 100
 const gbp = (n: number) => "£" + (n || 0).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export default function AccountsMonthClient({
-  monthId, monthLabel, documents,
-}: { monthId: string; monthLabel: string; documents: Row[] }) {
+  monthId, monthLabel, documents, cardholders,
+}: { monthId: string; monthLabel: string; documents: Row[]; cardholders: string[] }) {
   const router = useRouter()
   const [rows, setRows] = useState<Row[]>(documents)
   useEffect(() => { setRows(documents) }, [documents])
 
+  // Options for the per-row card dropdowns: the managed list plus any historical
+  // value still on a document (so a renamed/removed card never gets lost).
+  const cardOptions = Array.from(new Set([...cardholders, ...documents.map((d) => d.cardholder)].filter(Boolean)))
+
   // ── Upload / AI batch ──────────────────────────────────────────────────────
-  const [cardholder, setCardholder] = useState<string>("B Goodall")
+  const [cardholder, setCardholder] = useState<string>(cardholders[0] ?? "Vectis")
   const [files, setFiles] = useState<File[]>([])
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number; errors: number }>({ done: 0, total: 0, errors: 0 })
@@ -144,7 +148,7 @@ export default function AccountsMonthClient({
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm text-gray-600 dark:text-gray-300">Whose card / account:</label>
           <select value={cardholder} onChange={(e) => setCardholder(e.target.value)} className={input}>
-            {CARDHOLDERS.map((c) => <option key={c} value={c}>{c}</option>)}
+            {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
 
           {/* Camera — opens the device camera on phone/iPad; on desktop it's a file picker */}
@@ -233,7 +237,7 @@ export default function AccountsMonthClient({
                   </td>
                   <td className="p-2">
                     <select value={r.cardholder} onChange={(e) => patch(r.id, { cardholder: e.target.value })} className={input}>
-                      {CARDHOLDERS.map((c) => <option key={c} value={c}>{c}</option>)}
+                      {cardOptions.map((c) => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </td>
                   <td className="p-2">
@@ -311,7 +315,7 @@ export default function AccountsMonthClient({
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Card / account">
                     <select value={viewRow.cardholder} onChange={(e) => patch(viewRow.id, { cardholder: e.target.value })} className={`${input} w-full`}>
-                      {CARDHOLDERS.map((c) => <option key={c} value={c}>{c}</option>)}
+                      {cardOptions.map((c) => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </Field>
                   <Field label="Date">
