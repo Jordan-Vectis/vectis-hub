@@ -43,6 +43,7 @@ export default function AccountsMonthClient({
   const [viewer, setViewer] = useState<{ images: string[]; index: number } | null>(null)
   const [aiPreview, setAiPreview] = useState<{ docId: string; receipts: any[]; capped?: boolean }[] | null>(null)
   const [applying, setApplying] = useState(false)
+  const [deselected, setDeselected] = useState<Set<string>>(new Set())   // To-read scans the user has un-ticked
 
   // Each photo/file becomes a BLANK line straight away (image only); the AI is run
   // afterwards over all the un-read lines.
@@ -81,13 +82,17 @@ export default function AccountsMonthClient({
   }
 
   // Un-read scans sit in their own "To read" area; everything else (AI-read lines
-  // + manual lines) is the main table. Run AI works through the un-read ones first;
-  // with none left it can re-read any read-but-not-OK'd line.
+  // + manual lines) is the main table. Run AI only reads the scans the user has
+  // ticked in "To read" — it never silently re-does already-read lines (re-read a
+  // single read line from its detail view instead).
   const toRead = rows.filter((r) => r.images.length > 0 && !r.aiRun)
   const mainRows = rows.filter((r) => !(r.images.length > 0 && !r.aiRun))
-  const rereadable = mainRows.filter((r) => r.images.length > 0 && r.aiRun && !r.reviewed)
-  const aiTarget = toRead.length ? toRead : rereadable
-  const aiLabel = toRead.length ? `Run AI (${toRead.length})` : rereadable.length ? `Re-read AI (${rereadable.length})` : "Run AI"
+  const selectedToRead = toRead.filter((r) => !deselected.has(r.id))
+  const aiTarget = selectedToRead
+  const aiLabel = `Run AI${selectedToRead.length ? ` (${selectedToRead.length})` : ""}`
+  function toggleSel(id: string) {
+    setDeselected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
 
   // Preview: ask the AI what it proposes for a document — returns receipts but
   // writes nothing. The user approves before anything is committed.
@@ -332,20 +337,34 @@ export default function AccountsMonthClient({
         {!running && aiProg.total > 0 && <p className="text-xs text-gray-400 mt-2">Read {aiProg.total - aiProg.errors} of {aiProg.total}{aiProg.errors ? `, ${aiProg.errors} failed` : ""}.</p>}
       </div>
 
-      {/* To read — scans not yet processed by AI */}
+      {/* To read — scans not yet processed by AI (tick which ones Run AI should read) */}
       {toRead.length > 0 && (
         <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-amber-300/60 dark:border-amber-500/30 p-4 mb-6">
-          <h2 className="text-sm font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">To read ({toRead.length})</h2>
-          <p className="text-xs text-gray-400 mb-3">These scans haven&apos;t been read yet. Press <span className="font-semibold">Run AI</span> above and approve — they&apos;ll drop into the table below. Click one to view or remove it.</p>
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
+            <h2 className="text-sm font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">To read · {selectedToRead.length}/{toRead.length} selected</h2>
+            <div className="flex items-center gap-3 text-xs font-semibold">
+              <button onClick={() => setDeselected(new Set())} className="text-emerald-600 hover:text-emerald-500">Select all</button>
+              <button onClick={() => setDeselected(new Set(toRead.map((r) => r.id)))} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Select none</button>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 mb-3">Tick the scans you want to read, then press <span className="font-semibold">Run AI</span> above — only the selected ones are read. Click a scan to view or remove it.</p>
           <div className="flex flex-wrap gap-2">
-            {toRead.map((r) => (
-              <button key={r.id} onClick={() => setViewId(r.id)} title="View / remove" className="relative">
-                {isPdf(r.images[0])
-                  ? <span className="w-14 h-14 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-300 text-[10px] font-bold flex items-center justify-center hover:ring-2 hover:ring-amber-500">PDF</span>
-                  : <img src={r.images[0]} alt="scan" className="w-14 h-14 object-cover rounded-lg border border-gray-200 dark:border-gray-700 hover:ring-2 hover:ring-amber-500" />}
-                {r.images.length > 1 && <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[9px] font-bold rounded-full px-1 leading-tight">{r.images.length}</span>}
-              </button>
-            ))}
+            {toRead.map((r) => {
+              const sel = !deselected.has(r.id)
+              return (
+                <div key={r.id} className="relative">
+                  <button onClick={() => setViewId(r.id)} title="View / remove" className="block">
+                    {isPdf(r.images[0])
+                      ? <span className={`w-14 h-14 rounded-lg border bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-300 text-[10px] font-bold flex items-center justify-center ${sel ? "ring-2 ring-emerald-500 border-transparent" : "border-gray-200 dark:border-gray-700 opacity-60"}`}>PDF</span>
+                      : <img src={r.images[0]} alt="scan" className={`w-14 h-14 object-cover rounded-lg border border-gray-200 dark:border-gray-700 ${sel ? "ring-2 ring-emerald-500" : "opacity-60"}`} />}
+                  </button>
+                  <label className="absolute top-1 left-1 bg-white/90 dark:bg-black/70 rounded p-0.5 cursor-pointer flex" title={sel ? "Selected — untick to skip" : "Tick to read"}>
+                    <input type="checkbox" checked={sel} onChange={() => toggleSel(r.id)} className="w-4 h-4 accent-emerald-600 block" />
+                  </label>
+                  {r.images.length > 1 && <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[9px] font-bold rounded-full px-1 leading-tight">{r.images.length}</span>}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
