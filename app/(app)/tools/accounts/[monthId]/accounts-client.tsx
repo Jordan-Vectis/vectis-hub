@@ -245,7 +245,7 @@ export default function AccountsMonthClient({
   const groupOrder = Array.from(new Set([...cardholders, ...mainRows.map((r) => r.cardholder)].filter(Boolean)))
   const groups = groupOrder.map((name) => ({ name, items: mainRows.filter((r) => r.cardholder === name) })).filter((g) => g.items.length)
   const colSum = (items: Row[], key: string) => round(items.filter((r) => r.column === key).reduce((a, r) => a + r.net, 0))
-  const TOTAL_COLS = NOMINAL_COLUMNS.length + 9
+  const TOTAL_COLS = NOMINAL_COLUMNS.length + 10
 
   const input = "px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
   const cell = `${input} w-full text-xs`
@@ -385,21 +385,22 @@ export default function AccountsMonthClient({
         <>
           <p className="text-xs text-gray-400 mb-2">
             <span className="font-semibold text-gray-500 dark:text-gray-300">VAT codes:</span> 1 = 20% VAT · 2 = no VAT · 7 = personal.
-            {" "}Click a column cell to file a line under that nominal code. Open a line (its image) to change its card/date or add pages.
+            {" "}Click a column cell to file a line under that nominal code. Open a line (its image) to change its card or add pages.
           </p>
           <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-1">
             <table className="w-full table-fixed border-collapse">
               <colgroup>
                 <col style={{ width: "2.5%" }} />
-                <col style={{ width: "12%" }} />
-                <col style={{ width: "10%" }} />
-                <col style={{ width: "10%" }} />
+                <col style={{ width: "11%" }} />
+                <col style={{ width: "9%" }} />
+                <col style={{ width: "9%" }} />
+                <col style={{ width: "8%" }} />
                 <col style={{ width: "3%" }} />
                 <col style={{ width: "5.5%" }} />
                 <col style={{ width: "5.5%" }} />
                 {NOMINAL_COLUMNS.map((c) => <col key={c.key} />)}
-                <col style={{ width: "3%" }} />
                 <col style={{ width: "2.5%" }} />
+                <col style={{ width: "2%" }} />
               </colgroup>
               <thead>
                 <tr className="text-[10px] uppercase tracking-wide text-gray-400 border-b border-gray-200 dark:border-gray-800 align-bottom">
@@ -407,6 +408,7 @@ export default function AccountsMonthClient({
                   <th className="p-1.5 text-left">Supplier</th>
                   <th className="p-1.5 text-left">Item / service</th>
                   <th className="p-1.5 text-left">Website</th>
+                  <th className="p-1.5 text-left">Date</th>
                   <th className="p-1.5 text-center" title="VAT code — 1 = 20% VAT (reclaimable), 2 = no/zero VAT, 7 = personal">Vat</th>
                   <th className="p-1.5 text-right">Value</th>
                   <th className="p-1.5 text-right">VAT</th>
@@ -446,6 +448,9 @@ export default function AccountsMonthClient({
                           <input value={r.website} onChange={(e) => patch(r.id, { website: e.target.value })} className={cell} placeholder="—" />
                         </td>
                         <td className="p-1.5">
+                          <input type="date" value={r.docDate} onChange={(e) => patch(r.id, { docDate: e.target.value })} className={cell} />
+                        </td>
+                        <td className="p-1.5">
                           <select value={r.vatCode} onChange={(e) => patch(r.id, { vatCode: Number(e.target.value) })} className={cell}>
                             {VAT_CODES.map((v) => <option key={v.code} value={v.code}>{v.code}</option>)}
                           </select>
@@ -478,6 +483,7 @@ export default function AccountsMonthClient({
                     <tr className="border-b-2 border-gray-200 dark:border-gray-700 font-semibold text-gray-600 dark:text-gray-300 text-xs">
                       <td></td>
                       <td className="p-1.5">Total</td>
+                      <td></td>
                       <td></td>
                       <td></td>
                       <td></td>
