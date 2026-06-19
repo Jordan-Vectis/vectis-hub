@@ -2,10 +2,11 @@ import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { cookies } from "next/headers"
 import Link from "next/link"
+import { prisma } from "@/lib/prisma"
 import { isGaConfigured, getMarketingReport, realtimeActiveUsers, rangeDays, SECTION_CATALOG, DEFAULT_SECTION_IDS, type GaRange, type MetricKey } from "@/lib/ga"
 import MarketingCharts from "./marketing-charts"
 import InfoTip from "./info-tip"
-import SectionSelector from "./section-selector"
+import LayoutBar from "./layout-bar"
 
 const BOT_TIP = "When on, hides traffic from countries that are mostly automated bots/scrapers (currently China, Hong Kong, Taiwan, Singapore, India, Vietnam, Indonesia, Philippines, Thailand, Pakistan and Bangladesh) so the figures better reflect real visitors. Japan and Korea are deliberately kept in (likely genuine collectors). Ask IT to adjust the list if needed."
 
@@ -64,18 +65,21 @@ export default async function MarketingReportsPage({
 }) {
   const session = await auth()
   if (!session) redirect("/login")
+  const isAdmin = session.user.role === "ADMIN"
 
   const sp = await searchParams
   const range: GaRange = (["7d", "28d", "90d", "365d"].includes(sp.range ?? "") ? sp.range : "28d") as GaRange
   const excludeBots = sp.bots === "hide"
   const linkFor = (r: GaRange, bots: boolean) => `/tools/marketing-reports?range=${r}${bots ? "&bots=hide" : ""}`
 
-  // Which report sections to show — saved per browser in the mr_sections cookie.
+  // Saved shared layouts. The one shown = the user's picked layout (mr_layout
+  // cookie) → the default → the first → the hardcoded fallback set.
+  const dbLayouts = await prisma.marketingLayout.findMany({ orderBy: [{ isDefault: "desc" }, { name: "asc" }] })
+  const layouts = dbLayouts.map((l) => ({ id: l.id, name: l.name, sections: l.sections, isDefault: l.isDefault }))
   const validIds = new Set(SECTION_CATALOG.map((s) => s.id))
-  const cookieSections = (await cookies()).get("mr_sections")?.value
-  const selectedSections = cookieSections !== undefined
-    ? cookieSections.split(",").map((s) => s.trim()).filter((s) => validIds.has(s))
-    : DEFAULT_SECTION_IDS
+  const cookieLayoutId = (await cookies()).get("mr_layout")?.value
+  const activeLayout = layouts.find((l) => l.id === cookieLayoutId) ?? layouts.find((l) => l.isDefault) ?? layouts[0] ?? null
+  const selectedSections = activeLayout ? activeLayout.sections.filter((id) => validIds.has(id)) : DEFAULT_SECTION_IDS
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -87,7 +91,12 @@ export default async function MarketingReportsPage({
         </div>
         {isGaConfigured() && (
           <div className="flex items-center gap-2 flex-wrap">
-            <SectionSelector catalog={SECTION_CATALOG.map((s) => ({ id: s.id, title: s.title }))} selected={selectedSections} />
+            <LayoutBar
+              layouts={layouts}
+              activeId={activeLayout?.id ?? null}
+              catalog={SECTION_CATALOG.map((s) => ({ id: s.id, title: s.title }))}
+              isAdmin={isAdmin}
+            />
             <Link
               href={linkFor(range, !excludeBots)}
               className={`px-3.5 py-2 rounded-xl text-sm font-semibold border transition-colors ${

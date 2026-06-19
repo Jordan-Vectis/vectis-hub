@@ -1076,6 +1076,17 @@ model ITJobAttachment {
   @@index([messageId])
 }
 
+// A saved Marketing Reports layout: an ordered list of report-section ids,
+// shared across all users. One can be the default. Managed by admins.
+model MarketingLayout {
+  id        String   @id @default(cuid())
+  name      String
+  sections  String[] @default([])   // ordered report-section ids
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // Singleton (id = "global") — stores the delegated OAuth tokens for the shared
 // IT mailbox connection. Connected once by an admin via the sign-in flow.
 model ITMailboxAuth {

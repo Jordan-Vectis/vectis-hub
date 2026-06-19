@@ -436,6 +436,17 @@ const MIGRATIONS = [
       REFERENCES "Submission"("id") ON DELETE CASCADE ON UPDATE CASCADE
   )`,
   `CREATE INDEX IF NOT EXISTS "SubmissionNote_submissionId_idx" ON "SubmissionNote"("submissionId")`,
+
+  // 2026-06-18 — Marketing Reports: saved shared layouts
+  `CREATE TABLE IF NOT EXISTS "MarketingLayout" (
+    "id"        TEXT         NOT NULL,
+    "name"      TEXT         NOT NULL,
+    "sections"  TEXT[]       NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "isDefault" BOOLEAN      NOT NULL DEFAULT FALSE,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "MarketingLayout_pkey" PRIMARY KEY ("id")
+  )`,
 ]
 
 export async function POST() {
