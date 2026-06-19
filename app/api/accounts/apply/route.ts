@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { getObjectBuffer, uploadBufferToR2, getSignedImageUrl } from "@/lib/r2"
 import { isValidColumn, isValidVatCode, netFromGross } from "@/lib/accounting"
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 const r2p = (n: number) => Math.round(n * 100) / 100
 
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     if (list.length > 1 && keys.length) {
       const buf = await getObjectBuffer(keys[0])
       const mime = mimeForKey(keys[0])
-      for (let i = 1; i < list.length && i < 50; i++) {
+      for (let i = 1; i < list.length && i < 200; i++) {
         const f = clean(list[i])
         const newKey = `accounts/${doc.monthId}/${Date.now()}-${i}-split.${mime === "application/pdf" ? "pdf" : "jpg"}`
         await uploadBufferToR2(buf, newKey, mime)

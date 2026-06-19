@@ -8,7 +8,7 @@ import {
   vatFromGross, netFromGross, normaliseSupplier,
 } from "@/lib/accounting"
 
-export const maxDuration = 60
+export const maxDuration = 120
 
 const COLUMN_GUIDE = `Choose ONE allocation column (use the key in brackets):
 - Fuel (fuel): petrol, diesel, AdBlue, fuel cards
@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
     if (!allowSplit) receipts = receipts.slice(0, 1)
 
     const proposals = []
-    for (let i = 0; i < receipts.length && i < 50; i++) {
+    for (let i = 0; i < receipts.length && i < 200; i++) {
       const f = await normalise(receipts[i], i === 0 ? aiError : null)
       proposals.push({
         supplier: f.supplier, item: f.item, website: f.website,
