@@ -1,11 +1,9 @@
 "use client"
 
-import { useEffect, useRef, useState, useTransition } from "react"
+import { Fragment, useEffect, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import {
-  VAT_CODES, NOMINAL_COLUMNS, columnLabel,
-} from "@/lib/accounting"
+import { VAT_CODES, NOMINAL_COLUMNS } from "@/lib/accounting"
 import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, saveAccountingDocuments } from "@/lib/actions/accounting"
 
 type Row = {
@@ -113,6 +111,12 @@ export default function AccountsMonthClient({
   const vatReclaim  = round(rows.filter((r) => r.vatCode === 1).reduce((a, r) => a + r.vat, 0))
   const unreviewed  = rows.filter((r) => !r.reviewed).length
 
+  // Group rows by card (managed order first, then any other value present), like the sheet's sections.
+  const groupOrder = Array.from(new Set([...cardholders, ...rows.map((r) => r.cardholder)].filter(Boolean)))
+  const groups = groupOrder.map((name) => ({ name, items: rows.filter((r) => r.cardholder === name) })).filter((g) => g.items.length)
+  const colSum = (items: Row[], key: string) => round(items.filter((r) => r.column === key).reduce((a, r) => a + r.net, 0))
+  const TOTAL_COLS = NOMINAL_COLUMNS.length + 7
+
   const input = "px-2 py-1 rounded-lg text-sm border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
   const viewRow = rows.find((r) => r.id === viewId) ?? null
 
@@ -200,81 +204,106 @@ export default function AccountsMonthClient({
         <Stat label="Lines to review" value={String(unreviewed)} amber={unreviewed > 0} />
       </div>
 
-      {/* Review table */}
+      {/* Review grid — laid out like the spreadsheet: grouped per card, each line's
+          net shown in its nominal column. Click a nominal cell to allocate the line there. */}
       {rows.length === 0 ? (
         <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-8 text-center text-sm text-gray-400">
           No lines yet — scan a batch above, or add one manually.
         </div>
       ) : (
-        <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wider text-gray-400 border-b border-gray-200 dark:border-gray-800">
-                <th className="p-3 font-semibold">Scan</th>
-                <th className="p-3 font-semibold">Card</th>
-                <th className="p-3 font-semibold">Supplier / description</th>
-                <th className="p-3 font-semibold">Date</th>
-                <th className="p-3 font-semibold">VAT</th>
-                <th className="p-3 font-semibold text-right">Value</th>
-                <th className="p-3 font-semibold text-right">VAT £</th>
-                <th className="p-3 font-semibold text-right">Net</th>
-                <th className="p-3 font-semibold">Column</th>
-                <th className="p-3 font-semibold text-center">OK</th>
-                <th className="p-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className={`border-b border-gray-100 dark:border-gray-800/60 ${r.reviewed ? "" : "bg-amber-50/40 dark:bg-amber-500/5"}`}>
-                  <td className="p-2">
-                    <button onClick={() => setViewId(r.id)} className="block" title="Open invoice">
-                      {r.imageUrl ? (
-                        <img src={r.imageUrl} alt="scan" className="w-12 h-12 object-cover rounded-md border border-gray-200 dark:border-gray-700 hover:ring-2 hover:ring-emerald-500" />
-                      ) : (
-                        <span className="w-12 h-12 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-400 text-xs flex items-center justify-center hover:ring-2 hover:ring-emerald-500">✎</span>
-                      )}
-                    </button>
-                  </td>
-                  <td className="p-2">
-                    <select value={r.cardholder} onChange={(e) => patch(r.id, { cardholder: e.target.value })} className={input}>
-                      {cardOptions.map((c) => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </td>
-                  <td className="p-2">
-                    <input value={r.supplier} onChange={(e) => patch(r.id, { supplier: e.target.value })} className={`${input} w-48`} placeholder="Supplier" />
-                    {r.aiNotes && <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1 max-w-48">{r.aiNotes}</p>}
-                  </td>
-                  <td className="p-2">
-                    <input type="date" value={r.docDate} onChange={(e) => patch(r.id, { docDate: e.target.value })} className={input} />
-                  </td>
-                  <td className="p-2">
-                    <select value={r.vatCode} onChange={(e) => patch(r.id, { vatCode: Number(e.target.value) })} className={input}>
-                      {VAT_CODES.map((v) => <option key={v.code} value={v.code}>{v.code}</option>)}
-                    </select>
-                  </td>
-                  <td className="p-2">
-                    <input type="number" step="0.01" value={r.gross} onChange={(e) => patch(r.id, { gross: Number(e.target.value) })} className={`${input} w-24 text-right`} />
-                  </td>
-                  <td className="p-2">
-                    <input type="number" step="0.01" value={r.vat} onChange={(e) => patch(r.id, { vat: Number(e.target.value), net: round(r.gross - Number(e.target.value)) })} className={`${input} w-24 text-right`} />
-                  </td>
-                  <td className="p-2 text-right tabular-nums text-gray-500">{gbp(r.net)}</td>
-                  <td className="p-2">
-                    <select value={r.column} onChange={(e) => patch(r.id, { column: e.target.value })} className={input} title={columnLabel(r.column)}>
-                      {NOMINAL_COLUMNS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-                    </select>
-                  </td>
-                  <td className="p-2 text-center">
-                    <input type="checkbox" checked={r.reviewed} onChange={(e) => patch(r.id, { reviewed: e.target.checked })} className="w-4 h-4 accent-emerald-600" />
-                  </td>
-                  <td className="p-2 text-right">
-                    <button onClick={() => removeRow(r.id)} className="text-gray-400 hover:text-red-500" title="Delete line">✕</button>
-                  </td>
+        <>
+          <p className="text-xs text-gray-400 mb-2">Tip: click a column cell to file a line under that nominal code. Open a line (its image) to change its card or date.</p>
+          <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 overflow-x-auto">
+            <table className="text-sm border-collapse min-w-full">
+              <thead>
+                <tr className="text-xs uppercase tracking-wider text-gray-400 border-b border-gray-200 dark:border-gray-800">
+                  <th className="p-2 font-semibold text-left"></th>
+                  <th className="p-2 font-semibold text-left">Supplier</th>
+                  <th className="p-2 font-semibold text-center">Vat</th>
+                  <th className="p-2 font-semibold text-right">Value</th>
+                  <th className="p-2 font-semibold text-right">VAT</th>
+                  {NOMINAL_COLUMNS.map((c) => <th key={c.key} className="p-2 font-semibold text-right whitespace-nowrap">{c.label}</th>)}
+                  <th className="p-2 font-semibold text-center">OK</th>
+                  <th className="p-2"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                <tr className="text-[11px] text-gray-400 border-b border-gray-200 dark:border-gray-800">
+                  <th colSpan={5}></th>
+                  {NOMINAL_COLUMNS.map((c) => <th key={c.key} className="px-2 pb-1 text-right font-normal">{c.code}</th>)}
+                  <th colSpan={2}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {groups.map((g) => (
+                  <Fragment key={g.name}>
+                    <tr className="bg-gray-50 dark:bg-gray-800/40">
+                      <td colSpan={TOTAL_COLS} className="px-3 py-1.5 font-bold text-gray-700 dark:text-gray-200">{g.name}</td>
+                    </tr>
+                    {g.items.map((r) => (
+                      <tr key={r.id} className={`border-b border-gray-100 dark:border-gray-800/60 ${r.reviewed ? "" : "bg-amber-50/40 dark:bg-amber-500/5"}`}>
+                        <td className="p-1.5">
+                          <button onClick={() => setViewId(r.id)} title="Open invoice">
+                            {r.imageUrl ? (
+                              <img src={r.imageUrl} alt="scan" className="w-9 h-9 object-cover rounded border border-gray-200 dark:border-gray-700 hover:ring-2 hover:ring-emerald-500" />
+                            ) : (
+                              <span className="w-9 h-9 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 text-xs flex items-center justify-center hover:ring-2 hover:ring-emerald-500">✎</span>
+                            )}
+                          </button>
+                        </td>
+                        <td className="p-1.5">
+                          <input value={r.supplier} onChange={(e) => patch(r.id, { supplier: e.target.value })} className={`${input} w-44`} placeholder="Supplier" />
+                          {r.aiNotes && <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5 max-w-44">{r.aiNotes}</p>}
+                        </td>
+                        <td className="p-1.5 text-center">
+                          <select value={r.vatCode} onChange={(e) => patch(r.id, { vatCode: Number(e.target.value) })} className={`${input} w-14`}>
+                            {VAT_CODES.map((v) => <option key={v.code} value={v.code}>{v.code}</option>)}
+                          </select>
+                        </td>
+                        <td className="p-1.5">
+                          <input type="number" step="0.01" value={r.gross} onChange={(e) => patch(r.id, { gross: Number(e.target.value) })} className={`${input} w-20 text-right`} />
+                        </td>
+                        <td className="p-1.5">
+                          <input type="number" step="0.01" value={r.vat} onChange={(e) => patch(r.id, { vat: Number(e.target.value), net: round(r.gross - Number(e.target.value)) })} className={`${input} w-20 text-right`} />
+                        </td>
+                        {NOMINAL_COLUMNS.map((c) => {
+                          const active = r.column === c.key
+                          return (
+                            <td key={c.key} className="p-1 text-right">
+                              <button
+                                onClick={() => patch(r.id, { column: c.key })}
+                                title={`File under ${c.label}`}
+                                className={`w-full min-w-[58px] px-1.5 py-1 rounded text-xs tabular-nums ${active ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-semibold" : "text-gray-300 dark:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
+                              >
+                                {active ? gbp(r.net) : "·"}
+                              </button>
+                            </td>
+                          )
+                        })}
+                        <td className="p-1.5 text-center">
+                          <input type="checkbox" checked={r.reviewed} onChange={(e) => patch(r.id, { reviewed: e.target.checked })} className="w-4 h-4 accent-emerald-600" />
+                        </td>
+                        <td className="p-1.5 text-right">
+                          <button onClick={() => removeRow(r.id)} className="text-gray-400 hover:text-red-500" title="Delete line">✕</button>
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="border-b-2 border-gray-200 dark:border-gray-700 font-semibold text-gray-600 dark:text-gray-300">
+                      <td></td>
+                      <td className="p-1.5">Total</td>
+                      <td></td>
+                      <td className="p-1.5 text-right tabular-nums">{gbp(round(g.items.reduce((a, r) => a + r.gross, 0)))}</td>
+                      <td className="p-1.5 text-right tabular-nums">{gbp(round(g.items.reduce((a, r) => a + r.vat, 0)))}</td>
+                      {NOMINAL_COLUMNS.map((c) => {
+                        const s = colSum(g.items, c.key)
+                        return <td key={c.key} className="p-1.5 text-right tabular-nums text-xs">{s ? gbp(s) : ""}</td>
+                      })}
+                      <td colSpan={2}></td>
+                    </tr>
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {/* Save bar */}
