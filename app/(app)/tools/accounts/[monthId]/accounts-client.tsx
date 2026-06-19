@@ -30,6 +30,14 @@ export default function AccountsMonthClient({
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number; errors: number }>({ done: 0, total: 0, errors: 0 })
   const fileInput = useRef<HTMLInputElement>(null)
+  const cameraInput = useRef<HTMLInputElement>(null)
+  const [viewId, setViewId] = useState<string | null>(null)
+
+  // Both "Take photo" and "Choose files" add to the same pending batch, so you
+  // can snap several invoices (one at a time) and/or pick PDFs, then Run AI.
+  function addFiles(list: FileList | null) {
+    if (list && list.length) setFiles((f) => [...f, ...Array.from(list)])
+  }
 
   async function runBatch() {
     if (files.length === 0 || running) return
@@ -102,6 +110,7 @@ export default function AccountsMonthClient({
   const unreviewed  = rows.filter((r) => !r.reviewed).length
 
   const input = "px-2 py-1 rounded-lg text-sm border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+  const viewRow = rows.find((r) => r.id === viewId) ?? null
 
   return (
     <div className="p-6 max-w-[1400px] mx-auto">
@@ -131,20 +140,36 @@ export default function AccountsMonthClient({
       {/* Upload / scan */}
       <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-5 mb-6">
         <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Scan a batch</h2>
-        <p className="text-xs text-gray-400 mb-3">Pick whose card it is, choose the photos/PDFs, and AI reads each one. Tip: hit <span className="font-semibold">Save changes</span> before scanning another batch.</p>
+        <p className="text-xs text-gray-400 mb-3">Pick whose card it is, snap a photo or choose files (photos/PDFs), and AI reads each one. Tip: hit <span className="font-semibold">Save changes</span> before scanning another batch.</p>
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm text-gray-600 dark:text-gray-300">Whose card / account:</label>
           <select value={cardholder} onChange={(e) => setCardholder(e.target.value)} className={input}>
             {CARDHOLDERS.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
-          <input
-            ref={fileInput}
-            type="file"
-            accept="image/*,application/pdf"
-            multiple
-            onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-            className="text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-gray-100 dark:file:bg-gray-800 file:text-gray-700 dark:file:text-gray-200"
-          />
+
+          {/* Camera — opens the device camera on phone/iPad; on desktop it's a file picker */}
+          <input ref={cameraInput} type="file" accept="image/*" capture="environment" className="hidden"
+            onChange={(e) => { addFiles(e.target.files); e.currentTarget.value = "" }} />
+          <button onClick={() => cameraInput.current?.click()} disabled={running}
+            className="text-sm font-semibold px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-emerald-500 disabled:opacity-50">
+            📷 Take photo
+          </button>
+
+          {/* Files — photos from gallery or PDFs, multiple */}
+          <input ref={fileInput} type="file" accept="image/*,application/pdf" multiple className="hidden"
+            onChange={(e) => { addFiles(e.target.files); e.currentTarget.value = "" }} />
+          <button onClick={() => fileInput.current?.click()} disabled={running}
+            className="text-sm font-semibold px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-emerald-500 disabled:opacity-50">
+            Choose files
+          </button>
+
+          {files.length > 0 && (
+            <span className="text-sm text-gray-500">
+              {files.length} ready
+              <button onClick={() => setFiles([])} className="ml-2 text-gray-400 hover:text-red-500 underline">clear</button>
+            </span>
+          )}
+
           <button
             onClick={runBatch}
             disabled={running || files.length === 0}
@@ -198,13 +223,13 @@ export default function AccountsMonthClient({
               {rows.map((r) => (
                 <tr key={r.id} className={`border-b border-gray-100 dark:border-gray-800/60 ${r.reviewed ? "" : "bg-amber-50/40 dark:bg-amber-500/5"}`}>
                   <td className="p-2">
-                    {r.imageUrl ? (
-                      <a href={r.imageUrl} target="_blank" rel="noreferrer">
-                        <img src={r.imageUrl} alt="scan" className="w-12 h-12 object-cover rounded-md border border-gray-200 dark:border-gray-700" />
-                      </a>
-                    ) : (
-                      <span className="inline-block w-12 h-12 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-400 text-xs flex items-center justify-center">✎</span>
-                    )}
+                    <button onClick={() => setViewId(r.id)} className="block" title="Open invoice">
+                      {r.imageUrl ? (
+                        <img src={r.imageUrl} alt="scan" className="w-12 h-12 object-cover rounded-md border border-gray-200 dark:border-gray-700 hover:ring-2 hover:ring-emerald-500" />
+                      ) : (
+                        <span className="w-12 h-12 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-400 text-xs flex items-center justify-center hover:ring-2 hover:ring-emerald-500">✎</span>
+                      )}
+                    </button>
                   </td>
                   <td className="p-2">
                     <select value={r.cardholder} onChange={(e) => patch(r.id, { cardholder: e.target.value })} className={input}>
@@ -260,7 +285,84 @@ export default function AccountsMonthClient({
           </button>
         </div>
       )}
+
+      {/* Invoice detail — image alongside the saved details (auction-manager style) */}
+      {viewRow && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-start justify-center p-4 sm:p-8 overflow-y-auto" onClick={() => setViewId(null)}>
+          <div className="bg-white dark:bg-[#1C1C1E] w-full max-w-4xl rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-800">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Invoice details</h2>
+              <button onClick={() => setViewId(null)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none">&times;</button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2">
+              <div className="bg-gray-50 dark:bg-black/30 flex items-center justify-center p-3 min-h-[280px]">
+                {viewRow.imageUrl ? (
+                  <a href={viewRow.imageUrl} target="_blank" rel="noreferrer" title="Open full size">
+                    <img src={viewRow.imageUrl} alt="invoice" className="max-h-[70vh] w-auto rounded-lg" />
+                  </a>
+                ) : (
+                  <p className="text-sm text-gray-400">No image (manual line)</p>
+                )}
+              </div>
+              <div className="p-5 space-y-3">
+                <Field label="Supplier / description">
+                  <input value={viewRow.supplier} onChange={(e) => patch(viewRow.id, { supplier: e.target.value })} className={`${input} w-full`} placeholder="Supplier" />
+                </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Card / account">
+                    <select value={viewRow.cardholder} onChange={(e) => patch(viewRow.id, { cardholder: e.target.value })} className={`${input} w-full`}>
+                      {CARDHOLDERS.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Date">
+                    <input type="date" value={viewRow.docDate} onChange={(e) => patch(viewRow.id, { docDate: e.target.value })} className={`${input} w-full`} />
+                  </Field>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <Field label="VAT code">
+                    <select value={viewRow.vatCode} onChange={(e) => patch(viewRow.id, { vatCode: Number(e.target.value) })} className={`${input} w-full`}>
+                      {VAT_CODES.map((v) => <option key={v.code} value={v.code}>{v.code}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Value">
+                    <input type="number" step="0.01" value={viewRow.gross} onChange={(e) => patch(viewRow.id, { gross: Number(e.target.value) })} className={`${input} w-full text-right`} />
+                  </Field>
+                  <Field label="VAT £">
+                    <input type="number" step="0.01" value={viewRow.vat} onChange={(e) => patch(viewRow.id, { vat: Number(e.target.value), net: round(viewRow.gross - Number(e.target.value)) })} className={`${input} w-full text-right`} />
+                  </Field>
+                </div>
+                <Field label="Nominal column">
+                  <select value={viewRow.column} onChange={(e) => patch(viewRow.id, { column: e.target.value })} className={`${input} w-full`}>
+                    {NOMINAL_COLUMNS.map((c) => <option key={c.key} value={c.key}>{c.label}{c.code ? ` (${c.code})` : ""}</option>)}
+                  </select>
+                </Field>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-500">Net: <span className="font-semibold text-gray-900 dark:text-white">{gbp(viewRow.net)}</span></span>
+                  <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                    <input type="checkbox" checked={viewRow.reviewed} onChange={(e) => patch(viewRow.id, { reviewed: e.target.checked })} className="w-4 h-4 accent-emerald-600" />
+                    Reviewed
+                  </label>
+                </div>
+                {viewRow.aiNotes && <p className="text-xs text-amber-600 dark:text-amber-400">{viewRow.aiNotes}</p>}
+                <div className="flex gap-2 pt-2">
+                  <button onClick={() => { saveAll(); setViewId(null) }} disabled={saving} className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2 rounded-xl disabled:opacity-50">Save changes</button>
+                  <button onClick={() => setViewId(null)} className="text-sm font-semibold text-gray-600 dark:text-gray-300 px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700">Close</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  )
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{label}</span>
+      <div className="mt-1">{children}</div>
+    </label>
   )
 }
 
