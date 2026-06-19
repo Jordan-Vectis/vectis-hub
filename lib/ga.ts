@@ -35,11 +35,16 @@ export function rangeDays(range: GaRange): number { return RANGE_DAYS[range] ?? 
 // likely genuine diecast/model collectors. Adjust this list as needed.
 export const BOT_COUNTRY_IDS = ["CN", "HK", "TW", "SG", "IN", "VN", "ID", "PH", "TH", "PK", "BD"]
 
-// A GA4 dimensionFilter that excludes the bot countries (by countryId), or
-// undefined when the toggle is off.
-function botFilter(excludeBots?: boolean) {
-  if (!excludeBots) return undefined
-  return { notExpression: { filter: { fieldName: "countryId", inListFilter: { values: BOT_COUNTRY_IDS } } } }
+// Build a GA4 dimensionFilter combining the bot-country exclusion (when the
+// toggle is on) and an optional eventName match (for event-specific reports like
+// "registrations by source"). Returns undefined when neither applies.
+function buildFilter(excludeBots?: boolean, eventName?: string) {
+  const exprs: any[] = []
+  if (excludeBots) exprs.push({ notExpression: { filter: { fieldName: "countryId", inListFilter: { values: BOT_COUNTRY_IDS } } } })
+  if (eventName)   exprs.push({ filter: { fieldName: "eventName", stringFilter: { value: eventName } } })
+  if (exprs.length === 0) return undefined
+  if (exprs.length === 1) return exprs[0]
+  return { andGroup: { expressions: exprs } }
 }
 
 type Row = { name: string; value: number; secondary?: number }
@@ -49,14 +54,14 @@ async function report(
   range: GaRange,
   dimension: string,
   metric: string,
-  opts: { limit?: number; secondaryMetric?: string; excludeBots?: boolean } = {},
+  opts: { limit?: number; secondaryMetric?: string; excludeBots?: boolean; eventName?: string } = {},
 ): Promise<Row[]> {
   const [res] = await client().runReport({
     property: propertyPath(),
     dateRanges: [{ startDate: `${rangeDays(range)}daysAgo`, endDate: "today" }],
     dimensions: [{ name: dimension }],
     metrics: [{ name: metric }, ...(opts.secondaryMetric ? [{ name: opts.secondaryMetric }] : [])],
-    dimensionFilter: botFilter(opts.excludeBots) as any,
+    dimensionFilter: buildFilter(opts.excludeBots, opts.eventName) as any,
     orderBys: dimension === "date"
       ? [{ dimension: { dimensionName: "date" } }]
       : [{ metric: { metricName: metric }, desc: true }],
@@ -82,7 +87,7 @@ async function totalsFor(startDate: string, endDate: string, excludeBots?: boole
     property: propertyPath(),
     dateRanges: [{ startDate, endDate }],
     metrics: METRIC_KEYS.map((name) => ({ name })),
-    dimensionFilter: botFilter(excludeBots) as any,
+    dimensionFilter: buildFilter(excludeBots) as any,
   })
   const v = res.rows?.[0]?.metricValues ?? []
   const out = {} as Totals
@@ -96,7 +101,7 @@ export async function realtimeActiveUsers(excludeBots?: boolean): Promise<number
     const [res] = await client().runRealtimeReport({
       property: propertyPath(),
       metrics: [{ name: "activeUsers" }],
-      dimensionFilter: botFilter(excludeBots) as any,
+      dimensionFilter: buildFilter(excludeBots) as any,
     })
     return Number(res.rows?.[0]?.metricValues?.[0]?.value ?? 0)
   } catch { return null }
@@ -114,6 +119,7 @@ export type SectionDef = {
   secondaryMetric?: string
   limit?: number
   suffix?: string
+  eventName?: string  // when set, the report is filtered to this GA event
   help: string
 }
 
@@ -126,6 +132,8 @@ export const SECTION_CATALOG: SectionDef[] = [
   { id: "landingPages", title: "Top landing pages",  kind: "bars",  dimension: "landingPagePlusQueryString", metric: "sessions",        limit: 12, secondaryMetric: "activeUsers", suffix: "sessions", help: "The first page people arrived on — where their visit began. Good for seeing which pages pull people in." },
   { id: "events",       title: "Events",             kind: "bars",  dimension: "eventName",                  metric: "eventCount",      limit: 12, suffix: "count", help: "Things visitors did on the site. Google automatically tracks page views, scrolls, clicks and similar; this counts how often each happened." },
   { id: "keyEvents",    title: "Key events",         kind: "bars",  dimension: "eventName",                  metric: "keyEvents",       limit: 12, suffix: "count", help: "Your important tracked actions (key events, formerly 'conversions') broken down by which one fired." },
+  { id: "regByChannel", title: "Registrations by channel", kind: "bars", dimension: "sessionDefaultChannelGroup", metric: "eventCount", eventName: "register", limit: 12, suffix: "registrations", help: "Where the people who completed your 'register' event came from, grouped into channel buckets (Direct, Organic Search, Paid Social, Referral, etc.). Counts the 'register' event by the channel of the visit it happened in." },
+  { id: "regBySource",  title: "Registrations by source",  kind: "bars", dimension: "sessionSourceMedium",        metric: "eventCount", eventName: "register", limit: 12, suffix: "registrations", help: "The exact source/medium that drove each registration, e.g. 'google / organic' or 'facebook / cpc'. Counts the 'register' event by where the visit came from." },
   { id: "siteSearch",   title: "Site search terms",  kind: "bars",  dimension: "searchTerm",                 metric: "eventCount",      limit: 15, suffix: "searches", help: "What people typed into the search box on the site. Only shows data if site-search tracking is set up in GA." },
   { id: "countries",    title: "Top countries",      kind: "bars",  dimension: "country",                    metric: "activeUsers",     limit: 12, suffix: "users", help: "Which countries your visitors are in. Heavy far-away traffic is often bots — use the 'Hide bot traffic' toggle." },
   { id: "regions",      title: "Top regions",        kind: "bars",  dimension: "region",                     metric: "activeUsers",     limit: 12, suffix: "users", help: "Which regions/counties your visitors are in." },
@@ -140,7 +148,7 @@ export const SECTION_CATALOG: SectionDef[] = [
   { id: "dayOfWeek",    title: "Busiest days",       kind: "bars",  dimension: "dayOfWeekName",              metric: "sessions",        limit: 7,  suffix: "sessions", help: "Which days of the week are busiest." },
 ]
 
-export const DEFAULT_SECTION_IDS = ["channels", "sources", "pages", "landingPages", "events", "countries", "devices", "newReturning"]
+export const DEFAULT_SECTION_IDS = ["channels", "sources", "regByChannel", "regBySource", "siteSearch", "pages", "landingPages", "events", "countries", "devices", "newReturning"]
 
 // Run async work in capped-concurrency batches (GA4 allows ~10 concurrent requests).
 async function mapLimit<T, R>(items: T[], limit: number, fn: (x: T) => Promise<R>): Promise<R[]> {
@@ -166,7 +174,7 @@ export async function getMarketingReport(range: GaRange, excludeBots = false, se
   const defs = sectionIds.map((id) => SECTION_CATALOG.find((s) => s.id === id)).filter(Boolean) as SectionDef[]
   const sections: ReportSection[] = await mapLimit(defs, 6, async (def) => ({
     ...def,
-    rows: await report(range, def.dimension, def.metric, { secondaryMetric: def.secondaryMetric, limit: def.limit, excludeBots: b }),
+    rows: await report(range, def.dimension, def.metric, { secondaryMetric: def.secondaryMetric, limit: def.limit, excludeBots: b, eventName: def.eventName }),
   }))
 
   const deltas = {} as Record<MetricKey, number | null>
