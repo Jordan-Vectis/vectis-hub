@@ -269,40 +269,54 @@ export default function AccountsMonthClient({
 
       {/* Scan */}
       <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-5 mb-6">
-        <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Scan documents</h2>
-        <p className="text-xs text-gray-400 mb-3">Pick whose card it is, then take a photo or choose files. Each one is added as a line straight away — take them all, then press <span className="font-semibold">Run AI</span> to read them. For an invoice over several pages, tick <span className="font-semibold">Multi-page invoice</span> and every photo goes onto the same invoice; press <span className="font-semibold">New invoice</span> to start the next. If one photo has several receipts on it — or you upload a PDF scanned from a stack of different invoices — Run AI detects each one and splits them into separate lines automatically.</p>
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="text-sm text-gray-600 dark:text-gray-300">Whose card / account:</label>
-          <select value={cardholder} onChange={(e) => setCardholder(e.target.value)} className={`${input} text-sm`}>
-            {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-
-          <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 cursor-pointer">
-            <input type="checkbox" checked={multiPage} onChange={(e) => { setMultiPage(e.target.checked); setCurrentDocId(null) }} className="w-4 h-4 accent-emerald-600" />
-            Multi-page invoice
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+          <div>
+            <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Add documents</h2>
+            <p className="text-xs text-gray-400 mt-1">Tag whose card it is, add your invoices/receipts using any method below, then press <span className="font-semibold">Run AI</span> to read them — you approve the results before anything saves.</p>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+            Card / account:
+            <select value={cardholder} onChange={(e) => setCardholder(e.target.value)} className={`${input} text-sm`}>
+              {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
           </label>
+        </div>
 
-          <input ref={cameraInput} type="file" accept="image/*" capture="environment" className="hidden"
-            onChange={(e) => { uploadFiles(e.target.files); e.currentTarget.value = "" }} />
+        {/* hidden file inputs */}
+        <input ref={cameraInput} type="file" accept="image/*" capture="environment" className="hidden"
+          onChange={(e) => { uploadFiles(e.target.files); e.currentTarget.value = "" }} />
+        <input ref={fileInput} type="file" accept="image/*,application/pdf" multiple className="hidden"
+          onChange={(e) => { uploadFiles(e.target.files); e.currentTarget.value = "" }} />
+
+        {/* Upload methods, each explained */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <button onClick={() => cameraInput.current?.click()} disabled={!!uploadProg}
-            className="text-sm font-semibold px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-emerald-500 disabled:opacity-50">
-            📷 Take photo
+            className="text-left p-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-emerald-500 hover:bg-emerald-50/40 dark:hover:bg-emerald-500/5 disabled:opacity-50 transition-colors">
+            <div className="text-sm font-semibold text-gray-800 dark:text-gray-100">📷 Take photo</div>
+            <p className="text-xs text-gray-400 mt-1">Snap a receipt with your phone/iPad camera, one at a time. Each shot becomes a new line.</p>
           </button>
 
-          <input ref={fileInput} type="file" accept="image/*,application/pdf" multiple className="hidden"
-            onChange={(e) => { uploadFiles(e.target.files); e.currentTarget.value = "" }} />
           <button onClick={() => fileInput.current?.click()} disabled={!!uploadProg}
-            className="text-sm font-semibold px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-emerald-500 disabled:opacity-50">
-            Choose files
+            className="text-left p-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-emerald-500 hover:bg-emerald-50/40 dark:hover:bg-emerald-500/5 disabled:opacity-50 transition-colors">
+            <div className="text-sm font-semibold text-gray-800 dark:text-gray-100">🖼 Choose files / PDF</div>
+            <p className="text-xs text-gray-400 mt-1">Pick photos or PDFs from this device — including a multi-page PDF, or one scan holding several different invoices (Run AI splits them).</p>
           </button>
 
-          {multiPage && currentDocId && (
-            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-              Adding pages to this invoice ({rows.find((r) => r.id === currentDocId)?.images.length ?? 0})
-              <button onClick={() => setCurrentDocId(null)} className="ml-2 underline text-gray-500 hover:text-gray-800 dark:hover:text-gray-200">New invoice</button>
-            </span>
-          )}
+          <button onClick={() => { setMultiPage(!multiPage); setCurrentDocId(null) }}
+            className={`text-left p-3 rounded-xl border transition-colors ${multiPage ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10" : "border-gray-200 dark:border-gray-700 hover:border-emerald-500"}`}>
+            <div className="text-sm font-semibold text-gray-800 dark:text-gray-100">{multiPage ? "☑" : "☐"} Multi-page invoice</div>
+            <p className="text-xs text-gray-400 mt-1">Turn on when ONE invoice spans several separate photos — each photo then joins the same invoice. Leave off for normal receipts and PDFs.</p>
+          </button>
+        </div>
 
+        {multiPage && currentDocId && (
+          <p className="mt-3 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+            Adding pages to this invoice ({rows.find((r) => r.id === currentDocId)?.images.length ?? 0})
+            <button onClick={() => setCurrentDocId(null)} className="ml-2 underline text-gray-500 hover:text-gray-800 dark:hover:text-gray-200">New invoice / done</button>
+          </p>
+        )}
+
+        <div className="flex items-center gap-3 flex-wrap mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
           <button onClick={runAi} disabled={running || aiTarget.length === 0}
             className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2 rounded-xl disabled:opacity-50">
             {running ? `Reading ${aiProg.done}/${aiProg.total}…` : aiLabel}
@@ -310,6 +324,7 @@ export default function AccountsMonthClient({
           <button onClick={addManual} disabled={busy} className="text-sm font-semibold text-gray-600 dark:text-gray-300 hover:text-emerald-500 px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-700">
             + Add line manually
           </button>
+          <p className="text-xs text-gray-400 flex-1 min-w-[14rem]">Run AI reads each new document. A photo with several receipts, or a PDF scanned from a stack of invoices, is split into separate lines — you check and approve everything before it saves.</p>
         </div>
         {uploadProg && <p className="text-xs text-gray-400 mt-2">Adding {uploadProg.done}/{uploadProg.total}…</p>}
         {running && <p className="text-xs text-gray-400 mt-2">Reading each document with AI — leave this page open until it finishes.</p>}
@@ -330,7 +345,10 @@ export default function AccountsMonthClient({
         </div>
       ) : (
         <>
-          <p className="text-xs text-gray-400 mb-2">Tip: click a column cell to file a line under that nominal code. Open a line (its image) to change its card/date or add more pages for a multi-page invoice.</p>
+          <p className="text-xs text-gray-400 mb-2">
+            <span className="font-semibold text-gray-500 dark:text-gray-300">VAT codes:</span> 1 = 20% VAT · 2 = no VAT · 7 = personal.
+            {" "}Click a column cell to file a line under that nominal code. Open a line (its image) to change its card/date or add pages.
+          </p>
           <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-1">
             <table className="w-full table-fixed border-collapse">
               <colgroup>
@@ -351,7 +369,7 @@ export default function AccountsMonthClient({
                   <th className="p-1.5 text-left">Supplier</th>
                   <th className="p-1.5 text-left">Item / service</th>
                   <th className="p-1.5 text-left">Website</th>
-                  <th className="p-1.5 text-center">Vat</th>
+                  <th className="p-1.5 text-center" title="VAT code — 1 = 20% VAT (reclaimable), 2 = no/zero VAT, 7 = personal">Vat</th>
                   <th className="p-1.5 text-right">Value</th>
                   <th className="p-1.5 text-right">VAT</th>
                   {NOMINAL_COLUMNS.map((c) => <th key={c.key} className="p-1.5 text-right leading-tight break-words">{c.label}<br /><span className="text-gray-500 font-normal">{c.code}</span></th>)}
@@ -503,7 +521,7 @@ export default function AccountsMonthClient({
                 <div className="grid grid-cols-3 gap-3">
                   <Field label="VAT code">
                     <select value={viewRow.vatCode} onChange={(e) => patch(viewRow.id, { vatCode: Number(e.target.value) })} className={`${input} w-full`}>
-                      {VAT_CODES.map((v) => <option key={v.code} value={v.code}>{v.code}</option>)}
+                      {VAT_CODES.map((v) => <option key={v.code} value={v.code}>{v.label}</option>)}
                     </select>
                   </Field>
                   <Field label="Value"><input type="number" step="0.01" value={viewRow.gross} onChange={(e) => patch(viewRow.id, { gross: Number(e.target.value) })} className={`${input} w-full text-right`} /></Field>
