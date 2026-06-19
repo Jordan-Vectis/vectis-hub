@@ -93,8 +93,11 @@ export default function AccountsMonthClient({
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ docId }),
       })
       if (res.ok) {
-        const d = await res.json()
-        setRows((rs) => rs.map((x) => x.id === docId ? { ...x, ...d, aiRun: true } : x))
+        const { extra, ...fields } = await res.json()
+        setRows((rs) => {
+          const patched = rs.map((x) => x.id === docId ? { ...x, ...fields, aiRun: true } : x)
+          return extra && extra.length ? [...patched, ...extra] : patched
+        })
         return true
       }
     } catch { /* skip */ }
@@ -217,7 +220,7 @@ export default function AccountsMonthClient({
       {/* Scan */}
       <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-5 mb-6">
         <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Scan documents</h2>
-        <p className="text-xs text-gray-400 mb-3">Pick whose card it is, then take a photo or choose files. Each one is added as a line straight away — take them all, then press <span className="font-semibold">Run AI</span> to read them. For an invoice over several pages, tick <span className="font-semibold">Multi-page invoice</span> and every photo goes onto the same invoice; press <span className="font-semibold">New invoice</span> to start the next.</p>
+        <p className="text-xs text-gray-400 mb-3">Pick whose card it is, then take a photo or choose files. Each one is added as a line straight away — take them all, then press <span className="font-semibold">Run AI</span> to read them. For an invoice over several pages, tick <span className="font-semibold">Multi-page invoice</span> and every photo goes onto the same invoice; press <span className="font-semibold">New invoice</span> to start the next. If one photo has several separate receipts on it, Run AI splits them into separate lines automatically.</p>
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm text-gray-600 dark:text-gray-300">Whose card / account:</label>
           <select value={cardholder} onChange={(e) => setCardholder(e.target.value)} className={`${input} text-sm`}>

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { prisma } from "@/lib/prisma"
-import { getObjectBuffer } from "@/lib/r2"
+import { getObjectBuffer, uploadBufferToR2, getSignedImageUrl } from "@/lib/r2"
 import {
   NOMINAL_KEYS, isValidColumn, isValidVatCode,
   vatFromGross, netFromGross, normaliseSupplier,
@@ -22,30 +22,32 @@ const COLUMN_GUIDE = `Choose ONE allocation column (use the key in brackets):
 - Directors (directors): a director's personal/drawings expenditure
 - Vectis (vectis): general Vectis business purchases — use this as the default when unsure`
 
-function buildPrompt(cardholder: string): string {
-  return `You are reading a UK business expense document (an invoice, bill or receipt) for an auction house. The card/account it belongs to is "${cardholder}". If more than one image is supplied, they are the PAGES OF THE SAME document — read them together as one invoice (totals/VAT are usually on the last page).
+function buildPrompt(cardholder: string, allowSplit: boolean): string {
+  const splitRule = allowSplit
+    ? `This single photo may show ONE receipt or SEVERAL separate small receipts laid out together. Return one object per SEPARATE physical receipt/invoice you can see. Most photos have just one — only return multiple objects if there are clearly distinct, separate receipts in the image.`
+    : `Treat all the supplied images as the PAGES OF ONE document and return exactly ONE object (totals/VAT are usually on the last page).`
+  return `You are reading UK business expense receipts/invoices for an auction house. The card/account they belong to is "${cardholder}".
+${splitRule}
 
-Extract the following and return STRICT JSON only (no prose, no markdown):
-{
+Return STRICT JSON only (no prose, no markdown):
+{ "receipts": [ {
   "supplier": string,        // who it was paid to, short (e.g. "Google Ads", "Shell Fuel", "Amazon")
-  "item": string,            // the specific item or service bought — ONLY if clearly stated/obvious on the document, else ""
-  "website": string,         // the supplier's website/URL — ONLY if it actually appears on the document, else ""
-  "date": string|null,       // the document date as YYYY-MM-DD, or null if not visible
-  "gross": number,           // the TOTAL amount paid including VAT, in GBP (just the number)
-  "vat": number,             // the VAT amount shown, in GBP; 0 if no VAT is shown
-  "vatCode": 1|2|7,          // 1 = standard 20% VAT is shown and reclaimable; 2 = no/zero VAT shown; 7 = clearly personal
+  "item": string,            // the specific item/service bought — ONLY if clearly stated/obvious, else ""
+  "website": string,         // the supplier's website/URL — ONLY if it actually appears, else ""
+  "date": string|null,       // document date as YYYY-MM-DD, or null
+  "gross": number,           // TOTAL paid including VAT, GBP number only
+  "vat": number,             // VAT amount shown, GBP; 0 if none shown
+  "vatCode": 1|2|7,          // 1 = 20% VAT shown/reclaimable; 2 = no/zero VAT; 7 = clearly personal
   "column": string,          // one of: ${NOMINAL_KEYS.join(", ")}
-  "notes": string            // empty string, or a short note if something is unclear/needs checking (e.g. mixed VAT items)
-}
+  "notes": string            // "" or a short note if unclear (e.g. mixed VAT)
+} ] }
 
 ${COLUMN_GUIDE}
 
 Rules:
-- DO NOT GUESS "item" or "website". Only fill them if they are clearly visible/obvious on the document; otherwise return "" for them. Never invent a website.
-- If a VAT amount or VAT number is shown, use vatCode 1 and put the VAT figure in "vat".
-- If no VAT is shown (common for subscriptions billed abroad, postage, insurance), use vatCode 2 and vat 0.
-- Numbers only for gross/vat — no currency symbols or commas.
-- If you genuinely cannot read a figure, use 0 and explain in "notes".`
+- DO NOT GUESS "item" or "website". Only fill them if clearly visible; otherwise "". Never invent a website.
+- If a VAT amount/number is shown, use vatCode 1 and put the VAT figure in "vat". If no VAT shown, vatCode 2 and vat 0.
+- Numbers only for gross/vat — no symbols or commas. If a figure is unreadable, use 0 and say so in "notes".`
 }
 
 function mimeForKey(key: string): string {
@@ -57,7 +59,33 @@ function mimeForKey(key: string): string {
   return "image/jpeg"
 }
 
-// Runs the AI over ONE already-uploaded document (by id) and fills in its details.
+const r2p = (n: number) => Math.round(n * 100) / 100
+
+// Turn one raw AI receipt object into clean, validated fields (+ apply a learned
+// supplier rule and the VAT fallback).
+async function normalise(p: any, extraNote: string | null) {
+  let vatCode = isValidVatCode(Number(p?.vatCode)) ? Number(p.vatCode) : 2
+  let column  = isValidColumn(p?.column) ? p.column : "vectis"
+  const supplier = typeof p?.supplier === "string" ? p.supplier.trim().slice(0, 200) : ""
+  const item     = typeof p?.item === "string" ? p.item.trim().slice(0, 200) : ""
+  const website  = typeof p?.website === "string" ? p.website.trim().slice(0, 200) : ""
+  const gross = Number.isFinite(Number(p?.gross)) ? r2p(Number(p.gross)) : 0
+  let vat = Number.isFinite(Number(p?.vat)) ? r2p(Number(p.vat)) : 0
+  const docDate = typeof p?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(p.date) ? new Date(p.date) : null
+  const notes = [typeof p?.notes === "string" ? p.notes.trim() : "", extraNote ? `AI: ${extraNote}` : ""]
+    .filter(Boolean).join(" · ").slice(0, 500) || null
+
+  if (supplier) {
+    const rule = await prisma.accountingSupplierRule.findUnique({ where: { match: normaliseSupplier(supplier) } })
+    if (rule) { vatCode = rule.vatCode; column = rule.column }
+  }
+  if (vatCode === 1 && vat === 0 && gross > 0) vat = vatFromGross(gross, 1)
+  if (vatCode !== 1) vat = 0
+  return { supplier, item, website, docDate, vatCode, gross, vat, net: netFromGross(gross, vat), column, aiNotes: notes }
+}
+
+// Reads ONE already-uploaded document (by id). A single-photo line being read for
+// the first time may be split into several lines if it shows multiple receipts.
 export async function POST(req: NextRequest) {
   try {
     const session = await auth()
@@ -76,11 +104,12 @@ export async function POST(req: NextRequest) {
     const keys = (doc.images && doc.images.length) ? doc.images : (doc.imageKey ? [doc.imageKey] : [])
     if (!keys.length) return NextResponse.json({ error: "No scan to read" }, { status: 400 })
 
-    // Send every page of the document (capped) to the model together.
-    const imageParts = await Promise.all(keys.slice(0, 12).map(async (k) => {
-      const buf = await getObjectBuffer(k)
-      return { inlineData: { data: buf.toString("base64"), mimeType: mimeForKey(k) } }
-    }))
+    // Only auto-split a SINGLE-photo line on its FIRST read — never a multi-page
+    // invoice, and never on a re-read (avoids creating duplicate split lines).
+    const allowSplit = keys.length === 1 && !doc.aiRun
+
+    const buffers = await Promise.all(keys.slice(0, 12).map((k) => getObjectBuffer(k)))
+    const imageParts = buffers.map((buf, idx) => ({ inlineData: { data: buf.toString("base64"), mimeType: mimeForKey(keys[idx]) } }))
 
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
@@ -88,58 +117,59 @@ export async function POST(req: NextRequest) {
       generationConfig: { responseMimeType: "application/json" },
     })
 
-    let parsed: any = {}
+    let receipts: any[] = []
     let aiError: string | null = null
     try {
-      const result = await model.generateContent([
-        ...imageParts,
-        { text: buildPrompt(doc.cardholder) },
-      ])
+      const result = await model.generateContent([...imageParts, { text: buildPrompt(doc.cardholder, allowSplit) }])
       const response = result.response
       const block = response.promptFeedback?.blockReason
       if (block) throw new Error(`Blocked (prompt): ${block}`)
       const finish = response.candidates?.[0]?.finishReason
       if (finish && finish !== "STOP" && finish !== "MAX_TOKENS") throw new Error(`Blocked (${finish})`)
       const raw = response.text().trim().replace(/^```json\s*/i, "").replace(/```$/, "").trim()
-      parsed = JSON.parse(raw)
+      const parsed = JSON.parse(raw)
+      receipts = Array.isArray(parsed?.receipts) ? parsed.receipts : (parsed?.supplier !== undefined ? [parsed] : [])
     } catch (e: any) {
       aiError = e?.message ?? "AI could not read this document"
     }
+    if (receipts.length === 0) receipts = [{}]            // still update the existing line (blank)
+    if (!allowSplit) receipts = receipts.slice(0, 1)       // never split
 
-    // Sanitise the AI output.
-    let vatCode = isValidVatCode(Number(parsed.vatCode)) ? Number(parsed.vatCode) : 2
-    let column  = isValidColumn(parsed.column) ? parsed.column : "vectis"
-    const supplier = typeof parsed.supplier === "string" ? parsed.supplier.trim().slice(0, 200) : ""
-    const item    = typeof parsed.item === "string" ? parsed.item.trim().slice(0, 200) : ""
-    const website = typeof parsed.website === "string" ? parsed.website.trim().slice(0, 200) : ""
-    const gross = Number.isFinite(Number(parsed.gross)) ? Math.round(Number(parsed.gross) * 100) / 100 : 0
-    let vat = Number.isFinite(Number(parsed.vat)) ? Math.round(Number(parsed.vat) * 100) / 100 : 0
-    const docDate = typeof parsed.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? new Date(parsed.date) : null
-    const notes = [typeof parsed.notes === "string" ? parsed.notes.trim() : "", aiError ? `AI: ${aiError}` : ""]
-      .filter(Boolean).join(" · ").slice(0, 500) || null
-
-    // A learned supplier rule beats the AI's guess at category.
-    if (supplier) {
-      const rule = await prisma.accountingSupplierRule.findUnique({ where: { match: normaliseSupplier(supplier) } })
-      if (rule) { vatCode = rule.vatCode; column = rule.column }
-    }
-
-    // For a standard-rated line with no VAT figure read, fall back to gross/6.
-    if (vatCode === 1 && vat === 0 && gross > 0) vat = vatFromGross(gross, 1)
-    if (vatCode !== 1) vat = 0
-    const net = netFromGross(gross, vat)
-
+    // First receipt updates the existing line.
+    const first = await normalise(receipts[0], aiError)
     await prisma.accountingDocument.update({
       where: { id: doc.id },
-      data: { supplier, item, website, docDate, vatCode, gross, vat, net, column, aiNotes: notes, aiRun: true },
+      data: { ...first, aiRun: true },
     })
+
+    // Any further receipts become new lines, each with its own COPY of the photo
+    // (so deleting one line never removes another line's image).
+    const extra: any[] = []
+    for (let i = 1; i < receipts.length && i < 20; i++) {
+      const f = await normalise(receipts[i], null)
+      const mime = mimeForKey(keys[0])
+      const newKey = `accounts/${doc.monthId}/${Date.now()}-${i}-split.${mime === "application/pdf" ? "pdf" : "jpg"}`
+      await uploadBufferToR2(buffers[0], newKey, mime)
+      const created = await prisma.accountingDocument.create({
+        data: { monthId: doc.monthId, cardholder: doc.cardholder, source: "SCAN", images: [newKey], aiRun: true, ...f },
+      })
+      extra.push({
+        id: created.id, cardholder: created.cardholder, source: "SCAN",
+        images: [await getSignedImageUrl(newKey)],
+        supplier: f.supplier, item: f.item, website: f.website,
+        docDate: f.docDate ? f.docDate.toISOString().slice(0, 10) : "",
+        vatCode: f.vatCode, gross: f.gross, vat: f.vat, net: f.net, column: f.column,
+        reviewed: false, aiRun: true, aiNotes: f.aiNotes,
+      })
+    }
 
     return NextResponse.json({
       id: doc.id,
-      supplier, item, website,
-      docDate: docDate ? docDate.toISOString().slice(0, 10) : "",
-      vatCode, gross, vat, net, column,
-      aiNotes: notes,
+      supplier: first.supplier, item: first.item, website: first.website,
+      docDate: first.docDate ? first.docDate.toISOString().slice(0, 10) : "",
+      vatCode: first.vatCode, gross: first.gross, vat: first.vat, net: first.net, column: first.column,
+      aiNotes: first.aiNotes,
+      extra,
     })
   } catch (e: any) {
     console.error("accounts/extract error:", e)
