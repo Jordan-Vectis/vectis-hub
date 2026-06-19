@@ -237,17 +237,18 @@ export const APP_CARD_DEFS: AppCardDef[] = [
   },
   {
     key:                "ACCOUNTS",
-    href:               "#",
+    href:               "/tools/accounts",
     defaultLabel:       "Accounts",
-    defaultDescription: "Financial accounts, invoicing and vendor payments.",
+    defaultDescription: "Scan invoices & receipts — AI categorises them, you review, then export the monthly spreadsheet.",
     icon:               "💰",
     border:             "border-emerald-500",
     iconBg:             "text-emerald-400",
     btnBg:              "bg-emerald-600 hover:bg-emerald-500",
     glow:               "hover:shadow-emerald-900/40",
     group:              "OPERATIONS",
-    allUsers:           true,
-    comingSoon:         true,
+    // Admin-only (financial data): allUsers false + no appKey ⇒ the hub shows it
+    // to ADMIN only. The page + API also enforce this server-side.
+    allUsers:           false,
   },
   {
     key:                "PACKING_DISPATCH",

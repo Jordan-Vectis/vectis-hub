@@ -454,6 +454,48 @@ const MIGRATIONS = [
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
     CONSTRAINT "MarketingFavourite_pkey" PRIMARY KEY ("sectionId")
   )`,
+
+  // 2026-06-19 — Accounts: monthly bookkeeping from scanned documents
+  `CREATE TABLE IF NOT EXISTS "AccountingMonth" (
+    "id"        TEXT         NOT NULL,
+    "label"     TEXT         NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "AccountingMonth_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "AccountingMonth_label_key" ON "AccountingMonth"("label")`,
+  `CREATE TABLE IF NOT EXISTS "AccountingDocument" (
+    "id"         TEXT             NOT NULL,
+    "monthId"    TEXT             NOT NULL,
+    "cardholder" TEXT             NOT NULL,
+    "source"     TEXT             NOT NULL DEFAULT 'SCAN',
+    "imageKey"   TEXT,
+    "supplier"   TEXT             NOT NULL DEFAULT '',
+    "docDate"    TIMESTAMP(3),
+    "vatCode"    INTEGER          NOT NULL DEFAULT 1,
+    "gross"      DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "vat"        DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "net"        DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "column"     TEXT             NOT NULL DEFAULT 'vectis',
+    "reviewed"   BOOLEAN          NOT NULL DEFAULT FALSE,
+    "aiNotes"    TEXT,
+    "createdAt"  TIMESTAMP(3)     NOT NULL DEFAULT NOW(),
+    "updatedAt"  TIMESTAMP(3)     NOT NULL DEFAULT NOW(),
+    CONSTRAINT "AccountingDocument_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "AccountingDocument_monthId_fkey" FOREIGN KEY ("monthId")
+      REFERENCES "AccountingMonth"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "AccountingDocument_monthId_idx" ON "AccountingDocument"("monthId")`,
+  `CREATE TABLE IF NOT EXISTS "AccountingSupplierRule" (
+    "id"        TEXT         NOT NULL,
+    "match"     TEXT         NOT NULL,
+    "vatCode"   INTEGER      NOT NULL,
+    "column"    TEXT         NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "AccountingSupplierRule_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "AccountingSupplierRule_match_key" ON "AccountingSupplierRule"("match")`,
 ]
 
 export async function POST() {

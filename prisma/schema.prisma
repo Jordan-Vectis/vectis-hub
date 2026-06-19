@@ -1094,6 +1094,49 @@ model MarketingFavourite {
   createdAt DateTime @default(now())
 }
 
+// ─── Accounts (monthly bookkeeping from scanned invoices/receipts) ───────────
+// A month is a workspace (e.g. "April 26"); each scanned/manual document becomes
+// one categorised line that exports to the April-26-style spreadsheet.
+model AccountingMonth {
+  id        String   @id @default(cuid())
+  label     String   @unique          // e.g. "April 26"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  documents AccountingDocument[]
+}
+
+model AccountingDocument {
+  id         String          @id @default(cuid())
+  monthId    String
+  month      AccountingMonth @relation(fields: [monthId], references: [id], onDelete: Cascade)
+  cardholder String                              // "B Goodall" | "J Goodall" | "James" | "Michael" | "Vectis"
+  source     String          @default("SCAN")    // SCAN | MANUAL
+  imageKey   String?                             // R2 key of the scan (null for manual lines)
+  supplier   String          @default("")        // description / who it was paid to
+  docDate    DateTime?
+  vatCode    Int             @default(1)          // 1 = 20% reclaimable, 2 = none/zero, 7 = personal
+  gross      Float           @default(0)          // Value (inc VAT)
+  vat        Float           @default(0)          // VAT amount
+  net        Float           @default(0)          // gross - vat
+  column     String          @default("vectis")   // nominal allocation column key (see lib/accounting.ts)
+  reviewed   Boolean         @default(false)
+  aiNotes    String?                             // anything the AI flagged for attention
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@index([monthId])
+}
+
+// Learned categorisation memory — once a supplier is confirmed, reuse it next time.
+model AccountingSupplierRule {
+  id        String   @id @default(cuid())
+  match     String   @unique          // normalised supplier text
+  vatCode   Int
+  column    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // Singleton (id = "global") — stores the delegated OAuth tokens for the shared
 // IT mailbox connection. Connected once by an admin via the sign-in flow.
 model ITMailboxAuth {
