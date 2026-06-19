@@ -58,12 +58,11 @@ export default async function HubPage() {
     .filter(s => s.cards.length > 0)
 
   function renderCard(app: typeof cards[0]) {
-    return (
-      <div
-        key={app.key}
-        className={`relative bg-white dark:bg-[#1c1f27] border ${app.border} rounded-xl p-7 flex flex-col items-center text-center h-[320px]
-          transition-all duration-200 hover:shadow-xl ${app.glow} hover:-translate-y-0.5`}
-      >
+    const cardClass = `relative bg-white dark:bg-[#1c1f27] border ${app.border} rounded-xl p-7 flex flex-col items-center text-center h-[320px]
+      transition-all duration-200 hover:shadow-xl ${app.glow} hover:-translate-y-0.5`
+
+    const inner = (
+      <>
         {app.pinned && (
           <span className="absolute top-3 right-3 text-xs font-medium bg-yellow-500/20 text-yellow-600 dark:text-yellow-300 px-2 py-0.5 rounded-full">
             ★ Featured
@@ -81,14 +80,19 @@ export default async function HubPage() {
             Coming Soon
           </span>
         ) : (
-          <Link
-            href={app.href}
-            className={`w-full text-center text-sm font-semibold text-white py-2 px-4 rounded-lg transition-colors ${app.btnBg}`}
-          >
+          <span className={`w-full text-center text-sm font-semibold text-white py-2 px-4 rounded-lg transition-colors ${app.btnBg}`}>
             Open {app.label} →
-          </Link>
+          </span>
         )}
-      </div>
+      </>
+    )
+
+    // The whole card is the click target (not just the button) so a click
+    // anywhere on it navigates. Coming-soon cards aren't links.
+    return app.comingSoon ? (
+      <div key={app.key} className={`${cardClass} cursor-not-allowed`}>{inner}</div>
+    ) : (
+      <Link key={app.key} href={app.href} className={`${cardClass} cursor-pointer`}>{inner}</Link>
     )
   }
 
