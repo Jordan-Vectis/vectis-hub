@@ -28,6 +28,14 @@ export default function AccountsMonthClient({
   const cardOptions = Array.from(new Set([...cardholders, ...rows.map((d) => d.cardholder)].filter(Boolean)))
 
   const [cardholder, setCardholder] = useState<string>(cardholders[0] ?? "Vectis")
+  // Pin: remember the last-picked card/account across page loads (saved the moment it's changed).
+  useEffect(() => {
+    try { const saved = localStorage.getItem("accounts_cardholder"); if (saved && cardholders.includes(saved)) setCardholder(saved) } catch {}
+  }, [])   // eslint-disable-line react-hooks/exhaustive-deps
+  function pickCardholder(v: string) {
+    setCardholder(v)
+    try { localStorage.setItem("accounts_cardholder", v) } catch {}
+  }
   const [multiPage, setMultiPage] = useState(false)
   const [currentDocId, setCurrentDocId] = useState<string | null>(null)   // the invoice new photos attach to in multi-page mode
   const [uploadProg, setUploadProg] = useState<{ done: number; total: number } | null>(null)
@@ -288,8 +296,8 @@ export default function AccountsMonthClient({
             <p className="text-xs text-gray-400 mt-1">Tag whose card it is, add your invoices/receipts using any method below, then press <span className="font-semibold">Run AI</span> to read them — you approve the results before anything saves.</p>
           </div>
           <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-            Card / account:
-            <select value={cardholder} onChange={(e) => setCardholder(e.target.value)} className={`${input} text-sm`}>
+            <span title="Remembered for next time">📌 Card / account:</span>
+            <select value={cardholder} onChange={(e) => pickCardholder(e.target.value)} className={`${input} text-sm`}>
               {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </label>
