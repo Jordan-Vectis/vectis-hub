@@ -360,7 +360,7 @@ export default function AccountsMonthClient({
               <button onClick={() => setDeselected(new Set(toRead.map((r) => r.id)))} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Select none</button>
             </div>
           </div>
-          <p className="text-xs text-gray-400 mb-3">Tick the scans you want to read, then press <span className="font-semibold">Run AI</span> above — only the selected ones are read. Click a scan to view or remove it.</p>
+          <p className="text-xs text-gray-400 mb-3">Tick the scans you want to read, then press <span className="font-semibold">Run AI</span> above — only the selected ones are read. Click a scan to view it, or use the ✕ to remove it.</p>
           <div className="flex flex-wrap gap-2">
             {toRead.map((r) => {
               const sel = !deselected.has(r.id)
@@ -374,6 +374,8 @@ export default function AccountsMonthClient({
                   <label className="absolute top-1 left-1 bg-white/90 dark:bg-black/70 rounded p-0.5 cursor-pointer flex" title={sel ? "Selected — untick to skip" : "Tick to read"}>
                     <input type="checkbox" checked={sel} onChange={() => toggleSel(r.id)} className="w-4 h-4 accent-emerald-600 block" />
                   </label>
+                  <button onClick={() => { if (confirm("Remove this scan? It won't be read or saved.")) removeRow(r.id) }} disabled={busy} title="Remove this scan"
+                    className="absolute -bottom-1.5 -right-1.5 bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold rounded-full w-5 h-5 flex items-center justify-center leading-none shadow disabled:opacity-50">✕</button>
                   {r.images.length > 1 && <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[9px] font-bold rounded-full px-1 leading-tight">{r.images.length}</span>}
                 </div>
               )
