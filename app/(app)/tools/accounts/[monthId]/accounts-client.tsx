@@ -43,7 +43,6 @@ export default function AccountsMonthClient({
   const [viewer, setViewer] = useState<{ images: string[]; index: number } | null>(null)
   const [aiPreview, setAiPreview] = useState<{ docId: string; receipts: any[]; capped?: boolean }[] | null>(null)
   const [applying, setApplying] = useState(false)
-  const [deselected, setDeselected] = useState<Set<string>>(new Set())   // To-read scans the user un-ticked
   const [deselected, setDeselected] = useState<Set<string>>(new Set())   // To-read scans the user has un-ticked
 
   // Each photo/file becomes a BLANK line straight away (image only); the AI is run
@@ -303,11 +302,17 @@ export default function AccountsMonthClient({
           onChange={(e) => { uploadFiles(e.target.files); e.currentTarget.value = "" }} />
 
         {/* Upload methods, each explained */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <button onClick={() => cameraInput.current?.click()} disabled={!!uploadProg}
             className="text-left p-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-emerald-500 hover:bg-emerald-50/40 dark:hover:bg-emerald-500/5 disabled:opacity-50 transition-colors">
             <div className="text-sm font-semibold text-gray-800 dark:text-gray-100">📷 Take photo</div>
-            <p className="text-xs text-gray-400 mt-1">Snap a receipt with your phone/iPad camera, one at a time. Each shot becomes a new line.</p>
+            <p className="text-xs text-gray-400 mt-1">Snap ONE receipt with your phone/iPad camera. Each shot becomes a new line.</p>
+          </button>
+
+          <button onClick={() => { setMultiPage(false); setCurrentDocId(null); cameraInput.current?.click() }} disabled={!!uploadProg}
+            className="text-left p-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-emerald-500 hover:bg-emerald-50/40 dark:hover:bg-emerald-500/5 disabled:opacity-50 transition-colors">
+            <div className="text-sm font-semibold text-gray-800 dark:text-gray-100">🧾 Several receipts in one photo</div>
+            <p className="text-xs text-gray-400 mt-1">Lay several small receipts out together and take ONE photo — Run AI splits each receipt onto its own line.</p>
           </button>
 
           <button onClick={() => fileInput.current?.click()} disabled={!!uploadProg}
