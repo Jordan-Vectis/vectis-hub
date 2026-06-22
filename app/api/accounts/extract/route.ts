@@ -25,7 +25,7 @@ const COLUMN_GUIDE = `Choose ONE allocation column (use the key in brackets):
 
 function buildPrompt(cardholder: string, allowSplit: boolean): string {
   const splitRule = allowSplit
-    ? `This photo may show ONE receipt or SEVERAL separate small receipts laid out together. Return one object per SEPARATE physical receipt. Most photos have just one — only return multiple if there are clearly distinct, separate receipts.`
+    ? `This photo usually shows SEVERAL separate receipts laid out side by side. Scan the WHOLE image carefully — top, bottom, left and right — and return ONE object per SEPARATE physical receipt you can see, even if some are creased, angled, faint, rotated or slightly overlapping. If a receipt is only partly readable, STILL return it and fill in whatever fields you can (use "" or 0 for anything you can't read, and say so in "notes"). Only return a single object if there is genuinely just one receipt. NEVER return an empty list when any receipt is visible.`
     : `Read the supplied page(s) as ONE single invoice/receipt and return exactly ONE object (a multi-page invoice's total/VAT is usually on the last page).`
   return `You are reading UK business expense receipts/invoices for an auction house. The card/account they belong to is "${cardholder}".
 ${splitRule}
@@ -151,14 +151,24 @@ export async function POST(req: NextRequest) {
     } catch (e: any) {
       aiError = e?.message ?? "AI could not read this document"
     }
-    if (receipts.length === 0) receipts = [{}]
+    const readNothing = receipts.length === 0
+    if (readNothing) receipts = [{}]
     if (!allowSplit) receipts = receipts.slice(0, 1)
     let capped = false
     if (receipts.length > 200) { capped = true; receipts = receipts.slice(0, 200) }
 
+    // If we got nothing back (and it wasn't an outright AI error), explain why so
+    // the user sees a reason instead of a silent blank £0 line.
+    const firstNote = aiError
+      ?? (readNothing
+        ? (allowSplit
+          ? "AI couldn't read any receipts in this photo — try a clearer, straighter photo, snap each receipt on its own, or scan them as a PDF."
+          : "AI couldn't read this document — try a clearer photo.")
+        : null)
+
     const proposals = []
     for (let i = 0; i < receipts.length; i++) {
-      const f = await normalise(receipts[i], i === 0 ? aiError : null)
+      const f = await normalise(receipts[i], i === 0 ? firstNote : null)
       proposals.push({
         supplier: f.supplier, item: f.item, website: f.website,
         docDate: f.docDate ? f.docDate.toISOString().slice(0, 10) : "",
