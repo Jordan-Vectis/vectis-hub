@@ -215,6 +215,16 @@ export default function AccountsMonthClient({
     }))
   }
 
+  // Edit a proposed amount on the Approve screen before applying. Recomputes VAT
+  // for 20%-coded lines (net is recomputed server-side on apply).
+  function setPreviewGross(docId: string, i: number, gross: number) {
+    const g = round(gross)
+    setAiPreview((prev) => prev && prev.map((p) => p.docId !== docId ? p : {
+      ...p,
+      receipts: p.receipts.map((r: any, j: number) => j !== i ? r : { ...r, gross: g, vat: Number(r.vatCode) === 1 ? round(g / 6) : 0 }),
+    }))
+  }
+
   const [saving, startSave] = useTransition()
   function saveAll() {
     startSave(async () => {
@@ -643,7 +653,7 @@ export default function AccountsMonthClient({
               <button onClick={() => { if (!applying) setAiPreview(null) }} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none">&times;</button>
             </div>
             <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto">
-              <p className="text-xs text-gray-400">The AI read {aiPreview.length} {aiPreview.length === 1 ? "document" : "documents"}. Here&apos;s what it will fill in — approve to apply, or cancel to discard. Nothing is saved until you approve.</p>
+              <p className="text-xs text-gray-400">The AI read {aiPreview.length} {aiPreview.length === 1 ? "document" : "documents"}. Here&apos;s what it will fill in — tweak any amount if it&apos;s wrong, then approve to apply, or cancel to discard. Nothing is saved until you approve.</p>
               {aiPreview.some((p) => p.capped) && (
                 <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-3 py-2">⚠ A file held more than 200 invoices — only the first 200 were read. Split very large scans into smaller files and run them separately.</p>
               )}
@@ -657,9 +667,16 @@ export default function AccountsMonthClient({
                     <div className="text-sm flex-1 min-w-0">
                       {p.receipts.length > 1 && <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mb-1">Splits into {p.receipts.length} separate receipts:</p>}
                       {p.receipts.map((r: any, i: number) => (
-                        <div key={i} className="flex justify-between gap-2">
+                        <div key={i} className="flex justify-between items-center gap-2">
                           <span className="truncate text-gray-800 dark:text-gray-200">{r.supplier || "(no supplier read)"} <span className="text-gray-400">· VAT {r.vatCode} · {columnLabel(r.column)}</span></span>
-                          <span className="tabular-nums text-gray-600 dark:text-gray-300 flex-shrink-0">{gbp(r.gross)}</span>
+                          <span className="flex items-center gap-1 flex-shrink-0">
+                            <span className="text-gray-400 text-xs">£</span>
+                            <input
+                              type="number" step="0.01" value={r.gross}
+                              onChange={(e) => setPreviewGross(p.docId, i, Number(e.target.value))}
+                              className="w-20 text-right tabular-nums rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            />
+                          </span>
                         </div>
                       ))}
                       {p.receipts[0]?.aiNotes && <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">{p.receipts[0].aiNotes}</p>}
