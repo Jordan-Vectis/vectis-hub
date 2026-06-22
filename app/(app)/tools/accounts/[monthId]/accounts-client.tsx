@@ -43,6 +43,7 @@ export default function AccountsMonthClient({
   const [viewer, setViewer] = useState<{ images: string[]; index: number } | null>(null)
   const [aiPreview, setAiPreview] = useState<{ docId: string; receipts: any[]; capped?: boolean }[] | null>(null)
   const [applying, setApplying] = useState(false)
+  const [deselected, setDeselected] = useState<Set<string>>(new Set())   // To-read scans the user un-ticked
   const [deselected, setDeselected] = useState<Set<string>>(new Set())   // To-read scans the user has un-ticked
 
   // Each photo/file becomes a BLANK line straight away (image only); the AI is run
@@ -242,6 +243,13 @@ export default function AccountsMonthClient({
   const vatReclaim  = round(mainRows.filter((r) => r.vatCode === 1).reduce((a, r) => a + r.vat, 0))
   const unreviewed  = mainRows.filter((r) => !r.reviewed).length
 
+  // Possible-duplicate flag (display only — does nothing): a line that shares the
+  // same date AND the same amount with at least one other line in the month.
+  const dupeKey = (r: Row) => `${r.docDate}|${r.gross.toFixed(2)}`
+  const dupeCounts = new Map<string, number>()
+  for (const r of mainRows) if (r.docDate && r.gross > 0) dupeCounts.set(dupeKey(r), (dupeCounts.get(dupeKey(r)) ?? 0) + 1)
+  const isPossibleDupe = (r: Row) => !!r.docDate && r.gross > 0 && (dupeCounts.get(dupeKey(r)) ?? 0) > 1
+
   const groupOrder = Array.from(new Set([...cardholders, ...mainRows.map((r) => r.cardholder)].filter(Boolean)))
   const groups = groupOrder.map((name) => ({ name, items: mainRows.filter((r) => r.cardholder === name) })).filter((g) => g.items.length)
   const colSum = (items: Row[], key: string) => round(items.filter((r) => r.column === key).reduce((a, r) => a + r.net, 0))
@@ -440,6 +448,7 @@ export default function AccountsMonthClient({
                         <td className="p-1.5">
                           <input value={r.supplier} onChange={(e) => patch(r.id, { supplier: e.target.value })} className={cell} placeholder="Supplier" />
                           {r.aiNotes && <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5 break-words">{r.aiNotes}</p>}
+                          {isPossibleDupe(r) && <p className="text-[10px] font-semibold text-orange-600 dark:text-orange-400 mt-0.5">⚠ Possible duplicate — same date &amp; amount</p>}
                         </td>
                         <td className="p-1.5">
                           <input value={r.item} onChange={(e) => patch(r.id, { item: e.target.value })} className={cell} placeholder="—" />
