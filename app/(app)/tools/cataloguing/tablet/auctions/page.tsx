@@ -6,7 +6,7 @@ import { redirect } from "next/navigation"
 export default async function TabletAuctionsPage() {
   const session = await auth()
   if (!session) redirect("/login")
-  if (!["ADMIN", "CATALOGUER"].includes(session.user.role)) redirect("/submissions")
+  // Access is enforced by the cataloguing layout (hasAppAccess "CATALOGUING") — no hard-coded role gate here (it was bouncing managers/other granted roles to /submissions).
 
   const auctions = await prisma.catalogueAuction.findMany({
     orderBy: { auctionDate: "desc" },

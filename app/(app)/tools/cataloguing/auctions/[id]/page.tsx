@@ -12,7 +12,7 @@ export default async function AuctionDetailPage({
 }) {
   const session = await auth()
   if (!session) redirect("/login")
-  if (!["ADMIN", "CATALOGUER"].includes(session.user.role)) redirect("/submissions")
+  // Access is enforced by the cataloguing layout (hasAppAccess "CATALOGUING") — no hard-coded role gate here (it was bouncing managers/other granted roles to /submissions).
 
   const { id } = await params
 

@@ -11,7 +11,7 @@ import { getCataloguingSidebarItems } from "@/lib/apps"
 export default async function AuctionsPage() {
   const session = await auth()
   if (!session) redirect("/login")
-  if (!["ADMIN", "CATALOGUER"].includes(session.user.role)) redirect("/submissions")
+  // Access is enforced by the cataloguing layout (hasAppAccess "CATALOGUING") — no hard-coded role gate here (it was bouncing managers/other granted roles to /submissions).
 
   const dbUser = await prisma.user.findUnique({
     where: { id: session.user.id },
