@@ -13,8 +13,14 @@ function titleFromDescription(desc: string): string {
 
 async function requireCataloguer() {
   const session = await auth()
-  if (!session || !["ADMIN","CATALOGUER"].includes(session.user.role)) throw new Error("Access denied")
-  return session
+  if (!session) throw new Error("Access denied")
+  // ADMIN/CATALOGUER always allowed; any other role allowed if granted the
+  // Cataloguing app (mirrors the cataloguing layout's hasAppAccess gate — a role
+  // list alone wrongly locks out custom roles like Manager that have the app).
+  if (session.user.role === "ADMIN" || session.user.role === "CATALOGUER") return session
+  const dbUser = await prisma.user.findUnique({ where: { id: session.user.id }, select: { allowedApps: true } })
+  if ((dbUser?.allowedApps ?? []).includes("CATALOGUING")) return session
+  throw new Error("Access denied")
 }
 
 // Throws for non-admin users when the auction has been marked as Added to BC.

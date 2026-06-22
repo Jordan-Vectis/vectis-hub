@@ -36,7 +36,7 @@ Return STRICT JSON only (no prose, no markdown):
   "item": string,            // the specific item/service bought — ONLY if clearly stated/obvious, else ""
   "website": string,         // the supplier's website/URL — ONLY if it actually appears, else ""
   "date": string|null,       // document date as YYYY-MM-DD, or null
-  "gross": number,           // TOTAL paid including VAT, GBP number only
+  "gross": number,           // the FINAL total actually PAID incl. VAT — the bottom-line "Total"/"Amount Due"/"Balance"/"Card"/"Paid" figure. NEVER a "Sub total"/"Subtotal"/net/pre-VAT line
   "vat": number,             // VAT amount shown, GBP; 0 if none shown
   "vatCode": 1|2|7,          // 1 = 20% VAT shown/reclaimable; 2 = no/zero VAT; 7 = clearly personal
   "column": string,          // one of: ${NOMINAL_KEYS.join(", ")}
