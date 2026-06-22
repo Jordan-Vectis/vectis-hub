@@ -731,6 +731,19 @@ Inconsistent across machines/browsers. Generate server-side and return as downlo
 Divide the usable page area into a **fixed number of slots** rather than autosizing. Small groups should not produce giant rows.`,
   },
   {
+    filename: "reference_app_access_control.md",
+    content: `---
+name: App access control model
+description: How Vectis Hub gates access to app areas — hasAppAccess + per-app layouts, NOT hard-coded role lists
+metadata:
+  type: reference
+---
+
+Access to an app area is decided by hasAppAccess(role, allowedApps, appKey) in lib/apps.ts: ADMIN always; otherwise User.allowedApps must include the appKey. Hub card visibility uses this, and each app area's layout.tsx enforces it (e.g. the cataloguing layout redirects to /hub if the user lacks the CATALOGUING app). Sidebar sub-sections within an app are gated by appPermissions[appKey].sidebarItems.
+
+TRAP (bug fixed 2026-06-17): the 4 cataloguing auction pages hard-coded if (!["ADMIN","CATALOGUER"].includes(role)) redirect("/submissions"). A Manager (custom role) granted the Cataloguing app saw the hub card and passed the layout, but the page-level role list bounced them to /submissions ("the CRM"). Fix: removed those redundant page gates — the layout's hasAppAccess is the single gate. Never gate app pages with hard-coded role-string lists; roles are free-form, so a role list locks out custom roles that were granted the app.`,
+  },
+  {
     filename: "reference_new_claude_account.md",
     content: `---
 name: New Claude Account Setup
