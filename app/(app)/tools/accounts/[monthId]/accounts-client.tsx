@@ -237,6 +237,17 @@ export default function AccountsMonthClient({
   }
 
   const [busy, startBusy] = useTransition()
+  // After a manual line is added, flash + scroll to it and focus its first field
+  // so it's obvious it appeared (it lands at the bottom of the table).
+  const [flashId, setFlashId] = useState<string | null>(null)
+  const flashRef = useRef<HTMLTableRowElement | null>(null)
+  useEffect(() => {
+    if (!flashId) return
+    flashRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+    flashRef.current?.querySelector("input")?.focus()
+    const t = setTimeout(() => setFlashId(null), 2500)
+    return () => clearTimeout(t)
+  }, [flashId])
   function addManual() {
     startBusy(async () => {
       const { id } = await addManualDocument(monthId, cardholder)
@@ -244,6 +255,7 @@ export default function AccountsMonthClient({
         id, cardholder, source: "MANUAL", images: [], supplier: "", item: "", website: "", docDate: "",
         vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiRun: true, aiNotes: null,
       }])
+      setFlashId(id)
     })
   }
   function removeRow(id: string) {
@@ -457,7 +469,7 @@ export default function AccountsMonthClient({
                       <td colSpan={TOTAL_COLS} className="px-3 py-1.5 font-bold text-gray-700 dark:text-gray-200 text-sm">{g.name}</td>
                     </tr>
                     {g.items.map((r) => (
-                      <tr key={r.id} className={`border-b border-gray-100 dark:border-gray-800/60 align-top ${r.reviewed ? "" : "bg-amber-50/40 dark:bg-amber-500/5"}`}>
+                      <tr key={r.id} ref={r.id === flashId ? flashRef : undefined} className={`border-b border-gray-100 dark:border-gray-800/60 align-top transition-colors ${r.id === flashId ? "bg-emerald-100 dark:bg-emerald-500/20" : (r.reviewed ? "" : "bg-amber-50/40 dark:bg-amber-500/5")}`}>
                         <td className="p-1.5">
                           <button onClick={() => setViewId(r.id)} title="Open invoice" className="relative block">
                             {!r.images[0] ? (
