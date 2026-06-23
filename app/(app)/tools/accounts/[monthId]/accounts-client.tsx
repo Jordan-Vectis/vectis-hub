@@ -33,6 +33,15 @@ function receiptChanges(row: { supplier: string; vatCode: number; column: string
   return out
 }
 
+// Drop £0 "phantom" split lines the AI sometimes invents when over-splitting a big
+// scan: keep every line with an amount; only if ALL are £0 keep the first so the doc
+// still shows.
+function dropZeroSplits(receipts: any[]): any[] {
+  if (!Array.isArray(receipts) || receipts.length <= 1) return receipts
+  const nonZero = receipts.filter((r) => Number(r?.gross) > 0)
+  return nonZero.length ? nonZero : [receipts[0]]
+}
+
 // Keep split-group members contiguous (in first-appearance order); singles stay put.
 function orderGrouped(items: Row[]): Row[] {
   const out: Row[] = []
@@ -86,6 +95,9 @@ export default function AccountsMonthClient({
   const [viewer, setViewer] = useState<{ images: string[]; index: number } | null>(null)
   const [aiPreview, setAiPreview] = useState<{ docId: string; receipts: any[]; capped?: boolean; cardholder?: string }[] | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())   // main-table rows ticked for re-run
+  const [filterText, setFilterText] = useState("")
+  const [filterCard, setFilterCard] = useState("")
+  const [filterReview, setFilterReview] = useState(false)
   const [applying, setApplying] = useState(false)
   const [deselected, setDeselected] = useState<Set<string>>(new Set())   // To-read scans the user has un-ticked
 
@@ -227,7 +239,7 @@ export default function AccountsMonthClient({
       setAiProg({ done: i + 1, total: target.length, errors })
     }
     setRunning(false)
-    if (previews.length) setAiPreview(previews)
+    if (previews.length) setAiPreview(previews.map((p) => ({ ...p, receipts: dropZeroSplits(p.receipts) })))
   }
 
   // Re-run the AI on already-processed lines (e.g. to pick up improved extraction).
@@ -245,15 +257,36 @@ export default function AccountsMonthClient({
     for (let i = 0; i < targets.length; i++) {
       const r = targets[i]
       try {
-        const d = await previewOne(r.id)
-        if (d?.receipts?.length) previews.push({ docId: r.id, receipts: d.receipts, capped: !!d.capped, cardholder: r.cardholder })
-        else errors++
+        // Multi-page PDFs: split into individual invoices first, then read each on its
+        // own — reading a whole stack at once over-splits and misreads amounts (lots of £0).
+        const canSplit = r.images.length === 1 && isPdf(r.images[0])
+        if (canSplit) {
+          const s = await fetch("/api/accounts/split", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ docId: r.id }) }).then((x) => x.ok ? x.json() : null)
+          const groups: number[][] = s?.groups ?? []
+          if (groups.length > 1) {
+            const receipts: any[] = []
+            for (const g of groups) {
+              const d = await previewOne(r.id, g)
+              for (const rr of (d?.receipts ?? [])) receipts.push({ ...rr, pages: g })
+            }
+            if (receipts.length) previews.push({ docId: r.id, receipts, capped: !!s?.capped, cardholder: r.cardholder })
+            else errors++
+          } else {
+            const d = await previewOne(r.id)
+            if (d?.receipts?.length) previews.push({ docId: r.id, receipts: d.receipts.map((x: any) => ({ ...x, pages: groups[0] ?? [] })), capped: !!d.capped, cardholder: r.cardholder })
+            else errors++
+          }
+        } else {
+          const d = await previewOne(r.id)
+          if (d?.receipts?.length) previews.push({ docId: r.id, receipts: d.receipts, capped: !!d.capped, cardholder: r.cardholder })
+          else errors++
+        }
       } catch { errors++ }
       setAiProg({ done: i + 1, total: targets.length, errors })
     }
     setRunning(false)
     setSelected(new Set())
-    if (previews.length) setAiPreview(previews)
+    if (previews.length) setAiPreview(previews.map((p) => ({ ...p, receipts: dropZeroSplits(p.receipts) })))
   }
 
   // Approve the previewed proposals → commit them.
@@ -364,8 +397,17 @@ export default function AccountsMonthClient({
   for (const r of mainRows) if (r.docDate && r.gross > 0) dupeCounts.set(dupeKey(r), (dupeCounts.get(dupeKey(r)) ?? 0) + 1)
   const isPossibleDupe = (r: Row) => !!r.docDate && r.gross > 0 && (dupeCounts.get(dupeKey(r)) ?? 0) > 1
 
-  const groupOrder = Array.from(new Set([...cardholders, ...mainRows.map((r) => r.cardholder)].filter(Boolean)))
-  const groups = groupOrder.map((name) => ({ name, items: mainRows.filter((r) => r.cardholder === name) })).filter((g) => g.items.length)
+  // Filter (display only — the totals/stats above stay full-month).
+  const fq = filterText.trim().toLowerCase()
+  const displayRows = mainRows.filter((r) => {
+    if (filterCard && r.cardholder !== filterCard) return false
+    if (filterReview && r.reviewed) return false
+    if (fq && !`${r.supplier} ${r.item} ${r.website}`.toLowerCase().includes(fq)) return false
+    return true
+  })
+  const filtering = displayRows.length !== mainRows.length
+  const groupOrder = Array.from(new Set([...cardholders, ...displayRows.map((r) => r.cardholder)].filter(Boolean)))
+  const groups = groupOrder.map((name) => ({ name, items: displayRows.filter((r) => r.cardholder === name) })).filter((g) => g.items.length)
   const colSum = (items: Row[], key: string) => round(items.filter((r) => r.column === key).reduce((a, r) => a + r.net, 0))
   const TOTAL_COLS = NOMINAL_COLUMNS.length + 10
 
@@ -518,9 +560,20 @@ export default function AccountsMonthClient({
             <span className="font-semibold text-gray-500 dark:text-gray-300">VAT codes:</span> 1 = 20% VAT · 2 = no VAT · 7 = personal.
             {" "}Click a column cell to file a line under that nominal code. Open a line (its image) to change its card or add pages.
           </p>
+          {/* Filter */}
+          <div className="flex items-center gap-2 flex-wrap mb-2">
+            <input value={filterText} onChange={(e) => setFilterText(e.target.value)} placeholder="Filter by supplier / item / website…" className={`${input} text-sm w-60`} />
+            <select value={filterCard} onChange={(e) => setFilterCard(e.target.value)} className={`${input} text-sm`}>
+              <option value="">All cards</option>
+              {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400"><input type="checkbox" checked={filterReview} onChange={(e) => setFilterReview(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> To review only</label>
+            {filtering && <button onClick={() => { setFilterText(""); setFilterCard(""); setFilterReview(false) }} className="text-xs font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Clear filter</button>}
+            {filtering && <span className="text-xs text-gray-400">Showing {displayRows.length} of {mainRows.length}</span>}
+          </div>
           {/* Re-run AI on already-processed lines */}
           <div className="flex items-center gap-3 flex-wrap mb-2 text-xs">
-            <button onClick={() => setSelected(new Set(mainRows.filter((r) => r.images.length > 0).map((r) => r.id)))} className="font-semibold text-emerald-600 hover:text-emerald-500">Select all with a scan</button>
+            <button onClick={() => setSelected(new Set(displayRows.filter((r) => r.images.length > 0).map((r) => r.id)))} className="font-semibold text-emerald-600 hover:text-emerald-500">Select all with a scan</button>
             {selected.size > 0 && <button onClick={() => setSelected(new Set())} className="font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Clear</button>}
             <span className="text-gray-400">{selected.size} selected</span>
             <button onClick={rerunSelected} disabled={running || selected.size === 0} className="font-semibold px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40">{running ? `Re-reading ${aiProg.done}/${aiProg.total}…` : "🤖 Re-run AI on selected"}</button>
@@ -557,6 +610,9 @@ export default function AccountsMonthClient({
                 </tr>
               </thead>
               <tbody>
+                {groups.length === 0 && (
+                  <tr><td colSpan={TOTAL_COLS} className="p-6 text-center text-sm text-gray-400">No lines match your filter.</td></tr>
+                )}
                 {groups.map((g) => (
                   <Fragment key={g.name}>
                     <tr className="bg-gray-50 dark:bg-gray-800/40">
