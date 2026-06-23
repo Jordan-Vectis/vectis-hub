@@ -295,7 +295,7 @@ export default function AccountsMonthClient({
   // then merges their pages into one document (review the page counts before Run AI).
   async function stitchToRead() {
     const ids = selectedToRead.filter((r) => r.images.length > 0 && !isPdf(r.images[0])).map((r) => r.id)
-    if (ids.length < 2) { alert("Tick at least 2 photos to look for multi-photo invoices."); return }
+    if (ids.length < 2) { alert("This joins photos that are pages of the SAME invoice into one document.\n\nFirst TICK at least 2 photos in the “To read” list (the ones that belong to one invoice), then click this again. It only works on photos not yet read."); return }
     if (!confirm(`Look across ${Math.min(ids.length, 20)} ticked photo(s) for ones that are pages of the SAME invoice and stitch them together?\n\nNothing is read or deleted — pages just join one document, which you then Run AI on.`)) return
     setStitching(true)
     try {
@@ -547,11 +547,11 @@ export default function AccountsMonthClient({
             <div className="flex items-center gap-3 text-xs font-semibold">
               <button onClick={() => setDeselected(new Set())} className="text-emerald-600 hover:text-emerald-500">Select all</button>
               <button onClick={() => setDeselected(new Set(toRead.map((r) => r.id)))} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Select none</button>
-              <button onClick={stitchToRead} disabled={stitching || selectedToRead.length < 2} className="text-blue-600 hover:text-blue-500 disabled:opacity-40" title="Detect & join photos that are pages of the same invoice">{stitching ? "Stitching…" : "🧵 Stitch multi-photo"}</button>
+              <button onClick={stitchToRead} disabled={stitching} className="text-blue-600 hover:text-blue-500 disabled:opacity-40" title="Tick the photos that are pages of the SAME invoice, then click to join them into one before reading">{stitching ? "Stitching…" : "🧵 Combine same-invoice photos"}</button>
               <button onClick={() => { if (confirm(`Delete all ${toRead.length} un-read scan${toRead.length === 1 ? "" : "s"}? They won't be read or saved.`)) { const ids = toRead.map((r) => r.id); setRows((rs) => rs.filter((r) => !ids.includes(r.id))); startBusy(async () => { await bulkDeleteAccountingDocuments(ids) }) } }} disabled={busy} className="text-red-500 hover:text-red-700 disabled:opacity-50">Delete all</button>
             </div>
           </div>
-          <p className="text-xs text-gray-400 mb-3">Tick the scans you want to read, then press <span className="font-semibold">Run AI</span> above — only the selected ones are read. Click a scan to view it, or use the ✕ to remove it.</p>
+          <p className="text-xs text-gray-400 mb-3">Tick the scans you want to read, then press <span className="font-semibold">Run AI</span> above — only the selected ones are read. Click a scan to view it, or use the ✕ to remove it. If some photos are pages of <span className="font-semibold">one invoice</span>, tick just those and press <span className="font-semibold">🧵 Combine same-invoice photos</span> to join them first.</p>
           <div className="flex flex-wrap gap-2">
             {toRead.map((r) => {
               const sel = !deselected.has(r.id)
