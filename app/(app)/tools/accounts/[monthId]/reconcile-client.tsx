@@ -204,7 +204,7 @@ export default function AccountsReconcile({
             {stmt.cardholder && <p className="text-[11px] text-gray-400 px-4 pt-2">Matching against <span className="font-semibold text-gray-500 dark:text-gray-300">{stmt.cardholder}</span>&apos;s entered lines only.</p>}
 
             {stmt.transactions.length === 0 ? (
-              <p className="text-sm text-gray-400 p-4">{stmt.source === "CSV" ? "No rows imported." : "No transactions yet — press "Read (AI)" to extract them."}</p>
+              <p className="text-sm text-gray-400 p-4">{stmt.source === "CSV" ? "No rows imported." : "No transactions yet — press Read (AI) to extract them."}</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
