@@ -64,6 +64,8 @@ export default function AccountsReconcile({
   const [renameVal, setRenameVal] = useState(monthLabel ?? "")
   const [displayLabel, setDisplayLabel] = useState(monthLabel ?? "")
   const [open, setOpen] = useState(false)
+  const [missingOpen, setMissingOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const addPageInput = useRef<HTMLInputElement>(null)
   const csvInput = useRef<HTMLInputElement>(null)
@@ -75,6 +77,26 @@ export default function AccountsReconcile({
   const allLiveTxns = statements.flatMap((s) => s.transactions.filter((t) => !t.ignored && t.direction !== "CREDIT"))
   const totalMatched = allLiveTxns.filter((t) => t.matchedDocIds.length).length
   const totalUnmatched = allLiveTxns.length - totalMatched
+
+  // "Missing invoices" = unmatched live debits — there's a bank payment but no
+  // entered invoice/receipt for it. Build copy-ready email text grouped by card.
+  const txnDate = (t: Txn) => (t.tranDate || t.postDate || "").split("-").reverse().join("/")
+  const missingByCard = statements
+    .map((s) => ({ card: s.cardholder || s.label || "Statement", txns: s.transactions.filter((t) => !t.ignored && t.direction !== "CREDIT" && t.matchedDocIds.length === 0) }))
+    .filter((g) => g.txns.length)
+  const missingCount = missingByCard.reduce((a, g) => a + g.txns.length, 0)
+  const missingText = (() => {
+    if (!missingCount) return ""
+    const multi = missingByCard.length > 1
+    const lines: string[] = ["I am missing the following invoices:", ""]
+    for (const g of missingByCard) {
+      if (multi) lines.push(`${g.card}:`)
+      for (const t of g.txns) lines.push(`- ${txnDate(t)} — ${t.description || "(no description)"} — ${gbp(t.amount)}`)
+      if (multi) lines.push("")
+    }
+    return lines.join("\n").trim()
+  })()
+  async function copyMissing() { try { await navigator.clipboard.writeText(missingText); setCopied(true) } catch { setCopied(false) } }
 
   async function uploadFiles(files: FileList | null, statementId: string | null, cardholder?: string) {
     const arr = files ? Array.from(files) : []
@@ -324,6 +346,9 @@ export default function AccountsReconcile({
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-gray-400">{totalMatched} matched · {totalUnmatched} unmatched</span>
+            <button onClick={() => { setCopied(false); setMissingOpen(true) }} disabled={missingCount === 0} title="Get email text listing every bank payment with no entered invoice" className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-40">
+              ✉ Missing invoices{missingCount ? ` (${missingCount})` : ""}
+            </button>
             <a href={`/api/accounts/export?monthId=${monthId}&reconciled=true`} className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white">
               Export matched to Excel →
             </a>
@@ -331,6 +356,26 @@ export default function AccountsReconcile({
         </div>
 
         {statementsContent}
+
+        {missingOpen && (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setMissingOpen(false)}>
+            <div onClick={(e) => e.stopPropagation()} className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 w-full max-w-2xl max-h-[85vh] flex flex-col">
+              <div className="flex items-center justify-between gap-3 p-4 border-b border-gray-100 dark:border-gray-800">
+                <h3 className="text-sm font-bold text-gray-800 dark:text-gray-100">✉ Missing invoices ({missingCount})</h3>
+                <button onClick={() => setMissingOpen(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-lg leading-none">×</button>
+              </div>
+              <div className="p-4 overflow-y-auto">
+                <p className="text-xs text-gray-400 mb-2">Bank payments with no entered invoice yet. Copy this and email it to chase the paperwork.</p>
+                <textarea readOnly value={missingText} className="w-full h-72 text-sm font-mono bg-gray-50 dark:bg-[#2C2C2E] text-gray-800 dark:text-gray-100 rounded-lg border border-gray-200 dark:border-gray-700 p-3 focus:outline-none" />
+              </div>
+              <div className="flex items-center gap-2 p-4 border-t border-gray-100 dark:border-gray-800">
+                <button onClick={copyMissing} className="text-sm font-semibold px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white">{copied ? "✓ Copied" : "Copy text"}</button>
+                <a href={`mailto:?subject=${encodeURIComponent(`Missing invoices — ${displayLabel || "accounts"}`)}&body=${encodeURIComponent(missingText)}`} className="text-sm font-semibold px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300">Open in email</a>
+                <button onClick={() => setMissingOpen(false)} className="text-sm font-semibold px-4 py-2 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 ml-auto">Close</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
