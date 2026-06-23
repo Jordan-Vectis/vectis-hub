@@ -66,6 +66,7 @@ export default function AccountsReconcile({
   const [open, setOpen] = useState(false)
   const [missingOpen, setMissingOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [unmatchedOnly, setUnmatchedOnly] = useState(false)   // hide already-matched transactions
   const fileInput = useRef<HTMLInputElement>(null)
   const addPageInput = useRef<HTMLInputElement>(null)
   const csvInput = useRef<HTMLInputElement>(null)
@@ -186,6 +187,8 @@ export default function AccountsReconcile({
         const liveTxns = stmt.transactions.filter((t) => !t.ignored && t.direction !== "CREDIT")
         const matchedCount = liveTxns.filter((t) => t.matchedDocIds.length).length
         const unmatchedCount = liveTxns.length - matchedCount
+        // When "Unmatched only" is on, show just the live debits still needing a match.
+        const visibleTxns = unmatchedOnly ? stmt.transactions.filter((t) => !t.ignored && t.direction !== "CREDIT" && t.matchedDocIds.length === 0) : stmt.transactions
         const isReading = readingId === stmt.id
         const isUploading = uploadingId === stmt.id
         const allDone = liveTxns.length > 0 && unmatchedCount === 0
@@ -228,6 +231,8 @@ export default function AccountsReconcile({
 
             {stmt.transactions.length === 0 ? (
               <p className="text-sm text-gray-400 p-4">{stmt.source === "CSV" ? "No rows imported." : "No transactions yet — press Read (AI) to extract them."}</p>
+            ) : visibleTxns.length === 0 ? (
+              <p className="text-sm text-emerald-600 dark:text-emerald-400 p-4">✓ Nothing unmatched on this statement.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -241,7 +246,7 @@ export default function AccountsReconcile({
                     </tr>
                   </thead>
                   <tbody>
-                    {stmt.transactions.map((t) => {
+                    {visibleTxns.map((t) => {
                       const matched = t.matchedDocIds.map((id) => entryById.get(id)).filter(Boolean) as Entry[]
                       const isMatched = matched.length > 0
                       const credit = t.direction === "CREDIT"
@@ -346,6 +351,9 @@ export default function AccountsReconcile({
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-gray-400">{totalMatched} matched · {totalUnmatched} unmatched</span>
+            <button onClick={() => setUnmatchedOnly((v) => !v)} title="Hide transactions that are already matched" className={`text-xs font-semibold px-3 py-1.5 rounded-lg border ${unmatchedOnly ? "border-amber-500 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400" : "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-500/10"}`}>
+              Unmatched only{unmatchedOnly ? " ✓" : ""}
+            </button>
             <button onClick={() => { setCopied(false); setMissingOpen(true) }} disabled={missingCount === 0} title="Get email text listing every bank payment with no entered invoice" className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-40">
               ✉ Missing invoices{missingCount ? ` (${missingCount})` : ""}
             </button>
