@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   deleteBankStatement, autoMatchStatement, setTransactionMatch,
-  setTransactionIgnored, snapDocAmount, createBankStatementFromRows,
+  setTransactionIgnored, snapDocAmount, createBankStatementFromRows, setStatementCardholder,
 } from "@/lib/actions/accounting"
 
 type Entry = {
@@ -162,6 +162,12 @@ export default function AccountsReconcile({
             <>
               {/* Statement actions */}
               <div className="flex items-center gap-2 flex-wrap border-t border-gray-100 dark:border-gray-800 pt-3">
+                <label className="text-xs text-gray-500 dark:text-gray-400">Card:
+                  <select value={active.cardholder} disabled={busy} onChange={(e) => run(() => setStatementCardholder(active.id, e.target.value))} className={`${input} ml-1.5 text-xs py-1`} title="Change which card/account this statement is for (clears matches — re-run Auto-match)">
+                    {active.cardholder && !cardholders.includes(active.cardholder) && <option value={active.cardholder}>{active.cardholder}</option>}
+                    {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </label>
                 {active.source !== "CSV" && (
                   <>
                     <input ref={addPageInput} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files, active.id); e.currentTarget.value = "" }} />

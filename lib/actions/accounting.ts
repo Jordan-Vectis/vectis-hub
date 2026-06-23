@@ -231,6 +231,19 @@ export async function setTransactionIgnored(txnId: string, ignored: boolean) {
   revalidatePath(`/tools/accounts/${t.monthId}`)
 }
 
+// Change which card/account a statement belongs to. Clears existing matches (they
+// were against the old cardholder's lines), so re-run Auto-match afterwards.
+export async function setStatementCardholder(statementId: string, cardholder: string) {
+  await requireAdmin()
+  const stmt = await prisma.bankStatement.findUnique({ where: { id: statementId }, select: { monthId: true, cardholder: true } })
+  if (!stmt) return
+  const next = (cardholder || "").slice(0, 60)
+  if (next === stmt.cardholder) return
+  await prisma.bankStatement.update({ where: { id: statementId }, data: { cardholder: next } })
+  await prisma.bankTransaction.updateMany({ where: { statementId }, data: { matchedDocIds: [] } })
+  revalidatePath(`/tools/accounts/${stmt.monthId}`)
+}
+
 // Set an entered line's gross to the bank's exact GBP (used to "snap" a foreign
 // charge once it's matched, since the bank's settled GBP is the true cost).
 export async function snapDocAmount(docId: string, amount: number) {
