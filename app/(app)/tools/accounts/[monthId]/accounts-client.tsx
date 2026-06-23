@@ -72,6 +72,7 @@ export default function AccountsMonthClient({
   const [modalBusy, setModalBusy] = useState(false)
   const [viewer, setViewer] = useState<{ images: string[]; index: number } | null>(null)
   const [aiPreview, setAiPreview] = useState<{ docId: string; receipts: any[]; capped?: boolean; cardholder?: string }[] | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())   // main-table rows ticked for re-run
   const [applying, setApplying] = useState(false)
   const [deselected, setDeselected] = useState<Set<string>>(new Set())   // To-read scans the user has un-ticked
 
@@ -213,6 +214,32 @@ export default function AccountsMonthClient({
       setAiProg({ done: i + 1, total: target.length, errors })
     }
     setRunning(false)
+    if (previews.length) setAiPreview(previews)
+  }
+
+  // Re-run the AI on already-processed lines (e.g. to pick up improved extraction).
+  // Re-reads each selected line from its scan and shows the Approve modal.
+  function toggleSelect(id: string) {
+    setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  async function rerunSelected() {
+    const targets = mainRows.filter((r) => selected.has(r.id) && r.images.length > 0)
+    if (running || targets.length === 0) return
+    setRunning(true)
+    setAiProg({ done: 0, total: targets.length, errors: 0 })
+    const previews: { docId: string; receipts: any[]; capped?: boolean; cardholder?: string }[] = []
+    let errors = 0
+    for (let i = 0; i < targets.length; i++) {
+      const r = targets[i]
+      try {
+        const d = await previewOne(r.id)
+        if (d?.receipts?.length) previews.push({ docId: r.id, receipts: d.receipts, capped: !!d.capped, cardholder: r.cardholder })
+        else errors++
+      } catch { errors++ }
+      setAiProg({ done: i + 1, total: targets.length, errors })
+    }
+    setRunning(false)
+    setSelected(new Set())
     if (previews.length) setAiPreview(previews)
   }
 
@@ -473,6 +500,14 @@ export default function AccountsMonthClient({
             <span className="font-semibold text-gray-500 dark:text-gray-300">VAT codes:</span> 1 = 20% VAT · 2 = no VAT · 7 = personal.
             {" "}Click a column cell to file a line under that nominal code. Open a line (its image) to change its card or add pages.
           </p>
+          {/* Re-run AI on already-processed lines */}
+          <div className="flex items-center gap-3 flex-wrap mb-2 text-xs">
+            <button onClick={() => setSelected(new Set(mainRows.filter((r) => r.images.length > 0).map((r) => r.id)))} className="font-semibold text-emerald-600 hover:text-emerald-500">Select all with a scan</button>
+            {selected.size > 0 && <button onClick={() => setSelected(new Set())} className="font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Clear</button>}
+            <span className="text-gray-400">{selected.size} selected</span>
+            <button onClick={rerunSelected} disabled={running || selected.size === 0} className="font-semibold px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40">{running ? `Re-reading ${aiProg.done}/${aiProg.total}…` : "🤖 Re-run AI on selected"}</button>
+            <span className="text-gray-400">Re-reads each ticked line from its scan to pick up the latest extraction — you approve before anything changes.</span>
+          </div>
           <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-1">
             <table className="w-full table-fixed border-collapse">
               <colgroup>
@@ -530,16 +565,19 @@ export default function AccountsMonthClient({
                         )}
                       <tr ref={r.id === flashId ? flashRef : undefined} className={`border-b border-gray-100 dark:border-gray-800/60 align-top transition-colors ${inGroup ? "border-l-4 border-l-indigo-400 dark:border-l-indigo-500" : ""} ${r.id === flashId ? "bg-emerald-100 dark:bg-emerald-500/20" : inGroup ? "bg-indigo-50/30 dark:bg-indigo-500/[0.06]" : r.reviewed ? "" : "bg-amber-50/40 dark:bg-amber-500/5"}`}>
                         <td className="p-1.5">
-                          <button onClick={() => setViewId(r.id)} title="Open invoice" className="relative block">
-                            {!r.images[0] ? (
-                              <span className="w-9 h-9 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 text-xs flex items-center justify-center hover:ring-2 hover:ring-emerald-500">✎</span>
-                            ) : isPdf(r.images[0]) ? (
-                              <span className="w-9 h-9 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-300 text-[9px] font-bold flex items-center justify-center hover:ring-2 hover:ring-emerald-500">PDF</span>
-                            ) : (
-                              <img src={r.images[0]} alt="scan" className="w-9 h-9 object-cover rounded border border-gray-200 dark:border-gray-700 hover:ring-2 hover:ring-emerald-500" />
-                            )}
-                            {r.images.length > 1 && <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[9px] font-bold rounded-full px-1 leading-tight">{r.images.length}</span>}
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            {r.images.length > 0 && <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} className="w-4 h-4 accent-blue-600 flex-shrink-0" title="Select to re-run AI" />}
+                            <button onClick={() => setViewId(r.id)} title="Open invoice" className="relative block">
+                              {!r.images[0] ? (
+                                <span className="w-9 h-9 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 text-xs flex items-center justify-center hover:ring-2 hover:ring-emerald-500">✎</span>
+                              ) : isPdf(r.images[0]) ? (
+                                <span className="w-9 h-9 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-300 text-[9px] font-bold flex items-center justify-center hover:ring-2 hover:ring-emerald-500">PDF</span>
+                              ) : (
+                                <img src={r.images[0]} alt="scan" className="w-9 h-9 object-cover rounded border border-gray-200 dark:border-gray-700 hover:ring-2 hover:ring-emerald-500" />
+                              )}
+                              {r.images.length > 1 && <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[9px] font-bold rounded-full px-1 leading-tight">{r.images.length}</span>}
+                            </button>
+                          </div>
                         </td>
                         <td className="p-1.5">
                           <input value={r.supplier} onChange={(e) => patch(r.id, { supplier: e.target.value })} className={cell} placeholder="Supplier" />
