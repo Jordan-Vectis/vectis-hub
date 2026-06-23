@@ -1003,85 +1003,136 @@ export function TodayTimeline({
 // ─── Daily Lots Bar Chart ─────────────────────────────────────────────────────
 
 export function DailyLotsBarChart({ days }: { days: DayStats[] }) {
+  const sorted = useMemo(() => [...days].sort((a, b) => a.date.localeCompare(b.date)), [days])
+
+  const minDate = sorted[0]?.date ?? ""
+  const maxDate = sorted[sorted.length - 1]?.date ?? ""
+
+  const [fromDate, setFromDate] = useState("")
+  const [toDate,   setToDate]   = useState("")
+
   if (days.length === 0) return null
 
-  // Chronological order for the chart (oldest → newest)
+  const filtered = sorted.filter(d => {
+    if (fromDate && d.date < fromDate) return false
+    if (toDate   && d.date > toDate)   return false
+    return true
+  })
+
   const todayStr = format(new Date(), "yyyy-MM-dd")
-  const data = [...days]
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .map(d => ({
-      label: format(new Date(d.date + "T12:00:00"), days.length > 60 ? "MMM" : days.length > 14 ? "d MMM" : "EEE d"),
-      date:  d.date,
-      lots:  d.lots,
-      isToday: d.date === todayStr,
-    }))
+  const n = filtered.length
+
+  const data = filtered.map(d => ({
+    label:   format(new Date(d.date + "T12:00:00"), n > 60 ? "MMM" : n > 14 ? "d MMM" : "EEE d"),
+    date:    d.date,
+    lots:    d.lots,
+    isToday: d.date === todayStr,
+  }))
 
   // Deduplicate month labels when zoomed out
   const seenLabels = new Set<string>()
-  const dedupedData = data.map(d => {
-    if (days.length > 60) {
+  const chartData = data.map(d => {
+    if (n > 60) {
       if (seenLabels.has(d.label)) return { ...d, label: "" }
       seenLabels.add(d.label)
     }
     return d
   })
 
-  const maxLots = Math.max(...data.map(d => d.lots), 1)
-  const avg = data.length > 0 ? Math.round(data.reduce((s, d) => s + d.lots, 0) / data.length) : 0
+  const maxLots = Math.max(...chartData.map(d => d.lots), 1)
+  const avg = n > 0 ? Math.round(chartData.reduce((s, d) => s + d.lots, 0) / n) : 0
 
   return (
     <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl p-5">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
           Lots Catalogued per Day
         </h2>
-        <span className="text-xs text-gray-400">avg {avg} lots/day</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-gray-500 whitespace-nowrap">From</label>
+            <input
+              type="date"
+              value={fromDate}
+              min={minDate}
+              max={toDate || maxDate}
+              onChange={e => setFromDate(e.target.value)}
+              className="text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-gray-500 whitespace-nowrap">To</label>
+            <input
+              type="date"
+              value={toDate}
+              min={fromDate || minDate}
+              max={maxDate}
+              onChange={e => setToDate(e.target.value)}
+              className="text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]"
+            />
+          </div>
+          {(fromDate || toDate) && (
+            <button
+              onClick={() => { setFromDate(""); setToDate("") }}
+              className="text-xs text-red-400 hover:text-red-600 font-medium transition-colors"
+            >
+              Clear
+            </button>
+          )}
+          <span className="text-xs text-gray-400">avg {avg} lots/day</span>
+        </div>
       </div>
-      <div style={{ height: 220 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={dedupedData} margin={{ top: 8, right: 8, left: -20, bottom: 4 }}>
-            <XAxis
-              dataKey="label"
-              tick={{ fill: "#9ca3af", fontSize: 11 }}
-              axisLine={false}
-              tickLine={false}
-              interval={days.length > 60 ? 0 : "preserveStartEnd"}
-            />
-            <YAxis
-              tick={{ fill: "#9ca3af", fontSize: 11 }}
-              axisLine={false}
-              tickLine={false}
-              allowDecimals={false}
-              domain={[0, Math.ceil(maxLots * 1.15)]}
-            />
-            <Tooltip
-              formatter={(v) => [`${v} lots`, "Catalogued"]}
-              labelFormatter={(_, payload) => {
-                const d = payload?.[0]?.payload
-                return d ? format(new Date(d.date + "T12:00:00"), "EEEE d MMMM yyyy") : ""
-              }}
-              contentStyle={{
-                background: "#2C2C2E",
-                border: "1px solid #374151",
-                borderRadius: 8,
-                color: "#f3f4f6",
-                fontSize: 13,
-              }}
-              cursor={{ fill: "rgba(255,255,255,0.04)" }}
-            />
-            <ReferenceLine y={avg} stroke="#4b5563" strokeDasharray="4 3" />
-            <Bar dataKey="lots" radius={[4, 4, 0, 0]} maxBarSize={40}>
-              {dedupedData.map((d, i) => (
-                <Cell
-                  key={i}
-                  fill={d.isToday ? "#f59e0b" : "#2AB4A6"}
-                  fillOpacity={d.lots === 0 ? 0.3 : 1}
-                />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+
+      {chartData.length === 0 ? (
+        <p className="text-sm text-gray-500 text-center py-10">No data in this date range.</p>
+      ) : (
+        <div style={{ height: 220 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} margin={{ top: 8, right: 8, left: -20, bottom: 4 }}>
+              <XAxis
+                dataKey="label"
+                tick={{ fill: "#9ca3af", fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                interval={n > 60 ? 0 : "preserveStartEnd"}
+              />
+              <YAxis
+                tick={{ fill: "#9ca3af", fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                allowDecimals={false}
+                domain={[0, Math.ceil(maxLots * 1.15)]}
+              />
+              <Tooltip
+                formatter={(v) => [`${v} lots`, "Catalogued"]}
+                labelFormatter={(_, payload) => {
+                  const d = payload?.[0]?.payload
+                  return d ? format(new Date(d.date + "T12:00:00"), "EEEE d MMMM yyyy") : ""
+                }}
+                contentStyle={{
+                  background: "#2C2C2E",
+                  border: "1px solid #374151",
+                  borderRadius: 8,
+                  color: "#f3f4f6",
+                  fontSize: 13,
+                }}
+                cursor={{ fill: "rgba(255,255,255,0.04)" }}
+              />
+              <ReferenceLine y={avg} stroke="#4b5563" strokeDasharray="4 3" />
+              <Bar dataKey="lots" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                {chartData.map((d, i) => (
+                  <Cell
+                    key={i}
+                    fill={d.isToday ? "#f59e0b" : "#2AB4A6"}
+                    fillOpacity={d.lots === 0 ? 0.3 : 1}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       <p className="text-xs text-gray-500 mt-2 text-right">
         <span className="inline-flex items-center gap-1.5 mr-4">
           <span className="w-2.5 h-2.5 rounded-sm bg-[#2AB4A6] inline-block" /> Days
