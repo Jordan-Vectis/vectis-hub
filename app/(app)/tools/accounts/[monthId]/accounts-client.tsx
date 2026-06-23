@@ -566,8 +566,7 @@ export default function AccountsMonthClient({
                         )}
                       <tr ref={r.id === flashId ? flashRef : undefined} className={`border-b border-gray-100 dark:border-gray-800/60 align-top transition-colors ${inGroup ? "border-l-4 border-l-indigo-400 dark:border-l-indigo-500" : ""} ${r.id === flashId ? "bg-emerald-100 dark:bg-emerald-500/20" : inGroup ? "bg-indigo-50/30 dark:bg-indigo-500/[0.06]" : r.reviewed ? "" : "bg-amber-50/40 dark:bg-amber-500/5"}`}>
                         <td className="p-1.5">
-                          <div className="flex items-center gap-1.5">
-                            {r.images.length > 0 && <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} className="w-4 h-4 accent-blue-600 flex-shrink-0" title="Select to re-run AI" />}
+                          <div className="relative inline-block">
                             <button onClick={() => setViewId(r.id)} title="Open invoice" className="relative block">
                               {!r.images[0] ? (
                                 <span className="w-9 h-9 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 text-xs flex items-center justify-center hover:ring-2 hover:ring-emerald-500">✎</span>
@@ -578,6 +577,7 @@ export default function AccountsMonthClient({
                               )}
                               {r.images.length > 1 && <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[9px] font-bold rounded-full px-1 leading-tight">{r.images.length}</span>}
                             </button>
+                            {r.images.length > 0 && <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} onClick={(e) => e.stopPropagation()} className="absolute -top-1.5 -left-1.5 w-4 h-4 accent-blue-600 rounded bg-white/90 dark:bg-gray-900/90 shadow" title="Select to re-run AI" />}
                           </div>
                         </td>
                         <td className="p-1.5">
