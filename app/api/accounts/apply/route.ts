@@ -47,8 +47,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
     }
 
-    const { docId, receipts } = await req.json()
+    const { docId, receipts, cardholder } = await req.json()
     if (!docId) return NextResponse.json({ error: "docId required" }, { status: 400 })
+    const newCardholder = typeof cardholder === "string" && cardholder.trim() ? cardholder.trim().slice(0, 60) : null
     const list: any[] = (Array.isArray(receipts) && receipts.length ? receipts : [{}]).map(clean)
 
     // Lines split from ONE invoice carry the same non-empty "group" (set by the AI
@@ -97,7 +98,7 @@ export async function POST(req: NextRequest) {
     const primaryImages = await imagesFor(list[0], true)
     const { pages: _p0, group: _g0, ...firstData } = list[0]
     const firstSplitId = splitIdFor(list[0])
-    await prisma.accountingDocument.update({ where: { id: doc.id }, data: { ...firstData, images: primaryImages, aiRun: true, splitGroupId: firstSplitId } })
+    await prisma.accountingDocument.update({ where: { id: doc.id }, data: { ...firstData, images: primaryImages, aiRun: true, splitGroupId: firstSplitId, ...(newCardholder ? { cardholder: newCardholder } : {}) } })
 
     const extra: any[] = []
     for (let i = 1; i < list.length && i < 200; i++) {
@@ -105,7 +106,7 @@ export async function POST(req: NextRequest) {
       const splitGroupId = splitIdFor(list[i])
       const imgs = await imagesFor(list[i], false)
       const created = await prisma.accountingDocument.create({
-        data: { monthId: doc.monthId, cardholder: doc.cardholder, source: "SCAN", images: imgs, aiRun: true, ...f, splitGroupId },
+        data: { monthId: doc.monthId, cardholder: newCardholder ?? doc.cardholder, source: "SCAN", images: imgs, aiRun: true, ...f, splitGroupId },
       })
       extra.push({
         id: created.id, cardholder: created.cardholder, source: "SCAN",
@@ -128,6 +129,7 @@ export async function POST(req: NextRequest) {
       vatCode: firstData.vatCode, gross: firstData.gross, vat: firstData.vat, net: firstData.net, column: firstData.column,
       aiNotes: firstData.aiNotes, splitGroupId: firstSplitId,
       currency: firstData.currency, originalAmount: firstData.originalAmount,
+      cardholder: newCardholder ?? doc.cardholder,
       images: [await getSignedImageUrl(primaryImages[0])],
       extra,
     })

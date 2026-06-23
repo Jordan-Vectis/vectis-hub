@@ -71,7 +71,7 @@ export default function AccountsMonthClient({
   const [addingPage, setAddingPage] = useState(false)
   const [modalBusy, setModalBusy] = useState(false)
   const [viewer, setViewer] = useState<{ images: string[]; index: number } | null>(null)
-  const [aiPreview, setAiPreview] = useState<{ docId: string; receipts: any[]; capped?: boolean }[] | null>(null)
+  const [aiPreview, setAiPreview] = useState<{ docId: string; receipts: any[]; capped?: boolean; cardholder?: string }[] | null>(null)
   const [applying, setApplying] = useState(false)
   const [deselected, setDeselected] = useState<Set<string>>(new Set())   // To-read scans the user has un-ticked
 
@@ -136,10 +136,10 @@ export default function AccountsMonthClient({
     return null
   }
   // Apply an approved proposal — receipt[0] updates the line; the rest split into new lines.
-  async function applyOne(docId: string, receipts: any[]): Promise<boolean> {
+  async function applyOne(docId: string, receipts: any[], cardholder?: string): Promise<boolean> {
     try {
       const res = await fetch("/api/accounts/apply", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ docId, receipts }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ docId, receipts, cardholder }),
       })
       if (res.ok) {
         const { extra, ...fields } = await res.json()
@@ -182,7 +182,7 @@ export default function AccountsMonthClient({
     if (running || target.length === 0) return
     setRunning(true)
     setAiProg({ done: 0, total: target.length, errors: 0 })
-    const previews: { docId: string; receipts: any[]; capped?: boolean }[] = []
+    const previews: { docId: string; receipts: any[]; capped?: boolean; cardholder?: string }[] = []
     let errors = 0
     for (let i = 0; i < target.length; i++) {
       const r = target[i]
@@ -197,16 +197,16 @@ export default function AccountsMonthClient({
               const d = await previewOne(r.id, g)
               for (const rr of (d?.receipts ?? [])) receipts.push({ ...rr, pages: g })
             }
-            if (receipts.length) previews.push({ docId: r.id, receipts, capped: !!s?.capped })
+            if (receipts.length) previews.push({ docId: r.id, receipts, capped: !!s?.capped, cardholder: r.cardholder })
             else errors++
           } else {
             const d = await previewOne(r.id)
-            if (d?.receipts?.length) previews.push({ docId: r.id, receipts: d.receipts.map((x: any) => ({ ...x, pages: groups[0] ?? [] })), capped: !!d.capped })
+            if (d?.receipts?.length) previews.push({ docId: r.id, receipts: d.receipts.map((x: any) => ({ ...x, pages: groups[0] ?? [] })), capped: !!d.capped, cardholder: r.cardholder })
             else errors++
           }
         } else {
           const d = await previewOne(r.id)
-          if (d?.receipts) previews.push({ docId: r.id, receipts: d.receipts, capped: !!d.capped })
+          if (d?.receipts) previews.push({ docId: r.id, receipts: d.receipts, capped: !!d.capped, cardholder: r.cardholder })
           else errors++
         }
       } catch { errors++ }
@@ -220,7 +220,7 @@ export default function AccountsMonthClient({
   async function applyPreview() {
     if (!aiPreview) return
     setApplying(true)
-    for (const p of aiPreview) await applyOne(p.docId, p.receipts)
+    for (const p of aiPreview) await applyOne(p.docId, p.receipts, p.cardholder)
     setApplying(false)
     setAiPreview(null)
   }
@@ -245,6 +245,10 @@ export default function AccountsMonthClient({
       ...p,
       receipts: p.receipts.map((r: any, j: number) => j !== i ? r : { ...r, gross: g, vat: Number(r.vatCode) === 1 ? round(g / 6) : 0 }),
     }))
+  }
+  // Change which card/account a previewed document applies to, before approving.
+  function setPreviewCardholder(docId: string, cardholder: string) {
+    setAiPreview((prev) => prev && prev.map((p) => p.docId !== docId ? p : { ...p, cardholder }))
   }
 
   const [saving, startSave] = useTransition()
@@ -739,6 +743,13 @@ export default function AccountsMonthClient({
                       ? <span className="w-12 h-12 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-300 text-[9px] font-bold flex items-center justify-center flex-shrink-0">PDF</span>
                       : <img src={row.images[0]} alt="" className="w-12 h-12 object-cover rounded border border-gray-200 dark:border-gray-700 flex-shrink-0" />)}
                     <div className="text-sm flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <span className="text-[11px] text-gray-400">Apply to card:</span>
+                        <select value={p.cardholder ?? row?.cardholder ?? cardholders[0]} onChange={(e) => setPreviewCardholder(p.docId, e.target.value)}
+                          className="text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                          {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
                       {p.receipts.length > 1 && <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mb-1">Splits into {p.receipts.length} separate receipts:</p>}
                       {p.receipts.map((r: any, i: number) => (
                         <div key={i} className="flex justify-between items-center gap-2">
