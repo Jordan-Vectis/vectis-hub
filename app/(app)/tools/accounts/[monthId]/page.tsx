@@ -60,6 +60,7 @@ export default async function AccountsMonthPage({ params }: { params: Promise<{ 
   const statements = await Promise.all(stmtRows.map(async (s) => ({
     id: s.id,
     label: s.label,
+    cardholder: s.cardholder,
     source: s.source,
     images: await Promise.all(s.images.map((k) => getSignedImageUrl(k))),
     transactions: s.transactions.map((t) => ({
@@ -82,7 +83,7 @@ export default async function AccountsMonthPage({ params }: { params: Promise<{ 
     <>
       <AccountsMonthClient monthId={month.id} monthLabel={month.label} documents={documents} cardholders={cardholders} />
       <div className="px-6 pb-10 -mt-2">
-        <AccountsReconcile monthId={month.id} entries={documents} statements={statements} />
+        <AccountsReconcile monthId={month.id} entries={documents} statements={statements} cardholders={cardholders} />
       </div>
     </>
   )

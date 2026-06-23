@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
     const monthId     = form.get("monthId") as string
     const statementId = (form.get("statementId") as string) || null
     const label       = ((form.get("label") as string) || "").slice(0, 120)
+    const cardholder  = ((form.get("cardholder") as string) || "").slice(0, 60)
     const file        = form.get("file")
 
     if (!monthId) return NextResponse.json({ error: "monthId required" }, { status: 400 })
@@ -37,12 +38,13 @@ export async function POST(req: NextRequest) {
       if (!existing) return NextResponse.json({ error: "Statement not found" }, { status: 404 })
       stmt = await prisma.bankStatement.update({ where: { id: statementId }, data: { images: [...existing.images, key] } })
     } else {
-      stmt = await prisma.bankStatement.create({ data: { monthId, label, source: "SCAN", images: [key] } })
+      stmt = await prisma.bankStatement.create({ data: { monthId, label, cardholder, source: "SCAN", images: [key] } })
     }
 
     return NextResponse.json({
       id: stmt.id,
       label: stmt.label,
+      cardholder: stmt.cardholder,
       images: await Promise.all(stmt.images.map((k) => getSignedImageUrl(k))),
     })
   } catch (e: any) {

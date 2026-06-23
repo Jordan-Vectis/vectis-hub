@@ -8,7 +8,7 @@ import {
 } from "@/lib/actions/accounting"
 
 type Entry = {
-  id: string; supplier: string; item: string; gross: number
+  id: string; cardholder: string; supplier: string; item: string; gross: number
   currency: string; originalAmount: number | null; splitGroupId: string | null
   docDate: string; column: string
 }
@@ -17,7 +17,7 @@ type Txn = {
   amount: number; currency: string; originalAmount: number | null; feeAmount: number | null
   direction: string; matchedDocIds: string[]; ignored: boolean
 }
-type Statement = { id: string; label: string; source: string; images: string[]; transactions: Txn[] }
+type Statement = { id: string; label: string; cardholder: string; source: string; images: string[]; transactions: Txn[] }
 
 const round = (n: number) => Math.round((n || 0) * 100) / 100
 const gbp = (n: number) => "£" + (n || 0).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -27,14 +27,15 @@ const fmtCcy = (c: string, n: number) => (CCY[c] ?? c + " ") + (n || 0).toLocale
 type Unit = { key: string; docIds: string[]; amount: number; label: string }
 
 export default function AccountsReconcile({
-  monthId, entries, statements,
-}: { monthId: string; entries: Entry[]; statements: Statement[] }) {
+  monthId, entries, statements, cardholders,
+}: { monthId: string; entries: Entry[]; statements: Statement[]; cardholders: string[] }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [busy, startBusy] = useTransition()
   const [reading, setReading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [activeId, setActiveId] = useState<string | null>(statements[statements.length - 1]?.id ?? null)
+  const [newCardholder, setNewCardholder] = useState<string>(cardholders[0] ?? "Vectis")
   const fileInput = useRef<HTMLInputElement>(null)
   const addPageInput = useRef<HTMLInputElement>(null)
   const csvInput = useRef<HTMLInputElement>(null)
@@ -43,11 +44,14 @@ export default function AccountsReconcile({
   const entryById = new Map(entries.map((e) => [e.id, e]))
   const run = (fn: () => Promise<any>) => startBusy(async () => { await fn(); router.refresh() })
 
+  // Only this statement's cardholder's entries are matchable against it.
+  const scopedEntries = active && active.cardholder ? entries.filter((e) => e.cardholder === active.cardholder) : entries
+
   // Entered lines as match units (a split invoice = one unit summing its parts).
   const units: Unit[] = (() => {
     const out: Unit[] = []
     const groups = new Map<string, Entry[]>()
-    for (const e of entries) {
+    for (const e of scopedEntries) {
       if (e.splitGroupId) { const a = groups.get(e.splitGroupId) ?? []; a.push(e); groups.set(e.splitGroupId, a) }
       else out.push({ key: e.id, docIds: [e.id], amount: round(e.gross), label: `${e.supplier || "(no description)"}${e.item ? " — " + e.item : ""}` })
     }
@@ -67,14 +71,16 @@ export default function AccountsReconcile({
   const matchedCount = liveTxns.filter((t) => t.matchedDocIds.length).length
   const unmatchedCount = liveTxns.length - matchedCount
 
-  async function uploadFiles(files: FileList | null, statementId: string | null) {
+  async function uploadFiles(files: FileList | null, statementId: string | null, cardholder?: string) {
     const arr = files ? Array.from(files) : []
     if (!arr.length) return
     setUploading(true)
     let sid = statementId
     try {
       for (const f of arr) {
-        const fd = new FormData(); fd.append("monthId", monthId); if (sid) fd.append("statementId", sid); fd.append("file", f)
+        const fd = new FormData(); fd.append("monthId", monthId)
+        if (sid) fd.append("statementId", sid); else if (cardholder) fd.append("cardholder", cardholder)
+        fd.append("file", f)
         const res = await fetch("/api/accounts/statement/upload", { method: "POST", body: fd })
         if (res.ok) { const j = await res.json(); sid = j.id }
       }
@@ -111,7 +117,7 @@ export default function AccountsReconcile({
       }
     }).filter((r) => r.amount)
     if (!rows.length) { alert("No usable rows found in the CSV."); return }
-    run(async () => { const res = await createBankStatementFromRows(monthId, file.name.replace(/\.csv$/i, ""), rows); setActiveId(res.id) })
+    run(async () => { const res = await createBankStatementFromRows(monthId, file.name.replace(/\.csv$/i, ""), newCardholder, rows); setActiveId(res.id) })
   }
 
   const input = "px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
@@ -136,10 +142,17 @@ export default function AccountsReconcile({
             {statements.map((s) => (
               <button key={s.id} onClick={() => setActiveId(s.id)}
                 className={`text-xs px-3 py-1.5 rounded-lg border ${active?.id === s.id ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300"}`}>
-                {s.source === "CSV" ? "📄" : "🧾"} {s.label || "Statement"} · {s.transactions.length}
+                {s.source === "CSV" ? "📄" : "🧾"} <span className="font-semibold">{s.cardholder || "?"}</span>{s.label ? " — " + s.label : ""} · {s.transactions.length}
               </button>
             ))}
-            <input ref={fileInput} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files, null); e.currentTarget.value = "" }} />
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <label className="text-xs text-gray-500 dark:text-gray-400">New statement for card:
+              <select value={newCardholder} onChange={(e) => setNewCardholder(e.target.value)} className={`${input} ml-1.5 text-xs py-1`}>
+                {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+            <input ref={fileInput} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files, null, newCardholder); e.currentTarget.value = "" }} />
             <input ref={csvInput} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => { importCsv(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
             <button onClick={() => fileInput.current?.click()} disabled={uploading} className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50">{uploading ? "Uploading…" : "+ New statement (photo/PDF)"}</button>
             <button onClick={() => csvInput.current?.click()} disabled={uploading} className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300">Import CSV</button>
@@ -159,6 +172,8 @@ export default function AccountsReconcile({
                 <button onClick={() => run(() => autoMatchStatement(active.id))} disabled={busy || active.transactions.length === 0} className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50">⚡ Auto-match</button>
                 <button onClick={() => { if (confirm("Delete this statement and its transactions?")) run(() => deleteBankStatement(active.id)) }} disabled={busy} className="text-xs font-semibold px-3 py-1.5 rounded-lg text-red-500 hover:bg-red-500/10 ml-auto">Delete statement</button>
               </div>
+
+              {active.cardholder && <p className="text-[11px] text-gray-400">Matching against <span className="font-semibold text-gray-500 dark:text-gray-300">{active.cardholder}</span>&apos;s entered lines only.</p>}
 
               {active.transactions.length === 0 ? (
                 <p className="text-sm text-gray-400 py-4">{active.source === "CSV" ? "No rows imported." : "No transactions yet — press “Read statement (AI)” to pull them from the pages."}</p>

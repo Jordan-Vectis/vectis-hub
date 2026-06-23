@@ -1159,6 +1159,7 @@ model BankStatement {
   monthId      String
   month        AccountingMonth @relation(fields: [monthId], references: [id], onDelete: Cascade)
   label        String          @default("")     // e.g. "OneCard May 2026"
+  cardholder   String          @default("")     // which card/account this statement belongs to — matching is scoped to it
   source       String          @default("SCAN") // SCAN (photo/PDF + AI) | CSV
   images       String[]        @default([])      // R2 keys of the statement pages (photo/PDF)
   createdAt    DateTime        @default(now())

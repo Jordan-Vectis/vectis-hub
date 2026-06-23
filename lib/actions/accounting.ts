@@ -252,7 +252,10 @@ export async function autoMatchStatement(statementId: string) {
   const stmt = await prisma.bankStatement.findUnique({ where: { id: statementId } })
   if (!stmt) throw new Error("Statement not found")
   const txns = await prisma.bankTransaction.findMany({ where: { statementId }, orderBy: { createdAt: "asc" } })
-  const docs = await prisma.accountingDocument.findMany({ where: { monthId: stmt.monthId } })
+  // Only match against entries for THIS statement's cardholder (each card has its own statement).
+  const docs = await prisma.accountingDocument.findMany({
+    where: { monthId: stmt.monthId, ...(stmt.cardholder ? { cardholder: stmt.cardholder } : {}) },
+  })
 
   type Unit = { docIds: string[]; amount: number; currency: string; originalAmount: number | null; date: Date | null }
   const units: Unit[] = []
@@ -299,10 +302,11 @@ export async function autoMatchStatement(statementId: string) {
 export async function createBankStatementFromRows(
   monthId: string,
   label: string,
+  cardholder: string,
   rows: { date?: string | null; description?: string; reference?: string; amount: number; currency?: string; originalAmount?: number | null }[],
 ) {
   await requireAdmin()
-  const stmt = await prisma.bankStatement.create({ data: { monthId, label: (label || "Imported").slice(0, 120), source: "CSV", images: [] } })
+  const stmt = await prisma.bankStatement.create({ data: { monthId, label: (label || "Imported").slice(0, 120), cardholder: (cardholder || "").slice(0, 60), source: "CSV", images: [] } })
   const data = (rows || []).slice(0, 2000).map((r) => {
     const currency = (r.currency || "GBP").toUpperCase().slice(0, 8)
     const dt = r.date ? new Date(r.date) : null
