@@ -428,15 +428,17 @@ export default function AccountsMonthClient({
   const unreviewed  = mainRows.filter((r) => !r.reviewed).length
 
   // Possible-duplicate flag (display only — does nothing): a line that shares the
-  // same date AND the same amount with at least one other line in the month
-  // (across cardholders — the same purchase can land on two cards / be read twice).
-  const dupeKey = (r: Row) => `${r.docDate}|${r.gross.toFixed(2)}`
+  // same date AND amount with another line FOR THE SAME CARDHOLDER. Scoped per
+  // cardholder on purpose — different drivers often spend the same (e.g. £120 of
+  // fuel) on the same day, which isn't a duplicate.
+  const dupeKey = (r: Row) => `${r.cardholder}|${r.docDate}|${r.gross.toFixed(2)}`
   const dupeGroups = new Map<string, Row[]>()
   for (const r of mainRows) if (r.docDate && r.gross > 0) { const a = dupeGroups.get(dupeKey(r)) ?? []; a.push(r); dupeGroups.set(dupeKey(r), a) }
   const isPossibleDupe = (r: Row) => !!r.docDate && r.gross > 0 && (dupeGroups.get(dupeKey(r))?.length ?? 0) > 1
   // The OTHER line(s) this one matches — used to name its partner in the flag.
+  // Same cardholder by construction, so just name the supplier (+ item if present).
   const dupePartners = (r: Row) => (dupeGroups.get(dupeKey(r)) ?? []).filter((x) => x.id !== r.id)
-  const dupeLabel = (r: Row) => dupePartners(r).map((p) => `${p.supplier || "(no supplier)"}${p.cardholder ? " · " + p.cardholder : ""}`).join(", ")
+  const dupeLabel = (r: Row) => dupePartners(r).map((p) => `${p.supplier || "(no supplier)"}${p.item ? " — " + p.item : ""}`).join(", ")
   const dupeCount = mainRows.filter(isPossibleDupe).length
 
   // Per-column filter (display only — the totals/stats above stay full-month).
