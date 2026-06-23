@@ -1103,6 +1103,7 @@ model AccountingMonth {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   documents AccountingDocument[]
+  statements BankStatement[]
 }
 
 model AccountingDocument {
@@ -1126,6 +1127,8 @@ model AccountingDocument {
   aiRun      Boolean         @default(false)      // has AI been run on this scan yet? (blank scans wait for a batch Run AI)
   aiNotes    String?                             // anything the AI flagged for attention
   splitGroupId String?                           // lines split from one invoice share this id (grouped together in the UI)
+  currency       String?  @default("GBP")        // ISO currency shown on the invoice (GBP unless foreign)
+  originalAmount Float?                           // gross in that foreign currency (e.g. 99 for €99) — stable key for reconciling foreign card charges
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
 
@@ -1148,6 +1151,43 @@ model AccountingCardholder {
   name      String   @unique
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
+}
+
+// A bank/card statement uploaded for a month, to reconcile entered lines against.
+model BankStatement {
+  id           String          @id @default(cuid())
+  monthId      String
+  month        AccountingMonth @relation(fields: [monthId], references: [id], onDelete: Cascade)
+  label        String          @default("")     // e.g. "OneCard May 2026"
+  source       String          @default("SCAN") // SCAN (photo/PDF + AI) | CSV
+  images       String[]        @default([])      // R2 keys of the statement pages (photo/PDF)
+  createdAt    DateTime        @default(now())
+  transactions BankTransaction[]
+
+  @@index([monthId])
+}
+
+// One line on a statement. amount = the GBP actually charged (source of truth for cost).
+model BankTransaction {
+  id             String        @id @default(cuid())
+  statementId    String
+  statement      BankStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  monthId        String                          // denormalised for month-wide queries
+  postDate       DateTime?
+  tranDate       DateTime?
+  description    String        @default("")
+  reference      String        @default("")      // "Your Ref" / bank reference
+  amount         Float         @default(0)        // GBP settled amount
+  currency       String        @default("GBP")    // original currency if a foreign charge
+  originalAmount Float?                            // foreign amount (e.g. 99 for €99)
+  feeAmount      Float?                            // non-sterling transaction fee if shown
+  direction      String        @default("DEBIT")  // DEBIT | CREDIT (payment/refund)
+  matchedDocIds  String[]      @default([])        // entered AccountingDocument id(s) this reconciles to (N = split invoice)
+  ignored        Boolean       @default(false)     // marked as not needing a match (e.g. a card payment)
+  createdAt      DateTime      @default(now())
+
+  @@index([statementId])
+  @@index([monthId])
 }
 
 // Singleton (id = "global") — stores the delegated OAuth tokens for the shared

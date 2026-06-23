@@ -41,7 +41,9 @@ Return STRICT JSON only (no prose, no markdown):
   "vatCode": 1|2|7,          // 1 = 20% VAT shown/reclaimable; 2 = no/zero VAT; 7 = clearly personal
   "column": string,          // one of: ${NOMINAL_KEYS.join(", ")}
   "notes": string,           // "" or a short note if unclear (e.g. mixed VAT)
-  "group": string            // give EVERY part you split from ONE invoice the SAME non-empty value (e.g. supplier + grand total); "" for a normal standalone receipt
+  "group": string,           // give EVERY part you split from ONE invoice the SAME non-empty value (e.g. supplier + grand total); "" for a normal standalone receipt
+  "currency": string,        // ISO currency on the invoice — "GBP" unless it's clearly in another currency (e.g. "EUR", "USD")
+  "originalAmount": number|null // the gross IN THAT foreign currency (e.g. 99 for €99); null when the invoice is in GBP
 } ] }
 
 ${COLUMN_GUIDE}
@@ -50,7 +52,8 @@ Rules:
 - DO NOT GUESS "item" or "website". Only fill them if clearly visible; otherwise "". Never invent a website.
 - If a VAT amount/number is shown, use vatCode 1 and put the VAT figure in "vat". If no VAT shown, vatCode 2 and vat 0.
 - SPLIT MIXED INVOICES: if ONE receipt/invoice mixes things that must be booked DIFFERENTLY — e.g. FOOD/meals AND ACCOMMODATION/travel, or items at DIFFERENT VAT rates — return a SEPARATE object for EACH such category, each with its own gross (that category's total INCLUDING its VAT), its own vat, vatCode and column, so the objects SUM to the invoice's grand total. Put each "item" as the category name (e.g. "Accommodation", "Breakfast"). A single-category receipt (all food, all fuel, a shop of one type) stays ONE object — NEVER split per individual line item, only by booking category/VAT rate. Give every part of the SAME invoice the SAME "group" value so they stay linked; genuinely separate receipts (e.g. several receipts in one photo) must have a DIFFERENT or empty "group".
-- Numbers only for gross/vat — no symbols or commas. If a figure is unreadable, use 0 and say so in "notes".`
+- FOREIGN CURRENCY: if the invoice is NOT in GBP, set "currency" to its ISO code and "originalAmount" to the gross in that currency (e.g. EUR 99 → currency "EUR", originalAmount 99). Still put your best GBP estimate in "gross" (or 0 if you can't tell). For a normal GBP invoice use currency "GBP" and originalAmount null.
+- Numbers only for gross/vat/originalAmount — no symbols or commas. If a figure is unreadable, use 0 and say so in "notes".`
 }
 
 function mimeForKey(key: string): string {
@@ -76,6 +79,8 @@ async function normalise(p: any, extraNote: string | null) {
   const notes = [typeof p?.notes === "string" ? p.notes.trim() : "", extraNote ? `AI: ${extraNote}` : ""]
     .filter(Boolean).join(" · ").slice(0, 500) || null
   const group = typeof p?.group === "string" ? p.group.trim().slice(0, 120) : ""
+  const currency = (typeof p?.currency === "string" && p.currency.trim() ? p.currency.trim().toUpperCase().slice(0, 8) : "GBP")
+  const originalAmount = currency !== "GBP" && Number.isFinite(Number(p?.originalAmount)) && Number(p.originalAmount) > 0 ? r2p(Number(p.originalAmount)) : null
 
   if (supplier) {
     const rule = await prisma.accountingSupplierRule.findUnique({ where: { match: normaliseSupplier(supplier) } })
@@ -83,7 +88,7 @@ async function normalise(p: any, extraNote: string | null) {
   }
   if (vatCode === 1 && vat === 0 && gross > 0) vat = vatFromGross(gross, 1)
   if (vatCode !== 1) vat = 0
-  return { supplier, item, website, docDate, vatCode, gross, vat, net: netFromGross(gross, vat), column, aiNotes: notes, group }
+  return { supplier, item, website, docDate, vatCode, gross, vat, net: netFromGross(gross, vat), column, aiNotes: notes, group, currency, originalAmount }
 }
 
 // READER (preview, no writes). Reads ONE invoice and returns the proposed fields.
@@ -177,6 +182,7 @@ export async function POST(req: NextRequest) {
         supplier: f.supplier, item: f.item, website: f.website,
         docDate: f.docDate ? f.docDate.toISOString().slice(0, 10) : "",
         vatCode: f.vatCode, gross: f.gross, vat: f.vat, net: f.net, column: f.column, aiNotes: f.aiNotes, group: f.group,
+        currency: f.currency, originalAmount: f.originalAmount,
       })
     }
 

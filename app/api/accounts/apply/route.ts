@@ -32,7 +32,9 @@ function clean(r: any) {
   const aiNotes = typeof r?.aiNotes === "string" && r.aiNotes.trim() ? r.aiNotes.trim().slice(0, 500) : null
   const pages = Array.isArray(r?.pages) ? r.pages.map((n: any) => Number(n)).filter((n: number) => Number.isInteger(n) && n >= 1) : []
   const group = typeof r?.group === "string" ? r.group.trim().slice(0, 120) : ""
-  return { supplier, item, website, docDate, vatCode, gross, vat, net: netFromGross(gross, vat), column, aiNotes, pages, group }
+  const currency = (typeof r?.currency === "string" && r.currency.trim() ? r.currency.trim().toUpperCase().slice(0, 8) : "GBP")
+  const originalAmount = currency !== "GBP" && Number.isFinite(Number(r?.originalAmount)) && Number(r.originalAmount) > 0 ? r2p(Number(r.originalAmount)) : null
+  return { supplier, item, website, docDate, vatCode, gross, vat, net: netFromGross(gross, vat), column, aiNotes, pages, group, currency, originalAmount }
 }
 
 // Commit an approved AI proposal. receipt[0] updates the line; further receipts
@@ -112,6 +114,7 @@ export async function POST(req: NextRequest) {
         docDate: f.docDate ? f.docDate.toISOString().slice(0, 10) : "",
         vatCode: f.vatCode, gross: f.gross, vat: f.vat, net: f.net, column: f.column,
         reviewed: false, aiRun: true, aiNotes: f.aiNotes, splitGroupId,
+        currency: f.currency, originalAmount: f.originalAmount,
       })
     }
 
@@ -124,6 +127,7 @@ export async function POST(req: NextRequest) {
       docDate: firstData.docDate ? firstData.docDate.toISOString().slice(0, 10) : "",
       vatCode: firstData.vatCode, gross: firstData.gross, vat: firstData.vat, net: firstData.net, column: firstData.column,
       aiNotes: firstData.aiNotes, splitGroupId: firstSplitId,
+      currency: firstData.currency, originalAmount: firstData.originalAmount,
       images: [await getSignedImageUrl(primaryImages[0])],
       extra,
     })

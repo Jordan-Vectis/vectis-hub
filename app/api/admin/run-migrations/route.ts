@@ -523,6 +523,46 @@ const MIGRATIONS = [
 
   // 2026-06-23 — Accounts: lines split from one invoice share a splitGroupId (grouped in the UI)
   `ALTER TABLE "AccountingDocument" ADD COLUMN IF NOT EXISTS "splitGroupId" TEXT`,
+
+  // 2026-06-23 — Accounts: capture original currency + foreign amount (for reconciliation)
+  `ALTER TABLE "AccountingDocument" ADD COLUMN IF NOT EXISTS "currency"       TEXT DEFAULT 'GBP'`,
+  `ALTER TABLE "AccountingDocument" ADD COLUMN IF NOT EXISTS "originalAmount" DOUBLE PRECISION`,
+
+  // 2026-06-23 — Accounts: bank/card statement reconciliation
+  `CREATE TABLE IF NOT EXISTS "BankStatement" (
+    "id"        TEXT         NOT NULL,
+    "monthId"   TEXT         NOT NULL,
+    "label"     TEXT         NOT NULL DEFAULT '',
+    "source"    TEXT         NOT NULL DEFAULT 'SCAN',
+    "images"    TEXT[]       NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "BankStatement_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "BankStatement_monthId_fkey" FOREIGN KEY ("monthId")
+      REFERENCES "AccountingMonth"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "BankStatement_monthId_idx" ON "BankStatement"("monthId")`,
+  `CREATE TABLE IF NOT EXISTS "BankTransaction" (
+    "id"             TEXT             NOT NULL,
+    "statementId"    TEXT             NOT NULL,
+    "monthId"        TEXT             NOT NULL,
+    "postDate"       TIMESTAMP(3),
+    "tranDate"       TIMESTAMP(3),
+    "description"    TEXT             NOT NULL DEFAULT '',
+    "reference"      TEXT             NOT NULL DEFAULT '',
+    "amount"         DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "currency"       TEXT             NOT NULL DEFAULT 'GBP',
+    "originalAmount" DOUBLE PRECISION,
+    "feeAmount"      DOUBLE PRECISION,
+    "direction"      TEXT             NOT NULL DEFAULT 'DEBIT',
+    "matchedDocIds"  TEXT[]           NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "ignored"        BOOLEAN          NOT NULL DEFAULT FALSE,
+    "createdAt"      TIMESTAMP(3)     NOT NULL DEFAULT NOW(),
+    CONSTRAINT "BankTransaction_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "BankTransaction_statementId_fkey" FOREIGN KEY ("statementId")
+      REFERENCES "BankStatement"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "BankTransaction_statementId_idx" ON "BankTransaction"("statementId")`,
+  `CREATE INDEX IF NOT EXISTS "BankTransaction_monthId_idx"     ON "BankTransaction"("monthId")`,
 ]
 
 export async function POST() {

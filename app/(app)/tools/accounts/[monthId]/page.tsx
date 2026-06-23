@@ -44,6 +44,8 @@ export default async function AccountsMonthPage({ params }: { params: Promise<{ 
       aiRun: d.aiRun,
       aiNotes: d.aiNotes,
       splitGroupId: d.splitGroupId,
+      currency: d.currency ?? "GBP",
+      originalAmount: d.originalAmount,
       }
     })
   )

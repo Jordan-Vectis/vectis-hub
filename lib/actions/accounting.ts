@@ -126,7 +126,7 @@ export async function splitAccountingDocument(docId: string) {
       monthId: doc.monthId, cardholder: doc.cardholder, source: doc.source, images: newKeys,
       supplier: doc.supplier, item: doc.item, website: doc.website, docDate: doc.docDate,
       vatCode: doc.vatCode, column: doc.column, gross: 0, vat: 0, net: 0, aiRun: true,
-      splitGroupId: groupId,
+      splitGroupId: groupId, currency: doc.currency ?? "GBP",
     },
   })
   revalidatePath(`/tools/accounts/${doc.monthId}`)
@@ -137,6 +137,7 @@ export async function splitAccountingDocument(docId: string) {
     docDate: created.docDate ? created.docDate.toISOString().slice(0, 10) : "",
     vatCode: created.vatCode, gross: created.gross, vat: created.vat, net: created.net,
     column: created.column, aiNotes: null as string | null, splitGroupId: groupId,
+    currency: created.currency, originalAmount: created.originalAmount,
   }
 }
 

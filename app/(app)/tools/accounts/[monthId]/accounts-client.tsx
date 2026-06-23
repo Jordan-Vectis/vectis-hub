@@ -11,6 +11,13 @@ type Row = {
   supplier: string; item: string; website: string; docDate: string
   vatCode: number; gross: number; vat: number; net: number
   column: string; reviewed: boolean; aiRun: boolean; aiNotes: string | null; splitGroupId: string | null
+  currency: string; originalAmount: number | null
+}
+
+const CCY_SYMBOL: Record<string, string> = { GBP: "£", EUR: "€", USD: "$" }
+function ccy(code: string, amount: number): string {
+  const s = CCY_SYMBOL[code] ?? (code + " ")
+  return s + amount.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 // Keep split-group members contiguous (in first-appearance order); singles stay put.
@@ -93,7 +100,7 @@ export default function AccountsMonthClient({
             const { id, images } = await res.json()
             setRows((rs) => [...rs, {
               id, cardholder, source: "SCAN", images, supplier: "", item: "", website: "", docDate: "",
-              vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiRun: false, aiNotes: null, splitGroupId: null,
+              vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiRun: false, aiNotes: null, splitGroupId: null, currency: "GBP", originalAmount: null,
             }])
             if (multiPage) { curId = id; setCurrentDocId(id) }
           }
@@ -268,7 +275,7 @@ export default function AccountsMonthClient({
       const { id } = await addManualDocument(monthId, cardholder)
       setRows((rs) => [...rs, {
         id, cardholder, source: "MANUAL", images: [], supplier: "", item: "", website: "", docDate: "",
-        vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiRun: true, aiNotes: null, splitGroupId: null,
+        vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiRun: true, aiNotes: null, splitGroupId: null, currency: "GBP", originalAmount: null,
       }])
       setFlashId(id)
     })
@@ -551,6 +558,9 @@ export default function AccountsMonthClient({
                         </td>
                         <td className="p-1.5">
                           <input type="number" step="0.01" value={r.gross} onChange={(e) => patch(r.id, { gross: Number(e.target.value) })} className={`${cell} text-right`} />
+                          {r.currency !== "GBP" && r.originalAmount != null && (
+                            <p className="text-[10px] text-sky-600 dark:text-sky-400 mt-0.5 text-right" title="Original invoice amount — GBP charged may differ on the bank statement">{ccy(r.currency, r.originalAmount)}</p>
+                          )}
                         </td>
                         <td className="p-1.5">
                           <input type="number" step="0.01" value={r.vat} onChange={(e) => patch(r.id, { vat: Number(e.target.value), net: round(r.gross - Number(e.target.value)) })} className={`${cell} text-right`} />
