@@ -38,8 +38,10 @@ function receiptChanges(row: { supplier: string; vatCode: number; column: string
 // still shows.
 function dropZeroSplits(receipts: any[]): any[] {
   if (!Array.isArray(receipts) || receipts.length <= 1) return receipts
-  const nonZero = receipts.filter((r) => Number(r?.gross) > 0)
-  return nonZero.length ? nonZero : [receipts[0]]
+  // Keep lines with an amount AND lines flagged "price missing" (real, just unreadable);
+  // only the rest (£0 phantoms) get dropped.
+  const keep = receipts.filter((r) => Number(r?.gross) > 0 || r?.priceMissing === true)
+  return keep.length ? keep : [receipts[0]]
 }
 
 // Keep split-group members contiguous (in first-appearance order); singles stay put.
@@ -98,6 +100,7 @@ export default function AccountsMonthClient({
   const [filterText, setFilterText] = useState("")
   const [filterCard, setFilterCard] = useState("")
   const [filterReview, setFilterReview] = useState(false)
+  const [stitching, setStitching] = useState(false)
   const [applying, setApplying] = useState(false)
   const [deselected, setDeselected] = useState<Set<string>>(new Set())   // To-read scans the user has un-ticked
 
@@ -287,6 +290,21 @@ export default function AccountsMonthClient({
     setRunning(false)
     setSelected(new Set())
     if (previews.length) setAiPreview(previews.map((p) => ({ ...p, receipts: dropZeroSplits(p.receipts) })))
+  }
+
+  // Stitch multi-photo invoices: AI groups which ticked photos are the same invoice,
+  // then merges their pages into one document (review the page counts before Run AI).
+  async function stitchToRead() {
+    const ids = selectedToRead.filter((r) => r.images.length > 0 && !isPdf(r.images[0])).map((r) => r.id)
+    if (ids.length < 2) { alert("Tick at least 2 photos to look for multi-photo invoices."); return }
+    if (!confirm(`Look across ${Math.min(ids.length, 20)} ticked photo(s) for ones that are pages of the SAME invoice and stitch them together?\n\nNothing is read or deleted — pages just join one document, which you then Run AI on.`)) return
+    setStitching(true)
+    try {
+      const res = await fetch("/api/accounts/stitch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ docIds: ids }) })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) alert(j.error || "Couldn't stitch the photos.")
+      else if (!j.merged) alert("No multi-photo invoices found — each photo looks like its own receipt.")
+    } finally { setStitching(false); router.refresh() }
   }
 
   // Approve the previewed proposals → commit them.
@@ -515,6 +533,7 @@ export default function AccountsMonthClient({
             <div className="flex items-center gap-3 text-xs font-semibold">
               <button onClick={() => setDeselected(new Set())} className="text-emerald-600 hover:text-emerald-500">Select all</button>
               <button onClick={() => setDeselected(new Set(toRead.map((r) => r.id)))} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Select none</button>
+              <button onClick={stitchToRead} disabled={stitching || selectedToRead.length < 2} className="text-blue-600 hover:text-blue-500 disabled:opacity-40" title="Detect & join photos that are pages of the same invoice">{stitching ? "Stitching…" : "🧵 Stitch multi-photo"}</button>
               <button onClick={() => { if (confirm(`Delete all ${toRead.length} un-read scan${toRead.length === 1 ? "" : "s"}? They won't be read or saved.`)) { const ids = toRead.map((r) => r.id); setRows((rs) => rs.filter((r) => !ids.includes(r.id))); startBusy(async () => { await bulkDeleteAccountingDocuments(ids) }) } }} disabled={busy} className="text-red-500 hover:text-red-700 disabled:opacity-50">Delete all</button>
             </div>
           </div>
@@ -886,6 +905,7 @@ export default function AccountsMonthClient({
                               : <p className="text-[10px] text-gray-400">↻ No change</p>
                           )}
                           {!isPrimary && <p className="text-[10px] text-emerald-600 dark:text-emerald-400">+ new split line</p>}
+                          {r.priceMissing && <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">⚠ Price not on the document — type it in</p>}
                         </div>
                         )
                       })}

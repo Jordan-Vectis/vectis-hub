@@ -37,6 +37,7 @@ Return STRICT JSON only (no prose, no markdown):
   "website": string,         // the supplier's website/URL — ONLY if it actually appears, else ""
   "date": string|null,       // document date as YYYY-MM-DD, or null
   "gross": number,           // the FINAL total actually PAID incl. VAT — the bottom-line "Total"/"Amount Due"/"Balance"/"Card"/"Paid" figure. NEVER a "Sub total"/"Subtotal"/net/pre-VAT line
+  "priceMissing": boolean,   // true ONLY if this is a real receipt/invoice but its total is genuinely not printed/readable — then set gross to 0 and do NOT guess a number
   "vat": number,             // VAT amount shown, GBP; 0 if none shown
   "vatCode": 1|2|7,          // 1 = 20% VAT shown/reclaimable; 2 = no/zero VAT; 7 = clearly personal
   "column": string,          // one of: ${NOMINAL_KEYS.join(", ")}
@@ -53,7 +54,8 @@ Rules:
 - If a VAT amount/number is shown, use vatCode 1 and put the VAT figure in "vat". If no VAT shown, vatCode 2 and vat 0.
 - SPLIT MIXED INVOICES: if ONE receipt/invoice mixes things that must be booked DIFFERENTLY — e.g. FOOD/meals AND ACCOMMODATION/travel, or items at DIFFERENT VAT rates — return a SEPARATE object for EACH such category, each with its own gross (that category's total INCLUDING its VAT), its own vat, vatCode and column, so the objects SUM to the invoice's grand total. Put each "item" as the category name (e.g. "Accommodation", "Breakfast"). A single-category receipt (all food, all fuel, a shop of one type) stays ONE object — NEVER split per individual line item, only by booking category/VAT rate. Give every part of the SAME invoice the SAME "group" value so they stay linked; genuinely separate receipts (e.g. several receipts in one photo) must have a DIFFERENT or empty "group".
 - FOREIGN CURRENCY: if the invoice is NOT in GBP, set "currency" to its ISO code and "originalAmount" to the gross in that currency (e.g. EUR 99 → currency "EUR", originalAmount 99). Still put your best GBP estimate in "gross" (or 0 if you can't tell). For a normal GBP invoice use currency "GBP" and originalAmount null.
-- Numbers only for gross/vat/originalAmount — no symbols or commas. If a figure is unreadable, use 0 and say so in "notes".`
+- If the total genuinely isn't on the document or you can't read it, DON'T invent a number — set gross 0 and priceMissing true. Otherwise priceMissing false.
+- Numbers only for gross/vat/originalAmount — no symbols or commas.`
 }
 
 function mimeForKey(key: string): string {
@@ -76,7 +78,8 @@ async function normalise(p: any, extraNote: string | null) {
   const gross = Number.isFinite(Number(p?.gross)) ? r2p(Number(p.gross)) : 0
   let vat = Number.isFinite(Number(p?.vat)) ? r2p(Number(p.vat)) : 0
   const docDate = typeof p?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(p.date) ? new Date(p.date) : null
-  const notes = [typeof p?.notes === "string" ? p.notes.trim() : "", extraNote ? `AI: ${extraNote}` : ""]
+  const priceMissing = p?.priceMissing === true && gross === 0
+  const notes = [priceMissing ? "⚠ Price not on the document — enter it manually" : "", typeof p?.notes === "string" ? p.notes.trim() : "", extraNote ? `AI: ${extraNote}` : ""]
     .filter(Boolean).join(" · ").slice(0, 500) || null
   const group = typeof p?.group === "string" ? p.group.trim().slice(0, 120) : ""
   const currency = (typeof p?.currency === "string" && p.currency.trim() ? p.currency.trim().toUpperCase().slice(0, 8) : "GBP")
@@ -88,7 +91,7 @@ async function normalise(p: any, extraNote: string | null) {
   }
   if (vatCode === 1 && vat === 0 && gross > 0) vat = vatFromGross(gross, 1)
   if (vatCode !== 1) vat = 0
-  return { supplier, item, website, docDate, vatCode, gross, vat, net: netFromGross(gross, vat), column, aiNotes: notes, group, currency, originalAmount }
+  return { supplier, item, website, docDate, vatCode, gross, vat, net: netFromGross(gross, vat), column, aiNotes: notes, group, currency, originalAmount, priceMissing }
 }
 
 // READER (preview, no writes). Reads ONE invoice and returns the proposed fields.
@@ -182,7 +185,7 @@ export async function POST(req: NextRequest) {
         supplier: f.supplier, item: f.item, website: f.website,
         docDate: f.docDate ? f.docDate.toISOString().slice(0, 10) : "",
         vatCode: f.vatCode, gross: f.gross, vat: f.vat, net: f.net, column: f.column, aiNotes: f.aiNotes, group: f.group,
-        currency: f.currency, originalAmount: f.originalAmount,
+        currency: f.currency, originalAmount: f.originalAmount, priceMissing: f.priceMissing,
       })
     }
 
