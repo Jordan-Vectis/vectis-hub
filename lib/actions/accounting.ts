@@ -329,16 +329,16 @@ export async function autoMatchStatement(statementId: string) {
     where: { monthId: stmt.monthId, ...(stmt.cardholder ? { cardholder: stmt.cardholder } : {}) },
   })
 
-  type Unit = { docIds: string[]; amount: number; currency: string; originalAmount: number | null; date: Date | null }
+  type Unit = { docIds: string[]; amount: number; currency: string; originalAmount: number | null; date: Date | null; label: string }
   const units: Unit[] = []
   const groups = new Map<string, typeof docs>()
   for (const d of docs) {
     if (d.splitGroupId) { const a = groups.get(d.splitGroupId) ?? []; a.push(d); groups.set(d.splitGroupId, a) }
-    else units.push({ docIds: [d.id], amount: r2p(d.gross), currency: d.currency ?? "GBP", originalAmount: d.originalAmount ?? null, date: d.docDate })
+    else units.push({ docIds: [d.id], amount: r2p(d.gross), currency: d.currency ?? "GBP", originalAmount: d.originalAmount ?? null, date: d.docDate, label: `${d.supplier || ""} ${d.item || ""}`.trim() })
   }
   for (const [, arr] of groups) {
-    if (arr.length === 1) { const d = arr[0]; units.push({ docIds: [d.id], amount: r2p(d.gross), currency: d.currency ?? "GBP", originalAmount: d.originalAmount ?? null, date: d.docDate }) }
-    else units.push({ docIds: arr.map((d) => d.id), amount: r2p(arr.reduce((a, d) => a + d.gross, 0)), currency: arr[0].currency ?? "GBP", originalAmount: arr[0].originalAmount ?? null, date: arr[0].docDate })
+    if (arr.length === 1) { const d = arr[0]; units.push({ docIds: [d.id], amount: r2p(d.gross), currency: d.currency ?? "GBP", originalAmount: d.originalAmount ?? null, date: d.docDate, label: `${d.supplier || ""} ${d.item || ""}`.trim() }) }
+    else units.push({ docIds: arr.map((d) => d.id), amount: r2p(arr.reduce((a, d) => a + d.gross, 0)), currency: arr[0].currency ?? "GBP", originalAmount: arr[0].originalAmount ?? null, date: arr[0].docDate, label: `${arr[0].supplier || ""} (split)`.trim() })
   }
 
   const used = new Set<string>()
@@ -353,14 +353,15 @@ export async function autoMatchStatement(statementId: string) {
       const fxMatch = t.currency !== "GBP" && t.originalAmount != null && u.originalAmount != null && u.currency === t.currency && Math.abs(u.originalAmount - t.originalAmount) < 0.005
       return gbpMatch || fxMatch
     })
+    const sim = (a: string, b: string) => { const w = (s: string) => new Set(s.toLowerCase().split(/\W+/).filter(x => x.length > 2)); const wA = w(a), wB = w(b); const c = [...wA].filter(x => wB.has(x)).length; const u = new Set([...wA, ...wB]).size; return u > 0 ? c / u : 0 }
     let pick: Unit | null = null
-    if (cands.length === 1) pick = cands[0]
-    else if (cands.length > 1) {
+    if (cands.length === 1) {
+      pick = cands[0]
+    } else if (cands.length > 1) {
       const ref = t.tranDate ?? t.postDate
-      if (ref) {
-        const scored = cands.map((u) => ({ u, d: u.date ? Math.abs(u.date.getTime() - ref.getTime()) : Infinity })).sort((a, b) => a.d - b.d)
-        if (scored.length < 2 || scored[0].d !== scored[1].d) pick = scored[0].u
-      }
+      const txnText = `${t.description} ${t.reference || ""}`
+      const ranked = cands.map((u) => ({ u, dist: ref && u.date ? Math.abs(u.date.getTime() - ref.getTime()) : Infinity, sim: sim(txnText, u.label) })).sort((a, b) => a.dist !== b.dist ? a.dist - b.dist : b.sim - a.sim)
+      pick = ranked[0].u
     }
     if (pick) { pick.docIds.forEach((id) => used.add(id)); updates.push({ id: t.id, matchedDocIds: pick.docIds }) }
   }

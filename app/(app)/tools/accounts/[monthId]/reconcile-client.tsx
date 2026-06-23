@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   deleteBankStatement, autoMatchStatement, setTransactionMatch,
@@ -26,9 +26,20 @@ const fmtCcy = (c: string, n: number) => (CCY[c] ?? c + " ") + (n || 0).toLocale
 
 type Unit = { key: string; docIds: string[]; amount: number; label: string }
 
+function descSim(a: string, b: string): number {
+  const w = (s: string) => new Set(s.toLowerCase().split(/\W+/).filter(x => x.length > 2))
+  const wA = w(a), wB = w(b)
+  const common = [...wA].filter(x => wB.has(x)).length
+  const union = new Set([...wA, ...wB]).size
+  return union > 0 ? common / union : 0
+}
+
 export default function AccountsReconcile({
-  monthId, entries, statements, cardholders,
-}: { monthId: string; entries: Entry[]; statements: Statement[]; cardholders: string[] }) {
+  monthId, entries, statements, cardholders, standalone,
+}: {
+  monthId: string; entries: Entry[]; statements: Statement[]; cardholders: string[]
+  standalone?: boolean
+}) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [busy, startBusy] = useTransition()
@@ -40,14 +51,21 @@ export default function AccountsReconcile({
   const addPageInput = useRef<HTMLInputElement>(null)
   const csvInput = useRef<HTMLInputElement>(null)
 
+  useEffect(() => {
+    const saved = localStorage.getItem(`reconcile_stmt_${monthId}`)
+    if (saved && statements.find(s => s.id === saved)) setActiveId(saved)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (activeId) localStorage.setItem(`reconcile_stmt_${monthId}`, activeId)
+  }, [activeId, monthId])
+
   const active = statements.find((s) => s.id === activeId) ?? statements[statements.length - 1] ?? null
   const entryById = new Map(entries.map((e) => [e.id, e]))
   const run = (fn: () => Promise<any>) => startBusy(async () => { await fn(); router.refresh() })
 
-  // Only this statement's cardholder's entries are matchable against it.
   const scopedEntries = active && active.cardholder ? entries.filter((e) => e.cardholder === active.cardholder) : entries
 
-  // Entered lines as match units (a split invoice = one unit summing its parts).
   const units: Unit[] = (() => {
     const out: Unit[] = []
     const groups = new Map<string, Entry[]>()
@@ -96,7 +114,6 @@ export default function AccountsReconcile({
     } finally { setReading(false); router.refresh() }
   }
 
-  // Basic CSV import (backup): expects a header row with Date, Description, Amount (and optional Currency, OriginalAmount).
   async function importCsv(file: File | null) {
     if (!file) return
     const text = await file.text()
@@ -122,6 +139,141 @@ export default function AccountsReconcile({
 
   const input = "px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
 
+  const content = (
+    <div className={standalone ? "space-y-4" : "p-4 pt-0 space-y-4"}>
+      <div className="flex items-center gap-2 flex-wrap">
+        {statements.map((s) => (
+          <button key={s.id} onClick={() => setActiveId(s.id)}
+            className={`text-xs px-3 py-1.5 rounded-lg border ${active?.id === s.id ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300"}`}>
+            {s.source === "CSV" ? "📄" : "🧾"} <span className="font-semibold">{s.cardholder || "?"}</span>{s.label ? " — " + s.label : ""} · {s.transactions.length}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <label className="text-xs text-gray-500 dark:text-gray-400">New statement for card:
+          <select value={newCardholder} onChange={(e) => setNewCardholder(e.target.value)} className={`${input} ml-1.5 text-xs py-1`}>
+            {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </label>
+        <input ref={fileInput} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files, null, newCardholder); e.currentTarget.value = "" }} />
+        <input ref={csvInput} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => { importCsv(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
+        <button onClick={() => fileInput.current?.click()} disabled={uploading} className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50">{uploading ? "Uploading…" : "+ New statement (photo/PDF)"}</button>
+        <button onClick={() => csvInput.current?.click()} disabled={uploading} className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300">Import CSV</button>
+      </div>
+
+      {active && (
+        <>
+          <div className="flex items-center gap-2 flex-wrap border-t border-gray-100 dark:border-gray-800 pt-3">
+            <label className="text-xs text-gray-500 dark:text-gray-400">Card:
+              <select value={active.cardholder} disabled={busy} onChange={(e) => run(() => setStatementCardholder(active.id, e.target.value))} className={`${input} ml-1.5 text-xs py-1`} title="Change which card/account this statement is for (clears matches — re-run Auto-match)">
+                {active.cardholder && !cardholders.includes(active.cardholder) && <option value={active.cardholder}>{active.cardholder}</option>}
+                {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+            {active.source !== "CSV" && (
+              <>
+                <input ref={addPageInput} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files, active.id); e.currentTarget.value = "" }} />
+                <button onClick={() => addPageInput.current?.click()} disabled={uploading} className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300">+ Add page ({active.images.length})</button>
+                <button onClick={() => readStatement(active.id)} disabled={reading || active.images.length === 0} className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50">{reading ? "Reading…" : "🤖 Read statement (AI)"}</button>
+              </>
+            )}
+            <button onClick={() => run(() => autoMatchStatement(active.id))} disabled={busy || active.transactions.length === 0} className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50">⚡ Auto-match</button>
+            <button onClick={() => { if (confirm("Delete this statement and its transactions?")) run(() => deleteBankStatement(active.id)) }} disabled={busy} className="text-xs font-semibold px-3 py-1.5 rounded-lg text-red-500 hover:bg-red-500/10 ml-auto">Delete statement</button>
+          </div>
+
+          {active.cardholder && <p className="text-[11px] text-gray-400">Matching against <span className="font-semibold text-gray-500 dark:text-gray-300">{active.cardholder}</span>&apos;s entered lines only.</p>}
+
+          {active.transactions.length === 0 ? (
+            <p className="text-sm text-gray-400 py-4">{active.source === "CSV" ? "No rows imported." : "No transactions yet — press “Read statement (AI)” to pull them from the pages."}</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-[10px] uppercase tracking-wide text-gray-400 border-b border-gray-200 dark:border-gray-800">
+                    <th className="text-left p-1.5">Date</th>
+                    <th className="text-left p-1.5">Description</th>
+                    <th className="text-right p-1.5">Amount</th>
+                    <th className="text-left p-1.5">Match</th>
+                    <th className="p-1.5"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {active.transactions.map((t) => {
+                    const matched = t.matchedDocIds.map((id) => entryById.get(id)).filter(Boolean) as Entry[]
+                    const isMatched = matched.length > 0
+                    const credit = t.direction === "CREDIT"
+
+                    const txnText = `${t.description} ${t.reference || ""}`
+                    const exactCands = freeUnits.filter(u => Math.abs(u.amount - t.amount) < 0.005)
+                    const suggestions = exactCands.length > 0
+                      ? exactCands.slice().sort((a, b) => descSim(txnText, b.label) - descSim(txnText, a.label))
+                      : freeUnits.slice().sort((a, b) => Math.abs(a.amount - t.amount) - Math.abs(b.amount - t.amount)).slice(0, 5)
+                    const noExact = exactCands.length === 0
+
+                    return (
+                      <tr key={t.id} className={`border-b border-gray-100 dark:border-gray-800/60 align-top ${t.ignored ? "opacity-40" : isMatched ? "bg-emerald-50/40 dark:bg-emerald-500/5" : credit ? "" : "bg-amber-50/40 dark:bg-amber-500/5"}`}>
+                        <td className="p-1.5 whitespace-nowrap text-gray-500 dark:text-gray-400 text-xs">{(t.tranDate || t.postDate || "").split("-").reverse().join("/")}</td>
+                        <td className="p-1.5">
+                          <span className="text-gray-800 dark:text-gray-200">{t.description || "(no description)"}</span>
+                          {t.reference && <span className="text-gray-400 text-xs"> · {t.reference}</span>}
+                          {credit && <span className="ml-1 text-[10px] text-purple-600 dark:text-purple-400">(payment/credit)</span>}
+                        </td>
+                        <td className="p-1.5 text-right whitespace-nowrap tabular-nums">
+                          {gbp(t.amount)}
+                          {t.currency !== "GBP" && t.originalAmount != null && <div className="text-[10px] text-sky-600 dark:text-sky-400">{fmtCcy(t.currency, t.originalAmount)}</div>}
+                        </td>
+                        <td className="p-1.5 min-w-[14rem]">
+                          {t.ignored ? (
+                            <span className="text-xs text-gray-400">Ignored</span>
+                          ) : isMatched ? (
+                            <div className="space-y-0.5">
+                              {matched.map((e) => (
+                                <div key={e.id} className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-xs text-emerald-700 dark:text-emerald-300">✓ {e.supplier || "(no description)"}{e.item ? " — " + e.item : ""} · {gbp(e.gross)}</span>
+                                  {Math.abs(e.gross - t.amount) > 0.005 && matched.length === 1 && (
+                                    <button onClick={() => run(() => snapDocAmount(e.id, t.amount))} disabled={busy} className="text-[10px] font-semibold text-sky-600 hover:underline">set to {gbp(t.amount)}</button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <select disabled={busy} value="" onChange={(e) => { const u = freeUnits.find((x) => x.key === e.target.value); if (u) run(() => setTransactionMatch(t.id, u.docIds)) }} className={`${input} w-full text-xs`}>
+                              <option value="">{noExact ? `— no exact match (${suggestions.length} nearest) —` : `— ${suggestions.length} match${suggestions.length !== 1 ? "es" : ""} found —`}</option>
+                              {suggestions.map((u) => (
+                                <option key={u.key} value={u.key}>{noExact ? "~" : "✓"} {u.label} · {gbp(u.amount)}</option>
+                              ))}
+                            </select>
+                          )}
+                        </td>
+                        <td className="p-1.5 text-right whitespace-nowrap">
+                          {isMatched && !t.ignored && <button onClick={() => run(() => setTransactionMatch(t.id, []))} disabled={busy} className="text-xs text-gray-400 hover:text-red-500 mr-2" title="Unmatch">unmatch</button>}
+                          <button onClick={() => run(() => setTransactionIgnored(t.id, !t.ignored))} disabled={busy} className="text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" title="Ignore this transaction">{t.ignored ? "un-ignore" : "ignore"}</button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {freeUnits.length > 0 && active.transactions.length > 0 && (
+            <div className="border-t border-gray-100 dark:border-gray-800 pt-3">
+              <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-1">⚠ Entered, but not matched to any transaction ({freeUnits.length})</p>
+              <div className="flex flex-wrap gap-1.5">
+                {freeUnits.map((u) => (
+                  <span key={u.key} className="text-xs px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300">{u.label} · {gbp(u.amount)}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+
+  if (standalone) return content
+
   return (
     <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 mt-6">
       <button onClick={() => setOpen((o) => !o)} className="w-full flex items-center justify-between gap-3 p-4 text-left">
@@ -135,133 +287,7 @@ export default function AccountsReconcile({
         <span className="text-gray-400 text-lg">{open ? "▾" : "▸"}</span>
       </button>
 
-      {open && (
-        <div className="p-4 pt-0 space-y-4">
-          {/* Statement picker + add */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {statements.map((s) => (
-              <button key={s.id} onClick={() => setActiveId(s.id)}
-                className={`text-xs px-3 py-1.5 rounded-lg border ${active?.id === s.id ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300"}`}>
-                {s.source === "CSV" ? "📄" : "🧾"} <span className="font-semibold">{s.cardholder || "?"}</span>{s.label ? " — " + s.label : ""} · {s.transactions.length}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <label className="text-xs text-gray-500 dark:text-gray-400">New statement for card:
-              <select value={newCardholder} onChange={(e) => setNewCardholder(e.target.value)} className={`${input} ml-1.5 text-xs py-1`}>
-                {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </label>
-            <input ref={fileInput} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files, null, newCardholder); e.currentTarget.value = "" }} />
-            <input ref={csvInput} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => { importCsv(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
-            <button onClick={() => fileInput.current?.click()} disabled={uploading} className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50">{uploading ? "Uploading…" : "+ New statement (photo/PDF)"}</button>
-            <button onClick={() => csvInput.current?.click()} disabled={uploading} className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300">Import CSV</button>
-          </div>
-
-          {active && (
-            <>
-              {/* Statement actions */}
-              <div className="flex items-center gap-2 flex-wrap border-t border-gray-100 dark:border-gray-800 pt-3">
-                <label className="text-xs text-gray-500 dark:text-gray-400">Card:
-                  <select value={active.cardholder} disabled={busy} onChange={(e) => run(() => setStatementCardholder(active.id, e.target.value))} className={`${input} ml-1.5 text-xs py-1`} title="Change which card/account this statement is for (clears matches — re-run Auto-match)">
-                    {active.cardholder && !cardholders.includes(active.cardholder) && <option value={active.cardholder}>{active.cardholder}</option>}
-                    {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </label>
-                {active.source !== "CSV" && (
-                  <>
-                    <input ref={addPageInput} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files, active.id); e.currentTarget.value = "" }} />
-                    <button onClick={() => addPageInput.current?.click()} disabled={uploading} className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300">+ Add page ({active.images.length})</button>
-                    <button onClick={() => readStatement(active.id)} disabled={reading || active.images.length === 0} className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50">{reading ? "Reading…" : "🤖 Read statement (AI)"}</button>
-                  </>
-                )}
-                <button onClick={() => run(() => autoMatchStatement(active.id))} disabled={busy || active.transactions.length === 0} className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50">⚡ Auto-match</button>
-                <button onClick={() => { if (confirm("Delete this statement and its transactions?")) run(() => deleteBankStatement(active.id)) }} disabled={busy} className="text-xs font-semibold px-3 py-1.5 rounded-lg text-red-500 hover:bg-red-500/10 ml-auto">Delete statement</button>
-              </div>
-
-              {active.cardholder && <p className="text-[11px] text-gray-400">Matching against <span className="font-semibold text-gray-500 dark:text-gray-300">{active.cardholder}</span>&apos;s entered lines only.</p>}
-
-              {active.transactions.length === 0 ? (
-                <p className="text-sm text-gray-400 py-4">{active.source === "CSV" ? "No rows imported." : "No transactions yet — press “Read statement (AI)” to pull them from the pages."}</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-[10px] uppercase tracking-wide text-gray-400 border-b border-gray-200 dark:border-gray-800">
-                        <th className="text-left p-1.5">Date</th>
-                        <th className="text-left p-1.5">Description</th>
-                        <th className="text-right p-1.5">Amount</th>
-                        <th className="text-left p-1.5">Match</th>
-                        <th className="p-1.5"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {active.transactions.map((t) => {
-                        const matched = t.matchedDocIds.map((id) => entryById.get(id)).filter(Boolean) as Entry[]
-                        const isMatched = matched.length > 0
-                        const credit = t.direction === "CREDIT"
-                        return (
-                          <tr key={t.id} className={`border-b border-gray-100 dark:border-gray-800/60 align-top ${t.ignored ? "opacity-40" : isMatched ? "bg-emerald-50/40 dark:bg-emerald-500/5" : credit ? "" : "bg-amber-50/40 dark:bg-amber-500/5"}`}>
-                            <td className="p-1.5 whitespace-nowrap text-gray-500 dark:text-gray-400 text-xs">{(t.tranDate || t.postDate || "").split("-").reverse().join("/")}</td>
-                            <td className="p-1.5">
-                              <span className="text-gray-800 dark:text-gray-200">{t.description || "(no description)"}</span>
-                              {t.reference && <span className="text-gray-400 text-xs"> · {t.reference}</span>}
-                              {credit && <span className="ml-1 text-[10px] text-purple-600 dark:text-purple-400">(payment/credit)</span>}
-                            </td>
-                            <td className="p-1.5 text-right whitespace-nowrap tabular-nums">
-                              {gbp(t.amount)}
-                              {t.currency !== "GBP" && t.originalAmount != null && <div className="text-[10px] text-sky-600 dark:text-sky-400">{fmtCcy(t.currency, t.originalAmount)}</div>}
-                            </td>
-                            <td className="p-1.5 min-w-[14rem]">
-                              {t.ignored ? (
-                                <span className="text-xs text-gray-400">Ignored</span>
-                              ) : isMatched ? (
-                                <div className="space-y-0.5">
-                                  {matched.map((e) => (
-                                    <div key={e.id} className="flex items-center gap-1.5 flex-wrap">
-                                      <span className="text-xs text-emerald-700 dark:text-emerald-300">✓ {e.supplier || "(no description)"}{e.item ? " — " + e.item : ""} · {gbp(e.gross)}</span>
-                                      {Math.abs(e.gross - t.amount) > 0.005 && matched.length === 1 && (
-                                        <button onClick={() => run(() => snapDocAmount(e.id, t.amount))} disabled={busy} className="text-[10px] font-semibold text-sky-600 hover:underline">set to {gbp(t.amount)}</button>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <select disabled={busy} value="" onChange={(e) => { const u = freeUnits.find((x) => x.key === e.target.value); if (u) run(() => setTransactionMatch(t.id, u.docIds)) }} className={`${input} w-full`}>
-                                  <option value="">— match to an entered line —</option>
-                                  {freeUnits.slice().sort((a, b) => Math.abs(a.amount - t.amount) - Math.abs(b.amount - t.amount)).map((u) => (
-                                    <option key={u.key} value={u.key}>{Math.abs(u.amount - t.amount) < 0.005 ? "✓ " : ""}{u.label} · {gbp(u.amount)}</option>
-                                  ))}
-                                </select>
-                              )}
-                            </td>
-                            <td className="p-1.5 text-right whitespace-nowrap">
-                              {isMatched && !t.ignored && <button onClick={() => run(() => setTransactionMatch(t.id, []))} disabled={busy} className="text-xs text-gray-400 hover:text-red-500 mr-2" title="Unmatch">unmatch</button>}
-                              <button onClick={() => run(() => setTransactionIgnored(t.id, !t.ignored))} disabled={busy} className="text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" title="Ignore this transaction">{t.ignored ? "un-ignore" : "ignore"}</button>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* Entered lines that aren't on the statement */}
-              {freeUnits.length > 0 && active.transactions.length > 0 && (
-                <div className="border-t border-gray-100 dark:border-gray-800 pt-3">
-                  <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-1">⚠ Entered, but not matched to any transaction ({freeUnits.length})</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {freeUnits.map((u) => (
-                      <span key={u.key} className="text-xs px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300">{u.label} · {gbp(u.amount)}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
+      {open && content}
     </div>
   )
 }
