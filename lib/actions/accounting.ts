@@ -48,6 +48,21 @@ export async function renameCardholder(id: string, name: string) {
   revalidatePath("/tools/accounts/[monthId]", "page")
 }
 
+// Move every entry + statement from one cardholder NAME to another. Used to fold an
+// orphaned old name (left behind by a rename) into the right card. Only UPDATES the
+// name on existing rows — never deletes an entry, so nothing is lost.
+export async function mergeCardholderName(fromName: string, toName: string) {
+  await requireAdmin()
+  const from = (fromName ?? "").trim()
+  const to = cleanCardholder(toName)
+  if (!from || !to || from === to) return { moved: 0 }
+  const docs = await prisma.accountingDocument.updateMany({ where: { cardholder: from }, data: { cardholder: to } })
+  await prisma.bankStatement.updateMany({ where: { cardholder: from }, data: { cardholder: to } })
+  revalidatePath("/tools/accounts")
+  revalidatePath("/tools/accounts/[monthId]", "page")
+  return { moved: docs.count }
+}
+
 export async function deleteCardholder(id: string) {
   await requireAdmin()
   // Existing documents keep their stored cardholder name (history is preserved);

@@ -21,6 +21,15 @@ export default async function AccountsPage() {
   })
   const cardholders = await prisma.accountingCardholder.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] })
 
+  // Names still on entries that aren't in the managed list (left behind by a rename) —
+  // surfaced so they can be merged into the right card without losing anything.
+  const managedNames = new Set(cardholders.map((c) => c.name))
+  const docGroups = await prisma.accountingDocument.groupBy({ by: ["cardholder"], _count: { _all: true } })
+  const orphanCardholders = docGroups
+    .filter((g) => g.cardholder && !managedNames.has(g.cardholder))
+    .map((g) => ({ name: g.cardholder, count: g._count._all }))
+    .sort((a, b) => b.count - a.count)
+
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="mb-6">
@@ -37,7 +46,7 @@ export default async function AccountsPage() {
         </div>
         <div className={`${card} p-5`}>
           <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Cards &amp; accounts</h2>
-          <ManageCardholders cardholders={cardholders.map((c) => ({ id: c.id, name: c.name }))} />
+          <ManageCardholders cardholders={cardholders.map((c) => ({ id: c.id, name: c.name }))} orphans={orphanCardholders} />
         </div>
       </div>
 

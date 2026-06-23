@@ -2,16 +2,24 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { createCardholder, renameCardholder, deleteCardholder } from "@/lib/actions/accounting"
+import { createCardholder, renameCardholder, deleteCardholder, mergeCardholderName } from "@/lib/actions/accounting"
 
 type Cardholder = { id: string; name: string }
 
-export default function ManageCardholders({ cardholders }: { cardholders: Cardholder[] }) {
+export default function ManageCardholders({ cardholders, orphans = [] }: { cardholders: Cardholder[]; orphans?: { name: string; count: number }[] }) {
   const router = useRouter()
   const [newName, setNewName] = useState("")
   const [editId, setEditId] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
+  const [mergeTarget, setMergeTarget] = useState<Record<string, string>>({})
   const [busy, start] = useTransition()
+
+  function mergeOrphan(name: string, count: number) {
+    const to = mergeTarget[name] || ""
+    if (!to) return
+    if (!confirm(`Move all ${count} entr${count === 1 ? "y" : "ies"} from "${name}" into "${to}"?\n\nNothing is deleted — the entries just move onto that card.`)) return
+    start(async () => { await mergeCardholderName(name, to); router.refresh() })
+  }
 
   function add() {
     const v = newName.trim()
@@ -70,6 +78,25 @@ export default function ManageCardholders({ cardholders }: { cardholders: Cardho
           Add
         </button>
       </div>
+
+      {orphans.length > 0 && (
+        <div className="mt-4 pt-3 border-t border-amber-300/50 dark:border-amber-500/25">
+          <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-1">⚠ Names still on entries but not in the list ({orphans.length})</p>
+          <p className="text-[11px] text-gray-400 mb-2">Left behind when a card was renamed before this was fixed. Pick the card to fold each into — nothing is deleted, the entries just move across.</p>
+          <div className="space-y-1.5">
+            {orphans.map((o) => (
+              <div key={o.name} className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm text-gray-700 dark:text-gray-200 flex-1 min-w-[7rem]">{o.name} <span className="text-gray-400">· {o.count} {o.count === 1 ? "entry" : "entries"}</span></span>
+                <select value={mergeTarget[o.name] ?? ""} onChange={(e) => setMergeTarget((m) => ({ ...m, [o.name]: e.target.value }))} className={input}>
+                  <option value="">— merge into… —</option>
+                  {cardholders.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
+                <button onClick={() => mergeOrphan(o.name, o.count)} disabled={busy || !mergeTarget[o.name]} className="text-xs font-semibold text-emerald-600 hover:text-emerald-500 disabled:opacity-40">Merge</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
