@@ -4,7 +4,7 @@ import { Fragment, useEffect, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { VAT_CODES, NOMINAL_COLUMNS, columnLabel } from "@/lib/accounting"
-import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, removeDocumentPage, saveAccountingDocuments, splitAccountingDocument, bulkDeleteAccountingDocuments } from "@/lib/actions/accounting"
+import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, removeDocumentPage, saveAccountingDocuments, splitAccountingDocument, bulkDeleteAccountingDocuments, uncombineDocument } from "@/lib/actions/accounting"
 
 type Row = {
   id: string; cardholder: string; source: string; images: string[]
@@ -386,6 +386,10 @@ export default function AccountsMonthClient({
     setRows((rs) => rs.filter((r) => r.id !== id))
     startBusy(async () => { await deleteAccountingDocument(id) })
   }
+  // Un-combine a multi-photo scan back into separate photos (one doc each).
+  function uncombineRow(id: string) {
+    startBusy(async () => { await uncombineDocument(id); router.refresh() })
+  }
   // Split a line into two (e.g. accommodation vs food, which differ on VAT/nominal).
   // Creates a sibling carrying its own copy of the invoice image, starting at £0;
   // the user reallocates the amount across the two lines.
@@ -556,18 +560,21 @@ export default function AccountsMonthClient({
             {toRead.map((r) => {
               const sel = !deselected.has(r.id)
               return (
-                <div key={r.id} className="relative">
-                  <button onClick={() => setViewId(r.id)} title="View / remove" className="block">
-                    {isPdf(r.images[0])
-                      ? <span className={`w-14 h-14 rounded-lg border bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-300 text-[10px] font-bold flex items-center justify-center ${sel ? "ring-2 ring-emerald-500 border-transparent" : "border-gray-200 dark:border-gray-700 opacity-60"}`}>PDF</span>
-                      : <img src={r.images[0]} alt="scan" className={`w-14 h-14 object-cover rounded-lg border border-gray-200 dark:border-gray-700 ${sel ? "ring-2 ring-emerald-500" : "opacity-60"}`} />}
-                  </button>
-                  <label className="absolute top-1 left-1 bg-white/90 dark:bg-black/70 rounded p-0.5 cursor-pointer flex" title={sel ? "Selected — untick to skip" : "Tick to read"}>
-                    <input type="checkbox" checked={sel} onChange={() => toggleSel(r.id)} className="w-4 h-4 accent-emerald-600 block" />
-                  </label>
-                  <button onClick={() => { if (confirm("Remove this scan? It won't be read or saved.")) removeRow(r.id) }} disabled={busy} title="Remove this scan"
-                    className="absolute -bottom-1.5 -right-1.5 bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold rounded-full w-5 h-5 flex items-center justify-center leading-none shadow disabled:opacity-50">✕</button>
-                  {r.images.length > 1 && <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[9px] font-bold rounded-full px-1 leading-tight">{r.images.length}</span>}
+                <div key={r.id} className="flex flex-col items-center gap-0.5">
+                  <div className="relative">
+                    <button onClick={() => setViewId(r.id)} title="View / remove" className="block">
+                      {isPdf(r.images[0])
+                        ? <span className={`w-14 h-14 rounded-lg border bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-300 text-[10px] font-bold flex items-center justify-center ${sel ? "ring-2 ring-emerald-500 border-transparent" : "border-gray-200 dark:border-gray-700 opacity-60"}`}>PDF</span>
+                        : <img src={r.images[0]} alt="scan" className={`w-14 h-14 object-cover rounded-lg border border-gray-200 dark:border-gray-700 ${sel ? "ring-2 ring-emerald-500" : "opacity-60"}`} />}
+                    </button>
+                    <label className="absolute top-1 left-1 bg-white/90 dark:bg-black/70 rounded p-0.5 cursor-pointer flex" title={sel ? "Selected — untick to skip" : "Tick to read"}>
+                      <input type="checkbox" checked={sel} onChange={() => toggleSel(r.id)} className="w-4 h-4 accent-emerald-600 block" />
+                    </label>
+                    <button onClick={() => { if (confirm("Remove this scan? It won't be read or saved.")) removeRow(r.id) }} disabled={busy} title="Remove this scan"
+                      className="absolute -bottom-1.5 -right-1.5 bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold rounded-full w-5 h-5 flex items-center justify-center leading-none shadow disabled:opacity-50">✕</button>
+                    {r.images.length > 1 && <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[9px] font-bold rounded-full px-1 leading-tight">{r.images.length}</span>}
+                  </div>
+                  {r.images.length > 1 && <button onClick={() => { if (confirm(`Separate this combined scan back into ${r.images.length} individual photos?`)) uncombineRow(r.id) }} disabled={busy} className="text-[9px] font-semibold text-amber-600 hover:text-amber-500 leading-tight" title="Split this combined scan into separate photos">⤲ Separate {r.images.length}</button>}
                 </div>
               )
             })}

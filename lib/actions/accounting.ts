@@ -103,6 +103,26 @@ export async function removeDocumentPage(docId: string, index: number) {
   await prisma.accountingDocument.update({ where: { id: docId }, data: { images } })
 }
 
+// Un-combine a multi-image document back into one document per photo (e.g. when a
+// bulk upload / over-eager stitch lumped many separate invoices into one). Keeps the
+// first photo on the original and makes a new doc for each remaining photo. No R2
+// deletion — every image key is just reassigned to exactly one document.
+export async function uncombineDocument(docId: string) {
+  await requireAdmin()
+  const doc = await prisma.accountingDocument.findUnique({ where: { id: docId } })
+  if (!doc) return { created: 0 }
+  const keys = (doc.images && doc.images.length) ? doc.images : (doc.imageKey ? [doc.imageKey] : [])
+  if (keys.length <= 1) return { created: 0 }
+  await prisma.accountingDocument.update({ where: { id: doc.id }, data: { images: [keys[0]], imageKey: null, aiRun: false } })
+  const rest = keys.slice(1).map((k) => ({
+    monthId: doc.monthId, cardholder: doc.cardholder, source: "SCAN", images: [k], aiRun: false,
+    vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis",
+  }))
+  if (rest.length) await prisma.accountingDocument.createMany({ data: rest })
+  revalidatePath(`/tools/accounts/${doc.monthId}`)
+  return { created: rest.length }
+}
+
 export async function addManualDocument(monthId: string, cardholder: string) {
   await requireAdmin()
   const ch = cleanCardholder(cardholder) || "Vectis"
