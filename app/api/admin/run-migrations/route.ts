@@ -510,7 +510,7 @@ const MIGRATIONS = [
      ('seed_james','James',3),
      ('seed_michael','Michael',4),
      ('seed_vectis','Vectis',5)
-   ON CONFLICT ("name") DO NOTHING`,
+   ON CONFLICT DO NOTHING`,
 
   // 2026-06-19 — Accounts: extra capture fields + AI-run flag
   `ALTER TABLE "AccountingDocument" ADD COLUMN IF NOT EXISTS "item"    TEXT    NOT NULL DEFAULT ''`,
@@ -575,13 +575,20 @@ export async function POST() {
       return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
     }
 
+    // Each statement is idempotent (IF NOT EXISTS / ON CONFLICT), so a single
+    // failure should NOT block the rest — record it and carry on, then report.
     const results: string[] = []
+    const errors: string[] = []
     for (const sql of MIGRATIONS) {
-      await prisma.$executeRawUnsafe(sql)
-      results.push(`OK: ${sql.slice(0, 60)}…`)
+      try {
+        await prisma.$executeRawUnsafe(sql)
+        results.push(`OK: ${sql.slice(0, 60)}…`)
+      } catch (e: any) {
+        errors.push(`FAIL: ${sql.slice(0, 80)}… — ${e?.message ?? e}`)
+      }
     }
 
-    return NextResponse.json({ ok: true, results })
+    return NextResponse.json({ ok: errors.length === 0, ran: results.length, errors })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
   }
