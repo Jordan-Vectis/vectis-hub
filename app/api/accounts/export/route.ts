@@ -34,14 +34,25 @@ export async function GET(req: NextRequest) {
     rows.push(["", "", "", "", "", ...NOMINAL_COLUMNS.map((c) => c.code)])
 
     for (const ch of cardholderOrder) {
-      const chDocs = docs.filter((d) => d.cardholder === ch)
+      // Keep split-invoice parts next to each other (in first-appearance order).
+      const chDocs = orderByGroup(docs.filter((d) => d.cardholder === ch))
       if (chDocs.length === 0) continue
       rows.push([ch])
       let gTot = 0, vTot = 0
       const colTot: Record<string, number> = {}
+      const seenGroup = new Set<string>()
       for (const d of chDocs) {
+        // Label split parts so they read as one invoice: continuation rows get "↳ "
+        // and the category (item) is appended to tell them apart.
+        const members = d.splitGroupId ? chDocs.filter((x) => x.splitGroupId === d.splitGroupId) : []
+        const inGroup = members.length > 1
+        const isCont = inGroup && !!d.splitGroupId && seenGroup.has(d.splitGroupId)
+        if (d.splitGroupId) seenGroup.add(d.splitGroupId)
+        const desc = inGroup
+          ? `${isCont ? "↳ " : ""}${d.supplier || "(no description)"}${d.item ? " — " + d.item : ""}`
+          : (d.supplier || "(no description)")
         const cols = NOMINAL_COLUMNS.map((c) => (c.key === d.column ? round(d.net) : ""))
-        rows.push([d.supplier || "(no description)", fmtDate(d.docDate), d.vatCode, round(d.gross), d.vat ? round(d.vat) : "", ...cols])
+        rows.push([desc, fmtDate(d.docDate), d.vatCode, round(d.gross), d.vat ? round(d.vat) : "", ...cols])
         gTot += d.gross; vTot += d.vat
         colTot[d.column] = (colTot[d.column] ?? 0) + d.net
       }
@@ -94,6 +105,21 @@ export async function GET(req: NextRequest) {
     console.error("accounts/export error:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
   }
+}
+
+// Keep split-group members contiguous (first-appearance order); singles stay put.
+function orderByGroup<T extends { id: string; splitGroupId: string | null }>(items: T[]): T[] {
+  const out: T[] = []
+  const placed = new Set<string>()
+  for (const r of items) {
+    if (placed.has(r.id)) continue
+    if (r.splitGroupId) {
+      const members = items.filter((x) => x.splitGroupId === r.splitGroupId)
+      if (members.length > 1) { for (const m of members) { out.push(m); placed.add(m.id) }; continue }
+    }
+    out.push(r); placed.add(r.id)
+  }
+  return out
 }
 
 function round(n: number): number { return Math.round((n ?? 0) * 100) / 100 }
