@@ -450,6 +450,11 @@ export default function AccountsMonthClient({
   const input = "px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
   const cell = `${input} w-full text-xs`
   const viewRow = rows.find((r) => r.id === viewId) ?? null
+  // Navigate the viewer through the list the scan belongs to (To-read queue, else the visible table).
+  const inToReadView = viewRow ? toRead.some((r) => r.id === viewRow.id) : false
+  const navList = viewRow ? (inToReadView ? toRead : displayRows) : []
+  const navIndex = viewRow ? navList.findIndex((r) => r.id === viewRow.id) : -1
+  const goToNav = (delta: number) => { const n = navList[navIndex + delta]; if (n) setViewId(n.id) }
 
   return (
     <div className="p-6">
@@ -798,9 +803,21 @@ export default function AccountsMonthClient({
       {viewRow && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-start justify-center p-4 sm:p-8 overflow-y-auto" onClick={() => setViewId(null)}>
           <div className="bg-white dark:bg-[#1C1C1E] w-full max-w-4xl rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-800">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Invoice details</h2>
-              <button onClick={() => setViewId(null)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none">&times;</button>
+            <div className="flex items-center justify-between gap-3 p-4 border-b border-gray-200 dark:border-gray-800">
+              <div className="flex items-center gap-2 min-w-0">
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Invoice details</h2>
+                {navList.length > 1 && <span className="text-xs text-gray-400 whitespace-nowrap">{navIndex + 1} of {navList.length}</span>}
+              </div>
+              <div className="flex items-center gap-2">
+                {inToReadView && (
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 mr-1 cursor-pointer" title="Tick to include this photo when you Combine same-invoice photos / Run AI">
+                    <input type="checkbox" checked={!deselected.has(viewRow.id)} onChange={() => toggleSel(viewRow.id)} className="w-4 h-4 accent-emerald-600" /> Combine / read
+                  </label>
+                )}
+                <button onClick={() => goToNav(-1)} disabled={navIndex <= 0} className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-emerald-500 disabled:opacity-30" title="Previous">← Prev</button>
+                <button onClick={() => goToNav(1)} disabled={navIndex < 0 || navIndex >= navList.length - 1} className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-emerald-500 disabled:opacity-30" title="Next">Next →</button>
+                <button onClick={() => setViewId(null)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none ml-1">&times;</button>
+              </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2">
               <div className="bg-gray-50 dark:bg-black/30 p-3 min-h-[280px] max-h-[80vh] overflow-y-auto space-y-2">
