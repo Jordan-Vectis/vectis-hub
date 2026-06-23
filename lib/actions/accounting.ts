@@ -202,3 +202,125 @@ export async function saveAccountingDocuments(monthId: string, edits: DocEdit[])
 
   revalidatePath(`/tools/accounts/${monthId}`)
 }
+
+// ── Bank/card statement reconciliation ───────────────────────────────────────
+const r2p = (n: number) => Math.round((Number(n) || 0) * 100) / 100
+
+export async function deleteBankStatement(id: string) {
+  await requireAdmin()
+  const stmt = await prisma.bankStatement.findUnique({ where: { id }, select: { monthId: true, images: true } })
+  if (!stmt) return
+  if (stmt.images.length) await deleteObjectsFromR2(stmt.images)
+  await prisma.bankStatement.delete({ where: { id } })   // cascades transactions
+  revalidatePath(`/tools/accounts/${stmt.monthId}`)
+}
+
+export async function setTransactionMatch(txnId: string, docIds: string[]) {
+  await requireAdmin()
+  const t = await prisma.bankTransaction.findUnique({ where: { id: txnId }, select: { monthId: true } })
+  if (!t) return
+  await prisma.bankTransaction.update({ where: { id: txnId }, data: { matchedDocIds: docIds.slice(0, 50) } })
+  revalidatePath(`/tools/accounts/${t.monthId}`)
+}
+
+export async function setTransactionIgnored(txnId: string, ignored: boolean) {
+  await requireAdmin()
+  const t = await prisma.bankTransaction.findUnique({ where: { id: txnId }, select: { monthId: true } })
+  if (!t) return
+  await prisma.bankTransaction.update({ where: { id: txnId }, data: { ignored } })
+  revalidatePath(`/tools/accounts/${t.monthId}`)
+}
+
+// Set an entered line's gross to the bank's exact GBP (used to "snap" a foreign
+// charge once it's matched, since the bank's settled GBP is the true cost).
+export async function snapDocAmount(docId: string, amount: number) {
+  await requireAdmin()
+  const doc = await prisma.accountingDocument.findUnique({ where: { id: docId } })
+  if (!doc) return
+  const gross = r2p(amount)
+  const vat = doc.vatCode === 1 ? r2p(gross / 6) : 0
+  await prisma.accountingDocument.update({ where: { id: docId }, data: { gross, vat, net: r2p(gross - vat) } })
+  revalidatePath(`/tools/accounts/${doc.monthId}`)
+}
+
+// Auto-match a statement's transactions to entered lines. A non-split line is one
+// unit; a split invoice is one unit (its parts summed). Matches on exact GBP, or on
+// the foreign amount for foreign charges. Only assigns a UNIQUE confident match
+// (ties broken by nearest date, else left for manual review). Never double-assigns.
+export async function autoMatchStatement(statementId: string) {
+  await requireAdmin()
+  const stmt = await prisma.bankStatement.findUnique({ where: { id: statementId } })
+  if (!stmt) throw new Error("Statement not found")
+  const txns = await prisma.bankTransaction.findMany({ where: { statementId }, orderBy: { createdAt: "asc" } })
+  const docs = await prisma.accountingDocument.findMany({ where: { monthId: stmt.monthId } })
+
+  type Unit = { docIds: string[]; amount: number; currency: string; originalAmount: number | null; date: Date | null }
+  const units: Unit[] = []
+  const groups = new Map<string, typeof docs>()
+  for (const d of docs) {
+    if (d.splitGroupId) { const a = groups.get(d.splitGroupId) ?? []; a.push(d); groups.set(d.splitGroupId, a) }
+    else units.push({ docIds: [d.id], amount: r2p(d.gross), currency: d.currency ?? "GBP", originalAmount: d.originalAmount ?? null, date: d.docDate })
+  }
+  for (const [, arr] of groups) {
+    if (arr.length === 1) { const d = arr[0]; units.push({ docIds: [d.id], amount: r2p(d.gross), currency: d.currency ?? "GBP", originalAmount: d.originalAmount ?? null, date: d.docDate }) }
+    else units.push({ docIds: arr.map((d) => d.id), amount: r2p(arr.reduce((a, d) => a + d.gross, 0)), currency: arr[0].currency ?? "GBP", originalAmount: arr[0].originalAmount ?? null, date: arr[0].docDate })
+  }
+
+  const used = new Set<string>()
+  for (const t of txns) for (const id of t.matchedDocIds) used.add(id)
+
+  const updates: { id: string; matchedDocIds: string[] }[] = []
+  for (const t of txns) {
+    if (t.ignored || t.direction === "CREDIT" || t.matchedDocIds.length) continue
+    const cands = units.filter((u) => {
+      if (u.docIds.some((id) => used.has(id))) return false
+      const gbpMatch = Math.abs(u.amount - t.amount) < 0.005
+      const fxMatch = t.currency !== "GBP" && t.originalAmount != null && u.originalAmount != null && u.currency === t.currency && Math.abs(u.originalAmount - t.originalAmount) < 0.005
+      return gbpMatch || fxMatch
+    })
+    let pick: Unit | null = null
+    if (cands.length === 1) pick = cands[0]
+    else if (cands.length > 1) {
+      const ref = t.tranDate ?? t.postDate
+      if (ref) {
+        const scored = cands.map((u) => ({ u, d: u.date ? Math.abs(u.date.getTime() - ref.getTime()) : Infinity })).sort((a, b) => a.d - b.d)
+        if (scored.length < 2 || scored[0].d !== scored[1].d) pick = scored[0].u
+      }
+    }
+    if (pick) { pick.docIds.forEach((id) => used.add(id)); updates.push({ id: t.id, matchedDocIds: pick.docIds }) }
+  }
+
+  for (const u of updates) await prisma.bankTransaction.update({ where: { id: u.id }, data: { matchedDocIds: u.matchedDocIds } })
+  revalidatePath(`/tools/accounts/${stmt.monthId}`)
+  return { matched: updates.length, total: txns.filter((t) => !t.ignored && t.direction !== "CREDIT").length }
+}
+
+// CSV/manual import: client parses the file and sends rows (backup to the AI photo path).
+export async function createBankStatementFromRows(
+  monthId: string,
+  label: string,
+  rows: { date?: string | null; description?: string; reference?: string; amount: number; currency?: string; originalAmount?: number | null }[],
+) {
+  await requireAdmin()
+  const stmt = await prisma.bankStatement.create({ data: { monthId, label: (label || "Imported").slice(0, 120), source: "CSV", images: [] } })
+  const data = (rows || []).slice(0, 2000).map((r) => {
+    const currency = (r.currency || "GBP").toUpperCase().slice(0, 8)
+    const dt = r.date ? new Date(r.date) : null
+    const amt = Number(r.amount) || 0
+    return {
+      statementId: stmt.id, monthId,
+      postDate: dt && !isNaN(dt.getTime()) ? dt : null,
+      tranDate: dt && !isNaN(dt.getTime()) ? dt : null,
+      description: (r.description || "").slice(0, 300),
+      reference: (r.reference || "").slice(0, 120),
+      amount: r2p(Math.abs(amt)),
+      currency,
+      originalAmount: currency !== "GBP" && r.originalAmount ? r2p(Number(r.originalAmount)) : null,
+      feeAmount: null,
+      direction: amt < 0 ? "CREDIT" : "DEBIT",
+    }
+  })
+  if (data.length) await prisma.bankTransaction.createMany({ data })
+  revalidatePath(`/tools/accounts/${monthId}`)
+  return { id: stmt.id, count: data.length }
+}
