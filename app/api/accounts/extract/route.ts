@@ -40,7 +40,8 @@ Return STRICT JSON only (no prose, no markdown):
   "vat": number,             // VAT amount shown, GBP; 0 if none shown
   "vatCode": 1|2|7,          // 1 = 20% VAT shown/reclaimable; 2 = no/zero VAT; 7 = clearly personal
   "column": string,          // one of: ${NOMINAL_KEYS.join(", ")}
-  "notes": string            // "" or a short note if unclear (e.g. mixed VAT)
+  "notes": string,           // "" or a short note if unclear (e.g. mixed VAT)
+  "group": string            // give EVERY part you split from ONE invoice the SAME non-empty value (e.g. supplier + grand total); "" for a normal standalone receipt
 } ] }
 
 ${COLUMN_GUIDE}
@@ -48,7 +49,7 @@ ${COLUMN_GUIDE}
 Rules:
 - DO NOT GUESS "item" or "website". Only fill them if clearly visible; otherwise "". Never invent a website.
 - If a VAT amount/number is shown, use vatCode 1 and put the VAT figure in "vat". If no VAT shown, vatCode 2 and vat 0.
-- SPLIT MIXED INVOICES: if ONE receipt/invoice mixes things that must be booked DIFFERENTLY — e.g. FOOD/meals AND ACCOMMODATION/travel, or items at DIFFERENT VAT rates — return a SEPARATE object for EACH such category, each with its own gross (that category's total INCLUDING its VAT), its own vat, vatCode and column, so the objects SUM to the invoice's grand total. Put each "item" as the category name (e.g. "Accommodation", "Breakfast"). A single-category receipt (all food, all fuel, a shop of one type) stays ONE object — NEVER split per individual line item, only by booking category/VAT rate.
+- SPLIT MIXED INVOICES: if ONE receipt/invoice mixes things that must be booked DIFFERENTLY — e.g. FOOD/meals AND ACCOMMODATION/travel, or items at DIFFERENT VAT rates — return a SEPARATE object for EACH such category, each with its own gross (that category's total INCLUDING its VAT), its own vat, vatCode and column, so the objects SUM to the invoice's grand total. Put each "item" as the category name (e.g. "Accommodation", "Breakfast"). A single-category receipt (all food, all fuel, a shop of one type) stays ONE object — NEVER split per individual line item, only by booking category/VAT rate. Give every part of the SAME invoice the SAME "group" value so they stay linked; genuinely separate receipts (e.g. several receipts in one photo) must have a DIFFERENT or empty "group".
 - Numbers only for gross/vat — no symbols or commas. If a figure is unreadable, use 0 and say so in "notes".`
 }
 
@@ -74,6 +75,7 @@ async function normalise(p: any, extraNote: string | null) {
   const docDate = typeof p?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(p.date) ? new Date(p.date) : null
   const notes = [typeof p?.notes === "string" ? p.notes.trim() : "", extraNote ? `AI: ${extraNote}` : ""]
     .filter(Boolean).join(" · ").slice(0, 500) || null
+  const group = typeof p?.group === "string" ? p.group.trim().slice(0, 120) : ""
 
   if (supplier) {
     const rule = await prisma.accountingSupplierRule.findUnique({ where: { match: normaliseSupplier(supplier) } })
@@ -81,7 +83,7 @@ async function normalise(p: any, extraNote: string | null) {
   }
   if (vatCode === 1 && vat === 0 && gross > 0) vat = vatFromGross(gross, 1)
   if (vatCode !== 1) vat = 0
-  return { supplier, item, website, docDate, vatCode, gross, vat, net: netFromGross(gross, vat), column, aiNotes: notes }
+  return { supplier, item, website, docDate, vatCode, gross, vat, net: netFromGross(gross, vat), column, aiNotes: notes, group }
 }
 
 // READER (preview, no writes). Reads ONE invoice and returns the proposed fields.
@@ -174,7 +176,7 @@ export async function POST(req: NextRequest) {
       proposals.push({
         supplier: f.supplier, item: f.item, website: f.website,
         docDate: f.docDate ? f.docDate.toISOString().slice(0, 10) : "",
-        vatCode: f.vatCode, gross: f.gross, vat: f.vat, net: f.net, column: f.column, aiNotes: f.aiNotes,
+        vatCode: f.vatCode, gross: f.gross, vat: f.vat, net: f.net, column: f.column, aiNotes: f.aiNotes, group: f.group,
       })
     }
 

@@ -10,7 +10,22 @@ type Row = {
   id: string; cardholder: string; source: string; images: string[]
   supplier: string; item: string; website: string; docDate: string
   vatCode: number; gross: number; vat: number; net: number
-  column: string; reviewed: boolean; aiRun: boolean; aiNotes: string | null
+  column: string; reviewed: boolean; aiRun: boolean; aiNotes: string | null; splitGroupId: string | null
+}
+
+// Keep split-group members contiguous (in first-appearance order); singles stay put.
+function orderGrouped(items: Row[]): Row[] {
+  const out: Row[] = []
+  const placed = new Set<string>()
+  for (const r of items) {
+    if (placed.has(r.id)) continue
+    if (r.splitGroupId) {
+      const members = items.filter((x) => x.splitGroupId === r.splitGroupId)
+      if (members.length > 1) { for (const m of members) { out.push(m); placed.add(m.id) }; continue }
+    }
+    out.push(r); placed.add(r.id)
+  }
+  return out
 }
 
 const round = (n: number) => Math.round((n || 0) * 100) / 100
@@ -78,7 +93,7 @@ export default function AccountsMonthClient({
             const { id, images } = await res.json()
             setRows((rs) => [...rs, {
               id, cardholder, source: "SCAN", images, supplier: "", item: "", website: "", docDate: "",
-              vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiRun: false, aiNotes: null,
+              vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiRun: false, aiNotes: null, splitGroupId: null,
             }])
             if (multiPage) { curId = id; setCurrentDocId(id) }
           }
@@ -253,7 +268,7 @@ export default function AccountsMonthClient({
       const { id } = await addManualDocument(monthId, cardholder)
       setRows((rs) => [...rs, {
         id, cardholder, source: "MANUAL", images: [], supplier: "", item: "", website: "", docDate: "",
-        vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiRun: true, aiNotes: null,
+        vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiRun: true, aiNotes: null, splitGroupId: null,
       }])
       setFlashId(id)
     })
@@ -269,9 +284,10 @@ export default function AccountsMonthClient({
     startBusy(async () => {
       const d = await splitAccountingDocument(id)
       setRows((rs) => {
-        const idx = rs.findIndex((r) => r.id === id)
+        const withGroup = rs.map((r) => r.id === id ? { ...r, splitGroupId: d.splitGroupId } : r)
+        const idx = withGroup.findIndex((r) => r.id === id)
         const newRow = { ...d, reviewed: false, aiRun: true } as Row
-        return idx === -1 ? [...rs, newRow] : [...rs.slice(0, idx + 1), newRow, ...rs.slice(idx + 1)]
+        return idx === -1 ? [...withGroup, newRow] : [...withGroup.slice(0, idx + 1), newRow, ...withGroup.slice(idx + 1)]
       })
       setFlashId(d.id)
     })
@@ -482,8 +498,26 @@ export default function AccountsMonthClient({
                     <tr className="bg-gray-50 dark:bg-gray-800/40">
                       <td colSpan={TOTAL_COLS} className="px-3 py-1.5 font-bold text-gray-700 dark:text-gray-200 text-sm">{g.name}</td>
                     </tr>
-                    {g.items.map((r) => (
-                      <tr key={r.id} ref={r.id === flashId ? flashRef : undefined} className={`border-b border-gray-100 dark:border-gray-800/60 align-top transition-colors ${r.id === flashId ? "bg-emerald-100 dark:bg-emerald-500/20" : (r.reviewed ? "" : "bg-amber-50/40 dark:bg-amber-500/5")}`}>
+                    {(() => {
+                      const ordered = orderGrouped(g.items)
+                      const headerDone = new Set<string>()
+                      return ordered.map((r) => {
+                      const gid = r.splitGroupId
+                      const members = gid ? ordered.filter((x) => x.splitGroupId === gid) : []
+                      const inGroup = members.length > 1
+                      const showHeader = inGroup && !!gid && !headerDone.has(gid)
+                      if (gid) headerDone.add(gid)
+                      const groupTotal = inGroup ? round(members.reduce((a, m) => a + m.gross, 0)) : 0
+                      return (
+                      <Fragment key={r.id}>
+                        {showHeader && (
+                          <tr className="bg-indigo-50/60 dark:bg-indigo-500/10">
+                            <td colSpan={TOTAL_COLS} className="px-3 py-1 border-l-4 border-l-indigo-400 dark:border-l-indigo-500">
+                              <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">🧾 {r.supplier || "Invoice"} — one invoice, {members.length} parts — total {gbp(groupTotal)}</span>
+                            </td>
+                          </tr>
+                        )}
+                      <tr ref={r.id === flashId ? flashRef : undefined} className={`border-b border-gray-100 dark:border-gray-800/60 align-top transition-colors ${inGroup ? "border-l-4 border-l-indigo-400 dark:border-l-indigo-500" : ""} ${r.id === flashId ? "bg-emerald-100 dark:bg-emerald-500/20" : inGroup ? "bg-indigo-50/30 dark:bg-indigo-500/[0.06]" : r.reviewed ? "" : "bg-amber-50/40 dark:bg-amber-500/5"}`}>
                         <td className="p-1.5">
                           <button onClick={() => setViewId(r.id)} title="Open invoice" className="relative block">
                             {!r.images[0] ? (
@@ -540,7 +574,10 @@ export default function AccountsMonthClient({
                           <button onClick={() => removeRow(r.id)} className="text-gray-400 hover:text-red-500" title="Delete line">✕</button>
                         </td>
                       </tr>
-                    ))}
+                      </Fragment>
+                      )
+                      })
+                      })()}
                     <tr className="border-b-2 border-gray-200 dark:border-gray-700 font-semibold text-gray-600 dark:text-gray-300 text-xs">
                       <td></td>
                       <td className="p-1.5">Total</td>

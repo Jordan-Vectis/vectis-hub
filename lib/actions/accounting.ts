@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { deleteObjectsFromR2, getObjectBuffer, uploadBufferToR2, getSignedImageUrl } from "@/lib/r2"
+import { randomUUID } from "node:crypto"
 import {
   netFromGross, normaliseSupplier, cleanCardholder, isValidColumn, isValidVatCode,
 } from "@/lib/accounting"
@@ -114,11 +115,18 @@ export async function splitAccountingDocument(docId: string) {
     newKeys.push(nk)
   }
 
+  // All siblings of one invoice share a splitGroupId so the UI can group them.
+  const groupId = doc.splitGroupId ?? randomUUID()
+  if (!doc.splitGroupId) {
+    await prisma.accountingDocument.update({ where: { id: doc.id }, data: { splitGroupId: groupId } })
+  }
+
   const created = await prisma.accountingDocument.create({
     data: {
       monthId: doc.monthId, cardholder: doc.cardholder, source: doc.source, images: newKeys,
       supplier: doc.supplier, item: doc.item, website: doc.website, docDate: doc.docDate,
       vatCode: doc.vatCode, column: doc.column, gross: 0, vat: 0, net: 0, aiRun: true,
+      splitGroupId: groupId,
     },
   })
   revalidatePath(`/tools/accounts/${doc.monthId}`)
@@ -128,7 +136,7 @@ export async function splitAccountingDocument(docId: string) {
     supplier: created.supplier, item: created.item, website: created.website,
     docDate: created.docDate ? created.docDate.toISOString().slice(0, 10) : "",
     vatCode: created.vatCode, gross: created.gross, vat: created.vat, net: created.net,
-    column: created.column, aiNotes: null as string | null,
+    column: created.column, aiNotes: null as string | null, splitGroupId: groupId,
   }
 }
 

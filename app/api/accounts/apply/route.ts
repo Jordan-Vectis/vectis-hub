@@ -4,6 +4,7 @@ import { PDFDocument } from "pdf-lib"
 import { prisma } from "@/lib/prisma"
 import { getObjectBuffer, uploadBufferToR2, getSignedImageUrl, deleteObjectsFromR2 } from "@/lib/r2"
 import { isValidColumn, isValidVatCode, netFromGross } from "@/lib/accounting"
+import { randomUUID } from "node:crypto"
 
 export const maxDuration = 300
 
@@ -30,7 +31,8 @@ function clean(r: any) {
   const docDate = typeof r?.docDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.docDate) ? new Date(r.docDate) : null
   const aiNotes = typeof r?.aiNotes === "string" && r.aiNotes.trim() ? r.aiNotes.trim().slice(0, 500) : null
   const pages = Array.isArray(r?.pages) ? r.pages.map((n: any) => Number(n)).filter((n: number) => Number.isInteger(n) && n >= 1) : []
-  return { supplier, item, website, docDate, vatCode, gross, vat, net: netFromGross(gross, vat), column, aiNotes, pages }
+  const group = typeof r?.group === "string" ? r.group.trim().slice(0, 120) : ""
+  return { supplier, item, website, docDate, vatCode, gross, vat, net: netFromGross(gross, vat), column, aiNotes, pages, group }
 }
 
 // Commit an approved AI proposal. receipt[0] updates the line; further receipts
@@ -46,6 +48,16 @@ export async function POST(req: NextRequest) {
     const { docId, receipts } = await req.json()
     if (!docId) return NextResponse.json({ error: "docId required" }, { status: 400 })
     const list: any[] = (Array.isArray(receipts) && receipts.length ? receipts : [{}]).map(clean)
+
+    // Lines split from ONE invoice carry the same non-empty "group" (set by the AI
+    // when it category-splits a single invoice). 2+ sharing a group → one splitGroupId
+    // so the UI clusters them. Separate physical receipts (multi-receipt photo) have
+    // distinct/empty group, so they stay independent.
+    const groupCounts = new Map<string, number>()
+    for (const r of list) { const k = (r.group ?? "").trim(); if (k) groupCounts.set(k, (groupCounts.get(k) ?? 0) + 1) }
+    const groupToId = new Map<string, string>()
+    for (const [k, c] of groupCounts) if (c >= 2) groupToId.set(k, randomUUID())
+    const splitIdFor = (r: any): string | null => { const k = (r?.group ?? "").trim(); return k ? (groupToId.get(k) ?? null) : null }
 
     const doc = await prisma.accountingDocument.findUnique({ where: { id: docId } })
     if (!doc) return NextResponse.json({ error: "Document not found" }, { status: 404 })
@@ -81,15 +93,17 @@ export async function POST(req: NextRequest) {
     }
 
     const primaryImages = await imagesFor(list[0], true)
-    const { pages: _p0, ...firstData } = list[0]
-    await prisma.accountingDocument.update({ where: { id: doc.id }, data: { ...firstData, images: primaryImages, aiRun: true } })
+    const { pages: _p0, group: _g0, ...firstData } = list[0]
+    const firstSplitId = splitIdFor(list[0])
+    await prisma.accountingDocument.update({ where: { id: doc.id }, data: { ...firstData, images: primaryImages, aiRun: true, splitGroupId: firstSplitId } })
 
     const extra: any[] = []
     for (let i = 1; i < list.length && i < 200; i++) {
-      const { pages: _pi, ...f } = list[i]
+      const { pages: _pi, group: _gi, ...f } = list[i]
+      const splitGroupId = splitIdFor(list[i])
       const imgs = await imagesFor(list[i], false)
       const created = await prisma.accountingDocument.create({
-        data: { monthId: doc.monthId, cardholder: doc.cardholder, source: "SCAN", images: imgs, aiRun: true, ...f },
+        data: { monthId: doc.monthId, cardholder: doc.cardholder, source: "SCAN", images: imgs, aiRun: true, ...f, splitGroupId },
       })
       extra.push({
         id: created.id, cardholder: created.cardholder, source: "SCAN",
@@ -97,7 +111,7 @@ export async function POST(req: NextRequest) {
         supplier: f.supplier, item: f.item, website: f.website,
         docDate: f.docDate ? f.docDate.toISOString().slice(0, 10) : "",
         vatCode: f.vatCode, gross: f.gross, vat: f.vat, net: f.net, column: f.column,
-        reviewed: false, aiRun: true, aiNotes: f.aiNotes,
+        reviewed: false, aiRun: true, aiNotes: f.aiNotes, splitGroupId,
       })
     }
 
@@ -109,7 +123,7 @@ export async function POST(req: NextRequest) {
       supplier: firstData.supplier, item: firstData.item, website: firstData.website,
       docDate: firstData.docDate ? firstData.docDate.toISOString().slice(0, 10) : "",
       vatCode: firstData.vatCode, gross: firstData.gross, vat: firstData.vat, net: firstData.net, column: firstData.column,
-      aiNotes: firstData.aiNotes,
+      aiNotes: firstData.aiNotes, splitGroupId: firstSplitId,
       images: [await getSignedImageUrl(primaryImages[0])],
       extra,
     })

@@ -43,6 +43,7 @@ export default async function AccountsMonthPage({ params }: { params: Promise<{ 
       reviewed: d.reviewed,
       aiRun: d.aiRun,
       aiNotes: d.aiNotes,
+      splitGroupId: d.splitGroupId,
       }
     })
   )

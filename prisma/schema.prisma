@@ -1125,6 +1125,7 @@ model AccountingDocument {
   reviewed   Boolean         @default(false)
   aiRun      Boolean         @default(false)      // has AI been run on this scan yet? (blank scans wait for a batch Run AI)
   aiNotes    String?                             // anything the AI flagged for attention
+  splitGroupId String?                           // lines split from one invoice share this id (grouped together in the UI)
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
 
