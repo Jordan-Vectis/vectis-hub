@@ -682,7 +682,9 @@ Database migration errors are a recurring problem on Railway staging/production.
 
 **Why:** The Run Migrations button on /admin gives Jordan a one-click fix without needing console commands or redeployment.
 
-**How to apply:** Any time a schema change is made, update both the migration file AND the run-migrations endpoint in the same commit.`,
+**How to apply:** Any time a schema change is made, update both the migration file AND the run-migrations endpoint in the same commit.
+
+Runner behaviour (since 2026-06-23): the run-migrations POST wraps each statement in try/catch — it continues past failures and returns { ok, ran, errors[] } instead of aborting on the first error, so one bad statement can't block later migrations. Keep statements idempotent. Seed INSERTs must use bare ON CONFLICT DO NOTHING (not ON CONFLICT ("name")) — a name-only arbiter doesn't catch a primary-key clash and threw 23505, blocking the reconciliation migrations until fixed.`,
   },
   {
     filename: "feedback_git_workflow.md",
