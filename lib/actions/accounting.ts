@@ -32,8 +32,20 @@ export async function renameCardholder(id: string, name: string) {
   await requireAdmin()
   const n = cleanCardholder(name)
   if (!n) throw new Error("Name required")
-  await prisma.accountingCardholder.update({ where: { id }, data: { name: n } })
+  const existing = await prisma.accountingCardholder.findUnique({ where: { id } })
+  if (!existing) return
+  if (existing.name !== n) {
+    // Cards are referenced by NAME on entries/statements, so a rename must move them
+    // across — otherwise they orphan under the old name (looked like a new section).
+    await prisma.accountingDocument.updateMany({ where: { cardholder: existing.name }, data: { cardholder: n } })
+    await prisma.bankStatement.updateMany({ where: { cardholder: existing.name }, data: { cardholder: n } })
+    // Renaming into a name that already exists = merge: drop the duplicate card record.
+    const dupe = await prisma.accountingCardholder.findFirst({ where: { name: n, NOT: { id } } })
+    if (dupe) await prisma.accountingCardholder.delete({ where: { id } })
+    else await prisma.accountingCardholder.update({ where: { id }, data: { name: n } })
+  }
   revalidatePath("/tools/accounts")
+  revalidatePath("/tools/accounts/[monthId]", "page")
 }
 
 export async function deleteCardholder(id: string) {
