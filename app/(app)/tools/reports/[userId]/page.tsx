@@ -9,6 +9,7 @@ import {
   TodayProductivityCard,
   TodayTimeline,
   DailyComparisonTable,
+  DailyLotsBarChart,
   CustomRangePicker,
   type DayStats,
 } from "../../../admin/cataloguing-reports/[userId]/collapsible-sections"
@@ -360,6 +361,9 @@ export default async function ReportsUserPage({
               </div>
             </div>
           )}
+
+          {/* Daily lots bar chart */}
+          <DailyLotsBarChart days={dayStats} />
 
           {/* Daily breakdown: cataloguing vs idle per day */}
           <DailyComparisonTable days={dayStats} />
