@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma"
 import { getSignedImageUrl } from "@/lib/r2"
 import { DEFAULT_CARDHOLDERS } from "@/lib/accounting"
 import AccountsMonthClient from "./accounts-client"
-import Link from "next/link"
 
 export const dynamic = "force-dynamic"
 
@@ -52,13 +51,6 @@ export default async function AccountsMonthPage({ params }: { params: Promise<{ 
   )
 
   return (
-    <>
-      <AccountsMonthClient monthId={month.id} monthLabel={month.label} documents={documents} cardholders={cardholders} />
-      <div className="px-6 pb-10 -mt-2">
-        <Link href={`/tools/accounts/${month.id}/reconcile`} className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400">
-          🏦 Reconcile against bank statement →
-        </Link>
-      </div>
-    </>
+    <AccountsMonthClient monthId={month.id} monthLabel={month.label} documents={documents} cardholders={cardholders} />
   )
 }

@@ -4,7 +4,7 @@ import { Fragment, useEffect, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { VAT_CODES, NOMINAL_COLUMNS, columnLabel } from "@/lib/accounting"
-import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, removeDocumentPage, saveAccountingDocuments, splitAccountingDocument, bulkDeleteAccountingDocuments, uncombineDocument } from "@/lib/actions/accounting"
+import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, removeDocumentPage, saveAccountingDocuments, splitAccountingDocument, bulkDeleteAccountingDocuments, uncombineDocument, renameAccountingMonth } from "@/lib/actions/accounting"
 
 type Row = {
   id: string; cardholder: string; source: string; images: string[]
@@ -102,6 +102,10 @@ export default function AccountsMonthClient({
   const [stitching, setStitching] = useState(false)
   const [applying, setApplying] = useState(false)
   const [deselected, setDeselected] = useState<Set<string>>(new Set())   // To-read scans the user has un-ticked
+  const [renaming, setRenaming] = useState(false)
+  const [renameVal, setRenameVal] = useState(monthLabel)
+  const [displayLabel, setDisplayLabel] = useState(monthLabel)
+  useEffect(() => { setDisplayLabel(monthLabel); setRenameVal(monthLabel) }, [monthLabel])
 
   // Each photo/file becomes a BLANK line straight away (image only); the AI is run
   // afterwards over all the un-read lines.
@@ -409,6 +413,13 @@ export default function AccountsMonthClient({
     if (!confirm(`Delete the whole "${monthLabel}" month and all its lines? This cannot be undone.`)) return
     startBusy(async () => { await deleteAccountingMonth(monthId); router.push("/tools/accounts") })
   }
+  function doRename() {
+    const t = renameVal.trim()
+    setRenaming(false)
+    if (!t || t === displayLabel) return
+    setDisplayLabel(t)
+    startBusy(async () => { await renameAccountingMonth(monthId, t); router.refresh() })
+  }
 
   // ── Totals + grouping (main table only; un-read scans excluded) ────────────────
   const grandGross = round(mainRows.reduce((a, r) => a + r.gross, 0))
@@ -462,13 +473,33 @@ export default function AccountsMonthClient({
       <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
         <div>
           <Link href="/tools/accounts" className="text-sm text-gray-400 hover:text-emerald-500">← All months</Link>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mt-1">{monthLabel}</h1>
+          {renaming ? (
+            <input
+              value={renameVal}
+              onChange={(e) => setRenameVal(e.target.value)}
+              onBlur={doRename}
+              onKeyDown={(e) => { if (e.key === "Enter") doRename(); if (e.key === "Escape") { setRenameVal(displayLabel); setRenaming(false) } }}
+              autoFocus
+              className="mt-1 block text-3xl font-bold bg-white dark:bg-[#2C2C2E] text-gray-900 dark:text-white rounded-lg px-2 py-0.5 border border-emerald-500 focus:outline-none"
+            />
+          ) : (
+            <div className="flex items-center gap-3 mt-1">
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{displayLabel}</h1>
+              <button onClick={() => { setRenameVal(displayLabel); setRenaming(true) }} title="Rename this month"
+                className="text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-emerald-500 border border-gray-300 dark:border-gray-700 rounded-lg px-2.5 py-1">
+                ✏ Rename
+              </button>
+            </div>
+          )}
           <p className="text-sm text-gray-500 mt-1">
             {rows.length} {rows.length === 1 ? "line" : "lines"}
             {unreviewed > 0 && <span className="text-amber-500 font-semibold"> · {unreviewed} to review</span>}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Link href={`/tools/accounts/${monthId}/reconcile`} className="px-3.5 py-2 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white">
+            🏦 Reconcile
+          </Link>
           <a href={`/api/accounts/export?monthId=${monthId}`} className="px-3.5 py-2 rounded-xl text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white">
             ⬇ Export to Excel
           </a>

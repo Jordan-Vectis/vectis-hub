@@ -6,7 +6,7 @@ import Link from "next/link"
 import {
   deleteBankStatement, autoMatchStatement, setTransactionMatch,
   setTransactionIgnored, snapDocAmount, createBankStatementFromRows,
-  setStatementCardholder, renameAccountingMonth,
+  setStatementCardholder, renameAccountingMonth, clearStatementMatches,
 } from "@/lib/actions/accounting"
 
 type Entry = {
@@ -197,6 +197,7 @@ export default function AccountsReconcile({
                   </>
                 )}
                 <button onClick={() => run(() => autoMatchStatement(stmt.id))} disabled={busy || stmt.transactions.length === 0} className={btn("bg-emerald-600 hover:bg-emerald-500 text-white")}>⚡ Auto-match</button>
+                <button onClick={() => { if (confirm("Clear all matches on this statement so you can start again? (the transactions stay, just the matches/ignores are reset)")) run(() => clearStatementMatches(stmt.id)) }} disabled={busy || stmt.transactions.length === 0} className={btn("border border-amber-400 dark:border-amber-600 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10")} title="Reset every match + un-ignore — lets you re-run Auto-match cleanly">↺ Clear matches</button>
                 <button onClick={() => { if (confirm("Delete this statement and its transactions?")) run(() => deleteBankStatement(stmt.id)) }} disabled={busy} className="text-xs font-semibold px-3 py-1.5 rounded-lg text-red-500 hover:bg-red-500/10">Delete</button>
               </div>
             </div>

@@ -329,6 +329,17 @@ export async function snapDocAmount(docId: string, amount: number) {
 // unit; a split invoice is one unit (its parts summed). Matches on exact GBP, or on
 // the foreign amount for foreign charges. Only assigns a UNIQUE confident match
 // (ties broken by nearest date, else left for manual review). Never double-assigns.
+// Reset a statement back to its freshly-read state: drop every match + un-ignore
+// everything, so Auto-match can be run again from scratch if it went wrong.
+export async function clearStatementMatches(statementId: string) {
+  await requireAdmin()
+  const stmt = await prisma.bankStatement.findUnique({ where: { id: statementId } })
+  if (!stmt) throw new Error("Statement not found")
+  await prisma.bankTransaction.updateMany({ where: { statementId }, data: { matchedDocIds: [], ignored: false } })
+  revalidatePath(`/tools/accounts/${stmt.monthId}`)
+  revalidatePath(`/tools/accounts/${stmt.monthId}/reconcile`)
+}
+
 export async function autoMatchStatement(statementId: string) {
   await requireAdmin()
   const stmt = await prisma.bankStatement.findUnique({ where: { id: statementId } })
