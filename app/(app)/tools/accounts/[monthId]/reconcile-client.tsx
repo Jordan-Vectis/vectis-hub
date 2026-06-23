@@ -181,9 +181,20 @@ export default function AccountsReconcile({
       {statements.map((stmt) => {
         const scopedEntries = stmt.cardholder ? entries.filter((e) => e.cardholder === stmt.cardholder) : entries
         const stmtUnits = buildUnits(scopedEntries)
-        const matchedSet = new Set<string>()
-        for (const t of stmt.transactions) for (const id of t.matchedDocIds) matchedSet.add(id)
-        const freeUnits = stmtUnits.filter((u) => !u.docIds.some((id) => matchedSet.has(id)))
+        // Part-payment support: ONE invoice can be paid by SEVERAL bank transactions
+        // (e.g. Google Ads capped at £500/payment). Track how much of each entered
+        // unit has been matched so far; a unit stays available until its matched
+        // payments add up to its total.
+        const matchedByUnit = new Map<string, number>()        // unit.key → £ matched so far
+        const txnCountByUnit = new Map<string, number>()       // unit.key → how many txns matched to it
+        const unitForTxn = (t: Txn) => stmtUnits.find((u) => u.docIds.some((id) => t.matchedDocIds.includes(id)))
+        for (const t of stmt.transactions) {
+          if (t.ignored || t.direction === "CREDIT" || !t.matchedDocIds.length) continue
+          const u = unitForTxn(t)
+          if (u) { matchedByUnit.set(u.key, round((matchedByUnit.get(u.key) ?? 0) + t.amount)); txnCountByUnit.set(u.key, (txnCountByUnit.get(u.key) ?? 0) + 1) }
+        }
+        const unitRemaining = (u: Unit) => round(u.amount - (matchedByUnit.get(u.key) ?? 0))
+        const freeUnits = stmtUnits.filter((u) => unitRemaining(u) > 0.005)   // still has an outstanding balance
         const liveTxns = stmt.transactions.filter((t) => !t.ignored && t.direction !== "CREDIT")
         const matchedCount = liveTxns.filter((t) => t.matchedDocIds.length).length
         const unmatchedCount = liveTxns.length - matchedCount
@@ -252,11 +263,28 @@ export default function AccountsReconcile({
                       const credit = t.direction === "CREDIT"
 
                       const txnText = `${t.description} ${t.reference || ""}`
-                      const exactCands = freeUnits.filter((u) => Math.abs(u.amount - t.amount) < 0.005)
-                      const suggestions = exactCands.length > 0
-                        ? exactCands.slice().sort((a, b) => descSim(txnText, b.label) - descSim(txnText, a.label))
-                        : freeUnits.slice().sort((a, b) => Math.abs(a.amount - t.amount) - Math.abs(b.amount - t.amount)).slice(0, 5)
-                      const noExact = exactCands.length === 0
+                      // Three kinds of candidate, in priority order:
+                      //  exact — the invoice's OUTSTANDING amount equals this payment (finishes it)
+                      //  part  — the invoice still has MORE outstanding than this payment (a capped instalment)
+                      //  near  — nothing fits; show the closest by outstanding amount
+                      const exactCands = freeUnits.filter((u) => Math.abs(unitRemaining(u) - t.amount) < 0.005)
+                      const partCands = freeUnits.filter((u) => unitRemaining(u) - t.amount > 0.005)
+                        .sort((a, b) => descSim(txnText, b.label) - descSim(txnText, a.label))
+                      let kind: "exact" | "part" | "near"
+                      let suggestions: Unit[]
+                      if (exactCands.length) { kind = "exact"; suggestions = exactCands.slice().sort((a, b) => descSim(txnText, b.label) - descSim(txnText, a.label)) }
+                      else if (partCands.length) { kind = "part"; suggestions = partCands }
+                      else { kind = "near"; suggestions = freeUnits.slice().sort((a, b) => Math.abs(unitRemaining(a) - t.amount) - Math.abs(unitRemaining(b) - t.amount)).slice(0, 5) }
+                      const optLabel = (u: Unit) => {
+                        const rem = unitRemaining(u)
+                        const partial = Math.abs(rem - u.amount) > 0.005   // already part-paid
+                        if (kind === "part") return `↪ part of ${u.label} · ${gbp(rem)} outstanding`
+                        if (kind === "near") return `~ ${u.label} · ${gbp(rem)}${partial ? " left" : ""}`
+                        return `✓ ${u.label} · ${gbp(rem)}${partial ? " left" : ""}`
+                      }
+                      const placeholder = kind === "exact" ? `— ${suggestions.length} match${suggestions.length !== 1 ? "es" : ""} found —`
+                        : kind === "part" ? `— part-payment of a larger invoice? —`
+                        : `— no exact match (${suggestions.length} nearest) —`
 
                       return (
                         <tr key={t.id} className={`border-b border-gray-100 dark:border-gray-800/60 align-top ${t.ignored ? "opacity-40" : isMatched ? "bg-emerald-50/40 dark:bg-emerald-500/5" : credit ? "" : "bg-amber-50/40 dark:bg-amber-500/5"}`}>
@@ -274,21 +302,38 @@ export default function AccountsReconcile({
                             {t.ignored ? (
                               <span className="text-xs text-gray-400">Ignored</span>
                             ) : isMatched ? (
-                              <div className="space-y-0.5">
-                                {matched.map((e) => (
-                                  <div key={e.id} className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-xs text-emerald-700 dark:text-emerald-300">✓ {e.supplier || "(no description)"}{e.item ? " — " + e.item : ""} · {gbp(e.gross)}</span>
-                                    {Math.abs(e.gross - t.amount) > 0.005 && matched.length === 1 && (
-                                      <button onClick={() => run(() => snapDocAmount(e.id, t.amount))} disabled={busy} className="text-[10px] font-semibold text-sky-600 hover:underline">set to {gbp(t.amount)}</button>
+                              (() => {
+                                const myUnit = unitForTxn(t)
+                                const rem = myUnit ? unitRemaining(myUnit) : 0
+                                const paid = myUnit ? (matchedByUnit.get(myUnit.key) ?? 0) : 0
+                                // Part payment = several txns on one invoice, OR a single txn that
+                                // leaves a materially large balance. A tiny leftover (a few £ /
+                                // ≤10%) is just a foreign-settlement rounding diff, not an instalment.
+                                const partPaid = myUnit ? ((txnCountByUnit.get(myUnit.key) ?? 0) > 1 || rem > Math.max(5, t.amount * 0.1)) : false
+                                return (
+                                  <div className="space-y-0.5">
+                                    {matched.map((e) => (
+                                      <div key={e.id} className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="text-xs text-emerald-700 dark:text-emerald-300">✓ {e.supplier || "(no description)"}{e.item ? " — " + e.item : ""} · {gbp(e.gross)}</span>
+                                        {/* Snap only for a single, near-amount match (foreign settlement pennies) — never on instalments */}
+                                        {!partPaid && Math.abs(e.gross - t.amount) > 0.005 && Math.abs(e.gross - t.amount) <= Math.max(5, t.amount * 0.1) && matched.length === 1 && (
+                                          <button onClick={() => run(() => snapDocAmount(e.id, t.amount))} disabled={busy} className="text-[10px] font-semibold text-sky-600 hover:underline">set to {gbp(t.amount)}</button>
+                                        )}
+                                      </div>
+                                    ))}
+                                    {partPaid && (
+                                      <p className={`text-[10px] font-semibold ${rem > 0.005 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                                        Part payment · {gbp(paid)} of {gbp(myUnit!.amount)} matched{rem > 0.005 ? ` · ${gbp(rem)} still to match` : " · complete ✓"}
+                                      </p>
                                     )}
                                   </div>
-                                ))}
-                              </div>
+                                )
+                              })()
                             ) : (
                               <select disabled={busy} value="" onChange={(e) => { const u = freeUnits.find((x) => x.key === e.target.value); if (u) run(() => setTransactionMatch(t.id, u.docIds)) }} className={`${input} w-full text-xs`}>
-                                <option value="">{noExact ? `— no exact match (${suggestions.length} nearest) —` : `— ${suggestions.length} match${suggestions.length !== 1 ? "es" : ""} found —`}</option>
+                                <option value="">{placeholder}</option>
                                 {suggestions.map((u) => (
-                                  <option key={u.key} value={u.key}>{noExact ? "~" : "✓"} {u.label} · {gbp(u.amount)}</option>
+                                  <option key={u.key} value={u.key}>{optLabel(u)}</option>
                                 ))}
                               </select>
                             )}
@@ -309,9 +354,15 @@ export default function AccountsReconcile({
               <div className="border-t border-gray-100 dark:border-gray-800 p-3">
                 <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-1">⚠ Entered, but not matched ({freeUnits.length})</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {freeUnits.map((u) => (
-                    <span key={u.key} className="text-xs px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300">{u.label} · {gbp(u.amount)}</span>
-                  ))}
+                  {freeUnits.map((u) => {
+                    const rem = unitRemaining(u)
+                    const partial = Math.abs(rem - u.amount) > 0.005
+                    return (
+                      <span key={u.key} className="text-xs px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                        {u.label} · {partial ? <>{gbp(rem)} of {gbp(u.amount)} left</> : gbp(u.amount)}
+                      </span>
+                    )
+                  })}
                 </div>
               </div>
             )}
