@@ -173,7 +173,7 @@ export default function AccountsMonthClient({
             const receipts: any[] = []
             for (const g of groups) {
               const d = await previewOne(r.id, g)
-              if (d?.receipts?.[0]) receipts.push({ ...d.receipts[0], pages: g })
+              for (const rr of (d?.receipts ?? [])) receipts.push({ ...rr, pages: g })
             }
             if (receipts.length) previews.push({ docId: r.id, receipts, capped: !!s?.capped })
             else errors++

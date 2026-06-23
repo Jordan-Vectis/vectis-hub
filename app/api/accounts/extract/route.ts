@@ -26,7 +26,7 @@ const COLUMN_GUIDE = `Choose ONE allocation column (use the key in brackets):
 function buildPrompt(cardholder: string, allowSplit: boolean): string {
   const splitRule = allowSplit
     ? `This photo usually shows SEVERAL separate receipts laid out side by side. Scan the WHOLE image carefully — top, bottom, left and right — and return ONE object per SEPARATE physical receipt you can see, even if some are creased, angled, faint, rotated or slightly overlapping. If a receipt is only partly readable, STILL return it and fill in whatever fields you can (use "" or 0 for anything you can't read, and say so in "notes"). Only return a single object if there is genuinely just one receipt. NEVER return an empty list when any receipt is visible.`
-    : `Read the supplied page(s) as ONE single invoice/receipt and return exactly ONE object (a multi-page invoice's total/VAT is usually on the last page).`
+    : `Treat the supplied page(s) as ONE invoice/receipt (a multi-page invoice's totals are usually on the last page). Return one object — UNLESS it mixes categories (see the SPLIT MIXED INVOICES rule), in which case return one object per category.`
   return `You are reading UK business expense receipts/invoices for an auction house. The card/account they belong to is "${cardholder}".
 ${splitRule}
 
@@ -48,6 +48,7 @@ ${COLUMN_GUIDE}
 Rules:
 - DO NOT GUESS "item" or "website". Only fill them if clearly visible; otherwise "". Never invent a website.
 - If a VAT amount/number is shown, use vatCode 1 and put the VAT figure in "vat". If no VAT shown, vatCode 2 and vat 0.
+- SPLIT MIXED INVOICES: if ONE receipt/invoice mixes things that must be booked DIFFERENTLY — e.g. FOOD/meals AND ACCOMMODATION/travel, or items at DIFFERENT VAT rates — return a SEPARATE object for EACH such category, each with its own gross (that category's total INCLUDING its VAT), its own vat, vatCode and column, so the objects SUM to the invoice's grand total. Put each "item" as the category name (e.g. "Accommodation", "Breakfast"). A single-category receipt (all food, all fuel, a shop of one type) stays ONE object — NEVER split per individual line item, only by booking category/VAT rate.
 - Numbers only for gross/vat — no symbols or commas. If a figure is unreadable, use 0 and say so in "notes".`
 }
 
@@ -153,7 +154,8 @@ export async function POST(req: NextRequest) {
     }
     const readNothing = receipts.length === 0
     if (readNothing) receipts = [{}]
-    if (!allowSplit) receipts = receipts.slice(0, 1)
+    // (no longer force a single invoice down to one line — a mixed invoice may
+    // return one object per category; see the SPLIT MIXED INVOICES prompt rule.)
     let capped = false
     if (receipts.length > 200) { capped = true; receipts = receipts.slice(0, 200) }
 
