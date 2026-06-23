@@ -340,6 +340,10 @@ export default function AccountsMonthClient({
   function setPreviewCardholder(docId: string, cardholder: string) {
     setAiPreview((prev) => prev && prev.map((p) => p.docId !== docId ? p : { ...p, cardholder }))
   }
+  // Set the card on EVERY previewed document at once.
+  function setAllPreviewCardholder(cardholder: string) {
+    setAiPreview((prev) => prev && prev.map((p) => ({ ...p, cardholder })))
+  }
   // Skip one document in the Approve modal — it won't be applied (deny just this line).
   function removePreview(docId: string) {
     setAiPreview((prev) => { const next = (prev ?? []).filter((p) => p.docId !== docId); return next.length ? next : null })
@@ -611,17 +615,17 @@ export default function AccountsMonthClient({
           <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-1">
             <table className="w-full table-fixed border-collapse">
               <colgroup>
-                <col style={{ width: "2.5%" }} />
-                <col style={{ width: "11%" }} />
+                <col style={{ width: "3.5%" }} />
+                <col style={{ width: "9.5%" }} />
                 <col style={{ width: "9%" }} />
-                <col style={{ width: "9%" }} />
-                <col style={{ width: "8%" }} />
+                <col style={{ width: "8.5%" }} />
+                <col style={{ width: "7%" }} />
                 <col style={{ width: "3%" }} />
                 <col style={{ width: "5.5%" }} />
                 <col style={{ width: "5.5%" }} />
                 {NOMINAL_COLUMNS.map((c) => <col key={c.key} />)}
-                <col style={{ width: "2.5%" }} />
-                <col style={{ width: "2%" }} />
+                <col style={{ width: "3%" }} />
+                <col style={{ width: "4%" }} />
               </colgroup>
               <thead>
                 <tr className="text-[10px] uppercase tracking-wide text-gray-400 border-b border-gray-200 dark:border-gray-800 align-bottom">
@@ -686,7 +690,8 @@ export default function AccountsMonthClient({
                         )}
                       <tr ref={r.id === flashId ? flashRef : undefined} className={`border-b border-gray-100 dark:border-gray-800/60 align-top transition-colors ${inGroup ? "border-l-4 border-l-indigo-400 dark:border-l-indigo-500" : ""} ${r.id === flashId ? "bg-emerald-100 dark:bg-emerald-500/20" : inGroup ? "bg-indigo-50/30 dark:bg-indigo-500/[0.06]" : r.reviewed ? "" : "bg-amber-50/40 dark:bg-amber-500/5"}`}>
                         <td className="p-1.5">
-                          <div className="relative inline-block">
+                          <div className="flex flex-col items-center gap-1">
+                            {r.images.length > 0 && <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} className="w-4 h-4 accent-blue-600" title="Select to re-run AI" />}
                             <button onClick={() => setViewId(r.id)} title="Open invoice" className="relative block">
                               {!r.images[0] ? (
                                 <span className="w-9 h-9 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 text-xs flex items-center justify-center hover:ring-2 hover:ring-emerald-500">✎</span>
@@ -697,7 +702,6 @@ export default function AccountsMonthClient({
                               )}
                               {r.images.length > 1 && <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[9px] font-bold rounded-full px-1 leading-tight">{r.images.length}</span>}
                             </button>
-                            {r.images.length > 0 && <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} onClick={(e) => e.stopPropagation()} className="absolute -top-1.5 -left-1.5 w-4 h-4 accent-blue-600 rounded bg-white/90 dark:bg-gray-900/90 shadow" title="Select to re-run AI" />}
                           </div>
                         </td>
                         <td className="p-1.5">
@@ -891,6 +895,15 @@ export default function AccountsMonthClient({
             </div>
             <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto">
               <p className="text-xs text-gray-400">The AI read {aiPreview.length} {aiPreview.length === 1 ? "document" : "documents"}. Here&apos;s what it will fill in — tweak any amount if it&apos;s wrong, then approve to apply, or cancel to discard. Re-run lines show ↻ what changed; use ✕ to skip one. Nothing is saved until you approve.</p>
+              {aiPreview.length > 1 && (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-gray-500 dark:text-gray-400 font-semibold">Apply ALL to card:</span>
+                  <select value="" onChange={(e) => { if (e.target.value) setAllPreviewCardholder(e.target.value) }} className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                    <option value="">— choose to set them all —</option>
+                    {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              )}
               {aiPreview.some((p) => p.capped) && (
                 <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-3 py-2">⚠ A file held more than 200 invoices — only the first 200 were read. Split very large scans into smaller files and run them separately.</p>
               )}
