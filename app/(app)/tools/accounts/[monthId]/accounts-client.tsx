@@ -98,6 +98,7 @@ export default function AccountsMonthClient({
   const [aiPreview, setAiPreview] = useState<{ docId: string; receipts: any[]; capped?: boolean; cardholder?: string }[] | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())   // main-table rows ticked for re-run
   const [filterCard, setFilterCard] = useState("")
+  const [dupesOnly, setDupesOnly] = useState(false)   // quick filter: only show possible-duplicate lines
   const [colFilters, setColFilters] = useState({ supplier: "", item: "", website: "", date: "", vat: "", value: "", vatAmt: "", column: "", reviewed: "" })
   const [stitching, setStitching] = useState(false)
   const [applying, setApplying] = useState(false)
@@ -432,11 +433,13 @@ export default function AccountsMonthClient({
   const dupeCounts = new Map<string, number>()
   for (const r of mainRows) if (r.docDate && r.gross > 0) dupeCounts.set(dupeKey(r), (dupeCounts.get(dupeKey(r)) ?? 0) + 1)
   const isPossibleDupe = (r: Row) => !!r.docDate && r.gross > 0 && (dupeCounts.get(dupeKey(r)) ?? 0) > 1
+  const dupeCount = mainRows.filter(isPossibleDupe).length
 
   // Per-column filter (display only — the totals/stats above stay full-month).
   const cf = colFilters
   const inc = (val: string, q: string) => !q.trim() || (val ?? "").toLowerCase().includes(q.trim().toLowerCase())
   const displayRows = mainRows.filter((r) => {
+    if (dupesOnly && !isPossibleDupe(r)) return false
     if (filterCard && r.cardholder !== filterCard) return false
     if (!inc(r.supplier, cf.supplier)) return false
     if (!inc(r.item, cf.item)) return false
@@ -450,8 +453,8 @@ export default function AccountsMonthClient({
     if (cf.reviewed === "no" && r.reviewed) return false
     return true
   })
-  const filtering = !!filterCard || Object.values(colFilters).some(Boolean)
-  const clearFilters = () => { setFilterCard(""); setColFilters({ supplier: "", item: "", website: "", date: "", vat: "", value: "", vatAmt: "", column: "", reviewed: "" }) }
+  const filtering = !!filterCard || dupesOnly || Object.values(colFilters).some(Boolean)
+  const clearFilters = () => { setFilterCard(""); setDupesOnly(false); setColFilters({ supplier: "", item: "", website: "", date: "", vat: "", value: "", vatAmt: "", column: "", reviewed: "" }) }
   const miniFilter = "w-full px-1 py-0.5 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 text-[11px] focus:outline-none focus:ring-1 focus:ring-emerald-500"
   const groupOrder = Array.from(new Set([...cardholders, ...displayRows.map((r) => r.cardholder)].filter(Boolean)))
   const groups = groupOrder.map((name) => ({ name, items: displayRows.filter((r) => r.cardholder === name) })).filter((g) => g.items.length)
@@ -644,6 +647,13 @@ export default function AccountsMonthClient({
               {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
             <span className="text-gray-400">— or filter any column in the row below ↓</span>
+            {dupeCount > 0 && (
+              <button onClick={() => setDupesOnly((v) => !v)}
+                className={`font-semibold px-2 py-1 rounded-lg border ${dupesOnly ? "border-orange-500 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" : "border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400 hover:bg-orange-500/10"}`}
+                title="Show only lines flagged as possible duplicates (same date & amount)">
+                ⚠ Possible duplicates ({dupeCount}){dupesOnly ? " ✓" : ""}
+              </button>
+            )}
             {filtering && <button onClick={clearFilters} className="font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Clear all filters</button>}
             {filtering && <span className="text-gray-400">Showing {displayRows.length} of {mainRows.length}</span>}
           </div>
