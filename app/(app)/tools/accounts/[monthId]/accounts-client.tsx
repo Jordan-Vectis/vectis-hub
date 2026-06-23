@@ -97,9 +97,8 @@ export default function AccountsMonthClient({
   const [viewer, setViewer] = useState<{ images: string[]; index: number } | null>(null)
   const [aiPreview, setAiPreview] = useState<{ docId: string; receipts: any[]; capped?: boolean; cardholder?: string }[] | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())   // main-table rows ticked for re-run
-  const [filterText, setFilterText] = useState("")
   const [filterCard, setFilterCard] = useState("")
-  const [filterReview, setFilterReview] = useState(false)
+  const [colFilters, setColFilters] = useState({ supplier: "", item: "", website: "", date: "", vat: "", value: "", vatAmt: "", column: "", reviewed: "" })
   const [stitching, setStitching] = useState(false)
   const [applying, setApplying] = useState(false)
   const [deselected, setDeselected] = useState<Set<string>>(new Set())   // To-read scans the user has un-ticked
@@ -415,15 +414,26 @@ export default function AccountsMonthClient({
   for (const r of mainRows) if (r.docDate && r.gross > 0) dupeCounts.set(dupeKey(r), (dupeCounts.get(dupeKey(r)) ?? 0) + 1)
   const isPossibleDupe = (r: Row) => !!r.docDate && r.gross > 0 && (dupeCounts.get(dupeKey(r)) ?? 0) > 1
 
-  // Filter (display only — the totals/stats above stay full-month).
-  const fq = filterText.trim().toLowerCase()
+  // Per-column filter (display only — the totals/stats above stay full-month).
+  const cf = colFilters
+  const inc = (val: string, q: string) => !q.trim() || (val ?? "").toLowerCase().includes(q.trim().toLowerCase())
   const displayRows = mainRows.filter((r) => {
     if (filterCard && r.cardholder !== filterCard) return false
-    if (filterReview && r.reviewed) return false
-    if (fq && !`${r.supplier} ${r.item} ${r.website}`.toLowerCase().includes(fq)) return false
+    if (!inc(r.supplier, cf.supplier)) return false
+    if (!inc(r.item, cf.item)) return false
+    if (!inc(r.website, cf.website)) return false
+    if (cf.date.trim() && !(r.docDate || "").includes(cf.date.trim())) return false
+    if (cf.vat && String(r.vatCode) !== cf.vat) return false
+    if (cf.value.trim() && !String(r.gross).includes(cf.value.trim())) return false
+    if (cf.vatAmt.trim() && !String(r.vat).includes(cf.vatAmt.trim())) return false
+    if (cf.column && r.column !== cf.column) return false
+    if (cf.reviewed === "yes" && !r.reviewed) return false
+    if (cf.reviewed === "no" && r.reviewed) return false
     return true
   })
-  const filtering = displayRows.length !== mainRows.length
+  const filtering = !!filterCard || Object.values(colFilters).some(Boolean)
+  const clearFilters = () => { setFilterCard(""); setColFilters({ supplier: "", item: "", website: "", date: "", vat: "", value: "", vatAmt: "", column: "", reviewed: "" }) }
+  const miniFilter = "w-full px-1 py-0.5 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 text-[11px] focus:outline-none focus:ring-1 focus:ring-emerald-500"
   const groupOrder = Array.from(new Set([...cardholders, ...displayRows.map((r) => r.cardholder)].filter(Boolean)))
   const groups = groupOrder.map((name) => ({ name, items: displayRows.filter((r) => r.cardholder === name) })).filter((g) => g.items.length)
   const colSum = (items: Row[], key: string) => round(items.filter((r) => r.column === key).reduce((a, r) => a + r.net, 0))
@@ -579,16 +589,16 @@ export default function AccountsMonthClient({
             <span className="font-semibold text-gray-500 dark:text-gray-300">VAT codes:</span> 1 = 20% VAT · 2 = no VAT · 7 = personal.
             {" "}Click a column cell to file a line under that nominal code. Open a line (its image) to change its card or add pages.
           </p>
-          {/* Filter */}
-          <div className="flex items-center gap-2 flex-wrap mb-2">
-            <input value={filterText} onChange={(e) => setFilterText(e.target.value)} placeholder="Filter by supplier / item / website…" className={`${input} text-sm w-60`} />
+          {/* Filter — per-column boxes are in the header row below */}
+          <div className="flex items-center gap-2 flex-wrap mb-2 text-xs">
+            <span className="text-gray-400">Card / account:</span>
             <select value={filterCard} onChange={(e) => setFilterCard(e.target.value)} className={`${input} text-sm`}>
               <option value="">All cards</option>
               {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
-            <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400"><input type="checkbox" checked={filterReview} onChange={(e) => setFilterReview(e.target.checked)} className="w-4 h-4 accent-emerald-600" /> To review only</label>
-            {filtering && <button onClick={() => { setFilterText(""); setFilterCard(""); setFilterReview(false) }} className="text-xs font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Clear filter</button>}
-            {filtering && <span className="text-xs text-gray-400">Showing {displayRows.length} of {mainRows.length}</span>}
+            <span className="text-gray-400">— or filter any column in the row below ↓</span>
+            {filtering && <button onClick={clearFilters} className="font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Clear all filters</button>}
+            {filtering && <span className="text-gray-400">Showing {displayRows.length} of {mainRows.length}</span>}
           </div>
           {/* Re-run AI on already-processed lines */}
           <div className="flex items-center gap-3 flex-wrap mb-2 text-xs">
@@ -626,6 +636,24 @@ export default function AccountsMonthClient({
                   {NOMINAL_COLUMNS.map((c) => <th key={c.key} className="p-1.5 text-right leading-tight break-words">{c.label}<br /><span className="text-gray-500 font-normal">{c.code}</span></th>)}
                   <th className="p-1.5 text-center">OK</th>
                   <th className="p-1.5"></th>
+                </tr>
+                <tr className="border-b border-gray-200 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/30">
+                  <th className="p-1"></th>
+                  <th className="p-1"><input value={cf.supplier} onChange={(e) => setColFilters((s) => ({ ...s, supplier: e.target.value }))} placeholder="filter…" className={miniFilter} /></th>
+                  <th className="p-1"><input value={cf.item} onChange={(e) => setColFilters((s) => ({ ...s, item: e.target.value }))} placeholder="filter…" className={miniFilter} /></th>
+                  <th className="p-1"><input value={cf.website} onChange={(e) => setColFilters((s) => ({ ...s, website: e.target.value }))} placeholder="filter…" className={miniFilter} /></th>
+                  <th className="p-1"><input value={cf.date} onChange={(e) => setColFilters((s) => ({ ...s, date: e.target.value }))} placeholder="yyyy-mm" className={miniFilter} /></th>
+                  <th className="p-1"><select value={cf.vat} onChange={(e) => setColFilters((s) => ({ ...s, vat: e.target.value }))} className={miniFilter}><option value="">all</option><option value="1">1</option><option value="2">2</option><option value="7">7</option></select></th>
+                  <th className="p-1"><input value={cf.value} onChange={(e) => setColFilters((s) => ({ ...s, value: e.target.value }))} placeholder="filter…" className={miniFilter} /></th>
+                  <th className="p-1"><input value={cf.vatAmt} onChange={(e) => setColFilters((s) => ({ ...s, vatAmt: e.target.value }))} placeholder="filter…" className={miniFilter} /></th>
+                  <th className="p-1" colSpan={NOMINAL_COLUMNS.length}>
+                    <select value={cf.column} onChange={(e) => setColFilters((s) => ({ ...s, column: e.target.value }))} className={miniFilter}>
+                      <option value="">any nominal column</option>
+                      {NOMINAL_COLUMNS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                    </select>
+                  </th>
+                  <th className="p-1"><select value={cf.reviewed} onChange={(e) => setColFilters((s) => ({ ...s, reviewed: e.target.value }))} className={miniFilter}><option value="">all</option><option value="yes">✓</option><option value="no">✗</option></select></th>
+                  <th className="p-1"></th>
                 </tr>
               </thead>
               <tbody>
