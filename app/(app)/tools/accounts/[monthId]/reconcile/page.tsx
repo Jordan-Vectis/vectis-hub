@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma"
 import { getSignedImageUrl } from "@/lib/r2"
 import { DEFAULT_CARDHOLDERS } from "@/lib/accounting"
 import AccountsReconcile from "../reconcile-client"
-import Link from "next/link"
 
 export const dynamic = "force-dynamic"
 
@@ -65,17 +64,13 @@ export default async function ReconcilePage({ params }: { params: Promise<{ mont
 
   return (
     <div className="px-6 py-8">
-      <div className="flex items-center gap-3 mb-6">
-        <Link href={`/tools/accounts/${monthId}`} className="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">← {month.label}</Link>
-        <span className="text-gray-300 dark:text-gray-600">/</span>
-        <h1 className="text-base font-bold text-gray-800 dark:text-gray-100">🏦 Reconcile</h1>
-      </div>
       <AccountsReconcile
         monthId={month.id}
         entries={entries}
         statements={statements}
         cardholders={cardholders}
         standalone
+        monthLabel={month.label}
       />
     </div>
   )

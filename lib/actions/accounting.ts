@@ -82,6 +82,16 @@ export async function createAccountingMonth(label: string) {
   return { id: month.id }
 }
 
+export async function renameAccountingMonth(id: string, label: string) {
+  await requireAdmin()
+  const trimmed = label.trim().slice(0, 60)
+  if (!trimmed) throw new Error("Name required")
+  await prisma.accountingMonth.update({ where: { id }, data: { label: trimmed } })
+  revalidatePath("/tools/accounts")
+  revalidatePath(`/tools/accounts/${id}`)
+  revalidatePath(`/tools/accounts/${id}/reconcile`)
+}
+
 export async function deleteAccountingMonth(id: string) {
   await requireAdmin()
   const docs = await prisma.accountingDocument.findMany({ where: { monthId: id }, select: { imageKey: true, images: true } })

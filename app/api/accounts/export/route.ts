@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
 
     const monthId = req.nextUrl.searchParams.get("monthId")
     if (!monthId) return NextResponse.json({ error: "monthId required" }, { status: 400 })
+    const reconciledOnly = req.nextUrl.searchParams.get("reconciled") === "true"
 
     const month = await prisma.accountingMonth.findUnique({
       where: { id: monthId },
@@ -20,7 +21,17 @@ export async function GET(req: NextRequest) {
     })
     if (!month) return NextResponse.json({ error: "Month not found" }, { status: 404 })
 
-    const docs = month.documents
+    let docs = month.documents
+
+    if (reconciledOnly) {
+      const stmts = await prisma.bankStatement.findMany({
+        where: { monthId },
+        include: { transactions: { select: { matchedDocIds: true, ignored: true } } },
+      })
+      const matchedIds = new Set<string>()
+      for (const s of stmts) for (const t of s.transactions) if (!t.ignored) for (const id of t.matchedDocIds) matchedIds.add(id)
+      docs = docs.filter((d) => matchedIds.has(d.id))
+    }
     const blank = NOMINAL_COLUMNS.map(() => "")
 
     // Cardholder grouping order: managed list first, then any historical value
@@ -94,7 +105,7 @@ export async function GET(req: NextRequest) {
     XLSX.utils.book_append_sheet(wb, wsVat, ("VAT " + month.label).slice(0, 31))
 
     const buf: Buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" })
-    const filename = `Accounts ${month.label}.xlsx`.replace(/[^a-zA-Z0-9 ._-]/g, "")
+    const filename = (reconciledOnly ? `Reconciled ${month.label}.xlsx` : `Accounts ${month.label}.xlsx`).replace(/[^a-zA-Z0-9 ._-]/g, "")
     return new NextResponse(new Uint8Array(buf), {
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
