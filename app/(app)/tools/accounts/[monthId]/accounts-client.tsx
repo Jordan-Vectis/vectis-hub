@@ -4,7 +4,7 @@ import { Fragment, useEffect, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { VAT_CODES, NOMINAL_COLUMNS, columnLabel } from "@/lib/accounting"
-import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, removeDocumentPage, saveAccountingDocuments } from "@/lib/actions/accounting"
+import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, removeDocumentPage, saveAccountingDocuments, splitAccountingDocument } from "@/lib/actions/accounting"
 
 type Row = {
   id: string; cardholder: string; source: string; images: string[]
@@ -261,6 +261,20 @@ export default function AccountsMonthClient({
   function removeRow(id: string) {
     setRows((rs) => rs.filter((r) => r.id !== id))
     startBusy(async () => { await deleteAccountingDocument(id) })
+  }
+  // Split a line into two (e.g. accommodation vs food, which differ on VAT/nominal).
+  // Creates a sibling carrying its own copy of the invoice image, starting at £0;
+  // the user reallocates the amount across the two lines.
+  function splitRow(id: string) {
+    startBusy(async () => {
+      const d = await splitAccountingDocument(id)
+      setRows((rs) => {
+        const idx = rs.findIndex((r) => r.id === id)
+        const newRow = { ...d, reviewed: false, aiRun: true } as Row
+        return idx === -1 ? [...rs, newRow] : [...rs.slice(0, idx + 1), newRow, ...rs.slice(idx + 1)]
+      })
+      setFlashId(d.id)
+    })
   }
   function deleteMonth() {
     if (!confirm(`Delete the whole "${monthLabel}" month and all its lines? This cannot be undone.`)) return
@@ -521,7 +535,8 @@ export default function AccountsMonthClient({
                         <td className="p-1.5 text-center">
                           <input type="checkbox" checked={r.reviewed} onChange={(e) => patch(r.id, { reviewed: e.target.checked })} className="w-4 h-4 accent-emerald-600" />
                         </td>
-                        <td className="p-1.5 text-right">
+                        <td className="p-1.5 text-right whitespace-nowrap">
+                          <button onClick={() => splitRow(r.id)} disabled={busy} className="text-gray-400 hover:text-emerald-600 mr-2 disabled:opacity-40" title="Split this line into parts (e.g. food vs accommodation)">✂</button>
                           <button onClick={() => removeRow(r.id)} className="text-gray-400 hover:text-red-500" title="Delete line">✕</button>
                         </td>
                       </tr>

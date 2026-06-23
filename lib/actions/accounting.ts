@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
-import { deleteObjectsFromR2 } from "@/lib/r2"
+import { deleteObjectsFromR2, getObjectBuffer, uploadBufferToR2, getSignedImageUrl } from "@/lib/r2"
 import {
   netFromGross, normaliseSupplier, cleanCardholder, isValidColumn, isValidVatCode,
 } from "@/lib/accounting"
@@ -83,6 +83,53 @@ export async function addManualDocument(monthId: string, cardholder: string) {
   })
   revalidatePath(`/tools/accounts/${monthId}`)
   return { id: doc.id }
+}
+
+function mimeForKey(key: string): string {
+  const k = key.toLowerCase()
+  if (k.endsWith(".pdf")) return "application/pdf"
+  if (k.endsWith(".png")) return "image/png"
+  if (k.endsWith(".webp")) return "image/webp"
+  if (k.endsWith(".heic") || k.endsWith(".heif")) return "image/heic"
+  return "image/jpeg"
+}
+
+// Split one line into two: creates a sibling line that carries its OWN copy of
+// the invoice image(s) (so deleting either keeps the other's scan), copying the
+// supplier/item/date/VAT/column but starting at £0. The user then reallocates the
+// amount across the two lines (e.g. accommodation vs food, which differ on VAT/nominal).
+export async function splitAccountingDocument(docId: string) {
+  await requireAdmin()
+  const doc = await prisma.accountingDocument.findUnique({ where: { id: docId } })
+  if (!doc) throw new Error("Document not found")
+
+  const srcKeys = (doc.images && doc.images.length) ? doc.images : (doc.imageKey ? [doc.imageKey] : [])
+  const newKeys: string[] = []
+  for (const k of srcKeys) {
+    const buf = await getObjectBuffer(k)
+    const mime = mimeForKey(k)
+    const ext = mime === "application/pdf" ? "pdf" : mime === "image/png" ? "png" : "jpg"
+    const nk = `accounts/${doc.monthId}/${Date.now()}-${newKeys.length}-split.${ext}`
+    await uploadBufferToR2(buf, nk, mime)
+    newKeys.push(nk)
+  }
+
+  const created = await prisma.accountingDocument.create({
+    data: {
+      monthId: doc.monthId, cardholder: doc.cardholder, source: doc.source, images: newKeys,
+      supplier: doc.supplier, item: doc.item, website: doc.website, docDate: doc.docDate,
+      vatCode: doc.vatCode, column: doc.column, gross: 0, vat: 0, net: 0, aiRun: true,
+    },
+  })
+  revalidatePath(`/tools/accounts/${doc.monthId}`)
+  return {
+    id: created.id, cardholder: created.cardholder, source: created.source,
+    images: newKeys.length ? [await getSignedImageUrl(newKeys[0])] : [],
+    supplier: created.supplier, item: created.item, website: created.website,
+    docDate: created.docDate ? created.docDate.toISOString().slice(0, 10) : "",
+    vatCode: created.vatCode, gross: created.gross, vat: created.vat, net: created.net,
+    column: created.column, aiNotes: null as string | null,
+  }
 }
 
 export async function deleteAccountingDocument(id: string) {
