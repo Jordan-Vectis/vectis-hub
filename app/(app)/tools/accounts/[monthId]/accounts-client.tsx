@@ -4,7 +4,7 @@ import { Fragment, useEffect, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { VAT_CODES, NOMINAL_COLUMNS, columnLabel } from "@/lib/accounting"
-import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, removeDocumentPage, saveAccountingDocuments, splitAccountingDocument } from "@/lib/actions/accounting"
+import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, removeDocumentPage, saveAccountingDocuments, splitAccountingDocument, bulkDeleteAccountingDocuments } from "@/lib/actions/accounting"
 
 type Row = {
   id: string; cardholder: string; source: string; images: string[]
@@ -456,6 +456,7 @@ export default function AccountsMonthClient({
             <div className="flex items-center gap-3 text-xs font-semibold">
               <button onClick={() => setDeselected(new Set())} className="text-emerald-600 hover:text-emerald-500">Select all</button>
               <button onClick={() => setDeselected(new Set(toRead.map((r) => r.id)))} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Select none</button>
+              <button onClick={() => { if (confirm(`Delete all ${toRead.length} un-read scan${toRead.length === 1 ? "" : "s"}? They won't be read or saved.`)) { const ids = toRead.map((r) => r.id); setRows((rs) => rs.filter((r) => !ids.includes(r.id))); startBusy(async () => { await bulkDeleteAccountingDocuments(ids) }) } }} disabled={busy} className="text-red-500 hover:text-red-700 disabled:opacity-50">Delete all</button>
             </div>
           </div>
           <p className="text-xs text-gray-400 mb-3">Tick the scans you want to read, then press <span className="font-semibold">Run AI</span> above — only the selected ones are read. Click a scan to view it, or use the ✕ to remove it.</p>

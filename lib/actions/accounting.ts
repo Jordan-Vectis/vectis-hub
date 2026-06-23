@@ -151,6 +151,18 @@ export async function deleteAccountingDocument(id: string) {
   revalidatePath(`/tools/accounts/${doc.monthId}`)
 }
 
+// Delete several documents at once (e.g. clearing the whole To-read queue).
+export async function bulkDeleteAccountingDocuments(ids: string[]) {
+  await requireAdmin()
+  if (!ids.length) return
+  const docs = await prisma.accountingDocument.findMany({ where: { id: { in: ids } }, select: { id: true, monthId: true, imageKey: true, images: true } })
+  if (!docs.length) return
+  const keys = docs.flatMap((d) => [...(d.images ?? []), d.imageKey].filter((k): k is string => !!k))
+  if (keys.length) await deleteObjectsFromR2(keys)
+  await prisma.accountingDocument.deleteMany({ where: { id: { in: docs.map((d) => d.id) } } })
+  revalidatePath(`/tools/accounts/${docs[0].monthId}`)
+}
+
 type DocEdit = {
   id: string
   cardholder: string
