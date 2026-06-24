@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
@@ -70,6 +70,23 @@ export default function AccountsReconcile({
   const [copied, setCopied] = useState(false)
   const [unmatchedOnly, setUnmatchedOnly] = useState(false)   // hide already-matched transactions
   const [viewer, setViewer] = useState<{ images: string[]; label: string } | null>(null)   // fullscreen statement viewer
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())   // minimised statement sections
+
+  useEffect(() => {
+    try { const s = localStorage.getItem(`reconcile_collapsed_${monthId}`); if (s) setCollapsed(new Set(JSON.parse(s))) } catch {}
+  }, [monthId])
+  function toggleCollapsed(id: string) {
+    setCollapsed((prev) => {
+      const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id)
+      try { localStorage.setItem(`reconcile_collapsed_${monthId}`, JSON.stringify([...n])) } catch {}
+      return n
+    })
+  }
+  function setAllCollapsed(ids: string[], on: boolean) {
+    const n = on ? new Set(ids) : new Set<string>()
+    setCollapsed(n)
+    try { localStorage.setItem(`reconcile_collapsed_${monthId}`, JSON.stringify([...n])) } catch {}
+  }
   const fileInput = useRef<HTMLInputElement>(null)
   const addPageInput = useRef<HTMLInputElement>(null)
   const csvInput = useRef<HTMLInputElement>(null)
@@ -206,18 +223,30 @@ export default function AccountsReconcile({
         const isReading = readingId === stmt.id
         const isUploading = uploadingId === stmt.id
         const allDone = liveTxns.length > 0 && unmatchedCount === 0
+        const isCollapsed = collapsed.has(stmt.id)
+
+        // Summary stats (shown when the section is expanded)
+        const liveCredits = stmt.transactions.filter((t) => !t.ignored && t.direction === "CREDIT")
+        const ignoredCount = stmt.transactions.filter((t) => t.ignored).length
+        const totalSpend = round(liveTxns.reduce((a, t) => a + t.amount, 0))
+        const matchedSpend = round(liveTxns.filter((t) => t.matchedDocIds.length).reduce((a, t) => a + t.amount, 0))
+        const unmatchedSpend = round(totalSpend - matchedSpend)
+        const creditTotal = round(liveCredits.reduce((a, t) => a + t.amount, 0))
+        const freeRemaining = round(freeUnits.reduce((a, u) => a + unitRemaining(u), 0))
 
         return (
           <div key={stmt.id} className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
             {/* Statement header */}
             <div className="flex items-start justify-between gap-3 p-4 border-b border-gray-100 dark:border-gray-800 flex-wrap">
-              <div className="flex items-center gap-2 flex-wrap">
+              <button onClick={() => toggleCollapsed(stmt.id)} className="flex items-center gap-2 flex-wrap text-left" title={isCollapsed ? "Expand" : "Minimise"}>
+                <span className="text-gray-400 w-4 text-center">{isCollapsed ? "▸" : "▾"}</span>
                 <span className="font-semibold text-gray-800 dark:text-gray-100">{stmt.cardholder || "Unassigned"}</span>
                 {stmt.label && <span className="text-xs text-gray-400">— {stmt.label}</span>}
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${allDone ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300" : "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300"}`}>
                   {matchedCount}/{liveTxns.length} matched
                 </span>
-              </div>
+                {isCollapsed && unmatchedSpend > 0.005 && <span className="text-xs text-amber-600 dark:text-amber-400">· {gbp(unmatchedSpend)} unmatched</span>}
+              </button>
               <div className="flex items-center gap-2 flex-wrap">
                 <label className="text-xs text-gray-500 dark:text-gray-400">Card:
                   <select value={stmt.cardholder} disabled={busy} onChange={(e) => run(() => setStatementCardholder(stmt.id, e.target.value))} className={`${input} ml-1 text-xs py-1`} title="Change card — re-run Auto-match after">
@@ -245,6 +274,20 @@ export default function AccountsReconcile({
                 <button onClick={() => { if (confirm("Delete this statement and its transactions?")) run(() => deleteBankStatement(stmt.id)) }} disabled={busy} className="text-xs font-semibold px-3 py-1.5 rounded-lg text-red-500 hover:bg-red-500/10">Delete</button>
               </div>
             </div>
+
+            {!isCollapsed && (<>
+
+            {stmt.transactions.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 px-4 pt-3">
+                <SummaryStat label="Transactions" value={String(liveTxns.length)} />
+                <SummaryStat label="Total spend" value={gbp(totalSpend)} />
+                <SummaryStat label="Matched" value={gbp(matchedSpend)} tone="emerald" />
+                <SummaryStat label="Unmatched" value={gbp(unmatchedSpend)} tone={unmatchedSpend > 0.005 ? "amber" : "emerald"} />
+                {liveCredits.length > 0 && <SummaryStat label={`Credits (${liveCredits.length})`} value={gbp(creditTotal)} tone="purple" />}
+                {ignoredCount > 0 && <SummaryStat label="Ignored" value={String(ignoredCount)} />}
+                {freeUnits.length > 0 && <SummaryStat label={`Entered, unmatched (${freeUnits.length})`} value={gbp(freeRemaining)} tone="amber" />}
+              </div>
+            )}
 
             {stmt.cardholder && <p className="text-[11px] text-gray-400 px-4 pt-2">Matching against <span className="font-semibold text-gray-500 dark:text-gray-300">{stmt.cardholder}</span>&apos;s entered lines only.</p>}
 
@@ -374,6 +417,8 @@ export default function AccountsReconcile({
                 </div>
               </div>
             )}
+
+            </>)}
           </div>
         )
       })}
@@ -412,6 +457,11 @@ export default function AccountsReconcile({
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-gray-400">{totalMatched} matched · {totalUnmatched} unmatched</span>
+            {statements.length > 1 && (
+              <button onClick={() => setAllCollapsed(statements.map((s) => s.id), collapsed.size < statements.length)} title="Minimise or expand every statement" className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-500/10">
+                {collapsed.size >= statements.length ? "Expand all" : "Collapse all"}
+              </button>
+            )}
             <button onClick={() => setUnmatchedOnly((v) => !v)} title="Hide transactions that are already matched" className={`text-xs font-semibold px-3 py-1.5 rounded-lg border ${unmatchedOnly ? "border-amber-500 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400" : "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-500/10"}`}>
               Unmatched only{unmatchedOnly ? " ✓" : ""}
             </button>
@@ -463,5 +513,18 @@ export default function AccountsReconcile({
       </button>
       {open && <div className="p-4 pt-0">{statementsContent}</div>}
     </div>
+  )
+}
+
+function SummaryStat({ label, value, tone }: { label: string; value: string; tone?: "emerald" | "amber" | "purple" }) {
+  const toneCls = tone === "emerald" ? "text-emerald-700 dark:text-emerald-300"
+    : tone === "amber" ? "text-amber-700 dark:text-amber-300"
+    : tone === "purple" ? "text-purple-700 dark:text-purple-300"
+    : "text-gray-700 dark:text-gray-200"
+  return (
+    <span className="inline-flex flex-col px-2.5 py-1 rounded-lg bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800">
+      <span className="text-[9px] uppercase tracking-wide text-gray-400">{label}</span>
+      <span className={`text-xs font-semibold tabular-nums ${toneCls}`}>{value}</span>
+    </span>
   )
 }
