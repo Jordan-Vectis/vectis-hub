@@ -59,6 +59,7 @@ export default async function ReconcilePage({ params }: { params: Promise<{ mont
       direction: t.direction,
       matchedDocIds: t.matchedDocIds,
       ignored: t.ignored,
+      receiptMissing: t.receiptMissing,
     })),
   })))
 

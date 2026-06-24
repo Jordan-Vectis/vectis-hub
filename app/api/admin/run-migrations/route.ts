@@ -569,6 +569,9 @@ const MIGRATIONS = [
 
   // 2026-06-23 — Accounts: favourite/current month flag (pinned to top of the list)
   `ALTER TABLE "AccountingMonth" ADD COLUMN IF NOT EXISTS "favourite" BOOLEAN NOT NULL DEFAULT FALSE`,
+
+  // 2026-06-23 — Reconciliation: mark a bank transaction as "receipt missing" (no paperwork)
+  `ALTER TABLE "BankTransaction" ADD COLUMN IF NOT EXISTS "receiptMissing" BOOLEAN NOT NULL DEFAULT FALSE`,
 ]
 
 export async function POST() {

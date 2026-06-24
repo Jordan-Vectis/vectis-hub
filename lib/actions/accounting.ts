@@ -323,6 +323,18 @@ export async function setTransactionIgnored(txnId: string, ignored: boolean) {
   revalidatePath(`/tools/accounts/${t.monthId}`)
 }
 
+// Mark a transaction as "receipt missing": a real payment with no invoice/receipt.
+// Clears any match (a missing receipt can't be matched) — it's tracked separately
+// and surfaced in the "Missing invoices" email.
+export async function setTransactionReceiptMissing(txnId: string, missing: boolean) {
+  await requireAdmin()
+  const t = await prisma.bankTransaction.findUnique({ where: { id: txnId }, select: { monthId: true } })
+  if (!t) return
+  await prisma.bankTransaction.update({ where: { id: txnId }, data: { receiptMissing: missing, ...(missing ? { matchedDocIds: [] } : {}) } })
+  revalidatePath(`/tools/accounts/${t.monthId}`)
+  revalidatePath(`/tools/accounts/${t.monthId}/reconcile`)
+}
+
 // Change which card/account a statement belongs to. Clears existing matches (they
 // were against the old cardholder's lines), so re-run Auto-match afterwards.
 export async function setStatementCardholder(statementId: string, cardholder: string) {

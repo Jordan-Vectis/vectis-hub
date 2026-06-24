@@ -7,6 +7,7 @@ import {
   deleteBankStatement, autoMatchStatement, setTransactionMatch,
   setTransactionIgnored, snapDocAmount, createBankStatementFromRows,
   setStatementCardholder, renameAccountingMonth, clearStatementMatches,
+  setTransactionReceiptMissing,
 } from "@/lib/actions/accounting"
 import ImageViewer from "./accounts-viewer"
 import LinkSpinner from "../link-spinner"
@@ -19,7 +20,7 @@ type Entry = {
 type Txn = {
   id: string; postDate: string; tranDate: string; description: string; reference: string
   amount: number; currency: string; originalAmount: number | null; feeAmount: number | null
-  direction: string; matchedDocIds: string[]; ignored: boolean
+  direction: string; matchedDocIds: string[]; ignored: boolean; receiptMissing: boolean
 }
 type Statement = { id: string; label: string; cardholder: string; source: string; images: string[]; transactions: Txn[] }
 type Unit = { key: string; docIds: string[]; amount: number; label: string }
@@ -97,13 +98,14 @@ export default function AccountsReconcile({
 
   const allLiveTxns = statements.flatMap((s) => s.transactions.filter((t) => !t.ignored && t.direction !== "CREDIT"))
   const totalMatched = allLiveTxns.filter((t) => t.matchedDocIds.length).length
-  const totalUnmatched = allLiveTxns.length - totalMatched
+  const totalMissing = allLiveTxns.filter((t) => !t.matchedDocIds.length && t.receiptMissing).length
+  const totalUnmatched = allLiveTxns.length - totalMatched - totalMissing
 
-  // "Missing invoices" = unmatched live debits — there's a bank payment but no
-  // entered invoice/receipt for it. Build copy-ready email text grouped by card.
+  // "Missing invoices" email lists the transactions you've explicitly marked as
+  // "receipt missing" (a real payment with no paperwork). Grouped by card.
   const txnDate = (t: Txn) => (t.tranDate || t.postDate || "").split("-").reverse().join("/")
   const missingByCard = statements
-    .map((s) => ({ card: s.cardholder || s.label || "Statement", txns: s.transactions.filter((t) => !t.ignored && t.direction !== "CREDIT" && t.matchedDocIds.length === 0) }))
+    .map((s) => ({ card: s.cardholder || s.label || "Statement", txns: s.transactions.filter((t) => !t.ignored && t.direction !== "CREDIT" && t.receiptMissing) }))
     .filter((g) => g.txns.length)
   const missingCount = missingByCard.reduce((a, g) => a + g.txns.length, 0)
   const missingText = (() => {
@@ -217,9 +219,10 @@ export default function AccountsReconcile({
         const freeUnits = stmtUnits.filter((u) => unitRemaining(u) > 0.005)   // still has an outstanding balance
         const liveTxns = stmt.transactions.filter((t) => !t.ignored && t.direction !== "CREDIT")
         const matchedCount = liveTxns.filter((t) => t.matchedDocIds.length).length
-        const unmatchedCount = liveTxns.length - matchedCount
-        // When "Unmatched only" is on, show just the live debits still needing a match.
-        const visibleTxns = unmatchedOnly ? stmt.transactions.filter((t) => !t.ignored && t.direction !== "CREDIT" && t.matchedDocIds.length === 0) : stmt.transactions
+        const missingFlagCount = liveTxns.filter((t) => !t.matchedDocIds.length && t.receiptMissing).length
+        const unmatchedCount = liveTxns.length - matchedCount - missingFlagCount   // still need a decision
+        // When "Unmatched only" is on, show just the live debits still needing a match (not matched, not marked-missing).
+        const visibleTxns = unmatchedOnly ? stmt.transactions.filter((t) => !t.ignored && t.direction !== "CREDIT" && t.matchedDocIds.length === 0 && !t.receiptMissing) : stmt.transactions
         const isReading = readingId === stmt.id
         const isUploading = uploadingId === stmt.id
         const allDone = liveTxns.length > 0 && unmatchedCount === 0
@@ -230,7 +233,8 @@ export default function AccountsReconcile({
         const ignoredCount = stmt.transactions.filter((t) => t.ignored).length
         const totalSpend = round(liveTxns.reduce((a, t) => a + t.amount, 0))
         const matchedSpend = round(liveTxns.filter((t) => t.matchedDocIds.length).reduce((a, t) => a + t.amount, 0))
-        const unmatchedSpend = round(totalSpend - matchedSpend)
+        const missingSpend = round(liveTxns.filter((t) => !t.matchedDocIds.length && t.receiptMissing).reduce((a, t) => a + t.amount, 0))
+        const unmatchedSpend = round(totalSpend - matchedSpend - missingSpend)
         const creditTotal = round(liveCredits.reduce((a, t) => a + t.amount, 0))
         const freeRemaining = round(freeUnits.reduce((a, u) => a + unitRemaining(u), 0))
 
@@ -245,6 +249,7 @@ export default function AccountsReconcile({
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${allDone ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300" : "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300"}`}>
                   {matchedCount}/{liveTxns.length} matched
                 </span>
+                {missingFlagCount > 0 && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400">{missingFlagCount} receipt missing</span>}
                 {isCollapsed && unmatchedSpend > 0.005 && <span className="text-xs text-amber-600 dark:text-amber-400">· {gbp(unmatchedSpend)} unmatched</span>}
               </button>
               <div className="flex items-center gap-2 flex-wrap">
@@ -283,6 +288,7 @@ export default function AccountsReconcile({
                 <SummaryStat label="Total spend" value={gbp(totalSpend)} />
                 <SummaryStat label="Matched" value={gbp(matchedSpend)} tone="emerald" />
                 <SummaryStat label="Unmatched" value={gbp(unmatchedSpend)} tone={unmatchedSpend > 0.005 ? "amber" : "emerald"} />
+                {missingFlagCount > 0 && <SummaryStat label={`Receipt missing (${missingFlagCount})`} value={gbp(missingSpend)} tone="red" />}
                 {liveCredits.length > 0 && <SummaryStat label={`Credits (${liveCredits.length})`} value={gbp(creditTotal)} tone="purple" />}
                 {ignoredCount > 0 && <SummaryStat label="Ignored" value={String(ignoredCount)} />}
                 {freeUnits.length > 0 && <SummaryStat label={`Entered, unmatched (${freeUnits.length})`} value={gbp(freeRemaining)} tone="amber" />}
@@ -338,7 +344,7 @@ export default function AccountsReconcile({
                         : `— no exact match (${suggestions.length} nearest) —`
 
                       return (
-                        <tr key={t.id} className={`border-b border-gray-100 dark:border-gray-800/60 align-top ${t.ignored ? "opacity-40" : isMatched ? "bg-emerald-50/40 dark:bg-emerald-500/5" : credit ? "" : "bg-amber-50/40 dark:bg-amber-500/5"}`}>
+                        <tr key={t.id} className={`border-b border-gray-100 dark:border-gray-800/60 align-top ${t.ignored ? "opacity-40" : isMatched ? "bg-emerald-50/40 dark:bg-emerald-500/5" : credit ? "" : t.receiptMissing ? "bg-red-50/40 dark:bg-red-500/5" : "bg-amber-50/40 dark:bg-amber-500/5"}`}>
                           <td className="p-1.5 whitespace-nowrap text-gray-500 dark:text-gray-400 text-xs">{(t.tranDate || t.postDate || "").split("-").reverse().join("/")}</td>
                           <td className="p-1.5">
                             <span className="text-gray-800 dark:text-gray-200">{t.description || "(no description)"}</span>
@@ -380,6 +386,8 @@ export default function AccountsReconcile({
                                   </div>
                                 )
                               })()
+                            ) : t.receiptMissing ? (
+                              <span className="text-xs font-semibold text-red-600 dark:text-red-400">⚠ Receipt missing — no invoice for this payment</span>
                             ) : (
                               <select disabled={busy} value="" onChange={(e) => { const u = freeUnits.find((x) => x.key === e.target.value); if (u) run(() => setTransactionMatch(t.id, u.docIds)) }} className={`${input} w-full text-xs`}>
                                 <option value="">{placeholder}</option>
@@ -391,6 +399,11 @@ export default function AccountsReconcile({
                           </td>
                           <td className="p-1.5 text-right whitespace-nowrap">
                             {isMatched && !t.ignored && <button onClick={() => run(() => setTransactionMatch(t.id, []))} disabled={busy} className="text-xs text-gray-400 hover:text-red-500 mr-2">unmatch</button>}
+                            {!t.ignored && !isMatched && !credit && (
+                              <button onClick={() => run(() => setTransactionReceiptMissing(t.id, !t.receiptMissing))} disabled={busy} className={`text-xs mr-2 ${t.receiptMissing ? "text-emerald-600 hover:text-emerald-500" : "text-red-500 hover:text-red-400"}`} title={t.receiptMissing ? "Found the receipt — unmark" : "No invoice/receipt exists for this payment"}>
+                                {t.receiptMissing ? "found it" : "receipt missing"}
+                              </button>
+                            )}
                             <button onClick={() => run(() => setTransactionIgnored(t.id, !t.ignored))} disabled={busy} className="text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">{t.ignored ? "un-ignore" : "ignore"}</button>
                           </td>
                         </tr>
@@ -456,7 +469,7 @@ export default function AccountsReconcile({
             <span className="text-gray-400">/ 🏦 Reconcile</span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-400">{totalMatched} matched · {totalUnmatched} unmatched</span>
+            <span className="text-xs text-gray-400">{totalMatched} matched · {totalUnmatched} unmatched{totalMissing > 0 ? <span className="text-red-500"> · {totalMissing} receipt missing</span> : null}</span>
             {statements.length > 1 && (
               <button onClick={() => setAllCollapsed(statements.map((s) => s.id), collapsed.size < statements.length)} title="Minimise or expand every statement" className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-500/10">
                 {collapsed.size >= statements.length ? "Expand all" : "Collapse all"}
@@ -465,7 +478,7 @@ export default function AccountsReconcile({
             <button onClick={() => setUnmatchedOnly((v) => !v)} title="Hide transactions that are already matched" className={`text-xs font-semibold px-3 py-1.5 rounded-lg border ${unmatchedOnly ? "border-amber-500 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400" : "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-500/10"}`}>
               Unmatched only{unmatchedOnly ? " ✓" : ""}
             </button>
-            <button onClick={() => { setCopied(false); setMissingOpen(true) }} disabled={missingCount === 0} title="Get email text listing every bank payment with no entered invoice" className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-40">
+            <button onClick={() => { setCopied(false); setMissingOpen(true) }} disabled={missingCount === 0} title="Email text listing the payments you've marked as 'receipt missing'" className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-40">
               ✉ Missing invoices{missingCount ? ` (${missingCount})` : ""}
             </button>
             <a href={`/api/accounts/export?monthId=${monthId}&reconciled=true`} className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white">
@@ -484,7 +497,7 @@ export default function AccountsReconcile({
                 <button onClick={() => setMissingOpen(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-lg leading-none">×</button>
               </div>
               <div className="p-4 overflow-y-auto">
-                <p className="text-xs text-gray-400 mb-2">Bank payments with no entered invoice yet. Copy this and email it to chase the paperwork.</p>
+                <p className="text-xs text-gray-400 mb-2">The payments you&apos;ve marked &ldquo;receipt missing&rdquo;. Copy this and email it to chase the paperwork.</p>
                 <textarea readOnly value={missingText} className="w-full h-72 text-sm font-mono bg-gray-50 dark:bg-[#2C2C2E] text-gray-800 dark:text-gray-100 rounded-lg border border-gray-200 dark:border-gray-700 p-3 focus:outline-none" />
               </div>
               <div className="flex items-center gap-2 p-4 border-t border-gray-100 dark:border-gray-800">
@@ -516,10 +529,11 @@ export default function AccountsReconcile({
   )
 }
 
-function SummaryStat({ label, value, tone }: { label: string; value: string; tone?: "emerald" | "amber" | "purple" }) {
+function SummaryStat({ label, value, tone }: { label: string; value: string; tone?: "emerald" | "amber" | "purple" | "red" }) {
   const toneCls = tone === "emerald" ? "text-emerald-700 dark:text-emerald-300"
     : tone === "amber" ? "text-amber-700 dark:text-amber-300"
     : tone === "purple" ? "text-purple-700 dark:text-purple-300"
+    : tone === "red" ? "text-red-600 dark:text-red-400"
     : "text-gray-700 dark:text-gray-200"
   return (
     <span className="inline-flex flex-col px-2.5 py-1 rounded-lg bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800">

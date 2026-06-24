@@ -1186,6 +1186,7 @@ model BankTransaction {
   direction      String        @default("DEBIT")  // DEBIT | CREDIT (payment/refund)
   matchedDocIds  String[]      @default([])        // entered AccountingDocument id(s) this reconciles to (N = split invoice)
   ignored        Boolean       @default(false)     // marked as not needing a match (e.g. a card payment)
+  receiptMissing Boolean       @default(false)     // real payment but no invoice/receipt exists (chase the paperwork)
   createdAt      DateTime      @default(now())
 
   @@index([statementId])
