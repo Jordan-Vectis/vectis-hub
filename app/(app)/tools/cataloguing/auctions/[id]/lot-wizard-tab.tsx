@@ -636,6 +636,7 @@ export default function LotWizardTab({
       if (isNaN(Number(estLow.replace(/[£,]/g, ""))) || isNaN(Number(estHigh.replace(/[£,]/g, ""))))
         return "Estimate values must be numbers"
     }
+    if (s === 7 && !parcel.trim()) return "Parcel Size is required"
     return ""
   }
 
@@ -1193,7 +1194,7 @@ export default function LotWizardTab({
         {step === 7 && (
           <div className="max-w-lg space-y-4">
             <div>
-              <label className={`${lbl} block mb-2`}>Parcel Size</label>
+              <label className={`${lbl} block mb-2`}>Parcel Size <span className="text-red-500">*</span></label>
               <div className="flex flex-wrap gap-2">
                 {PARCEL_OPTIONS.map(opt => (
                   <button key={opt} type="button" onClick={() => setParcel(v => v === opt ? "" : opt)}
