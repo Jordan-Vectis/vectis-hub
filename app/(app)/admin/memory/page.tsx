@@ -575,11 +575,16 @@ Core sync rules (full detail on the reference card):
 - Fair Warning after 15s inactivity (both, manual). Sell 20s after FW (both, manual): Vectis HAMMER then NEXT LOT; Saleroom SELL then NEXT.
 - Undo is a manual button only (no auto-detection). Saleroom buttons have NO exclamation marks.
 
-## Recent work (as of 2026-05-28)
+## Recent work (as of 2026-06-24)
 
-- Auto Clerk shadow system built end-to-end (pages above, GAP relay, reference card) — pushed to production
-- Auction AI: sidebar model dropdown now stays in sync with the KP Check / Double Check tester-list selection (they could silently drift before; the run uses the tester selection)
-- Cataloguing Statistics tab: added "Lots Missing Photos" headline stat (red with %, green tick when none)
+Long session on the Accounts tool (/tools/accounts, admin-only) — mostly bank/card statement reconciliation. All on STAGING only.
+- Reconcile is its own page (/tools/accounts/[monthId]/reconcile, blue Reconcile button at top of the month page). All statements stacked + collapsible with a summary stat strip; "Unmatched only" toggle; per-statement Clear matches + fullscreen View.
+- Smarter matching: dropdown shows only exact-amount candidates (or nearest 5); part-payment matching (one invoice paid by several capped payments, e.g. Google Ads £500 caps); chunked-payment matching (one payment covering several invoices); ✨ Smart match button (subset-sum — auto-finds the invoices that add up to a payment).
+- "Receipt missing" per-transaction flag; "Missing invoices" copy-to-email button.
+- Shared Reserve pool: park entered lines that belong to another check (out of the month table/export/matching). Reserve panel on every reconcile (filter + multi-select + Pull selected/Pull all/Un-reserve) + a full-grid Reserves page (/tools/accounts/reserves).
+- Month extras: rename month, ★ favourite the month, move lines to another month, possible-duplicate quick filter (scoped per cardholder), instant tap-feedback spinners on slow nav (tablet). Export matched to Excel.
+- Cataloguing categories now DB-managed at Admin → Cataloguing Categories (/admin/categories) — add/rename/reorder/delete; feeds desktop + tablet dropdowns.
+- NEEDS Run Migrations on staging (AccountingMonth.favourite, BankTransaction.receiptMissing, AccountingDocument.reserved, LotCategory/LotSubcategory).
 
 ## Working-style reminders that came up this session
 
