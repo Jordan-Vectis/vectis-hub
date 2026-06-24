@@ -5,7 +5,7 @@ import * as XLSX from "xlsx"
 import { PRESETS } from "@/lib/auction-ai-presets"
 import { DOUBLE_CHECK_INSTRUCTION } from "@/lib/double-check-instruction"
 import { KEY_POINTS_INSTRUCTION } from "@/lib/key-points-instruction"
-import { applyAiDescriptionOne, saveAiFlagNote } from "@/lib/actions/catalogue"
+import { applyAiDescriptionOne, applyAiEstimateOne, saveAiFlagNote } from "@/lib/actions/catalogue"
 import { showError } from "@/lib/error-modal"
 import { MacroTab } from "./macro-tab"
 import { analyseKeyPoints, HighlightedDescription, kpColour } from "@/lib/kp-analysis"
@@ -3771,14 +3771,19 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           debug: { ...updated[idx].debug, batch: result.debug } }
         setLots([...updated])
         addLog(`  ✓ ${lot.label} — OK`)
-        // Apply the generated description + estimate straight to the catalogue lot (skipped in manual-review mode)
+        // The AI estimate lives in its own fields and never touches the real estimate, so
+        // save it as soon as it's generated — regardless of the auto-apply / review toggle,
+        // which only governs whether the DESCRIPTION is applied to the catalogue. Without
+        // this, running in "Review all before applying" mode silently dropped the AI estimate.
+        if (auctionId && low > 0 && high > 0) {
+          try {
+            await applyAiEstimateOne(auctionId, { id: lot.id, aiEstimateLow: low, aiEstimateHigh: high })
+          } catch (e: any) { addLog(`  ⚠ ${lot.label} — failed to save AI estimate: ${e?.message ?? "unknown error"}`) }
+        }
+        // Apply the generated description straight to the catalogue lot (skipped in review mode)
         if (autoApply && auctionId && desc) {
           try {
-            await applyAiDescriptionOne(auctionId, {
-              id: lot.id,
-              description: desc,
-              ...(low > 0 && high > 0 ? { aiEstimateLow: low, aiEstimateHigh: high } : {}),
-            })
+            await applyAiDescriptionOne(auctionId, { id: lot.id, description: desc })
           } catch (e: any) { addLog(`  ⚠ ${lot.label} — failed to apply to catalogue: ${e?.message ?? "unknown error"}`) }
         }
         // Save to pipeline + existing saved runs

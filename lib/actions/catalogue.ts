@@ -136,6 +136,25 @@ export async function applyAiDescriptionOne(
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
+// Write ONLY the AI estimate to a lot, leaving the description/title untouched.
+// The AI estimate lives in its own fields (aiEstimateLow/aiEstimateHigh) and never
+// touches the real estimate, so the pipeline saves it as soon as it's generated —
+// independent of the auto-apply / review toggle, which only governs the description.
+export async function applyAiEstimateOne(
+  auctionId: string,
+  update: { id: string; aiEstimateLow: number; aiEstimateHigh: number }
+) {
+  await requireCataloguer()
+  await prisma.catalogueLot.update({
+    where: { id: update.id },
+    data: {
+      aiEstimateLow:  update.aiEstimateLow,
+      aiEstimateHigh: update.aiEstimateHigh,
+    },
+  })
+  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+}
+
 export async function togglePublished(id: string, published: boolean) {
   await requireCataloguer()
   await prisma.catalogueAuction.update({ where: { id }, data: { published } })
