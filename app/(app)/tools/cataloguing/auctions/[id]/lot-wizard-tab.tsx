@@ -5,53 +5,14 @@ import { useRouter } from "next/navigation"
 import { createLot } from "@/lib/actions/catalogue"
 import { DEFAULT_REASONS } from "@/lib/idle-timer-config"
 import type { IdleReason } from "@/lib/idle-timer-config"
+import { DEFAULT_CATEGORY_MAP } from "@/lib/lot-categories"
+import { useCategoryMap } from "@/lib/use-category-map"
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
-export const CATEGORY_MAP: Record<string, string[]> = {
-  "BEARS":           ["ARTIST", "MAKING_SUPPLIES", "MIXED_LOTS", "MODERN", "OTHER_ITEMS", "VINTAGE"],
-  "COLLECTABLES":    ["ADVERTISING", "BADGES", "CASINO", "DECORATIVE", "HISTORICAL", "METALWARE",
-                      "MILITARIA", "NUMISMATIC", "OTHER", "PHOTOS", "RELIGION", "SCIENTIFIC",
-                      "TOOLS", "TOYS", "WATCHES", "WRITING"],
-  "DOLLS":           ["ACCESSORIES", "ANTIQUE", "ARTIST", "BLYTHE", "COLLECTOR_BOOKS", "FASHION",
-                      "GOLLIES", "HOUSES", "HOUSE_FURNITURE", "MODERN", "VINTAGE"],
-  "GAMING":          ["ACCESSORIES", "CONSOLES", "VIDEO_GAMES"],
-  "KITS":            ["KITS_AIRCRAFT"],
-  "MILITARY":        ["1/6 SCALE FIGURES"],
-  "MATCHBOX":        ["ACCESSORIES", "COLLECTIBLES", "CONVOY", "DINKY_COLLECTION", "KING_SIZE",
-                      "MIXED", "MOY", "OTHER_MATCHBOX", "REGULAR_MOKO", "SKYBUSTERS",
-                      "SUPERFAST", "SUPER_& SPEED_KINGS"],
-  "MODELS_KITS":     ["AIRCRAFT", "BOATS", "MODEL_KITS", "OTHER", "RC_ACCESSORIES", "RC_TOYS", "RC_VEHICLES"],
-  "MODERN_DIECAST":  ["ACCESSORIES", "AIRCRAFT", "VEHICLES", "WHITE_METAL_RESIN"],
-  "MUSIC_MEDIA":     ["ACCESSORIES", "BLURAY_DVD_VIDEO", "CDS", "MEMORABILIA", "OTHER", "VINYL_RECORDS"],
-  "PUBLICATIONS":    ["ANTIQUARIAN", "BOOKS", "CATALOGUES", "COMICS", "COM_ART", "MAGAZINES", "MERCHANDISE"],
-  "RETRO_TOYS":      ["ACTION_MAN", "CYCLES",
-                      "LEGO", "LEGO ARCHITECTURE", "LEGO BOTANICAL", "LEGO BRICK HEADZ", "LEGO CITY",
-                      "LEGO CREATOR", "LEGO DC", "LEGO FRIENDS", "LEGO GAMING",
-                      "LEGO HARRY POTTER", "LEGO ICONS", "LEGO IDEAS", "LEGO LOOSE PARTS",
-                      "LEGO MARVEL", "LEGO MINIFIGURES", "LEGO NINJAGO", "LEGO SPACE",
-                      "LEGO SPEED CHAMPIONS", "LEGO STAR WARS", "LEGO TECHNIC", "LEGO TRAINS",
-                      "LEGO TV/FILM", "LEGO VEHICLES", "LEGO VINTAGE",
-                      "OTHER", "PLAYMOBIL", "SCALEXTRIC_SLOT", "SUBBUTEO"],
-  "SPORTS":          ["FOOTBALL_MEMORABILIA", "FOOTBALL_PROGRAMMES"],
-  "STAR_WARS":       ["ACTION_FIGURES", "AUTOGRAPHS", "BOOKS", "FIGURINES", "OTHER",
-                      "PLAYSETS", "POSTERS", "VEHICLES", "WEAPON_REPLICAS"],
-  "TOY_FIGURES":     ["ANIMALS_CHARACTERS", "OTHER", "SOLDIERS"],
-  "TRADING_CARDS":   ["ACCESSORIES", "BOXES", "DECKS", "INDIVIDUAL", "MIXED_LOTS", "SETS"],
-  "TRAINS":          ["BACHMANN", "BACHMANN_BRANCHLINE", "BASSETT_LOWKE_O", "DAPOL_OO",
-                      "GAUGE_1_LARGER", "GENERAL_TRAIN", "G_GAUGE_GARDEN_RAIL", "HELJAN_O",
-                      "HORNBY_ACHO", "HORNBY_CHINA", "HORNBY_DUBLO_2_3RAIL", "HORNBY_GB",
-                      "HORNBY_O_GAUGE", "HO_USA_CONTINENTAL", "LIMA", "LIVE_STEAM",
-                      "MODERN_O_GAUGE", "NARROW_GAUGE", "N_GAUGE", "OO_GAUGE_BRITISH_OUT",
-                      "OO_GAUGE_KIT_KITBUIL", "OTHER_O_GAUGE", "O_GAUGE_KIT_KITBUILT",
-                      "RAILWAYANA", "SETS", "TRIANG_RAILWAYS", "TRIX_TWIN", "WRENN_RAILWAYS", "Z_GAUGE"],
-  "TV_FILM":         ["ACTION_FIGURES", "AUTOGRAPHS", "BOARD_GAMES", "CLOTHING", "FIGURINES",
-                      "FILM_CELLS", "ORNAMENTS", "OTHER", "PHOTOGRAPHS", "PLAY_SETS",
-                      "POSTERS", "VEHICLE_REPLICAS"],
-  "VINTAGE_DIECAST": ["ACCESSORIES", "VEHICLES"],
-  "VINTAGE_TOYS":    ["AUTOMATONS", "CONSTRUCTION", "GAMES", "OTHER", "PUPPETS", "ROBOTS",
-                      "ROCKING_HORSES", "TINPLATE"],
-}
+// Categories are now DB-managed at /admin/categories; this is the bundled default
+// (seed + fallback). Re-exported for back-compat with any other importer.
+export const CATEGORY_MAP = DEFAULT_CATEGORY_MAP
 
 export const BRANDS_LIST: string[] = [
   "Accurascale","Admiral Palou","Citadel & Games Workshop","Distler Figuren","Gilbert Erector",
@@ -654,8 +615,9 @@ export default function LotWizardTab({
     } catch { /* silent — lookup is best-effort */ }
   }
 
-  const subCats     = mainCat ? (CATEGORY_MAP[mainCat] ?? []) : []
-  const mainCatList = Object.keys(CATEGORY_MAP).sort()
+  const categoryMap = useCategoryMap()
+  const subCats     = mainCat ? (categoryMap[mainCat] ?? []) : []
+  const mainCatList = Object.keys(categoryMap)
   const inpFocus    = tablet
     ? "w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3.5 text-base text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#2AB4A6]"
     : "w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#2AB4A6]"
@@ -1152,7 +1114,7 @@ export default function LotWizardTab({
                   {pinnedMain === mainCat && mainCat ? "📌 Pinned" : "Pin"}
                 </button>
               </div>
-              <Autocomplete value={mainCat} onChange={v => { setMainCat(v); if (!CATEGORY_MAP[v]) setSubCat("") }}
+              <Autocomplete value={mainCat} onChange={v => { setMainCat(v); if (!categoryMap[v]) setSubCat("") }}
                 options={mainCatList} placeholder="Select main category…" tablet={tablet} />
             </div>
             <div>

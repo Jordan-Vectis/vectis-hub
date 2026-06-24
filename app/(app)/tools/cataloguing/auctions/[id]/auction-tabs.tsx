@@ -3,7 +3,8 @@
 import { useState, useTransition, useRef, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, fillLotsFromTotes, togglePublished, generateTitlesFromDescriptions, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, bulkSetLotsAiExcluded, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, transferLots, bulkClearLotPhotos } from "@/lib/actions/catalogue"
-import LotWizardTab, { CATEGORY_MAP, BRANDS_LIST } from "./lot-wizard-tab"
+import LotWizardTab, { BRANDS_LIST } from "./lot-wizard-tab"
+import { useCategoryMap } from "@/lib/use-category-map"
 import PhotoOnlyTab from "./photo-only-tab"
 import ImportTab from "./import-tab"
 import PhotoUploadTab from "./photo-upload-tab"
@@ -2012,8 +2013,9 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
   const [brand,    setBrand]    = useState(lot?.brand ?? "")
   const [brandSearch, setBrandSearch] = useState(lot?.brand ?? "")
   const [brandFocused, setBrandFocused] = useState(false)
-  const mainCatList = Object.keys(CATEGORY_MAP).sort()
-  const subCatList  = mainCat ? (CATEGORY_MAP[mainCat] ?? []) : []
+  const categoryMap = useCategoryMap()
+  const mainCatList = Object.keys(categoryMap)
+  const subCatList  = mainCat ? (categoryMap[mainCat] ?? []) : []
   const filteredBrands = useMemo(() =>
     brandSearch.trim().length < 2
       ? []

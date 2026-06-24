@@ -575,6 +575,27 @@ const MIGRATIONS = [
 
   // 2026-06-23 — Reconciliation: park an entered line in the shared reserve (belongs to another check)
   `ALTER TABLE "AccountingDocument" ADD COLUMN IF NOT EXISTS "reserved" BOOLEAN NOT NULL DEFAULT FALSE`,
+
+  // 2026-06-23 — Cataloguing: manageable categories + subcategories (was a hardcoded map)
+  `CREATE TABLE IF NOT EXISTS "LotCategory" (
+    "id"        TEXT         NOT NULL,
+    "name"      TEXT         NOT NULL,
+    "sortOrder" INTEGER      NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "LotCategory_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "LotCategory_name_key" ON "LotCategory"("name")`,
+  `CREATE TABLE IF NOT EXISTS "LotSubcategory" (
+    "id"         TEXT    NOT NULL,
+    "categoryId" TEXT    NOT NULL,
+    "name"       TEXT    NOT NULL,
+    "sortOrder"  INTEGER NOT NULL DEFAULT 0,
+    CONSTRAINT "LotSubcategory_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "LotSubcategory_categoryId_fkey" FOREIGN KEY ("categoryId")
+      REFERENCES "LotCategory"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "LotSubcategory_categoryId_idx" ON "LotSubcategory"("categoryId")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "LotSubcategory_categoryId_name_key" ON "LotSubcategory"("categoryId", "name")`,
 ]
 
 export async function POST() {

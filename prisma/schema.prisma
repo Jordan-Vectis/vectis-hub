@@ -342,6 +342,26 @@ model CatalogueAuction {
   webDescriptions WebDescription[]
 }
 
+// Managed cataloguing categories (was a hardcoded CATEGORY_MAP) — editable at /admin/categories.
+model LotCategory {
+  id            String            @id @default(cuid())
+  name          String            @unique
+  sortOrder     Int               @default(0)
+  createdAt     DateTime          @default(now())
+  subcategories LotSubcategory[]
+}
+
+model LotSubcategory {
+  id         String      @id @default(cuid())
+  categoryId String
+  category   LotCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name       String
+  sortOrder  Int         @default(0)
+
+  @@unique([categoryId, name])
+  @@index([categoryId])
+}
+
 model BidderRegistration {
   id                String           @id @default(cuid())
   auctionId         String

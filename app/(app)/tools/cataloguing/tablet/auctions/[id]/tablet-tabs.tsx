@@ -8,7 +8,8 @@ import {
   uploadLotPhoto,
   deleteLotPhoto,
 } from "@/lib/actions/catalogue"
-import LotWizardTab, { CATEGORY_MAP, BRANDS_LIST } from "../../../auctions/[id]/lot-wizard-tab"
+import LotWizardTab, { BRANDS_LIST } from "../../../auctions/[id]/lot-wizard-tab"
+import { useCategoryMap } from "@/lib/use-category-map"
 import PhotoOnlyTab from "../../../auctions/[id]/photo-only-tab"
 import ReviewTab from "../../../auctions/[id]/review-tab"
 
@@ -421,8 +422,9 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
   const [mainCat, setMainCat] = useState(lot?.category ?? "")
   const [subCat,  setSubCat]  = useState(lot?.subCategory ?? "")
   const [brand,   setBrand]   = useState(lot?.brand ?? "")
-  const mainCatList = Object.keys(CATEGORY_MAP).sort()
-  const subCatList  = mainCat ? (CATEGORY_MAP[mainCat] ?? []) : []
+  const categoryMap = useCategoryMap()
+  const mainCatList = Object.keys(categoryMap)
+  const subCatList  = mainCat ? (categoryMap[mainCat] ?? []) : []
 
   // Load signed photo URLs
   useEffect(() => {

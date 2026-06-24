@@ -76,6 +76,12 @@ const sections = [
     description: "Full audit trail of every field changed on every lot — who changed what, when, and what it was before.",
     icon:        "📋",
   },
+  {
+    href:        "/admin/categories",
+    label:       "Cataloguing Categories",
+    description: "Add, rename, reorder or remove the categories and subcategories cataloguers pick from when entering lots.",
+    icon:        "🏷️",
+  },
 ]
 
 export default async function AdminOverviewPage() {
