@@ -104,6 +104,8 @@ export default function AccountsReconcile({
   const [unmatchedOnly, setUnmatchedOnly] = useState(false)   // hide already-matched transactions
   const [viewer, setViewer] = useState<{ images: string[]; label: string } | null>(null)   // fullscreen statement viewer
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())   // minimised statement sections
+  const [reserveFilter, setReserveFilter] = useState("")               // filter the reserve chips
+  const [reserveSel, setReserveSel] = useState<Set<string>>(new Set()) // multi-selected reserve units
 
   useEffect(() => {
     try { const s = localStorage.getItem(`reconcile_collapsed_${monthId}`); if (s) setCollapsed(new Set(JSON.parse(s))) } catch {}
@@ -168,6 +170,11 @@ export default function AccountsReconcile({
     return out
   })()
   const reserveTotal = round(reserveUnits.reduce((a, u) => a + u.amount, 0))
+  const reserveShown = reserveUnits.filter((u) => { const q = reserveFilter.trim().toLowerCase(); return !q || `${u.label} ${u.monthLabel}`.toLowerCase().includes(q) })
+  const reserveSelUnits = reserveShown.filter((u) => reserveSel.has(u.key))
+  const reserveSelTotal = round(reserveSelUnits.reduce((a, u) => a + u.amount, 0))
+  const toggleReserveSel = (key: string) => setReserveSel((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
+  const reserveAllShownSelected = reserveShown.length > 0 && reserveShown.every((u) => reserveSel.has(u.key))
 
   async function uploadFiles(files: FileList | null, statementId: string | null, cardholder?: string) {
     const arr = files ? Array.from(files) : []
@@ -535,16 +542,35 @@ export default function AccountsReconcile({
       {/* Shared reserve pool (parked entered lines from any check) */}
       {reserveUnits.length > 0 && (
         <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-amber-300/60 dark:border-amber-700/50 p-4">
-          <h3 className="text-sm font-bold text-amber-700 dark:text-amber-400">🅿 Reserve ({reserveUnits.length}) · {gbp(reserveTotal)}</h3>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h3 className="text-sm font-bold text-amber-700 dark:text-amber-400">🅿 Reserve ({reserveUnits.length}) · {gbp(reserveTotal)}</h3>
+            <a href="/tools/accounts/reserves" className="text-[11px] font-semibold text-gray-400 hover:text-amber-500">open full grid →</a>
+          </div>
           <p className="text-[11px] text-gray-400 mt-0.5 mb-2">Entered receipts parked from other checks. If one belongs to this statement, <span className="font-semibold">pull it into {displayLabel || "this month"}</span> to match it; otherwise leave it here for next time.</p>
+
+          {/* Filter + bulk actions */}
+          <div className="flex items-center gap-2 flex-wrap mb-2 text-xs">
+            <input value={reserveFilter} onChange={(e) => setReserveFilter(e.target.value)} placeholder="Filter reserve…" className={`${input} text-xs py-1 w-48`} />
+            {reserveFilter && <span className="text-gray-400">{reserveShown.length} of {reserveUnits.length}</span>}
+            <button onClick={() => setReserveSel(reserveAllShownSelected ? new Set() : new Set(reserveShown.map((u) => u.key)))} className="font-semibold text-amber-700 dark:text-amber-400 hover:underline">{reserveAllShownSelected ? "Clear selection" : "Select all shown"}</button>
+            <span className="text-gray-300 dark:text-gray-600">|</span>
+            <button onClick={() => { const ids = reserveSelUnits.flatMap((u) => u.docIds); if (!ids.length) return; setReserveSel(new Set()); run(() => pullDocumentsFromReserve(ids, monthId)) }} disabled={busy || reserveSelUnits.length === 0} className="font-semibold px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-40">Pull selected ({reserveSelUnits.length}){reserveSelUnits.length ? ` · ${gbp(reserveSelTotal)}` : ""} →</button>
+            <button onClick={() => { const ids = reserveSelUnits.flatMap((u) => u.docIds); if (!ids.length) return; setReserveSel(new Set()); run(() => setDocumentsReserved(ids, false)) }} disabled={busy || reserveSelUnits.length === 0} className="font-semibold px-2.5 py-1 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 disabled:opacity-40">Un-reserve selected</button>
+            <button onClick={() => { const ids = reserveShown.flatMap((u) => u.docIds); if (!ids.length) return; if (confirm(`Pull all ${reserveShown.length} shown line${reserveShown.length === 1 ? "" : "s"} into ${displayLabel || "this month"}?`)) { setReserveSel(new Set()); run(() => pullDocumentsFromReserve(ids, monthId)) } }} disabled={busy || reserveShown.length === 0} className="font-semibold text-emerald-600 dark:text-emerald-400 hover:underline disabled:opacity-40">Pull all shown</button>
+          </div>
+
           <div className="flex flex-wrap gap-1.5">
-            {reserveUnits.map((u) => (
-              <span key={u.key} className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-200">
-                {u.label} · {gbp(u.amount)} <span className="text-amber-500/80">· {u.monthLabel}</span>
-                <button onClick={() => run(() => pullDocumentsFromReserve(u.docIds, monthId))} disabled={busy} className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline" title={`Move into ${displayLabel || "this month"} and match`}>pull in →</button>
-                <button onClick={() => run(() => setDocumentsReserved(u.docIds, false))} disabled={busy} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" title="Take out of reserve, back to its own month">un-reserve</button>
-              </span>
-            ))}
+            {reserveShown.map((u) => {
+              const sel = reserveSel.has(u.key)
+              return (
+                <span key={u.key} className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border ${sel ? "bg-amber-100 dark:bg-amber-500/20 border-amber-400 dark:border-amber-600" : "bg-amber-50 dark:bg-amber-500/10 border-transparent"} text-amber-800 dark:text-amber-200`}>
+                  <input type="checkbox" checked={sel} onChange={() => toggleReserveSel(u.key)} className="w-3.5 h-3.5 accent-amber-600" />
+                  {u.label} · {gbp(u.amount)} <span className="text-amber-500/80">· {u.monthLabel}</span>
+                  <button onClick={() => run(() => pullDocumentsFromReserve(u.docIds, monthId))} disabled={busy} className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline" title={`Move into ${displayLabel || "this month"} and match`}>pull in →</button>
+                  <button onClick={() => run(() => setDocumentsReserved(u.docIds, false))} disabled={busy} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" title="Take out of reserve, back to its own month">un-reserve</button>
+                </span>
+              )
+            })}
           </div>
         </div>
       )}
