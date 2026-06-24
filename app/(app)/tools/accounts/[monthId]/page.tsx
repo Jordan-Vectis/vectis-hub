@@ -15,7 +15,7 @@ export default async function AccountsMonthPage({ params }: { params: Promise<{ 
   const { monthId } = await params
   const month = await prisma.accountingMonth.findUnique({
     where: { id: monthId },
-    include: { documents: { orderBy: { createdAt: "asc" } } },
+    include: { documents: { where: { reserved: false }, orderBy: { createdAt: "asc" } } },
   })
   if (!month) notFound()
 

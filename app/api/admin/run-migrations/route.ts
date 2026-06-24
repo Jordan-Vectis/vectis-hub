@@ -572,6 +572,9 @@ const MIGRATIONS = [
 
   // 2026-06-23 — Reconciliation: mark a bank transaction as "receipt missing" (no paperwork)
   `ALTER TABLE "BankTransaction" ADD COLUMN IF NOT EXISTS "receiptMissing" BOOLEAN NOT NULL DEFAULT FALSE`,
+
+  // 2026-06-23 — Reconciliation: park an entered line in the shared reserve (belongs to another check)
+  `ALTER TABLE "AccountingDocument" ADD COLUMN IF NOT EXISTS "reserved" BOOLEAN NOT NULL DEFAULT FALSE`,
 ]
 
 export async function POST() {

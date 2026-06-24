@@ -15,7 +15,7 @@ export default async function ReconcilePage({ params }: { params: Promise<{ mont
   const { monthId } = await params
   const month = await prisma.accountingMonth.findUnique({
     where: { id: monthId },
-    include: { documents: { orderBy: { createdAt: "asc" } } },
+    include: { documents: { where: { reserved: false }, orderBy: { createdAt: "asc" } } },
   })
   if (!month) notFound()
 
@@ -33,6 +33,24 @@ export default async function ReconcilePage({ params }: { params: Promise<{ mont
     splitGroupId: d.splitGroupId,
     docDate: d.docDate ? d.docDate.toISOString().slice(0, 10) : "",
     column: d.column ?? "",
+  }))
+
+  // Shared reserve pool — entered lines parked from ANY month (belong to another check).
+  const reservedRows = await prisma.accountingDocument.findMany({
+    where: { reserved: true },
+    orderBy: { createdAt: "asc" },
+    include: { month: { select: { label: true } } },
+  })
+  const reserve = reservedRows.map((d) => ({
+    id: d.id,
+    cardholder: d.cardholder ?? "",
+    supplier: d.supplier ?? "",
+    item: d.item ?? "",
+    gross: d.gross,
+    splitGroupId: d.splitGroupId,
+    monthId: d.monthId,
+    monthLabel: d.month?.label ?? "",
+    docDate: d.docDate ? d.docDate.toISOString().slice(0, 10) : "",
   }))
 
   const stmtRows = await prisma.bankStatement.findMany({
@@ -72,6 +90,7 @@ export default async function ReconcilePage({ params }: { params: Promise<{ mont
         cardholders={cardholders}
         standalone
         monthLabel={month.label}
+        reserve={reserve}
       />
     </div>
   )

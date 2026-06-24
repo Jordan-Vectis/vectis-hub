@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 
     const month = await prisma.accountingMonth.findUnique({
       where: { id: monthId },
-      include: { documents: { orderBy: { createdAt: "asc" } } },
+      include: { documents: { where: { reserved: false }, orderBy: { createdAt: "asc" } } },
     })
     if (!month) return NextResponse.json({ error: "Month not found" }, { status: 404 })
 

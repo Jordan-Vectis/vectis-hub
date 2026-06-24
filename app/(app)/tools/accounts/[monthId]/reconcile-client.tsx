@@ -7,7 +7,7 @@ import {
   deleteBankStatement, autoMatchStatement, setTransactionMatch,
   setTransactionIgnored, snapDocAmount, createBankStatementFromRows,
   setStatementCardholder, renameAccountingMonth, clearStatementMatches,
-  setTransactionReceiptMissing,
+  setTransactionReceiptMissing, setDocumentsReserved, pullDocumentsFromReserve,
 } from "@/lib/actions/accounting"
 import ImageViewer from "./accounts-viewer"
 import LinkSpinner from "../link-spinner"
@@ -24,6 +24,7 @@ type Txn = {
 }
 type Statement = { id: string; label: string; cardholder: string; source: string; images: string[]; transactions: Txn[] }
 type Unit = { key: string; docIds: string[]; amount: number; label: string }
+type ReserveItem = { id: string; cardholder: string; supplier: string; item: string; gross: number; splitGroupId: string | null; monthId: string; monthLabel: string; docDate: string }
 
 const round = (n: number) => Math.round((n || 0) * 100) / 100
 const gbp = (n: number) => "£" + (n || 0).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -53,10 +54,10 @@ function buildUnits(entries: Entry[]): Unit[] {
 }
 
 export default function AccountsReconcile({
-  monthId, entries, statements, cardholders, standalone, monthLabel,
+  monthId, entries, statements, cardholders, standalone, monthLabel, reserve = [],
 }: {
   monthId: string; entries: Entry[]; statements: Statement[]; cardholders: string[]
-  standalone?: boolean; monthLabel?: string
+  standalone?: boolean; monthLabel?: string; reserve?: ReserveItem[]
 }) {
   const router = useRouter()
   const [busy, startBusy] = useTransition()
@@ -120,6 +121,22 @@ export default function AccountsReconcile({
     return lines.join("\n").trim()
   })()
   async function copyMissing() { try { await navigator.clipboard.writeText(missingText); setCopied(true) } catch { setCopied(false) } }
+
+  // Shared reserve pool as match-units (split invoice = one unit), keeping its origin month.
+  const reserveUnits: (Unit & { monthId: string; monthLabel: string })[] = (() => {
+    const out: (Unit & { monthId: string; monthLabel: string })[] = []
+    const groups = new Map<string, ReserveItem[]>()
+    for (const r of reserve) {
+      if (r.splitGroupId) { const a = groups.get(r.splitGroupId) ?? []; a.push(r); groups.set(r.splitGroupId, a) }
+      else out.push({ key: r.id, docIds: [r.id], amount: round(r.gross), label: `${r.supplier || "(no description)"}${r.item ? " — " + r.item : ""}`, monthId: r.monthId, monthLabel: r.monthLabel })
+    }
+    for (const [gid, arr] of groups) {
+      if (arr.length === 1) { const r = arr[0]; out.push({ key: r.id, docIds: [r.id], amount: round(r.gross), label: `${r.supplier || "(no description)"}${r.item ? " — " + r.item : ""}`, monthId: r.monthId, monthLabel: r.monthLabel }) }
+      else out.push({ key: gid, docIds: arr.map((r) => r.id), amount: round(arr.reduce((a, r) => a + r.gross, 0)), label: `${arr[0].supplier || "(no description)"} (split, ${arr.length} parts)`, monthId: arr[0].monthId, monthLabel: arr[0].monthLabel })
+    }
+    return out
+  })()
+  const reserveTotal = round(reserveUnits.reduce((a, u) => a + u.amount, 0))
 
   async function uploadFiles(files: FileList | null, statementId: string | null, cardholder?: string) {
     const arr = files ? Array.from(files) : []
@@ -416,14 +433,18 @@ export default function AccountsReconcile({
 
             {freeUnits.length > 0 && stmt.transactions.length > 0 && (
               <div className="border-t border-gray-100 dark:border-gray-800 p-3">
-                <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-1">⚠ Entered, but not matched ({freeUnits.length})</p>
+                <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
+                  <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">⚠ Entered, but not matched ({freeUnits.length})</p>
+                  <button onClick={() => { if (confirm(`Park all ${freeUnits.length} unmatched line${freeUnits.length === 1 ? "" : "s"} in the reserve? (they belong to another check — you can pull them back any time)`)) run(() => setDocumentsReserved(freeUnits.flatMap((u) => u.docIds), true)) }} disabled={busy} className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 hover:underline">⤓ Reserve all</button>
+                </div>
                 <div className="flex flex-wrap gap-1.5">
                   {freeUnits.map((u) => {
                     const rem = unitRemaining(u)
                     const partial = Math.abs(rem - u.amount) > 0.005
                     return (
-                      <span key={u.key} className="text-xs px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                      <span key={u.key} className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300">
                         {u.label} · {partial ? <>{gbp(rem)} of {gbp(u.amount)} left</> : gbp(u.amount)}
+                        <button onClick={() => run(() => setDocumentsReserved(u.docIds, true))} disabled={busy} className="text-amber-500 hover:text-amber-700 dark:hover:text-amber-300 font-bold" title="Park in the reserve — belongs to another check">⤓</button>
                       </span>
                     )
                   })}
@@ -435,6 +456,23 @@ export default function AccountsReconcile({
           </div>
         )
       })}
+
+      {/* Shared reserve pool (parked entered lines from any check) */}
+      {reserveUnits.length > 0 && (
+        <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-amber-300/60 dark:border-amber-700/50 p-4">
+          <h3 className="text-sm font-bold text-amber-700 dark:text-amber-400">🅿 Reserve ({reserveUnits.length}) · {gbp(reserveTotal)}</h3>
+          <p className="text-[11px] text-gray-400 mt-0.5 mb-2">Entered receipts parked from other checks. If one belongs to this statement, <span className="font-semibold">pull it into {displayLabel || "this month"}</span> to match it; otherwise leave it here for next time.</p>
+          <div className="flex flex-wrap gap-1.5">
+            {reserveUnits.map((u) => (
+              <span key={u.key} className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-200">
+                {u.label} · {gbp(u.amount)} <span className="text-amber-500/80">· {u.monthLabel}</span>
+                <button onClick={() => run(() => pullDocumentsFromReserve(u.docIds, monthId))} disabled={busy} className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline" title={`Move into ${displayLabel || "this month"} and match`}>pull in →</button>
+                <button onClick={() => run(() => setDocumentsReserved(u.docIds, false))} disabled={busy} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" title="Take out of reserve, back to its own month">un-reserve</button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Hidden file inputs */}
       <input ref={fileInput} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files, null, newCardholder); e.currentTarget.value = "" }} />

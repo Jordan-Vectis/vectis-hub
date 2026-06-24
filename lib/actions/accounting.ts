@@ -243,6 +243,30 @@ export async function moveDocumentsToMonth(ids: string[], targetMonthId: string)
   return { moved: docs.length }
 }
 
+// Park / un-park entered lines in the shared reconcile reserve. Reserved lines drop
+// out of every month's table, export and matching until pulled back in.
+export async function setDocumentsReserved(ids: string[], reserved: boolean) {
+  await requireAdmin()
+  if (!ids.length) return { changed: 0 }
+  const docs = await prisma.accountingDocument.findMany({ where: { id: { in: ids } }, select: { id: true, monthId: true } })
+  await prisma.accountingDocument.updateMany({ where: { id: { in: docs.map((d) => d.id) } }, data: { reserved } })
+  for (const m of Array.from(new Set(docs.map((d) => d.monthId)))) { revalidatePath(`/tools/accounts/${m}`); revalidatePath(`/tools/accounts/${m}/reconcile`) }
+  return { changed: docs.length }
+}
+
+// Pull reserved lines INTO a specific month's check: move them to that month and
+// un-reserve, so they appear in that month's matching list.
+export async function pullDocumentsFromReserve(ids: string[], targetMonthId: string) {
+  await requireAdmin()
+  if (!ids.length || !targetMonthId) return { pulled: 0 }
+  const target = await prisma.accountingMonth.findUnique({ where: { id: targetMonthId }, select: { id: true } })
+  if (!target) throw new Error("Target month not found")
+  const docs = await prisma.accountingDocument.findMany({ where: { id: { in: ids } }, select: { id: true, monthId: true } })
+  await prisma.accountingDocument.updateMany({ where: { id: { in: docs.map((d) => d.id) } }, data: { monthId: targetMonthId, reserved: false } })
+  for (const m of Array.from(new Set([...docs.map((d) => d.monthId), targetMonthId]))) { revalidatePath(`/tools/accounts/${m}`); revalidatePath(`/tools/accounts/${m}/reconcile`) }
+  return { pulled: docs.length }
+}
+
 type DocEdit = {
   id: string
   cardholder: string

@@ -1130,6 +1130,7 @@ model AccountingDocument {
   splitGroupId String?                           // lines split from one invoice share this id (grouped together in the UI)
   currency       String?  @default("GBP")        // ISO currency shown on the invoice (GBP unless foreign)
   originalAmount Float?                           // gross in that foreign currency (e.g. 99 for €99) — stable key for reconciling foreign card charges
+  reserved   Boolean         @default(false)      // parked in the shared reconcile reserve (belongs to another check) — out of month table/export/matching until pulled in
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
 
