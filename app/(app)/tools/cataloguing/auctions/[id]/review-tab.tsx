@@ -159,7 +159,19 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
         <div className="flex items-center gap-3 flex-wrap">
           <p className="text-sm text-gray-700 dark:text-gray-300">
             <span className="font-bold text-gray-900 dark:text-white">{filtered.length}</span> of {lots.length} lots
-            {issueCount > 0 && <span className="ml-2 text-amber-500 font-semibold">⚠ {issueCount} with issues</span>}
+            {issueCount > 0 && (
+              <button
+                onClick={() => setIssueFilter(f => (f === "issues" ? "all" : "issues"))}
+                title="Show only the lots with issues (missing/partial key points, no description or photos, or flagged)"
+                className={`ml-2 font-semibold rounded px-1.5 py-0.5 transition-colors ${
+                  issueFilter === "issues"
+                    ? "bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/50"
+                    : "text-amber-500 hover:bg-amber-500/10"
+                }`}
+              >
+                ⚠ {issueCount} with issues
+              </button>
+            )}
             {flaggedCount > 0 && <span className="ml-2 text-red-500 font-semibold">🚩 {flaggedCount} flagged</span>}
             {aiFlagCount > 0 && <span className="ml-2 text-orange-400 font-semibold">⚠️ {aiFlagCount} AI-flagged</span>}
           </p>
