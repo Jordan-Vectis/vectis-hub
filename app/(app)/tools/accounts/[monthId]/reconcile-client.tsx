@@ -8,6 +8,7 @@ import {
   setTransactionIgnored, snapDocAmount, createBankStatementFromRows,
   setStatementCardholder, renameAccountingMonth, clearStatementMatches,
 } from "@/lib/actions/accounting"
+import ImageViewer from "./accounts-viewer"
 
 type Entry = {
   id: string; cardholder: string; supplier: string; item: string; gross: number
@@ -67,6 +68,7 @@ export default function AccountsReconcile({
   const [missingOpen, setMissingOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [unmatchedOnly, setUnmatchedOnly] = useState(false)   // hide already-matched transactions
+  const [viewer, setViewer] = useState<{ images: string[]; label: string } | null>(null)   // fullscreen statement viewer
   const fileInput = useRef<HTMLInputElement>(null)
   const addPageInput = useRef<HTMLInputElement>(null)
   const csvInput = useRef<HTMLInputElement>(null)
@@ -222,6 +224,11 @@ export default function AccountsReconcile({
                     {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </label>
+                {stmt.images.length > 0 && (
+                  <button onClick={() => setViewer({ images: stmt.images, label: `${stmt.cardholder || "Statement"}${stmt.label ? " — " + stmt.label : ""}` })} className={btn("border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300")} title="View the uploaded statement full-screen">
+                    👁 View ({stmt.images.length})
+                  </button>
+                )}
                 {stmt.source !== "CSV" && (
                   <>
                     <button onClick={() => { addPageForIdRef.current = stmt.id; addPageInput.current?.click() }} disabled={isUploading} className={btn("border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300")}>
@@ -374,6 +381,8 @@ export default function AccountsReconcile({
       <input ref={fileInput} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files, null, newCardholder); e.currentTarget.value = "" }} />
       <input ref={addPageInput} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => { uploadFiles(e.target.files, addPageForIdRef.current); e.currentTarget.value = "" }} />
       <input ref={csvInput} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => { importCsv(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
+
+      {viewer && <ImageViewer images={viewer.images} startIndex={0} label={viewer.label} onClose={() => setViewer(null)} />}
     </div>
   )
 

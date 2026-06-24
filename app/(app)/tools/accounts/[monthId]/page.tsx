@@ -22,6 +22,9 @@ export default async function AccountsMonthPage({ params }: { params: Promise<{ 
   const chRows = await prisma.accountingCardholder.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] })
   const cardholders = chRows.length ? chRows.map((c) => c.name) : DEFAULT_CARDHOLDERS
 
+  // Other months, for the "Move lines to month" action.
+  const monthRows = await prisma.accountingMonth.findMany({ orderBy: { createdAt: "desc" }, select: { id: true, label: true } })
+
   // Sign every page's URL server-side (1h URLs).
   const documents = await Promise.all(
     month.documents.map(async (d) => {
@@ -51,6 +54,6 @@ export default async function AccountsMonthPage({ params }: { params: Promise<{ 
   )
 
   return (
-    <AccountsMonthClient monthId={month.id} monthLabel={month.label} documents={documents} cardholders={cardholders} />
+    <AccountsMonthClient monthId={month.id} monthLabel={month.label} documents={documents} cardholders={cardholders} months={monthRows} />
   )
 }

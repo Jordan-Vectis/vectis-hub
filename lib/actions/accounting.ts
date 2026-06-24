@@ -220,6 +220,21 @@ export async function bulkDeleteAccountingDocuments(ids: string[]) {
   revalidatePath(`/tools/accounts/${docs[0].monthId}`)
 }
 
+// Move selected lines to a different month (e.g. a receipt filed under the wrong month).
+export async function moveDocumentsToMonth(ids: string[], targetMonthId: string) {
+  await requireAdmin()
+  if (!ids.length || !targetMonthId) return { moved: 0 }
+  const target = await prisma.accountingMonth.findUnique({ where: { id: targetMonthId }, select: { id: true } })
+  if (!target) throw new Error("Target month not found")
+  const docs = await prisma.accountingDocument.findMany({ where: { id: { in: ids } }, select: { id: true, monthId: true } })
+  const fromMonths = Array.from(new Set(docs.map((d) => d.monthId)))
+  await prisma.accountingDocument.updateMany({ where: { id: { in: docs.map((d) => d.id) } }, data: { monthId: targetMonthId } })
+  for (const m of fromMonths) { revalidatePath(`/tools/accounts/${m}`); revalidatePath(`/tools/accounts/${m}/reconcile`) }
+  revalidatePath(`/tools/accounts/${targetMonthId}`)
+  revalidatePath(`/tools/accounts/${targetMonthId}/reconcile`)
+  return { moved: docs.length }
+}
+
 type DocEdit = {
   id: string
   cardholder: string

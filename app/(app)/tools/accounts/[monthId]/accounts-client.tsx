@@ -4,7 +4,8 @@ import { Fragment, useEffect, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { VAT_CODES, NOMINAL_COLUMNS, columnLabel } from "@/lib/accounting"
-import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, removeDocumentPage, saveAccountingDocuments, splitAccountingDocument, bulkDeleteAccountingDocuments, uncombineDocument, renameAccountingMonth } from "@/lib/actions/accounting"
+import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, removeDocumentPage, saveAccountingDocuments, splitAccountingDocument, bulkDeleteAccountingDocuments, uncombineDocument, renameAccountingMonth, moveDocumentsToMonth } from "@/lib/actions/accounting"
+import ImageViewer from "./accounts-viewer"
 
 type Row = {
   id: string; cardholder: string; source: string; images: string[]
@@ -64,8 +65,8 @@ const gbp = (n: number) => "£" + (n || 0).toLocaleString("en-GB", { minimumFrac
 const isPdf = (u: string) => u.split("?")[0].toLowerCase().endsWith(".pdf")
 
 export default function AccountsMonthClient({
-  monthId, monthLabel, documents, cardholders,
-}: { monthId: string; monthLabel: string; documents: Row[]; cardholders: string[] }) {
+  monthId, monthLabel, documents, cardholders, months,
+}: { monthId: string; monthLabel: string; documents: Row[]; cardholders: string[]; months: { id: string; label: string }[] }) {
   const router = useRouter()
   const [rows, setRows] = useState<Row[]>(documents)
   useEffect(() => { setRows(documents) }, [documents])
@@ -107,6 +108,7 @@ export default function AccountsMonthClient({
   const [renameVal, setRenameVal] = useState(monthLabel)
   const [displayLabel, setDisplayLabel] = useState(monthLabel)
   useEffect(() => { setDisplayLabel(monthLabel); setRenameVal(monthLabel) }, [monthLabel])
+  const [moveTarget, setMoveTarget] = useState("")   // target month id for "Move selected"
 
   // Each photo/file becomes a BLANK line straight away (image only); the AI is run
   // afterwards over all the un-read lines.
@@ -421,6 +423,17 @@ export default function AccountsMonthClient({
     setDisplayLabel(t)
     startBusy(async () => { await renameAccountingMonth(monthId, t); router.refresh() })
   }
+  function moveSelected() {
+    const ids = [...selected]
+    if (!ids.length || !moveTarget) return
+    const targetLabel = months.find((m) => m.id === moveTarget)?.label ?? "another month"
+    if (!confirm(`Move ${ids.length} line${ids.length === 1 ? "" : "s"} to "${targetLabel}"?`)) return
+    setRows((rs) => rs.filter((r) => !ids.includes(r.id)))   // drop locally; they now live in the other month
+    setSelected(new Set())
+    const target = moveTarget
+    setMoveTarget("")
+    startBusy(async () => { await moveDocumentsToMonth(ids, target); router.refresh() })
+  }
 
   // ── Totals + grouping (main table only; un-read scans excluded) ────────────────
   const grandGross = round(mainRows.reduce((a, r) => a + r.gross, 0))
@@ -669,6 +682,16 @@ export default function AccountsMonthClient({
             {selected.size > 0 && <button onClick={() => setSelected(new Set())} className="font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Clear</button>}
             <span className="text-gray-400">{selected.size} selected</span>
             <button onClick={rerunSelected} disabled={running || selected.size === 0} className="font-semibold px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40">{running ? `Re-reading ${aiProg.done}/${aiProg.total}…` : "🤖 Re-run AI on selected"}</button>
+            {months.filter((m) => m.id !== monthId).length > 0 && (
+              <span className="flex items-center gap-1.5">
+                <span className="text-gray-300 dark:text-gray-600">|</span>
+                <select value={moveTarget} onChange={(e) => setMoveTarget(e.target.value)} disabled={selected.size === 0} className={`${input} text-xs py-1 disabled:opacity-40`}>
+                  <option value="">Move selected to…</option>
+                  {months.filter((m) => m.id !== monthId).map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </select>
+                <button onClick={moveSelected} disabled={busy || selected.size === 0 || !moveTarget} className="font-semibold px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-40">Move →</button>
+              </span>
+            )}
             <span className="text-gray-400">Re-reads each ticked line from its scan to pick up the latest extraction — you approve before anything changes.</span>
           </div>
           <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-1">
@@ -1034,104 +1057,6 @@ export default function AccountsMonthClient({
             </div>
           </div>
         </div>
-      )}
-    </div>
-  )
-}
-
-const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
-
-function ImageViewer({ images, startIndex, onClose }: { images: string[]; startIndex: number; onClose: () => void }) {
-  const [i, setI] = useState(startIndex)
-  const [zoom, setZoom] = useState(1)
-  const [pos, setPos] = useState({ x: 0, y: 0 })
-  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map())
-  const pinch = useRef<{ dist: number; zoom: number } | null>(null)
-  const panLast = useRef<{ x: number; y: number } | null>(null)
-
-  useEffect(() => { setZoom(1); setPos({ x: 0, y: 0 }) }, [i])
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose()
-      else if (e.key === "ArrowRight") setI((p) => Math.min(p + 1, images.length - 1))
-      else if (e.key === "ArrowLeft") setI((p) => Math.max(p - 1, 0))
-      else if (e.key === "+" || e.key === "=") setZoom((z) => clamp(z + 0.25, 1, 6))
-      else if (e.key === "-" || e.key === "_") setZoom((z) => clamp(z - 0.25, 1, 6))
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [images.length, onClose])
-
-  function spread() {
-    const pts = [...pointers.current.values()]
-    return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
-  }
-  function onPointerDown(e: React.PointerEvent) {
-    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
-    if (pointers.current.size === 2) pinch.current = { dist: spread(), zoom }
-    else if (pointers.current.size === 1 && zoom > 1) panLast.current = { x: e.clientX, y: e.clientY }
-  }
-  function onPointerMove(e: React.PointerEvent) {
-    if (!pointers.current.has(e.pointerId)) return
-    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
-    if (pointers.current.size === 2 && pinch.current) {
-      setZoom(clamp(pinch.current.zoom * (spread() / pinch.current.dist), 1, 6))
-    } else if (pointers.current.size === 1 && zoom > 1 && panLast.current) {
-      setPos((p) => ({ x: p.x + (e.clientX - panLast.current!.x), y: p.y + (e.clientY - panLast.current!.y) }))
-      panLast.current = { x: e.clientX, y: e.clientY }
-    }
-  }
-  function onPointerUp(e: React.PointerEvent) {
-    pointers.current.delete(e.pointerId)
-    if (pointers.current.size < 2) pinch.current = null
-    if (pointers.current.size === 0) { panLast.current = null; if (zoom <= 1) setPos({ x: 0, y: 0 }) }
-  }
-
-  const btn = "bg-white/15 hover:bg-white/30 text-white rounded-lg w-9 h-9 flex items-center justify-center text-lg leading-none"
-  const pdf = isPdf(images[i])
-  return (
-    <div className="fixed inset-0 z-[70] bg-black/90 flex flex-col" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="flex items-center justify-between p-3 text-white">
-        <span className="text-sm">{images.length > 1 ? `Page ${i + 1} of ${images.length}` : "Invoice"}{pdf ? " · PDF" : ` · ${Math.round(zoom * 100)}%`}</span>
-        <div className="flex items-center gap-2">
-          {!pdf && <button className={btn} onClick={() => setZoom((z) => clamp(z - 0.5, 1, 6))} title="Zoom out">−</button>}
-          {!pdf && <button className={btn} onClick={() => { setZoom(1); setPos({ x: 0, y: 0 }) }} title="Fit">⤢</button>}
-          {!pdf && <button className={btn} onClick={() => setZoom((z) => clamp(z + 0.5, 1, 6))} title="Zoom in">+</button>}
-          <a className={btn} href={images[i]} target="_blank" rel="noreferrer" title="Open in new tab">↗</a>
-          <button className={btn} onClick={onClose} title="Close">×</button>
-        </div>
-      </div>
-      {pdf ? (
-        <div className="flex-1 bg-white" onClick={(e) => e.stopPropagation()}>
-          <iframe src={images[i]} title={`Page ${i + 1}`} className="w-full h-full border-0" />
-        </div>
-      ) : (
-        <div
-          className="flex-1 overflow-hidden flex items-center justify-center select-none"
-          style={{ touchAction: "none", cursor: zoom > 1 ? "grab" : "zoom-in" }}
-          onWheel={(e) => setZoom((z) => clamp(z - e.deltaY * 0.0015, 1, 6))}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-          onDoubleClick={() => setZoom((z) => (z > 1 ? 1 : 2.5))}
-        >
-          <img
-            src={images[i]}
-            alt={`Page ${i + 1}`}
-            draggable={false}
-            className="max-h-full max-w-full object-contain"
-            style={{ transform: `translate(${pos.x}px, ${pos.y}px) scale(${zoom})`, transition: pinch.current || panLast.current ? "none" : "transform 0.08s" }}
-          />
-        </div>
-      )}
-      {images.length > 1 && (
-        <>
-          <button onClick={() => setI((p) => Math.max(p - 1, 0))} disabled={i === 0}
-            className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/15 hover:bg-white/30 disabled:opacity-30 text-white rounded-full w-11 h-11 text-2xl leading-none">‹</button>
-          <button onClick={() => setI((p) => Math.min(p + 1, images.length - 1))} disabled={i === images.length - 1}
-            className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/15 hover:bg-white/30 disabled:opacity-30 text-white rounded-full w-11 h-11 text-2xl leading-none">›</button>
-        </>
       )}
     </div>
   )
