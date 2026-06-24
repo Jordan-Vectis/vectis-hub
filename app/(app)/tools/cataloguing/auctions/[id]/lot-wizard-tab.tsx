@@ -561,6 +561,12 @@ export default function LotWizardTab({
   const [estHigh,     setEstHigh]     = useState("")
   const [cond1,       setCond1]       = useState("")
   const [cond2,       setCond2]       = useState("")
+  // Optional separate box/packaging condition (step 6)
+  const [boxOn,         setBoxOn]         = useState(false)
+  const [boxPrefixMode, setBoxPrefixMode] = useState<"Box is" | "Packaging is" | "custom">("Box is")
+  const [boxCustomPrefix, setBoxCustomPrefix] = useState("")
+  const [boxCond1,      setBoxCond1]      = useState("")
+  const [boxCond2,      setBoxCond2]      = useState("")
   const [parcel,      setParcel]      = useState("")
   const [photoFiles,  setPhotoFiles]  = useState<{ file: File; preview: string }[]>([])
   const photoInputRef = useRef<HTMLInputElement>(null)
@@ -676,13 +682,25 @@ export default function LotWizardTab({
     setBarcode(src.slice(0, m.index) + String(parseInt(m[1]) + 1).padStart(m[1].length, "0"))
   }
 
+  // Build the saved condition: the item condition, plus an optional separate
+  // box/packaging sentence — e.g. "Near Mint to Excellent. Box is Good to Good Plus."
+  function buildCondition(): string {
+    const byGrade = (a: string, b: string) => CONDITIONS.indexOf(b) - CONDITIONS.indexOf(a)
+    const itemCond = [cond1, cond2].filter(Boolean).sort(byGrade).join(" to ")
+    const prefix   = (boxPrefixMode === "custom" ? boxCustomPrefix.trim() : boxPrefixMode)
+    const boxGrade = [boxCond1, boxCond2].filter(Boolean).sort(byGrade).join(" to ")
+    const boxSentence = boxOn && prefix && boxGrade ? `${prefix} ${boxGrade}` : ""
+    if (itemCond && boxSentence) return `${itemCond}. ${boxSentence}.`
+    if (boxSentence) return `${boxSentence}.`
+    return itemCond
+  }
+
   function saveLot() {
     const err = validateStep(step)
     if (err) { setValidErr(err); return }
     setValidErr("")
 
-    const condArr = [cond1, cond2].filter(Boolean).sort((a, b) => CONDITIONS.indexOf(b) - CONDITIONS.indexOf(a))
-    const condition = condArr.join(" to ")
+    const condition = buildCondition()
     const autoTitle = [brand, mainCat, subCat].filter(Boolean).join(" – ") || barcode || "Lot"
     const title = aiExcluded
       ? (manualDesc.split("\n")[0]?.trim() || autoTitle)
@@ -740,6 +758,7 @@ export default function LotWizardTab({
       setBarcode(""); setKeyPoints(""); setAiExcluded(false); setManualDesc("")
       setMainCat(pinnedMain); setSubCat(pinnedSub); setBrand("")
       setEstLow(""); setEstHigh(""); setCond1(""); setCond2(""); setParcel("")
+      setBoxOn(false); setBoxPrefixMode("Box is"); setBoxCustomPrefix(""); setBoxCond1(""); setBoxCond2("")
       photoFiles.forEach(p => URL.revokeObjectURL(p.preview))
       setPhotoFiles([])
       setStep(2)
@@ -1185,8 +1204,57 @@ export default function LotWizardTab({
             <div>
               <label className={`${lbl} block mb-1`}>Condition To <span className="text-gray-600">(optional)</span></label>
               <div className="flex flex-wrap gap-2">
-                {CONDITIONS.map(c => <CondBtn key={c} label={c} selected={cond2 === c} onClick={() => setCond2(v => v === c ? "" : c)} />)}
+                {CONDITIONS.map(c => <CondBtn key={c} label={c} selected={cond2 === c} onClick={() => setCond2(v => v === c ? "" : c)} tablet={tablet} />)}
               </div>
+            </div>
+
+            {/* Optional separate box / packaging condition */}
+            <div className="pt-3 border-t border-gray-200 dark:border-gray-800">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" checked={boxOn} onChange={e => setBoxOn(e.target.checked)}
+                  className="w-4 h-4 accent-[#2AB4A6]" style={{ touchAction: "manipulation" }} />
+                <span className={lbl}>Add a separate box / packaging condition</span>
+              </label>
+
+              {boxOn && (
+                <div className="mt-3 space-y-4">
+                  {/* Wording */}
+                  <div>
+                    <label className={`${lbl} block mb-2`}>Wording</label>
+                    <div className="flex flex-wrap gap-2">
+                      {(["Box is", "Packaging is"] as const).map(p => (
+                        <CondBtn key={p} label={p} selected={boxPrefixMode === p} onClick={() => setBoxPrefixMode(p)} tablet={tablet} />
+                      ))}
+                      <CondBtn label="Custom…" selected={boxPrefixMode === "custom"} onClick={() => setBoxPrefixMode("custom")} tablet={tablet} />
+                    </div>
+                    {boxPrefixMode === "custom" && (
+                      <input
+                        value={boxCustomPrefix}
+                        onChange={e => setBoxCustomPrefix(e.target.value)}
+                        placeholder="e.g. Inner tray is"
+                        className={`${inpFocus} mt-2`}
+                        autoFocus
+                      />
+                    )}
+                  </div>
+                  {/* Grade (same quick-select as the main condition) */}
+                  <div>
+                    <label className={`${lbl} block mb-2`}>Packaging Condition</label>
+                    <div className="flex flex-wrap gap-2">
+                      {CONDITIONS.map(c => <CondBtn key={c} label={c} selected={boxCond1 === c} onClick={() => setBoxCond1(v => v === c ? "" : c)} tablet={tablet} />)}
+                    </div>
+                  </div>
+                  <div>
+                    <label className={`${lbl} block mb-1`}>Packaging Condition To <span className="text-gray-600">(optional)</span></label>
+                    <div className="flex flex-wrap gap-2">
+                      {CONDITIONS.map(c => <CondBtn key={c} label={c} selected={boxCond2 === c} onClick={() => setBoxCond2(v => v === c ? "" : c)} tablet={tablet} />)}
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Will save as: <span className="text-gray-700 dark:text-gray-300 font-medium">{buildCondition() || "—"}</span>
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1217,7 +1285,7 @@ export default function LotWizardTab({
               <p><span className="text-gray-600">Category:</span> {mainCat || "—"}{subCat && ` › ${subCat}`}</p>
               <p><span className="text-gray-600">Brand:</span> {brand || "—"}</p>
               <p><span className="text-gray-600">Estimate:</span> £{estLow}–£{estHigh}</p>
-              <p><span className="text-gray-600">Condition:</span> {[cond1, cond2].filter(Boolean).sort((a, b) => CONDITIONS.indexOf(b) - CONDITIONS.indexOf(a)).join(" to ") || "—"}</p>
+              <p><span className="text-gray-600">Condition:</span> {buildCondition() || "—"}</p>
               <p><span className="text-gray-600">Parcel:</span> {parcel || "—"}</p>
             </div>
           </div>
