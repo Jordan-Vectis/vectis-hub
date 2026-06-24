@@ -345,9 +345,9 @@ export default function AccountsReconcile({
                             {t.reference && <span className="text-gray-400 text-xs"> · {t.reference}</span>}
                             {credit && <span className="ml-1 text-[10px] text-purple-600 dark:text-purple-400">(payment/credit)</span>}
                           </td>
-                          <td className="p-1.5 text-right whitespace-nowrap tabular-nums">
+                          <td className="p-1.5 text-right whitespace-nowrap tabular-nums font-semibold text-gray-900 dark:text-gray-100">
                             {gbp(t.amount)}
-                            {t.currency !== "GBP" && t.originalAmount != null && <div className="text-[10px] text-sky-600 dark:text-sky-400">{fmtCcy(t.currency, t.originalAmount)}</div>}
+                            {t.currency !== "GBP" && t.originalAmount != null && <div className="text-[10px] font-normal text-sky-600 dark:text-sky-400">{fmtCcy(t.currency, t.originalAmount)}</div>}
                           </td>
                           <td className="p-1.5 min-w-[14rem]">
                             {t.ignored ? (
