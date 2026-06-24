@@ -251,6 +251,8 @@ export async function setDocumentsReserved(ids: string[], reserved: boolean) {
   const docs = await prisma.accountingDocument.findMany({ where: { id: { in: ids } }, select: { id: true, monthId: true } })
   await prisma.accountingDocument.updateMany({ where: { id: { in: docs.map((d) => d.id) } }, data: { reserved } })
   for (const m of Array.from(new Set(docs.map((d) => d.monthId)))) { revalidatePath(`/tools/accounts/${m}`); revalidatePath(`/tools/accounts/${m}/reconcile`) }
+  revalidatePath("/tools/accounts/reserves")
+  revalidatePath("/tools/accounts")
   return { changed: docs.length }
 }
 
@@ -264,6 +266,7 @@ export async function pullDocumentsFromReserve(ids: string[], targetMonthId: str
   const docs = await prisma.accountingDocument.findMany({ where: { id: { in: ids } }, select: { id: true, monthId: true } })
   await prisma.accountingDocument.updateMany({ where: { id: { in: docs.map((d) => d.id) } }, data: { monthId: targetMonthId, reserved: false } })
   for (const m of Array.from(new Set([...docs.map((d) => d.monthId), targetMonthId]))) { revalidatePath(`/tools/accounts/${m}`); revalidatePath(`/tools/accounts/${m}/reconcile`) }
+  revalidatePath("/tools/accounts/reserves")
   return { pulled: docs.length }
 }
 

@@ -4,7 +4,7 @@ import { Fragment, useEffect, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { VAT_CODES, NOMINAL_COLUMNS, columnLabel } from "@/lib/accounting"
-import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, removeDocumentPage, saveAccountingDocuments, splitAccountingDocument, bulkDeleteAccountingDocuments, uncombineDocument, renameAccountingMonth, moveDocumentsToMonth } from "@/lib/actions/accounting"
+import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, removeDocumentPage, saveAccountingDocuments, splitAccountingDocument, bulkDeleteAccountingDocuments, uncombineDocument, renameAccountingMonth, moveDocumentsToMonth, pullDocumentsFromReserve, setDocumentsReserved } from "@/lib/actions/accounting"
 import ImageViewer from "./accounts-viewer"
 import MonthStar from "../month-star"
 import LinkSpinner from "../link-spinner"
@@ -67,8 +67,8 @@ const gbp = (n: number) => "£" + (n || 0).toLocaleString("en-GB", { minimumFrac
 const isPdf = (u: string) => u.split("?")[0].toLowerCase().endsWith(".pdf")
 
 export default function AccountsMonthClient({
-  monthId, monthLabel, documents, cardholders, months, favourite,
-}: { monthId: string; monthLabel: string; documents: Row[]; cardholders: string[]; months: { id: string; label: string }[]; favourite: boolean }) {
+  monthId, monthLabel, documents, cardholders, months, favourite, reserveMode,
+}: { monthId: string; monthLabel: string; documents: Row[]; cardholders: string[]; months: { id: string; label: string }[]; favourite: boolean; reserveMode?: boolean }) {
   const router = useRouter()
   const [rows, setRows] = useState<Row[]>(documents)
   useEffect(() => { setRows(documents) }, [documents])
@@ -429,12 +429,22 @@ export default function AccountsMonthClient({
     const ids = [...selected]
     if (!ids.length || !moveTarget) return
     const targetLabel = months.find((m) => m.id === moveTarget)?.label ?? "another month"
-    if (!confirm(`Move ${ids.length} line${ids.length === 1 ? "" : "s"} to "${targetLabel}"?`)) return
+    const verb = reserveMode ? "Pull" : "Move"
+    if (!confirm(`${verb} ${ids.length} line${ids.length === 1 ? "" : "s"} ${reserveMode ? "into" : "to"} "${targetLabel}"?`)) return
     setRows((rs) => rs.filter((r) => !ids.includes(r.id)))   // drop locally; they now live in the other month
     setSelected(new Set())
     const target = moveTarget
     setMoveTarget("")
-    startBusy(async () => { await moveDocumentsToMonth(ids, target); router.refresh() })
+    // In the reserve view, moving = pull into the month (also un-reserves).
+    startBusy(async () => { await (reserveMode ? pullDocumentsFromReserve(ids, target) : moveDocumentsToMonth(ids, target)); router.refresh() })
+  }
+  function unreserveSelected() {
+    const ids = [...selected]
+    if (!ids.length) return
+    if (!confirm(`Take ${ids.length} line${ids.length === 1 ? "" : "s"} out of the reserve, back to their own month?`)) return
+    setRows((rs) => rs.filter((r) => !ids.includes(r.id)))
+    setSelected(new Set())
+    startBusy(async () => { await setDocumentsReserved(ids, false); router.refresh() })
   }
 
   // ── Totals + grouping (main table only; un-read scans excluded) ────────────────
@@ -494,6 +504,15 @@ export default function AccountsMonthClient({
   return (
     <div className="p-6">
       {/* Header */}
+      {reserveMode ? (
+        <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
+          <div>
+            <Link href="/tools/accounts" className="text-sm text-gray-400 hover:text-emerald-500 inline-flex items-center gap-1.5">← All months <LinkSpinner className="w-3.5 h-3.5" /></Link>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mt-1">🅿 Reserves</h1>
+            <p className="text-sm text-gray-500 mt-1">Entered lines parked from other checks (across all months). Edit them, pull them into a month, or take them out of the reserve.</p>
+          </div>
+        </div>
+      ) : (
       <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
         <div>
           <Link href="/tools/accounts" className="text-sm text-gray-400 hover:text-emerald-500 inline-flex items-center gap-1.5">← All months <LinkSpinner className="w-3.5 h-3.5" /></Link>
@@ -533,8 +552,10 @@ export default function AccountsMonthClient({
           </button>
         </div>
       </div>
+      )}
 
       {/* Scan */}
+      {!reserveMode && (
       <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-5 mb-6">
         <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
           <div>
@@ -603,6 +624,7 @@ export default function AccountsMonthClient({
         {running && <p className="text-xs text-gray-400 mt-2">Reading each document with AI — leave this page open until it finishes.</p>}
         {!running && aiProg.total > 0 && <p className="text-xs text-gray-400 mt-2">Read {aiProg.total - aiProg.errors} of {aiProg.total}{aiProg.errors ? `, ${aiProg.errors} failed` : ""}.</p>}
       </div>
+      )}
 
       {/* To read — scans not yet processed by AI (tick which ones Run AI should read) */}
       {toRead.length > 0 && (
@@ -679,23 +701,25 @@ export default function AccountsMonthClient({
             {filtering && <button onClick={clearFilters} className="font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Clear all filters</button>}
             {filtering && <span className="text-gray-400">Showing {displayRows.length} of {mainRows.length}</span>}
           </div>
-          {/* Re-run AI on already-processed lines */}
+          {/* Selection actions */}
           <div className="flex items-center gap-3 flex-wrap mb-2 text-xs">
-            <button onClick={() => setSelected(new Set(displayRows.filter((r) => r.images.length > 0).map((r) => r.id)))} className="font-semibold text-emerald-600 hover:text-emerald-500">Select all with a scan</button>
+            <button onClick={() => setSelected(new Set((reserveMode ? displayRows : displayRows.filter((r) => r.images.length > 0)).map((r) => r.id)))} className="font-semibold text-emerald-600 hover:text-emerald-500">{reserveMode ? "Select all" : "Select all with a scan"}</button>
             {selected.size > 0 && <button onClick={() => setSelected(new Set())} className="font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Clear</button>}
             <span className="text-gray-400">{selected.size} selected</span>
-            <button onClick={rerunSelected} disabled={running || selected.size === 0} className="font-semibold px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40">{running ? `Re-reading ${aiProg.done}/${aiProg.total}…` : "🤖 Re-run AI on selected"}</button>
+            {reserveMode
+              ? <button onClick={unreserveSelected} disabled={busy || selected.size === 0} className="font-semibold px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-40">↺ Un-reserve selected</button>
+              : <button onClick={rerunSelected} disabled={running || selected.size === 0} className="font-semibold px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40">{running ? `Re-reading ${aiProg.done}/${aiProg.total}…` : "🤖 Re-run AI on selected"}</button>}
             {months.filter((m) => m.id !== monthId).length > 0 && (
               <span className="flex items-center gap-1.5">
                 <span className="text-gray-300 dark:text-gray-600">|</span>
                 <select value={moveTarget} onChange={(e) => setMoveTarget(e.target.value)} disabled={selected.size === 0} className={`${input} text-xs py-1 disabled:opacity-40`}>
-                  <option value="">Move selected to…</option>
+                  <option value="">{reserveMode ? "Pull into month…" : "Move selected to…"}</option>
                   {months.filter((m) => m.id !== monthId).map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
                 </select>
-                <button onClick={moveSelected} disabled={busy || selected.size === 0 || !moveTarget} className="font-semibold px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-40">Move →</button>
+                <button onClick={moveSelected} disabled={busy || selected.size === 0 || !moveTarget} className="font-semibold px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-40">{reserveMode ? "Pull in →" : "Move →"}</button>
               </span>
             )}
-            <span className="text-gray-400">Re-reads each ticked line from its scan to pick up the latest extraction — you approve before anything changes.</span>
+            <span className="text-gray-400">{reserveMode ? "Tick lines, then pull them into a month to reconcile, or un-reserve to send back to their own month." : "Re-reads each ticked line from its scan to pick up the latest extraction — you approve before anything changes."}</span>
           </div>
           <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-1">
             <table className="w-full table-fixed border-collapse">

@@ -21,6 +21,7 @@ export default async function AccountsPage() {
     orderBy: [{ favourite: "desc" }, { createdAt: "desc" }],
     include: { _count: { select: { documents: true } } },
   })
+  const reservedCount = await prisma.accountingDocument.count({ where: { reserved: true } })
   const cardholders = await prisma.accountingCardholder.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] })
 
   // Names still on entries that aren't in the managed list (left behind by a rename) —
@@ -51,6 +52,15 @@ export default async function AccountsPage() {
           <ManageCardholders cardholders={cardholders.map((c) => ({ id: c.id, name: c.name }))} orphans={orphanCardholders} />
         </div>
       </div>
+
+      <Link href="/tools/accounts/reserves"
+        className={`${card} p-4 mb-3 flex items-center justify-between hover:border-amber-400/70 transition-colors`}>
+        <div>
+          <p className="text-base font-bold text-amber-600 dark:text-amber-400">🅿 Reserves</p>
+          <p className="text-sm text-gray-500">Receipts parked from other checks — view, edit, or pull into a month.</p>
+        </div>
+        <span className="text-amber-600 dark:text-amber-400 font-semibold text-sm">{reservedCount} {reservedCount === 1 ? "line" : "lines"} →</span>
+      </Link>
 
       <div className="space-y-3">
         {months.length === 0 ? (
