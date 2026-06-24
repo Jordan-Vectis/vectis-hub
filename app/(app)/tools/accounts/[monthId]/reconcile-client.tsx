@@ -220,17 +220,23 @@ export default function AccountsReconcile({
       {statements.map((stmt) => {
         const scopedEntries = stmt.cardholder ? entries.filter((e) => e.cardholder === stmt.cardholder) : entries
         const stmtUnits = buildUnits(scopedEntries)
-        // Part-payment support: ONE invoice can be paid by SEVERAL bank transactions
-        // (e.g. Google Ads capped at £500/payment). Track how much of each entered
-        // unit has been matched so far; a unit stays available until its matched
-        // payments add up to its total.
-        const matchedByUnit = new Map<string, number>()        // unit.key → £ matched so far
-        const txnCountByUnit = new Map<string, number>()       // unit.key → how many txns matched to it
-        const unitForTxn = (t: Txn) => stmtUnits.find((u) => u.docIds.some((id) => t.matchedDocIds.includes(id)))
+        // Two directions of many-to-one matching, both supported:
+        //  A) ONE invoice paid by SEVERAL transactions (Google Ads £500 caps) — a txn
+        //     hits ONE unit and contributes its amount toward that unit's balance.
+        //  B) ONE transaction covering SEVERAL invoices (World Options chunked into one
+        //     PayPal payment) — a txn hits MANY units, each fully claimed by it.
+        const matchedByUnit = new Map<string, number>()        // unit.key → £ claimed so far
+        const txnCountByUnit = new Map<string, number>()       // unit.key → how many txns reference it
+        const unitsForTxn = (t: Txn) => {
+          const seen = new Set<string>(); const out: Unit[] = []
+          for (const u of stmtUnits) if (!seen.has(u.key) && u.docIds.some((id) => t.matchedDocIds.includes(id))) { seen.add(u.key); out.push(u) }
+          return out
+        }
         for (const t of stmt.transactions) {
           if (t.ignored || t.direction === "CREDIT" || !t.matchedDocIds.length) continue
-          const u = unitForTxn(t)
-          if (u) { matchedByUnit.set(u.key, round((matchedByUnit.get(u.key) ?? 0) + t.amount)); txnCountByUnit.set(u.key, (txnCountByUnit.get(u.key) ?? 0) + 1) }
+          const us = unitsForTxn(t)
+          if (us.length === 1) { const u = us[0]; matchedByUnit.set(u.key, round((matchedByUnit.get(u.key) ?? 0) + t.amount)); txnCountByUnit.set(u.key, (txnCountByUnit.get(u.key) ?? 0) + 1) }
+          else for (const u of us) { matchedByUnit.set(u.key, round((matchedByUnit.get(u.key) ?? 0) + u.amount)); txnCountByUnit.set(u.key, (txnCountByUnit.get(u.key) ?? 0) + 1) }
         }
         const unitRemaining = (u: Unit) => round(u.amount - (matchedByUnit.get(u.key) ?? 0))
         const freeUnits = stmtUnits.filter((u) => unitRemaining(u) > 0.005)   // still has an outstanding balance
@@ -332,23 +338,38 @@ export default function AccountsReconcile({
                   </thead>
                   <tbody>
                     {visibleTxns.map((t) => {
-                      const matched = t.matchedDocIds.map((id) => entryById.get(id)).filter(Boolean) as Entry[]
-                      const isMatched = matched.length > 0
                       const credit = t.direction === "CREDIT"
+                      // The entered line(s) attached to this transaction (as units, so a split
+                      // invoice shows as one). Several units = a chunked payment covering many invoices.
+                      const matchedUnits: Unit[] = (() => {
+                        const seen = new Set<string>(); const out: Unit[] = []
+                        for (const id of t.matchedDocIds) {
+                          const u = stmtUnits.find((x) => x.docIds.includes(id))
+                          if (u) { if (!seen.has(u.key)) { seen.add(u.key); out.push(u) } }
+                          else { const e = entryById.get(id); if (e && !seen.has(id)) { seen.add(id); out.push({ key: id, docIds: [id], amount: round(e.gross), label: `${e.supplier || "(no description)"}${e.item ? " — " + e.item : ""}` }) } }
+                        }
+                        return out
+                      })()
+                      const isMatched = matchedUnits.length > 0
+                      // How much of THIS payment the attached invoices account for. A single
+                      // invoice ≥ the payment is a part-payment of a bigger invoice (fully uses
+                      // the payment); otherwise sum the attached pieces.
+                      const singleBig = matchedUnits.length === 1 && matchedUnits[0].amount >= t.amount - 0.005
+                      const covered = singleBig ? t.amount : round(matchedUnits.reduce((a, u) => a + u.amount, 0))
+                      const remaining = round(t.amount - covered)   // still to allocate on this payment
 
                       const txnText = `${t.description} ${t.reference || ""}`
-                      // Three kinds of candidate, in priority order:
-                      //  exact — the invoice's OUTSTANDING amount equals this payment (finishes it)
-                      //  part  — the invoice still has MORE outstanding than this payment (a capped instalment)
-                      //  near  — nothing fits; show the closest by outstanding amount
-                      const exactCands = freeUnits.filter((u) => Math.abs(unitRemaining(u) - t.amount) < 0.005)
-                      const partCands = freeUnits.filter((u) => unitRemaining(u) - t.amount > 0.005)
+                      // Suggestions target the OUTSTANDING amount on this payment (so after you add
+                      // one invoice, the next dropdown looks for what fits the remainder).
+                      const target = isMatched ? remaining : t.amount
+                      const exactCands = freeUnits.filter((u) => Math.abs(unitRemaining(u) - target) < 0.005)
+                      const partCands = freeUnits.filter((u) => unitRemaining(u) - target > 0.005)
                         .sort((a, b) => descSim(txnText, b.label) - descSim(txnText, a.label))
                       let kind: "exact" | "part" | "near"
                       let suggestions: Unit[]
                       if (exactCands.length) { kind = "exact"; suggestions = exactCands.slice().sort((a, b) => descSim(txnText, b.label) - descSim(txnText, a.label)) }
                       else if (partCands.length) { kind = "part"; suggestions = partCands }
-                      else { kind = "near"; suggestions = freeUnits.slice().sort((a, b) => Math.abs(unitRemaining(a) - t.amount) - Math.abs(unitRemaining(b) - t.amount)).slice(0, 5) }
+                      else { kind = "near"; suggestions = freeUnits.slice().sort((a, b) => Math.abs(unitRemaining(a) - target) - Math.abs(unitRemaining(b) - target)).slice(0, 5) }
                       const optLabel = (u: Unit) => {
                         const rem = unitRemaining(u)
                         const partial = Math.abs(rem - u.amount) > 0.005   // already part-paid
@@ -359,6 +380,8 @@ export default function AccountsReconcile({
                       const placeholder = kind === "exact" ? `— ${suggestions.length} match${suggestions.length !== 1 ? "es" : ""} found —`
                         : kind === "part" ? `— part-payment of a larger invoice? —`
                         : `— no exact match (${suggestions.length} nearest) —`
+                      const addMatch = (u: Unit) => run(() => setTransactionMatch(t.id, [...t.matchedDocIds, ...u.docIds]))
+                      const removeMatch = (u: Unit) => run(() => setTransactionMatch(t.id, t.matchedDocIds.filter((id) => !u.docIds.includes(id))))
 
                       return (
                         <tr key={t.id} className={`border-b border-gray-100 dark:border-gray-800/60 align-top ${t.ignored ? "opacity-40" : isMatched ? "bg-emerald-50/40 dark:bg-emerald-500/5" : credit ? "" : t.receiptMissing ? "bg-red-50/40 dark:bg-red-500/5" : "bg-amber-50/40 dark:bg-amber-500/5"}`}>
@@ -375,44 +398,50 @@ export default function AccountsReconcile({
                           <td className="p-1.5 min-w-[14rem]">
                             {t.ignored ? (
                               <span className="text-xs text-gray-400">Ignored</span>
-                            ) : isMatched ? (
-                              (() => {
-                                const myUnit = unitForTxn(t)
-                                const rem = myUnit ? unitRemaining(myUnit) : 0
-                                const paid = myUnit ? (matchedByUnit.get(myUnit.key) ?? 0) : 0
-                                // Part payment = several txns on one invoice, OR a single txn that
-                                // leaves a materially large balance. A tiny leftover (a few £ /
-                                // ≤10%) is just a foreign-settlement rounding diff, not an instalment.
-                                const partPaid = myUnit ? ((txnCountByUnit.get(myUnit.key) ?? 0) > 1 || rem > Math.max(5, t.amount * 0.1)) : false
+                            ) : t.receiptMissing ? (
+                              <span className="text-xs font-semibold text-red-600 dark:text-red-400">⚠ Receipt missing — no invoice for this payment</span>
+                            ) : (() => {
+                                const single = matchedUnits.length === 1 ? matchedUnits[0] : null
+                                const singleRem = single ? unitRemaining(single) : 0
+                                // Part payment = a single invoice spread across several txns, or one txn
+                                // leaving a materially large balance on a bigger invoice (not pennies).
+                                const partPaid = !!single && ((txnCountByUnit.get(single.key) ?? 0) > 1 || singleRem > Math.max(5, t.amount * 0.1))
+                                const showAdd = remaining > 0.005   // payment not fully accounted for yet
                                 return (
-                                  <div className="space-y-0.5">
-                                    {matched.map((e) => (
-                                      <div key={e.id} className="flex items-center gap-1.5 flex-wrap">
-                                        <span className="text-xs text-emerald-700 dark:text-emerald-300">✓ {e.supplier || "(no description)"}{e.item ? " — " + e.item : ""} · {gbp(e.gross)}</span>
-                                        {/* Snap only for a single, near-amount match (foreign settlement pennies) — never on instalments */}
-                                        {!partPaid && Math.abs(e.gross - t.amount) > 0.005 && Math.abs(e.gross - t.amount) <= Math.max(5, t.amount * 0.1) && matched.length === 1 && (
-                                          <button onClick={() => run(() => snapDocAmount(e.id, t.amount))} disabled={busy} className="text-[10px] font-semibold text-sky-600 hover:underline">set to {gbp(t.amount)}</button>
+                                  <div className="space-y-1">
+                                    {matchedUnits.length > 0 && (
+                                      <div className="space-y-0.5">
+                                        {matchedUnits.map((u) => (
+                                          <div key={u.key} className="flex items-center gap-1.5 flex-wrap">
+                                            <span className="text-xs text-emerald-700 dark:text-emerald-300">✓ {u.label} · {gbp(u.amount)}</span>
+                                            {/* Snap only for a single, near-amount match (foreign-settlement pennies) */}
+                                            {single && !partPaid && Math.abs(single.amount - t.amount) > 0.005 && Math.abs(single.amount - t.amount) <= Math.max(5, t.amount * 0.1) && single.docIds.length === 1 && (
+                                              <button onClick={() => run(() => snapDocAmount(single.docIds[0], t.amount))} disabled={busy} className="text-[10px] font-semibold text-sky-600 hover:underline">set to {gbp(t.amount)}</button>
+                                            )}
+                                            <button onClick={() => removeMatch(u)} disabled={busy} className="text-[11px] text-gray-400 hover:text-red-500" title="Remove this line">×</button>
+                                          </div>
+                                        ))}
+                                        {partPaid && (
+                                          <p className={`text-[10px] font-semibold ${singleRem > 0.005 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                                            Part payment · {gbp(matchedByUnit.get(single!.key) ?? 0)} of {gbp(single!.amount)} matched{singleRem > 0.005 ? ` · ${gbp(singleRem)} still to match` : " · complete ✓"}
+                                          </p>
+                                        )}
+                                        {!partPaid && matchedUnits.length >= 1 && showAdd && (
+                                          <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">{gbp(covered)} of {gbp(t.amount)} covered · {gbp(remaining)} to go — add another line:</p>
                                         )}
                                       </div>
-                                    ))}
-                                    {partPaid && (
-                                      <p className={`text-[10px] font-semibold ${rem > 0.005 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
-                                        Part payment · {gbp(paid)} of {gbp(myUnit!.amount)} matched{rem > 0.005 ? ` · ${gbp(rem)} still to match` : " · complete ✓"}
-                                      </p>
+                                    )}
+                                    {showAdd && (
+                                      <select disabled={busy} value="" onChange={(e) => { const u = freeUnits.find((x) => x.key === e.target.value); if (u) addMatch(u) }} className={`${input} w-full text-xs`}>
+                                        <option value="">{isMatched ? `— add a line (${gbp(remaining)} to go) —` : placeholder}</option>
+                                        {suggestions.map((u) => (
+                                          <option key={u.key} value={u.key}>{optLabel(u)}</option>
+                                        ))}
+                                      </select>
                                     )}
                                   </div>
                                 )
-                              })()
-                            ) : t.receiptMissing ? (
-                              <span className="text-xs font-semibold text-red-600 dark:text-red-400">⚠ Receipt missing — no invoice for this payment</span>
-                            ) : (
-                              <select disabled={busy} value="" onChange={(e) => { const u = freeUnits.find((x) => x.key === e.target.value); if (u) run(() => setTransactionMatch(t.id, u.docIds)) }} className={`${input} w-full text-xs`}>
-                                <option value="">{placeholder}</option>
-                                {suggestions.map((u) => (
-                                  <option key={u.key} value={u.key}>{optLabel(u)}</option>
-                                ))}
-                              </select>
-                            )}
+                              })()}
                           </td>
                           <td className="p-1.5 text-right whitespace-nowrap">
                             {isMatched && !t.ignored && <button onClick={() => run(() => setTransactionMatch(t.id, []))} disabled={busy} className="text-xs text-gray-400 hover:text-red-500 mr-2">unmatch</button>}
