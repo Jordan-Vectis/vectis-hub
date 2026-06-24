@@ -32,6 +32,9 @@ All descriptions must use British English spelling. Correct any American spellin
 - recognise/realise/organise/advertise (not -ize endings), licence (noun), practice (noun) vs practise (verb)
 Correct any instance found in the revised description.
 
+LANGUAGE — must be British English:
+The entire description must be written in British English. Model railway and other European lots often have German, French or other foreign-language packaging, and the description may have been written in that language by mistake. If ANY part of the description is not in English, you MUST treat it as an issue: record it in "contradictions" (e.g. "Description was not in English — translated") AND put a complete British-English translation of the whole description in "revised". Quote proper names, brand names and catalogue numbers exactly as written, but every other word must be English. A non-English (or part-non-English) description must NEVER be left unflagged or returned unchanged.
+
 WHAT NOT TO FLAG:
 - General descriptive language or style choices
 - Facts that are plausible and commonly known (e.g. well-known band names, standard formats)
