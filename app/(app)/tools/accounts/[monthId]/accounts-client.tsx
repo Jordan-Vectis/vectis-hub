@@ -7,6 +7,7 @@ import { VAT_CODES, NOMINAL_COLUMNS, columnLabel } from "@/lib/accounting"
 import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, removeDocumentPage, saveAccountingDocuments, splitAccountingDocument, bulkDeleteAccountingDocuments, uncombineDocument, renameAccountingMonth, moveDocumentsToMonth } from "@/lib/actions/accounting"
 import ImageViewer from "./accounts-viewer"
 import MonthStar from "../month-star"
+import LinkSpinner from "../link-spinner"
 
 type Row = {
   id: string; cardholder: string; source: string; images: string[]
@@ -495,7 +496,7 @@ export default function AccountsMonthClient({
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
         <div>
-          <Link href="/tools/accounts" className="text-sm text-gray-400 hover:text-emerald-500">← All months</Link>
+          <Link href="/tools/accounts" className="text-sm text-gray-400 hover:text-emerald-500 inline-flex items-center gap-1.5">← All months <LinkSpinner className="w-3.5 h-3.5" /></Link>
           {renaming ? (
             <input
               value={renameVal}
@@ -521,8 +522,8 @@ export default function AccountsMonthClient({
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Link href={`/tools/accounts/${monthId}/reconcile`} className="px-3.5 py-2 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white">
-            🏦 Reconcile
+          <Link href={`/tools/accounts/${monthId}/reconcile`} prefetch={false} className="px-3.5 py-2 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white inline-flex items-center gap-2">
+            🏦 Reconcile <LinkSpinner />
           </Link>
           <a href={`/api/accounts/export?monthId=${monthId}`} className="px-3.5 py-2 rounded-xl text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white">
             ⬇ Export to Excel

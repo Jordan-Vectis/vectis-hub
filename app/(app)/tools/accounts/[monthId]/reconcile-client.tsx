@@ -9,6 +9,7 @@ import {
   setStatementCardholder, renameAccountingMonth, clearStatementMatches,
 } from "@/lib/actions/accounting"
 import ImageViewer from "./accounts-viewer"
+import LinkSpinner from "../link-spinner"
 
 type Entry = {
   id: string; cardholder: string; supplier: string; item: string; gross: number
@@ -392,7 +393,7 @@ export default function AccountsReconcile({
         {/* Page header */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2">
-            <Link href={`/tools/accounts/${monthId}`} className="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">←</Link>
+            <Link href={`/tools/accounts/${monthId}`} prefetch={false} className="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 inline-flex items-center gap-1.5">← <LinkSpinner className="w-3.5 h-3.5" /></Link>
             {renaming ? (
               <input
                 value={renameVal}
