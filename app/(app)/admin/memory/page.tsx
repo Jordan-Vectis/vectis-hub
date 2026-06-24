@@ -470,6 +470,7 @@ Bidding increments: £0–50: £5 | £50–200: £10 | £200–700: £20 | £700
 - On retry, alternate between primary and fallback model
 - Returns HTTP 200 even when lots fail — always check results[0].status, not res.ok
 - Join description lines with \\n, never space — collapsing to space destroys formatting
+- English output enforced (2026-06-24): a LANGUAGE_RULE is appended to the system instruction AND the user prompt in the batch route, forcing British English. Without it Gemini mirrored foreign-language packaging (German Märklin/Fleischmann/Roco model railway boxes etc.) and returned non-English descriptions. Applies to Pipeline Batch stage + standalone Batch Run (shared route). Re-run any lots already generated in another language.
 
 Always check before calling .text(): (1) response.promptFeedback?.blockReason and (2) response.candidates?.[0]?.finishReason — only "STOP" and "MAX_TOKENS" are acceptable. 503 from Gemini = transient, retry. Use 422 (not 500) for content blocks.
 

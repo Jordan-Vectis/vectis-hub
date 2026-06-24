@@ -4,6 +4,17 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 
 export const maxDuration = 300
 
+// Vectis catalogues in British English. Model railway and similar lots often have
+// German/French/other foreign-language packaging in the photos (Märklin, Fleischmann,
+// Roco, etc.), and Gemini will otherwise mirror that language in its description.
+// This is appended to every batch generation so output is always English.
+const LANGUAGE_RULE =
+  "IMPORTANT: Write the entire description in British English only, using UK spelling. " +
+  "Ignore the language of any text, packaging, labelling or markings shown in the photos — " +
+  "foreign-language items (e.g. German Märklin/Fleischmann/Roco, French or any other) must still " +
+  "be described in British English. Never output any other language. Proper names and catalogue " +
+  "numbers printed on the item may be quoted verbatim, but all surrounding description must be English."
+
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
@@ -31,7 +42,8 @@ export async function POST(req: NextRequest) {
   const genai = new GoogleGenerativeAI(apiKey)
   const model = genai.getGenerativeModel({
     model: modelId,
-    systemInstruction: systemInstruction || undefined,
+    // Always include the English-language rule, even when the preset is empty/custom.
+    systemInstruction: [systemInstruction, LANGUAGE_RULE].filter(Boolean).join("\n\n"),
     // Google Search grounding lets Gemini look up catalogue numbers and product details
     // in real time. Only enabled when the client requests it — strict presets are unaffected.
     // Note: not all models support grounding; errors surface in the client log.
@@ -113,6 +125,10 @@ After the description (and optional FLAG line), include the estimate on its own 
       } else {
         userPrompt = `Existing description: ${existingContext}\n\nImprove and enhance this description based on the photos. Only use information present in the existing description or directly visible in the photos — do not add details from training data. Keep the same output format. Do not repeat the same information twice.\n\nAfter the description, include the estimate on its own line exactly as your instructions specify.`
       }
+
+      // Reinforce in the user turn too — foreign-language packaging in the photos is a
+      // strong cue and the system instruction alone doesn't always win.
+      userPrompt += "\n\n(Write the description in British English only — ignore any foreign-language text on the item or its packaging.)"
 
       const { text, searchQueries } = await generateWithRetry([
         ...imageParts,

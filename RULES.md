@@ -140,6 +140,11 @@ Bidding increment rounding:
   Always check `results[0].status`, not `res.ok`.
 - **Description formatting**: join lines with `\n`, never with ` `. Collapsing to a space
   destroys list and multi-paragraph formatting. This has been broken before — don't change it.
+- **English output is enforced**: a `LANGUAGE_RULE` constant is appended to the system instruction
+  (`[systemInstruction, LANGUAGE_RULE].filter(Boolean).join("\n\n")`) and reinforced in the user
+  prompt, forcing British English. Without it Gemini mirrors foreign-language packaging in the
+  photos (e.g. German Märklin/Fleischmann/Roco model railway boxes) and returns non-English
+  descriptions. Don't remove it.
 
 ---
 
