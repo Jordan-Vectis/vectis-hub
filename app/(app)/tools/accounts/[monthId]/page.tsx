@@ -54,6 +54,6 @@ export default async function AccountsMonthPage({ params }: { params: Promise<{ 
   )
 
   return (
-    <AccountsMonthClient monthId={month.id} monthLabel={month.label} documents={documents} cardholders={cardholders} months={monthRows} />
+    <AccountsMonthClient monthId={month.id} monthLabel={month.label} documents={documents} cardholders={cardholders} months={monthRows} favourite={month.favourite} />
   )
 }

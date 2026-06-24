@@ -4,6 +4,7 @@ import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import NewMonthForm from "./new-month-form"
 import ManageCardholders from "./manage-cardholders"
+import MonthStar from "./month-star"
 
 export const dynamic = "force-dynamic"
 export const metadata = { title: "Accounts" }
@@ -16,7 +17,7 @@ export default async function AccountsPage() {
   if (session.user.role !== "ADMIN") redirect("/hub")
 
   const months = await prisma.accountingMonth.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ favourite: "desc" }, { createdAt: "desc" }],
     include: { _count: { select: { documents: true } } },
   })
   const cardholders = await prisma.accountingCardholder.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] })
@@ -57,17 +58,19 @@ export default async function AccountsPage() {
           </div>
         ) : (
           months.map((m) => (
-            <Link
+            <div
               key={m.id}
-              href={`/tools/accounts/${m.id}`}
-              className={`${card} p-5 flex items-center justify-between hover:border-emerald-500/60 transition-colors`}
+              className={`${card} p-5 flex items-center gap-3 transition-colors ${m.favourite ? "border-amber-400/70 ring-1 ring-amber-400/40" : "hover:border-emerald-500/60"}`}
             >
-              <div>
-                <p className="text-lg font-bold text-gray-900 dark:text-white">{m.label}</p>
-                <p className="text-sm text-gray-500">{m._count.documents} {m._count.documents === 1 ? "line" : "lines"}</p>
-              </div>
-              <span className="text-emerald-600 dark:text-emerald-400 font-semibold text-sm">Open →</span>
-            </Link>
+              <MonthStar id={m.id} favourite={m.favourite} />
+              <Link href={`/tools/accounts/${m.id}`} className="flex items-center justify-between flex-1 min-w-0">
+                <div>
+                  <p className="text-lg font-bold text-gray-900 dark:text-white">{m.label}{m.favourite && <span className="ml-2 text-xs font-semibold text-amber-500 align-middle">Working on this</span>}</p>
+                  <p className="text-sm text-gray-500">{m._count.documents} {m._count.documents === 1 ? "line" : "lines"}</p>
+                </div>
+                <span className="text-emerald-600 dark:text-emerald-400 font-semibold text-sm">Open →</span>
+              </Link>
+            </div>
           ))
         )}
       </div>

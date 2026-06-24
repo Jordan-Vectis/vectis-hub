@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { VAT_CODES, NOMINAL_COLUMNS, columnLabel } from "@/lib/accounting"
 import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, removeDocumentPage, saveAccountingDocuments, splitAccountingDocument, bulkDeleteAccountingDocuments, uncombineDocument, renameAccountingMonth, moveDocumentsToMonth } from "@/lib/actions/accounting"
 import ImageViewer from "./accounts-viewer"
+import MonthStar from "../month-star"
 
 type Row = {
   id: string; cardholder: string; source: string; images: string[]
@@ -65,8 +66,8 @@ const gbp = (n: number) => "£" + (n || 0).toLocaleString("en-GB", { minimumFrac
 const isPdf = (u: string) => u.split("?")[0].toLowerCase().endsWith(".pdf")
 
 export default function AccountsMonthClient({
-  monthId, monthLabel, documents, cardholders, months,
-}: { monthId: string; monthLabel: string; documents: Row[]; cardholders: string[]; months: { id: string; label: string }[] }) {
+  monthId, monthLabel, documents, cardholders, months, favourite,
+}: { monthId: string; monthLabel: string; documents: Row[]; cardholders: string[]; months: { id: string; label: string }[]; favourite: boolean }) {
   const router = useRouter()
   const [rows, setRows] = useState<Row[]>(documents)
   useEffect(() => { setRows(documents) }, [documents])
@@ -506,6 +507,7 @@ export default function AccountsMonthClient({
             />
           ) : (
             <div className="flex items-center gap-3 mt-1">
+              <MonthStar id={monthId} favourite={favourite} />
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{displayLabel}</h1>
               <button onClick={() => { setRenameVal(displayLabel); setRenaming(true) }} title="Rename this month"
                 className="text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-emerald-500 border border-gray-300 dark:border-gray-700 rounded-lg px-2.5 py-1">

@@ -1100,6 +1100,7 @@ model MarketingFavourite {
 model AccountingMonth {
   id        String   @id @default(cuid())
   label     String   @unique          // e.g. "April 26"
+  favourite Boolean  @default(false)  // the month currently being worked on (pinned to top)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   documents AccountingDocument[]

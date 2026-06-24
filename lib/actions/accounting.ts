@@ -92,6 +92,14 @@ export async function renameAccountingMonth(id: string, label: string) {
   revalidatePath(`/tools/accounts/${id}/reconcile`)
 }
 
+// Mark/unmark a month as the one being worked on (pinned to the top of the list).
+export async function toggleMonthFavourite(id: string, favourite: boolean) {
+  await requireAdmin()
+  await prisma.accountingMonth.update({ where: { id }, data: { favourite } })
+  revalidatePath("/tools/accounts")
+  revalidatePath(`/tools/accounts/${id}`)
+}
+
 export async function deleteAccountingMonth(id: string) {
   await requireAdmin()
   const docs = await prisma.accountingDocument.findMany({ where: { monthId: id }, select: { imageKey: true, images: true } })

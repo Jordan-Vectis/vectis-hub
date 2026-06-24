@@ -566,6 +566,9 @@ const MIGRATIONS = [
 
   // 2026-06-23 — Reconciliation: a statement belongs to one cardholder (scopes matching)
   `ALTER TABLE "BankStatement" ADD COLUMN IF NOT EXISTS "cardholder" TEXT NOT NULL DEFAULT ''`,
+
+  // 2026-06-23 — Accounts: favourite/current month flag (pinned to top of the list)
+  `ALTER TABLE "AccountingMonth" ADD COLUMN IF NOT EXISTS "favourite" BOOLEAN NOT NULL DEFAULT FALSE`,
 ]
 
 export async function POST() {
