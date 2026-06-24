@@ -39,6 +39,37 @@ function descSim(a: string, b: string): number {
   return union > 0 ? common / union : 0
 }
 
+// Smart match: find a SUBSET of free invoices whose amounts add up exactly to a
+// target payment (subset-sum, penny-exact). Bounded so it stays instant in the
+// browser: ranks candidates by description similarity to the txn (so same-supplier
+// chunks are tried first), caps the pool + depth + iterations, and prefers the
+// combination with the fewest lines, then the best supplier match.
+function findCombo(target: number, cands: Unit[], txnText: string): Unit[] | null {
+  const goal = Math.round(target * 100)
+  if (goal <= 0) return null
+  const items = cands
+    .map((u) => ({ u, p: Math.round(u.amount * 100), sim: descSim(txnText, u.label) }))
+    .filter((x) => x.p > 0 && x.p <= goal)
+    .sort((a, b) => b.sim - a.sim || b.p - a.p)
+    .slice(0, 22)
+  let best: { idx: number[]; sim: number } | null = null
+  let iter = 0
+  const cur: number[] = []
+  function dfs(i: number, sum: number, simSum: number) {
+    if (iter++ > 400000 || (best && best.idx.length === 1)) return
+    if (sum === goal && cur.length) {
+      if (!best || cur.length < best.idx.length || (cur.length === best.idx.length && simSum > best.sim)) best = { idx: [...cur], sim: simSum }
+      return
+    }
+    if (sum >= goal || i >= items.length || cur.length >= 10) return
+    cur.push(i); dfs(i + 1, sum + items[i].p, simSum + items[i].sim); cur.pop()
+    dfs(i + 1, sum, simSum)
+  }
+  dfs(0, 0, 0)
+  const result = best as { idx: number[]; sim: number } | null
+  return result ? result.idx.map((i: number) => items[i].u) : null
+}
+
 function buildUnits(entries: Entry[]): Unit[] {
   const out: Unit[] = []
   const groups = new Map<string, Entry[]>()
@@ -382,6 +413,14 @@ export default function AccountsReconcile({
                         : `— no exact match (${suggestions.length} nearest) —`
                       const addMatch = (u: Unit) => run(() => setTransactionMatch(t.id, [...t.matchedDocIds, ...u.docIds]))
                       const removeMatch = (u: Unit) => run(() => setTransactionMatch(t.id, t.matchedDocIds.filter((id) => !u.docIds.includes(id))))
+                      // Smart match: only untouched (fully-free) lines are candidates for a sum.
+                      const fullyFree = freeUnits.filter((u) => Math.abs(unitRemaining(u) - u.amount) < 0.005)
+                      const canSmart = fullyFree.length >= 2 && remaining > 0.005
+                      const smartMatch = () => {
+                        const combo = findCombo(target, fullyFree, txnText)
+                        if (!combo) { alert(`Couldn't find a combination of entered lines that adds up to ${gbp(target)}. Add them manually, or some may not be entered yet.`); return }
+                        run(() => setTransactionMatch(t.id, [...t.matchedDocIds, ...combo.flatMap((u) => u.docIds)]))
+                      }
 
                       return (
                         <tr key={t.id} className={`border-b border-gray-100 dark:border-gray-800/60 align-top ${t.ignored ? "opacity-40" : isMatched ? "bg-emerald-50/40 dark:bg-emerald-500/5" : credit ? "" : t.receiptMissing ? "bg-red-50/40 dark:bg-red-500/5" : "bg-amber-50/40 dark:bg-amber-500/5"}`}>
@@ -432,12 +471,19 @@ export default function AccountsReconcile({
                                       </div>
                                     )}
                                     {showAdd && (
-                                      <select disabled={busy} value="" onChange={(e) => { const u = freeUnits.find((x) => x.key === e.target.value); if (u) addMatch(u) }} className={`${input} w-full text-xs`}>
-                                        <option value="">{isMatched ? `— add a line (${gbp(remaining)} to go) —` : placeholder}</option>
-                                        {suggestions.map((u) => (
-                                          <option key={u.key} value={u.key}>{optLabel(u)}</option>
-                                        ))}
-                                      </select>
+                                      <div className="space-y-1">
+                                        {canSmart && (
+                                          <button onClick={smartMatch} disabled={busy} className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline" title="Find a set of entered lines that add up to this payment and match them all">
+                                            ✨ Smart match — find lines adding up to {gbp(remaining)}
+                                          </button>
+                                        )}
+                                        <select disabled={busy} value="" onChange={(e) => { const u = freeUnits.find((x) => x.key === e.target.value); if (u) addMatch(u) }} className={`${input} w-full text-xs`}>
+                                          <option value="">{isMatched ? `— add a line (${gbp(remaining)} to go) —` : placeholder}</option>
+                                          {suggestions.map((u) => (
+                                            <option key={u.key} value={u.key}>{optLabel(u)}</option>
+                                          ))}
+                                        </select>
+                                      </div>
                                     )}
                                   </div>
                                 )
