@@ -5005,7 +5005,15 @@ function UpgradeTab({ model: globalModel, fallbackModel }: { model: string; fall
           const json = await res.json()
           if (json.error) throw new Error(json.error)
 
-          working[idx] = { ...working[idx], status: "done", revised: json.revised }
+          const revised = (json.revised ?? "").trim()
+          if (!revised) {
+            // An empty result can't be accepted — mark it skipped (visible in the log) rather
+            // than a "done" lot with nothing behind the Accept button.
+            working[idx] = { ...working[idx], status: "skipped" }
+            addLog(`✗ ${lot.label} — model returned an empty result, skipping`)
+          } else {
+            working[idx] = { ...working[idx], status: "done", revised }
+          }
           setLots([...working])
           succeeded = true
           done++
@@ -5039,16 +5047,13 @@ function UpgradeTab({ model: globalModel, fallbackModel }: { model: string; fall
 
   async function acceptLot(lot: UpgradeLot) {
     if (!auctionId || !lot.revised) return
-    const working = [...lots]
-    const idx = working.findIndex(l => l.id === lot.id)
-    working[idx] = { ...working[idx], accepted: true }
-    setLots([...working])
+    // Functional updates so accepting in a loop (Accept All) doesn't read a stale `lots`
+    // closure and overwrite earlier accepts — previously only the last lot stuck.
+    setLots(prev => prev.map(l => l.id === lot.id ? { ...l, accepted: true } : l))
     try {
       await applyAiDescriptionOne(auctionId, { id: lot.id, description: lot.revised })
     } catch (e: any) {
-      const revert = [...lots]
-      revert[idx] = { ...revert[idx], accepted: false }
-      setLots([...revert])
+      setLots(prev => prev.map(l => l.id === lot.id ? { ...l, accepted: false } : l))
       setError(`Failed to save ${lot.label}: ${e.message}`)
     }
   }
@@ -5066,7 +5071,7 @@ function UpgradeTab({ model: globalModel, fallbackModel }: { model: string; fall
     return a.code.toLowerCase().includes(q) || a.name.toLowerCase().includes(q)
   })
 
-  const pendingCount  = lots.filter(l => l.status === "done" && !l.accepted).length
+  const pendingCount  = lots.filter(l => l.status === "done" && !l.accepted && l.revised).length
   const acceptedCount = lots.filter(l => l.accepted).length
   const conflictModes = modes.has("shorten") && modes.has("expand")
 
