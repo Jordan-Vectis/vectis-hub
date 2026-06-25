@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { parseModelJson } from "@/lib/model-json"
 
 export const maxDuration = 300
 
@@ -136,11 +137,10 @@ After the description (and optional FLAG line), include the estimate on its own 
       ])
 
       // Occasionally Gemini returns a JSON object instead of plain text — extract description if so
+      // (parseModelJson also repairs the common invalid \' escape). Plain text → null → use as-is.
       let rawText = text.trim()
-      try {
-        const parsed = JSON.parse(rawText)
-        if (parsed && typeof parsed.description === "string") rawText = parsed.description.trim()
-      } catch { /* not JSON — use as-is */ }
+      const parsedBatch = parseModelJson(rawText)
+      if (parsedBatch && typeof parsedBatch.description === "string") rawText = parsedBatch.description.trim()
 
       // Split description, estimate and any cataloguer-mistake FLAG line — preserve newlines
       const lines = rawText.split("\n")

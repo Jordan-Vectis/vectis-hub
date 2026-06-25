@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { DOUBLE_CHECK_INSTRUCTION } from "@/lib/double-check-instruction"
+import { parseModelJson, extractJsonField } from "@/lib/model-json"
 
 export const maxDuration = 60
 
@@ -66,15 +67,17 @@ export async function POST(req: NextRequest) {
     let revised        = ""
     let verdict: "ok" | "issues" = "ok"
 
-    try {
-      const parsed   = JSON.parse(raw)
-      contradictions = parsed.contradictions?.trim() || ""
-      unsupported    = parsed.unsupported?.trim()    || ""
-      revised        = parsed.revised?.trim()        || ""
+    const parsed = parseModelJson(raw)
+    if (parsed && typeof parsed === "object") {
+      contradictions = (parsed.contradictions ?? "").toString().trim()
+      unsupported    = (parsed.unsupported ?? "").toString().trim()
+      revised        = (parsed.revised ?? "").toString().trim()
       verdict        = contradictions || unsupported ? "issues" : "ok"
-    } catch {
-      contradictions = raw.slice(0, 200)
-      verdict        = "issues"
+    } else {
+      // Couldn't parse the JSON (e.g. an invalid \' escape from the model). Salvage the
+      // revised description if we can; NEVER dump the raw JSON into the contradictions field.
+      revised = extractJsonField(raw, "revised") ?? ""
+      verdict = revised ? "issues" : "ok"
     }
 
     return NextResponse.json({ verdict, contradictions, unsupported, revised,

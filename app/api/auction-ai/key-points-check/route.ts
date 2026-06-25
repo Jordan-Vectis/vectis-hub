@@ -2,30 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { KEY_POINTS_INSTRUCTION } from "@/lib/key-points-instruction"
+import { parseModelJson, extractJsonField } from "@/lib/model-json"
 
 export const maxDuration = 60
 
 const SYSTEM_INSTRUCTION = KEY_POINTS_INSTRUCTION
-
-// Gemini occasionally returns JSON with an invalid escape — most commonly \' (a
-// backslash before a single quote), which is NOT a legal JSON escape and makes
-// JSON.parse throw. Repair the common mistakes and retry before giving up.
-function parseModelJson(s: string): any | null {
-  try { return JSON.parse(s) } catch {}
-  try { return JSON.parse(s.replace(/\\'/g, "'")) } catch {}
-  return null
-}
-
-// Last resort: pull the "description" value out of a malformed JSON string directly,
-// so a parse failure can NEVER store the whole raw JSON blob as the lot description.
-function extractDescription(s: string): string | null {
-  const m = s.match(/"description"\s*:\s*"((?:[^"\\]|\\.)*)"/)
-  if (!m) return null
-  return m[1]
-    .replace(/\\n/g, "\n").replace(/\\t/g, "\t")
-    .replace(/\\"/g, '"').replace(/\\'/g, "'").replace(/\\\\/g, "\\")
-    .trim()
-}
 
 // POST /api/auction-ai/key-points-check
 // Checks a single lot — label, keyPoints, description.
@@ -88,7 +69,7 @@ export async function POST(req: NextRequest) {
       // Could not parse the JSON (e.g. an invalid \' escape from the model). Pull the
       // description out directly if we can; otherwise KEEP the original description.
       // Never write the raw JSON blob — that corrupted a lot (2026-06-25).
-      const extracted = extractDescription(raw)
+      const extracted = extractJsonField(raw, "description")
       if (extracted) revised = extracted
     }
 
