@@ -173,6 +173,15 @@ function parseEstimate(est: string): { low: number; high: number } {
   return { low: parseInt(m[1].replace(/,/g, "")), high: parseInt(m[2].replace(/,/g, "")) }
 }
 
+// Pull Gemini's block reason (SAFETY / RECITATION / OTHER / PROHIBITED_CONTENT …) out of the
+// route's error string so a skipped lot can show e.g. "content blocked (RECITATION)".
+// Route formats: "BLOCKED: X" (KP/DC) and "Blocked (prompt): X" / "Blocked (X)" (Batch).
+function blockReasonLabel(err: string): string {
+  const m = err.match(/BLOCKED:\s*(.+)$/i) || err.match(/\(prompt\):\s*(.+)$/i) || err.match(/Blocked\s*\(([^)]+)\)/i)
+  const reason = (m?.[1] ?? "").trim().replace(/[.\s]+$/, "")
+  return reason ? `content blocked (${reason})` : "content blocked by AI"
+}
+
 function toDataURL(file: File): Promise<string> {
   return new Promise((res, rej) => {
     const r = new FileReader()
@@ -3476,6 +3485,7 @@ type PLot = {
   currentDesc: string   // updated as stages complete so next stage uses latest
   // Stage 1
   batchStatus?: "ok" | "failed" | "skipped"
+  batchSkipReason?: string  // why Batch skipped this lot
   estimate?:    string
   batchDesc?:   string   // description produced by the Batch stage
   kpDesc?:      string   // description produced by the Key Points stage
@@ -3556,6 +3566,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   const logRef   = useRef<HTMLDivElement>(null)
   const cancelRef = useRef(false)
   const pauseRef  = useRef(false)
+  const lastBlockRef = useRef("")   // the exact "BLOCKED: …" message from the last blocked lot
   const localModel = globalModel
 
   const systemInstruction = overrides[preset] ?? PRESETS[preset] ?? ""
@@ -3706,6 +3717,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         lastError = e.message ?? String(e)
         wasRateLimit = false
         if (isBlock(lastError)) {
+          lastBlockRef.current = lastError
           addLog(`✗ ${label} — blocked, skipping: ${lastError}`)
           return null
         }
@@ -3727,7 +3739,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
 
       // Lots with no photos → skip
       if (lot.imageUrls.length === 0) {
-        updated[idx] = { ...updated[idx], batchStatus: "skipped" }
+        updated[idx] = { ...updated[idx], batchStatus: "skipped", batchSkipReason: "no photos" }
         setLots([...updated])
         await saveLot(lot.id, { batchStatus: "skipped" })
         done++; setProgress({ done, total: toRun.length })
@@ -3804,10 +3816,10 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           body: JSON.stringify({ code: code.trim().toUpperCase(), preset, lot: lot.label, description: desc, estimate: result.estimate ?? "" }),
         }).catch(() => {})
       } else if (!cancelRef.current) {
-        updated[idx] = { ...updated[idx], batchStatus: "skipped" }
+        updated[idx] = { ...updated[idx], batchStatus: "skipped", batchSkipReason: blockReasonLabel(lastBlockRef.current) }
         setLots([...updated])
         await saveLot(lot.id, { batchStatus: "skipped" })
-        addLog(`  — ${lot.label} — skipped (content blocked)`)
+        addLog(`  — ${lot.label} — skipped (${lastBlockRef.current || "content blocked"})`)
       }
 
       done++; setProgress({ done, total: toRun.length })
@@ -3886,10 +3898,10 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         }
         setLots([...updated])
       } else if (!cancelRef.current) {
-        updated[idx] = { ...updated[idx], dcStatus: "skipped", dcSkipReason: "content blocked by AI" }
+        updated[idx] = { ...updated[idx], dcStatus: "skipped", dcSkipReason: blockReasonLabel(lastBlockRef.current) }
         setLots([...updated])
         await saveLot(lot.id, { dcStatus: "skipped" })
-        addLog(`  — ${lot.label} — skipped (content blocked)`)
+        addLog(`  — ${lot.label} — skipped (${lastBlockRef.current || "content blocked"})`)
       }
 
       done++; setProgress({ done, total: toRun.length })
@@ -3963,10 +3975,10 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         setLots([...updated])
         await saveLot(lot.id, { kpStatus: updated[idx].kpStatus, kpMissing: missing, kpAdded: added, description: newDesc, revised: newDesc })
       } else if (!cancelRef.current) {
-        updated[idx] = { ...updated[idx], kpStatus: "skipped", kpSkipReason: "content blocked by AI" }
+        updated[idx] = { ...updated[idx], kpStatus: "skipped", kpSkipReason: blockReasonLabel(lastBlockRef.current) }
         setLots([...updated])
         await saveLot(lot.id, { kpStatus: "skipped" })
-        addLog(`  — ${lot.label} — skipped (content blocked)`)
+        addLog(`  — ${lot.label} — skipped (${lastBlockRef.current || "content blocked"})`)
       }
 
       done++; setProgress({ done, total: toRun.length })
@@ -4733,7 +4745,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                   ) : lot.batchStatus === "ok" ? (
                     <span className="text-green-400">✓ Generated{lot.estimate ? ` · ${lot.estimate}` : ""}</span>
                   ) : (
-                    <span className="text-gray-500">— Skipped</span>
+                    <span className="text-gray-500">— Skipped{lot.batchSkipReason ? ` · ${lot.batchSkipReason}` : ""}</span>
                   )
 
                   const dcCell = !lot.dcStatus ? (
