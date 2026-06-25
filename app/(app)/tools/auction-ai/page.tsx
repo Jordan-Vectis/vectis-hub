@@ -4225,7 +4225,12 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   const stageIndex = stageOrder.indexOf(stage)
 
   const batchOkLots = lots.filter(l => l.batchStatus === "ok")
-  const kpIncomplete  = stageIndex > stageOrder.indexOf("kpcheck")  && batchOkLots.some(l => !l.kpStatus)
+  // A batch-OK lot only still NEEDS key-point checking if it actually has key points AND a
+  // description to check against. A lot with no key points (or no description) can never be
+  // KP-checked — the KP stage's toRun excludes it — so it must NOT count as incomplete, or
+  // the warning never clears and re-running is a permanent no-op for that lot.
+  const kpUnchecked = (l: PLot) => l.batchStatus === "ok" && !l.kpStatus && !!l.keyPoints?.trim() && !!l.currentDesc?.trim()
+  const kpIncomplete  = stageIndex > stageOrder.indexOf("kpcheck")  && lots.some(kpUnchecked)
   const dcIncomplete  = stageIndex > stageOrder.indexOf("doublecheck") && batchOkLots.some(l => !l.dcStatus)
   const pipelineIncomplete = kpIncomplete || dcIncomplete
 
@@ -4478,11 +4483,11 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
               <span>Pipeline complete — all descriptions applied for <span className="font-mono font-bold">{code.trim().toUpperCase()}</span></span>
             </div>
           )}
-          {lots.some(l => !l.kpStatus && l.batchStatus === "ok") && (
+          {lots.some(kpUnchecked) && (
             <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-950/20 border border-amber-700/50 text-amber-300 text-sm">
               <span className="text-xl">✓</span>
               <div className="flex-1">
-                <p>{lots.filter(l => !l.kpStatus && l.batchStatus === "ok").length} lots were not key-point checked — descriptions applied but key points not verified.</p>
+                <p>{lots.filter(kpUnchecked).length} lots were not key-point checked — descriptions applied but key points not verified.</p>
               </div>
               <button
                 onClick={async () => { await advanceStage("kpcheck"); await handleLoad() }}
