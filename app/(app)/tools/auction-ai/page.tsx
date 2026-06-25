@@ -3657,7 +3657,9 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           // Best AI text available: KP-revised → post-DC pipeline desc → catalogue desc.
           // Use || not ?? — fields may be stored as "" (falsy) rather than null.
           kpRevised:   saved?.revised || saved?.description || l.description || undefined,
-          appliedDesc: l.description ?? "",
+          // Prefer the persisted applied text; fall back to the catalogue description for lots
+          // applied before this was tracked (or auto-applied by the Batch/KP stages).
+          appliedDesc: saved?.appliedDesc || l.description || "",
         }
       })
 
@@ -4154,8 +4156,9 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     setLots(prev => prev.map(l => l.id === lot.id ? { ...l, kpStatus: "fixed", currentDesc: text, appliedDesc: text } : l))
     try {
       await applyAiDescriptionOne(auctionId, { id: lot.id, description: text })
-      // Persist to pipeline DB so the applied text survives a reload
-      await saveLot(lot.id, { kpStatus: "fixed", revised: text, description: text })
+      // Persist BOTH the revised text and what was applied, so a reload knows it's done
+      // (the load compares kpRevised vs appliedDesc — both now come from the pipeline DB).
+      await saveLot(lot.id, { kpStatus: "fixed", revised: text, description: text, appliedDesc: text })
     } catch {
       setLots(prev => prev.map(l => l.id === lot.id ? { ...l, appliedDesc: prevApplied } : l))
     }

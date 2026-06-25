@@ -290,6 +290,10 @@ model PipelineLot {
   kpMissing  String?      @db.Text
   kpAdded    String?      @db.Text
 
+  // The description actually applied to the catalogue (Review & Apply). Persisted so a
+  // reload knows the lot was applied without re-deriving it from the catalogue text.
+  appliedDesc String?     @db.Text
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

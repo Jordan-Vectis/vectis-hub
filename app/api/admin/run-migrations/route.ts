@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma"
 
 const MIGRATIONS = [
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "extraDetails" TEXT`,
+  `ALTER TABLE "PipelineLot" ADD COLUMN IF NOT EXISTS "appliedDesc" TEXT`,
   `CREATE TABLE IF NOT EXISTS "ConditionWording" (
     "id"        TEXT NOT NULL,
     "label"     TEXT NOT NULL,
