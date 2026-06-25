@@ -143,5 +143,25 @@ app.prepare().then(async () => {
       runITMailboxSync()
       setInterval(runITMailboxSync, IT_MAILBOX_INTERVAL_MS)
     }, 90 * 1000)
+
+    // Condition-reports mailbox poll — turns new condition-report emails into
+    // Condition Reports. Every 5 minutes, first run delayed 100s. No-op until
+    // the mailbox is connected and CONDITION_MAILBOX is set.
+    const CONDITION_MAILBOX_INTERVAL_MS = 5 * 60 * 1000
+    function runConditionMailboxSync() {
+      const secret = process.env.CRON_SECRET
+      if (!secret) return
+      fetch(`http://localhost:${port}/api/cron/condition-mailbox`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
+      })
+        .then(r => r.json())
+        .then(d => { if (d && d.created) console.log(`[cron/condition-mailbox] created ${d.created} report(s)`) })
+        .catch(e => console.warn('[cron/condition-mailbox] error:', e.message))
+    }
+    setTimeout(() => {
+      runConditionMailboxSync()
+      setInterval(runConditionMailboxSync, CONDITION_MAILBOX_INTERVAL_MS)
+    }, 100 * 1000)
   })
 })

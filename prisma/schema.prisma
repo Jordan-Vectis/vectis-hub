@@ -340,6 +340,7 @@ model CatalogueAuction {
   liveAuction LiveAuction?
   bidderRegistrations BidderRegistration[]
   webDescriptions WebDescription[]
+  conditionReports ConditionReport[]
 }
 
 // Managed cataloguing categories (was a hardcoded CATEGORY_MAP) — editable at /admin/categories.
@@ -1237,6 +1238,54 @@ model BankTransaction {
 // Singleton (id = "global") — stores the delegated OAuth tokens for the shared
 // IT mailbox connection. Connected once by an admin via the sign-in flow.
 model ITMailboxAuth {
+  id           String   @id @default("global")
+  accessToken  String   @db.Text
+  refreshToken String   @db.Text
+  expiresAt    DateTime
+  connectedBy  String?
+  lastSyncAt   DateTime?
+  updatedAt    DateTime @updatedAt
+}
+
+// A customer condition-report request that arrived by email (or was added
+// manually). Mirrors the Job Board pattern: emails land here as a list, with
+// lot number / auction / date captured (AI-extracted on sync, staff can edit),
+// then get assigned to a person and ticked done.
+model ConditionReport {
+  id             String    @id @default(cuid())
+  subject        String                                  // email subject / short title
+  body           String    @db.Text @default("")         // email preview / body text
+  fromName       String?
+  fromEmail      String?
+  status         String    @default("NEW")               // NEW | IN_PROGRESS | DONE
+  source         String    @default("EMAIL")             // EMAIL | MANUAL
+  graphMessageId String?   @unique                        // Office 365 message id — dedupe key
+  webLink        String?                                  // Outlook deep link to the original email
+  receivedAt     DateTime?
+
+  // Captured details
+  lotNumber      String?                                  // lot number referenced in the request
+  auctionId      String?                                  // linked auction (preferred)
+  auction        CatalogueAuction? @relation(fields: [auctionId], references: [id], onDelete: SetNull)
+  auctionLabel   String?                                  // free-text auction name (AI guess / fallback)
+  auctionDate    DateTime?                                // sale date for grouping/sorting
+
+  // Assignment
+  assignedToId   String?
+  assignedToName String?
+
+  createdByName  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status])
+  @@index([auctionId])
+  @@index([receivedAt])
+}
+
+// OAuth tokens for the shared mailbox that condition-report emails arrive in.
+// Singleton (id = "global"), same delegated-Graph pattern as ITMailboxAuth.
+model ConditionMailboxAuth {
   id           String   @id @default("global")
   accessToken  String   @db.Text
   refreshToken String   @db.Text
