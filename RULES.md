@@ -156,6 +156,11 @@ Lots must never be silently marked FAILED or skipped due to rate limits or netwo
 The retry loop is **infinite** — keep going until the lot succeeds or the user clicks Cancel.
 
 Only abort a lot early on a Gemini **content block** — those will never succeed on retry.
+**Exception (pipeline `withRetry`, 2026-06-25): RECITATION blocks DO retry** — up to 4 times with a
+short (~1.5s) wait, alternating primary/fallback model each attempt, because RECITATION is
+stochastic/model-specific (a list of catalogue numbers echoed back) and often clears on the other
+model. Every other block reason (SAFETY etc.) still skips instantly. To make the model actually
+swap, the pipeline stages select the model by `attempt % 2`, not `wasRateLimit`.
 
 Backoff:
 - **Rate limits** (`RATE_LIMITED:` prefix): exponential — `Math.min(60000 * 2^(attempt-1), 1800000)`

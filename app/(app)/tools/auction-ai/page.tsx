@@ -3702,11 +3702,15 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     let lastError    = ""
     let attempt      = 0
     let wasRateLimit = false
+    let recitationRetries = 0
+    const MAX_RECITATION_RETRIES = 4
     while (!cancelRef.current) {
       if (attempt > 0) {
-        const isRL = lastError.startsWith("RATE_LIMITED:")
-        wasRateLimit = isRL
-        const wait = isRL ? Math.min(60000 * Math.pow(2, attempt - 1), 1800000) : Math.min(attempt * 12000, 30000)
+        const isRL    = lastError.startsWith("RATE_LIMITED:")
+        const isRecit = /RECITATION/i.test(lastError)
+        wasRateLimit  = isRL
+        // RECITATION just needs the other model, not a long backoff — retry quickly.
+        const wait = isRL ? Math.min(60000 * Math.pow(2, attempt - 1), 1800000) : isRecit ? 1500 : Math.min(attempt * 12000, 30000)
         addLog(`↺ ${label} — ${isRL ? "rate limited, waiting" : "retrying in"} ${wait / 1000}s (attempt ${attempt + 1})…`)
         await new Promise(r => setTimeout(r, wait))
         if (cancelRef.current) return null
@@ -3719,6 +3723,14 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         wasRateLimit = false
         if (isBlock(lastError)) {
           lastBlockRef.current = lastError
+          // RECITATION is stochastic and model-specific — unlike SAFETY it often clears on a
+          // retry with the OTHER model (the next attempt alternates via attempt % 2). Retry a
+          // few times before giving up; every other block reason skips immediately.
+          if (/RECITATION/i.test(lastError) && recitationRetries < MAX_RECITATION_RETRIES) {
+            recitationRetries++
+            addLog(`↻ ${label} — RECITATION block, retrying with the other model (${recitationRetries}/${MAX_RECITATION_RETRIES})…`)
+            continue
+          }
           addLog(`✗ ${label} — blocked, skipping: ${lastError}`)
           return null
         }
@@ -3750,9 +3762,9 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       addLog(`  · ${done + 1}/${toRun.length} ${lot.label} — fetching images…`)
 
       const result = await withRetry(lot.label, async (attempt, wasRateLimit) => {
-        // Only use fallback when the previous failure was a rate limit —
-        // for timeouts and other errors always retry with the primary model
-        const modelToUse = (wasRateLimit && fallbackModel) ? fallbackModel : localModel
+        // Alternate primary/fallback on each retry, so a rate-limited OR RECITATION-blocked
+        // lot gets a shot at the other model.
+        const modelToUse = (attempt % 2 === 0 && fallbackModel) ? fallbackModel : localModel
         if (attempt > 1) addLog(`  ↳ ${lot.label} trying ${modelToUse}`)
         const fd = new FormData()
         fd.append("systemInstruction", systemInstruction)
@@ -3859,7 +3871,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       addLog(`  · ${done + 1}/${toRun.length} ${lot.label} — double checking…`)
 
       const result = await withRetry(lot.label, async (attempt, wasRateLimit) => {
-        const modelToUse = (wasRateLimit && fallbackModel) ? fallbackModel : localModel
+        const modelToUse = (attempt % 2 === 0 && fallbackModel) ? fallbackModel : localModel
         if (attempt > 1) addLog(`  ↳ ${lot.label} trying ${modelToUse}`)
         // Fetch images
         const urls = lot.imageUrls.slice(0, 6)
@@ -3945,7 +3957,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       addLog(`  · ${done + 1}/${toRun.length} ${lot.label} — checking key points…`)
 
       const result = await withRetry(lot.label, async (attempt, wasRateLimit) => {
-        const modelToUse = (wasRateLimit && fallbackModel) ? fallbackModel : localModel
+        const modelToUse = (attempt % 2 === 0 && fallbackModel) ? fallbackModel : localModel
         if (attempt > 1) addLog(`  ↳ ${lot.label} trying ${modelToUse}`)
         const res  = await fetch("/api/auction-ai/key-points-check", {
           method: "POST", headers: { "Content-Type": "application/json" },
@@ -4017,7 +4029,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
 
       addLog(`  · ${done + 1}/${targets.length} ${lot.label} — upgrading…`)
       const result = await withRetry(lot.label, async (attempt, wasRateLimit) => {
-        const modelToUse = (wasRateLimit && fallbackModel) ? fallbackModel : localModel
+        const modelToUse = (attempt % 2 === 0 && fallbackModel) ? fallbackModel : localModel
         if (attempt > 1) addLog(`  ↳ ${lot.label} trying ${modelToUse}`)
         const res = await fetch("/api/auction-ai/upgrade", {
           method: "POST", headers: { "Content-Type": "application/json" },
