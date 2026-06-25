@@ -3483,10 +3483,12 @@ type PLot = {
   cataloguerFlag?: string  // AI's warning that a key point may be a cataloguer mistake
   // Stage 2
   dcStatus?:       "ok" | "issues" | "error" | "skipped"
+  dcSkipReason?:   string  // why Double Check skipped this lot
   contradictions?: string
   unsupported?:    string
   // Stage 3
   kpStatus?:  "ok" | "pending" | "fixed" | "error" | "skipped"
+  kpSkipReason?: string  // why Key Points skipped this lot
   kpMissing?: string
   kpAdded?:   string
   kpFound?:   string  // exact phrases the AI matched for each "present" key point
@@ -3828,11 +3830,13 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       if (cancelRef.current) break
       const idx = updated.findIndex(l => l.id === lot.id)
 
-      // No images → skip
+      // No images / no description → can't double-check
       if (lot.imageUrls.length === 0 || !lot.currentDesc) {
-        updated[idx] = { ...updated[idx], dcStatus: "skipped" }
+        const reason = lot.imageUrls.length === 0 ? "no photos" : "no description"
+        updated[idx] = { ...updated[idx], dcStatus: "skipped", dcSkipReason: reason }
         setLots([...updated])
         await saveLot(lot.id, { dcStatus: "skipped" })
+        addLog(`  — ${lot.label} — skipped (${reason})`)
         done++; setProgress({ done, total: toRun.length })
         continue
       }
@@ -3880,7 +3884,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         }
         setLots([...updated])
       } else if (!cancelRef.current) {
-        updated[idx] = { ...updated[idx], dcStatus: "skipped" }
+        updated[idx] = { ...updated[idx], dcStatus: "skipped", dcSkipReason: "content blocked by AI" }
         setLots([...updated])
         await saveLot(lot.id, { dcStatus: "skipped" })
         addLog(`  — ${lot.label} — skipped (content blocked)`)
@@ -3915,7 +3919,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       const idx = updated.findIndex(l => l.id === lot.id)
 
       if (!lot.currentDesc || !lot.keyPoints) {
-        updated[idx] = { ...updated[idx], kpStatus: "skipped" }
+        const reason = !lot.currentDesc ? "no description" : "no key points"
+        updated[idx] = { ...updated[idx], kpStatus: "skipped", kpSkipReason: reason }
         setLots([...updated])
         await saveLot(lot.id, { kpStatus: "skipped" })
         done++; setProgress({ done, total: toRun.length })
@@ -3956,7 +3961,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         setLots([...updated])
         await saveLot(lot.id, { kpStatus: updated[idx].kpStatus, kpMissing: missing, kpAdded: added, description: newDesc, revised: newDesc })
       } else if (!cancelRef.current) {
-        updated[idx] = { ...updated[idx], kpStatus: "skipped" }
+        updated[idx] = { ...updated[idx], kpStatus: "skipped", kpSkipReason: "content blocked by AI" }
         setLots([...updated])
         await saveLot(lot.id, { kpStatus: "skipped" })
         addLog(`  — ${lot.label} — skipped (content blocked)`)
@@ -4071,6 +4076,36 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     } finally {
       setRunning(false)
       setProgress(null)
+    }
+  }
+
+  // Re-run a single lot through the whole pipeline (Batch → Key Points → Double Check).
+  // Resets just that lot's stage state so the stage functions reprocess only it — useful
+  // when a lot was skipped (e.g. content blocked) and you want to give it another go.
+  async function rerunLot(lot: PLot) {
+    if (running || !auctionId) return
+    const aid = auctionId
+    cancelRef.current = false
+    setRunning(true); setError(null)
+    addLog(`↻ Re-running ${lot.label}…`)
+    const reset = lots.map(l => l.id === lot.id ? {
+      ...l,
+      batchStatus: undefined, estimate: undefined, batchDesc: undefined,
+      dcStatus: undefined, dcSkipReason: undefined, contradictions: undefined, unsupported: undefined, dcDesc: undefined,
+      kpStatus: undefined, kpSkipReason: undefined, kpMissing: undefined, kpAdded: undefined, kpFound: undefined, kpRevised: undefined, kpDesc: undefined,
+      cataloguerFlag: undefined, currentDesc: "",
+    } : l)
+    setLots(reset)
+    try {
+      let current = reset
+      current = await runBatchStage(current)
+      if (!cancelRef.current) current = await runKPStage(current, aid)
+      if (!cancelRef.current) current = await runDoubleCheckStage(current, aid)
+      if (!cancelRef.current) addLog(`✓ ${lot.label} — re-run complete`)
+    } catch (e: any) {
+      if (!cancelRef.current) { addLog(`✗ ${lot.label} — re-run error: ${e?.message ?? "unknown"}`); setError(e?.message ?? "Re-run failed") }
+    } finally {
+      setRunning(false); setProgress(null)
     }
   }
 
@@ -4705,7 +4740,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                   ) : lot.dcStatus === "issues" ? (
                     <span className="text-yellow-400">⚑ Fixed{lot.contradictions ? ` · ${lot.contradictions}` : ""}</span>
                   ) : (
-                    <span className="text-gray-500">— Skipped</span>
+                    <span className="text-gray-500">— Skipped{lot.dcSkipReason ? ` · ${lot.dcSkipReason}` : ""}</span>
                   )
 
                   const kpCell = !lot.kpStatus ? (
@@ -4717,7 +4752,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                   ) : lot.kpStatus === "fixed" ? (
                     <span className="text-green-400">✓ Accepted{lot.kpAdded ? ` · ${lot.kpAdded}` : ""}</span>
                   ) : (
-                    <span className="text-gray-500">— Skipped</span>
+                    <span className="text-gray-500">— Skipped{lot.kpSkipReason ? ` · ${lot.kpSkipReason}` : ""}</span>
                   )
 
                   const isOpen = expandedId === lot.id
@@ -4734,6 +4769,11 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                       <td className="px-3 py-2">{dcCell}</td>
                       <td className="px-3 py-2">{kpCell}</td>
                       <td className="px-3 py-2 text-right whitespace-nowrap">
+                        <button onClick={e => { e.stopPropagation(); rerunLot(lot) }} disabled={running}
+                          className="text-xs text-[#C8A96E] hover:text-[#d4b87a] disabled:opacity-30 transition-colors mr-3"
+                          title="Re-run this lot through Batch → Key Points → Double Check">
+                          ↻ Re-run
+                        </button>
                         {lot.debug && (
                           <button onClick={e => { e.stopPropagation(); setDebugLot(lot) }}
                             className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors mr-3">
