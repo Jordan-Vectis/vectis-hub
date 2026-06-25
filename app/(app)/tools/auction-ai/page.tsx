@@ -3543,6 +3543,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   const [stage,       setStage]       = useState<PipelineStage>("batch")
   const [progress,    setProgress]    = useState<{ done: number; total: number } | null>(null)
   const [log,         setLog]         = useState<string[]>([])
+  const [problemsOnly, setProblemsOnly] = useState(false)   // Results table filter: skipped / issues only
   const [preset,      setPreset]      = useState(Object.keys(PRESETS)[1])
   const [overrides,   setOverrides]   = useState<Record<string, string>>({})
   const [editOpen,     setEditOpen]    = useState(false)
@@ -4277,6 +4278,15 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   }
   const reviewLots = lots.filter(needsReview)
 
+  // A lot is a "problem" for the Results filter if any stage skipped it, Double Check
+  // corrected it, Key Points is awaiting review, or the AI flagged a cataloguer mistake.
+  function hasProblem(l: PLot): boolean {
+    return l.batchStatus === "skipped" || l.kpStatus === "skipped" || l.dcStatus === "skipped"
+      || l.dcStatus === "issues" || l.kpStatus === "pending" || !!l.cataloguerFlag
+  }
+  const resultRows = problemsOnly ? lots.filter(hasProblem) : lots
+  const problemCount = lots.filter(hasProblem).length
+
   const stageOrder: PipelineStage[] = ["batch", "kpcheck", "doublecheck", "complete"]
   const stageIndex = stageOrder.indexOf(stage)
 
@@ -4721,7 +4731,20 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       {/* Results table — shown once any lot has results */}
       {lots.some(l => l.batchStatus || l.dcStatus || l.kpStatus) && (
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Results</h3>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Results</h3>
+            <button onClick={() => setProblemsOnly(v => !v)} disabled={problemCount === 0}
+              className={`text-xs px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-40 ${
+                problemsOnly
+                  ? "bg-amber-600/25 border-amber-500 text-amber-300"
+                  : "bg-gray-100 dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-amber-500"
+              }`}>
+              ⚠ Problems only{problemCount > 0 ? ` (${problemCount})` : ""}
+            </button>
+            <span className="text-xs text-gray-500">
+              {problemsOnly ? `Showing ${resultRows.length} skipped / flagged` : `${lots.length} lots`}
+            </span>
+          </div>
           {lots.some(l => l.cataloguerFlag) && (
             <div className="rounded-lg border border-red-600/50 bg-red-950/30 px-3 py-2 text-xs text-red-300">
               ⚠️ {lots.filter(l => l.cataloguerFlag).length} lot{lots.filter(l => l.cataloguerFlag).length === 1 ? "" : "s"} flagged — the AI thinks a key point may be wrong. Expand the flagged row{lots.filter(l => l.cataloguerFlag).length === 1 ? "" : "s"} (⚠️) to review.
@@ -4739,7 +4762,10 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                 </tr>
               </thead>
               <tbody>
-                {lots.map((lot, i) => {
+                {resultRows.length === 0 && (
+                  <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-500">No lots match this filter.</td></tr>
+                )}
+                {resultRows.map((lot, i) => {
                   const batchCell = !lot.batchStatus ? (
                     <span className="text-gray-500">—</span>
                   ) : lot.batchStatus === "ok" ? (
