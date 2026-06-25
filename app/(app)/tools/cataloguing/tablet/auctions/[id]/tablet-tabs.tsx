@@ -10,6 +10,7 @@ import {
 } from "@/lib/actions/catalogue"
 import LotWizardTab, { BRANDS_LIST } from "../../../auctions/[id]/lot-wizard-tab"
 import { useCategoryMap } from "@/lib/use-category-map"
+import { parseCondition, buildCondition, type BoxPrefixMode } from "@/lib/condition"
 import PhotoOnlyTab from "../../../auctions/[id]/photo-only-tab"
 import ReviewTab from "../../../auctions/[id]/review-tab"
 
@@ -406,14 +407,16 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
 
   const [titleVal, setTitleVal] = useState(lot?.title ?? "")
 
-  // Condition
-  const condParts = (lot?.condition ?? "").split(" to ")
-  const [cond1, setCond1] = useState(condParts[0] ?? "")
-  const [cond2, setCond2] = useState(condParts[1] ?? "")
-  const condValue = [cond1, cond2]
-    .filter(Boolean)
-    .sort((a, b) => CONDITIONS.indexOf(b) - CONDITIONS.indexOf(a))
-    .join(" to ")
+  // Condition — item condition + optional separate box/packaging condition
+  const initCond = parseCondition(lot?.condition)
+  const [cond1, setCond1] = useState(initCond.cond1)
+  const [cond2, setCond2] = useState(initCond.cond2)
+  const [boxOn,           setBoxOn]           = useState(initCond.boxOn)
+  const [boxPrefixMode,   setBoxPrefixMode]   = useState<BoxPrefixMode>(initCond.boxPrefixMode)
+  const [boxCustomPrefix, setBoxCustomPrefix] = useState(initCond.boxCustomPrefix)
+  const [boxCond1,        setBoxCond1]        = useState(initCond.boxCond1)
+  const [boxCond2,        setBoxCond2]        = useState(initCond.boxCond2)
+  const condValue = buildCondition({ cond1, cond2, boxOn, boxPrefixMode, boxCustomPrefix, boxCond1, boxCond2 })
 
   // Parcel
   const [parcel, setParcel] = useState(lot?.notes ?? "")
@@ -647,6 +650,39 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
           {condValue && (
             <p className="text-sm text-[#2AB4A6] mt-2 px-1">Condition: {condValue}</p>
           )}
+
+          {/* Optional separate box / packaging condition */}
+          <div className="mt-3 pt-3 border-t border-gray-800">
+            <label className="flex items-center gap-2 cursor-pointer select-none" style={{ touchAction: "manipulation" }}>
+              <input type="checkbox" checked={boxOn} onChange={e => setBoxOn(e.target.checked)} className="w-5 h-5 accent-[#2AB4A6]" />
+              <span className={lbl} style={{ margin: 0 }}>Separate box / packaging condition</span>
+            </label>
+            {boxOn && (
+              <div className="mt-2 space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <select value={boxPrefixMode} onChange={e => setBoxPrefixMode(e.target.value as BoxPrefixMode)} className={inp}>
+                    <option value="Box is">Box is</option>
+                    <option value="Packaging is">Packaging is</option>
+                    <option value="custom">Custom…</option>
+                  </select>
+                  {boxPrefixMode === "custom" && (
+                    <input value={boxCustomPrefix} onChange={e => setBoxCustomPrefix(e.target.value)}
+                      placeholder="e.g. Inner tray is" className={`${inp} col-span-2`} />
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <select value={boxCond1} onChange={e => setBoxCond1(e.target.value)} className={inp}>
+                    <option value="">—</option>
+                    {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <select value={boxCond2} onChange={e => setBoxCond2(e.target.value)} className={inp}>
+                    <option value="">— to —</option>
+                    {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Parcel size */}

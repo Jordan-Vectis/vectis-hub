@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, fillLotsFromTotes, togglePublished, generateTitlesFromDescriptions, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, bulkSetLotsAiExcluded, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, transferLots, bulkClearLotPhotos } from "@/lib/actions/catalogue"
 import LotWizardTab, { BRANDS_LIST } from "./lot-wizard-tab"
 import { useCategoryMap } from "@/lib/use-category-map"
+import { parseCondition, buildCondition, type BoxPrefixMode } from "@/lib/condition"
 import PhotoOnlyTab from "./photo-only-tab"
 import ImportTab from "./import-tab"
 import PhotoUploadTab from "./photo-upload-tab"
@@ -2007,11 +2008,16 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
   const [titleVal, setTitleVal] = useState(lot?.title ?? "")
   const [descVal,  setDescVal]  = useState(lot?.description ?? "")
 
-  // Parse stored condition "Good to Excellent" → cond1="Good", cond2="Excellent"
-  const condParts = (lot?.condition ?? "").split(" to ")
-  const [cond1, setCond1] = useState(condParts[0] ?? "")
-  const [cond2, setCond2] = useState(condParts[1] ?? "")
-  const condValue = [cond1, cond2].filter(Boolean).sort((a, b) => CONDITIONS.indexOf(b) - CONDITIONS.indexOf(a)).join(" to ")
+  // Parse the stored condition into the item condition + optional box/packaging condition
+  const initCond = parseCondition(lot?.condition)
+  const [cond1, setCond1] = useState(initCond.cond1)
+  const [cond2, setCond2] = useState(initCond.cond2)
+  const [boxOn,           setBoxOn]           = useState(initCond.boxOn)
+  const [boxPrefixMode,   setBoxPrefixMode]   = useState<BoxPrefixMode>(initCond.boxPrefixMode)
+  const [boxCustomPrefix, setBoxCustomPrefix] = useState(initCond.boxCustomPrefix)
+  const [boxCond1,        setBoxCond1]        = useState(initCond.boxCond1)
+  const [boxCond2,        setBoxCond2]        = useState(initCond.boxCond2)
+  const condValue = buildCondition({ cond1, cond2, boxOn, boxPrefixMode, boxCustomPrefix, boxCond1, boxCond2 })
 
   function addConditionToDesc() {
     if (!condValue) return
@@ -2194,6 +2200,54 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
                   </button>
                 ))}
               </div>
+
+              {/* Optional separate box / packaging condition */}
+              <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-800">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input type="checkbox" checked={boxOn} onChange={e => { setBoxOn(e.target.checked); triggerAutoSave() }}
+                    className="w-4 h-4 accent-[#2AB4A6]" />
+                  <span className={lbl} style={{ margin: 0 }}>Separate box / packaging condition</span>
+                </label>
+                {boxOn && (
+                  <div className="mt-2 space-y-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {(["Box is", "Packaging is"] as const).map(p => (
+                        <button key={p} type="button" onClick={() => { setBoxPrefixMode(p); triggerAutoSave() }}
+                          className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${boxPrefixMode === p ? "border-[#2AB4A6] bg-[#2AB4A6]/20 text-[#2AB4A6]" : "border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
+                          {p}
+                        </button>
+                      ))}
+                      <button type="button" onClick={() => { setBoxPrefixMode("custom"); triggerAutoSave() }}
+                        className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${boxPrefixMode === "custom" ? "border-[#2AB4A6] bg-[#2AB4A6]/20 text-[#2AB4A6]" : "border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
+                        Custom…
+                      </button>
+                    </div>
+                    {boxPrefixMode === "custom" && (
+                      <input value={boxCustomPrefix} onChange={e => { setBoxCustomPrefix(e.target.value); triggerAutoSave() }}
+                        placeholder="e.g. Inner tray is" className={input} />
+                    )}
+                    <p className="text-xs text-gray-500 dark:text-gray-500">Packaging condition</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {CONDITIONS.map(c => (
+                        <button key={c} type="button" onClick={() => { setBoxCond1(v => v === c ? "" : c); triggerAutoSave() }}
+                          className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${boxCond1 === c ? "border-[#2AB4A6] bg-[#2AB4A6]/20 text-[#2AB4A6]" : "border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-500">Packaging condition to <span className="text-gray-600">(optional)</span></p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {CONDITIONS.map(c => (
+                        <button key={c} type="button" onClick={() => { setBoxCond2(v => v === c ? "" : c); triggerAutoSave() }}
+                          className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${boxCond2 === c ? "border-[#2AB4A6] bg-[#2AB4A6]/20 text-[#2AB4A6]" : "border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {condValue && <p className="text-xs text-[#2AB4A6] mt-1">{condValue}</p>}
               <input type="hidden" name="condition" value={condValue} />
             </div>

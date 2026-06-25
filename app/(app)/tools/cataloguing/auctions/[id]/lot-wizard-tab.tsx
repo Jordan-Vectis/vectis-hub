@@ -7,6 +7,7 @@ import { DEFAULT_REASONS } from "@/lib/idle-timer-config"
 import type { IdleReason } from "@/lib/idle-timer-config"
 import { DEFAULT_CATEGORY_MAP } from "@/lib/lot-categories"
 import { useCategoryMap } from "@/lib/use-category-map"
+import { buildCondition as buildConditionStr } from "@/lib/condition"
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -682,17 +683,10 @@ export default function LotWizardTab({
     setBarcode(src.slice(0, m.index) + String(parseInt(m[1]) + 1).padStart(m[1].length, "0"))
   }
 
-  // Build the saved condition: the item condition, plus an optional separate
-  // box/packaging sentence — e.g. "Near Mint to Excellent. Box is Good to Good Plus."
+  // Build the saved condition via the shared helper (item condition + optional separate
+  // box/packaging sentence) so the wizard, desktop editor and tablet stay in lock-step.
   function buildCondition(): string {
-    const byGrade = (a: string, b: string) => CONDITIONS.indexOf(b) - CONDITIONS.indexOf(a)
-    const itemCond = [cond1, cond2].filter(Boolean).sort(byGrade).join(" to ")
-    const prefix   = (boxPrefixMode === "custom" ? boxCustomPrefix.trim() : boxPrefixMode)
-    const boxGrade = [boxCond1, boxCond2].filter(Boolean).sort(byGrade).join(" to ")
-    const boxSentence = boxOn && prefix && boxGrade ? `${prefix} ${boxGrade}` : ""
-    if (itemCond && boxSentence) return `${itemCond}. ${boxSentence}.`
-    if (boxSentence) return `${boxSentence}.`
-    return itemCond
+    return buildConditionStr({ cond1, cond2, boxOn, boxPrefixMode, boxCustomPrefix, boxCond1, boxCond2 })
   }
 
   function saveLot() {
