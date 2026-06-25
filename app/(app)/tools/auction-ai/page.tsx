@@ -3501,16 +3501,22 @@ type PLot = {
 }
 
 // Optional AI Upgrade transformations — same set as the standalone AI Upgrade tab.
-const PIPELINE_UPGRADE_MODES: { id: string; label: string }[] = [
-  { id: "expand",           label: "Add more detail" },
-  { id: "seo",              label: "Improve SEO" },
-  { id: "condition",        label: "Expand condition notes" },
-  { id: "humanise",         label: "Humanise wording" },
-  { id: "grammar",          label: "Fix grammar & spelling" },
-  { id: "format",           label: "Standardise formatting" },
-  { id: "no_hyperbole",     label: "Remove hyperbole" },
-  { id: "auction_language", label: "Auction terminology" },
-  { id: "shorten",          label: "Shorten" },
+// Single source of truth for AI Upgrade transformation modes — used by BOTH the
+// pipeline's inline "Enhance with AI Upgrade" step and the standalone AI Upgrade tab,
+// so the two always offer the same options. Keys must match MODE_INSTRUCTIONS in
+// app/api/auction-ai/upgrade/route.ts.
+const UPGRADE_MODES: { key: string; label: string; desc: string }[] = [
+  { key: "shorten",          label: "Shorten",                desc: "Remove padding, tighten verbose descriptions" },
+  { key: "expand",           label: "Add more detail",        desc: "Expand sparse descriptions with useful context" },
+  { key: "seo",              label: "Improve SEO",            desc: "Weave in buyer search terms naturally, without changing facts" },
+  { key: "humanise",         label: "Humanise",               desc: "Remove AI-robotic phrasing, make it read naturally" },
+  { key: "grammar",          label: "Fix grammar",            desc: "Spelling, punctuation and sentence structure" },
+  { key: "format",           label: "Standardise format",     desc: "Consistent bullets, capitalisation and spacing" },
+  { key: "condition",        label: "Expand condition notes", desc: "More specific about defects and completeness" },
+  { key: "remove_condition", label: "Remove conditions",      desc: "Strip any condition/grading statement (condition is set separately by a human)" },
+  { key: "no_hyperbole",     label: "Remove hyperbole",       desc: "Strip vague positives and sales-speak" },
+  { key: "auction_language", label: "Auction language",       desc: "Reinforce lot/catalogue-appropriate terminology" },
+  { key: "brand_first",      label: "Brand first",            desc: "Move the brand/maker name to the very start of the description" },
 ]
 
 function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fallbackModel: string }) {
@@ -4525,11 +4531,11 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {PIPELINE_UPGRADE_MODES.map(m => {
-              const on = upgradeModes.has(m.id)
+            {UPGRADE_MODES.map(m => {
+              const on = upgradeModes.has(m.key)
               return (
-                <button key={m.id} disabled={upgrading}
-                  onClick={() => setUpgradeModes(prev => { const n = new Set(prev); n.has(m.id) ? n.delete(m.id) : n.add(m.id); return n })}
+                <button key={m.key} disabled={upgrading} title={m.desc}
+                  onClick={() => setUpgradeModes(prev => { const n = new Set(prev); n.has(m.key) ? n.delete(m.key) : n.add(m.key); return n })}
                   className={`text-xs px-3 py-1.5 rounded-full border transition-colors disabled:opacity-40 ${
                     on ? "bg-purple-600/30 border-purple-500 text-purple-200" : "bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-purple-500"
                   }`}>
@@ -4874,19 +4880,6 @@ type UpgradeLot = {
   revised?:    string
   accepted:    boolean
 }
-
-const UPGRADE_MODES = [
-  { key: "shorten",          label: "Shorten",                desc: "Remove padding, tighten verbose descriptions" },
-  { key: "expand",           label: "Add more detail",        desc: "Expand sparse descriptions with useful context" },
-  { key: "seo",              label: "Improve SEO",            desc: "Weave in buyer search terms naturally, without changing facts" },
-  { key: "humanise",         label: "Humanise",               desc: "Remove AI-robotic phrasing, make it read naturally" },
-  { key: "grammar",          label: "Fix grammar",            desc: "Spelling, punctuation and sentence structure" },
-  { key: "format",           label: "Standardise format",     desc: "Consistent bullets, capitalisation and spacing" },
-  { key: "condition",        label: "Expand condition notes", desc: "More specific about defects and completeness" },
-  { key: "no_hyperbole",     label: "Remove hyperbole",       desc: "Strip vague positives and sales-speak" },
-  { key: "auction_language", label: "Auction language",       desc: "Reinforce lot/catalogue-appropriate terminology" },
-  { key: "brand_first",      label: "Brand first",            desc: "Move the brand/maker name to the very start of the description" },
-]
 
 function UpgradeTab({ model: globalModel, fallbackModel }: { model: string; fallbackModel: string }) {
   const [code,         setCode]         = useState("")

@@ -23,7 +23,7 @@ Condition grades and assessments are set separately by the cataloguer and must N
 - Phrases like "condition appears…", "in good condition", "in excellent condition", "well-preserved", "shows signs of wear", "light wear", "heavy wear", "some scuffing", "paint chips" and similar
 - Any sentence whose primary purpose is to assess the physical state of the item
 Exception: do NOT remove condition language that is part of a factual product description (e.g. "Good" as part of a grade name in an official product title).
-If any condition statement is found, remove it from the revised description entirely.
+If any condition statement is found, remove it from the revised description entirely AND record its removal in "contradictions" (e.g. "Removed condition statement — condition is recorded separately by a human") so the corrected description is actually applied. A condition statement must NEVER be left in the description just because nothing else was wrong with the lot.
 
 UK SPELLING — always correct:
 All descriptions must use British English spelling. Correct any American spellings found, including:

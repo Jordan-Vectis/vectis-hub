@@ -9,6 +9,7 @@ const MODE_INSTRUCTIONS: Record<string, string> = {
   grammar:          "Fix grammar, spelling, punctuation, and sentence structure throughout.",
   format:           "Standardise the format — consistent bullet point style, capitalisation, and spacing.",
   condition:        "Expand condition notes — be more specific and explicit about any defects, damage, or completeness issues.",
+  remove_condition: "Remove any condition or grading statement — delete grade words used as a condition assessment (e.g. \"Mint\", \"Near Mint\", \"Excellent to Near Mint\", \"Good Plus\") and condition phrases (e.g. \"condition appears…\", \"in good condition\", \"shows light wear\", \"paint chips\"). Condition is recorded separately by a human, so the description must contain NO condition assessment. Do NOT remove a grade word that is part of an official product name.",
   no_hyperbole:     "Remove hyperbole and sales-speak — replace vague positive language with specific factual statements.",
   auction_language: "Ensure auction-appropriate terminology throughout — use lot/catalogue language as appropriate.",
   seo:              "Improve search visibility (SEO) — naturally weave in the specific terms a buyer would search for (brand, maker, model/range name, character, theme, era, format). Do not keyword-stuff, repeat unnaturally, or change any facts.",
