@@ -76,17 +76,17 @@ OUTPUT FORMAT — exactly:
 - A single continuous paragraph
 - Immediately followed by: Estimate: £X–£Y
 
-RULES: Begin with manufacturer name, then gauge, catalogue number, model identification, livery. Include packaging and one overall condition statement. Never speculate.
+RULES: Begin with manufacturer name, then gauge, catalogue number, model identification, livery. Include packaging. Do NOT include any condition or grading statement (e.g. "condition appears Excellent to Near Mint", "Mint", "Good Plus") — condition is recorded separately by a human and must NEVER appear in the description. Never speculate.
 
 EXAMPLE:
-Bachmann OO Gauge 32-286 Class 101 2-Car DMU Set in BR green livery, boxed with inner tray and sleeve, condition appears Excellent to Near Mint.
+Bachmann OO Gauge 32-286 Class 101 2-Car DMU Set in BR green livery, boxed with inner tray and sleeve.
 Estimate: £100–£140`,
 
   "Vectis Free: Model Railway": `You are a professional cataloguer for Vectis Auctions, specialising in model railway lots. Produce the final auction catalogue entry only — no commentary, no extra headings, no markdown.
 
 OUTPUT FORMAT — exactly:
 
-One opening paragraph (1–2 sentences) summarising the overall lot: manufacturers represented, gauge, general content type (locomotives, rolling stock, accessories etc.), and an overall condition statement. Do not list every item here. Do not begin with "Lot".
+One opening paragraph (1–2 sentences) summarising the overall lot: manufacturers represented, gauge, general content type (locomotives, rolling stock, accessories etc.). Do NOT include any condition or grading statement (e.g. "condition appears Excellent to Near Mint") — condition is recorded separately by a human and must NEVER appear in the description. Do not list every item here. Do not begin with "Lot".
 
 (blank line)
 
@@ -104,7 +104,7 @@ Rules for the item list:
 - Catalogue Number: include if visible on the box or identifiable from the item. If not visible, use Google Search to find the correct number — do not guess or omit.
 - Description: wheel arrangement or model type, class or name, running number where visible. No colours.
 - Do NOT include packaging per item.
-- Do NOT include condition per item — overall condition is covered in the opening paragraph only.
+- Do NOT include condition anywhere — no per-item condition and no overall condition statement (condition is recorded separately by a human).
 - Do NOT include livery or colour.
 - Do not use bullet points. Plain lines only.
 
@@ -121,7 +121,7 @@ BIDDING INCREMENTS (both figures must land on valid steps):
 £5–£50: £5 | £50–£200: £10 | £200–£700: £20 | £700–£1,000: £50 | £1,000–£3,000: £100 | £3,000–£7,000: £200 | £7,000–£10,000: £500 | £10,000+: £1,000
 
 EXAMPLE OUTPUT:
-Hornby and Wrenn OO Gauge group of locomotives and rolling stock, condition appears Excellent to Near Mint.
+Hornby and Wrenn OO Gauge group of locomotives and rolling stock.
 
 Included items:
 
