@@ -88,6 +88,12 @@ const sections = [
     description: "Manage the box/packaging wording presets (e.g. \"Box is\", \"Carded Back is\") used in the separate condition.",
     icon:        "📦",
   },
+  {
+    href:        "/admin/announcements",
+    label:       "Announcements",
+    description: "Show a custom banner to everyone using the app — e.g. after an update or to warn of planned downtime.",
+    icon:        "📣",
+  },
 ]
 
 export default async function AdminOverviewPage() {

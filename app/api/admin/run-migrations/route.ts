@@ -16,6 +16,15 @@ const MIGRATIONS = [
     CONSTRAINT "ConditionWording_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "ConditionWording_label_key" UNIQUE ("label")
   )`,
+  `CREATE TABLE IF NOT EXISTS "Announcement" (
+    "id"            TEXT NOT NULL,
+    "message"       TEXT NOT NULL DEFAULT '',
+    "level"         TEXT NOT NULL DEFAULT 'warning',
+    "active"        BOOLEAN NOT NULL DEFAULT false,
+    "updatedAt"     TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedByName" TEXT,
+    CONSTRAINT "Announcement_pkey" PRIMARY KEY ("id")
+  )`,
   `CREATE TABLE IF NOT EXISTS "RoleDefault" (
     "role"           TEXT NOT NULL,
     "allowedApps"    TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],

@@ -371,6 +371,17 @@ model ConditionWording {
   createdAt DateTime @default(now())
 }
 
+// Single manual app-wide announcement banner (one "current" row). Set at /admin/announcements,
+// shown to everyone via the announcement banner in the app layout.
+model Announcement {
+  id            String   @id            // always "current"
+  message       String   @db.Text @default("")
+  level         String   @default("warning") // info | warning | success
+  active        Boolean  @default(false)
+  updatedAt     DateTime @updatedAt
+  updatedByName String?
+}
+
 model BidderRegistration {
   id                String           @id @default(cuid())
   auctionId         String
