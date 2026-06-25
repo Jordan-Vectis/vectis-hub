@@ -362,6 +362,15 @@ model LotSubcategory {
   @@index([categoryId])
 }
 
+// Wording presets for the separate box/packaging condition (e.g. "Box is", "Carded Back is").
+// Managed at /admin/condition-wording; read by the lot editors.
+model ConditionWording {
+  id        String   @id @default(cuid())
+  label     String   @unique
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
 model BidderRegistration {
   id                String           @id @default(cuid())
   auctionId         String

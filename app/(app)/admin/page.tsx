@@ -82,6 +82,12 @@ const sections = [
     description: "Add, rename, reorder or remove the categories and subcategories cataloguers pick from when entering lots.",
     icon:        "🏷️",
   },
+  {
+    href:        "/admin/condition-wording",
+    label:       "Condition Wording",
+    description: "Manage the box/packaging wording presets (e.g. \"Box is\", \"Carded Back is\") used in the separate condition.",
+    icon:        "📦",
+  },
 ]
 
 export default async function AdminOverviewPage() {

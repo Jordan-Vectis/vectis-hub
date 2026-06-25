@@ -11,6 +11,7 @@ import {
 import LotWizardTab, { BRANDS_LIST } from "../../../auctions/[id]/lot-wizard-tab"
 import { useCategoryMap } from "@/lib/use-category-map"
 import { parseCondition, buildCondition, type BoxPrefixMode } from "@/lib/condition"
+import { useConditionWordings } from "@/lib/use-condition-wordings"
 import PhotoOnlyTab from "../../../auctions/[id]/photo-only-tab"
 import ReviewTab from "../../../auctions/[id]/review-tab"
 
@@ -416,6 +417,7 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
   const [boxCustomPrefix, setBoxCustomPrefix] = useState(initCond.boxCustomPrefix)
   const [boxCond1,        setBoxCond1]        = useState(initCond.boxCond1)
   const [boxCond2,        setBoxCond2]        = useState(initCond.boxCond2)
+  const boxWordings = useConditionWordings()
   const condValue = buildCondition({ cond1, cond2, boxOn, boxPrefixMode, boxCustomPrefix, boxCond1, boxCond2 })
 
   // Parcel
@@ -661,8 +663,7 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
               <div className="mt-2 space-y-2">
                 <div className="grid grid-cols-3 gap-2">
                   <select value={boxPrefixMode} onChange={e => setBoxPrefixMode(e.target.value as BoxPrefixMode)} className={inp}>
-                    <option value="Box is">Box is</option>
-                    <option value="Packaging is">Packaging is</option>
+                    {boxWordings.map(w => <option key={w} value={w}>{w}</option>)}
                     <option value="custom">Custom…</option>
                   </select>
                   {boxPrefixMode === "custom" && (

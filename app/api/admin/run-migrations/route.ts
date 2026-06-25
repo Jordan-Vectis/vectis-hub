@@ -8,6 +8,14 @@ import { prisma } from "@/lib/prisma"
 
 const MIGRATIONS = [
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "extraDetails" TEXT`,
+  `CREATE TABLE IF NOT EXISTS "ConditionWording" (
+    "id"        TEXT NOT NULL,
+    "label"     TEXT NOT NULL,
+    "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "ConditionWording_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "ConditionWording_label_key" UNIQUE ("label")
+  )`,
   `CREATE TABLE IF NOT EXISTS "RoleDefault" (
     "role"           TEXT NOT NULL,
     "allowedApps"    TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],

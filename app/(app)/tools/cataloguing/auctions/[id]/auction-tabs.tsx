@@ -6,6 +6,7 @@ import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, del
 import LotWizardTab, { BRANDS_LIST } from "./lot-wizard-tab"
 import { useCategoryMap } from "@/lib/use-category-map"
 import { parseCondition, buildCondition, type BoxPrefixMode } from "@/lib/condition"
+import { useConditionWordings } from "@/lib/use-condition-wordings"
 import PhotoOnlyTab from "./photo-only-tab"
 import ImportTab from "./import-tab"
 import PhotoUploadTab from "./photo-upload-tab"
@@ -2017,6 +2018,7 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
   const [boxCustomPrefix, setBoxCustomPrefix] = useState(initCond.boxCustomPrefix)
   const [boxCond1,        setBoxCond1]        = useState(initCond.boxCond1)
   const [boxCond2,        setBoxCond2]        = useState(initCond.boxCond2)
+  const boxWordings = useConditionWordings()
   const condValue = buildCondition({ cond1, cond2, boxOn, boxPrefixMode, boxCustomPrefix, boxCond1, boxCond2 })
 
   function addConditionToDesc() {
@@ -2211,7 +2213,7 @@ function LotEditView({ lot, auctionId, allLots, entryDir, onDone, onEdit }: { lo
                 {boxOn && (
                   <div className="mt-2 space-y-2">
                     <div className="flex flex-wrap gap-1.5">
-                      {(["Box is", "Packaging is"] as const).map(p => (
+                      {boxWordings.map(p => (
                         <button key={p} type="button" onClick={() => { setBoxPrefixMode(p); triggerAutoSave() }}
                           className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${boxPrefixMode === p ? "border-[#2AB4A6] bg-[#2AB4A6]/20 text-[#2AB4A6]" : "border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
                           {p}

@@ -10,7 +10,14 @@
 
 export const CONDITION_GRADES = ["Mint", "Near Mint", "Excellent", "Good Plus", "Good", "Fair", "Poor"]
 
-export type BoxPrefixMode = "Box is" | "Packaging is" | "custom"
+// Built-in box/packaging wording presets. The live list is DB-managed at
+// /admin/condition-wording (seeded from these); this stays the instant fallback and the
+// set parseCondition recognises so a saved wording highlights its chip on re-edit.
+export const DEFAULT_WORDINGS = ["Box is", "Packaging is", "Carded Back is", "Blister Card is"]
+
+// A box wording is either a preset label (e.g. "Box is") or the literal "custom"
+// (then boxCustomPrefix holds the free text). Dynamic, so this is just a string.
+export type BoxPrefixMode = string
 
 export interface ConditionParts {
   cond1: string
@@ -58,10 +65,12 @@ export function parseCondition(raw: string | null | undefined): ConditionParts {
     const candidate = s.slice(sep + 2).trim()
     const m = BOX_RE.exec(candidate)
     if (m && m[1].trim()) { itemStr = s.slice(0, sep).trim(); boxStr = candidate }
-  } else if (/^(Box|Packaging) is\s+/i.test(s)) {
-    // Box-only (no item) — only recognised for the two built-in prefixes, so legacy
-    // free-text that happens to end in a grade word is never mis-read as a box condition.
-    itemStr = ""; boxStr = s
+  } else {
+    // Box-only (no item condition) — recognise it when the whole string is "<wording> <grade>"
+    // and the wording ends in "is" (the convention for every preset, built-in or custom). This
+    // avoids mis-reading legacy free-text condition that happens to end in a grade word.
+    const m = BOX_RE.exec(s)
+    if (m && /\bis$/i.test(m[1].trim())) { itemStr = ""; boxStr = s }
   }
 
   const [c1 = "", c2 = ""] = itemStr.split(/\s+to\s+/i).map(x => x.trim())
@@ -75,8 +84,9 @@ export function parseCondition(raw: string | null | undefined): ConditionParts {
       parts.boxOn = true
       parts.boxCond1 = b1
       parts.boxCond2 = b2
-      if (prefix === "Box is") parts.boxPrefixMode = "Box is"
-      else if (prefix === "Packaging is") parts.boxPrefixMode = "Packaging is"
+      // Known preset → select its chip; anything else → the Custom field. (Wordings added
+      // beyond the built-ins still round-trip correctly, they just show as Custom on re-edit.)
+      if (DEFAULT_WORDINGS.includes(prefix)) parts.boxPrefixMode = prefix
       else { parts.boxPrefixMode = "custom"; parts.boxCustomPrefix = prefix }
     }
   }

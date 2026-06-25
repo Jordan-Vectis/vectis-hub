@@ -7,7 +7,8 @@ import { DEFAULT_REASONS } from "@/lib/idle-timer-config"
 import type { IdleReason } from "@/lib/idle-timer-config"
 import { DEFAULT_CATEGORY_MAP } from "@/lib/lot-categories"
 import { useCategoryMap } from "@/lib/use-category-map"
-import { buildCondition as buildConditionStr } from "@/lib/condition"
+import { buildCondition as buildConditionStr, type BoxPrefixMode } from "@/lib/condition"
+import { useConditionWordings } from "@/lib/use-condition-wordings"
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -564,7 +565,7 @@ export default function LotWizardTab({
   const [cond2,       setCond2]       = useState("")
   // Optional separate box/packaging condition (step 6)
   const [boxOn,         setBoxOn]         = useState(false)
-  const [boxPrefixMode, setBoxPrefixMode] = useState<"Box is" | "Packaging is" | "custom">("Box is")
+  const [boxPrefixMode, setBoxPrefixMode] = useState<BoxPrefixMode>("Box is")
   const [boxCustomPrefix, setBoxCustomPrefix] = useState("")
   const [boxCond1,      setBoxCond1]      = useState("")
   const [boxCond2,      setBoxCond2]      = useState("")
@@ -625,6 +626,7 @@ export default function LotWizardTab({
   const categoryMap = useCategoryMap()
   const subCats     = mainCat ? (categoryMap[mainCat] ?? []) : []
   const mainCatList = Object.keys(categoryMap)
+  const boxWordings = useConditionWordings()
   const inpFocus    = tablet
     ? "w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3.5 text-base text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#2AB4A6]"
     : "w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#2AB4A6]"
@@ -1216,7 +1218,7 @@ export default function LotWizardTab({
                   <div>
                     <label className={`${lbl} block mb-2`}>Wording</label>
                     <div className="flex flex-wrap gap-2">
-                      {(["Box is", "Packaging is"] as const).map(p => (
+                      {boxWordings.map(p => (
                         <CondBtn key={p} label={p} selected={boxPrefixMode === p} onClick={() => setBoxPrefixMode(p)} tablet={tablet} />
                       ))}
                       <CondBtn label="Custom…" selected={boxPrefixMode === "custom"} onClick={() => setBoxPrefixMode("custom")} tablet={tablet} />
