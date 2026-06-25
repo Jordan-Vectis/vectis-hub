@@ -7,6 +7,7 @@ export default function ContentGeneratorTab() {
   // Filters
   const [keyword,     setKeyword]     = useState("")
   const [category,    setCategory]    = useState("")
+  const [subcategory, setSubcategory] = useState("")
   const [month,       setMonth]       = useState("")
   const [year,        setYear]        = useState("")
   const [topN,        setTopN]        = useState<number | "all">(10)
@@ -15,6 +16,8 @@ export default function ContentGeneratorTab() {
   const [length,      setLength]      = useState<"short" | "medium" | "long" | "max">("medium")
 
   const [categories, setCategories]       = useState<string[]>([])
+  const [subcatsByCategory, setSubcatsByCategory] = useState<Record<string, string[]>>({})
+  const [allSubcats, setAllSubcats]       = useState<string[]>([])
   const [allSales,   setAllSales]          = useState<Sale[]>([])
   const [selectedSales, setSelectedSales]  = useState<string[]>([])  // array of auctionCodes
   const [salesPickerOpen, setSalesPickerOpen] = useState(false)
@@ -37,7 +40,11 @@ export default function ContentGeneratorTab() {
   const [savedDefault, setSavedDefault] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch("/api/marketing/categories").then(r => r.json()).then(d => { if (d.categories) setCategories(d.categories) }).catch(() => {})
+    fetch("/api/marketing/categories").then(r => r.json()).then(d => {
+      if (d.categories) setCategories(d.categories)
+      if (d.subcategoriesByCategory) setSubcatsByCategory(d.subcategoriesByCategory)
+      if (d.allSubcategories) setAllSubcats(d.allSubcategories)
+    }).catch(() => {})
     fetch("/api/marketing/sales").then(r => r.json()).then(d => { if (d.sales) setAllSales(d.sales) }).catch(() => {})
     fetch("/api/auction-ai/models").then(r => r.json()).then(d => {
       if (d.models?.length) {
@@ -75,6 +82,7 @@ export default function ContentGeneratorTab() {
     const params = new URLSearchParams()
     if (keyword)       params.set("keyword",  keyword.trim())
     if (category)      params.set("category", category)
+    if (subcategory)   params.set("subcategory", subcategory)
     if (month && year) params.set("month",    `${year}-${month}`)
     else if (year)     params.set("year",     year)   // year-only filter
     else if (month)    params.set("month",    month)  // month-only (current year)
@@ -224,11 +232,31 @@ export default function ContentGeneratorTab() {
           </div>
           <div>
             <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Category</label>
-            <select value={category} onChange={e => setCategory(e.target.value)}
+            <select value={category} onChange={e => {
+                const newCat = e.target.value
+                setCategory(newCat)
+                // Drop the sub-category if it no longer belongs to the chosen category
+                const allowed = newCat ? (subcatsByCategory[newCat] ?? []) : allSubcats
+                if (subcategory && !allowed.includes(subcategory)) setSubcategory("")
+              }}
               className="w-full bg-white dark:bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-pink-500">
               <option value="">All categories</option>
               {categories.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Sub-category</label>
+            {(() => {
+              const subOptions = category ? (subcatsByCategory[category] ?? []) : allSubcats
+              return (
+                <select value={subcategory} onChange={e => setSubcategory(e.target.value)}
+                  disabled={subOptions.length === 0}
+                  className="w-full bg-white dark:bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-pink-500 disabled:opacity-50">
+                  <option value="">All sub-categories</option>
+                  {subOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              )
+            })()}
           </div>
           <div>
             <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Month / Year</label>
@@ -403,6 +431,7 @@ export default function ContentGeneratorTab() {
                     <th className="px-4 py-2 font-medium">Lot</th>
                     <th className="px-4 py-2 font-medium">Description</th>
                     <th className="px-4 py-2 font-medium">Category</th>
+                    <th className="px-4 py-2 font-medium">Sub-category</th>
                     <th className="px-4 py-2 font-medium">Estimate</th>
                     <th className="px-4 py-2 font-medium">{mode === "upcoming" ? "—" : "Hammer"}</th>
                     <th className="px-4 py-2 font-medium">Sale</th>
@@ -415,6 +444,7 @@ export default function ContentGeneratorTab() {
                       <td className="px-4 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">{lot.currentLotNo ?? lot.lotNo ?? lot.uniqueId}</td>
                       <td className="px-4 py-2 text-gray-700 dark:text-gray-200 max-w-xs truncate">{lot.description ?? "—"}</td>
                       <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{lot.category ?? "—"}</td>
+                      <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{lot.subcategory ?? "—"}</td>
                       <td className="px-4 py-2 text-gray-600 dark:text-gray-400 whitespace-nowrap">
                         {lot.lowEstimate && lot.highEstimate ? `${fmt(lot.lowEstimate)}–${fmt(lot.highEstimate)}` : "—"}
                       </td>

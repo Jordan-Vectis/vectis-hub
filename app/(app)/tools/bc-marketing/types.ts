@@ -4,6 +4,7 @@ export type Lot = {
   currentLotNo: string | null
   description:  string | null      // BC short description (EVA_ShortDescription)
   category:     string | null
+  subcategory:  string | null      // BC sub-category (EVA_ArticleSubcategoryCode)
   hammerPrice:  number | null
   lowEstimate:  number | null
   highEstimate: number | null

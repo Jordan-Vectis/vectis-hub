@@ -15,8 +15,9 @@ export async function GET(req: NextRequest) {
     if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
     const { searchParams } = req.nextUrl
-    const keyword  = searchParams.get("keyword")?.trim()  ?? ""
-    const category = searchParams.get("category")?.trim() ?? ""
+    const keyword     = searchParams.get("keyword")?.trim()     ?? ""
+    const category    = searchParams.get("category")?.trim()    ?? ""
+    const subcategory = searchParams.get("subcategory")?.trim() ?? ""
     const month    = searchParams.get("month")?.trim()    ?? "" // "YYYY-MM" or just "YYYY"
     const year     = searchParams.get("year")?.trim()     ?? ""  // "YYYY" — used when no month picked
     const mode     = searchParams.get("mode")?.trim()     ?? "sold"  // "sold" | "upcoming" | "all"
@@ -63,6 +64,11 @@ export async function GET(req: NextRequest) {
       where.category = { contains: category, mode: "insensitive" }
     }
 
+    if (subcategory) {
+      // Sub-categories come from a fixed dropdown, so match exactly (case-insensitive).
+      where.subcategory = { equals: subcategory, mode: "insensitive" }
+    }
+
     if (month) {
       // "YYYY-MM" prefix — most specific
       where.auctionDate = { startsWith: month }
@@ -79,6 +85,7 @@ export async function GET(req: NextRequest) {
         currentLotNo: true,
         description:  true,
         category:     true,
+        subcategory:  true,
         hammerPrice:  true,
         lowEstimate:  true,
         highEstimate: true,
