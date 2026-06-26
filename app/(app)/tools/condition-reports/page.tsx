@@ -57,12 +57,17 @@ export default async function ConditionReportsPage() {
     date:  isoDate(a.auctionDate),
   }))
 
+  const inboundSecret = process.env.CONDITION_INBOUND_SECRET
+  const appUrl = process.env.NEXTAUTH_URL ?? "https://vectis-staging.up.railway.app"
+  const inboundUrl = isAdmin && inboundSecret ? `${appUrl}/api/condition-reports/inbound?key=${inboundSecret}` : null
+
   return (
     <ConditionReportsClient
       reports={reportsPlain}
       users={users}
       auctions={auctionsPlain}
       isAdmin={isAdmin}
+      inboundUrl={inboundUrl}
       mailbox={{
         configured:    conditionMailboxConfigured(),
         address:       conditionMailboxAddress(),

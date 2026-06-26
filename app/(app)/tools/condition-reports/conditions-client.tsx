@@ -64,12 +64,13 @@ function fmtDateLabel(iso: string | null): string {
 // ─── Component ──────────────────────────────────────────────────────────────────
 
 export default function ConditionReportsClient({
-  reports, users, auctions, isAdmin, mailbox,
+  reports, users, auctions, isAdmin, inboundUrl, mailbox,
 }: {
   reports: Report[]
   users: User[]
   auctions: Auction[]
   isAdmin: boolean
+  inboundUrl: string | null
   mailbox: Mailbox
 }) {
   const [isPending, start] = useTransition()
@@ -82,6 +83,16 @@ export default function ConditionReportsClient({
   const [folders, setFolders] = useState<{ id: string; name: string }[]>([])
   const [foldersLoading, setFoldersLoading] = useState(false)
   const [folderSaved, setFolderSaved] = useState(false)
+  const [copiedUrl, setCopiedUrl] = useState(false)
+  const [showGraph, setShowGraph] = useState(false)
+
+  function copyInbound() {
+    if (!inboundUrl) return
+    navigator.clipboard.writeText(inboundUrl).then(() => {
+      setCopiedUrl(true)
+      setTimeout(() => setCopiedUrl(false), 2000)
+    }).catch(() => {})
+  }
 
   useEffect(() => {
     if (!isAdmin || !mailbox.connected || !mailbox.address) return
@@ -185,8 +196,37 @@ export default function ConditionReportsClient({
           </div>
         </div>
 
-        {/* Mailbox status (admin) */}
+        {/* Inbound webhook (admin) — the no-admin-consent path via Power Automate */}
         {isAdmin && (
+          <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl p-4 text-sm space-y-2">
+            <p className="font-semibold text-gray-800 dark:text-gray-100">Email capture — via Power Automate (recommended)</p>
+            {inboundUrl ? (
+              <>
+                <p className="text-gray-600 dark:text-gray-400">
+                  In Power Automate, build a flow: <span className="font-medium">“When a new email arrives”</span> in <span className="font-mono">admin@vectis.co.uk</span> (or a folder) →
+                  <span className="font-medium"> HTTP POST</span> to the URL below, JSON body with <span className="font-mono">Subject</span>, <span className="font-mono">Body</span> (HTML), <span className="font-mono">From</span> and <span className="font-mono">MessageId</span>. No Microsoft admin consent needed.
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <code className="flex-1 min-w-[240px] text-xs bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded px-2 py-1.5 text-gray-700 dark:text-gray-300 break-all">{inboundUrl}</code>
+                  <button onClick={copyInbound} className="px-3 py-1.5 rounded-lg bg-[#2AB4A6] text-white text-xs font-semibold hover:bg-[#249b8f] transition-colors">
+                    {copiedUrl ? "✓ Copied" : "Copy URL"}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400">Keep this URL secret — it contains the access key.</p>
+              </>
+            ) : (
+              <p className="text-amber-500">
+                Set <span className="font-mono">CONDITION_INBOUND_SECRET</span> in Railway to enable the webhook, then the POST URL will appear here.
+              </p>
+            )}
+            <button onClick={() => setShowGraph(v => !v)} className="text-xs text-gray-400 hover:text-gray-200 underline">
+              {showGraph ? "Hide" : "Or connect a mailbox via Microsoft 365 (needs admin consent)"}
+            </button>
+          </div>
+        )}
+
+        {/* Mailbox status (admin) — Microsoft Graph path, secondary */}
+        {isAdmin && showGraph && (
           <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl p-4 text-sm">
             {!mailbox.configured ? (
               <p className="text-amber-500">

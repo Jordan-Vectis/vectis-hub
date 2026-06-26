@@ -10,8 +10,8 @@
  */
 
 import { prisma } from "@/lib/prisma"
-import { extractConditionDetails, type AuctionCandidate } from "@/lib/condition-extract"
-import { parseConditionEmail } from "@/lib/condition-parse"
+import type { AuctionCandidate } from "@/lib/condition-extract"
+import { ingestConditionEmail, loadAuctionCandidates } from "@/lib/condition-ingest"
 
 const TENANT  = process.env.GRAPH_TENANT_ID
 const CLIENT  = process.env.GRAPH_CLIENT_ID
@@ -122,46 +122,6 @@ type GraphMessage = {
   from?: { emailAddress?: { name?: string; address?: string } }
 }
 
-// Match a parsed auction to a local CatalogueAuction — by code first (from the
-// lot link, authoritative), then by exact name. Returns the linked date too.
-async function matchAuction(
-  code: string | null,
-  name: string | null,
-): Promise<{ id: string; date: Date | null } | null> {
-  if (code) {
-    const a = await prisma.catalogueAuction.findFirst({
-      where:  { code: { equals: code, mode: "insensitive" } },
-      select: { id: true, auctionDate: true },
-    })
-    if (a) return { id: a.id, date: a.auctionDate }
-  }
-  if (name) {
-    const a = await prisma.catalogueAuction.findFirst({
-      where:  { name: { equals: name, mode: "insensitive" } },
-      select: { id: true, auctionDate: true },
-    })
-    if (a) return { id: a.id, date: a.auctionDate }
-  }
-  return null
-}
-
-// Auctions to offer the AI as match candidates: the most recent ~60 with a date,
-// which comfortably covers upcoming and just-passed sales without a huge prompt.
-async function loadAuctionCandidates(): Promise<AuctionCandidate[]> {
-  const auctions = await prisma.catalogueAuction.findMany({
-    where:   { auctionDate: { not: null } },
-    orderBy: { auctionDate: "desc" },
-    take:    60,
-    select:  { id: true, code: true, name: true, auctionDate: true },
-  })
-  return auctions.map(a => ({
-    id:   a.id,
-    code: a.code,
-    name: a.name,
-    date: a.auctionDate ? a.auctionDate.toISOString().slice(0, 10) : null,
-  }))
-}
-
 /**
  * Polls the condition-reports inbox and creates a ConditionReport for each new
  * email (deduped by Graph message id). Best-effort AI extraction fills in the
@@ -190,72 +150,31 @@ export async function syncConditionMailbox(): Promise<{ ok: boolean; created: nu
   const data = await res.json()
   const messages: GraphMessage[] = data.value ?? []
 
-  // Only load auction candidates once, and only if there is at least one new email.
-  let candidates: AuctionCandidate[] | null = null
+  // Memoise the AI candidate list — only loaded if a parse falls back to AI.
+  let cachedCandidates: AuctionCandidate[] | null = null
+  const candidatesLoader = async () => (cachedCandidates ??= await loadAuctionCandidates())
 
   let created = 0
   for (const m of messages) {
     if (!m.id) continue
-    const existing = await prisma.conditionReport.findUnique({ where: { graphMessageId: m.id }, select: { id: true } })
-    if (existing) continue
 
-    const emailSubject = m.subject?.trim() || "(no subject)"
     const rawHtml = m.body?.contentType?.toLowerCase() === "html" ? (m.body?.content ?? null) : null
     const rawText = m.body?.contentType?.toLowerCase() === "text"
       ? (m.body?.content ?? "")
       : (m.bodyPreview ?? "")
 
-    // Deterministic parse first — these emails follow a fixed template.
-    const parsed = parseConditionEmail(emailSubject, rawText, rawHtml)
+    const result = await ingestConditionEmail({
+      subject:           m.subject?.trim() || "(no subject)",
+      text:              rawText,
+      html:              rawHtml,
+      envelopeFromName:  m.from?.emailAddress?.name ?? null,
+      envelopeFromEmail: m.from?.emailAddress?.address ?? null,
+      messageId:         m.id,
+      webLink:           m.webLink ?? null,
+      receivedAt:        m.receivedDateTime ? new Date(m.receivedDateTime) : null,
+    }, candidatesLoader)
 
-    // Requester details come from the body (the envelope sender is admin@vectis.co.uk).
-    const fromName  = parsed.requesterName ?? m.from?.emailAddress?.name ?? null
-    const fromEmail = parsed.email         ?? m.from?.emailAddress?.address ?? null
-    let lotNumber = parsed.lotNumber
-    let auctionLabel = parsed.auctionName
-    let auctionId: string | null = null
-    let auctionDate: Date | null = null
-
-    const match = await matchAuction(parsed.auctionCode, parsed.auctionName)
-    if (match) { auctionId = match.id; auctionDate = match.date }
-
-    // Fallback to AI only when the template didn't yield the essentials.
-    if (!parsed.matched) {
-      if (candidates === null) candidates = await loadAuctionCandidates()
-      const ai = await extractConditionDetails(emailSubject, rawText || m.bodyPreview || "", candidates)
-      lotNumber    = ai.lotNumber
-      auctionId    = ai.auctionId
-      auctionLabel = ai.auctionLabel
-      auctionDate  = ai.auctionDate ? new Date(`${ai.auctionDate}T00:00:00.000Z`) : null
-    }
-
-    // A meaningful title: "Lot 546 — Dinky Toys 106 Austin Atlantic" beats the
-    // generic email subject (which is identical on every request).
-    const subject = lotNumber
-      ? `Lot ${lotNumber}${parsed.lotTitle ? ` — ${parsed.lotTitle}` : ""}`
-      : emailSubject
-
-    await prisma.conditionReport.create({
-      data: {
-        subject,
-        body:           parsed.requestText ?? m.bodyPreview?.trim() ?? "",
-        fromName,
-        fromEmail,
-        fromPhone:      parsed.phone,
-        navId:          parsed.navId,
-        status:         "NEW",
-        source:         "EMAIL",
-        graphMessageId: m.id,
-        webLink:        m.webLink ?? null,
-        lotUrl:         parsed.lotUrl,
-        receivedAt:     m.receivedDateTime ? new Date(m.receivedDateTime) : null,
-        lotNumber,
-        auctionId,
-        auctionLabel,
-        auctionDate,
-      },
-    })
-    created++
+    if (result.created) created++
   }
 
   await prisma.conditionMailboxAuth.update({
