@@ -40,6 +40,16 @@ The database is hosted on **Neon** (console.neon.tech), not Railway. Never sugge
 - The `DATABASE_URL` env var in Railway points to the Neon connection string
 - No pg_dump backup is currently configured — this is a known gap to address
 
+### ⚠ Adding columns to the `User` table — login lockout risk
+
+Code deploys to Railway immediately, but migrations are applied manually via the **Run Migrations**
+button (which requires being logged in). So there's a window where the new Prisma client expects a
+column the database doesn't have yet. The **login query in `auth.ts` MUST use an explicit `select`**
+listing only the fields it needs — never a bare `findFirst({ where })` (which selects `*`). A `*`
+select would reference the not-yet-created column and break login → and since you must be logged in
+to run migrations, that's a **lockout**. When adding any `User` column, double-check `auth.ts` still
+uses an explicit `select`.
+
 ## ⚠ Branch / Deploy Rules — MUST follow every time
 
 **Never push to `main` unless the user explicitly says to.** Phrases like "push it", "deploy it", or "merge it" are NOT enough — the user must specifically say "push to main" or "merge to production".

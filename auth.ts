@@ -35,10 +35,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         const input = (credentials.email as string).trim()
         const isEmail = input.includes("@")
+        // Select only the fields login needs — NOT `*`. This keeps login working through the
+        // window after a deploy that adds new User columns but before Run Migrations creates
+        // them (a full select would reference the missing columns and break login → lockout,
+        // since you must be logged in to run migrations).
         const user = await prisma.user.findFirst({
           where: isEmail
             ? { email: { equals: input, mode: "insensitive" } }
             : { username: { equals: input, mode: "insensitive" } },
+          select: { id: true, name: true, email: true, password: true, role: true, departmentId: true, appPermissions: true },
         })
 
         if (!user) return null
