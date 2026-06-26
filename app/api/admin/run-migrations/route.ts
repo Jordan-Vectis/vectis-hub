@@ -861,6 +861,13 @@ const MIGRATIONS = [
    ('seed_sub_2606_211','VINTAGE_TOYS','NOAHS_ARKS',1)
  ) AS v(id, cat, sub, ord) ON c.name = v.cat
  ON CONFLICT ("categoryId","name") DO NOTHING`,
+
+  // 2026-06-26 — Shipping report: parcel size + collection number on WarehouseItem
+  // (synced from Receipt_Lines_Excel). Needs a full receipt-lines resync afterwards
+  // to backfill historical rows. Joins to ShipmentRequestAPI.EVA_DocumentNo.
+  `ALTER TABLE "WarehouseItem" ADD COLUMN IF NOT EXISTS "collectionNo"       TEXT`,
+  `ALTER TABLE "WarehouseItem" ADD COLUMN IF NOT EXISTS "sizeClassification" TEXT`,
+  `CREATE INDEX IF NOT EXISTS "WarehouseItem_collectionNo_idx" ON "WarehouseItem"("collectionNo")`,
 ]
 
 export async function POST() {

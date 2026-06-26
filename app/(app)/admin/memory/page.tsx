@@ -291,7 +291,8 @@ Email Lists tab: pulls buyer emails from BC AttendenceRegister by auction name k
 Location Heatmap, Sale Checklist, Search by Location, Location History (DO NOT redesign), Tote Data, Collections Due, Unsold Items, Data Sync, DB Explorer.
 
 ### BC Reports (/tools/bc-reports)
-Cataloguing report (barcode/uniqueid/compare modes), Packing report.
+Cataloguing report (barcode/uniqueid/compare modes), Packing report, **Shipping report**.
+**Shipping report** (Shipping tab, 2026-06-26): parcels by country / region (UK / Europe / Rest of World) / city, parcel-size breakdown, estimated shipping revenue, country × size grid, World/UK maps, Download PDF. Joins ShipmentRequestAPI (destination country = EVA_CountryRegion, parcel docket EVA_DocumentNo, filter EVA_Status ≠ Cancelled) to receipt-line sizes (EVA_SHIP_EVA_SizeClassification) via the collection number — sizes read from local WarehouseItem.collectionNo/sizeClassification, so a one-time full receipt-lines resync is needed to backfill (amber banner until then). Revenue = per shipped lot, count × its size's first-item rate (lib/shipping-rates.ts static snapshot of Shipping Rates.xlsx); no hammer price. Logic: lib/shipping-analytics.ts; PDF: /api/bc/shipping/pdf.
 DateRange component: active preset tracked explicitly via state (not date-string comparison) — prevents two presets with coinciding dates both highlighting. Manual date-input edits clear the active preset.
 Bar charts: isAnimationActive={false} on Bar to prevent LabelList flash during animation.
 
@@ -538,7 +539,7 @@ BC Marketing (/tools/bc-marketing): 9 tabs — Content Generator (16 types), Pas
 
 BC Warehouse (/tools/bc-warehouse): Location Heatmap, Sale Checklist, Search by Location, Location History (DO NOT redesign), Tote Data, Collections Due, Unsold Items, Data Sync, DB Explorer.
 
-BC Reports (/tools/bc-reports): Cataloguing report (barcode/uniqueid/compare), Packing report.
+BC Reports (/tools/bc-reports): Cataloguing report (barcode/uniqueid/compare), Packing report, Shipping report (parcels by country/region/size, estimated revenue from the rate sheet, country×size grid, PDF).
 
 Packing (/tools/packing): Royal Mail dispatch. Packers: Full Time/Agency/Ex-Staff, aliases, barcode sheet PDF.
 

@@ -39,10 +39,23 @@ type WhData = {
   meta:         { total: number; openTotes: number; categoryCount: number; largestCategory: string }
 }
 
+type Region = "UK" | "Europe" | "Rest of World"
 type ShipData = {
   byCountry: { country: string; count: number }[]
   byCity:    { city: string; country: string; count: number }[]
-  meta:      { total: number; countries: number; cities: number }
+  byRegion:  { region: Region; parcels: number; items: number; revenue: number }[]
+  bySize:    { size: string; items: number; revenue: number }[]
+  byCountrySize: {
+    country: string; region: Region; parcels: number; items: number
+    revenue: number; rated: boolean; sizes: Record<string, number>
+  }[]
+  sizesPresent: string[]
+  meta: {
+    total: number; countries: number; cities: number
+    itemsWithSize: number; parcelsWithSize: number; parcelsWithoutSize: number
+    sizeDataAvailable: boolean; estRevenueTotal: number
+    unratedParcels: number; unratedItems: number
+  }
 }
 
 type Report = "cataloguing" | "packing" | "warehouse" | "explorer" | "shipping"
@@ -1586,31 +1599,55 @@ function ShippingTab() {
 
   function handleDateChange(f: string, t: string) { setFrom(f); setTo(t) }
 
+  const money = (n: number) =>
+    "£" + (n || 0).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
   return (
     <div>
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Shipping Report</h2>
+      <div className="flex items-center justify-between mb-4 gap-3">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Shipping Report</h2>
+        <a
+          href={`/api/bc/shipping/pdf?from=${from}&to=${to}`}
+          target="_blank" rel="noreferrer"
+          className="inline-flex items-center gap-2 bg-cyan-700 hover:bg-cyan-600 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition-colors flex-shrink-0"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Download PDF
+        </a>
+      </div>
       <DateRange from={from} to={to} onChange={handleDateChange} onPreset={handleDateChange} />
       {!loading && <LoadBtn loading={loading} onClick={() => load(from, to)} />}
       {loading && <p className="text-xs text-gray-600 dark:text-gray-500 mb-5">Loading…</p>}
       {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
       {data && (
         <div className={loading ? "opacity-40 pointer-events-none transition-opacity" : "transition-opacity"}>
-          <div className="grid grid-cols-3 gap-3 mb-4">
+          {!data.meta.sizeDataAvailable && (
+            <div className="mb-4 text-sm rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 px-4 py-3">
+              Parcel size &amp; estimated revenue need a one-time data refresh. Go to <span className="font-medium">BC Warehouse → Data Sync</span> and run a full receipt-lines sync, then reload this report.
+            </div>
+          )}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
-              <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Total Shipments</p>
+              <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Parcels</p>
               <p className="text-xl font-bold text-gray-900 dark:text-white">{data.meta.total.toLocaleString()}</p>
+            </div>
+            <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
+              <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Est. Shipping Revenue</p>
+              <p className="text-xl font-bold text-cyan-700 dark:text-cyan-300">{money(data.meta.estRevenueTotal)}</p>
             </div>
             <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
               <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Countries</p>
               <p className="text-xl font-bold text-gray-900 dark:text-white">{data.meta.countries.toLocaleString()}</p>
             </div>
             <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
-              <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Cities</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">{data.meta.cities.toLocaleString()}</p>
+              <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Items Sized</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-white">{data.meta.itemsWithSize.toLocaleString()}</p>
             </div>
           </div>
-          <MetaBar text={`${from} — ${to}  ·  ${data.meta.total.toLocaleString()} shipments`} />
-          <SubTabs tabs={["By Country", "By City", "World Map", "UK Map"]} active={subTab} onChange={setSubTab} />
+          <MetaBar text={`${from} — ${to}  ·  ${data.meta.total.toLocaleString()} parcels  ·  ${money(data.meta.estRevenueTotal)} est. revenue`} />
+          <SubTabs tabs={["By Country", "By Region", "By Size", "Country × Size", "By City", "World Map", "UK Map"]} active={subTab} onChange={setSubTab} />
           {subTab === "By Country" && (
             <>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 520 }}>
@@ -1644,6 +1681,124 @@ function ShippingTab() {
                   "%": data.meta.total ? +((r.count / data.meta.total) * 100).toFixed(1) : 0,
                 })),
                 "shipping_by_country"
+              )} />
+            </>
+          )}
+          {subTab === "By Region" && (
+            <>
+              <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Region</th>
+                      <th className="px-4 py-2 text-right">Parcels</th>
+                      <th className="px-4 py-2 text-right">%</th>
+                      <th className="px-4 py-2 text-right">Items</th>
+                      <th className="px-4 py-2 text-right">Est. Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                    {data.byRegion.map((r, i) => (
+                      <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
+                        <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{r.region}</td>
+                        <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{r.parcels.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-400">{data.meta.total ? ((r.parcels / data.meta.total) * 100).toFixed(1) : "—"}%</td>
+                        <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{r.items.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-right text-cyan-700 dark:text-cyan-300">{money(r.revenue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <ExportBtn onClick={() => exportXlsx(
+                data.byRegion.map(r => ({
+                  "Region": r.region,
+                  "Parcels": r.parcels,
+                  "%": data.meta.total ? +((r.parcels / data.meta.total) * 100).toFixed(1) : 0,
+                  "Items": r.items,
+                  "Est. Revenue": +r.revenue.toFixed(2),
+                })),
+                "shipping_by_region"
+              )} />
+            </>
+          )}
+          {subTab === "By Size" && (
+            <>
+              <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Size</th>
+                      <th className="px-4 py-2 text-right">Items</th>
+                      <th className="px-4 py-2 text-right">%</th>
+                      <th className="px-4 py-2 text-right">Est. Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                    {data.bySize.map((r, i) => (
+                      <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
+                        <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{r.size}</td>
+                        <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{r.items.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-400">{data.meta.itemsWithSize ? ((r.items / data.meta.itemsWithSize) * 100).toFixed(1) : "—"}%</td>
+                        <td className="px-4 py-2 text-right text-cyan-700 dark:text-cyan-300">{money(r.revenue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {data.bySize.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-500 mb-3">No parcel-size data for this period — run a full receipt-lines sync.</p>}
+              <ExportBtn onClick={() => exportXlsx(
+                data.bySize.map(r => ({
+                  "Size": r.size,
+                  "Items": r.items,
+                  "%": data.meta.itemsWithSize ? +((r.items / data.meta.itemsWithSize) * 100).toFixed(1) : 0,
+                  "Est. Revenue": +r.revenue.toFixed(2),
+                })),
+                "shipping_by_size"
+              )} />
+            </>
+          )}
+          {subTab === "Country × Size" && (
+            <>
+              <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 560 }}>
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Country</th>
+                      <th className="px-3 py-2 text-left">Region</th>
+                      {data.sizesPresent.map(s => <th key={s} className="px-3 py-2 text-right">{s}</th>)}
+                      <th className="px-3 py-2 text-right">Parcels</th>
+                      <th className="px-4 py-2 text-right">Est. Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                    {data.byCountrySize.map((r, i) => (
+                      <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
+                        <td className="px-4 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                          {COUNTRY_NAMES[r.country] ? `${COUNTRY_NAMES[r.country]} (${r.country})` : r.country}
+                          {!r.rated && <span className="ml-1 text-amber-500" title="Not on the rate sheet">*</span>}
+                        </td>
+                        <td className="px-3 py-2 text-gray-600 dark:text-gray-500">{r.region}</td>
+                        {data.sizesPresent.map(s => (
+                          <td key={s} className="px-3 py-2 text-right text-gray-600 dark:text-gray-300">{r.sizes[s] ? r.sizes[s].toLocaleString() : "·"}</td>
+                        ))}
+                        <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-300">{r.parcels.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-right text-cyan-700 dark:text-cyan-300">{money(r.revenue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-2">* country not on the rate sheet — counted in parcels, excluded from estimated revenue.</p>
+              <ExportBtn onClick={() => exportXlsx(
+                data.byCountrySize.map(r => ({
+                  "Country": COUNTRY_NAMES[r.country] ? `${COUNTRY_NAMES[r.country]} (${r.country})` : r.country,
+                  "Region": r.region,
+                  ...Object.fromEntries(data.sizesPresent.map(s => [s, r.sizes[s] ?? 0])),
+                  "Parcels": r.parcels,
+                  "Est. Revenue": +r.revenue.toFixed(2),
+                })),
+                "shipping_country_size"
               )} />
             </>
           )}

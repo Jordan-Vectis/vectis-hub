@@ -1,0 +1,224 @@
+// Shipping analytics — powers the BC Reports "Shipping" tab and its PDF.
+//
+// Combines two BC sources that don't live on the same row:
+//   • ShipmentRequestAPI  → one row per dispatch (parcel). Carries the buyer's
+//     destination country (EVA_CountryRegion) and the collection docket number
+//     (EVA_DocumentNo, e.g. COL000010). Status "Cancelled" rows are dropped.
+//   • Receipt_Lines_Excel → one row per lot. Carries the parcel size band
+//     (EVA_SHIP_EVA_SizeClassification) and the collection number
+//     (EVA_CollectionNo). Synced locally into WarehouseItem.
+//
+// The two are joined on the collection number, so each shipped lot's size can
+// be tied to its destination country, and the Vectis rate sheet applied to
+// estimate shipping revenue. Sizes come from the LOCAL WarehouseItem table
+// (fast, no per-collection BC calls) — which means a full receipt-lines resync
+// must have run to populate `collectionNo` + `sizeClassification`.
+
+import { bcFetchAll } from "@/lib/bc"
+import { prisma } from "@/lib/prisma"
+import { firstItemRate, hasRate, regionOf, normalizeSize, PARCEL_SIZES, type Region } from "@/lib/shipping-rates"
+
+export type ShippingAnalytics = {
+  from: string
+  to:   string
+  byCountry: { country: string; count: number }[]
+  byCity:    { city: string; country: string; count: number }[]
+  byRegion:  { region: Region; parcels: number; items: number; revenue: number }[]
+  bySize:    { size: string; items: number; revenue: number }[]
+  byCountrySize: {
+    country: string
+    region:  Region
+    parcels: number                 // shipments to this country
+    items:   number                 // sized lots shipped to this country
+    revenue: number
+    rated:   boolean                // is the country in the rate sheet?
+    sizes:   Record<string, number> // size band → item count
+  }[]
+  sizesPresent: string[]            // ordered list of size labels seen in the data
+  meta: {
+    total:              number      // parcels (non-cancelled shipments)
+    countries:          number
+    cities:             number
+    itemsWithSize:      number      // sized lots counted
+    parcelsWithSize:    number      // collections with ≥1 sized lot
+    parcelsWithoutSize: number      // collections with no size data found
+    sizeDataAvailable:  boolean     // false until a receipt-lines resync has run
+    estRevenueTotal:    number
+    unratedParcels:     number      // shipments to countries with no rate sheet entry
+    unratedItems:       number
+  }
+}
+
+// Order sizes canonically (Small, Medium, Large, Contact, Collection Only)
+// first, then any other labels alphabetically.
+function orderSizes(labels: Iterable<string>): string[] {
+  const seen = new Set(labels)
+  const canon = (PARCEL_SIZES as readonly string[]).filter(s => seen.has(s))
+  const extra = [...seen].filter(s => !(PARCEL_SIZES as readonly string[]).includes(s)).sort()
+  return [...canon, ...extra]
+}
+
+export async function computeShippingAnalytics(
+  token: string,
+  from:  string,
+  to:    string,
+): Promise<ShippingAnalytics> {
+  const empty = (): ShippingAnalytics => ({
+    from, to, byCountry: [], byCity: [], byRegion: [], bySize: [], byCountrySize: [],
+    sizesPresent: [],
+    meta: {
+      total: 0, countries: 0, cities: 0, itemsWithSize: 0, parcelsWithSize: 0,
+      parcelsWithoutSize: 0, sizeDataAvailable: false, estRevenueTotal: 0,
+      unratedParcels: 0, unratedItems: 0,
+    },
+  })
+
+  const filter = `EVA_ShipmentDate ge ${from} and EVA_ShipmentDate le ${to}`
+  const all = await bcFetchAll(token, "ShipmentRequestAPI", filter)
+  const active = all.filter((s) => s.EVA_Status !== "Cancelled")
+  if (active.length === 0) return empty()
+
+  // Field detection — prefer the confirmed names, fall back to a regex scan in
+  // case BC renames them.
+  const firstKeys  = Object.keys(active[0])
+  const countryKey = firstKeys.includes("EVA_CountryRegion") ? "EVA_CountryRegion"
+                   : (firstKeys.find((k) => /country/i.test(k)) ?? null)
+  const cityKey    = firstKeys.includes("EVA_City") ? "EVA_City"
+                   : (firstKeys.find((k) => /city/i.test(k)) ?? null)
+  const colKey     = firstKeys.includes("EVA_DocumentNo") ? "EVA_DocumentNo"
+                   : (firstKeys.find((k) => /documentno|collection/i.test(k)) ?? null)
+
+  // ── Parcel-level aggregation (country / city / collection) ──
+  const countryCounts: Record<string, number> = {}
+  const cityCounts:    Record<string, { count: number; country: string }> = {}
+  const colToCountry:  Record<string, string> = {}
+  const colSet = new Set<string>()
+
+  for (const row of active) {
+    const country = (countryKey ? String(row[countryKey] ?? "") : "").toUpperCase().trim() || "Unknown"
+    const city    = (cityKey    ? String(row[cityKey]    ?? "") : "").trim() || "Unknown"
+    const col     = (colKey     ? String(row[colKey]     ?? "") : "").trim()
+
+    countryCounts[country] = (countryCounts[country] ?? 0) + 1
+    if (!cityCounts[city]) cityCounts[city] = { count: 0, country }
+    cityCounts[city].count++
+
+    if (col) {
+      colSet.add(col)
+      if (!colToCountry[col]) colToCountry[col] = country
+    }
+  }
+
+  const byCountry = Object.entries(countryCounts)
+    .map(([country, count]) => ({ country, count }))
+    .sort((a, b) => b.count - a.count)
+  const byCity = Object.entries(cityCounts)
+    .map(([city, { count, country }]) => ({ city, country, count }))
+    .sort((a, b) => b.count - a.count)
+
+  // ── Pull sizes for those collections from the local synced receipt lines ──
+  // Chunk the IN() query so a wide date range (tens of thousands of
+  // collections) doesn't build one enormous parameter list.
+  const cols = [...colSet]
+  const colToSizes: Record<string, string[]> = {}
+  const CHUNK = 1000
+  for (let i = 0; i < cols.length; i += CHUNK) {
+    const slice = cols.slice(i, i + CHUNK)
+    const rows = await prisma.warehouseItem.findMany({
+      where: { collectionNo: { in: slice }, sizeClassification: { not: null } },
+      select: { collectionNo: true, sizeClassification: true },
+    })
+    for (const r of rows) {
+      if (!r.collectionNo) continue
+      ;(colToSizes[r.collectionNo] ??= []).push(normalizeSize(r.sizeClassification))
+    }
+  }
+
+  // ── Join: attribute each collection's sized lots to its destination country ──
+  type Agg = { parcels: number; items: number; revenue: number; sizes: Record<string, number>; region: Region; rated: boolean }
+  const perCountry = new Map<string, Agg>()
+  const ensure = (country: string): Agg => {
+    let a = perCountry.get(country)
+    if (!a) {
+      a = { parcels: 0, items: 0, revenue: 0, sizes: {}, region: regionOf(country), rated: hasRate(country) }
+      perCountry.set(country, a)
+    }
+    return a
+  }
+  // Seed parcel (shipment) counts per country
+  for (const { country, count } of byCountry) ensure(country).parcels = count
+
+  const sizeItems:   Record<string, number> = {}
+  const sizeRevenue: Record<string, number> = {}
+  let itemsWithSize = 0
+  let parcelsWithSize = 0
+  let estRevenueTotal = 0
+  let unratedItems = 0
+
+  // Dedupe by collection (count each shipped lot once even if a collection
+  // appears on more than one shipment row).
+  for (const col of cols) {
+    const sizes = colToSizes[col]
+    if (!sizes || sizes.length === 0) continue
+    parcelsWithSize++
+    const country = colToCountry[col] ?? "Unknown"
+    const agg = ensure(country)
+    for (const size of sizes) {
+      const rate = firstItemRate(country, size)
+      agg.items++
+      agg.sizes[size] = (agg.sizes[size] ?? 0) + 1
+      agg.revenue += rate
+      itemsWithSize++
+      estRevenueTotal += rate
+      sizeItems[size]   = (sizeItems[size]   ?? 0) + 1
+      sizeRevenue[size] = (sizeRevenue[size] ?? 0) + rate
+      if (!agg.rated) unratedItems++
+    }
+  }
+
+  // ── Region rollup ──
+  const regionAgg = new Map<Region, { parcels: number; items: number; revenue: number }>()
+  for (const a of perCountry.values()) {
+    const r = regionAgg.get(a.region) ?? { parcels: 0, items: 0, revenue: 0 }
+    r.parcels += a.parcels
+    r.items   += a.items
+    r.revenue += a.revenue
+    regionAgg.set(a.region, r)
+  }
+  const byRegion = (["UK", "Europe", "Rest of World"] as Region[])
+    .map((region) => ({ region, ...(regionAgg.get(region) ?? { parcels: 0, items: 0, revenue: 0 }) }))
+    .filter((r) => r.parcels > 0 || r.items > 0)
+
+  const sizesPresent = orderSizes(Object.keys(sizeItems))
+  const bySize = sizesPresent.map((size) => ({
+    size, items: sizeItems[size] ?? 0, revenue: sizeRevenue[size] ?? 0,
+  }))
+
+  const byCountrySize = [...perCountry.entries()]
+    .map(([country, a]) => ({
+      country, region: a.region, parcels: a.parcels, items: a.items,
+      revenue: a.revenue, rated: a.rated, sizes: a.sizes,
+    }))
+    .sort((x, y) => y.parcels - x.parcels || y.revenue - x.revenue)
+
+  const unratedParcels = active.filter((row) => {
+    const country = (countryKey ? String(row[countryKey] ?? "") : "").toUpperCase().trim() || "Unknown"
+    return !hasRate(country)
+  }).length
+
+  return {
+    from, to, byCountry, byCity, byRegion, bySize, byCountrySize, sizesPresent,
+    meta: {
+      total: active.length,
+      countries: byCountry.length,
+      cities: byCity.length,
+      itemsWithSize,
+      parcelsWithSize,
+      parcelsWithoutSize: cols.length - parcelsWithSize,
+      sizeDataAvailable: itemsWithSize > 0,
+      estRevenueTotal,
+      unratedParcels,
+      unratedItems,
+    },
+  }
+}

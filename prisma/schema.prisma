@@ -768,6 +768,10 @@ model WarehouseItem {
   toteNo       String?           // EVA_ArticleToteNo
   locationScannedAt DateTime?    // from ChangeLogEntries — when location was last scanned
 
+  // Shipping (used by the BC Reports → Shipping report)
+  collectionNo       String?     // EVA_CollectionNo — joins to ShipmentRequestAPI.EVA_DocumentNo
+  sizeClassification String?     // EVA_SHIP_EVA_SizeClassification — parcel size band (Small/Medium/Large/…)
+
   // Status
   catalogued        Boolean?     // EVA_Catalogued
   cataloguedBy      String?      // EVA_CataloguedBy
@@ -788,6 +792,7 @@ model WarehouseItem {
   @@index([location])
   @@index([toteNo])
   @@index([barcode])
+  @@index([collectionNo])
 }
 
 model WarehouseSyncLog {
