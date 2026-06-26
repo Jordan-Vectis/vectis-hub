@@ -41,6 +41,8 @@ export async function createConditionReport(formData: FormData) {
       body:          (formData.get("body") as string)?.trim() || "",
       fromName:      (formData.get("fromName") as string)?.trim() || null,
       fromEmail:     (formData.get("fromEmail") as string)?.trim() || null,
+      fromPhone:     (formData.get("fromPhone") as string)?.trim() || null,
+      navId:         (formData.get("navId") as string)?.trim() || null,
       lotNumber:     (formData.get("lotNumber") as string)?.trim() || null,
       auctionId,
       auctionLabel,

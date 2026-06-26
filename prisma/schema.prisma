@@ -1258,13 +1258,16 @@ model ITMailboxAuth {
 model ConditionReport {
   id             String    @id @default(cuid())
   subject        String                                  // email subject / short title
-  body           String    @db.Text @default("")         // email preview / body text
-  fromName       String?
+  body           String    @db.Text @default("")         // the customer's actual request text
+  fromName       String?                                  // requester (parsed from body, not envelope)
   fromEmail      String?
+  fromPhone      String?                                  // requester phone
+  navId          String?                                  // NAV / contact id e.g. C125476
   status         String    @default("NEW")               // NEW | IN_PROGRESS | DONE
   source         String    @default("EMAIL")             // EMAIL | MANUAL
   graphMessageId String?   @unique                        // Office 365 message id — dedupe key
   webLink        String?                                  // Outlook deep link to the original email
+  lotUrl         String?                                  // public "view the lot" link from the email
   receivedAt     DateTime?
 
   // Captured details

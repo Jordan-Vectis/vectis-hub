@@ -19,9 +19,12 @@ type Report = {
   body: string
   fromName: string | null
   fromEmail: string | null
+  fromPhone: string | null
+  navId: string | null
   status: string
   source: string
   webLink: string | null
+  lotUrl: string | null
   lotNumber: string | null
   auctionId: string | null
   auctionLabel: string | null
@@ -247,7 +250,6 @@ function ReportCard({
   auctions: Auction[]
   start: (cb: () => Promise<void>) => void
 }) {
-  const [open, setOpen] = useState(false)
   const [lot, setLot] = useState(r.lotNumber ?? "")
   const done = r.status === "DONE"
 
@@ -279,7 +281,9 @@ function ReportCard({
           {/* Meta line */}
           <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
             {r.fromName || r.fromEmail || "Unknown sender"}
-            {r.fromEmail && r.fromName && <span className="text-gray-400"> · {r.fromEmail}</span>}
+            {r.fromEmail && <span className="text-gray-400"> · {r.fromEmail}</span>}
+            {r.fromPhone && <span className="text-gray-400"> · {r.fromPhone}</span>}
+            {r.navId && <span className="text-gray-400"> · {r.navId}</span>}
             <span className="text-gray-400"> · {r.receivedLabel}</span>
           </div>
 
@@ -342,21 +346,23 @@ function ReportCard({
             </select>
           </div>
 
-          {/* Body toggle */}
-          {(r.body || r.webLink) && (
+          {/* Request text — shown by default since it's the whole point */}
+          {r.body && (
+            <div className="mt-2 text-sm text-gray-700 dark:text-gray-200 whitespace-pre-wrap bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3 border border-gray-200 dark:border-gray-800">
+              {r.body}
+            </div>
+          )}
+
+          {/* Links */}
+          {(r.lotUrl || r.webLink) && (
             <div className="mt-2 flex items-center gap-3">
-              {r.body && (
-                <button onClick={() => setOpen(v => !v)} className="text-xs text-gray-400 hover:text-gray-200">
-                  {open ? "Hide email" : "Show email"}
-                </button>
+              {r.lotUrl && (
+                <a href={r.lotUrl} target="_blank" rel="noreferrer" className="text-xs text-lime-500 hover:text-lime-400">View lot ↗</a>
               )}
               {r.webLink && (
                 <a href={r.webLink} target="_blank" rel="noreferrer" className="text-xs text-blue-400 hover:text-blue-300">Open in Outlook ↗</a>
               )}
             </div>
-          )}
-          {open && r.body && (
-            <pre className="mt-2 text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap font-sans bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3 border border-gray-200 dark:border-gray-800">{r.body}</pre>
           )}
         </div>
 
@@ -393,6 +399,8 @@ function AddForm({
         <input name="lotNumber" placeholder="Lot number" className="text-sm border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]" />
         <input name="fromName" placeholder="Requester name" className="text-sm border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]" />
         <input name="fromEmail" placeholder="Requester email" className="text-sm border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]" />
+        <input name="fromPhone" placeholder="Requester phone" className="text-sm border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]" />
+        <input name="navId" placeholder="NAV / contact ID (e.g. C125476)" className="text-sm border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]" />
         <select name="auctionId" className="text-sm border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6] sm:col-span-2">
           <option value="">— pick auction (optional) —</option>
           {auctions.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}{a.date ? ` (${fmtDateLabel(a.date)})` : ""}</option>)}
