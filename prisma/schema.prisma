@@ -1272,10 +1272,17 @@ model ConditionReport {
 
   // Captured details
   lotNumber      String?                                  // lot number referenced in the request
+  auctionCode    String?                                  // BC auction code e.g. "F093" (from the lot link) — used to find the lot in BC
   auctionId      String?                                  // linked auction (preferred)
   auction        CatalogueAuction? @relation(fields: [auctionId], references: [id], onDelete: SetNull)
   auctionLabel   String?                                  // free-text auction name (AI guess / fallback)
   auctionDate    DateTime?                                // sale date for grouping/sorting
+
+  // Cataloguer (resolved from Business Central by auctionCode + lotNumber)
+  cataloguerCode  String?                                 // BC initials e.g. "AR2"
+  cataloguerName  String?
+  cataloguerEmail String?
+  notifiedAt      DateTime?                               // when the cataloguer was emailed
 
   // Assignment
   assignedToId   String?

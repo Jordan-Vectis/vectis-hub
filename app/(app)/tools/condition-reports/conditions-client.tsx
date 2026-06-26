@@ -32,7 +32,15 @@ type Report = {
   auctionDate: string | null
   assignedToId: string | null
   assignedToName: string | null
+  notified: boolean
   receivedLabel: string
+  bcFound: boolean
+  bcCataloguerName: string | null
+  bcCataloguerEmail: string | null
+  bcCataloguerCode: string | null
+  bcLocation: string | null
+  bcTote: string | null
+  bcGone: boolean
 }
 
 type Auction = { id: string; code: string; name: string; date: string | null }
@@ -438,6 +446,33 @@ function ReportCard({
               <option value="IN_PROGRESS">In progress</option>
               <option value="DONE">Done</option>
             </select>
+          </div>
+
+          {/* Business Central — cataloguer + location for this lot */}
+          <div className="mt-2 text-xs">
+            {r.bcFound ? (
+              <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-gray-600 dark:text-gray-300">
+                <span>
+                  🗂️ Catalogued by{" "}
+                  {r.bcCataloguerName
+                    ? <span className="font-medium text-gray-800 dark:text-gray-100">{r.bcCataloguerName}</span>
+                    : r.bcCataloguerCode
+                      ? <span className="font-medium text-amber-500">{r.bcCataloguerCode} (no email on file)</span>
+                      : <span className="text-gray-400">unknown</span>}
+                  {r.bcCataloguerEmail && <span className="text-gray-400"> · {r.bcCataloguerEmail}</span>}
+                </span>
+                <span className="text-gray-400">·</span>
+                <span>
+                  📍 {r.bcGone
+                    ? <span className="text-orange-500 font-medium">{r.bcLocation}</span>
+                    : <span className="font-medium text-gray-800 dark:text-gray-100">{r.bcLocation ?? "no location"}</span>}
+                  {r.bcTote && <span className="text-gray-400"> · tote {r.bcTote}</span>}
+                </span>
+                {r.notified && <span className="text-emerald-500">✓ cataloguer notified</span>}
+              </div>
+            ) : (
+              <span className="text-gray-400">🗂️ Lot not found in Business Central{r.lotNumber ? ` (lot ${r.lotNumber})` : ""}</span>
+            )}
           </div>
 
           {/* Request text — shown by default since it's the whole point */}

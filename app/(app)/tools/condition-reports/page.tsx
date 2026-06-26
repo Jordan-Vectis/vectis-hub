@@ -2,6 +2,7 @@ import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { conditionMailboxConfigured, conditionMailboxAddress } from "@/lib/condition-mailbox"
+import { lookupLotCataloguer } from "@/lib/condition-bc"
 import ConditionReportsClient from "./conditions-client"
 
 export const dynamic = "force-dynamic"
@@ -29,7 +30,17 @@ export default async function ConditionReportsPage() {
     prisma.conditionMailboxAuth.findUnique({ where: { id: "global" }, select: { connectedBy: true, lastSyncAt: true, folderId: true, folderName: true } }),
   ])
 
-  const reportsPlain = reports.map(r => ({
+  // Live BC lookup per report: who catalogued the lot + where it sits.
+  // auctionCode is stored going forward; for older reports derive it from the lot link.
+  const codeFromUrl = (url: string | null) => url?.match(/\/bidding\/([A-Za-z]+\d+)/)?.[1]?.toUpperCase() ?? null
+  const bcByReport = new Map<string, Awaited<ReturnType<typeof lookupLotCataloguer>>>()
+  await Promise.all(reports.map(async r => {
+    bcByReport.set(r.id, await lookupLotCataloguer(r.auctionCode ?? codeFromUrl(r.lotUrl), r.lotNumber))
+  }))
+
+  const reportsPlain = reports.map(r => {
+    const bc = bcByReport.get(r.id)
+    return {
     id:             r.id,
     subject:        r.subject,
     body:           r.body,
@@ -47,8 +58,18 @@ export default async function ConditionReportsPage() {
     auctionDate:    isoDate(r.auctionDate),
     assignedToId:   r.assignedToId,
     assignedToName: r.assignedToName,
+    notified:       !!r.notifiedAt,
     receivedLabel:  (r.receivedAt ?? r.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-  }))
+    // Business Central — cataloguer + location for this lot
+    bcFound:           bc?.found ?? false,
+    bcCataloguerName:  bc?.cataloguerName ?? null,
+    bcCataloguerEmail: bc?.cataloguerEmail ?? null,
+    bcCataloguerCode:  bc?.cataloguerCode ?? null,
+    bcLocation:        bc?.location ?? null,
+    bcTote:            bc?.toteNo ?? null,
+    bcGone:            bc?.gone ?? false,
+    }
+  })
 
   const auctionsPlain = auctions.map(a => ({
     id:    a.id,

@@ -117,6 +117,7 @@ export async function ingestConditionEmail(
       lotUrl:         parsed.lotUrl,
       receivedAt:     input.receivedAt ?? new Date(),
       lotNumber,
+      auctionCode:    parsed.auctionCode,
       auctionId,
       auctionLabel,
       auctionDate,
