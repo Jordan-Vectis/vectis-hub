@@ -49,6 +49,10 @@ model User {
   timerYellowMins Int       @default(4)
   timerRedMins    Int       @default(10)
   isITStaff      Boolean     @default(false)  // can be assigned IT Job Board jobs
+  // Lot Wizard "remember last" fields — follow the user across devices (e.g. shared iPads)
+  lastTote       String?
+  lastVendor     String?
+  lastReceipt    String?
   departmentId   String?
   department     Department? @relation(fields: [departmentId], references: [id])
   createdAt      DateTime    @default(now())

@@ -155,6 +155,31 @@ export async function applyAiEstimateOne(
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
+// Lot Wizard "remember last" — the user's last Tote / Vendor / Receipt, stored on their
+// account so they follow them across devices (shared iPads). Any signed-in user; their own row.
+export async function getLastLotFields() {
+  const session = await auth()
+  if (!session) return { tote: "", vendor: "", receipt: "" }
+  const u = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { lastTote: true, lastVendor: true, lastReceipt: true },
+  })
+  return { tote: u?.lastTote ?? "", vendor: u?.lastVendor ?? "", receipt: u?.lastReceipt ?? "" }
+}
+
+export async function saveLastLotFields(fields: { tote?: string; vendor?: string; receipt?: string }) {
+  const session = await auth()
+  if (!session) return
+  await prisma.user.update({
+    where: { id: session.user.id },
+    data: {
+      lastTote:    (fields.tote ?? "").trim()    || null,
+      lastVendor:  (fields.vendor ?? "").trim()  || null,
+      lastReceipt: (fields.receipt ?? "").trim() || null,
+    },
+  })
+}
+
 export async function togglePublished(id: string, published: boolean) {
   await requireCataloguer()
   await prisma.catalogueAuction.update({ where: { id }, data: { published } })

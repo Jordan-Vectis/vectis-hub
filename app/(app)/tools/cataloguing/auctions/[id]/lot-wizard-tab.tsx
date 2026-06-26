@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { createLot } from "@/lib/actions/catalogue"
+import { createLot, getLastLotFields, saveLastLotFields } from "@/lib/actions/catalogue"
 import { DEFAULT_REASONS } from "@/lib/idle-timer-config"
 import type { IdleReason } from "@/lib/idle-timer-config"
 import { DEFAULT_CATEGORY_MAP } from "@/lib/lot-categories"
@@ -553,6 +553,18 @@ export default function LotWizardTab({
   function saveLastBarcode(val: string) {
     try { localStorage.setItem(LAST_BARCODE_KEY, val) } catch {}
   }
+
+  // On first open, pre-fill Tote / Vendor / Receipt from the user's account so they survive
+  // closing the app and follow the user across devices. Only fills blank fields, so it never
+  // clobbers a pinned value or something the user has already started typing.
+  useEffect(() => {
+    getLastLotFields().then(f => {
+      setVendor(v => v || f.vendor)
+      setTote(t => t || f.tote)
+      setReceipt(r => r || f.receipt)
+    }).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [keyPoints,   setKeyPoints]   = useState("")
   const [aiExcluded,  setAiExcluded]  = useState(false)
   const [manualDesc,  setManualDesc]  = useState("")
@@ -636,8 +648,9 @@ export default function LotWizardTab({
 
   function validateStep(s: number): string {
     if (s === 1) {
-      if (!vendor.trim()) return "Vendor Number is required"
-      if (!tote.trim())   return "Tote Number is required"
+      if (!vendor.trim())  return "Vendor Number is required"
+      if (!tote.trim())    return "Tote Number is required"
+      if (!receipt.trim()) return "Receipt Number is required"
     }
     if (s === 2 && !barcode.trim()) return "Internal Barcode is required"
     if (s === 5) {
@@ -657,7 +670,7 @@ export default function LotWizardTab({
     if (step === 1) {
       const shortTote    = tote.trim().length !== 7
       const shortVendor  = vendor.trim().length !== 7
-      const shortReceipt = receipt.trim().length > 0 && receipt.trim().length !== 7
+      const shortReceipt = receipt.trim().length !== 7
       if (shortTote || shortVendor || shortReceipt) {
         setStep1LengthWarning(true)
         return
@@ -745,6 +758,8 @@ export default function LotWizardTab({
       const n = lotCount + 1
       setLotCount(n)
       saveLastBarcode(barcode)
+      // Remember Tote / Vendor / Receipt on the user's account for next time (any device)
+      saveLastLotFields({ vendor, tote, receipt }).catch(() => {})
       setSaveStatus(`✓ Lot #${n} saved — ${vendor} / ${tote} / ${barcode}`)
       // Restore pinned values; vendor/tote/receipt fall back to keeping current value if not pinned
       setVendor(pinnedVendor || vendor)
@@ -1003,7 +1018,7 @@ export default function LotWizardTab({
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className={lbl}>Receipt Number <span className="text-gray-600">(optional)</span></label>
+                <label className={lbl}>Receipt Number <span className="text-red-500">*</span></label>
                 <PinBtn pinned={pinnedReceipt === receipt && !!receipt} onPin={() => setPinnedReceipt(v => v === receipt ? "" : receipt)} tablet={tablet} />
               </div>
               <div className="flex gap-2">
