@@ -8,6 +8,7 @@ import { KEY_POINTS_INSTRUCTION } from "@/lib/key-points-instruction"
 import { applyAiDescriptionOne, applyAiEstimateOne, saveAiFlagNote } from "@/lib/actions/catalogue"
 import { showError } from "@/lib/error-modal"
 import { MacroTab } from "./macro-tab"
+import BcImportCheckTab from "./bc-import-check-tab"
 import { analyseKeyPoints, HighlightedDescription, kpColour } from "@/lib/kp-analysis"
 
 // ─── Show Instruction Toggle ──────────────────────────────────────────────────
@@ -151,7 +152,7 @@ function ToastContainer() {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "chat" | "batch" | "barcode" | "copier" | "runs" | "kpruns" | "instructions" | "kpcheck" | "macro" | "doublecheck" | "pipeline" | "upgrade" | "models"
+type Tab = "chat" | "batch" | "barcode" | "copier" | "runs" | "kpruns" | "instructions" | "kpcheck" | "macro" | "doublecheck" | "pipeline" | "upgrade" | "models" | "bcimport"
 
 type ChatMessage = {
   role: "user" | "model"
@@ -5558,6 +5559,7 @@ const TAB_GROUPS: { label: string; tabs: TabDef[] }[] = [
     tabs: [
       { id: "instructions", label: "Instructions",       icon: "📝" },
       { id: "macro",        label: "Macro Downloader",   icon: "⌨️" },
+      { id: "bcimport",     label: "BC Import Check",     icon: "🩹" },
       { id: "models",       label: "Models",             icon: "🧩" },
     ],
   },
@@ -5697,6 +5699,7 @@ export default function AuctionAIPage() {
         <div className={tab === "instructions" ? "" : "hidden"}><InstructionsTab /></div>
         <div className={tab === "models" ? "" : "hidden"}><ModelsTab /></div>
         <div className={tab === "macro"        ? "" : "hidden"}><MacroTab /></div>
+        <div className={tab === "bcimport"     ? "" : "hidden"}>{tab === "bcimport" && <BcImportCheckTab />}</div>
       </main>
     </div>
   )
