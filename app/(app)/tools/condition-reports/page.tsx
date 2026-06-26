@@ -26,7 +26,7 @@ export default async function ConditionReportsPage() {
       select:  { id: true, code: true, name: true, auctionDate: true },
       take:    150,
     }),
-    prisma.conditionMailboxAuth.findUnique({ where: { id: "global" }, select: { connectedBy: true, lastSyncAt: true } }),
+    prisma.conditionMailboxAuth.findUnique({ where: { id: "global" }, select: { connectedBy: true, lastSyncAt: true, folderId: true, folderName: true } }),
   ])
 
   const reportsPlain = reports.map(r => ({
@@ -68,6 +68,8 @@ export default async function ConditionReportsPage() {
         address:       conditionMailboxAddress(),
         connected:     !!mailbox,
         connectedBy:   mailbox?.connectedBy ?? null,
+        folderId:      mailbox?.folderId ?? null,
+        folderName:    mailbox?.folderName ?? null,
         lastSyncLabel: mailbox?.lastSyncAt
           ? mailbox.lastSyncAt.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
           : null,

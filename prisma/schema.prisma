@@ -1299,5 +1299,7 @@ model ConditionMailboxAuth {
   expiresAt    DateTime
   connectedBy  String?
   lastSyncAt   DateTime?
+  folderId     String?                       // Graph mail-folder id to read from (null = inbox)
+  folderName   String?                       // display name of that folder, for the UI
   updatedAt    DateTime @updatedAt
 }

@@ -132,3 +132,14 @@ export async function syncConditionMailboxNow() {
   revalidatePath(PATH)
   return result
 }
+
+// Choose which mailbox folder to capture condition-report emails from.
+// folderId null/"" = read from the inbox.
+export async function setConditionMailboxFolder(folderId: string | null, folderName: string | null) {
+  await requireAdmin()
+  await prisma.conditionMailboxAuth.update({
+    where: { id: "global" },
+    data:  { folderId: folderId || null, folderName: folderName || null },
+  })
+  revalidatePath(PATH)
+}

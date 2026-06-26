@@ -77,6 +77,41 @@ export async function conditionMailboxConnected(): Promise<boolean> {
   return !!row
 }
 
+export type MailFolder = { id: string; name: string }
+
+// Lists the mailbox's folders (top level + one level of children) so an admin
+// can pick which folder condition-report emails are filed into.
+export async function listConditionMailboxFolders(): Promise<{ ok: boolean; folders: MailFolder[]; error?: string }> {
+  if (!MAILBOX) return { ok: false, folders: [], error: "Mailbox address not configured" }
+  const token = await getConditionMailboxToken()
+  if (!token) return { ok: false, folders: [], error: "Mailbox not connected" }
+
+  async function fetchFolders(path: string): Promise<any[]> {
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(MAILBOX)}/${path}?$top=200&$select=id,displayName,childFolderCount`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    )
+    if (!res.ok) return []
+    const d = await res.json()
+    return d.value ?? []
+  }
+
+  try {
+    const top = await fetchFolders("mailFolders")
+    const folders: MailFolder[] = []
+    for (const f of top) {
+      folders.push({ id: f.id, name: f.displayName })
+      if (f.childFolderCount > 0) {
+        const children = await fetchFolders(`mailFolders/${f.id}/childFolders`)
+        for (const c of children) folders.push({ id: c.id, name: `${f.displayName} / ${c.displayName}` })
+      }
+    }
+    return { ok: true, folders }
+  } catch (e: any) {
+    return { ok: false, folders: [], error: e?.message ?? "Failed to list folders" }
+  }
+}
+
 type GraphMessage = {
   id: string
   subject?: string
@@ -138,8 +173,12 @@ export async function syncConditionMailbox(): Promise<{ ok: boolean; created: nu
   const token = await getConditionMailboxToken()
   if (!token) return { ok: false, created: 0, error: "Mailbox not connected" }
 
+  // Read from the chosen folder if one is set, otherwise the inbox.
+  const authRow = await prisma.conditionMailboxAuth.findUnique({ where: { id: "global" }, select: { folderId: true } })
+  const folderSegment = authRow?.folderId ? `mailFolders/${authRow.folderId}` : "mailFolders/inbox"
+
   const url =
-    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(MAILBOX)}/mailFolders/inbox/messages` +
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(MAILBOX)}/${folderSegment}/messages` +
     `?$top=40&$orderby=receivedDateTime desc&$select=id,subject,bodyPreview,body,from,receivedDateTime,webLink`
 
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })

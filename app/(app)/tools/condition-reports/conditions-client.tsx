@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import {
   createConditionReport,
   updateConditionReportStatus,
@@ -9,6 +9,7 @@ import {
   updateConditionReportDetails,
   deleteConditionReport,
   syncConditionMailboxNow,
+  setConditionMailboxFolder,
 } from "@/lib/actions/condition-reports"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -41,6 +42,8 @@ type Mailbox = {
   address: string
   connected: boolean
   connectedBy: string | null
+  folderId: string | null
+  folderName: string | null
   lastSyncLabel: string | null
 }
 
@@ -74,6 +77,31 @@ export default function ConditionReportsClient({
   const [showDone, setShowDone] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
+
+  // Mailbox folder picker (admin)
+  const [folders, setFolders] = useState<{ id: string; name: string }[]>([])
+  const [foldersLoading, setFoldersLoading] = useState(false)
+  const [folderSaved, setFolderSaved] = useState(false)
+
+  useEffect(() => {
+    if (!isAdmin || !mailbox.connected || !mailbox.address) return
+    setFoldersLoading(true)
+    fetch("/api/condition-mailbox/folders")
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d.folders)) setFolders(d.folders) })
+      .catch(() => {})
+      .finally(() => setFoldersLoading(false))
+  }, [isAdmin, mailbox.connected, mailbox.address])
+
+  function chooseFolder(id: string) {
+    const name = folders.find(f => f.id === id)?.name ?? null
+    setFolderSaved(false)
+    start(async () => {
+      await setConditionMailboxFolder(id || null, id ? name : null)
+      setFolderSaved(true)
+      setTimeout(() => setFolderSaved(false), 2500)
+    })
+  }
 
   const auctionById = useMemo(() => new Map(auctions.map(a => [a.id, a])), [auctions])
 
@@ -177,14 +205,40 @@ export default function ConditionReportsClient({
                 </a>
               </div>
             ) : (
-              <div className="flex items-center justify-between gap-3 flex-wrap text-gray-600 dark:text-gray-300">
-                <p>
-                  ✓ Connected{mailbox.address && <> to <span className="font-mono">{mailbox.address}</span></>}
-                  {mailbox.connectedBy && <> by {mailbox.connectedBy}</>}
-                  {mailbox.lastSyncLabel && <> · last sync {mailbox.lastSyncLabel}</>}
-                  {!mailbox.address && <span className="text-amber-500"> · set CONDITION_MAILBOX to start polling</span>}
-                </p>
-                <a href="/api/condition-mailbox/auth" className="text-xs text-gray-400 hover:text-gray-200 underline">Reconnect</a>
+              <div className="space-y-3 text-gray-600 dark:text-gray-300">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <p>
+                    ✓ Connected{mailbox.address && <> to <span className="font-mono">{mailbox.address}</span></>}
+                    {mailbox.connectedBy && <> by {mailbox.connectedBy}</>}
+                    {mailbox.lastSyncLabel && <> · last sync {mailbox.lastSyncLabel}</>}
+                    {!mailbox.address && <span className="text-amber-500"> · set CONDITION_MAILBOX to start polling</span>}
+                  </p>
+                  <a href="/api/condition-mailbox/auth" className="text-xs text-gray-400 hover:text-gray-200 underline">Reconnect</a>
+                </div>
+
+                {mailbox.address && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <label className="text-xs text-gray-500">Read from folder</label>
+                    <select
+                      defaultValue={mailbox.folderId ?? ""}
+                      disabled={foldersLoading || isPending}
+                      onChange={e => chooseFolder(e.target.value)}
+                      className="text-xs border border-gray-300 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-[#2AB4A6] max-w-[280px]"
+                    >
+                      <option value="">Inbox (default)</option>
+                      {/* Keep the saved folder selectable even before the list loads */}
+                      {mailbox.folderId && !folders.some(f => f.id === mailbox.folderId) && (
+                        <option value={mailbox.folderId}>{mailbox.folderName ?? "Current folder"}</option>
+                      )}
+                      {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                    </select>
+                    {foldersLoading && <span className="text-xs text-gray-400">loading folders…</span>}
+                    {folderSaved && <span className="text-xs text-emerald-400">✓ saved</span>}
+                    <span className="text-xs text-gray-400">
+                      — set an Outlook rule to file requests here, then we capture only this folder.
+                    </span>
+                  </div>
+                )}
               </div>
             )}
             {syncMsg && <p className="mt-2 text-xs text-gray-400">{syncMsg}</p>}
