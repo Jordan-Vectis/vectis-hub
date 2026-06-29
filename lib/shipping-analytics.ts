@@ -53,6 +53,7 @@ export type ShippingAnalytics = {
     estItemsUnlinked:   number      // ROUGH estimate of items for unlinked parcels (region average)
     estRevenueUnlinked: number      // ROUGH estimate of £ for unlinked parcels (region average)
     collectedRefund:    number      // ROUGH estimate of shipping £ forgone because items were collected (UK rates)
+    notScannedExcludesLastMonth: boolean  // did the "Not scanned" bucket drop the last month? (false for windows ≤ ~1 month)
   }
 }
 
@@ -63,6 +64,25 @@ function orderSizes(labels: Iterable<string>): string[] {
   const canon = (PARCEL_SIZES as readonly string[]).filter(s => seen.has(s))
   const extra = [...seen].filter(s => !(PARCEL_SIZES as readonly string[]).includes(s)).sort()
   return [...canon, ...extra]
+}
+
+// Distribute an integer `total` across keys in proportion to their fractional
+// `weights` using the largest-remainder (Hamilton) method, so the per-bucket
+// integers PROVABLY sum to `total`. Used so the By Region / By Month estimated-
+// item columns add up exactly to the headline "Items shipped" instead of
+// drifting from independent per-bucket rounding.
+function allocateRounded(weights: Record<string, number>, total: number): Record<string, number> {
+  const keys = Object.keys(weights)
+  const out: Record<string, number> = {}
+  for (const k of keys) out[k] = 0
+  if (total <= 0 || keys.length === 0) return out
+  const parts = keys.map((k) => ({ k, floor: Math.floor(weights[k]), rem: weights[k] - Math.floor(weights[k]) }))
+  for (const p of parts) out[p.k] = p.floor
+  let leftover = total - parts.reduce((s, p) => s + p.floor, 0)
+  parts.sort((a, b) => b.rem - a.rem)
+  for (let i = 0; leftover > 0 && i < parts.length; i++, leftover--) out[parts[i].k]++
+  for (let i = parts.length - 1; leftover < 0 && i >= 0; i--) { if (out[parts[i].k] > 0) { out[parts[i].k]--; leftover++ } }
+  return out
 }
 
 
@@ -79,6 +99,7 @@ export async function computeShippingAnalytics(
       parcelsWithoutSize: 0, sizeDataAvailable: false, estRevenueTotal: 0,
       unratedParcels: 0, unratedItems: 0, unlinkedParcels: 0,
       estItemsUnlinked: 0, estRevenueUnlinked: 0, collectedRefund: 0,
+      notScannedExcludesLastMonth: true,
     },
   })
 
@@ -115,7 +136,7 @@ export async function computeShippingAnalytics(
 
   // ── Parcel-level aggregation (country / city / collection) ──
   const countryCounts: Record<string, number> = {}
-  const cityCounts:    Record<string, { count: number; country: string }> = {}
+  const cityCounts:    Record<string, { city: string; count: number; country: string }> = {}
   const colToCountry:  Record<string, string> = {}
   const colToMonth:    Record<string, string> = {}
   const monthParcels:  Record<string, number> = {}
@@ -131,8 +152,11 @@ export async function computeShippingAnalytics(
     const month   = (dateKey ? String(row[dateKey] ?? "") : "").slice(0, 7) || "Unknown"
 
     countryCounts[country] = (countryCounts[country] ?? 0) + 1
-    if (!cityCounts[city]) cityCounts[city] = { count: 0, country }
-    cityCounts[city].count++
+    // Key by country+city so e.g. London (GB) and London (CA) don't merge into
+    // one mislabelled row (which also mis-plotted the UK map).
+    const cityCK = `${country}|${city}`
+    if (!cityCounts[cityCK]) cityCounts[cityCK] = { city, count: 0, country }
+    cityCounts[cityCK].count++
     monthParcels[month] = (monthParcels[month] ?? 0) + 1
 
     // Only real collection dockets (COL…) can be joined to lots. Some shipments
@@ -143,7 +167,11 @@ export async function computeShippingAnalytics(
     if (col && /^col/i.test(col)) {
       colSet.add(col)
       if (!colToCountry[col]) colToCountry[col] = country
-      if (!colToMonth[col])   colToMonth[col]   = month
+      // A collection can appear on more than one shipment row, and rows arrive in
+      // BC storage order (no $orderby). Pin the month to the EARLIEST shipment
+      // date so the By Month split is deterministic across syncs. ("Unknown" >
+      // any real "YYYY-MM" lexicographically, so a real date always wins.)
+      if (!colToMonth[col] || month < colToMonth[col]) colToMonth[col] = month
     } else {
       monthUnlinked[month] = (monthUnlinked[month] ?? 0) + 1
       const k = `${month}|${regionOf(country)}`
@@ -154,8 +182,8 @@ export async function computeShippingAnalytics(
   const byCountry = Object.entries(countryCounts)
     .map(([country, count]) => ({ country, count }))
     .sort((a, b) => b.count - a.count)
-  const byCity = Object.entries(cityCounts)
-    .map(([city, { count, country }]) => ({ city, country, count }))
+  const byCity = Object.values(cityCounts)
+    .map(({ city, country, count }) => ({ city, country, count }))
     .sort((a, b) => b.count - a.count)
 
   // ── Pull sizes for those collections from the local synced receipt lines ──
@@ -250,10 +278,22 @@ export async function computeShippingAnalytics(
   // show a clearly-labelled "rough total" without faking the real numbers.
   const regionAvgItems: Record<string, number> = {}
   const regionAvgRev:   Record<string, number> = {}
+  // Overall (all-region) average per linked parcel, used as a fallback so that a
+  // region whose parcels are ALL unlinked (no COL ever joined) still gets an
+  // estimate instead of silently contributing 0 items/£.
+  let totLinkedColls = 0, totLinkedItems = 0, totLinkedRev = 0
+  for (const [region, agg] of regionAgg) {
+    totLinkedColls += linkedCollByRegion[region] ?? 0
+    totLinkedItems += agg.items
+    totLinkedRev   += agg.revenue
+  }
+  const overallAvgItems = totLinkedColls > 0 ? totLinkedItems / totLinkedColls : 0
+  const overallAvgRev   = totLinkedColls > 0 ? totLinkedRev   / totLinkedColls : 0
   for (const [region, agg] of regionAgg) {
     const n = linkedCollByRegion[region] ?? 0
-    regionAvgItems[region] = n > 0 ? agg.items   / n : 0
-    regionAvgRev[region]   = n > 0 ? agg.revenue / n : 0
+    regionAvgItems[region] = n > 0 ? agg.items   / n : overallAvgItems
+    // Rest of World is quote-only (£0), so never fall it back to a non-zero rate.
+    regionAvgRev[region]   = n > 0 ? agg.revenue / n : (region === "Rest of World" ? 0 : overallAvgRev)
   }
   const estItemsByMonth:  Record<string, number> = {}
   const estRevByMonth:    Record<string, number> = {}
@@ -274,6 +314,12 @@ export async function computeShippingAnalytics(
     estItemsUnlinked   += ei
     estRevenueUnlinked += er
   }
+  // Round the estimated-item total ONCE, then allocate it across regions and
+  // months with largest-remainder so each split sums back to this exact figure
+  // (and therefore to the headline "Items shipped"). Revenue is never rounded.
+  const estItemsTotal  = Math.round(estItemsUnlinked)
+  const regionEstAlloc = allocateRounded(estItemsByRegion, estItemsTotal)
+  const monthEstAlloc  = allocateRounded(estItemsByMonth, estItemsTotal)
 
   const byRegion = (["UK", "Europe", "Rest of World"] as Region[])
     .map((region) => {
@@ -283,7 +329,7 @@ export async function computeShippingAnalytics(
         parcels:    a.parcels,
         items:      a.items,
         revenue:    a.revenue,
-        estItems:   Math.round(estItemsByRegion[region] ?? 0),
+        estItems:   regionEstAlloc[region] ?? 0,
         estRevenue: estRevByRegion[region] ?? 0,
       }
     })
@@ -297,7 +343,7 @@ export async function computeShippingAnalytics(
   // parcels' estimated lots can't be split by size, so surface them as one row
   // — now the size totals match "Items shipped" / the headline revenue.
   if (estItemsUnlinked > 0 || estRevenueUnlinked > 0) {
-    bySize.push({ size: "Estimated (no docket)", items: Math.round(estItemsUnlinked), revenue: estRevenueUnlinked })
+    bySize.push({ size: "Estimated (no docket)", items: estItemsTotal, revenue: estRevenueUnlinked })
   }
 
   // Monthly trend — every month that has parcels and/or revenue, chronological.
@@ -308,7 +354,7 @@ export async function computeShippingAnalytics(
     items:      monthItems[month]    ?? 0,
     revenue:    monthRevenue[month]  ?? 0,
     unlinked:   monthUnlinked[month] ?? 0,
-    estItems:   Math.round(estItemsByMonth[month] ?? 0),
+    estItems:   monthEstAlloc[month] ?? 0,
     estRevenue: estRevByMonth[month] ?? 0,
   }))
 
@@ -327,11 +373,19 @@ export async function computeShippingAnalytics(
   // ...T23:59:59 upper bound is inclusive whether auctionDate is date-only or has
   // a time component.
   const aucWhere = { gte: from, lte: `${to}T23:59:59.999Z` }
-  // "Not scanned / unknown" also drops the last month (recent auctions may not be
-  // dispatched/collected yet).
-  const oneMonthBack = new Date(`${to}T00:00:00.000Z`)
-  oneMonthBack.setUTCMonth(oneMonthBack.getUTCMonth() - 1)
-  const preAucWhere = { gte: from, lte: `${oneMonthBack.toISOString().slice(0, 10)}T23:59:59.999Z` }
+  // "Not scanned / unknown" normally drops the last month (recent auctions may
+  // not be dispatched/collected yet). Compute "one month before `to`" WITHOUT JS
+  // day-overflow (31 Mar -> 28 Feb, not 3 Mar): clamp the day to the last day of
+  // the previous month. And if that cutoff falls before `from` (a selected window
+  // of a month or less), don't invert the range to empty — count the full window
+  // instead, matching the other three buckets so the % base stays coherent.
+  const toD = new Date(`${to}T00:00:00.000Z`)
+  const lastDayPrevMonth = new Date(Date.UTC(toD.getUTCFullYear(), toD.getUTCMonth(), 0)).getUTCDate()
+  const cutoff = new Date(Date.UTC(toD.getUTCFullYear(), toD.getUTCMonth() - 1, Math.min(toD.getUTCDate(), lastDayPrevMonth)))
+  const cutoffStr = cutoff.toISOString().slice(0, 10)
+  const notScannedExcludesLastMonth = cutoffStr >= from
+  const preAucTo = notScannedExcludesLastMonth ? cutoffStr : to
+  const preAucWhere = { gte: from, lte: `${preAucTo}T23:59:59.999Z` }
   const [shippedCount, sandownCount, collectedRows, preLocGroups] = await Promise.all([
     prisma.warehouseItem.count({ where: { ...colOnly, location: { equals: "Shipped", mode: "insensitive" }, auctionDate: aucWhere } }),
     prisma.warehouseItem.count({ where: { ...colOnly, location: { equals: "SANDOWN", mode: "insensitive" }, auctionDate: aucWhere } }),
@@ -365,10 +419,19 @@ export async function computeShippingAnalytics(
     notScannedCount += n
     notScannedLocAgg[raw || "(no location)"] = (notScannedLocAgg[raw || "(no location)"] ?? 0) + n
   }
-  const notScannedLocations = Object.entries(notScannedLocAgg)
+  const sortedNotScanned = Object.entries(notScannedLocAgg)
     .map(([location, items]) => ({ location, items }))
     .sort((a, b) => b.items - a.items)
-    .slice(0, 25)
+  const TOP_LOCS = 25
+  const notScannedLocations = sortedNotScanned.slice(0, TOP_LOCS)
+  // Keep the drill-in readable but still reconcilable: fold everything past the
+  // top 25 into one "(N other locations)" row so the rows always sum to the
+  // headline "Not scanned / unknown" count.
+  if (sortedNotScanned.length > TOP_LOCS) {
+    const shown = notScannedLocations.reduce((s, x) => s + x.items, 0)
+    const rest = notScannedCount - shown
+    if (rest > 0) notScannedLocations.push({ location: `(${sortedNotScanned.length - TOP_LOCS} other locations)`, items: rest })
+  }
   // Estimated shipping that would be REFUNDED for these collections (the revenue
   // reduction). Group by collection and price each like a parcel (first item +
   // additionals) at UK rates — in-person collections are local. Rough estimate.
@@ -414,9 +477,10 @@ export async function computeShippingAnalytics(
       unratedParcels,
       unratedItems,
       unlinkedParcels: Object.values(monthUnlinked).reduce((a, b) => a + b, 0),
-      estItemsUnlinked: Math.round(estItemsUnlinked),
+      estItemsUnlinked: estItemsTotal,
       estRevenueUnlinked,
       collectedRefund,
+      notScannedExcludesLastMonth,
     },
   }
 }

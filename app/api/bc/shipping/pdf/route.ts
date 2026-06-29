@@ -78,7 +78,7 @@ function safeAscii(text: string): string {
     .replace(/[“”„‟]/g, '"')
     .replace(/[–—]/g, "-")
     .replace(/…/g, "...")
-    .replace(/ /g, " ")
+    .replace(/[  -   ⁠　]/g, " ") // non-breaking / unicode spaces -> normal space (before the ASCII strip below)
     .replace(/[^\x20-\x7E£€]/g, "")
 }
 
@@ -178,7 +178,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
   // ── Shipped vs Collected (standalone count by warehouse location) ──
   if (d.byDeliveryStatus.length > 0) {
     ensureSpace(cur, 80)
-    sectionTitle(cur, "Items by warehouse location (this period)", "Where collection items physically are now — broader than 'items shipped' (includes collected, SANDOWN, etc.). COL items only; excludes ARCHIVE/QUERY and the last month.")
+    sectionTitle(cur, "Items by warehouse location (this period)", `Where collection items physically are now — broader than 'items shipped' (includes collected, SANDOWN, etc.). COL items only; excludes ARCHIVE/QUERY${d.meta.notScannedExcludesLastMonth ? " and the last month" : ""}.`)
     const totalSC = d.byDeliveryStatus.reduce((s, r) => s + r.items, 0)
     const cols: Col[] = [
       { title: "STATUS", x: MARGIN,        w: 220, align: "left"  },

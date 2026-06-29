@@ -59,6 +59,7 @@ type ShipData = {
     sizeDataAvailable: boolean; estRevenueTotal: number
     unratedParcels: number; unratedItems: number; unlinkedParcels: number
     estItemsUnlinked: number; estRevenueUnlinked: number; collectedRefund: number
+    notScannedExcludesLastMonth: boolean
   }
 }
 
@@ -66,23 +67,29 @@ type Report = "cataloguing" | "packing" | "warehouse" | "explorer" | "shipping"
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function today()      { return new Date().toISOString().split("T")[0] }
+// Format a Date from its LOCAL calendar fields. Do NOT use toISOString() here —
+// it converts to UTC, so under BST (UTC+1) local midnight becomes the previous
+// day and every preset shifts back a day (e.g. "This month" -> last month).
+function fmt(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+function today()      { return fmt(new Date()) }
 function daysAgo(n: number) {
-  const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().split("T")[0]
+  const d = new Date(); d.setDate(d.getDate() - n); return fmt(d)
 }
 function startOfMonth() {
   const d = new Date()
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split("T")[0]
+  return fmt(new Date(d.getFullYear(), d.getMonth(), 1))
 }
-function startOfYear() { return new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0] }
+function startOfYear() { return fmt(new Date(new Date().getFullYear(), 0, 1)) }
 function last12Months() {
-  const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d.toISOString().split("T")[0]
+  const d = new Date(); d.setFullYear(d.getFullYear() - 1); return fmt(d)
 }
 function lastMonthRange(): [string, string] {
   const d = new Date()
   const end   = new Date(d.getFullYear(), d.getMonth(), 0)
   const start = new Date(end.getFullYear(), end.getMonth(), 1)
-  return [start.toISOString().split("T")[0], end.toISOString().split("T")[0]]
+  return [fmt(start), fmt(end)]
 }
 function exportXlsx(rows: object[], filename: string) {
   const ws = XLSX.utils.json_to_sheet(rows)
@@ -1833,7 +1840,7 @@ function ShippingTab() {
             return (
             <>
               <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">
-Count of items that went into a collection (<span className="font-medium">have a COL number</span>) and were <span className="font-medium">auctioned in this period</span>, by warehouse location — <span className="font-medium">Shipped</span>, <span className="font-medium">Collected</span>, <span className="font-medium">SANDOWN</span>, and everything else (<span className="font-medium">Not scanned / unknown</span> — excludes the last month, since recent collections may not be dispatched yet; expand it below to see where those items actually are). Independent of the parcels &amp; revenue above. Use the <span className="font-medium">Collected</span> figure to gauge shipping refunds for in-person collections.
+Count of items that went into a collection (<span className="font-medium">have a COL number</span>) and were <span className="font-medium">auctioned in this period</span>, by warehouse location — <span className="font-medium">Shipped</span>, <span className="font-medium">Collected</span>, <span className="font-medium">SANDOWN</span>, and everything else (<span className="font-medium">Not scanned / unknown</span>{data.meta.notScannedExcludesLastMonth ? " — excludes the last month, since recent collections may not be dispatched yet" : ""}; expand it below to see where those items actually are). Independent of the parcels &amp; revenue above. Use the <span className="font-medium">Collected</span> figure to gauge shipping refunds for in-person collections.
               </p>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3">
                 <table className="w-full text-sm">
