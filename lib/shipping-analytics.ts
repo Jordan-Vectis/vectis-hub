@@ -26,6 +26,7 @@ export type ShippingAnalytics = {
   byRegion:  { region: Region; parcels: number; items: number; revenue: number }[]
   bySize:    { size: string; items: number; revenue: number }[]
   byMonth:   { month: string; parcels: number; items: number; revenue: number }[]
+  byDeliveryStatus: { status: string; items: number; revenue: number }[]  // Shipped / Collected / Other (display only)
   byCountrySize: {
     country: string
     region:  Region
@@ -59,13 +60,25 @@ function orderSizes(labels: Iterable<string>): string[] {
   return [...canon, ...extra]
 }
 
+// Bucket a lot's BC location / collected flag into a delivery status for the
+// display-only Shipped/Collected breakdown. Case-insensitive; the collected
+// flag or a "collected" location wins, then "shipped", else "Other" (still in a
+// warehouse aisle / not yet marked). Does NOT affect revenue — informational so
+// Jordan can decide whether to later exclude Collected lots from the £.
+function deliveryStatus(location: unknown, collected: unknown): string {
+  const loc = String(location ?? "").trim().toLowerCase()
+  if (collected === true || loc === "collected") return "Collected"
+  if (loc === "shipped") return "Shipped"
+  return "Other"
+}
+
 export async function computeShippingAnalytics(
   token: string,
   from:  string,
   to:    string,
 ): Promise<ShippingAnalytics> {
   const empty = (): ShippingAnalytics => ({
-    from, to, byCountry: [], byCity: [], byRegion: [], bySize: [], byMonth: [], byCountrySize: [],
+    from, to, byCountry: [], byCity: [], byRegion: [], bySize: [], byMonth: [], byDeliveryStatus: [], byCountrySize: [],
     sizesPresent: [],
     meta: {
       total: 0, countries: 0, cities: 0, itemsWithSize: 0, parcelsWithSize: 0,
@@ -143,19 +156,26 @@ export async function computeShippingAnalytics(
   // Chunk the IN() query so a wide date range (tens of thousands of
   // collections) doesn't build one enormous parameter list.
   const cols = [...colSet]
-  const colToSizes: Record<string, string[]> = {}
+  type Lot = { size: string; status: string }
+  const colToLots: Record<string, Lot[]> = {}
   const CHUNK = 1000
   for (let i = 0; i < cols.length; i += CHUNK) {
     const slice = cols.slice(i, i + CHUNK)
     const rows = await prisma.warehouseItem.findMany({
       where: { collectionNo: { in: slice } },
-      select: { collectionNo: true, sizeClassification: true },
+      select: { collectionNo: true, sizeClassification: true, location: true, collected: true },
     })
-    // A lot whose collection matched WAS shipped, so count it even if its size
-    // is blank — normalizeSize(null) → "Unspecified" (£0). Never silently drop.
+    // A lot whose collection matched WAS in a dispatched collection, so count it
+    // even if its size is blank — normalizeSize(null) → "Unspecified" (£0). The
+    // per-lot location/collected flag is bucketed into a delivery status
+    // (Shipped / Collected / Other) for the display-only breakdown — it does NOT
+    // change the revenue maths yet.
     for (const r of rows) {
       if (!r.collectionNo) continue
-      ;(colToSizes[r.collectionNo] ??= []).push(normalizeSize(r.sizeClassification))
+      ;(colToLots[r.collectionNo] ??= []).push({
+        size:   normalizeSize(r.sizeClassification),
+        status: deliveryStatus(r.location, r.collected),
+      })
     }
   }
 
@@ -177,6 +197,8 @@ export async function computeShippingAnalytics(
   const sizeRevenue:  Record<string, number> = {}
   const monthItems:   Record<string, number> = {}
   const monthRevenue: Record<string, number> = {}
+  const statusItems:   Record<string, number> = {}
+  const statusRevenue: Record<string, number> = {}
   let itemsWithSize = 0
   let parcelsWithSize = 0
   let estRevenueTotal = 0
@@ -188,13 +210,17 @@ export async function computeShippingAnalytics(
   // other lot at its size's additional-item rate (ex VAT). Each lot's
   // contribution is attributed back to its own size band.
   for (const col of cols) {
-    const sizes = colToSizes[col]
-    if (!sizes || sizes.length === 0) continue
+    const lots = colToLots[col]
+    if (!lots || lots.length === 0) continue
     parcelsWithSize++
     const country = colToCountry[col] ?? "Unknown"
     const month   = colToMonth[col] ?? "Unknown"
     const agg = ensure(country)
-    for (const lot of parcelLotCharges(country, sizes)) {
+    // parcelLotCharges returns one entry per lot in the SAME order as the sizes
+    // passed in, so charges[i] lines up with lots[i] (its delivery status).
+    const charges = parcelLotCharges(country, lots.map((l) => l.size))
+    charges.forEach((lot, i) => {
+      const status = lots[i].status
       agg.items++
       agg.sizes[lot.size] = (agg.sizes[lot.size] ?? 0) + 1
       agg.revenue += lot.rate
@@ -204,8 +230,10 @@ export async function computeShippingAnalytics(
       sizeRevenue[lot.size]  = (sizeRevenue[lot.size]  ?? 0) + lot.rate
       monthItems[month]      = (monthItems[month]      ?? 0) + 1
       monthRevenue[month]    = (monthRevenue[month]    ?? 0) + lot.rate
+      statusItems[status]    = (statusItems[status]    ?? 0) + 1
+      statusRevenue[status]  = (statusRevenue[status]  ?? 0) + lot.rate
       if (!agg.rated) unratedItems++
-    }
+    })
   }
 
   // ── Region rollup ──
@@ -235,6 +263,11 @@ export async function computeShippingAnalytics(
     revenue: monthRevenue[month]  ?? 0,
   }))
 
+  // Delivery-status split (display only — revenue is NOT filtered by this yet).
+  const byDeliveryStatus = ["Shipped", "Collected", "Other"]
+    .filter((s) => (statusItems[s] ?? 0) > 0)
+    .map((status) => ({ status, items: statusItems[status] ?? 0, revenue: statusRevenue[status] ?? 0 }))
+
   const byCountrySize = [...perCountry.entries()]
     .map(([country, a]) => ({
       country, region: a.region, parcels: a.parcels, items: a.items,
@@ -248,7 +281,7 @@ export async function computeShippingAnalytics(
   }).length
 
   return {
-    from, to, byCountry, byCity, byRegion, bySize, byMonth, byCountrySize, sizesPresent,
+    from, to, byCountry, byCity, byRegion, bySize, byMonth, byDeliveryStatus, byCountrySize, sizesPresent,
     meta: {
       total: active.length,
       countries: byCountry.length,
