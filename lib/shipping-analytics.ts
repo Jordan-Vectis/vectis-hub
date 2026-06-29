@@ -313,14 +313,23 @@ export async function computeShippingAnalytics(
   const periodFrom = new Date(from)
   const periodTo   = new Date(`${to}T23:59:59.999Z`)
   const dateWhere  = { gte: periodFrom, lte: periodTo }
-  const [totalInPeriod, shippedCount, sandownCount, collectedRows] = await Promise.all([
-    prisma.warehouseItem.count({ where: { bcModifiedAt: dateWhere } }),
-    prisma.warehouseItem.count({ where: { location: { equals: "Shipped", mode: "insensitive" }, bcModifiedAt: dateWhere } }),
-    prisma.warehouseItem.count({ where: { location: { equals: "SANDOWN", mode: "insensitive" }, bcModifiedAt: dateWhere } }),
+  // "Not scanned / unknown" excludes the LAST MONTH of the range — recent items
+  // are mostly for auctions that haven't happened yet (still being catalogued),
+  // not genuinely unshipped. Shipped / Collected / SANDOWN keep the full period.
+  const notScannedTo = new Date(periodTo)
+  notScannedTo.setUTCMonth(notScannedTo.getUTCMonth() - 1)
+  const preWhere = { gte: periodFrom, lte: notScannedTo }
+  const [shippedCount, sandownCount, collectedRows, preTotal, preShipped, preCollected, preSandown] = await Promise.all([
+    prisma.warehouseItem.count({ where: { location: { equals: "Shipped",   mode: "insensitive" }, bcModifiedAt: dateWhere } }),
+    prisma.warehouseItem.count({ where: { location: { equals: "SANDOWN",   mode: "insensitive" }, bcModifiedAt: dateWhere } }),
     prisma.warehouseItem.findMany({
       where: { location: { equals: "Collected", mode: "insensitive" }, bcModifiedAt: dateWhere },
       select: { collectionNo: true, sizeClassification: true },
     }),
+    prisma.warehouseItem.count({ where: { bcModifiedAt: preWhere } }),
+    prisma.warehouseItem.count({ where: { location: { equals: "Shipped",   mode: "insensitive" }, bcModifiedAt: preWhere } }),
+    prisma.warehouseItem.count({ where: { location: { equals: "Collected", mode: "insensitive" }, bcModifiedAt: preWhere } }),
+    prisma.warehouseItem.count({ where: { location: { equals: "SANDOWN",   mode: "insensitive" }, bcModifiedAt: preWhere } }),
   ])
   const collectedCount = collectedRows.length
   // Estimated shipping that would be REFUNDED for these collections (the revenue
@@ -335,9 +344,9 @@ export async function computeShippingAnalytics(
   for (const sizes of Object.values(collectedGroups)) {
     for (const lot of parcelLotCharges("GB", sizes)) collectedRefund += lot.rate
   }
-  // Everything in the period that isn't Shipped/Collected/SANDOWN — incl. items
-  // still in warehouse aisles, archive, or with no location (per Jordan's choice).
-  const notScannedCount = Math.max(0, totalInPeriod - shippedCount - collectedCount - sandownCount)
+  // Everything that isn't Shipped/Collected/SANDOWN, EXCLUDING the last month
+  // (those recent items are mostly pending/unsold auctions, not unshipped).
+  const notScannedCount = Math.max(0, preTotal - preShipped - preCollected - preSandown)
   const byDeliveryStatus = [
     { status: "Shipped",               items: shippedCount },
     { status: "Collected",             items: collectedCount },

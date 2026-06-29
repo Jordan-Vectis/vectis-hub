@@ -1824,7 +1824,7 @@ function ShippingTab() {
             return (
             <>
               <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">
-                Count of items by warehouse location, last updated in this period — <span className="font-medium">Shipped</span>, <span className="font-medium">Collected</span>, <span className="font-medium">SANDOWN</span>, and everything else (<span className="font-medium">Not scanned / unknown</span> — includes items still in warehouse aisles). A standalone count straight from the article location code, independent of the parcels &amp; revenue above. Use the <span className="font-medium">Collected</span> figure to gauge shipping refunds for in-person collections.
+                Count of items by warehouse location, last updated in this period — <span className="font-medium">Shipped</span>, <span className="font-medium">Collected</span>, <span className="font-medium">SANDOWN</span>, and everything else (<span className="font-medium">Not scanned / unknown</span> — includes warehouse aisles, but <span className="font-medium">excludes the last month</span>, since recent items are mostly pending/unsold auctions). A standalone count straight from the article location code, independent of the parcels &amp; revenue above. Use the <span className="font-medium">Collected</span> figure to gauge shipping refunds for in-person collections.
               </p>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3">
                 <table className="w-full text-sm">
