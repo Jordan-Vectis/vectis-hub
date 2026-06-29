@@ -62,7 +62,7 @@ Before every git push, ask yourself: "Did the user explicitly name `main`?" If n
 
 ## General
 
-- This is **not a CRM**. It is "the app". Never use the word CRM in UI copy, logs, or comments.
+- **Never call it a CRM.** It is the **Vectis Hub** ("the app"). It *began* as a CRM-only tool and grew into the Hub — a broad internal toolset of which the original contacts/CRM piece is now just one section — but Claude kept reflexively calling the whole thing "the CRM"; **this rule exists to stop that habit.** Never use the word "CRM" in UI copy, logs, comments, or memory. (Known live violation: the `/crm-settings` page still renders "CRM Settings" — reword when next touched.)
 - The business is **Vectis auction house**. All language should reflect an auction context.
 - British English spelling throughout: "Unauthorised", not "Unauthorized".
 - Superadmin email `it@vectis.co.uk` is hardcoded to always receive ADMIN role regardless of DB role.

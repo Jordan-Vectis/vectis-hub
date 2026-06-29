@@ -720,15 +720,15 @@ Always ask the user where they want files saved before saving them. Do not assum
     filename: "feedback_naming.md",
     content: `---
 name: App naming
-description: Don't call it a CRM — it's just one section of the whole app
+description: Don't call it "the CRM" — it's the Hub; it only BEGAN as a CRM
 type: feedback
 ---
 
-Don't refer to the Vectis app as "the CRM". It is just "the app". CRM is only one section of it and using that label causes confusion.
+Don't refer to the Vectis app as "the CRM". It is the Vectis Hub (or just "the app").
 
-**Why:** User corrected this explicitly — calling it a CRM is inaccurate and could cause misunderstanding about what's being worked on.
+**Why:** The system started as a CRM-only tool, then grew into the Hub — a broad internal toolset (cataloguing, BC tools, auction controller, accounts, shipping, IT help, the public auction site, etc.) of which the original contacts/CRM piece is now just one part. The rule exists because Claude kept reflexively calling the WHOLE thing "the CRM" out of that history, which is now inaccurate.
 
-**How to apply:** Always say "the app" when referring to the overall Vectis Next.js application.`,
+**How to apply:** Say "the Hub" (or "the app") for the overall application. Never use "CRM" in UI copy, logs, comments, or memory. Known live violation: the /crm-settings page still renders "CRM Settings".`,
   },
   {
     filename: "feedback_migrations.md",
