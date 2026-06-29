@@ -178,7 +178,8 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
     // The un-docketed parcels' items can't be sized, so show them as a separate
     // estimate line (NOT a size row). Real sizes + this = the headline totals.
     if (d.meta.estItemsUnlinked > 0) {
-      ensureSpace(cur, 14)
+      ensureSpace(cur, 22)
+      cur.y -= 8 // gap so the note clears the last table row above it
       drawWrapped(cur, `Plus about ${num(d.meta.estItemsUnlinked)} more items in parcels with no collection number — size unknown, so estimated at about ${money(d.meta.estRevenueUnlinked)}.`, 7.5, cur.fonts.helv, GREY)
     }
     cur.y -= 10
@@ -233,6 +234,8 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
       cell(cur, gone ? `${((r.collected / gone) * 100).toFixed(1)}%` : "-", cols[4])
       rowLine(cur)
     }
+    ensureSpace(cur, 22)
+    cur.y -= 8 // gap so the note clears the last table row above it
     drawWrapped(cur, "'% collected' = of the items that left (shipped or collected), the share picked up in person. 'In period' also counts items still in the warehouse.", 7, cur.fonts.helv, GREY)
     cur.y -= 10
   }
