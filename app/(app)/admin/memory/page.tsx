@@ -78,6 +78,10 @@ PascalCase with underscores: \`User_ID\`, \`Date_and_Time\`, \`Field_Caption\`, 
 
 Cache (BCCatalogueDay, BCCatalogueEntry) is namespaced by mode via composite PK. Nightly cron at /api/cron/bc-catalogue refreshes both. UI toggle on /tools/bc-reports.
 
+## Shipping report column coverage (added 2026-06-29)
+
+The Shipping report reads parcel size/collection from the locally-synced WarehouseItem.collectionNo / .sizeClassification (backfilled by a full Receipt Lines re-sync). To confirm the backfill worked, the **Data Sync** tab in /tools/bc-warehouse shows a "Shipping column coverage" line — total items · N with collection · N with size — from /api/warehouse/sync/status (withCollectionNo / withSizeClassification = count where the column is not null). DB Explorer also returns a true total (real match count, not the capped page) and shows "Showing X of Y matching rows"; its select now includes both shipping columns so they're visible.
+
 ## When adding a new BC integration
 1. Call /api/bc/api-viewer first to confirm field names.
 2. Cross-check this file.

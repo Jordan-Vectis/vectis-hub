@@ -18,44 +18,54 @@ export async function GET(req: NextRequest) {
 
     if (table === "totes") {
       const where: Record<string, any> = q ? { [field]: { contains: q, mode: "insensitive" } } : {}
-      const rows = await prisma.warehouseTote.findMany({
-        where,
-        take: limit,
-        orderBy: { toteNo: "asc" },
-      })
-      return NextResponse.json({ rows, count: rows.length })
+      const [rows, total] = await Promise.all([
+        prisma.warehouseTote.findMany({
+          where,
+          take: limit,
+          orderBy: { toteNo: "asc" },
+        }),
+        prisma.warehouseTote.count({ where }),
+      ])
+      // count = rows returned (capped by limit); total = real match count across the whole table
+      return NextResponse.json({ rows, count: rows.length, total })
     }
 
     // Default: items
     const where: Record<string, any> = q ? { [field]: { contains: q, mode: "insensitive" } } : {}
-    const rows = await prisma.warehouseItem.findMany({
-      where,
-      select: {
-        uniqueId:     true,
-        barcode:      true,
-        auctionCode:  true,
-        auctionName:  true,
-        auctionDate:  true,
-        lotNo:        true,
-        currentLotNo: true,
-        description:  true,
-        artist:       true,
-        category:     true,
-        location:     true,
-        binCode:      true,
-        toteNo:       true,
-        vendorNo:     true,
-        vendorName:   true,
-        catalogued:   true,
-        withdrawLot:  true,
-        collected:    true,
-        bcModifiedAt: true,
-      },
-      take:    limit,
-      orderBy: { uniqueId: "asc" },
-    })
+    const [rows, total] = await Promise.all([
+      prisma.warehouseItem.findMany({
+        where,
+        select: {
+          uniqueId:           true,
+          barcode:            true,
+          auctionCode:        true,
+          auctionName:        true,
+          auctionDate:        true,
+          lotNo:              true,
+          currentLotNo:       true,
+          description:        true,
+          artist:             true,
+          category:           true,
+          location:           true,
+          binCode:            true,
+          toteNo:             true,
+          vendorNo:           true,
+          vendorName:         true,
+          catalogued:         true,
+          withdrawLot:        true,
+          collected:          true,
+          collectionNo:       true,  // Shipping report — EVA_CollectionNo
+          sizeClassification: true,  // Shipping report — parcel size band
+          bcModifiedAt:       true,
+        },
+        take:    limit,
+        orderBy: { uniqueId: "asc" },
+      }),
+      prisma.warehouseItem.count({ where }),
+    ])
 
-    return NextResponse.json({ rows, count: rows.length })
+    // count = rows returned (capped by limit); total = real match count across the whole table
+    return NextResponse.json({ rows, count: rows.length, total })
   } catch (e: any) {
     console.error("db-explorer error:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })

@@ -7,6 +7,8 @@ import { useState, useEffect, useCallback, useRef } from "react"
 type SyncStatus = {
   itemCount: number
   toteCount: number
+  withCollectionNo: number
+  withSizeClassification: number
   running: string[]
   sources: {
     receipt_lines: { completedAt: string; itemsProcessed: number } | null
@@ -2001,6 +2003,7 @@ function DbExplorerTab() {
   const [q,       setQ]       = useState("")
   const [rows,    setRows]    = useState<any[]>([])
   const [count,   setCount]   = useState<number | null>(null)
+  const [total,   setTotal]   = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
 
   // Re-pull auction names from BC. Use this when a sale name in the DB looks
@@ -2036,6 +2039,7 @@ function DbExplorerTab() {
       setClearMsg(`✓ Cleared ${parts.join(" + ")}. Now go to Data Sync and run a fresh pull.`)
       setRows([])
       setCount(null)
+      setTotal(null)
       setClearOpen(false)
       setClearConfirmText("")
     } catch {
@@ -2078,6 +2082,7 @@ function DbExplorerTab() {
       const j   = await res.json()
       setRows(j.rows ?? [])
       setCount(j.count ?? 0)
+      setTotal(j.total ?? null)
     } finally {
       setLoading(false)
     }
@@ -2191,7 +2196,7 @@ function DbExplorerTab() {
       <div className="flex gap-2 flex-wrap">
         <div className="flex rounded overflow-hidden border border-gray-300 dark:border-gray-700">
           {(["items","totes"] as const).map(t => (
-            <button key={t} onClick={() => { setTable(t); setField(t === "items" ? "auctionCode" : "toteNo"); setRows([]); setCount(null) }}
+            <button key={t} onClick={() => { setTable(t); setField(t === "items" ? "auctionCode" : "toteNo"); setRows([]); setCount(null); setTotal(null) }}
               className={`px-4 py-2 text-sm transition-colors ${table === t ? "bg-blue-600 text-gray-900 dark:text-white" : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-white"}`}>
               {t === "items" ? "Warehouse Items" : "Warehouse Totes"}
             </button>
@@ -2212,7 +2217,10 @@ function DbExplorerTab() {
       </div>
 
       {count !== null && (
-        <p className="text-sm text-gray-600 dark:text-gray-400">{count} row{count !== 1 ? "s" : ""} returned {count === 200 && <span className="text-yellow-500">(capped at 200)</span>}</p>
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          Showing {count.toLocaleString()} of {(total ?? count).toLocaleString()} matching row{(total ?? count) !== 1 ? "s" : ""}
+          {total !== null && count < total && <span className="text-yellow-500"> (capped at {count.toLocaleString()})</span>}
+        </p>
       )}
 
       {/* Table */}
@@ -2638,6 +2646,21 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
               ⟳ Sync
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Shipping column coverage — confirm a full Receipt Lines re-sync populated the Shipping report columns */}
+      <div className="mb-6 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-900 px-4 py-3">
+        <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Shipping column coverage</div>
+        <div className="text-sm text-gray-800 dark:text-gray-100">
+          <span className="font-mono">{(status?.itemCount ?? 0).toLocaleString()}</span> items
+          {" · "}
+          <span className="font-mono">{(status?.withCollectionNo ?? 0).toLocaleString()}</span> with collection
+          {" · "}
+          <span className="font-mono">{(status?.withSizeClassification ?? 0).toLocaleString()}</span> with size
+        </div>
+        <div className="text-xs text-gray-600 dark:text-gray-500 mt-1">
+          Both columns feed the Shipping report. After a full Receipt Lines re-sync these should cover every item that has shipping details in Business Central.
         </div>
       </div>
 

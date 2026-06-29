@@ -10,7 +10,7 @@ export async function GET() {
 
   const sources = ["receipt_lines", "auction_lines", "changelog", "totes", "totes-active"] as const
 
-  const [logs, itemCount, toteCount] = await Promise.all([
+  const [logs, itemCount, toteCount, withCollectionNo, withSizeClassification] = await Promise.all([
     Promise.all(
       sources.map(source =>
         prisma.warehouseSyncLog.findFirst({
@@ -21,6 +21,9 @@ export async function GET() {
     ),
     prisma.warehouseItem.count(),
     prisma.warehouseTote.count(),
+    // Shipping report coverage — how many items have the two shipping columns populated
+    prisma.warehouseItem.count({ where: { collectionNo: { not: null } } }),
+    prisma.warehouseItem.count({ where: { sizeClassification: { not: null } } }),
   ])
 
   const running = await prisma.warehouseSyncLog.findMany({
@@ -31,6 +34,8 @@ export async function GET() {
   return NextResponse.json({
     itemCount,
     toteCount,
+    withCollectionNo,
+    withSizeClassification,
     running: running.map(r => r.source),
     sources: Object.fromEntries(
       sources.map((source, i) => [
