@@ -59,6 +59,23 @@ export const SHIPPING_RATES: Record<string, Partial<Record<ParcelSize, Rate>>> =
   SK: { "Small": { first: 34.95, additional: 9.95 }, "Medium": { first: 66.95, additional: 14.95 }, "Large": { first: 89.95, additional: 19.95 }, "Contact": { first: 0, additional: 0 }, "Collection Only": { first: 0, additional: 0 } },
   TR: { "Small": { first: 34.95, additional: 9.95 }, "Medium": { first: 66.95, additional: 14.95 }, "Large": { first: 89.95, additional: 19.95 }, "Contact": { first: 0, additional: 0 }, "Collection Only": { first: 0, additional: 0 } },
   UA: { "Small": { first: 34.95, additional: 9.95 }, "Medium": { first: 66.95, additional: 14.95 }, "Large": { first: 89.95, additional: 19.95 }, "Contact": { first: 0, additional: 0 }, "Collection Only": { first: 0, additional: 0 } },
+  // European territories not in the source spreadsheet — priced at the standard
+  // western-EU tier (same as FR/DE/ES + the Channel Islands) per Jordan's call
+  // (2026-06-29), so they contribute estimated revenue instead of £0.
+  AD: { "Small": { first: 34.95, additional: 4.95 }, "Medium": { first: 49.95, additional: 9.95 }, "Large": { first: 64.95, additional: 19.95 }, "Contact": { first: 0, additional: 0 }, "Collection Only": { first: 0, additional: 0 } },
+  AL: { "Small": { first: 34.95, additional: 4.95 }, "Medium": { first: 49.95, additional: 9.95 }, "Large": { first: 64.95, additional: 19.95 }, "Contact": { first: 0, additional: 0 }, "Collection Only": { first: 0, additional: 0 } },
+  AX: { "Small": { first: 34.95, additional: 4.95 }, "Medium": { first: 49.95, additional: 9.95 }, "Large": { first: 64.95, additional: 19.95 }, "Contact": { first: 0, additional: 0 }, "Collection Only": { first: 0, additional: 0 } },
+  BA: { "Small": { first: 34.95, additional: 4.95 }, "Medium": { first: 49.95, additional: 9.95 }, "Large": { first: 64.95, additional: 19.95 }, "Contact": { first: 0, additional: 0 }, "Collection Only": { first: 0, additional: 0 } },
+  FO: { "Small": { first: 34.95, additional: 4.95 }, "Medium": { first: 49.95, additional: 9.95 }, "Large": { first: 64.95, additional: 19.95 }, "Contact": { first: 0, additional: 0 }, "Collection Only": { first: 0, additional: 0 } },
+  GI: { "Small": { first: 34.95, additional: 4.95 }, "Medium": { first: 49.95, additional: 9.95 }, "Large": { first: 64.95, additional: 19.95 }, "Contact": { first: 0, additional: 0 }, "Collection Only": { first: 0, additional: 0 } },
+  LI: { "Small": { first: 34.95, additional: 4.95 }, "Medium": { first: 49.95, additional: 9.95 }, "Large": { first: 64.95, additional: 19.95 }, "Contact": { first: 0, additional: 0 }, "Collection Only": { first: 0, additional: 0 } },
+  MC: { "Small": { first: 34.95, additional: 4.95 }, "Medium": { first: 49.95, additional: 9.95 }, "Large": { first: 64.95, additional: 19.95 }, "Contact": { first: 0, additional: 0 }, "Collection Only": { first: 0, additional: 0 } },
+  MD: { "Small": { first: 34.95, additional: 4.95 }, "Medium": { first: 49.95, additional: 9.95 }, "Large": { first: 64.95, additional: 19.95 }, "Contact": { first: 0, additional: 0 }, "Collection Only": { first: 0, additional: 0 } },
+  ME: { "Small": { first: 34.95, additional: 4.95 }, "Medium": { first: 49.95, additional: 9.95 }, "Large": { first: 64.95, additional: 19.95 }, "Contact": { first: 0, additional: 0 }, "Collection Only": { first: 0, additional: 0 } },
+  MK: { "Small": { first: 34.95, additional: 4.95 }, "Medium": { first: 49.95, additional: 9.95 }, "Large": { first: 64.95, additional: 19.95 }, "Contact": { first: 0, additional: 0 }, "Collection Only": { first: 0, additional: 0 } },
+  RS: { "Small": { first: 34.95, additional: 4.95 }, "Medium": { first: 49.95, additional: 9.95 }, "Large": { first: 64.95, additional: 19.95 }, "Contact": { first: 0, additional: 0 }, "Collection Only": { first: 0, additional: 0 } },
+  SM: { "Small": { first: 34.95, additional: 4.95 }, "Medium": { first: 49.95, additional: 9.95 }, "Large": { first: 64.95, additional: 19.95 }, "Contact": { first: 0, additional: 0 }, "Collection Only": { first: 0, additional: 0 } },
+  VA: { "Small": { first: 34.95, additional: 4.95 }, "Medium": { first: 49.95, additional: 9.95 }, "Large": { first: 64.95, additional: 19.95 }, "Contact": { first: 0, additional: 0 }, "Collection Only": { first: 0, additional: 0 } },
 }
 
 // Normalise a raw BC size value to a canonical band. BC's
