@@ -1687,7 +1687,7 @@ function ShippingTab() {
                   <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">
                     <tr>
                       <th className="px-4 py-2 text-left">Country</th>
-                      <th className="px-4 py-2 text-right">Shipments</th>
+                      <th className="px-4 py-2 text-right">Parcels</th>
                       <th className="px-4 py-2 text-right">%</th>
                     </tr>
                   </thead>
@@ -1709,7 +1709,7 @@ function ShippingTab() {
               <ExportBtn onClick={() => exportXlsx(
                 data.byCountry.map(r => ({
                   "Country": COUNTRY_NAMES[r.country] ? `${COUNTRY_NAMES[r.country]} (${r.country})` : r.country,
-                  "Shipments": r.count,
+                  "Parcels": r.count,
                   "%": data.meta.total ? +((r.count / data.meta.total) * 100).toFixed(1) : 0,
                 })),
                 "shipping_by_country"
@@ -1877,6 +1877,9 @@ Where items are now in the warehouse — <span className="font-medium">Shipped</
                   </tbody>
                 </table>
               </div>
+              {data.meta.notScannedExcludesLastMonth && (
+                <p className="text-xs text-gray-500 dark:text-gray-500 mb-3"><span className="font-medium">Not scanned / unknown</span> leaves out the most recent month — items from recent auctions may not have been shipped or collected yet — so that row covers a slightly shorter period than the others and its % is approximate.</p>
+              )}
               {data.meta.collectedRefund > 0 && (
                 <div className="mb-3 rounded-lg border border-cyan-500/30 bg-cyan-500/5 px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
                   Estimated revenue reduction from collections: <span className="font-semibold text-cyan-700 dark:text-cyan-300">{money(data.meta.collectedRefund)}</span> <span className="text-gray-500 dark:text-gray-500">— the shipping those collected items would have been charged (UK rates, grouped by collection), i.e. potential refunds.</span>
@@ -2001,7 +2004,7 @@ Where items are now in the warehouse — <span className="font-medium">Shipped</
                     <tr>
                       <th className="px-4 py-2 text-left">City</th>
                       <th className="px-4 py-2 text-left">Country</th>
-                      <th className="px-4 py-2 text-right">Shipments</th>
+                      <th className="px-4 py-2 text-right">Parcels</th>
                       <th className="px-4 py-2 text-right">%</th>
                     </tr>
                   </thead>
@@ -2025,7 +2028,7 @@ Where items are now in the warehouse — <span className="font-medium">Shipped</
                 data.byCity.map(r => ({
                   "City": r.city,
                   "Country": COUNTRY_NAMES[r.country] ? `${COUNTRY_NAMES[r.country]} (${r.country})` : r.country,
-                  "Shipments": r.count,
+                  "Parcels": r.count,
                   "%": data.meta.total ? +((r.count / data.meta.total) * 100).toFixed(1) : 0,
                 })),
                 "shipping_by_city"

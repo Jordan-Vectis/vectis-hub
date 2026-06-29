@@ -138,10 +138,11 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
     ensureSpace(cur, 90)
     sectionTitle(cur, "Parcels by Region", "How many parcels went to the UK, Europe and the rest of the world. Rest of World has no set price, so it shows £0.")
     const cols: Col[] = [
-      { title: "REGION",       x: MARGIN,        w: 200, align: "left"  },
-      { title: "PARCELS",      x: MARGIN + 200,  w: 90,  align: "right" },
-      { title: "%",            x: MARGIN + 290,  w: 80,  align: "right" },
-      { title: "EST. REVENUE", x: MARGIN + 370,  w: RIGHT - (MARGIN + 370), align: "right" },
+      { title: "REGION",       x: MARGIN,        w: 150, align: "left"  },
+      { title: "PARCELS",      x: MARGIN + 150,  w: 80,  align: "right" },
+      { title: "%",            x: MARGIN + 230,  w: 60,  align: "right" },
+      { title: "ITEMS",        x: MARGIN + 290,  w: 90,  align: "right" },
+      { title: "EST. REVENUE", x: MARGIN + 380,  w: RIGHT - (MARGIN + 380), align: "right" },
     ]
     headerRow(cur, cols)
     for (const r of d.byRegion) {
@@ -149,7 +150,8 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
       cell(cur, r.region, cols[0])
       cell(cur, num(r.parcels), cols[1])
       cell(cur, pct(r.parcels, d.meta.total), cols[2])
-      cell(cur, money(r.revenue + r.estRevenue), cols[3])
+      cell(cur, num(r.items + r.estItems), cols[3])
+      cell(cur, money(r.revenue + r.estRevenue), cols[4])
       rowLine(cur)
     }
     cur.y -= 10
@@ -188,7 +190,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
   // ── Shipped vs Collected (standalone count by warehouse location) ──
   if (d.byDeliveryStatus.length > 0) {
     ensureSpace(cur, 80)
-    sectionTitle(cur, "Where items are now", "Where these items are in the warehouse. This counts more than just shipped items (it also includes ones that were collected), so the numbers are higher.")
+    sectionTitle(cur, "Where items are now", "Where these items are in the warehouse: Shipped, Collected (picked up in person), SANDOWN, or Not scanned / unknown (anywhere else). A separate count from the parcels and revenue above, so the numbers differ.")
     const totalSC = d.byDeliveryStatus.reduce((s, r) => s + r.items, 0)
     const cols: Col[] = [
       { title: "STATUS", x: MARGIN,        w: 220, align: "left"  },
@@ -203,8 +205,14 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
       cell(cur, pct(r.items, totalSC), cols[2])
       rowLine(cur)
     }
+    if (d.meta.notScannedExcludesLastMonth) {
+      ensureSpace(cur, 22)
+      cur.y -= 8 // gap so the note clears the last table row above it
+      drawWrapped(cur, "'Not scanned / unknown' leaves out the most recent month — items from recent auctions may not have been shipped or collected yet — so that row covers a slightly shorter period than the others and its % is approximate.", 7.5, cur.fonts.helv, GREY)
+    }
     if (d.meta.collectedRefund > 0) {
-      ensureSpace(cur, 16)
+      ensureSpace(cur, 22)
+      cur.y -= 8 // gap so the note clears the row/note above it
       cur.page.drawText(safeAscii(`Est. revenue reduction from collections: ${money(d.meta.collectedRefund)} (UK rates)`),
         { x: MARGIN, y: cur.y - 4, size: 8.5, font: cur.fonts.helvB, color: BLACK })
       cur.y -= 16
@@ -284,7 +292,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
       cell(cur, countryLabel(r.country), cols[0], 8)
       sizes.forEach((s, i) => {
         const c = r.sizes[s] ?? 0
-        cell(cur, c ? num(c) : "·", cols[1 + i], 8)
+        cell(cur, c ? num(c) : "-", cols[1 + i], 8)
       })
       cell(cur, num(r.parcels), cols[1 + sizes.length], 8)
       cell(cur, money(r.revenue), cols[2 + sizes.length], 8)
