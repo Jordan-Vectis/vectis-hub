@@ -39,7 +39,7 @@ CatalogueTimingLog (per-lot cataloguing time → Admin Cataloguing Reports), Idl
 - AI Presenter (/tools/avatar) has 3 modes (script speak, screen-reading Gemini OCR auto-narrate, live-feed WebSocket templates) — not just a D-ID avatar.
 - IT Tools also has an Email Templates library + AI draft-reply route.
 - Databases tab 5 is Commission Bids (portal data), not a generic Bids tab.
-- /crm-settings reworded to "Department Settings" (2026-06-29). Remaining no-CRM violations: the "CRM" nav section + hub-card label (the original contacts/submissions section) + Contacts "Buyer — CRM" tab + About page — pending a chosen rename; the app KEY stays "CRM" to keep permissions working.
+- /crm-settings reworded to "Department Settings" (2026-06-29, accuracy fix — it manages Departments). The "CRM" nav section / hub-card / "Buyer — CRM" tab are CORRECT and stay (that section genuinely is the CRM) — the no-CRM rule only bans calling the WHOLE Hub a CRM, not the legitimate CRM section.
 - RULES.md "no backup configured" was stale — the db-backup JSON cron exists.
 
 ## Env vars previously unrecorded
