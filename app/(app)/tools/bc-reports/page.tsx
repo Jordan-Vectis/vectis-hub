@@ -57,7 +57,7 @@ type ShipData = {
     itemsWithSize: number; parcelsWithSize: number; parcelsWithoutSize: number
     sizeDataAvailable: boolean; estRevenueTotal: number
     unratedParcels: number; unratedItems: number; unlinkedParcels: number
-    estItemsUnlinked: number; estRevenueUnlinked: number
+    estItemsUnlinked: number; estRevenueUnlinked: number; collectedRefund: number
   }
 }
 
@@ -1849,6 +1849,11 @@ function ShippingTab() {
                   </tbody>
                 </table>
               </div>
+              {data.meta.collectedRefund > 0 && (
+                <div className="mb-3 rounded-lg border border-cyan-500/30 bg-cyan-500/5 px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                  Estimated revenue reduction from collections: <span className="font-semibold text-cyan-700 dark:text-cyan-300">{money(data.meta.collectedRefund)}</span> <span className="text-gray-500 dark:text-gray-500">— the shipping those collected items would have been charged (UK rates, grouped by collection), i.e. potential refunds.</span>
+                </div>
+              )}
               {data.byDeliveryStatus.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-500 mb-3">No items at location Shipped/Collected in this period.</p>}
               <ExportBtn onClick={() => exportXlsx(
                 data.byDeliveryStatus.map(r => ({

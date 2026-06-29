@@ -51,6 +51,7 @@ export type ShippingAnalytics = {
     unlinkedParcels:    number      // shipments with no collection docket (e.g. "DISPATCH") — can't be joined to lots
     estItemsUnlinked:   number      // ROUGH estimate of items for unlinked parcels (region average)
     estRevenueUnlinked: number      // ROUGH estimate of £ for unlinked parcels (region average)
+    collectedRefund:    number      // ROUGH estimate of shipping £ forgone because items were collected (UK rates)
   }
 }
 
@@ -76,7 +77,7 @@ export async function computeShippingAnalytics(
       total: 0, countries: 0, cities: 0, itemsWithSize: 0, parcelsWithSize: 0,
       parcelsWithoutSize: 0, sizeDataAvailable: false, estRevenueTotal: 0,
       unratedParcels: 0, unratedItems: 0, unlinkedParcels: 0,
-      estItemsUnlinked: 0, estRevenueUnlinked: 0,
+      estItemsUnlinked: 0, estRevenueUnlinked: 0, collectedRefund: 0,
     },
   })
 
@@ -311,10 +312,27 @@ export async function computeShippingAnalytics(
   // refunded. Nothing else feeds this — not the COL join, not the rate sheet.
   const periodFrom = new Date(from)
   const periodTo   = new Date(`${to}T23:59:59.999Z`)
-  const [shippedCount, collectedCount] = await Promise.all([
-    prisma.warehouseItem.count({ where: { location: { equals: "Shipped",   mode: "insensitive" }, bcModifiedAt: { gte: periodFrom, lte: periodTo } } }),
-    prisma.warehouseItem.count({ where: { location: { equals: "Collected", mode: "insensitive" }, bcModifiedAt: { gte: periodFrom, lte: periodTo } } }),
+  const dateWhere  = { gte: periodFrom, lte: periodTo }
+  const [shippedCount, collectedRows] = await Promise.all([
+    prisma.warehouseItem.count({ where: { location: { equals: "Shipped", mode: "insensitive" }, bcModifiedAt: dateWhere } }),
+    prisma.warehouseItem.findMany({
+      where: { location: { equals: "Collected", mode: "insensitive" }, bcModifiedAt: dateWhere },
+      select: { collectionNo: true, sizeClassification: true },
+    }),
   ])
+  const collectedCount = collectedRows.length
+  // Estimated shipping that would be REFUNDED for these collections (the revenue
+  // reduction). Group by collection and price each like a parcel (first item +
+  // additionals) at UK rates — in-person collections are local. Rough estimate.
+  const collectedGroups: Record<string, string[]> = {}
+  collectedRows.forEach((r, i) => {
+    const key = r.collectionNo || `__solo_${i}`
+    ;(collectedGroups[key] ??= []).push(normalizeSize(r.sizeClassification))
+  })
+  let collectedRefund = 0
+  for (const sizes of Object.values(collectedGroups)) {
+    for (const lot of parcelLotCharges("GB", sizes)) collectedRefund += lot.rate
+  }
   const byDeliveryStatus = [
     { status: "Shipped",   items: shippedCount },
     { status: "Collected", items: collectedCount },
@@ -348,6 +366,7 @@ export async function computeShippingAnalytics(
       unlinkedParcels: Object.values(monthUnlinked).reduce((a, b) => a + b, 0),
       estItemsUnlinked: Math.round(estItemsUnlinked),
       estRevenueUnlinked,
+      collectedRefund,
     },
   }
 }

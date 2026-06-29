@@ -188,6 +188,12 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
       cell(cur, pct(r.items, totalSC), cols[2])
       rowLine(cur)
     }
+    if (d.meta.collectedRefund > 0) {
+      ensureSpace(cur, 16)
+      cur.page.drawText(safeAscii(`Est. revenue reduction from collections: ${money(d.meta.collectedRefund)} (UK rates)`),
+        { x: MARGIN, y: cur.y - 4, size: 8.5, font: cur.fonts.helvB, color: BLACK })
+      cur.y -= 16
+    }
     cur.y -= 10
   }
 
