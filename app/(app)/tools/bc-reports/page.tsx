@@ -46,7 +46,7 @@ type ShipData = {
   byRegion:  { region: Region; parcels: number; items: number; revenue: number; estItems: number; estRevenue: number }[]
   bySize:    { size: string; items: number; revenue: number }[]
   byMonth:   { month: string; parcels: number; items: number; revenue: number; unlinked: number; estItems: number; estRevenue: number }[]
-  byDeliveryStatus: { status: string; items: number; revenue: number }[]
+  byDeliveryStatus: { status: string; items: number }[]
   byCountrySize: {
     country: string; region: Region; parcels: number; items: number
     revenue: number; rated: boolean; sizes: Record<string, number>
@@ -1822,10 +1822,12 @@ function ShippingTab() {
               )} />
             </>
           )}
-          {subTab === "Shipped / Collected" && (
+          {subTab === "Shipped / Collected" && (() => {
+            const totalSC = data.byDeliveryStatus.reduce((s, r) => s + r.items, 0)
+            return (
             <>
               <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">
-                How shipped lots split by their BC location / collected flag. <span className="font-medium">Revenue is NOT filtered by this yet</span> — the column shows how much of the current estimate each status accounts for, so you can decide whether to exclude Collected later. (“Other” = still in a warehouse aisle / not yet marked.)
+                Count of items whose warehouse location is <span className="font-medium">Shipped</span> or <span className="font-medium">Collected</span>, last updated in this period. A standalone count straight from the article location code — independent of the parcels &amp; revenue above. Use the <span className="font-medium">Collected</span> figure to gauge shipping refunds for in-person collections.
               </p>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3">
                 <table className="w-full text-sm">
@@ -1834,7 +1836,6 @@ function ShippingTab() {
                       <th className="px-4 py-2 text-left">Status</th>
                       <th className="px-4 py-2 text-right">Items</th>
                       <th className="px-4 py-2 text-right">%</th>
-                      <th className="px-4 py-2 text-right">Est. Revenue (incl.)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
@@ -1842,25 +1843,24 @@ function ShippingTab() {
                       <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{r.status}</td>
                         <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{r.items.toLocaleString()}</td>
-                        <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-400">{data.meta.itemsWithSize ? ((r.items / data.meta.itemsWithSize) * 100).toFixed(1) : "—"}%</td>
-                        <td className="px-4 py-2 text-right text-cyan-700 dark:text-cyan-300">{money(r.revenue)}</td>
+                        <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-400">{totalSC ? ((r.items / totalSC) * 100).toFixed(1) : "—"}%</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              {data.byDeliveryStatus.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-500 mb-3">No delivery-status data for this period.</p>}
+              {data.byDeliveryStatus.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-500 mb-3">No items at location Shipped/Collected in this period.</p>}
               <ExportBtn onClick={() => exportXlsx(
                 data.byDeliveryStatus.map(r => ({
                   "Status": r.status,
                   "Items": r.items,
-                  "%": data.meta.itemsWithSize ? +((r.items / data.meta.itemsWithSize) * 100).toFixed(1) : 0,
-                  "Est. Revenue": +r.revenue.toFixed(2),
+                  "%": totalSC ? +((r.items / totalSC) * 100).toFixed(1) : 0,
                 })),
                 "shipping_by_delivery_status"
               )} />
             </>
-          )}
+            )
+          })()}
           {subTab === "Country × Size" && (
             <>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 560 }}>

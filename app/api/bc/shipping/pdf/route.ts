@@ -170,23 +170,22 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
     cur.y -= 10
   }
 
-  // ── Delivery status (Shipped / Collected) — display only ──
+  // ── Shipped vs Collected (standalone count by warehouse location) ──
   if (d.byDeliveryStatus.length > 0) {
     ensureSpace(cur, 80)
-    sectionTitle(cur, "Shipped vs Collected (display only — not deducted from revenue)")
+    sectionTitle(cur, "Shipped vs Collected (count by warehouse location, this period)")
+    const totalSC = d.byDeliveryStatus.reduce((s, r) => s + r.items, 0)
     const cols: Col[] = [
-      { title: "STATUS",       x: MARGIN,        w: 200, align: "left"  },
-      { title: "ITEMS",        x: MARGIN + 200,  w: 90,  align: "right" },
-      { title: "%",            x: MARGIN + 290,  w: 80,  align: "right" },
-      { title: "EST. REVENUE", x: MARGIN + 370,  w: RIGHT - (MARGIN + 370), align: "right" },
+      { title: "STATUS", x: MARGIN,        w: 220, align: "left"  },
+      { title: "ITEMS",  x: MARGIN + 220,  w: 120, align: "right" },
+      { title: "%",      x: MARGIN + 340,  w: RIGHT - (MARGIN + 340), align: "right" },
     ]
     headerRow(cur, cols)
     for (const r of d.byDeliveryStatus) {
       ensureSpace(cur, 16, () => headerRow(cur, cols))
       cell(cur, r.status, cols[0])
       cell(cur, num(r.items), cols[1])
-      cell(cur, pct(r.items, d.meta.itemsWithSize), cols[2])
-      cell(cur, money(r.revenue), cols[3])
+      cell(cur, pct(r.items, totalSC), cols[2])
       rowLine(cur)
     }
     cur.y -= 10

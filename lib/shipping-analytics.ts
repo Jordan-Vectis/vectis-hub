@@ -26,7 +26,7 @@ export type ShippingAnalytics = {
   byRegion:  { region: Region; parcels: number; items: number; revenue: number; estItems: number; estRevenue: number }[]
   bySize:    { size: string; items: number; revenue: number }[]
   byMonth:   { month: string; parcels: number; items: number; revenue: number; unlinked: number; estItems: number; estRevenue: number }[]
-  byDeliveryStatus: { status: string; items: number; revenue: number }[]  // Shipped / Collected / Other (display only)
+  byDeliveryStatus: { status: string; items: number }[]  // Shipped / Collected counts (standalone, by warehouse location + last-updated date)
   byCountrySize: {
     country: string
     region:  Region
@@ -63,20 +63,6 @@ function orderSizes(labels: Iterable<string>): string[] {
   return [...canon, ...extra]
 }
 
-// Bucket a lot into a delivery status from its BC location ONLY, for the
-// display-only Shipped/Collected breakdown. Case-insensitive: location set to
-// "Shipped" → Shipped, "Collected" → Collected, anything else (a warehouse
-// aisle code / not yet marked) → Other.
-// NOTE: do NOT use the EVA_Collected boolean here — it is true for most items
-// (it doesn't mean "collected in person") and wrongly labels shipped parcels as
-// Collected. The location string is the real signal (per Jordan). Does NOT
-// affect revenue — informational only.
-function deliveryStatus(location: unknown): string {
-  const loc = String(location ?? "").trim().toLowerCase()
-  if (loc === "collected") return "Collected"
-  if (loc === "shipped")   return "Shipped"
-  return "Other"
-}
 
 export async function computeShippingAnalytics(
   token: string,
@@ -174,26 +160,20 @@ export async function computeShippingAnalytics(
   // Chunk the IN() query so a wide date range (tens of thousands of
   // collections) doesn't build one enormous parameter list.
   const cols = [...colSet]
-  type Lot = { size: string; status: string }
+  type Lot = { size: string }
   const colToLots: Record<string, Lot[]> = {}
   const CHUNK = 1000
   for (let i = 0; i < cols.length; i += CHUNK) {
     const slice = cols.slice(i, i + CHUNK)
     const rows = await prisma.warehouseItem.findMany({
       where: { collectionNo: { in: slice } },
-      select: { collectionNo: true, sizeClassification: true, location: true },
+      select: { collectionNo: true, sizeClassification: true },
     })
     // A lot whose collection matched WAS in a dispatched collection, so count it
-    // even if its size is blank — normalizeSize(null) → "Unspecified" (£0). The
-    // per-lot location/collected flag is bucketed into a delivery status
-    // (Shipped / Collected / Other) for the display-only breakdown — it does NOT
-    // change the revenue maths yet.
+    // even if its size is blank — normalizeSize(null) → "Unspecified" (£0).
     for (const r of rows) {
       if (!r.collectionNo) continue
-      ;(colToLots[r.collectionNo] ??= []).push({
-        size:   normalizeSize(r.sizeClassification),
-        status: deliveryStatus(r.location),
-      })
+      ;(colToLots[r.collectionNo] ??= []).push({ size: normalizeSize(r.sizeClassification) })
     }
   }
 
@@ -215,8 +195,6 @@ export async function computeShippingAnalytics(
   const sizeRevenue:  Record<string, number> = {}
   const monthItems:   Record<string, number> = {}
   const monthRevenue: Record<string, number> = {}
-  const statusItems:   Record<string, number> = {}
-  const statusRevenue: Record<string, number> = {}
   const linkedCollByRegion: Record<string, number> = {}  // linked collections per region (for the rough-estimate average)
   let itemsWithSize = 0
   let parcelsWithSize = 0
@@ -238,9 +216,7 @@ export async function computeShippingAnalytics(
     linkedCollByRegion[agg.region] = (linkedCollByRegion[agg.region] ?? 0) + 1
     // parcelLotCharges returns one entry per lot in the SAME order as the sizes
     // passed in, so charges[i] lines up with lots[i] (its delivery status).
-    const charges = parcelLotCharges(country, lots.map((l) => l.size))
-    charges.forEach((lot, i) => {
-      const status = lots[i].status
+    for (const lot of parcelLotCharges(country, lots.map((l) => l.size))) {
       agg.items++
       agg.sizes[lot.size] = (agg.sizes[lot.size] ?? 0) + 1
       agg.revenue += lot.rate
@@ -250,10 +226,8 @@ export async function computeShippingAnalytics(
       sizeRevenue[lot.size]  = (sizeRevenue[lot.size]  ?? 0) + lot.rate
       monthItems[month]      = (monthItems[month]      ?? 0) + 1
       monthRevenue[month]    = (monthRevenue[month]    ?? 0) + lot.rate
-      statusItems[status]    = (statusItems[status]    ?? 0) + 1
-      statusRevenue[status]  = (statusRevenue[status]  ?? 0) + lot.rate
       if (!agg.rated) unratedItems++
-    })
+    }
   }
 
   // ── Region rollup ──
@@ -330,10 +304,21 @@ export async function computeShippingAnalytics(
     estRevenue: estRevByMonth[month] ?? 0,
   }))
 
-  // Delivery-status split (display only — revenue is NOT filtered by this yet).
-  const byDeliveryStatus = ["Shipped", "Collected", "Other"]
-    .filter((s) => (statusItems[s] ?? 0) > 0)
-    .map((status) => ({ status, items: statusItems[status] ?? 0, revenue: statusRevenue[status] ?? 0 }))
+  // ── Shipped vs Collected (standalone count — independent of the shipment join) ──
+  // Simply count every warehouse item whose location is "Shipped" or "Collected",
+  // last updated within the period (bcModifiedAt = EVA_SystemModifiedAt ≈ when the
+  // location flipped). Used to gauge how many were collected so shipping can be
+  // refunded. Nothing else feeds this — not the COL join, not the rate sheet.
+  const periodFrom = new Date(from)
+  const periodTo   = new Date(`${to}T23:59:59.999Z`)
+  const [shippedCount, collectedCount] = await Promise.all([
+    prisma.warehouseItem.count({ where: { location: { equals: "Shipped",   mode: "insensitive" }, bcModifiedAt: { gte: periodFrom, lte: periodTo } } }),
+    prisma.warehouseItem.count({ where: { location: { equals: "Collected", mode: "insensitive" }, bcModifiedAt: { gte: periodFrom, lte: periodTo } } }),
+  ])
+  const byDeliveryStatus = [
+    { status: "Shipped",   items: shippedCount },
+    { status: "Collected", items: collectedCount },
+  ].filter((s) => s.items > 0)
 
   const byCountrySize = [...perCountry.entries()]
     .map(([country, a]) => ({
