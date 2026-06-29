@@ -25,7 +25,7 @@ export type ShippingAnalytics = {
   byCity:    { city: string; country: string; count: number }[]
   byRegion:  { region: Region; parcels: number; items: number; revenue: number }[]
   bySize:    { size: string; items: number; revenue: number }[]
-  byMonth:   { month: string; parcels: number; items: number; revenue: number }[]
+  byMonth:   { month: string; parcels: number; items: number; revenue: number; unlinked: number }[]
   byDeliveryStatus: { status: string; items: number; revenue: number }[]  // Shipped / Collected / Other (display only)
   byCountrySize: {
     country: string
@@ -48,6 +48,7 @@ export type ShippingAnalytics = {
     estRevenueTotal:    number
     unratedParcels:     number      // shipments to countries with no rate sheet entry
     unratedItems:       number
+    unlinkedParcels:    number      // shipments with no collection docket (e.g. "DISPATCH") — can't be joined to lots
   }
 }
 
@@ -83,7 +84,7 @@ export async function computeShippingAnalytics(
     meta: {
       total: 0, countries: 0, cities: 0, itemsWithSize: 0, parcelsWithSize: 0,
       parcelsWithoutSize: 0, sizeDataAvailable: false, estRevenueTotal: 0,
-      unratedParcels: 0, unratedItems: 0,
+      unratedParcels: 0, unratedItems: 0, unlinkedParcels: 0,
     },
   })
 
@@ -124,6 +125,7 @@ export async function computeShippingAnalytics(
   const colToCountry:  Record<string, string> = {}
   const colToMonth:    Record<string, string> = {}
   const monthParcels:  Record<string, number> = {}
+  const monthUnlinked: Record<string, number> = {}
   const colSet = new Set<string>()
 
   for (const row of active) {
@@ -138,10 +140,17 @@ export async function computeShippingAnalytics(
     cityCounts[city].count++
     monthParcels[month] = (monthParcels[month] ?? 0) + 1
 
-    if (col) {
+    // Only real collection dockets (COL…) can be joined to lots. Some shipments
+    // carry a placeholder EVA_DocumentNo like "DISPATCH" (no collection link) —
+    // count them as "unlinked" so their missing items/revenue is explained, not
+    // silently swallowed. (This was the Jul/Aug 2025 undercount: a chunk of
+    // those months' shipments use "DISPATCH" instead of a COL number.)
+    if (col && /^col/i.test(col)) {
       colSet.add(col)
       if (!colToCountry[col]) colToCountry[col] = country
       if (!colToMonth[col])   colToMonth[col]   = month
+    } else {
+      monthUnlinked[month] = (monthUnlinked[month] ?? 0) + 1
     }
   }
 
@@ -258,9 +267,10 @@ export async function computeShippingAnalytics(
   const monthKeys = [...new Set([...Object.keys(monthParcels), ...Object.keys(monthRevenue)])].sort()
   const byMonth = monthKeys.map((month) => ({
     month,
-    parcels: monthParcels[month]  ?? 0,
-    items:   monthItems[month]    ?? 0,
-    revenue: monthRevenue[month]  ?? 0,
+    parcels:  monthParcels[month]  ?? 0,
+    items:    monthItems[month]    ?? 0,
+    revenue:  monthRevenue[month]  ?? 0,
+    unlinked: monthUnlinked[month] ?? 0,
   }))
 
   // Delivery-status split (display only — revenue is NOT filtered by this yet).
@@ -293,6 +303,7 @@ export async function computeShippingAnalytics(
       estRevenueTotal,
       unratedParcels,
       unratedItems,
+      unlinkedParcels: Object.values(monthUnlinked).reduce((a, b) => a + b, 0),
     },
   }
 }

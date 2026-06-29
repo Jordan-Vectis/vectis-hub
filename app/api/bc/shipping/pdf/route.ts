@@ -197,10 +197,11 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
     ensureSpace(cur, 90)
     sectionTitle(cur, "Parcels by Month")
     const cols: Col[] = [
-      { title: "MONTH",        x: MARGIN,        w: 150, align: "left"  },
-      { title: "PARCELS",      x: MARGIN + 150,  w: 90,  align: "right" },
-      { title: "ITEMS",        x: MARGIN + 240,  w: 90,  align: "right" },
-      { title: "EST. REVENUE", x: MARGIN + 330,  w: RIGHT - (MARGIN + 330), align: "right" },
+      { title: "MONTH",        x: MARGIN,        w: 130, align: "left"  },
+      { title: "PARCELS",      x: MARGIN + 130,  w: 75,  align: "right" },
+      { title: "ITEMS",        x: MARGIN + 205,  w: 75,  align: "right" },
+      { title: "NO DOCKET",    x: MARGIN + 280,  w: 75,  align: "right" },
+      { title: "EST. REVENUE", x: MARGIN + 355,  w: RIGHT - (MARGIN + 355), align: "right" },
     ]
     headerRow(cur, cols)
     for (const m of d.byMonth) {
@@ -208,7 +209,8 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
       cell(cur, monthLabel(m.month), cols[0])
       cell(cur, num(m.parcels), cols[1])
       cell(cur, num(m.items), cols[2])
-      cell(cur, money(m.revenue), cols[3])
+      cell(cur, m.unlinked ? num(m.unlinked) : "-", cols[3])
+      cell(cur, money(m.revenue), cols[4])
       rowLine(cur)
     }
     cur.y -= 10
@@ -252,6 +254,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
       "Estimated revenue (ex VAT): each parcel = one first-item charge (its dearest lot) + every other lot at its size's additional-item rate, per the Vectis UK / EU-zone rates.",
       `Rest of World is quote-only — ${num(d.meta.unratedParcels)} parcel(s) to countries not on the rate sheet are counted but priced at £0.`,
       `${num(d.meta.parcelsWithoutSize)} collection(s) had no size data and contribute nothing to revenue.`,
+      `${num(d.meta.unlinkedParcels)} parcel(s) have no collection docket in BC ("DISPATCH"), so their items & revenue can't be counted (mostly older months — see "No docket").`,
     ]
     for (const n of notes) {
       cur.page.drawText(safeAscii("- " + n), { x: MARGIN, y: cur.y, size: 7.5, font: fonts.helv, color: GREY })

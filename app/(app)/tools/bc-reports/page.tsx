@@ -45,7 +45,7 @@ type ShipData = {
   byCity:    { city: string; country: string; count: number }[]
   byRegion:  { region: Region; parcels: number; items: number; revenue: number }[]
   bySize:    { size: string; items: number; revenue: number }[]
-  byMonth:   { month: string; parcels: number; items: number; revenue: number }[]
+  byMonth:   { month: string; parcels: number; items: number; revenue: number; unlinked: number }[]
   byDeliveryStatus: { status: string; items: number; revenue: number }[]
   byCountrySize: {
     country: string; region: Region; parcels: number; items: number
@@ -56,7 +56,7 @@ type ShipData = {
     total: number; countries: number; cities: number
     itemsWithSize: number; parcelsWithSize: number; parcelsWithoutSize: number
     sizeDataAvailable: boolean; estRevenueTotal: number
-    unratedParcels: number; unratedItems: number
+    unratedParcels: number; unratedItems: number; unlinkedParcels: number
   }
 }
 
@@ -1638,6 +1638,11 @@ function ShippingTab() {
               <span className="font-medium">{data.meta.parcelsWithoutSize.toLocaleString()}</span> of {data.meta.total.toLocaleString()} parcels have no matching lot data locally, so their items &amp; revenue are missing here. This usually means the receipt-lines sync didn’t finish — run a <span className="font-medium">full</span> re-sync in <span className="font-medium">BC Warehouse → Data Sync</span> (keep the tab open until it completes), then reload.
             </div>
           ) : null}
+          {data.meta.unlinkedParcels > 0 && (
+            <div className="mb-4 text-sm rounded-lg border border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-300 px-4 py-3">
+              <span className="font-medium">{data.meta.unlinkedParcels.toLocaleString()}</span> parcels have no collection docket in BC (their document number is a placeholder like “DISPATCH”, not a COL number), so their items &amp; revenue can’t be counted — see the “No docket” column under <span className="font-medium">By Month</span>. This is a BC data gap (mostly older months), not a report error; parcel counts are still complete.
+            </div>
+          )}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
               <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Parcels</p>
@@ -1744,7 +1749,8 @@ function ShippingTab() {
                         <th className="px-4 py-2 text-right">Parcels</th>
                         <th className="px-4 py-2 text-right">Items</th>
                         <th className="px-4 py-2 text-right">Est. Revenue</th>
-                        <th className="px-4 py-2 text-left" style={{ width: "34%" }}>Revenue trend</th>
+                        <th className="px-4 py-2 text-right">No docket</th>
+                        <th className="px-4 py-2 text-left" style={{ width: "30%" }}>Revenue trend</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
@@ -1754,6 +1760,7 @@ function ShippingTab() {
                           <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{m.parcels.toLocaleString()}</td>
                           <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{m.items.toLocaleString()}</td>
                           <td className="px-4 py-2 text-right text-cyan-700 dark:text-cyan-300">{money(m.revenue)}</td>
+                          <td className="px-4 py-2 text-right text-orange-500" title="Parcels with no collection docket (e.g. DISPATCH) — items not counted">{m.unlinked ? m.unlinked.toLocaleString() : "—"}</td>
                           <td className="px-4 py-2">
                             <div className="h-3 rounded bg-cyan-500/70" style={{ width: `${Math.max(2, (m.revenue / maxRev) * 100)}%` }} title={money(m.revenue)} />
                           </td>
@@ -1769,6 +1776,7 @@ function ShippingTab() {
                     "Parcels": m.parcels,
                     "Items": m.items,
                     "Est. Revenue": +m.revenue.toFixed(2),
+                    "No docket (unlinked)": m.unlinked,
                   })),
                   "shipping_by_month"
                 )} />
