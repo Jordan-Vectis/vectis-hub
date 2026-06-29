@@ -211,6 +211,32 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
     cur.y -= 10
   }
 
+  // ── Sizes: shipped vs collected ──
+  if (d.sizeByDisposition.length > 0) {
+    ensureSpace(cur, 90)
+    sectionTitle(cur, "Sizes: shipped vs collected", "How many of each size were shipped vs collected in person — shows whether bigger items get collected more. From warehouse locations, so totals differ from 'Items by size' above.")
+    const cols: Col[] = [
+      { title: "SIZE",        x: MARGIN,        w: 150, align: "left"  },
+      { title: "IN PERIOD",   x: MARGIN + 150,  w: 95,  align: "right" },
+      { title: "SHIPPED",     x: MARGIN + 245,  w: 95,  align: "right" },
+      { title: "COLLECTED",   x: MARGIN + 340,  w: 95,  align: "right" },
+      { title: "% COLLECTED", x: MARGIN + 435,  w: RIGHT - (MARGIN + 435), align: "right" },
+    ]
+    headerRow(cur, cols)
+    for (const r of d.sizeByDisposition) {
+      ensureSpace(cur, 16, () => headerRow(cur, cols))
+      const gone = r.shipped + r.collected
+      cell(cur, r.size, cols[0])
+      cell(cur, num(r.all), cols[1])
+      cell(cur, num(r.shipped), cols[2])
+      cell(cur, num(r.collected), cols[3])
+      cell(cur, gone ? `${((r.collected / gone) * 100).toFixed(1)}%` : "-", cols[4])
+      rowLine(cur)
+    }
+    drawWrapped(cur, "'% collected' = of the items that left (shipped or collected), the share picked up in person. 'In period' also counts items still in the warehouse.", 7, cur.fonts.helv, GREY)
+    cur.y -= 10
+  }
+
   // ── Monthly trend ──
   {
     ensureSpace(cur, 90)

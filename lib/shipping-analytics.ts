@@ -36,6 +36,7 @@ export type ShippingAnalytics = {
   byMonth:   { month: string; parcels: number; items: number; revenue: number; unlinked: number; estItems: number; estRevenue: number }[]
   byDeliveryStatus: { status: string; items: number }[]  // Shipped / Collected / SANDOWN / Not-scanned counts (COL items, by warehouse location)
   notScannedLocations: { location: string; items: number }[]  // breakdown of what's in the "Not scanned / unknown" bucket
+  sizeByDisposition: { size: string; all: number; shipped: number; collected: number }[]  // size mix: all in period vs shipped vs collected (warehouse-location data)
   byCountrySize: {
     country: string
     region:  Region
@@ -100,7 +101,7 @@ export async function computeShippingAnalytics(
   to:    string,
 ): Promise<ShippingAnalytics> {
   const empty = (): ShippingAnalytics => ({
-    from, to, byCountry: [], byCity: [], byRegion: [], bySize: [], byMonth: [], byDeliveryStatus: [], notScannedLocations: [], byCountrySize: [],
+    from, to, byCountry: [], byCity: [], byRegion: [], bySize: [], byMonth: [], byDeliveryStatus: [], notScannedLocations: [], byCountrySize: [], sizeByDisposition: [],
     sizesPresent: [],
     meta: {
       total: 0, countries: 0, cities: 0, itemsWithSize: 0, parcelsWithSize: 0,
@@ -392,7 +393,7 @@ export async function computeShippingAnalytics(
   const notScannedExcludesLastMonth = cutoffStr >= from
   const preAucTo = notScannedExcludesLastMonth ? cutoffStr : to
   const preAucWhere = { gte: from, lte: `${preAucTo}T23:59:59.999Z` }
-  const [shippedCount, sandownCount, collectedRows, preLocGroups] = await Promise.all([
+  const [shippedCount, sandownCount, collectedRows, preLocGroups, allSizeGroups, shippedSizeGroups] = await Promise.all([
     prisma.warehouseItem.count({ where: { ...colOnly, location: { equals: "Shipped", mode: "insensitive" }, auctionDate: aucWhere } }),
     prisma.warehouseItem.count({ where: { ...colOnly, location: { equals: "SANDOWN", mode: "insensitive" }, auctionDate: aucWhere } }),
     prisma.warehouseItem.findMany({
@@ -404,8 +405,39 @@ export async function computeShippingAnalytics(
       where: { ...colOnly, auctionDate: preAucWhere },
       _count: { _all: true },
     }),
+    // Size mix of EVERY item in the period (any location) and of just the shipped
+    // ones — to show whether larger items skew toward in-person collection.
+    prisma.warehouseItem.groupBy({
+      by: ["sizeClassification"],
+      where: { ...colOnly, auctionDate: aucWhere },
+      _count: { _all: true },
+    }),
+    prisma.warehouseItem.groupBy({
+      by: ["sizeClassification"],
+      where: { ...colOnly, location: { equals: "Shipped", mode: "insensitive" }, auctionDate: aucWhere },
+      _count: { _all: true },
+    }),
   ])
   const collectedCount = collectedRows.length
+
+  // ── Sizes: All / Shipped / Collected (warehouse-location data) ──
+  // One consistent population (COL items auctioned in the period), so Shipped and
+  // Collected are directly comparable. NB: these are warehouse counts, NOT the
+  // shipment-join counts behind the revenue "Items by size" table.
+  const allBySize:       Record<string, number> = {}
+  const shippedBySize:   Record<string, number> = {}
+  const collectedBySize: Record<string, number> = {}
+  for (const g of allSizeGroups)     { const s = normalizeSize(g.sizeClassification); allBySize[s]     = (allBySize[s]     ?? 0) + g._count._all }
+  for (const g of shippedSizeGroups) { const s = normalizeSize(g.sizeClassification); shippedBySize[s] = (shippedBySize[s] ?? 0) + g._count._all }
+  for (const r of collectedRows)     { const s = normalizeSize(r.sizeClassification); collectedBySize[s] = (collectedBySize[s] ?? 0) + 1 }
+  const sizeByDisposition = orderSizes([...Object.keys(allBySize), ...Object.keys(shippedBySize), ...Object.keys(collectedBySize)])
+    .map((size) => ({
+      size,
+      all:       allBySize[size]       ?? 0,
+      shipped:   shippedBySize[size]   ?? 0,
+      collected: collectedBySize[size] ?? 0,
+    }))
+    .filter((r) => r.all > 0 || r.shipped > 0 || r.collected > 0)
 
   // "Not scanned / unknown" = COL items (excluding the last month) NOT at
   // Shipped / Collected / SANDOWN, plus a breakdown of what their locations
@@ -470,7 +502,7 @@ export async function computeShippingAnalytics(
   }).length
 
   return {
-    from, to, byCountry, byCity, byRegion, bySize, byMonth, byDeliveryStatus, notScannedLocations, byCountrySize, sizesPresent,
+    from, to, byCountry, byCity, byRegion, bySize, byMonth, byDeliveryStatus, notScannedLocations, byCountrySize, sizeByDisposition, sizesPresent,
     meta: {
       total: active.length,
       countries: byCountry.length,

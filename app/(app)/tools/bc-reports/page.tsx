@@ -48,6 +48,7 @@ type ShipData = {
   byMonth:   { month: string; parcels: number; items: number; revenue: number; unlinked: number; estItems: number; estRevenue: number }[]
   byDeliveryStatus: { status: string; items: number }[]
   notScannedLocations: { location: string; items: number }[]
+  sizeByDisposition: { size: string; all: number; shipped: number; collected: number }[]
   byCountrySize: {
     country: string; region: Region; parcels: number; items: number
     revenue: number; rated: boolean; sizes: Record<string, number>
@@ -1879,6 +1880,39 @@ Where items are now in the warehouse — <span className="font-medium">Shipped</
               {data.meta.collectedRefund > 0 && (
                 <div className="mb-3 rounded-lg border border-cyan-500/30 bg-cyan-500/5 px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
                   Estimated revenue reduction from collections: <span className="font-semibold text-cyan-700 dark:text-cyan-300">{money(data.meta.collectedRefund)}</span> <span className="text-gray-500 dark:text-gray-500">— the shipping those collected items would have been charged (UK rates, grouped by collection), i.e. potential refunds.</span>
+                </div>
+              )}
+              {data.sizeByDisposition.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-500 mb-2">By size: how many of each were <span className="font-medium">shipped</span> vs <span className="font-medium">collected</span> in person — to spot whether bigger items get collected more often. (From warehouse locations, so totals differ from the revenue “Items by size” table.)</p>
+                  <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase">
+                        <tr>
+                          <th className="px-4 py-2 text-left">Size</th>
+                          <th className="px-4 py-2 text-right">In period</th>
+                          <th className="px-4 py-2 text-right">Shipped</th>
+                          <th className="px-4 py-2 text-right">Collected</th>
+                          <th className="px-4 py-2 text-right">% collected</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                        {data.sizeByDisposition.map((r, i) => {
+                          const gone = r.shipped + r.collected
+                          return (
+                            <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
+                              <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{r.size}</td>
+                              <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{r.all.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{r.shipped.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{r.collected.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-400">{gone ? ((r.collected / gone) * 100).toFixed(1) + "%" : "—"}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-1">“% collected” = of the items that left (shipped or collected), the share picked up in person. “In period” also counts items still in the warehouse.</p>
                 </div>
               )}
               {data.notScannedLocations.length > 0 && (
