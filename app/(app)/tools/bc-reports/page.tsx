@@ -1673,6 +1673,9 @@ function ShippingTab() {
             </div>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-500 mb-2">A parcel is one shipment. Items are the things inside it — a parcel can hold several, so there are more items than parcels.</p>
+          {data.meta.collectedRefund > 0 && (
+            <p className="text-xs text-gray-500 dark:text-gray-500 mb-2">Shipping earned: <span className="font-medium text-cyan-700 dark:text-cyan-300">{money(data.meta.estRevenueTotal + data.meta.estRevenueUnlinked)}</span> (posted parcels only — collected items aren&apos;t included). We&apos;d have earned about <span className="font-medium">{money(data.meta.collectedRefund)}</span> more if the items collected in person had been posted instead.</p>
+          )}
           <MetaBar text={`${from} — ${to}  ·  ${data.meta.total.toLocaleString()} parcels  ·  ${money(data.meta.estRevenueTotal + data.meta.estRevenueUnlinked)} est. revenue`} />
           <SubTabs tabs={["By Country", "By Region", "By Month", "Items by Size", "Shipped / Collected", "Country × Size", "By City", "World Map", "UK Map"]} active={subTab} onChange={setSubTab} />
           {subTab === "By Country" && (

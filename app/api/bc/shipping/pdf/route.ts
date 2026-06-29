@@ -123,6 +123,10 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
   cur.y -= 38
 
   drawWrapped(cur, "A parcel is one shipment. Items are the things inside it — a parcel can hold several, so there are more items than parcels.", 7.5, fonts.helv, GREY)
+  cur.y -= 4
+  if (d.meta.collectedRefund > 0) {
+    drawWrapped(cur, `Shipping earned: ${money(d.meta.estRevenueTotal + d.meta.estRevenueUnlinked)} (posted parcels only — collected items aren't included). We'd have earned about ${money(d.meta.collectedRefund)} more if the items collected in person had been posted instead.`, 7.5, fonts.helv, GREY)
+  }
   cur.y -= 6
 
   if (!d.meta.sizeDataAvailable) {
