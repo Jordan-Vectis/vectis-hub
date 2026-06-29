@@ -341,12 +341,17 @@ export async function computeShippingAnalytics(
   // "Not scanned / unknown" = COL items (excluding the last month) NOT at
   // Shipped / Collected / SANDOWN, plus a breakdown of what their locations
   // actually are so they can be investigated.
+  // Known warehouse locations that are NOT a shipping disposition and aren't
+  // "unscanned" either — exclude them from the breakdown entirely (per Jordan's
+  // list). Add more here if other holding locations turn up.
+  const EXCLUDED_LOCS = new Set(["archive", "query"])
   const notScannedLocAgg: Record<string, number> = {}
   let notScannedCount = 0
   for (const g of preLocGroups) {
     const raw = String(g.location ?? "").trim()
     const lc  = raw.toLowerCase()
     if (lc === "shipped" || lc === "collected" || lc === "sandown") continue
+    if (EXCLUDED_LOCS.has(lc)) continue
     const n = g._count._all
     notScannedCount += n
     notScannedLocAgg[raw || "(no location)"] = (notScannedLocAgg[raw || "(no location)"] ?? 0) + n
