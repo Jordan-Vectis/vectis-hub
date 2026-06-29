@@ -293,6 +293,7 @@ Email Lists tab: pulls buyer emails from BC AttendenceRegister by auction name k
 
 ### BC Warehouse (/tools/bc-warehouse) — 8 tabs
 Location Heatmap, Sale Checklist, Search by Location, Location History (DO NOT redesign), Tote Data, Collections Due, Unsold Items, Data Sync, DB Explorer.
+Scheduled sync: /api/cron/bc-warehouse (server interval scheduler, CRON_SECRET) loops receipt-lines to completion then auction-lines/changelog/totes/totes-active/auction-names — but INCREMENTAL only, so newly-added columns need a one-time full re-sync (Data Sync → amber Full re-sync button) to backfill historical rows; the cron then maintains them. Data Sync shows a "Shipping column coverage" line (total items · with collection · with size, from /api/warehouse/sync/status) to confirm a full re-sync populated the Shipping report columns.
 
 ### BC Reports (/tools/bc-reports)
 Cataloguing report (barcode/uniqueid/compare modes), Packing report, **Shipping report**.
