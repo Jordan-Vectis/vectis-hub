@@ -202,11 +202,10 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
     ensureSpace(cur, 90)
     sectionTitle(cur, "Parcels by Month")
     const cols: Col[] = [
-      { title: "MONTH",        x: MARGIN,        w: 130, align: "left"  },
-      { title: "PARCELS",      x: MARGIN + 130,  w: 75,  align: "right" },
-      { title: "ITEMS",        x: MARGIN + 205,  w: 75,  align: "right" },
-      { title: "NO DOCKET",    x: MARGIN + 280,  w: 75,  align: "right" },
-      { title: "EST. REVENUE", x: MARGIN + 355,  w: RIGHT - (MARGIN + 355), align: "right" },
+      { title: "MONTH",        x: MARGIN,        w: 150, align: "left"  },
+      { title: "PARCELS",      x: MARGIN + 150,  w: 90,  align: "right" },
+      { title: "ITEMS",        x: MARGIN + 240,  w: 90,  align: "right" },
+      { title: "EST. REVENUE", x: MARGIN + 330,  w: RIGHT - (MARGIN + 330), align: "right" },
     ]
     headerRow(cur, cols)
     for (const m of d.byMonth) {
@@ -214,8 +213,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
       cell(cur, monthLabel(m.month), cols[0])
       cell(cur, num(m.parcels), cols[1])
       cell(cur, num(m.items + m.estItems), cols[2])
-      cell(cur, m.unlinked ? num(m.unlinked) : "-", cols[3])
-      cell(cur, money(m.revenue + m.estRevenue), cols[4])
+      cell(cur, money(m.revenue + m.estRevenue), cols[3])
       rowLine(cur)
     }
     cur.y -= 10
