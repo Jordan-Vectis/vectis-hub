@@ -1672,12 +1672,12 @@ function ShippingTab() {
               {data.meta.estItemsUnlinked > 0 && <p className="text-[10px] text-gray-500 mt-0.5">incl. ~{data.meta.estItemsUnlinked.toLocaleString()} estimated</p>}
             </div>
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-500 mb-2">Parcels = shipments; items = the individual lots inside them (a parcel usually holds several), so item totals run higher than parcel totals.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-500 mb-2">A parcel is one shipment. Items are the things inside it — a parcel can hold several, so there are more items than parcels.</p>
           <MetaBar text={`${from} — ${to}  ·  ${data.meta.total.toLocaleString()} parcels  ·  ${money(data.meta.estRevenueTotal + data.meta.estRevenueUnlinked)} est. revenue`} />
           <SubTabs tabs={["By Country", "By Region", "By Month", "Items by Size", "Shipped / Collected", "Country × Size", "By City", "World Map", "UK Map"]} active={subTab} onChange={setSubTab} />
           {subTab === "By Country" && (
             <>
-              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">Parcels (shipments) by destination country.</p>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">How many parcels we sent to each country.</p>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 520 }}>
                 <table className="w-full text-sm">
                   <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">
@@ -1714,7 +1714,7 @@ function ShippingTab() {
           )}
           {subTab === "By Region" && (
             <>
-              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">Parcels (shipments) grouped into UK / Europe / Rest of World. Rest of World is quote-only (no set rate), so it shows £0.</p>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">How many parcels went to the UK, Europe and the rest of the world. Rest of World has no set price, so it shows £0.</p>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase">
@@ -1755,7 +1755,7 @@ function ShippingTab() {
             const maxRev = Math.max(1, ...data.byMonth.map(m => m.revenue + m.estRevenue))
             return (
               <>
-                <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">Parcels and the lots inside them, by the month they were shipped.</p>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">How many parcels and items we sent each month.</p>
                 <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 560 }}>
                   <table className="w-full text-sm">
                     <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">
@@ -1799,7 +1799,7 @@ function ShippingTab() {
             const sizeTotal = data.bySize.reduce((s, r) => s + r.items, 0)
             return (
             <>
-              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">The individual lots inside the parcels, grouped by size band (the rate sheet prices each). <span className="font-medium">“Estimated (no docket)”</span> = lots in parcels with no collection number, valued at the regional average — so this table now totals the headline figures.</p>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">How many items of each size we sent, and the shipping that earns.</p>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase">
@@ -1822,14 +1822,25 @@ function ShippingTab() {
                   </tbody>
                 </table>
               </div>
+              {data.meta.estItemsUnlinked > 0 && (
+                <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">Plus about <span className="font-medium">{data.meta.estItemsUnlinked.toLocaleString()}</span> more items in parcels with no collection number — size unknown, so estimated at about <span className="font-medium">{money(data.meta.estRevenueUnlinked)}</span>. (Real sizes above + this estimate = the headline totals.)</p>
+              )}
               {data.bySize.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-500 mb-3">No parcel-size data for this period — run a full receipt-lines sync.</p>}
               <ExportBtn onClick={() => exportXlsx(
-                data.bySize.map(r => ({
-                  "Size": r.size,
-                  "Items": r.items,
-                  "%": sizeTotal ? +((r.items / sizeTotal) * 100).toFixed(1) : 0,
-                  "Est. Revenue": +r.revenue.toFixed(2),
-                })),
+                [
+                  ...data.bySize.map(r => ({
+                    "Size": r.size,
+                    "Items": r.items,
+                    "%": sizeTotal ? +((r.items / sizeTotal) * 100).toFixed(1) : 0,
+                    "Est. Revenue": +r.revenue.toFixed(2),
+                  })),
+                  ...(data.meta.estItemsUnlinked > 0 ? [{
+                    "Size": "Estimated (no collection number)",
+                    "Items": data.meta.estItemsUnlinked,
+                    "%": 0,
+                    "Est. Revenue": +data.meta.estRevenueUnlinked.toFixed(2),
+                  }] : []),
+                ],
                 "shipping_by_size"
               )} />
             </>
@@ -1840,7 +1851,7 @@ function ShippingTab() {
             return (
             <>
               <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">
-Count of items that went into a collection (<span className="font-medium">have a COL number</span>) and were <span className="font-medium">auctioned in this period</span>, by warehouse location — <span className="font-medium">Shipped</span>, <span className="font-medium">Collected</span>, <span className="font-medium">SANDOWN</span>, and everything else (<span className="font-medium">Not scanned / unknown</span>{data.meta.notScannedExcludesLastMonth ? " — excludes the last month, since recent collections may not be dispatched yet" : ""}; expand it below to see where those items actually are). Independent of the parcels &amp; revenue above. Use the <span className="font-medium">Collected</span> figure to gauge shipping refunds for in-person collections.
+Where items are now in the warehouse — <span className="font-medium">Shipped</span>, <span className="font-medium">Collected</span> (picked up in person), <span className="font-medium">SANDOWN</span>, or <span className="font-medium">Not scanned / unknown</span> (anywhere else — expand it below to see where). This is a separate count from the parcels and revenue above. The <span className="font-medium">Collected</span> figure shows how many were picked up rather than shipped.
               </p>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3">
                 <table className="w-full text-sm">
@@ -1901,7 +1912,7 @@ Count of items that went into a collection (<span className="font-medium">have a
           })()}
           {subTab === "Country × Size" && (
             <>
-              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">Per destination country: how many lots of each size, plus parcels and estimated revenue.</p>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">For each country: how many items of each size, plus parcels and shipping.</p>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 560 }}>
                 <table className="w-full text-sm">
                   <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">
@@ -1946,7 +1957,7 @@ Count of items that went into a collection (<span className="font-medium">have a
           )}
           {subTab === "By City" && (
             <>
-              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">Parcels (shipments) by destination city.</p>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">How many parcels we sent to each town or city.</p>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 520 }}>
                 <table className="w-full text-sm">
                   <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">

@@ -122,9 +122,8 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
   })
   cur.y -= 38
 
-  cur.page.drawText(safeAscii("Parcels = shipments. Items = the individual lots inside them — a parcel usually holds several, so item totals are higher than parcel totals."),
-    { x: MARGIN, y: cur.y, size: 7.5, font: fonts.helv, color: GREY })
-  cur.y -= 16
+  drawWrapped(cur, "A parcel is one shipment. Items are the things inside it — a parcel can hold several, so there are more items than parcels.", 7.5, fonts.helv, GREY)
+  cur.y -= 6
 
   if (!d.meta.sizeDataAvailable) {
     sectionNote(cur, "Size & revenue data unavailable — run a full receipt-lines resync (BC Warehouse > Data Sync) to populate parcel sizes.")
@@ -133,7 +132,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
   // ── Region table ──
   {
     ensureSpace(cur, 90)
-    sectionTitle(cur, "Parcels by Region", "Shipments by destination region. Rest of World is quote-only (no set rate), so it shows £0.")
+    sectionTitle(cur, "Parcels by Region", "How many parcels went to the UK, Europe and the rest of the world. Rest of World has no set price, so it shows £0.")
     const cols: Col[] = [
       { title: "REGION",       x: MARGIN,        w: 200, align: "left"  },
       { title: "PARCELS",      x: MARGIN + 200,  w: 90,  align: "right" },
@@ -155,7 +154,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
   // ── Size table ──
   {
     ensureSpace(cur, 90)
-    sectionTitle(cur, "Items by size (lots, not parcels)", "The lots inside the parcels, by size band (rate sheet applied). 'Estimated (no docket)' = lots in parcels with no collection number, valued at the regional average — so this totals the headline.")
+    sectionTitle(cur, "Items by size", "How many items of each size we sent, and the shipping that earns.")
     const sizeTotal = d.bySize.reduce((s, r) => s + r.items, 0)
     const cols: Col[] = [
       { title: "SIZE",         x: MARGIN,        w: 200, align: "left"  },
@@ -172,13 +171,19 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
       cell(cur, money(r.revenue), cols[3])
       rowLine(cur)
     }
+    // The un-docketed parcels' items can't be sized, so show them as a separate
+    // estimate line (NOT a size row). Real sizes + this = the headline totals.
+    if (d.meta.estItemsUnlinked > 0) {
+      ensureSpace(cur, 14)
+      drawWrapped(cur, `Plus about ${num(d.meta.estItemsUnlinked)} more items in parcels with no collection number — size unknown, so estimated at about ${money(d.meta.estRevenueUnlinked)}.`, 7.5, cur.fonts.helv, GREY)
+    }
     cur.y -= 10
   }
 
   // ── Shipped vs Collected (standalone count by warehouse location) ──
   if (d.byDeliveryStatus.length > 0) {
     ensureSpace(cur, 80)
-    sectionTitle(cur, "Items by warehouse location (this period)", `Where collection items physically are now — broader than 'items shipped' (includes collected, SANDOWN, etc.). COL items only; excludes ARCHIVE/QUERY${d.meta.notScannedExcludesLastMonth ? " and the last month" : ""}.`)
+    sectionTitle(cur, "Where items are now", "Where these items are in the warehouse. This counts more than just shipped items (it also includes ones that were collected), so the numbers are higher.")
     const totalSC = d.byDeliveryStatus.reduce((s, r) => s + r.items, 0)
     const cols: Col[] = [
       { title: "STATUS", x: MARGIN,        w: 220, align: "left"  },
@@ -205,7 +210,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
   // ── Monthly trend ──
   {
     ensureSpace(cur, 90)
-    sectionTitle(cur, "Parcels by Month", "Parcels and the lots inside them, by the month they were shipped.")
+    sectionTitle(cur, "Parcels by Month", "How many parcels and items we sent each month.")
     const cols: Col[] = [
       { title: "MONTH",        x: MARGIN,        w: 150, align: "left"  },
       { title: "PARCELS",      x: MARGIN + 150,  w: 90,  align: "right" },
@@ -227,7 +232,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
   // ── Country × Size grid ──
   {
     ensureSpace(cur, 110)
-    sectionTitle(cur, "Country breakdown", "Per destination country: lots by size, parcels, and estimated revenue.")
+    sectionTitle(cur, "Country breakdown", "Items, parcels and shipping for each country we sent to.")
     const sizes   = d.sizesPresent
     const nameW   = 150
     const revW    = 72
@@ -259,14 +264,15 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
     ensureSpace(cur, 60)
     cur.y -= 8
     const notes = [
-      "Estimated revenue (ex VAT): each parcel = one first-item charge (its dearest lot) + every other lot at its size's additional-item rate, per the Vectis UK / EU-zone rates.",
-      `Rest of World is quote-only — ${num(d.meta.unratedParcels)} parcel(s) to countries not on the rate sheet are counted but priced at £0.`,
-      `${num(d.meta.parcelsWithoutSize)} collection(s) had no size data and contribute nothing to revenue.`,
-      `${num(d.meta.unlinkedParcels)} parcel(s) have no collection docket in BC ("DISPATCH") — their items & revenue are roughly ESTIMATED at the regional average (~${money(d.meta.estRevenueUnlinked)} added, shown as the "Estimated (no docket)" row under Items by size). The country breakdown is actual-only and excludes these.`,
+      "All figures are estimates and exclude VAT. Each parcel is priced as one full charge for its biggest item, plus a smaller charge for each other item, using Vectis's shipping rates.",
+      `Rest of World has no set price, so ${num(d.meta.unratedParcels)} parcel(s) to those countries are counted but shown as £0.`,
+      `${num(d.meta.parcelsWithoutSize)} collection(s) had no size recorded, so they add nothing to the revenue.`,
+      `${num(d.meta.unlinkedParcels)} parcel(s) had no collection number in BC, so we couldn't see what was inside — their items and value are a rough estimate (about ${money(d.meta.estRevenueUnlinked)}).`,
     ]
     for (const n of notes) {
-      cur.page.drawText(safeAscii("- " + n), { x: MARGIN, y: cur.y, size: 7.5, font: fonts.helv, color: GREY })
-      cur.y -= 11
+      ensureSpace(cur, 14)
+      drawWrapped(cur, "- " + n, 7.5, fonts.helv, GREY, 10)
+      cur.y -= 1
     }
   }
 
@@ -286,8 +292,11 @@ function sectionTitle(cur: Cursor, title: string, subtitle?: string) {
   cur.page.drawText(safeAscii(title), { x: MARGIN, y: cur.y, size: 11, font: cur.fonts.helvB, color: BLACK })
   cur.y -= 13
   if (subtitle) {
-    cur.page.drawText(safeAscii(subtitle), { x: MARGIN, y: cur.y, size: 7.5, font: cur.fonts.helv, color: GREY })
-    cur.y -= 11
+    for (const ln of wrapLines(subtitle, cur.fonts.helv, 7.5, RIGHT - MARGIN)) {
+      cur.page.drawText(ln, { x: MARGIN, y: cur.y, size: 7.5, font: cur.fonts.helv, color: GREY })
+      cur.y -= 10
+    }
+    cur.y -= 1
   }
 }
 
@@ -349,4 +358,26 @@ function clip(text: string, font: PDFFont, size: number, maxWidth: number): stri
   let t = text
   while (t.length > 1 && font.widthOfTextAtSize(t + "..", size) > maxWidth) t = t.slice(0, -1)
   return t + ".."
+}
+
+// Word-wrap text to a max width, returning the lines (so nothing runs off the page).
+function wrapLines(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+  const words = safeAscii(text).split(/\s+/).filter(Boolean)
+  const lines: string[] = []
+  let line = ""
+  for (const w of words) {
+    const test = line ? `${line} ${w}` : w
+    if (line && font.widthOfTextAtSize(test, size) > maxWidth) { lines.push(line); line = w }
+    else line = test
+  }
+  if (line) lines.push(line)
+  return lines
+}
+
+// Draw left-aligned wrapped text from the cursor, advancing cur.y per line.
+function drawWrapped(cur: Cursor, text: string, size: number, font: PDFFont, color: any, lineH = size + 2.5) {
+  for (const ln of wrapLines(text, font, size, RIGHT - MARGIN)) {
+    cur.page.drawText(ln, { x: MARGIN, y: cur.y, size, font, color })
+    cur.y -= lineH
+  }
 }
