@@ -122,6 +122,10 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
   })
   cur.y -= 38
 
+  cur.page.drawText(safeAscii("Parcels = shipments. Items = the individual lots inside them — a parcel usually holds several, so item totals are higher than parcel totals."),
+    { x: MARGIN, y: cur.y, size: 7.5, font: fonts.helv, color: GREY })
+  cur.y -= 16
+
   if (!d.meta.sizeDataAvailable) {
     sectionNote(cur, "Size & revenue data unavailable — run a full receipt-lines resync (BC Warehouse > Data Sync) to populate parcel sizes.")
   }
@@ -151,7 +155,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
   // ── Size table ──
   {
     ensureSpace(cur, 90)
-    sectionTitle(cur, "Parcels by Size")
+    sectionTitle(cur, "Items by size (lots, not parcels)")
     const cols: Col[] = [
       { title: "SIZE",         x: MARGIN,        w: 200, align: "left"  },
       { title: "ITEMS",        x: MARGIN + 200,  w: 90,  align: "right" },
@@ -232,7 +236,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
     const cols: Col[] = [
       { title: "COUNTRY", x: MARGIN, w: nameW, align: "left" },
       ...sizes.map((s, i) => ({ title: shortSize(s), x: MARGIN + nameW + i * sizeW, w: sizeW, align: "right" as const })),
-      { title: "PCLS",    x: MARGIN + nameW + gridW, w: parcelW, align: "right" as const },
+      { title: "PARCELS", x: MARGIN + nameW + gridW, w: parcelW, align: "right" as const },
       { title: "REVENUE", x: MARGIN + nameW + gridW + parcelW, w: revW, align: "right" as const },
     ]
     headerRow(cur, cols, 7)

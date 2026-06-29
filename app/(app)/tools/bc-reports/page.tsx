@@ -1664,8 +1664,9 @@ function ShippingTab() {
               {data.meta.estItemsUnlinked > 0 && <p className="text-[10px] text-gray-500 mt-0.5">incl. ~{data.meta.estItemsUnlinked.toLocaleString()} estimated</p>}
             </div>
           </div>
+          <p className="text-xs text-gray-500 dark:text-gray-500 mb-2">Parcels = shipments; items = the individual lots inside them (a parcel usually holds several), so item totals run higher than parcel totals.</p>
           <MetaBar text={`${from} — ${to}  ·  ${data.meta.total.toLocaleString()} parcels  ·  ${money(data.meta.estRevenueTotal + data.meta.estRevenueUnlinked)} est. revenue`} />
-          <SubTabs tabs={["By Country", "By Region", "By Month", "By Size", "Shipped / Collected", "Country × Size", "By City", "World Map", "UK Map"]} active={subTab} onChange={setSubTab} />
+          <SubTabs tabs={["By Country", "By Region", "By Month", "Items by Size", "Shipped / Collected", "Country × Size", "By City", "World Map", "UK Map"]} active={subTab} onChange={setSubTab} />
           {subTab === "By Country" && (
             <>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 520 }}>
@@ -1783,7 +1784,7 @@ function ShippingTab() {
               </>
             )
           })()}
-          {subTab === "By Size" && (
+          {subTab === "Items by Size" && (
             <>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3">
                 <table className="w-full text-sm">
