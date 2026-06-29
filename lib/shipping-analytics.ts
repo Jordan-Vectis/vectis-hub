@@ -317,28 +317,31 @@ export async function computeShippingAnalytics(
   // last updated within the period (bcModifiedAt = EVA_SystemModifiedAt ≈ when the
   // location flipped). Used to gauge how many were collected so shipping can be
   // refunded. Nothing else feeds this — not the COL join, not the rate sheet.
-  const periodFrom = new Date(from)
-  const periodTo   = new Date(`${to}T23:59:59.999Z`)
-  const dateWhere  = { gte: periodFrom, lte: periodTo }
-  // Only items that actually went INTO a collection (have a COL number) are
-  // counted here — that's the population this report is about, and it strips out
-  // pending / unsold stock that never gets a collection (which was bloating the
-  // "Not scanned" bucket). "Not scanned / unknown" further excludes the LAST
-  // MONTH (recent collections may not have been dispatched/collected yet).
+  // Only items that actually went INTO a collection (have a COL number) — that's
+  // the population this report is about, and it strips out pending/unsold stock.
   const colOnly = { collectionNo: { not: null } }
-  const notScannedTo = new Date(periodTo)
-  notScannedTo.setUTCMonth(notScannedTo.getUTCMonth() - 1)
-  const preWhere = { gte: periodFrom, lte: notScannedTo }
+  // Filter by the lot's AUCTION DATE (EVA_AuctionDate, an ISO yyyy-mm-dd string →
+  // lexicographic gte/lte == chronological), NOT bcModifiedAt: a 2023 lot that
+  // was merely touched in BC recently has a recent bcModifiedAt and would wrongly
+  // land inside a "last 12 months" window (e.g. the 139 lots at A17G2). The
+  // ...T23:59:59 upper bound is inclusive whether auctionDate is date-only or has
+  // a time component.
+  const aucWhere = { gte: from, lte: `${to}T23:59:59.999Z` }
+  // "Not scanned / unknown" also drops the last month (recent auctions may not be
+  // dispatched/collected yet).
+  const oneMonthBack = new Date(`${to}T00:00:00.000Z`)
+  oneMonthBack.setUTCMonth(oneMonthBack.getUTCMonth() - 1)
+  const preAucWhere = { gte: from, lte: `${oneMonthBack.toISOString().slice(0, 10)}T23:59:59.999Z` }
   const [shippedCount, sandownCount, collectedRows, preLocGroups] = await Promise.all([
-    prisma.warehouseItem.count({ where: { ...colOnly, location: { equals: "Shipped", mode: "insensitive" }, bcModifiedAt: dateWhere } }),
-    prisma.warehouseItem.count({ where: { ...colOnly, location: { equals: "SANDOWN", mode: "insensitive" }, bcModifiedAt: dateWhere } }),
+    prisma.warehouseItem.count({ where: { ...colOnly, location: { equals: "Shipped", mode: "insensitive" }, auctionDate: aucWhere } }),
+    prisma.warehouseItem.count({ where: { ...colOnly, location: { equals: "SANDOWN", mode: "insensitive" }, auctionDate: aucWhere } }),
     prisma.warehouseItem.findMany({
-      where: { ...colOnly, location: { equals: "Collected", mode: "insensitive" }, bcModifiedAt: dateWhere },
+      where: { ...colOnly, location: { equals: "Collected", mode: "insensitive" }, auctionDate: aucWhere },
       select: { collectionNo: true, sizeClassification: true },
     }),
     prisma.warehouseItem.groupBy({
       by: ["location"],
-      where: { ...colOnly, bcModifiedAt: preWhere },
+      where: { ...colOnly, auctionDate: preAucWhere },
       _count: { _all: true },
     }),
   ])
