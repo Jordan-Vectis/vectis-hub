@@ -170,6 +170,28 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
     cur.y -= 10
   }
 
+  // ── Monthly trend ──
+  {
+    ensureSpace(cur, 90)
+    sectionTitle(cur, "Parcels by Month")
+    const cols: Col[] = [
+      { title: "MONTH",        x: MARGIN,        w: 150, align: "left"  },
+      { title: "PARCELS",      x: MARGIN + 150,  w: 90,  align: "right" },
+      { title: "ITEMS",        x: MARGIN + 240,  w: 90,  align: "right" },
+      { title: "EST. REVENUE", x: MARGIN + 330,  w: RIGHT - (MARGIN + 330), align: "right" },
+    ]
+    headerRow(cur, cols)
+    for (const m of d.byMonth) {
+      ensureSpace(cur, 16, () => headerRow(cur, cols))
+      cell(cur, monthLabel(m.month), cols[0])
+      cell(cur, num(m.parcels), cols[1])
+      cell(cur, num(m.items), cols[2])
+      cell(cur, money(m.revenue), cols[3])
+      rowLine(cur)
+    }
+    cur.y -= 10
+  }
+
   // ── Country × Size grid ──
   {
     ensureSpace(cur, 110)
@@ -276,6 +298,12 @@ function shortSize(s: string): string {
   if (s === "Collection Only") return "COLL"
   if (s === "Unspecified")     return "N/A"
   return s.slice(0, 6).toUpperCase()
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+function monthLabel(m: string): string {
+  const mm = /^(\d{4})-(\d{2})$/.exec(m)
+  return mm ? `${MONTHS[+mm[2] - 1]} ${mm[1]}` : m
 }
 
 // Truncate text to fit a width, trimming characters and adding ".." if needed.

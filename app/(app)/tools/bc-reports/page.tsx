@@ -45,6 +45,7 @@ type ShipData = {
   byCity:    { city: string; country: string; count: number }[]
   byRegion:  { region: Region; parcels: number; items: number; revenue: number }[]
   bySize:    { size: string; items: number; revenue: number }[]
+  byMonth:   { month: string; parcels: number; items: number; revenue: number }[]
   byCountrySize: {
     country: string; region: Region; parcels: number; items: number
     revenue: number; rated: boolean; sizes: Record<string, number>
@@ -1601,6 +1602,10 @@ function ShippingTab() {
 
   const money = (n: number) =>
     "£" + (n || 0).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const monthLabel = (m: string) => {
+    const mm = /^(\d{4})-(\d{2})$/.exec(m)
+    return mm ? new Date(+mm[1], +mm[2] - 1, 1).toLocaleString("en-GB", { month: "short", year: "numeric" }) : m
+  }
 
   return (
     <div>
@@ -1647,7 +1652,7 @@ function ShippingTab() {
             </div>
           </div>
           <MetaBar text={`${from} — ${to}  ·  ${data.meta.total.toLocaleString()} parcels  ·  ${money(data.meta.estRevenueTotal)} est. revenue`} />
-          <SubTabs tabs={["By Country", "By Region", "By Size", "Country × Size", "By City", "World Map", "UK Map"]} active={subTab} onChange={setSubTab} />
+          <SubTabs tabs={["By Country", "By Region", "By Month", "By Size", "Country × Size", "By City", "World Map", "UK Map"]} active={subTab} onChange={setSubTab} />
           {subTab === "By Country" && (
             <>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 520 }}>
@@ -1722,6 +1727,49 @@ function ShippingTab() {
               )} />
             </>
           )}
+          {subTab === "By Month" && (() => {
+            const maxRev = Math.max(1, ...data.byMonth.map(m => m.revenue))
+            return (
+              <>
+                <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 560 }}>
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">
+                      <tr>
+                        <th className="px-4 py-2 text-left">Month</th>
+                        <th className="px-4 py-2 text-right">Parcels</th>
+                        <th className="px-4 py-2 text-right">Items</th>
+                        <th className="px-4 py-2 text-right">Est. Revenue</th>
+                        <th className="px-4 py-2 text-left" style={{ width: "34%" }}>Revenue trend</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                      {data.byMonth.map((m, i) => (
+                        <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
+                          <td className="px-4 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">{monthLabel(m.month)}</td>
+                          <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{m.parcels.toLocaleString()}</td>
+                          <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{m.items.toLocaleString()}</td>
+                          <td className="px-4 py-2 text-right text-cyan-700 dark:text-cyan-300">{money(m.revenue)}</td>
+                          <td className="px-4 py-2">
+                            <div className="h-3 rounded bg-cyan-500/70" style={{ width: `${Math.max(2, (m.revenue / maxRev) * 100)}%` }} title={money(m.revenue)} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {data.byMonth.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-500 mb-3">No shipments in this period.</p>}
+                <ExportBtn onClick={() => exportXlsx(
+                  data.byMonth.map(m => ({
+                    "Month": m.month,
+                    "Parcels": m.parcels,
+                    "Items": m.items,
+                    "Est. Revenue": +m.revenue.toFixed(2),
+                  })),
+                  "shipping_by_month"
+                )} />
+              </>
+            )
+          })()}
           {subTab === "By Size" && (
             <>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3">

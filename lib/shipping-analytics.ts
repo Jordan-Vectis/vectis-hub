@@ -25,6 +25,7 @@ export type ShippingAnalytics = {
   byCity:    { city: string; country: string; count: number }[]
   byRegion:  { region: Region; parcels: number; items: number; revenue: number }[]
   bySize:    { size: string; items: number; revenue: number }[]
+  byMonth:   { month: string; parcels: number; items: number; revenue: number }[]
   byCountrySize: {
     country: string
     region:  Region
@@ -64,7 +65,7 @@ export async function computeShippingAnalytics(
   to:    string,
 ): Promise<ShippingAnalytics> {
   const empty = (): ShippingAnalytics => ({
-    from, to, byCountry: [], byCity: [], byRegion: [], bySize: [], byCountrySize: [],
+    from, to, byCountry: [], byCity: [], byRegion: [], bySize: [], byMonth: [], byCountrySize: [],
     sizesPresent: [],
     meta: {
       total: 0, countries: 0, cities: 0, itemsWithSize: 0, parcelsWithSize: 0,
@@ -87,25 +88,33 @@ export async function computeShippingAnalytics(
                    : (firstKeys.find((k) => /city/i.test(k)) ?? null)
   const colKey     = firstKeys.includes("EVA_DocumentNo") ? "EVA_DocumentNo"
                    : (firstKeys.find((k) => /documentno|collection/i.test(k)) ?? null)
+  const dateKey    = firstKeys.includes("EVA_ShipmentDate") ? "EVA_ShipmentDate"
+                   : (firstKeys.find((k) => /shipmentdate|date/i.test(k)) ?? null)
 
   // ── Parcel-level aggregation (country / city / collection) ──
   const countryCounts: Record<string, number> = {}
   const cityCounts:    Record<string, { count: number; country: string }> = {}
   const colToCountry:  Record<string, string> = {}
+  const colToMonth:    Record<string, string> = {}
+  const monthParcels:  Record<string, number> = {}
   const colSet = new Set<string>()
 
   for (const row of active) {
     const country = (countryKey ? String(row[countryKey] ?? "") : "").toUpperCase().trim() || "Unknown"
     const city    = (cityKey    ? String(row[cityKey]    ?? "") : "").trim() || "Unknown"
     const col     = (colKey     ? String(row[colKey]     ?? "") : "").trim()
+    // YYYY-MM from the shipment date (BC dates are ISO-ish strings)
+    const month   = (dateKey ? String(row[dateKey] ?? "") : "").slice(0, 7) || "Unknown"
 
     countryCounts[country] = (countryCounts[country] ?? 0) + 1
     if (!cityCounts[city]) cityCounts[city] = { count: 0, country }
     cityCounts[city].count++
+    monthParcels[month] = (monthParcels[month] ?? 0) + 1
 
     if (col) {
       colSet.add(col)
       if (!colToCountry[col]) colToCountry[col] = country
+      if (!colToMonth[col])   colToMonth[col]   = month
     }
   }
 
@@ -148,8 +157,10 @@ export async function computeShippingAnalytics(
   // Seed parcel (shipment) counts per country
   for (const { country, count } of byCountry) ensure(country).parcels = count
 
-  const sizeItems:   Record<string, number> = {}
-  const sizeRevenue: Record<string, number> = {}
+  const sizeItems:    Record<string, number> = {}
+  const sizeRevenue:  Record<string, number> = {}
+  const monthItems:   Record<string, number> = {}
+  const monthRevenue: Record<string, number> = {}
   let itemsWithSize = 0
   let parcelsWithSize = 0
   let estRevenueTotal = 0
@@ -165,6 +176,7 @@ export async function computeShippingAnalytics(
     if (!sizes || sizes.length === 0) continue
     parcelsWithSize++
     const country = colToCountry[col] ?? "Unknown"
+    const month   = colToMonth[col] ?? "Unknown"
     const agg = ensure(country)
     for (const lot of parcelLotCharges(country, sizes)) {
       agg.items++
@@ -172,8 +184,10 @@ export async function computeShippingAnalytics(
       agg.revenue += lot.rate
       itemsWithSize++
       estRevenueTotal += lot.rate
-      sizeItems[lot.size]   = (sizeItems[lot.size]   ?? 0) + 1
-      sizeRevenue[lot.size] = (sizeRevenue[lot.size] ?? 0) + lot.rate
+      sizeItems[lot.size]    = (sizeItems[lot.size]    ?? 0) + 1
+      sizeRevenue[lot.size]  = (sizeRevenue[lot.size]  ?? 0) + lot.rate
+      monthItems[month]      = (monthItems[month]      ?? 0) + 1
+      monthRevenue[month]    = (monthRevenue[month]    ?? 0) + lot.rate
       if (!agg.rated) unratedItems++
     }
   }
@@ -196,6 +210,15 @@ export async function computeShippingAnalytics(
     size, items: sizeItems[size] ?? 0, revenue: sizeRevenue[size] ?? 0,
   }))
 
+  // Monthly trend — every month that has parcels and/or revenue, chronological.
+  const monthKeys = [...new Set([...Object.keys(monthParcels), ...Object.keys(monthRevenue)])].sort()
+  const byMonth = monthKeys.map((month) => ({
+    month,
+    parcels: monthParcels[month]  ?? 0,
+    items:   monthItems[month]    ?? 0,
+    revenue: monthRevenue[month]  ?? 0,
+  }))
+
   const byCountrySize = [...perCountry.entries()]
     .map(([country, a]) => ({
       country, region: a.region, parcels: a.parcels, items: a.items,
@@ -209,7 +232,7 @@ export async function computeShippingAnalytics(
   }).length
 
   return {
-    from, to, byCountry, byCity, byRegion, bySize, byCountrySize, sizesPresent,
+    from, to, byCountry, byCity, byRegion, bySize, byMonth, byCountrySize, sizesPresent,
     meta: {
       total: active.length,
       countries: byCountry.length,
