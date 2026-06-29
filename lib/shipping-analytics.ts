@@ -26,7 +26,8 @@ export type ShippingAnalytics = {
   byRegion:  { region: Region; parcels: number; items: number; revenue: number; estItems: number; estRevenue: number }[]
   bySize:    { size: string; items: number; revenue: number }[]
   byMonth:   { month: string; parcels: number; items: number; revenue: number; unlinked: number; estItems: number; estRevenue: number }[]
-  byDeliveryStatus: { status: string; items: number }[]  // Shipped / Collected counts (standalone, by warehouse location + last-updated date)
+  byDeliveryStatus: { status: string; items: number }[]  // Shipped / Collected / SANDOWN / Not-scanned counts (COL items, by warehouse location)
+  notScannedLocations: { location: string; items: number }[]  // breakdown of what's in the "Not scanned / unknown" bucket
   byCountrySize: {
     country: string
     region:  Region
@@ -71,7 +72,7 @@ export async function computeShippingAnalytics(
   to:    string,
 ): Promise<ShippingAnalytics> {
   const empty = (): ShippingAnalytics => ({
-    from, to, byCountry: [], byCity: [], byRegion: [], bySize: [], byMonth: [], byDeliveryStatus: [], byCountrySize: [],
+    from, to, byCountry: [], byCity: [], byRegion: [], bySize: [], byMonth: [], byDeliveryStatus: [], notScannedLocations: [], byCountrySize: [],
     sizesPresent: [],
     meta: {
       total: 0, countries: 0, cities: 0, itemsWithSize: 0, parcelsWithSize: 0,
@@ -313,25 +314,47 @@ export async function computeShippingAnalytics(
   const periodFrom = new Date(from)
   const periodTo   = new Date(`${to}T23:59:59.999Z`)
   const dateWhere  = { gte: periodFrom, lte: periodTo }
-  // "Not scanned / unknown" excludes the LAST MONTH of the range — recent items
-  // are mostly for auctions that haven't happened yet (still being catalogued),
-  // not genuinely unshipped. Shipped / Collected / SANDOWN keep the full period.
+  // Only items that actually went INTO a collection (have a COL number) are
+  // counted here — that's the population this report is about, and it strips out
+  // pending / unsold stock that never gets a collection (which was bloating the
+  // "Not scanned" bucket). "Not scanned / unknown" further excludes the LAST
+  // MONTH (recent collections may not have been dispatched/collected yet).
+  const colOnly = { collectionNo: { not: null } }
   const notScannedTo = new Date(periodTo)
   notScannedTo.setUTCMonth(notScannedTo.getUTCMonth() - 1)
   const preWhere = { gte: periodFrom, lte: notScannedTo }
-  const [shippedCount, sandownCount, collectedRows, preTotal, preShipped, preCollected, preSandown] = await Promise.all([
-    prisma.warehouseItem.count({ where: { location: { equals: "Shipped",   mode: "insensitive" }, bcModifiedAt: dateWhere } }),
-    prisma.warehouseItem.count({ where: { location: { equals: "SANDOWN",   mode: "insensitive" }, bcModifiedAt: dateWhere } }),
+  const [shippedCount, sandownCount, collectedRows, preLocGroups] = await Promise.all([
+    prisma.warehouseItem.count({ where: { ...colOnly, location: { equals: "Shipped", mode: "insensitive" }, bcModifiedAt: dateWhere } }),
+    prisma.warehouseItem.count({ where: { ...colOnly, location: { equals: "SANDOWN", mode: "insensitive" }, bcModifiedAt: dateWhere } }),
     prisma.warehouseItem.findMany({
-      where: { location: { equals: "Collected", mode: "insensitive" }, bcModifiedAt: dateWhere },
+      where: { ...colOnly, location: { equals: "Collected", mode: "insensitive" }, bcModifiedAt: dateWhere },
       select: { collectionNo: true, sizeClassification: true },
     }),
-    prisma.warehouseItem.count({ where: { bcModifiedAt: preWhere } }),
-    prisma.warehouseItem.count({ where: { location: { equals: "Shipped",   mode: "insensitive" }, bcModifiedAt: preWhere } }),
-    prisma.warehouseItem.count({ where: { location: { equals: "Collected", mode: "insensitive" }, bcModifiedAt: preWhere } }),
-    prisma.warehouseItem.count({ where: { location: { equals: "SANDOWN",   mode: "insensitive" }, bcModifiedAt: preWhere } }),
+    prisma.warehouseItem.groupBy({
+      by: ["location"],
+      where: { ...colOnly, bcModifiedAt: preWhere },
+      _count: { _all: true },
+    }),
   ])
   const collectedCount = collectedRows.length
+
+  // "Not scanned / unknown" = COL items (excluding the last month) NOT at
+  // Shipped / Collected / SANDOWN, plus a breakdown of what their locations
+  // actually are so they can be investigated.
+  const notScannedLocAgg: Record<string, number> = {}
+  let notScannedCount = 0
+  for (const g of preLocGroups) {
+    const raw = String(g.location ?? "").trim()
+    const lc  = raw.toLowerCase()
+    if (lc === "shipped" || lc === "collected" || lc === "sandown") continue
+    const n = g._count._all
+    notScannedCount += n
+    notScannedLocAgg[raw || "(no location)"] = (notScannedLocAgg[raw || "(no location)"] ?? 0) + n
+  }
+  const notScannedLocations = Object.entries(notScannedLocAgg)
+    .map(([location, items]) => ({ location, items }))
+    .sort((a, b) => b.items - a.items)
+    .slice(0, 25)
   // Estimated shipping that would be REFUNDED for these collections (the revenue
   // reduction). Group by collection and price each like a parcel (first item +
   // additionals) at UK rates — in-person collections are local. Rough estimate.
@@ -344,9 +367,6 @@ export async function computeShippingAnalytics(
   for (const sizes of Object.values(collectedGroups)) {
     for (const lot of parcelLotCharges("GB", sizes)) collectedRefund += lot.rate
   }
-  // Everything that isn't Shipped/Collected/SANDOWN, EXCLUDING the last month
-  // (those recent items are mostly pending/unsold auctions, not unshipped).
-  const notScannedCount = Math.max(0, preTotal - preShipped - preCollected - preSandown)
   const byDeliveryStatus = [
     { status: "Shipped",               items: shippedCount },
     { status: "Collected",             items: collectedCount },
@@ -367,7 +387,7 @@ export async function computeShippingAnalytics(
   }).length
 
   return {
-    from, to, byCountry, byCity, byRegion, bySize, byMonth, byDeliveryStatus, byCountrySize, sizesPresent,
+    from, to, byCountry, byCity, byRegion, bySize, byMonth, byDeliveryStatus, notScannedLocations, byCountrySize, sizesPresent,
     meta: {
       total: active.length,
       countries: byCountry.length,

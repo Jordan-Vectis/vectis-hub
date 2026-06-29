@@ -47,6 +47,7 @@ type ShipData = {
   bySize:    { size: string; items: number; revenue: number }[]
   byMonth:   { month: string; parcels: number; items: number; revenue: number; unlinked: number; estItems: number; estRevenue: number }[]
   byDeliveryStatus: { status: string; items: number }[]
+  notScannedLocations: { location: string; items: number }[]
   byCountrySize: {
     country: string; region: Region; parcels: number; items: number
     revenue: number; rated: boolean; sizes: Record<string, number>
@@ -1825,7 +1826,7 @@ function ShippingTab() {
             return (
             <>
               <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">
-                Count of items by warehouse location, last updated in this period — <span className="font-medium">Shipped</span>, <span className="font-medium">Collected</span>, <span className="font-medium">SANDOWN</span>, and everything else (<span className="font-medium">Not scanned / unknown</span> — includes warehouse aisles, but <span className="font-medium">excludes the last month</span>, since recent items are mostly pending/unsold auctions). A standalone count straight from the article location code, independent of the parcels &amp; revenue above. Use the <span className="font-medium">Collected</span> figure to gauge shipping refunds for in-person collections.
+Count of items that went into a collection (<span className="font-medium">have a COL number</span>), by warehouse location, last updated in this period — <span className="font-medium">Shipped</span>, <span className="font-medium">Collected</span>, <span className="font-medium">SANDOWN</span>, and everything else (<span className="font-medium">Not scanned / unknown</span> — excludes the last month, since recent collections may not be dispatched yet; expand it below to see where those items actually are). Independent of the parcels &amp; revenue above. Use the <span className="font-medium">Collected</span> figure to gauge shipping refunds for in-person collections.
               </p>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3">
                 <table className="w-full text-sm">
@@ -1852,7 +1853,27 @@ function ShippingTab() {
                   Estimated revenue reduction from collections: <span className="font-semibold text-cyan-700 dark:text-cyan-300">{money(data.meta.collectedRefund)}</span> <span className="text-gray-500 dark:text-gray-500">— the shipping those collected items would have been charged (UK rates, grouped by collection), i.e. potential refunds.</span>
                 </div>
               )}
-              {data.byDeliveryStatus.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-500 mb-3">No items at location Shipped/Collected in this period.</p>}
+              {data.notScannedLocations.length > 0 && (
+                <details className="mb-3 text-sm">
+                  <summary className="cursor-pointer select-none text-gray-600 dark:text-gray-400">What’s in “Not scanned / unknown”? ({data.notScannedLocations.length} location{data.notScannedLocations.length === 1 ? "" : "s"})</summary>
+                  <div className="mt-2 overflow-x-auto rounded border border-gray-200 dark:border-gray-800" style={{ maxHeight: 320 }}>
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">
+                        <tr><th className="px-4 py-2 text-left">Location</th><th className="px-4 py-2 text-right">Items</th></tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                        {data.notScannedLocations.map((l, i) => (
+                          <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
+                            <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{l.location}</td>
+                            <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{l.items.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              )}
+              {data.byDeliveryStatus.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-500 mb-3">No items with a collection number at Shipped/Collected/SANDOWN in this period.</p>}
               <ExportBtn onClick={() => exportXlsx(
                 data.byDeliveryStatus.map(r => ({
                   "Status": r.status,
