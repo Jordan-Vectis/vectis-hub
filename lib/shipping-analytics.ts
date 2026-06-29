@@ -293,6 +293,12 @@ export async function computeShippingAnalytics(
   const bySize = sizesPresent.map((size) => ({
     size, items: sizeItems[size] ?? 0, revenue: sizeRevenue[size] ?? 0,
   }))
+  // Reconcile the size table with the headline: the un-docketed ("DISPATCH")
+  // parcels' estimated lots can't be split by size, so surface them as one row
+  // — now the size totals match "Items shipped" / the headline revenue.
+  if (estItemsUnlinked > 0 || estRevenueUnlinked > 0) {
+    bySize.push({ size: "Estimated (no docket)", items: Math.round(estItemsUnlinked), revenue: estRevenueUnlinked })
+  }
 
   // Monthly trend — every month that has parcels and/or revenue, chronological.
   const monthKeys = [...new Set([...Object.keys(monthParcels), ...Object.keys(monthRevenue)])].sort()

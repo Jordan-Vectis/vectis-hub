@@ -133,7 +133,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
   // ── Region table ──
   {
     ensureSpace(cur, 90)
-    sectionTitle(cur, "Parcels by Region")
+    sectionTitle(cur, "Parcels by Region", "Shipments by destination region. Rest of World is quote-only (no set rate), so it shows £0.")
     const cols: Col[] = [
       { title: "REGION",       x: MARGIN,        w: 200, align: "left"  },
       { title: "PARCELS",      x: MARGIN + 200,  w: 90,  align: "right" },
@@ -155,7 +155,8 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
   // ── Size table ──
   {
     ensureSpace(cur, 90)
-    sectionTitle(cur, "Items by size (lots, not parcels)")
+    sectionTitle(cur, "Items by size (lots, not parcels)", "The lots inside the parcels, by size band (rate sheet applied). 'Estimated (no docket)' = lots in parcels with no collection number, valued at the regional average — so this totals the headline.")
+    const sizeTotal = d.bySize.reduce((s, r) => s + r.items, 0)
     const cols: Col[] = [
       { title: "SIZE",         x: MARGIN,        w: 200, align: "left"  },
       { title: "ITEMS",        x: MARGIN + 200,  w: 90,  align: "right" },
@@ -167,7 +168,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
       ensureSpace(cur, 16, () => headerRow(cur, cols))
       cell(cur, r.size, cols[0])
       cell(cur, num(r.items), cols[1])
-      cell(cur, pct(r.items, d.meta.itemsWithSize), cols[2])
+      cell(cur, pct(r.items, sizeTotal), cols[2])
       cell(cur, money(r.revenue), cols[3])
       rowLine(cur)
     }
@@ -177,7 +178,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
   // ── Shipped vs Collected (standalone count by warehouse location) ──
   if (d.byDeliveryStatus.length > 0) {
     ensureSpace(cur, 80)
-    sectionTitle(cur, "Items by warehouse location (this period)")
+    sectionTitle(cur, "Items by warehouse location (this period)", "Where collection items physically are now — broader than 'items shipped' (includes collected, SANDOWN, etc.). COL items only; excludes ARCHIVE/QUERY and the last month.")
     const totalSC = d.byDeliveryStatus.reduce((s, r) => s + r.items, 0)
     const cols: Col[] = [
       { title: "STATUS", x: MARGIN,        w: 220, align: "left"  },
@@ -204,7 +205,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
   // ── Monthly trend ──
   {
     ensureSpace(cur, 90)
-    sectionTitle(cur, "Parcels by Month")
+    sectionTitle(cur, "Parcels by Month", "Parcels and the lots inside them, by the month they were shipped.")
     const cols: Col[] = [
       { title: "MONTH",        x: MARGIN,        w: 150, align: "left"  },
       { title: "PARCELS",      x: MARGIN + 150,  w: 90,  align: "right" },
@@ -226,7 +227,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
   // ── Country × Size grid ──
   {
     ensureSpace(cur, 110)
-    sectionTitle(cur, "Country breakdown")
+    sectionTitle(cur, "Country breakdown", "Per destination country: lots by size, parcels, and estimated revenue.")
     const sizes   = d.sizesPresent
     const nameW   = 150
     const revW    = 72
@@ -281,9 +282,13 @@ function ensureSpace(cur: Cursor, needed: number, onNewPage?: () => void) {
   if (onNewPage) onNewPage()
 }
 
-function sectionTitle(cur: Cursor, title: string) {
+function sectionTitle(cur: Cursor, title: string, subtitle?: string) {
   cur.page.drawText(safeAscii(title), { x: MARGIN, y: cur.y, size: 11, font: cur.fonts.helvB, color: BLACK })
-  cur.y -= 16
+  cur.y -= 13
+  if (subtitle) {
+    cur.page.drawText(safeAscii(subtitle), { x: MARGIN, y: cur.y, size: 7.5, font: cur.fonts.helv, color: GREY })
+    cur.y -= 11
+  }
 }
 
 function headerRow(cur: Cursor, cols: Col[], size = 8) {

@@ -1670,6 +1670,7 @@ function ShippingTab() {
           <SubTabs tabs={["By Country", "By Region", "By Month", "Items by Size", "Shipped / Collected", "Country × Size", "By City", "World Map", "UK Map"]} active={subTab} onChange={setSubTab} />
           {subTab === "By Country" && (
             <>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">Parcels (shipments) by destination country.</p>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 520 }}>
                 <table className="w-full text-sm">
                   <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">
@@ -1706,6 +1707,7 @@ function ShippingTab() {
           )}
           {subTab === "By Region" && (
             <>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">Parcels (shipments) grouped into UK / Europe / Rest of World. Rest of World is quote-only (no set rate), so it shows £0.</p>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase">
@@ -1746,6 +1748,7 @@ function ShippingTab() {
             const maxRev = Math.max(1, ...data.byMonth.map(m => m.revenue + m.estRevenue))
             return (
               <>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">Parcels and the lots inside them, by the month they were shipped.</p>
                 <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 560 }}>
                   <table className="w-full text-sm">
                     <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">
@@ -1785,8 +1788,11 @@ function ShippingTab() {
               </>
             )
           })()}
-          {subTab === "Items by Size" && (
+          {subTab === "Items by Size" && (() => {
+            const sizeTotal = data.bySize.reduce((s, r) => s + r.items, 0)
+            return (
             <>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">The individual lots inside the parcels, grouped by size band (the rate sheet prices each). <span className="font-medium">“Estimated (no docket)”</span> = lots in parcels with no collection number, valued at the regional average — so this table now totals the headline figures.</p>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase">
@@ -1802,7 +1808,7 @@ function ShippingTab() {
                       <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{r.size}</td>
                         <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{r.items.toLocaleString()}</td>
-                        <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-400">{data.meta.itemsWithSize ? ((r.items / data.meta.itemsWithSize) * 100).toFixed(1) : "—"}%</td>
+                        <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-400">{sizeTotal ? ((r.items / sizeTotal) * 100).toFixed(1) : "—"}%</td>
                         <td className="px-4 py-2 text-right text-cyan-700 dark:text-cyan-300">{money(r.revenue)}</td>
                       </tr>
                     ))}
@@ -1814,13 +1820,14 @@ function ShippingTab() {
                 data.bySize.map(r => ({
                   "Size": r.size,
                   "Items": r.items,
-                  "%": data.meta.itemsWithSize ? +((r.items / data.meta.itemsWithSize) * 100).toFixed(1) : 0,
+                  "%": sizeTotal ? +((r.items / sizeTotal) * 100).toFixed(1) : 0,
                   "Est. Revenue": +r.revenue.toFixed(2),
                 })),
                 "shipping_by_size"
               )} />
             </>
-          )}
+            )
+          })()}
           {subTab === "Shipped / Collected" && (() => {
             const totalSC = data.byDeliveryStatus.reduce((s, r) => s + r.items, 0)
             return (
@@ -1887,6 +1894,7 @@ Count of items that went into a collection (<span className="font-medium">have a
           })()}
           {subTab === "Country × Size" && (
             <>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">Per destination country: how many lots of each size, plus parcels and estimated revenue.</p>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 560 }}>
                 <table className="w-full text-sm">
                   <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">
@@ -1931,6 +1939,7 @@ Count of items that went into a collection (<span className="font-medium">have a
           )}
           {subTab === "By City" && (
             <>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">Parcels (shipments) by destination city.</p>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 520 }}>
                 <table className="w-full text-sm">
                   <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">
