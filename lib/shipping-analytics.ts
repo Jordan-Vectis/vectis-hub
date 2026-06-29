@@ -313,8 +313,10 @@ export async function computeShippingAnalytics(
   const periodFrom = new Date(from)
   const periodTo   = new Date(`${to}T23:59:59.999Z`)
   const dateWhere  = { gte: periodFrom, lte: periodTo }
-  const [shippedCount, collectedRows] = await Promise.all([
+  const [totalInPeriod, shippedCount, sandownCount, collectedRows] = await Promise.all([
+    prisma.warehouseItem.count({ where: { bcModifiedAt: dateWhere } }),
     prisma.warehouseItem.count({ where: { location: { equals: "Shipped", mode: "insensitive" }, bcModifiedAt: dateWhere } }),
+    prisma.warehouseItem.count({ where: { location: { equals: "SANDOWN", mode: "insensitive" }, bcModifiedAt: dateWhere } }),
     prisma.warehouseItem.findMany({
       where: { location: { equals: "Collected", mode: "insensitive" }, bcModifiedAt: dateWhere },
       select: { collectionNo: true, sizeClassification: true },
@@ -333,9 +335,14 @@ export async function computeShippingAnalytics(
   for (const sizes of Object.values(collectedGroups)) {
     for (const lot of parcelLotCharges("GB", sizes)) collectedRefund += lot.rate
   }
+  // Everything in the period that isn't Shipped/Collected/SANDOWN — incl. items
+  // still in warehouse aisles, archive, or with no location (per Jordan's choice).
+  const notScannedCount = Math.max(0, totalInPeriod - shippedCount - collectedCount - sandownCount)
   const byDeliveryStatus = [
-    { status: "Shipped",   items: shippedCount },
-    { status: "Collected", items: collectedCount },
+    { status: "Shipped",               items: shippedCount },
+    { status: "Collected",             items: collectedCount },
+    { status: "SANDOWN",               items: sandownCount },
+    { status: "Not scanned / unknown", items: notScannedCount },
   ].filter((s) => s.items > 0)
 
   const byCountrySize = [...perCountry.entries()]
