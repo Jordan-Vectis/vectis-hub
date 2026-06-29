@@ -4,7 +4,7 @@ import { redirect } from "next/navigation"
 import DepartmentForm from "@/app/(app)/admin/departments/department-form"
 import DeleteDepartmentButton from "@/app/(app)/admin/departments/delete-button"
 
-export default async function CrmSettingsPage() {
+export default async function DepartmentSettingsPage() {
   const session = await auth()
   if (!session || session.user.role !== "ADMIN") redirect("/submissions")
 
@@ -16,8 +16,8 @@ export default async function CrmSettingsPage() {
   return (
     <div className="p-6 max-w-3xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">CRM Settings</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Settings specific to the CRM</p>
+        <h1 className="text-2xl font-bold text-gray-900">Department Settings</h1>
+        <p className="text-sm text-gray-500 mt-0.5">Manage the departments used across the Hub</p>
       </div>
 
       <h2 className="text-base font-semibold text-gray-700 mb-3">Departments</h2>
