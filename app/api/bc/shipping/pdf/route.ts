@@ -262,7 +262,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
       "Estimated revenue (ex VAT): each parcel = one first-item charge (its dearest lot) + every other lot at its size's additional-item rate, per the Vectis UK / EU-zone rates.",
       `Rest of World is quote-only — ${num(d.meta.unratedParcels)} parcel(s) to countries not on the rate sheet are counted but priced at £0.`,
       `${num(d.meta.parcelsWithoutSize)} collection(s) had no size data and contribute nothing to revenue.`,
-      `${num(d.meta.unlinkedParcels)} parcel(s) have no collection docket in BC ("DISPATCH") — their items & revenue are roughly ESTIMATED at the regional average (~${money(d.meta.estRevenueUnlinked)} added; see "No docket"). Size & country breakdowns exclude these.`,
+      `${num(d.meta.unlinkedParcels)} parcel(s) have no collection docket in BC ("DISPATCH") — their items & revenue are roughly ESTIMATED at the regional average (~${money(d.meta.estRevenueUnlinked)} added, shown as the "Estimated (no docket)" row under Items by size). The country breakdown is actual-only and excludes these.`,
     ]
     for (const n of notes) {
       cur.page.drawText(safeAscii("- " + n), { x: MARGIN, y: cur.y, size: 7.5, font: fonts.helv, color: GREY })

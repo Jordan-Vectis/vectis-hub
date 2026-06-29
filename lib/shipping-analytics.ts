@@ -17,6 +17,14 @@
 import { bcPageWithNext } from "@/lib/bc"
 import { prisma } from "@/lib/prisma"
 import { parcelLotCharges, hasRate, regionOf, normalizeSize, PARCEL_SIZES, type Region } from "@/lib/shipping-rates"
+import { COUNTRY_ALIASES } from "@/lib/country-names"
+
+// Normalise a raw BC country value: uppercase, trim, and fold non-canonical
+// codes (e.g. "UK" → "GB") so the same place can't appear as two rows.
+function normCountry(raw: unknown): string {
+  const c = String(raw ?? "").toUpperCase().trim()
+  return (COUNTRY_ALIASES[c] ?? c) || "Unknown"
+}
 
 export type ShippingAnalytics = {
   from: string
@@ -145,7 +153,7 @@ export async function computeShippingAnalytics(
   const colSet = new Set<string>()
 
   for (const row of active) {
-    const country = (countryKey ? String(row[countryKey] ?? "") : "").toUpperCase().trim() || "Unknown"
+    const country = normCountry(countryKey ? row[countryKey] : "")
     const city    = (cityKey    ? String(row[cityKey]    ?? "") : "").trim() || "Unknown"
     const col     = (colKey     ? String(row[colKey]     ?? "") : "").trim()
     // YYYY-MM from the shipment date (BC dates are ISO-ish strings)
@@ -459,7 +467,7 @@ export async function computeShippingAnalytics(
     .sort((x, y) => y.parcels - x.parcels || y.revenue - x.revenue)
 
   const unratedParcels = active.filter((row) => {
-    const country = (countryKey ? String(row[countryKey] ?? "") : "").toUpperCase().trim() || "Unknown"
+    const country = normCountry(countryKey ? row[countryKey] : "")
     return !hasRate(country)
   }).length
 

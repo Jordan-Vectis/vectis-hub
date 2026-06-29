@@ -72,7 +72,49 @@ export const COUNTRY_NAMES: Record<string, string> = {
   UK: "United Kingdom",
   US: "United States",
   ZA: "South Africa",
+  // UK Crown Dependencies / territories
+  NI: "Northern Ireland",
+  GG: "Guernsey",
+  JE: "Jersey",
+  IM: "Isle of Man",
+  GI: "Gibraltar",
+  // Rest of geographic Europe not already listed
+  AL: "Albania",
+  AX: "Aland Islands",
+  BA: "Bosnia and Herzegovina",
+  BY: "Belarus",
+  FO: "Faroe Islands",
+  GL: "Greenland",
+  MD: "Moldova",
+  ME: "Montenegro",
+  MK: "North Macedonia",
+  SM: "San Marino",
+  VA: "Vatican City",
+  // Common Rest-of-World destinations seen in BC data
+  ID: "Indonesia",
+  OM: "Oman",
+  GQ: "Equatorial Guinea",
+  NG: "Nigeria",
+  PH: "Philippines",
+  VN: "Vietnam",
+  EG: "Egypt",
+  KE: "Kenya",
+  PK: "Pakistan",
+  QA: "Qatar",
+  KW: "Kuwait",
+  BH: "Bahrain",
+  LK: "Sri Lanka",
+  CL: "Chile",
+  CO: "Colombia",
+  MA: "Morocco",
+  JO: "Jordan",
+  LB: "Lebanon",
 }
+
+// BC sometimes emits a non-canonical code for the same place. Map it to the
+// canonical alpha-2 so the report doesn't show a duplicate country row (e.g.
+// "United Kingdom (GB)" AND "United Kingdom (UK)").
+export const COUNTRY_ALIASES: Record<string, string> = { UK: "GB" }
 
 // Reverse map: lowercase full name → alpha-2 (for BC data that sends full names)
 export const NAME_TO_ALPHA2: Record<string, string> = Object.fromEntries(
