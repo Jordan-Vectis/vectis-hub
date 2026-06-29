@@ -23,9 +23,9 @@ export type ShippingAnalytics = {
   to:   string
   byCountry: { country: string; count: number }[]
   byCity:    { city: string; country: string; count: number }[]
-  byRegion:  { region: Region; parcels: number; items: number; revenue: number }[]
+  byRegion:  { region: Region; parcels: number; items: number; revenue: number; estItems: number; estRevenue: number }[]
   bySize:    { size: string; items: number; revenue: number }[]
-  byMonth:   { month: string; parcels: number; items: number; revenue: number; unlinked: number }[]
+  byMonth:   { month: string; parcels: number; items: number; revenue: number; unlinked: number; estItems: number; estRevenue: number }[]
   byDeliveryStatus: { status: string; items: number; revenue: number }[]  // Shipped / Collected / Other (display only)
   byCountrySize: {
     country: string
@@ -49,6 +49,8 @@ export type ShippingAnalytics = {
     unratedParcels:     number      // shipments to countries with no rate sheet entry
     unratedItems:       number
     unlinkedParcels:    number      // shipments with no collection docket (e.g. "DISPATCH") — can't be joined to lots
+    estItemsUnlinked:   number      // ROUGH estimate of items for unlinked parcels (region average)
+    estRevenueUnlinked: number      // ROUGH estimate of £ for unlinked parcels (region average)
   }
 }
 
@@ -85,6 +87,7 @@ export async function computeShippingAnalytics(
       total: 0, countries: 0, cities: 0, itemsWithSize: 0, parcelsWithSize: 0,
       parcelsWithoutSize: 0, sizeDataAvailable: false, estRevenueTotal: 0,
       unratedParcels: 0, unratedItems: 0, unlinkedParcels: 0,
+      estItemsUnlinked: 0, estRevenueUnlinked: 0,
     },
   })
 
@@ -126,6 +129,7 @@ export async function computeShippingAnalytics(
   const colToMonth:    Record<string, string> = {}
   const monthParcels:  Record<string, number> = {}
   const monthUnlinked: Record<string, number> = {}
+  const unlinkedMR:    Record<string, number> = {}   // "month|region" → unlinked-parcel count (for the rough estimate)
   const colSet = new Set<string>()
 
   for (const row of active) {
@@ -151,6 +155,8 @@ export async function computeShippingAnalytics(
       if (!colToMonth[col])   colToMonth[col]   = month
     } else {
       monthUnlinked[month] = (monthUnlinked[month] ?? 0) + 1
+      const k = `${month}|${regionOf(country)}`
+      unlinkedMR[k] = (unlinkedMR[k] ?? 0) + 1
     }
   }
 
@@ -208,6 +214,7 @@ export async function computeShippingAnalytics(
   const monthRevenue: Record<string, number> = {}
   const statusItems:   Record<string, number> = {}
   const statusRevenue: Record<string, number> = {}
+  const linkedCollByRegion: Record<string, number> = {}  // linked collections per region (for the rough-estimate average)
   let itemsWithSize = 0
   let parcelsWithSize = 0
   let estRevenueTotal = 0
@@ -225,6 +232,7 @@ export async function computeShippingAnalytics(
     const country = colToCountry[col] ?? "Unknown"
     const month   = colToMonth[col] ?? "Unknown"
     const agg = ensure(country)
+    linkedCollByRegion[agg.region] = (linkedCollByRegion[agg.region] ?? 0) + 1
     // parcelLotCharges returns one entry per lot in the SAME order as the sizes
     // passed in, so charges[i] lines up with lots[i] (its delivery status).
     const charges = parcelLotCharges(country, lots.map((l) => l.size))
@@ -254,9 +262,53 @@ export async function computeShippingAnalytics(
     r.revenue += a.revenue
     regionAgg.set(a.region, r)
   }
+
+  // ── Rough estimate for "unlinked" (DISPATCH) parcels ──
+  // They have a country (→ region) but no collection, so their lots aren't
+  // visible. Value each at the AVERAGE items/£ per LINKED parcel in the same
+  // region, so a UK unlinked parcel is valued like a UK one, Europe like Europe.
+  // Kept SEPARATE from the actual figures (estItems/estRevenue) so the UI can
+  // show a clearly-labelled "rough total" without faking the real numbers.
+  const regionAvgItems: Record<string, number> = {}
+  const regionAvgRev:   Record<string, number> = {}
+  for (const [region, agg] of regionAgg) {
+    const n = linkedCollByRegion[region] ?? 0
+    regionAvgItems[region] = n > 0 ? agg.items   / n : 0
+    regionAvgRev[region]   = n > 0 ? agg.revenue / n : 0
+  }
+  const estItemsByMonth:  Record<string, number> = {}
+  const estRevByMonth:    Record<string, number> = {}
+  const estItemsByRegion: Record<string, number> = {}
+  const estRevByRegion:   Record<string, number> = {}
+  let estItemsUnlinked = 0
+  let estRevenueUnlinked = 0
+  for (const [key, count] of Object.entries(unlinkedMR)) {
+    const sep    = key.lastIndexOf("|")
+    const month  = key.slice(0, sep)
+    const region = key.slice(sep + 1)
+    const ei = count * (regionAvgItems[region] ?? 0)
+    const er = count * (regionAvgRev[region]   ?? 0)
+    estItemsByMonth[month]   = (estItemsByMonth[month]   ?? 0) + ei
+    estRevByMonth[month]     = (estRevByMonth[month]     ?? 0) + er
+    estItemsByRegion[region] = (estItemsByRegion[region] ?? 0) + ei
+    estRevByRegion[region]   = (estRevByRegion[region]   ?? 0) + er
+    estItemsUnlinked   += ei
+    estRevenueUnlinked += er
+  }
+
   const byRegion = (["UK", "Europe", "Rest of World"] as Region[])
-    .map((region) => ({ region, ...(regionAgg.get(region) ?? { parcels: 0, items: 0, revenue: 0 }) }))
-    .filter((r) => r.parcels > 0 || r.items > 0)
+    .map((region) => {
+      const a = regionAgg.get(region) ?? { parcels: 0, items: 0, revenue: 0 }
+      return {
+        region,
+        parcels:    a.parcels,
+        items:      a.items,
+        revenue:    a.revenue,
+        estItems:   Math.round(estItemsByRegion[region] ?? 0),
+        estRevenue: estRevByRegion[region] ?? 0,
+      }
+    })
+    .filter((r) => r.parcels > 0 || r.items > 0 || r.estItems > 0)
 
   const sizesPresent = orderSizes(Object.keys(sizeItems))
   const bySize = sizesPresent.map((size) => ({
@@ -267,10 +319,12 @@ export async function computeShippingAnalytics(
   const monthKeys = [...new Set([...Object.keys(monthParcels), ...Object.keys(monthRevenue)])].sort()
   const byMonth = monthKeys.map((month) => ({
     month,
-    parcels:  monthParcels[month]  ?? 0,
-    items:    monthItems[month]    ?? 0,
-    revenue:  monthRevenue[month]  ?? 0,
-    unlinked: monthUnlinked[month] ?? 0,
+    parcels:    monthParcels[month]  ?? 0,
+    items:      monthItems[month]    ?? 0,
+    revenue:    monthRevenue[month]  ?? 0,
+    unlinked:   monthUnlinked[month] ?? 0,
+    estItems:   Math.round(estItemsByMonth[month] ?? 0),
+    estRevenue: estRevByMonth[month] ?? 0,
   }))
 
   // Delivery-status split (display only — revenue is NOT filtered by this yet).
@@ -304,6 +358,8 @@ export async function computeShippingAnalytics(
       unratedParcels,
       unratedItems,
       unlinkedParcels: Object.values(monthUnlinked).reduce((a, b) => a + b, 0),
+      estItemsUnlinked: Math.round(estItemsUnlinked),
+      estRevenueUnlinked,
     },
   }
 }

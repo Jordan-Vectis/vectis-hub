@@ -43,9 +43,9 @@ type Region = "UK" | "Europe" | "Rest of World"
 type ShipData = {
   byCountry: { country: string; count: number }[]
   byCity:    { city: string; country: string; count: number }[]
-  byRegion:  { region: Region; parcels: number; items: number; revenue: number }[]
+  byRegion:  { region: Region; parcels: number; items: number; revenue: number; estItems: number; estRevenue: number }[]
   bySize:    { size: string; items: number; revenue: number }[]
-  byMonth:   { month: string; parcels: number; items: number; revenue: number; unlinked: number }[]
+  byMonth:   { month: string; parcels: number; items: number; revenue: number; unlinked: number; estItems: number; estRevenue: number }[]
   byDeliveryStatus: { status: string; items: number; revenue: number }[]
   byCountrySize: {
     country: string; region: Region; parcels: number; items: number
@@ -57,6 +57,7 @@ type ShipData = {
     itemsWithSize: number; parcelsWithSize: number; parcelsWithoutSize: number
     sizeDataAvailable: boolean; estRevenueTotal: number
     unratedParcels: number; unratedItems: number; unlinkedParcels: number
+    estItemsUnlinked: number; estRevenueUnlinked: number
   }
 }
 
@@ -1640,7 +1641,7 @@ function ShippingTab() {
           ) : null}
           {data.meta.unlinkedParcels > 0 && (
             <div className="mb-4 text-sm rounded-lg border border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-300 px-4 py-3">
-              <span className="font-medium">{data.meta.unlinkedParcels.toLocaleString()}</span> parcels have no collection docket in BC (their document number is a placeholder like “DISPATCH”, not a COL number), so their items &amp; revenue can’t be counted — see the “No docket” column under <span className="font-medium">By Month</span>. This is a BC data gap (mostly older months), not a report error; parcel counts are still complete.
+              <span className="font-medium">{data.meta.unlinkedParcels.toLocaleString()}</span> parcels have no collection docket in BC (placeholder “DISPATCH” instead of a COL number), so their lots can’t be seen. Their items &amp; revenue are <span className="font-medium">roughly estimated</span> at the average per parcel for their region (≈{money(data.meta.estRevenueUnlinked)} / {data.meta.estItemsUnlinked.toLocaleString()} items added), so totals are approximate for affected months (mostly older). The “No docket” column under <span className="font-medium">By Month</span> shows how many per month; the size &amp; country×size breakdowns exclude these.
             </div>
           )}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
@@ -1650,7 +1651,8 @@ function ShippingTab() {
             </div>
             <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
               <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Est. Shipping Revenue (ex VAT)</p>
-              <p className="text-xl font-bold text-cyan-700 dark:text-cyan-300">{money(data.meta.estRevenueTotal)}</p>
+              <p className="text-xl font-bold text-cyan-700 dark:text-cyan-300">{money(data.meta.estRevenueTotal + data.meta.estRevenueUnlinked)}</p>
+              {data.meta.estRevenueUnlinked > 0 && <p className="text-[10px] text-gray-500 mt-0.5">incl. ~{money(data.meta.estRevenueUnlinked)} estimated</p>}
             </div>
             <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
               <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Countries</p>
@@ -1658,10 +1660,11 @@ function ShippingTab() {
             </div>
             <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
               <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Items Shipped</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">{data.meta.itemsWithSize.toLocaleString()}</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-white">{(data.meta.itemsWithSize + data.meta.estItemsUnlinked).toLocaleString()}</p>
+              {data.meta.estItemsUnlinked > 0 && <p className="text-[10px] text-gray-500 mt-0.5">incl. ~{data.meta.estItemsUnlinked.toLocaleString()} estimated</p>}
             </div>
           </div>
-          <MetaBar text={`${from} — ${to}  ·  ${data.meta.total.toLocaleString()} parcels  ·  ${money(data.meta.estRevenueTotal)} est. revenue`} />
+          <MetaBar text={`${from} — ${to}  ·  ${data.meta.total.toLocaleString()} parcels  ·  ${money(data.meta.estRevenueTotal + data.meta.estRevenueUnlinked)} est. revenue`} />
           <SubTabs tabs={["By Country", "By Region", "By Month", "By Size", "Shipped / Collected", "Country × Size", "By City", "World Map", "UK Map"]} active={subTab} onChange={setSubTab} />
           {subTab === "By Country" && (
             <>
@@ -1718,8 +1721,8 @@ function ShippingTab() {
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{r.region}</td>
                         <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{r.parcels.toLocaleString()}</td>
                         <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-400">{data.meta.total ? ((r.parcels / data.meta.total) * 100).toFixed(1) : "—"}%</td>
-                        <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{r.items.toLocaleString()}</td>
-                        <td className="px-4 py-2 text-right text-cyan-700 dark:text-cyan-300">{money(r.revenue)}</td>
+                        <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{(r.items + r.estItems).toLocaleString()}</td>
+                        <td className="px-4 py-2 text-right text-cyan-700 dark:text-cyan-300">{money(r.revenue + r.estRevenue)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1730,15 +1733,15 @@ function ShippingTab() {
                   "Region": r.region,
                   "Parcels": r.parcels,
                   "%": data.meta.total ? +((r.parcels / data.meta.total) * 100).toFixed(1) : 0,
-                  "Items": r.items,
-                  "Est. Revenue": +r.revenue.toFixed(2),
+                  "Items": r.items + r.estItems,
+                  "Est. Revenue": +(r.revenue + r.estRevenue).toFixed(2),
                 })),
                 "shipping_by_region"
               )} />
             </>
           )}
           {subTab === "By Month" && (() => {
-            const maxRev = Math.max(1, ...data.byMonth.map(m => m.revenue))
+            const maxRev = Math.max(1, ...data.byMonth.map(m => m.revenue + m.estRevenue))
             return (
               <>
                 <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 560 }}>
@@ -1758,11 +1761,11 @@ function ShippingTab() {
                         <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
                           <td className="px-4 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">{monthLabel(m.month)}</td>
                           <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{m.parcels.toLocaleString()}</td>
-                          <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{m.items.toLocaleString()}</td>
-                          <td className="px-4 py-2 text-right text-cyan-700 dark:text-cyan-300">{money(m.revenue)}</td>
-                          <td className="px-4 py-2 text-right text-orange-500" title="Parcels with no collection docket (e.g. DISPATCH) — items not counted">{m.unlinked ? m.unlinked.toLocaleString() : "—"}</td>
+                          <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{(m.items + m.estItems).toLocaleString()}</td>
+                          <td className="px-4 py-2 text-right text-cyan-700 dark:text-cyan-300">{money(m.revenue + m.estRevenue)}</td>
+                          <td className="px-4 py-2 text-right text-orange-500" title="Parcels with no collection docket (e.g. DISPATCH) — items/£ estimated at the regional average">{m.unlinked ? m.unlinked.toLocaleString() : "—"}</td>
                           <td className="px-4 py-2">
-                            <div className="h-3 rounded bg-cyan-500/70" style={{ width: `${Math.max(2, (m.revenue / maxRev) * 100)}%` }} title={money(m.revenue)} />
+                            <div className="h-3 rounded bg-cyan-500/70" style={{ width: `${Math.max(2, ((m.revenue + m.estRevenue) / maxRev) * 100)}%` }} title={money(m.revenue + m.estRevenue)} />
                           </td>
                         </tr>
                       ))}
@@ -1774,8 +1777,8 @@ function ShippingTab() {
                   data.byMonth.map(m => ({
                     "Month": m.month,
                     "Parcels": m.parcels,
-                    "Items": m.items,
-                    "Est. Revenue": +m.revenue.toFixed(2),
+                    "Items": m.items + m.estItems,
+                    "Est. Revenue": +(m.revenue + m.estRevenue).toFixed(2),
                     "No docket (unlinked)": m.unlinked,
                   })),
                   "shipping_by_month"

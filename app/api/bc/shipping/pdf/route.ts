@@ -110,9 +110,9 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
   // ── Summary stat strip ──
   const stats: [string, string][] = [
     ["Parcels", num(d.meta.total)],
-    ["Est. revenue (ex VAT)", money(d.meta.estRevenueTotal)],
+    ["Est. revenue (ex VAT)", money(d.meta.estRevenueTotal + d.meta.estRevenueUnlinked)],
     ["Countries", num(d.meta.countries)],
-    ["Items shipped", num(d.meta.itemsWithSize)],
+    ["Items shipped", num(d.meta.itemsWithSize + d.meta.estItemsUnlinked)],
   ]
   const sw = (RIGHT - MARGIN) / stats.length
   stats.forEach(([label, val], i) => {
@@ -142,7 +142,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
       cell(cur, r.region, cols[0])
       cell(cur, num(r.parcels), cols[1])
       cell(cur, pct(r.parcels, d.meta.total), cols[2])
-      cell(cur, money(r.revenue), cols[3])
+      cell(cur, money(r.revenue + r.estRevenue), cols[3])
       rowLine(cur)
     }
     cur.y -= 10
@@ -208,9 +208,9 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
       ensureSpace(cur, 16, () => headerRow(cur, cols))
       cell(cur, monthLabel(m.month), cols[0])
       cell(cur, num(m.parcels), cols[1])
-      cell(cur, num(m.items), cols[2])
+      cell(cur, num(m.items + m.estItems), cols[2])
       cell(cur, m.unlinked ? num(m.unlinked) : "-", cols[3])
-      cell(cur, money(m.revenue), cols[4])
+      cell(cur, money(m.revenue + m.estRevenue), cols[4])
       rowLine(cur)
     }
     cur.y -= 10
@@ -254,7 +254,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
       "Estimated revenue (ex VAT): each parcel = one first-item charge (its dearest lot) + every other lot at its size's additional-item rate, per the Vectis UK / EU-zone rates.",
       `Rest of World is quote-only — ${num(d.meta.unratedParcels)} parcel(s) to countries not on the rate sheet are counted but priced at £0.`,
       `${num(d.meta.parcelsWithoutSize)} collection(s) had no size data and contribute nothing to revenue.`,
-      `${num(d.meta.unlinkedParcels)} parcel(s) have no collection docket in BC ("DISPATCH"), so their items & revenue can't be counted (mostly older months — see "No docket").`,
+      `${num(d.meta.unlinkedParcels)} parcel(s) have no collection docket in BC ("DISPATCH") — their items & revenue are roughly ESTIMATED at the regional average (~${money(d.meta.estRevenueUnlinked)} added; see "No docket"). Size & country breakdowns exclude these.`,
     ]
     for (const n of notes) {
       cur.page.drawText(safeAscii("- " + n), { x: MARGIN, y: cur.y, size: 7.5, font: fonts.helv, color: GREY })
