@@ -39,33 +39,58 @@ type WhData = {
   meta:         { total: number; openTotes: number; categoryCount: number; largestCategory: string }
 }
 
+type Region = "UK" | "Europe" | "Rest of World"
 type ShipData = {
   byCountry: { country: string; count: number }[]
   byCity:    { city: string; country: string; count: number }[]
-  meta:      { total: number; countries: number; cities: number }
+  byRegion:  { region: Region; parcels: number; items: number; revenue: number; estItems: number; estRevenue: number }[]
+  bySize:    { size: string; items: number; revenue: number }[]
+  byMonth:   { month: string; parcels: number; items: number; revenue: number; unlinked: number; estItems: number; estRevenue: number }[]
+  byDeliveryStatus: { status: string; items: number }[]
+  notScannedLocations: { location: string; items: number }[]
+  sizeByDisposition: { size: string; all: number; shipped: number; collected: number }[]
+  byCountrySize: {
+    country: string; region: Region; parcels: number; items: number
+    revenue: number; rated: boolean; sizes: Record<string, number>
+  }[]
+  sizesPresent: string[]
+  meta: {
+    total: number; countries: number; cities: number
+    itemsWithSize: number; parcelsWithSize: number; parcelsWithoutSize: number
+    sizeDataAvailable: boolean; estRevenueTotal: number
+    unratedParcels: number; unratedItems: number; unlinkedParcels: number
+    estItemsUnlinked: number; estRevenueUnlinked: number; collectedRefund: number
+    notScannedExcludesLastMonth: boolean
+  }
 }
 
 type Report = "cataloguing" | "packing" | "warehouse" | "explorer" | "shipping"
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function today()      { return new Date().toISOString().split("T")[0] }
+// Format a Date from its LOCAL calendar fields. Do NOT use toISOString() here —
+// it converts to UTC, so under BST (UTC+1) local midnight becomes the previous
+// day and every preset shifts back a day (e.g. "This month" -> last month).
+function fmt(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+function today()      { return fmt(new Date()) }
 function daysAgo(n: number) {
-  const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().split("T")[0]
+  const d = new Date(); d.setDate(d.getDate() - n); return fmt(d)
 }
 function startOfMonth() {
   const d = new Date()
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split("T")[0]
+  return fmt(new Date(d.getFullYear(), d.getMonth(), 1))
 }
-function startOfYear() { return new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0] }
+function startOfYear() { return fmt(new Date(new Date().getFullYear(), 0, 1)) }
 function last12Months() {
-  const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d.toISOString().split("T")[0]
+  const d = new Date(); d.setFullYear(d.getFullYear() - 1); return fmt(d)
 }
 function lastMonthRange(): [string, string] {
   const d = new Date()
   const end   = new Date(d.getFullYear(), d.getMonth(), 0)
   const start = new Date(end.getFullYear(), end.getMonth(), 1)
-  return [start.toISOString().split("T")[0], end.toISOString().split("T")[0]]
+  return [fmt(start), fmt(end)]
 }
 function exportXlsx(rows: object[], filename: string) {
   const ws = XLSX.utils.json_to_sheet(rows)
@@ -1586,39 +1611,83 @@ function ShippingTab() {
 
   function handleDateChange(f: string, t: string) { setFrom(f); setTo(t) }
 
+  const money = (n: number) =>
+    "£" + (n || 0).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const monthLabel = (m: string) => {
+    const mm = /^(\d{4})-(\d{2})$/.exec(m)
+    return mm ? new Date(+mm[1], +mm[2] - 1, 1).toLocaleString("en-GB", { month: "short", year: "numeric" }) : m
+  }
+
   return (
     <div>
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Shipping Report</h2>
+      <div className="flex items-center justify-between mb-4 gap-3">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Shipping Report</h2>
+        <a
+          href={`/api/bc/shipping/pdf?from=${from}&to=${to}`}
+          target="_blank" rel="noreferrer"
+          className="inline-flex items-center gap-2 bg-cyan-700 hover:bg-cyan-600 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition-colors flex-shrink-0"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Download PDF
+        </a>
+      </div>
       <DateRange from={from} to={to} onChange={handleDateChange} onPreset={handleDateChange} />
       {!loading && <LoadBtn loading={loading} onClick={() => load(from, to)} />}
       {loading && <p className="text-xs text-gray-600 dark:text-gray-500 mb-5">Loading…</p>}
       {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
       {data && (
         <div className={loading ? "opacity-40 pointer-events-none transition-opacity" : "transition-opacity"}>
-          <div className="grid grid-cols-3 gap-3 mb-4">
+          {!data.meta.sizeDataAvailable ? (
+            <div className="mb-4 text-sm rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 px-4 py-3">
+              Parcel size &amp; estimated revenue need a one-time data refresh. Go to <span className="font-medium">BC Warehouse → Data Sync</span> and run a full receipt-lines sync, then reload this report.
+            </div>
+          ) : data.meta.parcelsWithoutSize > Math.max(20, data.meta.total * 0.03) ? (
+            <div className="mb-4 text-sm rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 px-4 py-3">
+              <span className="font-medium">{data.meta.parcelsWithoutSize.toLocaleString()}</span> of {data.meta.total.toLocaleString()} parcels have no matching lot data locally, so their items &amp; revenue are missing here. This usually means the receipt-lines sync didn’t finish — run a <span className="font-medium">full</span> re-sync in <span className="font-medium">BC Warehouse → Data Sync</span> (keep the tab open until it completes), then reload.
+            </div>
+          ) : null}
+          {data.meta.unlinkedParcels > 0 && (
+            <div className="mb-4 text-sm rounded-lg border border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-300 px-4 py-3">
+              <span className="font-medium">{data.meta.unlinkedParcels.toLocaleString()}</span> parcels have no collection docket in BC (placeholder “DISPATCH” instead of a COL number), so their lots can’t be seen. Their items &amp; revenue are <span className="font-medium">roughly estimated</span> at the average per parcel for their region (≈{money(data.meta.estRevenueUnlinked)} / {data.meta.estItemsUnlinked.toLocaleString()} items added), so totals are approximate for affected months (mostly older, mainly mid-2025). The size &amp; country×size breakdowns exclude these.
+            </div>
+          )}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
-              <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Total Shipments</p>
+              <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Parcels</p>
               <p className="text-xl font-bold text-gray-900 dark:text-white">{data.meta.total.toLocaleString()}</p>
+            </div>
+            <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
+              <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Est. Shipping Revenue (ex VAT)</p>
+              <p className="text-xl font-bold text-cyan-700 dark:text-cyan-300">{money(data.meta.estRevenueTotal + data.meta.estRevenueUnlinked)}</p>
+              {data.meta.estRevenueUnlinked > 0 && <p className="text-[10px] text-gray-500 mt-0.5">incl. ~{money(data.meta.estRevenueUnlinked)} estimated</p>}
             </div>
             <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
               <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Countries</p>
               <p className="text-xl font-bold text-gray-900 dark:text-white">{data.meta.countries.toLocaleString()}</p>
             </div>
             <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
-              <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Cities</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">{data.meta.cities.toLocaleString()}</p>
+              <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Items Shipped</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-white">{(data.meta.itemsWithSize + data.meta.estItemsUnlinked).toLocaleString()}</p>
+              {data.meta.estItemsUnlinked > 0 && <p className="text-[10px] text-gray-500 mt-0.5">incl. ~{data.meta.estItemsUnlinked.toLocaleString()} estimated</p>}
             </div>
           </div>
-          <MetaBar text={`${from} — ${to}  ·  ${data.meta.total.toLocaleString()} shipments`} />
-          <SubTabs tabs={["By Country", "By City", "World Map", "UK Map"]} active={subTab} onChange={setSubTab} />
+          <p className="text-xs text-gray-500 dark:text-gray-500 mb-2">A parcel is one shipment. Items are the things inside it — a parcel can hold several, so there are more items than parcels.</p>
+          {data.meta.collectedRefund > 0 && (
+            <p className="text-xs text-gray-500 dark:text-gray-500 mb-2">Shipping earned: <span className="font-medium text-cyan-700 dark:text-cyan-300">{money(data.meta.estRevenueTotal + data.meta.estRevenueUnlinked)}</span> (posted parcels only — collected items aren&apos;t included). We&apos;d have earned about <span className="font-medium">{money(data.meta.collectedRefund)}</span> more if the items collected in person had been posted instead.</p>
+          )}
+          <MetaBar text={`${from} — ${to}  ·  ${data.meta.total.toLocaleString()} parcels  ·  ${money(data.meta.estRevenueTotal + data.meta.estRevenueUnlinked)} est. revenue`} />
+          <SubTabs tabs={["By Country", "By Region", "By Month", "Items by Size", "Shipped / Collected", "Country × Size", "By City", "World Map", "UK Map"]} active={subTab} onChange={setSubTab} />
           {subTab === "By Country" && (
             <>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">How many parcels we sent to each country.</p>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 520 }}>
                 <table className="w-full text-sm">
                   <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">
                     <tr>
                       <th className="px-4 py-2 text-left">Country</th>
-                      <th className="px-4 py-2 text-right">Shipments</th>
+                      <th className="px-4 py-2 text-right">Parcels</th>
                       <th className="px-4 py-2 text-right">%</th>
                     </tr>
                   </thead>
@@ -1640,22 +1709,302 @@ function ShippingTab() {
               <ExportBtn onClick={() => exportXlsx(
                 data.byCountry.map(r => ({
                   "Country": COUNTRY_NAMES[r.country] ? `${COUNTRY_NAMES[r.country]} (${r.country})` : r.country,
-                  "Shipments": r.count,
+                  "Parcels": r.count,
                   "%": data.meta.total ? +((r.count / data.meta.total) * 100).toFixed(1) : 0,
                 })),
                 "shipping_by_country"
               )} />
             </>
           )}
+          {subTab === "By Region" && (
+            <>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">How many parcels went to the UK, Europe and the rest of the world. Rest of World has no set price, so it shows £0.</p>
+              <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Region</th>
+                      <th className="px-4 py-2 text-right">Parcels</th>
+                      <th className="px-4 py-2 text-right">%</th>
+                      <th className="px-4 py-2 text-right">Items</th>
+                      <th className="px-4 py-2 text-right">Est. Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                    {data.byRegion.map((r, i) => (
+                      <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
+                        <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{r.region}</td>
+                        <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{r.parcels.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-400">{data.meta.total ? ((r.parcels / data.meta.total) * 100).toFixed(1) : "—"}%</td>
+                        <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{(r.items + r.estItems).toLocaleString()}</td>
+                        <td className="px-4 py-2 text-right text-cyan-700 dark:text-cyan-300">{money(r.revenue + r.estRevenue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <ExportBtn onClick={() => exportXlsx(
+                data.byRegion.map(r => ({
+                  "Region": r.region,
+                  "Parcels": r.parcels,
+                  "%": data.meta.total ? +((r.parcels / data.meta.total) * 100).toFixed(1) : 0,
+                  "Items": r.items + r.estItems,
+                  "Est. Revenue": +(r.revenue + r.estRevenue).toFixed(2),
+                })),
+                "shipping_by_region"
+              )} />
+            </>
+          )}
+          {subTab === "By Month" && (() => {
+            const maxRev = Math.max(1, ...data.byMonth.map(m => m.revenue + m.estRevenue))
+            return (
+              <>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">How many parcels and items we sent each month.</p>
+                <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 560 }}>
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">
+                      <tr>
+                        <th className="px-4 py-2 text-left">Month</th>
+                        <th className="px-4 py-2 text-right">Parcels</th>
+                        <th className="px-4 py-2 text-right">Items</th>
+                        <th className="px-4 py-2 text-right">Est. Revenue</th>
+                        <th className="px-4 py-2 text-left" style={{ width: "34%" }}>Revenue trend</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                      {data.byMonth.map((m, i) => (
+                        <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
+                          <td className="px-4 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">{monthLabel(m.month)}</td>
+                          <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{m.parcels.toLocaleString()}</td>
+                          <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{(m.items + m.estItems).toLocaleString()}</td>
+                          <td className="px-4 py-2 text-right text-cyan-700 dark:text-cyan-300">{money(m.revenue + m.estRevenue)}</td>
+                          <td className="px-4 py-2">
+                            <div className="h-3 rounded bg-cyan-500/70" style={{ width: `${Math.max(2, ((m.revenue + m.estRevenue) / maxRev) * 100)}%` }} title={money(m.revenue + m.estRevenue)} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {data.byMonth.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-500 mb-3">No shipments in this period.</p>}
+                <ExportBtn onClick={() => exportXlsx(
+                  data.byMonth.map(m => ({
+                    "Month": m.month,
+                    "Parcels": m.parcels,
+                    "Items": m.items + m.estItems,
+                    "Est. Revenue": +(m.revenue + m.estRevenue).toFixed(2),
+                  })),
+                  "shipping_by_month"
+                )} />
+              </>
+            )
+          })()}
+          {subTab === "Items by Size" && (() => {
+            const sizeTotal = data.bySize.reduce((s, r) => s + r.items, 0)
+            return (
+            <>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">How many items of each size we sent, and the shipping that earns.</p>
+              <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Size</th>
+                      <th className="px-4 py-2 text-right">Items</th>
+                      <th className="px-4 py-2 text-right">%</th>
+                      <th className="px-4 py-2 text-right">Est. Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                    {data.bySize.map((r, i) => (
+                      <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
+                        <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{r.size}</td>
+                        <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{r.items.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-400">{sizeTotal ? ((r.items / sizeTotal) * 100).toFixed(1) : "—"}%</td>
+                        <td className="px-4 py-2 text-right text-cyan-700 dark:text-cyan-300">{money(r.revenue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {data.meta.estItemsUnlinked > 0 && (
+                <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">Plus about <span className="font-medium">{data.meta.estItemsUnlinked.toLocaleString()}</span> more items in parcels with no collection number — size unknown, so estimated at about <span className="font-medium">{money(data.meta.estRevenueUnlinked)}</span>. (Real sizes above + this estimate = the headline totals.)</p>
+              )}
+              {data.bySize.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-500 mb-3">No parcel-size data for this period — run a full receipt-lines sync.</p>}
+              <ExportBtn onClick={() => exportXlsx(
+                [
+                  ...data.bySize.map(r => ({
+                    "Size": r.size,
+                    "Items": r.items,
+                    "%": sizeTotal ? +((r.items / sizeTotal) * 100).toFixed(1) : 0,
+                    "Est. Revenue": +r.revenue.toFixed(2),
+                  })),
+                  ...(data.meta.estItemsUnlinked > 0 ? [{
+                    "Size": "Estimated (no collection number)",
+                    "Items": data.meta.estItemsUnlinked,
+                    "%": 0,
+                    "Est. Revenue": +data.meta.estRevenueUnlinked.toFixed(2),
+                  }] : []),
+                ],
+                "shipping_by_size"
+              )} />
+            </>
+            )
+          })()}
+          {subTab === "Shipped / Collected" && (() => {
+            const totalSC = data.byDeliveryStatus.reduce((s, r) => s + r.items, 0)
+            return (
+            <>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">
+Where items are now in the warehouse — <span className="font-medium">Shipped</span>, <span className="font-medium">Collected</span> (picked up in person), <span className="font-medium">SANDOWN</span>, or <span className="font-medium">Not scanned / unknown</span> (anywhere else — expand it below to see where). This is a separate count from the parcels and revenue above. The <span className="font-medium">Collected</span> figure shows how many were picked up rather than shipped.
+              </p>
+              <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Status</th>
+                      <th className="px-4 py-2 text-right">Items</th>
+                      <th className="px-4 py-2 text-right">%</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                    {data.byDeliveryStatus.map((r, i) => (
+                      <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
+                        <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{r.status}</td>
+                        <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{r.items.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-400">{totalSC ? ((r.items / totalSC) * 100).toFixed(1) : "—"}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {data.meta.notScannedExcludesLastMonth && (
+                <p className="text-xs text-gray-500 dark:text-gray-500 mb-3"><span className="font-medium">Not scanned / unknown</span> leaves out the most recent month — items from recent auctions may not have been shipped or collected yet — so that row covers a slightly shorter period than the others and its % is approximate.</p>
+              )}
+              {data.meta.collectedRefund > 0 && (
+                <div className="mb-3 rounded-lg border border-cyan-500/30 bg-cyan-500/5 px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                  Estimated revenue reduction from collections: <span className="font-semibold text-cyan-700 dark:text-cyan-300">{money(data.meta.collectedRefund)}</span> <span className="text-gray-500 dark:text-gray-500">— the shipping those collected items would have been charged (UK rates, grouped by collection), i.e. potential refunds.</span>
+                </div>
+              )}
+              {data.sizeByDisposition.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-500 mb-2">By size: how many of each were <span className="font-medium">shipped</span> vs <span className="font-medium">collected</span> in person — to spot whether bigger items get collected more often. (From warehouse locations, so totals differ from the revenue “Items by size” table.)</p>
+                  <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase">
+                        <tr>
+                          <th className="px-4 py-2 text-left">Size</th>
+                          <th className="px-4 py-2 text-right">In period</th>
+                          <th className="px-4 py-2 text-right">Shipped</th>
+                          <th className="px-4 py-2 text-right">Collected</th>
+                          <th className="px-4 py-2 text-right">% collected</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                        {data.sizeByDisposition.map((r, i) => {
+                          const gone = r.shipped + r.collected
+                          return (
+                            <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
+                              <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{r.size}</td>
+                              <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{r.all.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{r.shipped.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{r.collected.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-400">{gone ? ((r.collected / gone) * 100).toFixed(1) + "%" : "—"}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-1">“% collected” = of the items that left (shipped or collected), the share picked up in person. “In period” also counts items still in the warehouse.</p>
+                </div>
+              )}
+              {data.notScannedLocations.length > 0 && (
+                <details className="mb-3 text-sm">
+                  <summary className="cursor-pointer select-none text-gray-600 dark:text-gray-400">What’s in “Not scanned / unknown”? ({data.notScannedLocations.length} location{data.notScannedLocations.length === 1 ? "" : "s"})</summary>
+                  <div className="mt-2 overflow-x-auto rounded border border-gray-200 dark:border-gray-800" style={{ maxHeight: 320 }}>
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">
+                        <tr><th className="px-4 py-2 text-left">Location</th><th className="px-4 py-2 text-right">Items</th></tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                        {data.notScannedLocations.map((l, i) => (
+                          <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
+                            <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{l.location}</td>
+                            <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{l.items.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              )}
+              {data.byDeliveryStatus.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-500 mb-3">No items with a collection number at Shipped/Collected/SANDOWN in this period.</p>}
+              <ExportBtn onClick={() => exportXlsx(
+                data.byDeliveryStatus.map(r => ({
+                  "Status": r.status,
+                  "Items": r.items,
+                  "%": totalSC ? +((r.items / totalSC) * 100).toFixed(1) : 0,
+                })),
+                "shipping_by_delivery_status"
+              )} />
+            </>
+            )
+          })()}
+          {subTab === "Country × Size" && (
+            <>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">For each country: how many items of each size, plus parcels and shipping.</p>
+              <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 560 }}>
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Country</th>
+                      <th className="px-3 py-2 text-left">Region</th>
+                      {data.sizesPresent.map(s => <th key={s} className="px-3 py-2 text-right">{s}</th>)}
+                      <th className="px-3 py-2 text-right">Parcels</th>
+                      <th className="px-4 py-2 text-right">Est. Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                    {data.byCountrySize.map((r, i) => (
+                      <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
+                        <td className="px-4 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                          {COUNTRY_NAMES[r.country] ? `${COUNTRY_NAMES[r.country]} (${r.country})` : r.country}
+                          {!r.rated && <span className="ml-1 text-amber-500" title="Not on the rate sheet">*</span>}
+                        </td>
+                        <td className="px-3 py-2 text-gray-600 dark:text-gray-500">{r.region}</td>
+                        {data.sizesPresent.map(s => (
+                          <td key={s} className="px-3 py-2 text-right text-gray-600 dark:text-gray-300">{r.sizes[s] ? r.sizes[s].toLocaleString() : "·"}</td>
+                        ))}
+                        <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-300">{r.parcels.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-right text-cyan-700 dark:text-cyan-300">{money(r.revenue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-2">* country not on the rate sheet — counted in parcels, excluded from estimated revenue.</p>
+              <ExportBtn onClick={() => exportXlsx(
+                data.byCountrySize.map(r => ({
+                  "Country": COUNTRY_NAMES[r.country] ? `${COUNTRY_NAMES[r.country]} (${r.country})` : r.country,
+                  "Region": r.region,
+                  ...Object.fromEntries(data.sizesPresent.map(s => [s, r.sizes[s] ?? 0])),
+                  "Parcels": r.parcels,
+                  "Est. Revenue": +r.revenue.toFixed(2),
+                })),
+                "shipping_country_size"
+              )} />
+            </>
+          )}
           {subTab === "By City" && (
             <>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">How many parcels we sent to each town or city.</p>
               <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-3" style={{ maxHeight: 520 }}>
                 <table className="w-full text-sm">
                   <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase sticky top-0">
                     <tr>
                       <th className="px-4 py-2 text-left">City</th>
                       <th className="px-4 py-2 text-left">Country</th>
-                      <th className="px-4 py-2 text-right">Shipments</th>
+                      <th className="px-4 py-2 text-right">Parcels</th>
                       <th className="px-4 py-2 text-right">%</th>
                     </tr>
                   </thead>
@@ -1679,7 +2028,7 @@ function ShippingTab() {
                 data.byCity.map(r => ({
                   "City": r.city,
                   "Country": COUNTRY_NAMES[r.country] ? `${COUNTRY_NAMES[r.country]} (${r.country})` : r.country,
-                  "Shipments": r.count,
+                  "Parcels": r.count,
                   "%": data.meta.total ? +((r.count / data.meta.total) * 100).toFixed(1) : 0,
                 })),
                 "shipping_by_city"

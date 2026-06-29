@@ -3,18 +3,7 @@
 import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createAuction } from "@/lib/actions/catalogue"
-
-const AUCTION_TYPES = [
-  { value: "GENERAL", label: "General" },
-  { value: "DIECAST", label: "Diecast" },
-  { value: "TRAINS", label: "Trains" },
-  { value: "VINYL", label: "Vinyl" },
-  { value: "TV_FILM", label: "TV & Film" },
-  { value: "MATCHBOX", label: "Matchbox" },
-  { value: "COMICS", label: "Comics" },
-  { value: "BEARS", label: "Bears" },
-  { value: "DOLLS", label: "Dolls" },
-]
+import { AUCTION_TYPES } from "@/lib/auction-types"
 
 export default function NewAuctionButton() {
   const router = useRouter()
@@ -84,8 +73,8 @@ export default function NewAuctionButton() {
                   defaultValue="GENERAL"
                   className="w-full rounded-lg border border-gray-700 bg-[#2C2C2E] px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]"
                 >
-                  {AUCTION_TYPES.map(({ value, label }) => (
-                    <option key={value} value={value}>{label}</option>
+                  {AUCTION_TYPES.map(({ value, label, emoji }) => (
+                    <option key={value} value={value}>{emoji} {label}</option>
                   ))}
                 </select>
               </div>

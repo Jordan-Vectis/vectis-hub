@@ -58,7 +58,7 @@ export default async function HubPage() {
     .filter(s => s.cards.length > 0)
 
   function renderCard(app: typeof cards[0]) {
-    const cardClass = `relative bg-white dark:bg-[#1c1f27] border ${app.border} rounded-xl p-7 flex flex-col items-center text-center h-[320px]
+    const cardClass = `relative bg-white dark:bg-[#1c1f27] border ${app.border} rounded-xl p-7 flex flex-col items-center text-center min-h-[320px]
       transition-all duration-200 hover:shadow-xl ${app.glow} hover:-translate-y-0.5`
 
     const inner = (

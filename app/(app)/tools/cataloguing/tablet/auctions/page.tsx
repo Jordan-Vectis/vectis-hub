@@ -2,6 +2,7 @@ import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
+import { auctionTypeEmoji } from "@/lib/auction-types"
 
 export default async function TabletAuctionsPage() {
   const session = await auth()
@@ -42,7 +43,7 @@ export default async function TabletAuctionsPage() {
           {a.auctionDate && (
             <span>📅 {new Date(a.auctionDate).toLocaleDateString("en-GB")}</span>
           )}
-          <span className="text-gray-600">{a.auctionType}</span>
+          <span className="text-gray-600">{auctionTypeEmoji(a.auctionType)} {a.auctionType}</span>
         </div>
       </Link>
     )

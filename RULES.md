@@ -38,7 +38,7 @@ The database is hosted on **Neon** (console.neon.tech), not Railway. Never sugge
 
 - Neon provides point-in-time restore via branching
 - The `DATABASE_URL` env var in Railway points to the Neon connection string
-- No pg_dump backup is currently configured — this is a known gap to address
+- A scheduled **JSON** backup exists: `/api/cron/db-backup` (run by a `server.js` setInterval loop at midnight UTC, 24h cadence) dumps tables to R2 (`CLOUDFLARE_R2_BACKUP_BUCKET`), keeping the last 30 per env, surfaced at `/admin/backup`. A true `pg_dump` / point-in-time dump is still not configured — Neon branching remains the primary restore path.
 
 ### ⚠ Adding columns to the `User` table — login lockout risk
 
@@ -62,7 +62,7 @@ Before every git push, ask yourself: "Did the user explicitly name `main`?" If n
 
 ## General
 
-- This is **not a CRM**. It is "the app". Never use the word CRM in UI copy, logs, or comments.
+- **Never call the WHOLE Hub "the CRM".** It is the **Vectis Hub** ("the app"). It *began* as a CRM-only tool and grew into the Hub — a broad internal toolset — but Claude kept reflexively calling the entire thing "the CRM"; **this rule exists to stop that habit.** ⚠ The ban is on mislabelling the *overall app* (or tools outside the CRM area) as a CRM — it is **NOT** a blanket ban on the word. The genuine **CRM section** (Submissions / Follow-ups / Contacts) really IS a CRM and is **correctly** labelled "CRM" in the nav, hub card, and "Buyer — CRM" tab — leave those. (`/crm-settings` was reworded to "Department Settings" on 2026-06-29 because it manages Departments, not CRM-specific settings — an accuracy fix, not because "CRM" was wrong there.)
 - The business is **Vectis auction house**. All language should reflect an auction context.
 - British English spelling throughout: "Unauthorised", not "Unauthorized".
 - Superadmin email `it@vectis.co.uk` is hardcoded to always receive ADMIN role regardless of DB role.
