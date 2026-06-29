@@ -63,15 +63,18 @@ function orderSizes(labels: Iterable<string>): string[] {
   return [...canon, ...extra]
 }
 
-// Bucket a lot's BC location / collected flag into a delivery status for the
-// display-only Shipped/Collected breakdown. Case-insensitive; the collected
-// flag or a "collected" location wins, then "shipped", else "Other" (still in a
-// warehouse aisle / not yet marked). Does NOT affect revenue — informational so
-// Jordan can decide whether to later exclude Collected lots from the £.
-function deliveryStatus(location: unknown, collected: unknown): string {
+// Bucket a lot into a delivery status from its BC location ONLY, for the
+// display-only Shipped/Collected breakdown. Case-insensitive: location set to
+// "Shipped" → Shipped, "Collected" → Collected, anything else (a warehouse
+// aisle code / not yet marked) → Other.
+// NOTE: do NOT use the EVA_Collected boolean here — it is true for most items
+// (it doesn't mean "collected in person") and wrongly labels shipped parcels as
+// Collected. The location string is the real signal (per Jordan). Does NOT
+// affect revenue — informational only.
+function deliveryStatus(location: unknown): string {
   const loc = String(location ?? "").trim().toLowerCase()
-  if (collected === true || loc === "collected") return "Collected"
-  if (loc === "shipped") return "Shipped"
+  if (loc === "collected") return "Collected"
+  if (loc === "shipped")   return "Shipped"
   return "Other"
 }
 
@@ -178,7 +181,7 @@ export async function computeShippingAnalytics(
     const slice = cols.slice(i, i + CHUNK)
     const rows = await prisma.warehouseItem.findMany({
       where: { collectionNo: { in: slice } },
-      select: { collectionNo: true, sizeClassification: true, location: true, collected: true },
+      select: { collectionNo: true, sizeClassification: true, location: true },
     })
     // A lot whose collection matched WAS in a dispatched collection, so count it
     // even if its size is blank — normalizeSize(null) → "Unspecified" (£0). The
@@ -189,7 +192,7 @@ export async function computeShippingAnalytics(
       if (!r.collectionNo) continue
       ;(colToLots[r.collectionNo] ??= []).push({
         size:   normalizeSize(r.sizeClassification),
-        status: deliveryStatus(r.location, r.collected),
+        status: deliveryStatus(r.location),
       })
     }
   }
