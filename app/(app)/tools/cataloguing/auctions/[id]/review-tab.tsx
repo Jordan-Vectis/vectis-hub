@@ -59,6 +59,7 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
   const [editDescId, setEditDescId] = useState<string | null>(null)
   const [editDescText, setEditDescText] = useState("")
   const [fullscreenImg, setFullscreenImg] = useState<string | null>(null)
+  const [fixingId, setFixingId] = useState<string | null>(null)
   const [pending, start] = useTransition()
 
   useEffect(() => {
@@ -147,6 +148,30 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
         setError(e?.message ?? "Failed to save description")
       }
     })
+  }
+
+  // Ask the AI to rewrite the description applying the flagged correction, then
+  // drop it into the editor for a quick review — we never write AI output to the
+  // catalogue unseen. The user clicks "Save description" to commit (which clears
+  // the flag).
+  async function autoFix(lot: ReviewLot) {
+    setFixingId(lot.id)
+    setError(null)
+    try {
+      const res = await fetch("/api/auction-ai/autofix-flag", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyPoints: lot.keyPoints, description: lot.description, flagNote: lot.aiFlagNote }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? "Auto-fix failed")
+      setEditDescId(lot.id)
+      setEditDescText(data.description ?? lot.description ?? "")
+    } catch (e: any) {
+      setError(e?.message ?? "Auto-fix failed")
+    } finally {
+      setFixingId(null)
+    }
   }
 
   if (loading) return <p className="text-sm text-gray-500 dark:text-gray-400 py-8 text-center">Loading lots…</p>
@@ -320,7 +345,13 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <button
+                      onClick={() => autoFix(lot)}
+                      disabled={fixingId === lot.id || pending}
+                      className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 hover:underline disabled:opacity-40">
+                      {fixingId === lot.id ? "Auto-fixing…" : "✨ Auto-fix (apply AI's advice)"}
+                    </button>
                     <button
                       onClick={() => { setEditDescId(lot.id); setEditDescText(lot.description ?? "") }}
                       className="text-sm font-medium text-orange-600 dark:text-orange-400 hover:underline">
