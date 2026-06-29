@@ -9,6 +9,44 @@ type Entry = { filename: string; content: string }
 
 const ENTRIES: Entry[] = [
   {
+    filename: "audit_2026-06-29_missing.md",
+    content: `---
+name: Audit — surfaces previously missing from memory
+last_updated: 2026-06-29
+---
+
+# Documentation gaps closed by the 2026-06-29 code-vs-memory audit
+
+Three whole features the memory never recorded, plus stale facts:
+
+## Condition Reports (/tools/condition-reports, key CONDITION_REPORTS)
+Customer condition-report helpdesk grouped by auction (NEW/IN_PROGRESS/DONE, assign, manual add). Live BC lookup per report (lib/condition-bc.ts) resolves cataloguer + tote/location. Two email paths: inbound webhook POST /api/condition-reports/inbound?key= (env CONDITION_INBOUND_SECRET) and a 2nd Graph shared mailbox (lib/condition-mailbox.ts, env CONDITION_MAILBOX, OAuth /api/condition-mailbox/auth|callback|folders). Gemini fallback parse (condition-extract.ts). Models ConditionReport + ConditionMailboxAuth. Needs Run Migrations.
+
+## Public website + customer bidder portal — app/(site)/  (NOT just an iframe)
+The Hub serves a full public Vectis site + portal: marketing pages, /auctions (+[code]/live online bidding room, /lot, /bidjs), /search, /portal/login+register, /account(+bids,sales). Own CustomerAccount cookie auth (lib/customer-auth.ts), separate from staff NextAuth. Models: CustomerAccount, BidderRegistration, LiveAuction (status + currentLotIndex, reset to PENDING on boot), CommissionBid. The /website staff tool is now THREE tabs (adds BidJS Setup).
+
+## Royal Mail Click & Drop parcel dispatch (inside /tools/packing)
+Create parcel then POST /api/parcels/[id]/label (lib/royal-mail.ts, env ROYAL_MAIL_API_KEY) creates the Click & Drop order + label PDF + tracking; end-of-day /api/parcels/manifest marks LABEL_CREATED to DISPATCHED. Models Parcel + ParcelLot.
+
+## Cron scheduling = server.js setInterval loops (NOT Railway/Vercel)
+On boot: migrate deploy + reset stale LiveAuctions to PENDING. Four loops (Bearer CRON_SECRET): bc-warehouse 12h, db-backup daily-midnight-UTC (JSON dump to R2 then /admin/backup), it-mailbox 5m, condition-mailbox 5m. bc-packing and bc-catalogue have NO in-repo scheduler (external Railway).
+
+## Models with zero memory
+CatalogueTimingLog (per-lot cataloguing time → Admin Cataloguing Reports), IdleLog (idle periods), CataloguePhotoSession (Photo Only storage), EmailTemplate (IT Tools templates), plus the feature models above.
+
+## Stale facts corrected
+- NO KPCheckRun/KPCheckLot table — batch runs persist in AuctionRun/AuctionLot, the pipeline in PipelineRun/PipelineLot.
+- AI Presenter (/tools/avatar) has 3 modes (script speak, screen-reading Gemini OCR auto-narrate, live-feed WebSocket templates) — not just a D-ID avatar.
+- IT Tools also has an Email Templates library + AI draft-reply route.
+- Databases tab 5 is Commission Bids (portal data), not a generic Bids tab.
+- /crm-settings is an admin Departments manager whose UI literally says "CRM Settings" — violates the no-CRM rule (candidate to reword).
+- RULES.md "no backup configured" was stale — the db-backup JSON cron exists.
+
+## Env vars previously unrecorded
+ROYAL_MAIL_API_KEY, CONDITION_INBOUND_SECRET, CONDITION_MAILBOX, CLOUDFLARE_R2_BACKUP_BUCKET, CONDITION_AI_MODEL.
+`,
+  },
+  {
     filename: "bc_api_reference.md",
     content: `---
 name: BC OData API Reference

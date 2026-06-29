@@ -38,7 +38,7 @@ The database is hosted on **Neon** (console.neon.tech), not Railway. Never sugge
 
 - Neon provides point-in-time restore via branching
 - The `DATABASE_URL` env var in Railway points to the Neon connection string
-- No pg_dump backup is currently configured — this is a known gap to address
+- A scheduled **JSON** backup exists: `/api/cron/db-backup` (run by a `server.js` setInterval loop at midnight UTC, 24h cadence) dumps tables to R2 (`CLOUDFLARE_R2_BACKUP_BUCKET`), keeping the last 30 per env, surfaced at `/admin/backup`. A true `pg_dump` / point-in-time dump is still not configured — Neon branching remains the primary restore path.
 
 ### ⚠ Adding columns to the `User` table — login lockout risk
 
