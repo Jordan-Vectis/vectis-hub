@@ -1634,7 +1634,7 @@ function ShippingTab() {
               <p className="text-xl font-bold text-gray-900 dark:text-white">{data.meta.total.toLocaleString()}</p>
             </div>
             <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
-              <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Est. Shipping Revenue</p>
+              <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Est. Shipping Revenue (ex VAT)</p>
               <p className="text-xl font-bold text-cyan-700 dark:text-cyan-300">{money(data.meta.estRevenueTotal)}</p>
             </div>
             <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">

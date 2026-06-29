@@ -110,7 +110,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
   // ── Summary stat strip ──
   const stats: [string, string][] = [
     ["Parcels", num(d.meta.total)],
-    ["Est. revenue", money(d.meta.estRevenueTotal)],
+    ["Est. revenue (ex VAT)", money(d.meta.estRevenueTotal)],
     ["Countries", num(d.meta.countries)],
     ["Items sized", num(d.meta.itemsWithSize)],
   ]
@@ -205,8 +205,8 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
     ensureSpace(cur, 60)
     cur.y -= 8
     const notes = [
-      "Estimated revenue applies the per-item Vectis shipping rate for each parcel size and destination country.",
-      `${num(d.meta.unratedParcels)} parcel(s) went to countries not on the rate sheet (excluded from revenue, still counted in parcels).`,
+      "Estimated revenue (ex VAT): each parcel = one first-item charge (its dearest lot) + every other lot at its size's additional-item rate, per the Vectis UK / EU-zone rates.",
+      `Rest of World is quote-only — ${num(d.meta.unratedParcels)} parcel(s) to countries not on the rate sheet are counted but priced at £0.`,
       `${num(d.meta.parcelsWithoutSize)} collection(s) had no size data and contribute nothing to revenue.`,
     ]
     for (const n of notes) {

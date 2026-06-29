@@ -85,6 +85,40 @@ export function firstItemRate(country: string, size: string): number {
   return r ? r.first : 0
 }
 
+// Each-extra-item cost for a country/size (0 for unrated countries / 0-rate bands).
+export function additionalItemRate(country: string, size: string): number {
+  const c = SHIPPING_RATES[String(country ?? "").toUpperCase().trim()]
+  if (!c) return 0
+  const r = c[size as ParcelSize]
+  return r ? r.additional : 0
+}
+
+// Price one parcel the way Vectis actually charges it: ONE "first item" (the
+// single dearest lot — the one whose size has the highest first-item rate) at
+// its first-item rate, and EVERY other lot at its own size's additional rate.
+// Returns each lot's contribution so callers can both total the parcel and
+// attribute revenue back to per-size / per-country buckets.
+//
+//   e.g. UK parcel of 1 Medium + 3 Small →
+//        Medium £19.95 (first) + 3 × Small £1.95 (additional) = £25.80
+export function parcelLotCharges(
+  country: string,
+  sizes: string[],
+): { size: string; rate: number; first: boolean }[] {
+  if (sizes.length === 0) return []
+  // Pick the first item: highest first-item rate wins (ties → earliest).
+  let firstIdx = 0
+  let maxFirst = -1
+  sizes.forEach((s, i) => {
+    const fr = firstItemRate(country, s)
+    if (fr > maxFirst) { maxFirst = fr; firstIdx = i }
+  })
+  return sizes.map((size, i) => {
+    const first = i === firstIdx
+    return { size, first, rate: first ? firstItemRate(country, size) : additionalItemRate(country, size) }
+  })
+}
+
 // Does the rate sheet cover this destination country at all?
 export function hasRate(country: string): boolean {
   return !!SHIPPING_RATES[String(country ?? "").toUpperCase().trim()]

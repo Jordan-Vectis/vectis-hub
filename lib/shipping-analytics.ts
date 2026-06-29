@@ -16,7 +16,7 @@
 
 import { bcFetchAll } from "@/lib/bc"
 import { prisma } from "@/lib/prisma"
-import { firstItemRate, hasRate, regionOf, normalizeSize, PARCEL_SIZES, type Region } from "@/lib/shipping-rates"
+import { parcelLotCharges, hasRate, regionOf, normalizeSize, PARCEL_SIZES, type Region } from "@/lib/shipping-rates"
 
 export type ShippingAnalytics = {
   from: string
@@ -155,23 +155,25 @@ export async function computeShippingAnalytics(
   let estRevenueTotal = 0
   let unratedItems = 0
 
-  // Dedupe by collection (count each shipped lot once even if a collection
-  // appears on more than one shipment row).
+  // Dedupe by collection (one parcel = one collection, charged once even if a
+  // collection appears on more than one shipment row). Each parcel is priced
+  // the way Vectis charges it: one first-item charge (the dearest lot) + every
+  // other lot at its size's additional-item rate (ex VAT). Each lot's
+  // contribution is attributed back to its own size band.
   for (const col of cols) {
     const sizes = colToSizes[col]
     if (!sizes || sizes.length === 0) continue
     parcelsWithSize++
     const country = colToCountry[col] ?? "Unknown"
     const agg = ensure(country)
-    for (const size of sizes) {
-      const rate = firstItemRate(country, size)
+    for (const lot of parcelLotCharges(country, sizes)) {
       agg.items++
-      agg.sizes[size] = (agg.sizes[size] ?? 0) + 1
-      agg.revenue += rate
+      agg.sizes[lot.size] = (agg.sizes[lot.size] ?? 0) + 1
+      agg.revenue += lot.rate
       itemsWithSize++
-      estRevenueTotal += rate
-      sizeItems[size]   = (sizeItems[size]   ?? 0) + 1
-      sizeRevenue[size] = (sizeRevenue[size] ?? 0) + rate
+      estRevenueTotal += lot.rate
+      sizeItems[lot.size]   = (sizeItems[lot.size]   ?? 0) + 1
+      sizeRevenue[lot.size] = (sizeRevenue[lot.size] ?? 0) + lot.rate
       if (!agg.rated) unratedItems++
     }
   }
