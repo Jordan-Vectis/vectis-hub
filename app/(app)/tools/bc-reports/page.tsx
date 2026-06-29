@@ -1628,11 +1628,15 @@ function ShippingTab() {
       {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
       {data && (
         <div className={loading ? "opacity-40 pointer-events-none transition-opacity" : "transition-opacity"}>
-          {!data.meta.sizeDataAvailable && (
+          {!data.meta.sizeDataAvailable ? (
             <div className="mb-4 text-sm rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 px-4 py-3">
               Parcel size &amp; estimated revenue need a one-time data refresh. Go to <span className="font-medium">BC Warehouse → Data Sync</span> and run a full receipt-lines sync, then reload this report.
             </div>
-          )}
+          ) : data.meta.parcelsWithoutSize > Math.max(20, data.meta.total * 0.03) ? (
+            <div className="mb-4 text-sm rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 px-4 py-3">
+              <span className="font-medium">{data.meta.parcelsWithoutSize.toLocaleString()}</span> of {data.meta.total.toLocaleString()} parcels have no matching lot data locally, so their items &amp; revenue are missing here. This usually means the receipt-lines sync didn’t finish — run a <span className="font-medium">full</span> re-sync in <span className="font-medium">BC Warehouse → Data Sync</span> (keep the tab open until it completes), then reload.
+            </div>
+          ) : null}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
               <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Parcels</p>
@@ -1647,7 +1651,7 @@ function ShippingTab() {
               <p className="text-xl font-bold text-gray-900 dark:text-white">{data.meta.countries.toLocaleString()}</p>
             </div>
             <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
-              <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Items Sized</p>
+              <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Items Shipped</p>
               <p className="text-xl font-bold text-gray-900 dark:text-white">{data.meta.itemsWithSize.toLocaleString()}</p>
             </div>
           </div>

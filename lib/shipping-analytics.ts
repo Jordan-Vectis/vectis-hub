@@ -14,7 +14,7 @@
 // (fast, no per-collection BC calls) — which means a full receipt-lines resync
 // must have run to populate `collectionNo` + `sizeClassification`.
 
-import { bcFetchAll } from "@/lib/bc"
+import { bcPageWithNext } from "@/lib/bc"
 import { prisma } from "@/lib/prisma"
 import { parcelLotCharges, hasRate, regionOf, normalizeSize, PARCEL_SIZES, type Region } from "@/lib/shipping-rates"
 
@@ -75,7 +75,21 @@ export async function computeShippingAnalytics(
   })
 
   const filter = `EVA_ShipmentDate ge ${from} and EVA_ShipmentDate le ${to}`
-  const all = await bcFetchAll(token, "ShipmentRequestAPI", filter)
+  // Walk ShipmentRequestAPI via skiptoken (@odata.nextLink) — NOT $skip, which
+  // BC silently caps at ~38–40k rows (returns empty pages past the limit). This
+  // mirrors the receipt-lines sync so a busy/long date range can't truncate.
+  const all: any[] = []
+  let link: string | null = null
+  for (let page = 0; page < 2000; page++) {
+    const { rows, nextLink } = await bcPageWithNext(
+      token,
+      link ?? "ShipmentRequestAPI",
+      link ? undefined : { $filter: filter },
+    )
+    all.push(...rows)
+    if (!nextLink) break
+    link = nextLink
+  }
   const active = all.filter((s) => s.EVA_Status !== "Cancelled")
   if (active.length === 0) return empty()
 
@@ -134,9 +148,11 @@ export async function computeShippingAnalytics(
   for (let i = 0; i < cols.length; i += CHUNK) {
     const slice = cols.slice(i, i + CHUNK)
     const rows = await prisma.warehouseItem.findMany({
-      where: { collectionNo: { in: slice }, sizeClassification: { not: null } },
+      where: { collectionNo: { in: slice } },
       select: { collectionNo: true, sizeClassification: true },
     })
+    // A lot whose collection matched WAS shipped, so count it even if its size
+    // is blank — normalizeSize(null) → "Unspecified" (£0). Never silently drop.
     for (const r of rows) {
       if (!r.collectionNo) continue
       ;(colToSizes[r.collectionNo] ??= []).push(normalizeSize(r.sizeClassification))

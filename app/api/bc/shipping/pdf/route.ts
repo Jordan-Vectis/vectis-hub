@@ -112,7 +112,7 @@ async function buildPdf(d: ShippingAnalytics): Promise<Uint8Array> {
     ["Parcels", num(d.meta.total)],
     ["Est. revenue (ex VAT)", money(d.meta.estRevenueTotal)],
     ["Countries", num(d.meta.countries)],
-    ["Items sized", num(d.meta.itemsWithSize)],
+    ["Items shipped", num(d.meta.itemsWithSize)],
   ]
   const sw = (RIGHT - MARGIN) / stats.length
   stats.forEach(([label, val], i) => {
