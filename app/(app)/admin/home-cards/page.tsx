@@ -28,6 +28,8 @@ export default function HomeCardsPage() {
   const [saved, setSaved]     = useState(false)
   const [loading, setLoading] = useState(true)
   const dragKey = useRef<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [importMsg, setImportMsg] = useState("")
 
   useEffect(() => {
     fetch("/api/admin/app-cards")
@@ -85,6 +87,56 @@ export default function HomeCardsPage() {
     setSaved(true)
   }
 
+  // Download the current setup as JSON (same shape the Save PUT uses) so it can
+  // be imported on another environment to match it.
+  function exportCards() {
+    const ordered = GROUPS.flatMap(g => cards.filter(c => c.group === g.key))
+    const payload = ordered.map((c, i) => ({
+      key: c.key, order: i, visible: c.visible, pinned: c.pinned,
+      label: c.label?.trim() || null, description: c.description?.trim() || null,
+    }))
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement("a")
+    a.href = url
+    a.download = `home-cards-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // Load an exported file into the editor (matched by key). It does NOT save —
+  // the admin reviews and clicks Save changes to apply, going through the normal PUT.
+  async function importCards(file: File) {
+    setImportMsg("")
+    try {
+      const data = JSON.parse(await file.text())
+      if (!Array.isArray(data)) throw new Error("not an array")
+      const byKey = Object.fromEntries(data.filter((d: any) => d && d.key).map((d: any) => [d.key, d]))
+      let applied = 0
+      setCards(prev => {
+        const next = prev.map(c => {
+          const imp = byKey[c.key]
+          if (!imp) return c
+          applied++
+          return {
+            ...c,
+            order:       typeof imp.order === "number" ? imp.order : c.order,
+            visible:     typeof imp.visible === "boolean" ? imp.visible : c.visible,
+            pinned:      typeof imp.pinned === "boolean" ? imp.pinned : c.pinned,
+            label:       imp.label ?? null,
+            description: imp.description ?? null,
+          }
+        })
+        return [...next].sort((a, b) => a.order - b.order)
+      })
+      setSaved(false)
+      const missing = Object.keys(byKey).length - applied
+      setImportMsg(`Loaded ${applied} card${applied === 1 ? "" : "s"}${missing > 0 ? ` (${missing} in the file aren't cards here and were ignored)` : ""}. Review, then click Save changes to apply.`)
+    } catch {
+      setImportMsg("Couldn't read that file — pick a JSON exported from this page.")
+    }
+  }
+
   if (loading) return <div className="p-8 text-gray-500 text-sm">Loading…</div>
 
   return (
@@ -94,14 +146,38 @@ export default function HomeCardsPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Home Page Cards</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Cards are grouped into the same sections shown on the home page. Drag to reorder within a section · toggle visibility &amp; featured · customise labels.</p>
         </div>
-        <button
-          onClick={save}
-          disabled={saving}
-          className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-        >
-          {saving ? "Saving…" : saved ? "✓ Saved" : "Save changes"}
-        </button>
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) importCards(f); e.target.value = "" }}
+          />
+          <button
+            onClick={exportCards}
+            className="px-3 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-slate-400 text-sm font-medium rounded-lg transition-colors"
+            title="Download this setup as JSON to import on another environment"
+          >
+            Export
+          </button>
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="px-3 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-slate-400 text-sm font-medium rounded-lg transition-colors"
+            title="Load a setup from a JSON file (review, then Save)"
+          >
+            Import
+          </button>
+          <button
+            onClick={save}
+            disabled={saving}
+            className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+          >
+            {saving ? "Saving…" : saved ? "✓ Saved" : "Save changes"}
+          </button>
+        </div>
       </div>
+      {importMsg && <p className="text-xs text-amber-600 dark:text-amber-400 -mt-4 mb-6">{importMsg}</p>}
 
       <div className="space-y-8">
         {GROUPS.map(group => {
