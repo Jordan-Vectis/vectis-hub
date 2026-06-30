@@ -21,6 +21,7 @@ const GROUPS: { label: string; cards: Card[] }[] = [
       { href: "/admin/categories",        label: "Cataloguing Categories", description: "Add, rename, reorder or remove the categories and subcategories cataloguers pick from when entering lots.", icon: "🏷️" },
       { href: "/admin/condition-wording", label: "Condition Wording",      description: "Manage the box/packaging wording presets (e.g. \"Box is\", \"Carded Back is\") used in the separate condition.", icon: "📦" },
       { href: "/admin/lot-log",           label: "Lot Change Log",         description: "Full audit trail of every field changed on every lot — who changed what, when, and what it was before.", icon: "📋" },
+      { href: "/admin/idle-timer",        label: "Idle Timer",             description: "Configure the idle popup — add or remove reasons, change wording, set timing thresholds.", icon: "⏱️" },
     ],
   },
   {
@@ -39,7 +40,6 @@ const GROUPS: { label: string; cards: Card[] }[] = [
       { href: "/admin/ai-models",  label: "AI Models",        description: "Choose which Gemini model each AI feature uses across the app. Fix a retired model in one place instead of in code.", icon: "🤖" },
       { href: "/admin/backup",     label: "Database Backup",  description: "View stored database backups, check when the last backup ran, and trigger a manual backup.", icon: "💾" },
       { href: "/admin/memory",     label: "Claude Memory",    description: "Browse what Claude remembers about you, this project, and how to work with you.", icon: "🧠" },
-      { href: "/admin/idle-timer", label: "Idle Timer",       description: "Configure the idle popup — add or remove reasons, change wording, set timing thresholds.", icon: "⏱️" },
     ],
   },
 ]
