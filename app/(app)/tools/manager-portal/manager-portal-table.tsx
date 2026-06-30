@@ -132,8 +132,6 @@ const STYLES = `
 .mp-spark{display:flex; align-items:flex-end; gap:3px; height:30px; margin-top:2px;}
 .mp-spark i{flex:1; background:var(--teal); border-radius:2px 2px 0 0; opacity:.85; min-height:3px;}
 .mp-spark i.cur{background:var(--white); opacity:1;}
-.mp-bbadge{display:inline-flex; align-items:center; gap:8px; align-self:flex-start; font-size:12px; font-weight:600; color:var(--amber); background:var(--amber-dim); border:1px solid rgba(224,164,88,.26); padding:7px 11px; border-radius:9px;}
-.mp-btext{font-size:11.5px; color:var(--muted); line-height:1.5;}
 .mp-expand{border-top:1px solid var(--line-soft); background:var(--inset);}
 .mp-ebar{display:flex; align-items:center; gap:9px; padding:9px 18px; font-size:11.5px; color:var(--muted);}
 .mp-ebar.click{cursor:pointer;} .mp-ebar.click:hover{color:var(--body);}
@@ -270,12 +268,8 @@ function ActiveSaleCard({ row, bc, nowMs, open, onToggle }: {
             </>
           ) : (
             <>
-              <span className="mp-bbadge">⚡ {activeDays === 1 ? "Bulk import" : "Just started"}</span>
-              <div className="mp-btext">
-                {row.hubLots === 0 ? "No lots catalogued yet." : activeDays === 1
-                  ? `All ${row.hubLots.toLocaleString()} lots added on one day — no pace yet.`
-                  : "Not enough cataloguing history for a pace yet."} Projections appear once cataloguing spreads across days.
-              </div>
+              <div className="mp-pbig"><span className="mp-pnum" style={{ color: "var(--faint)" }}>—</span><span className="mp-punit">lots / day</span></div>
+              <div className="mp-psub">{row.hubLots === 0 ? "No lots yet" : "Not enough days of activity"}</div>
             </>
           )}
         </div>
