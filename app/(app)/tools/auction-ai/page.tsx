@@ -1288,8 +1288,11 @@ function sortRows(rows: CopierRow[], sortBy: SortBy) {
   })
 }
 
-function CopierTab() {
+function CopierTab({ active }: { active: boolean }) {
   const [rows, setRows]         = useState<CopierRow[]>([])
+  const [showCondReminder, setShowCondReminder] = useState(false)
+  // Remind to add conditions to the description every time the Copier is opened.
+  useEffect(() => { if (active) setShowCondReminder(true) }, [active])
   const [sortBy, setSortBy]     = useState<SortBy>("uniqueId")
   const [idx, setIdx]           = useState(0)
   const [copiedType, setCopied] = useState<"desc" | "both" | null>(null)
@@ -1386,6 +1389,19 @@ function CopierTab() {
 
   return (
     <div>
+      {showCondReminder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowCondReminder(false)}>
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 max-w-sm w-full text-center shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="text-4xl mb-3">📦</div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Have you added conditions to the description?</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-5">Quick reminder before you start copying — make sure each lot&apos;s condition is in its description.</p>
+            <button onClick={() => setShowCondReminder(false)}
+              className="w-full rounded-lg bg-[#C8A96E] hover:bg-[#d4b87a] text-black font-bold text-sm px-4 py-2.5">
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
       <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Description Copier</h2>
       <label className="block mb-4">
         <span className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1 block">Load Excel results file</span>
@@ -5543,7 +5559,7 @@ export default function AuctionAIPage() {
         <div className={tab === "runs"         ? "" : "hidden"}>{tab === "runs"   && <SavedRunsTab />}</div>
         <div className={tab === "kpruns"       ? "" : "hidden"}>{tab === "kpruns" && <KPRunsTab />}</div>
         <div className={tab === "barcode"      ? "" : "hidden"}><BarcodeTab /></div>
-        <div className={tab === "copier"       ? "" : "hidden"}><CopierTab /></div>
+        <div className={tab === "copier"       ? "" : "hidden"}><CopierTab active={tab === "copier"} /></div>
         <div className={tab === "kpcheck"      ? "" : "hidden"}><KeyPointsCheckTab model={model} fallbackModel={fallbackModel} onModelChange={m => { setModel(m); localStorage.setItem("ai_model", m) }} /></div>
         <div className={tab === "doublecheck"  ? "" : "hidden"}>{tab === "doublecheck" && <DoubleCheckTab model={model} fallbackModel={fallbackModel} onModelChange={m => { setModel(m); localStorage.setItem("ai_model", m) }} />}</div>
         <div className={tab === "pipeline"     ? "" : "hidden"}>{tab === "pipeline" && <PipelineTab model={model} fallbackModel={fallbackModel} />}</div>
