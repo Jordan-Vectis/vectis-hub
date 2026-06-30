@@ -402,6 +402,12 @@ export default function LotWizardTab({
   const barcodeStartedAt   = useRef<number | null>(null)
   const keyPointsEnteredAt = useRef<number | null>(null)
   const keyPointsAccumMs   = useRef<number>(0)
+  // Guard against runaway auto-creation (e.g. a barcode scanner left in
+  // continuous/wedge mode repeatedly activating Save): remember the last saved
+  // barcode + time so the same barcode can't be saved again and saves can't fire
+  // in rapid succession.
+  const lastSavedBarcode   = useRef<string>("")
+  const lastSavedAt        = useRef<number>(0)
 
   // Idle detection
   const lastActivityRef    = useRef<number>(Date.now())
@@ -705,8 +711,19 @@ export default function LotWizardTab({
   }
 
   function saveLot() {
-    const err = validateStep(step)
-    if (err) { setValidErr(err); return }
+    // Validate the WHOLE wizard, not just the current step. Step 8's Save had no
+    // validation, so any activation of it minted a lot from whatever was on
+    // screen — this is what was auto-creating blank lots.
+    for (const s of [1, 2, 5, 7]) {
+      const v = validateStep(s)
+      if (v) { setValidErr(v); setStep(s); return }
+    }
+    // Refuse to re-save the same barcode, or to save twice in quick succession —
+    // stops a stuck / continuous-mode scanner minting duplicate lots.
+    if (barcode.trim() && barcode.trim() === lastSavedBarcode.current) {
+      setValidErr("That barcode was just saved — scan the next item."); return
+    }
+    if (Date.now() - lastSavedAt.current < 3000) return
     setValidErr("")
 
     const condition = buildCondition()
@@ -757,6 +774,8 @@ export default function LotWizardTab({
       setTimerSecs(0)
       const n = lotCount + 1
       setLotCount(n)
+      lastSavedBarcode.current = barcode.trim()
+      lastSavedAt.current = Date.now()
       saveLastBarcode(barcode)
       // Remember Tote / Vendor / Receipt on the user's account for next time (any device)
       saveLastLotFields({ vendor, tote, receipt }).catch(() => {})

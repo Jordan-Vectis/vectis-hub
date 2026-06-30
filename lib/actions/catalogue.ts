@@ -202,6 +202,19 @@ export async function createLot(auctionId: string, formData: FormData) {
   const data = extractLotData(formData)
   const createdByName = session.user.name ?? session.user.email ?? "Unknown"
 
+  // Backstop against runaway auto-creation (a barcode scanner stuck in
+  // continuous mode was minting duplicate lots + phantom timing logs): refuse an
+  // identical barcode in the same auction within a short window. Real
+  // cataloguing never re-uses a barcode, so this only blocks the runaway case.
+  const bc = (formData.get("barcode") as string | null)?.trim()
+  if (bc) {
+    const dup = await prisma.catalogueLot.findFirst({
+      where:  { auctionId, barcode: bc, createdAt: { gte: new Date(Date.now() - 60_000) } },
+      select: { id: true },
+    })
+    if (dup) return
+  }
+
   const photoFiles = formData.getAll("photo") as File[]
   const imageUrls: string[] = []
   for (let i = 0; i < photoFiles.length; i++) {
