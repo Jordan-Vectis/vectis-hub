@@ -104,6 +104,11 @@ function AskTab() {
     }).catch(() => {})
   }, [])
 
+  useEffect(() => {
+    if (typeof window !== "undefined" && localStorage.getItem("it_help_default_model")) return
+    fetch("/api/ai-tool-model?slot=it_help").then(r => r.json()).then(j => { if (j?.model) setModelId(j.model) }).catch(() => {})
+  }, [])
+
   function setAsDefault() {
     localStorage.setItem("it_help_default_model", modelId)
     setSavedDef(modelId)

@@ -398,6 +398,13 @@ export default function SocialPostsTab() {
     loadPosts()
   }, [])
 
+  // Seed the picker from the admin-configured default for this slot,
+  // unless the user already has a saved per-user choice.
+  useEffect(() => {
+    if (typeof window !== "undefined" && localStorage.getItem("bc_marketing_default_model")) return
+    fetch("/api/ai-tool-model?slot=marketing_social").then(r => r.json()).then(j => { if (j?.model) setModelId(j.model) }).catch(() => {})
+  }, [])
+
   const loadPosts = useCallback(() => {
     setLoadingPosts(true)
     fetch("/api/marketing/social-posts")

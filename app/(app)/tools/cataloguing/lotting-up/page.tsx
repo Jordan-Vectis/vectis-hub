@@ -249,6 +249,14 @@ export default function LottingUpPage() {
       .catch(() => {})
   }, [])
 
+  useEffect(() => {
+    if (typeof window !== "undefined" && localStorage.getItem(MODEL_STORAGE_KEY)) return
+    fetch("/api/ai-tool-model?slot=catalogue_lotting_up")
+      .then(r => r.json())
+      .then(j => { if (j?.model) setModel(j.model) })
+      .catch(() => {})
+  }, [])
+
   function addFiles(files: File[]) {
     const images = files.filter(f => f.type.startsWith("image/"))
     if (!images.length) return

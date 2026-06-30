@@ -32,6 +32,11 @@ export default function PasteGenerateTab() {
     }).catch(() => {})
   }, [])
 
+  useEffect(() => {
+    if (typeof window !== "undefined" && localStorage.getItem("bc_marketing_default_model")) return
+    fetch("/api/ai-tool-model?slot=marketing_article_text").then(r => r.json()).then(j => { if (j?.model) setModelId(j.model) }).catch(() => {})
+  }, [])
+
   function setAsDefault() {
     localStorage.setItem("bc_marketing_default_model", modelId)
     setSavedDefault(modelId)

@@ -57,6 +57,13 @@ export default function ContentGeneratorTab() {
     }).catch(() => {})
   }, [])
 
+  // Seed the picker from the admin-configured default for this slot,
+  // but only when the user hasn't already saved a per-user choice.
+  useEffect(() => {
+    if (typeof window !== "undefined" && localStorage.getItem("bc_marketing_default_model")) return
+    fetch("/api/ai-tool-model?slot=marketing_article").then(r => r.json()).then(j => { if (j?.model) setModelId(j.model) }).catch(() => {})
+  }, [])
+
   function setAsDefault() {
     localStorage.setItem("bc_marketing_default_model", modelId)
     setSavedDefault(modelId)

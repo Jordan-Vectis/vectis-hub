@@ -72,10 +72,14 @@ function DraftReplyTab() {
         const saved = typeof window !== "undefined" ? localStorage.getItem("it_tools_default_model") : null
         setSavedDef(saved)
         if (saved && d.models.includes(saved))                   setModelId(saved)
-        else if (d.models.includes(FALLBACK_MODEL))              setModelId(FALLBACK_MODEL)
-        else                                                     setModelId(d.models[0])
+        else setModelId(prev => d.models.includes(prev) ? prev : (d.models.includes(FALLBACK_MODEL) ? FALLBACK_MODEL : d.models[0]))
       }
     }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && localStorage.getItem("it_tools_default_model")) return
+    fetch("/api/ai-tool-model?slot=it_draft_reply").then(r => r.json()).then(j => { if (j?.model) setModelId(j.model) }).catch(() => {})
   }, [])
 
   function setAsDefault() {

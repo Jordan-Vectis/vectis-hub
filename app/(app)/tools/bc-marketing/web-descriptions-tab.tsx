@@ -68,6 +68,12 @@ export default function WebDescriptionsTab() {
     }).catch(() => {})
   }, [])
 
+  // ── Seed picker from admin default (marketing_web) when user has no saved choice ──
+  useEffect(() => {
+    if (typeof window !== "undefined" && localStorage.getItem("bc_marketing_default_model")) return
+    fetch("/api/ai-tool-model?slot=marketing_web").then(r => r.json()).then(j => { if (j?.model) setModelId(j.model) }).catch(() => {})
+  }, [])
+
   // ── Load saved descriptions ──
   const loadSaved = useCallback(() => {
     setLoadingSaved(true)

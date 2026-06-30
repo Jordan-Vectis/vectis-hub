@@ -73,13 +73,21 @@ export default function LotHistoryTab({ auctionId, lots }: Props) {
   useEffect(() => {
     fetch("/api/auction-ai/models")
       .then(r => r.json())
-      .then(d => { if (d.models?.length) { setModelList(d.models); setModelId(d.models[0]) } })
+      .then(d => { if (d.models?.length) { setModelList(d.models); setModelId(prev => d.models.includes(prev) ? prev : d.models[0]) } })
       .catch(() => {})
     // Load saved instructions from localStorage
     try {
       const saved = localStorage.getItem(LS_KEY)
       if (saved) { setInstructions(saved); setInstructionsDirty(true) }
     } catch {}
+  }, [])
+
+  // Seed the model picker from the admin-configured default for this slot
+  useEffect(() => {
+    fetch("/api/ai-tool-model?slot=catalogue_lot_history")
+      .then(r => r.json())
+      .then(j => { if (j?.model) setModelId(j.model) })
+      .catch(() => {})
   }, [])
 
   function updateState(lotId: string, patch: Partial<LotState>) {
