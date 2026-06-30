@@ -208,6 +208,9 @@ last_updated: 2026-05-29
 
 # Vectis Hub
 
+## Manager Portal (/tools/manager-portal) — BUILT 2026-06-30, STAGING
+New home card under Cataloguing & AI (app key MANAGER_PORTAL — grant access in Admin → Users; admins see it automatically). Manager overview of how many lots are in every sale across BOTH cataloguing systems. Per sale it shows: Hub catalogue lot count (CatalogueLot grouped by auctionId), the live BC count (counted from Receipt_Lines_Excel where EVA_SalesAllocation = the auction code, e.g. F089), and a combined Total = Hub + BC (lots are split between systems — some catalogued straight into BC, some into the Hub — so summing is correct). Active sales prominent, completed sales shown dimmed (opacity-70). BC counts load client-side via GET /api/manager-portal/bc-counts (returns connected:false gracefully when BC isn't connected, and "—" per sale on a failed lookup) using a new bcCount(token, endpoint, filter) helper in lib/bc.ts ($count via @odata.count, $top=0, no row download), run per-code in parallel batches. No schema change / no migration.
+
 **Production URL:** https://vectis-production.up.railway.app
 **Staging URL:** https://vectis-staging.up.railway.app
 **GitHub repo:** https://github.com/Jordan-Vectis/vectis-hub

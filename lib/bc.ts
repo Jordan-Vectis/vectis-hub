@@ -150,6 +150,26 @@ export async function bcPageWithNext(
   }
 }
 
+// bcCount: returns the number of rows matching `filter` on `endpoint` using
+// OData $count — it does NOT download the rows ($top=0), so it's cheap even for
+// sales with thousands of lines. Relies on @odata.count, the same annotation
+// bcFetchAllWithProgress reads; falls back to the returned row count if the
+// server omits it.
+export async function bcCount(
+  token: string,
+  endpoint: string,
+  filter: string,
+): Promise<number> {
+  const base = baseUrl() + endpoint
+  const params: Record<string, string | number> = { $filter: filter, $top: 0, $count: "true" }
+  const qs = Object.entries(params)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
+    .join("&")
+  const json = await bcPageJson(token, `${base}?${qs}`)
+  const c = json["@odata.count"]
+  return typeof c === "number" ? c : (json.value ?? []).length
+}
+
 export async function bcFetchAll(
   token: string,
   endpoint: string,
