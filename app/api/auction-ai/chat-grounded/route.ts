@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   const systemInstruction = formData.get("systemInstruction") as string ?? ""
   const historyRaw        = formData.get("history") as string ?? "[]"
   const imageFiles        = formData.getAll("images") as File[]
-  const modelId           = formData.get("model") as string || "gemini-2.0-flash"
+  const modelId           = formData.get("model") as string || "gemini-3-flash-preview"
 
   // Build image parts from uploaded files
   const imageParts = await Promise.all(

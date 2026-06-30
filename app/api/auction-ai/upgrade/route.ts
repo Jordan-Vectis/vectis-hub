@@ -54,7 +54,7 @@ Rules:
 - Join lines with \\n, never collapse multi-paragraph or list formatting into a single paragraph.${kpRule}`
 
     const genai  = new GoogleGenerativeAI(apiKey)
-    const gemini = genai.getGenerativeModel({ model: model || "gemini-2.0-flash", systemInstruction })
+    const gemini = genai.getGenerativeModel({ model: model || "gemini-3-flash-preview", systemInstruction })
     const result = await gemini.generateContent(description.trim())
 
     const blockReason = (result.response as any).promptFeedback?.blockReason

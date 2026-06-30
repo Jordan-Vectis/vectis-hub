@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
 
-    const { keyPoints, description, model: modelId = "gemini-2.0-flash" } = await req.json()
+    const { keyPoints, description, model: modelId = "gemini-3-flash-preview" } = await req.json()
 
     if (!keyPoints?.trim() || !description?.trim()) {
       return NextResponse.json({ flag: null })
