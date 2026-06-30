@@ -860,6 +860,62 @@ export async function removeOrphanedTimingLogs(): Promise<{ count: number }> {
   return { count }
 }
 
+// READ-ONLY diagnostic — dumps the orphaned ("deleted lot") timing logs so we
+// can see where they actually come from instead of guessing: grouped by auction
+// code, with distinct users, the key-points distribution, and a few raw sample
+// rows (their own id + lotId). Admin-only.
+export async function inspectOrphanedTimingLogs(): Promise<{
+  total: number
+  byAuction: {
+    auctionCode: string | null
+    auctionId: string
+    count: number
+    users: string[]
+    zeroKeyPoints: number
+    firstSeen: string | null
+    lastSeen: string | null
+    samples: { id: string; lotId: string | null; userName: string; method: string; durationMs: number; keyPointsMs: number | null; savedAt: string }[]
+  }[]
+}> {
+  const session = await auth()
+  if (!session || session.user.role !== "ADMIN") throw new Error("Unauthorised")
+
+  const rows = await prisma.$queryRaw<{
+    id: string; auctionId: string; auctionCode: string | null; lotId: string | null
+    userName: string; method: string; durationMs: number; keyPointsMs: number | null; savedAt: Date
+  }[]>`
+    SELECT t."id", t."auctionId", a."code" AS "auctionCode", t."lotId",
+           t."userName", t."method", t."durationMs", t."keyPointsMs", t."savedAt"
+    FROM "CatalogueTimingLog" t
+    LEFT JOIN "CatalogueAuction" a ON a."id" = t."auctionId"
+    WHERE t."lotId" IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM "CatalogueLot" l WHERE l."id" = t."lotId")
+    ORDER BY t."savedAt" DESC`
+
+  const groups = new Map<string, typeof rows>()
+  for (const r of rows) {
+    const arr = groups.get(r.auctionId) ?? []
+    arr.push(r)
+    groups.set(r.auctionId, arr)
+  }
+
+  const byAuction = [...groups.entries()].map(([auctionId, list]) => ({
+    auctionId,
+    auctionCode: list[0].auctionCode,
+    count: list.length,
+    users: [...new Set(list.map(r => r.userName))],
+    zeroKeyPoints: list.filter(r => !r.keyPointsMs).length,
+    firstSeen: list.length ? list[list.length - 1].savedAt.toISOString() : null,
+    lastSeen:  list.length ? list[0].savedAt.toISOString() : null,
+    samples: list.slice(0, 8).map(r => ({
+      id: r.id, lotId: r.lotId, userName: r.userName, method: r.method,
+      durationMs: r.durationMs, keyPointsMs: r.keyPointsMs, savedAt: r.savedAt.toISOString(),
+    })),
+  })).sort((a, b) => b.count - a.count)
+
+  return { total: rows.length, byAuction }
+}
+
 export async function massCreateLots(
   auctionId: string,
   auctionCode: string,
