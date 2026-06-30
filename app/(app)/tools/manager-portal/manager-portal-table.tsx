@@ -13,17 +13,8 @@ export type SaleRow = {
   hubLots: number
   complete: boolean
   addedToBC: boolean
-  addedToBCLots: number
-  estLowSum: number
-  estHighSum: number
-  estLowAvg: number | null
-  estHighAvg: number | null
-  estCount: number
   firstLot: string | null
   lastLot: string | null
-  lots7d: number
-  statusCounts: Record<string, number>
-  withPhotos: number | null
   avgDurationMs: number | null
   timedLots: number
   topCataloguers: { name: string; count: number }[]
@@ -36,22 +27,9 @@ type BcState =
   | { status: "error"; message: string }
   | { status: "ready"; sales: Record<string, SaleBc | null> }
 
-const STATUS_ORDER = ["ENTERED", "REVIEWED", "PUBLISHED", "SOLD", "UNSOLD", "WITHDRAWN"]
 const DAY = 86_400_000
 
 // ─── Formatting ──────────────────────────────────────────────────────────────
-
-const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x))
-const gbp = (n: number) => "£" + Math.round(n).toLocaleString("en-GB")
-
-function gbpShort(n: number): string {
-  const neg = n < 0 ? "-" : ""
-  const abs = Math.abs(n)
-  if (abs < 999.5) return neg + "£" + Math.round(abs).toLocaleString("en-GB")
-  if (abs >= 999_500) { const m = abs / 1_000_000; return neg + "£" + m.toFixed(m >= 10 ? 0 : 1) + "m" }
-  const k = abs / 1_000
-  return neg + "£" + k.toFixed((Math.round(k * 10) / 10) >= 100 ? 0 : 1) + "k"
-}
 
 const fmtDate = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
 const fmtFullDate = (iso: string) => new Date(iso).toLocaleDateString("en-GB")
@@ -64,8 +42,6 @@ function fmtDuration(ms: number | null): string {
   return m > 0 ? `${m}m ${s % 60}s` : `${s}s`
 }
 
-const pctNum = (n: number, total: number) => (total > 0 ? (n / total) * 100 : 0)
-const pctTxt = (n: number, total: number) => (total > 0 ? Math.round((n / total) * 100) + "%" : "—")
 const startOfDay = (ms: number) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime() }
 
 // ─── Pace + milestones (steady rate over the whole cataloguing span) ─────────
@@ -97,12 +73,10 @@ function daysToSale(auctionDate: string | null, nowMs: number): number | null {
   return Math.ceil((Date.parse(auctionDate) - nowMs) / DAY)
 }
 
-function bcFor(code: string, bc: BcState): { loading: boolean; unavailable: boolean; data: SaleBc | null } {
-  if (bc.status === "loading") return { loading: true, unavailable: false, data: null }
-  if (bc.status !== "ready")   return { loading: false, unavailable: true, data: null }
-  const s = bc.sales[code]
-  if (!s) return { loading: false, unavailable: true, data: null }
-  return { loading: false, unavailable: false, data: s }
+function bcFor(code: string, bc: BcState): { loading: boolean; data: SaleBc | null } {
+  if (bc.status === "loading") return { loading: true, data: null }
+  if (bc.status !== "ready")   return { loading: false, data: null }
+  return { loading: false, data: bc.sales[code] ?? null }
 }
 
 // ─── Small UI bits ───────────────────────────────────────────────────────────
@@ -112,26 +86,6 @@ function Num({ label, value, accent }: { label: string; value: string; accent?: 
     <div className="text-right min-w-[60px]">
       <div className={`text-xl font-bold leading-none ${accent ? "text-[#2AB4A6]" : "text-gray-900 dark:text-white"}`}>{value}</div>
       <div className="text-[11px] uppercase tracking-wide text-gray-500 mt-1">{label}</div>
-    </div>
-  )
-}
-
-function Bar({ value, color }: { value: number; color: string }) {
-  return (
-    <div className="h-2 rounded-full bg-gray-200 dark:bg-[#2C2C2E] overflow-hidden">
-      <div className={`h-full rounded-full ${color}`} style={{ width: `${clamp(value, 0, 100)}%` }} />
-    </div>
-  )
-}
-
-function ProgressRow({ label, n, total, color, value }: { label: string; n: number; total: number; color: string; value?: string }) {
-  return (
-    <div>
-      <div className="flex justify-between text-xs mb-1">
-        <span className="text-gray-600 dark:text-gray-300">{label}</span>
-        <span className="text-gray-500 dark:text-gray-400">{value ?? `${n.toLocaleString()} / ${total.toLocaleString()} · ${pctTxt(n, total)}`}</span>
-      </div>
-      <Bar value={pctNum(n, total)} color={color} />
     </div>
   )
 }
@@ -154,14 +108,13 @@ function ActiveSaleCard({ row, bc, nowMs, open, onToggle }: {
   const pace = paceFor(row)
   const { loading, data } = bcFor(row.code, bc)
   const bcTxt    = loading ? "…" : data ? data.bc.toLocaleString() : "—"
-  // When BC is unavailable for this sale, the combined total is unknown — fall
-  // back to the Hub count (its known minimum) so the card matches the headline.
   const totalTxt = loading ? "…" : data ? data.combined.toLocaleString() : row.hubLots.toLocaleString()
   const overlap  = data?.overlap
   const dts = daysToSale(row.auctionDate, nowMs)
   const ladder = milestonesFor(row.hubLots, pace.perDay, nowMs)
   const next = ladder[0]
-  const nextLate = next ? startOfDay(next.date) > startOfDay(row.auctionDate ? Date.parse(row.auctionDate) : Infinity) : false
+  const saleTs = row.auctionDate ? Date.parse(row.auctionDate) : Infinity
+  const nextLate = next ? startOfDay(next.date) > startOfDay(saleTs) : false
 
   const dtsChip = dts == null ? null
     : dts < 0 ? <span className="text-gray-400">sale passed</span>
@@ -201,32 +154,19 @@ function ActiveSaleCard({ row, bc, nowMs, open, onToggle }: {
           ? <span>📈 <span className="font-medium">{pace.perDay >= 10 ? Math.round(pace.perDay) : pace.perDay.toFixed(1)}/day</span></span>
           : <span className="text-gray-400 dark:text-gray-500">📈 not enough history for a pace</span>}
         {next && <span className={nextLate ? "text-amber-600 dark:text-amber-400" : ""}>→ {next.target.toLocaleString()} lots by {fmtDate(next.date)}{nextLate && " ⚠"}</span>}
-        {(row.estLowSum || row.estHighSum) ? <span>💷 {gbpShort(row.estLowSum)}–{gbpShort(row.estHighSum)}</span> : null}
         {overlap != null && overlap > 0 && <span className="text-gray-500 dark:text-gray-400">· {overlap.toLocaleString()} of {row.hubLots.toLocaleString()} Hub lots already in BC</span>}
       </div>
 
       {/* Expanded detail */}
       {open && (
         <div className="border-t border-gray-200 dark:border-gray-800 px-5 py-4 space-y-5">
-          {/* progress + key tiles */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2.5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Progress</p>
-              <ProgressRow label="Added to BC" n={row.addedToBCLots} total={row.hubLots} color="bg-blue-500" />
-              <ProgressRow label="With photos" n={row.withPhotos ?? 0} total={row.hubLots} color="bg-teal-500"
-                value={row.withPhotos == null ? "—" : undefined} />
-              <ProgressRow label="Published" n={row.statusCounts.PUBLISHED ?? 0} total={row.hubLots} color="bg-violet-500" />
-            </div>
-            <div className="grid grid-cols-2 gap-2.5 content-start">
-              <Tile label="Pace" value={pace.perDay > 0 ? `${pace.perDay >= 10 ? Math.round(pace.perDay) : pace.perDay.toFixed(1)}/day` : "—"} sub={pace.spanDays ? `over ${pace.spanDays}d` : undefined} />
-              <Tile label="Avg / lot" value={fmtDuration(row.avgDurationMs)} sub={row.timedLots > 0 ? `${row.timedLots.toLocaleString()} timed` : "no timing"} />
-              <Tile label="Est. value" value={row.estLowSum || row.estHighSum ? `${gbpShort(row.estLowSum)}–${gbpShort(row.estHighSum)}` : "—"} sub={row.estLowAvg != null ? `avg ${gbp(row.estLowAvg)}–${row.estHighAvg != null ? gbp(row.estHighAvg) : "—"}` : `${row.estCount}/${row.hubLots} priced`} />
-              <Tile label="Days to sale" value={dts == null ? "—" : dts < 0 ? `${Math.abs(dts)}d ago` : dts === 0 ? "today" : `${dts}d`} sub={row.auctionDate ? fmtFullDate(row.auctionDate) : undefined} />
-            </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            <Tile label="Pace" value={pace.perDay > 0 ? `${pace.perDay >= 10 ? Math.round(pace.perDay) : pace.perDay.toFixed(1)}/day` : "—"} sub={pace.spanDays ? `over ${pace.spanDays}d` : undefined} />
+            <Tile label="Avg / lot" value={fmtDuration(row.avgDurationMs)} sub={row.timedLots > 0 ? `${row.timedLots.toLocaleString()} timed` : "no timing"} />
+            <Tile label="Days to sale" value={dts == null ? "—" : dts < 0 ? `${Math.abs(dts)}d ago` : dts === 0 ? "today" : `${dts}d`} sub={row.auctionDate ? fmtFullDate(row.auctionDate) : undefined} />
           </div>
 
-          {/* milestones + status + people */}
-          <div className="grid gap-5 md:grid-cols-3">
+          <div className="grid gap-5 md:grid-cols-2">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Projected milestones</p>
               {ladder.length === 0 ? (
@@ -234,7 +174,7 @@ function ActiveSaleCard({ row, bc, nowMs, open, onToggle }: {
               ) : (
                 <ul className="space-y-1 text-sm">
                   {ladder.map(m => {
-                    const late = startOfDay(m.date) > startOfDay(row.auctionDate ? Date.parse(row.auctionDate) : Infinity)
+                    const late = startOfDay(m.date) > startOfDay(saleTs)
                     return (
                       <li key={m.target} className="flex justify-between gap-4">
                         <span className="text-gray-600 dark:text-gray-300">{m.target.toLocaleString()} lots</span>
@@ -243,21 +183,6 @@ function ActiveSaleCard({ row, bc, nowMs, open, onToggle }: {
                     )
                   })}
                 </ul>
-              )}
-            </div>
-
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Status breakdown</p>
-              {row.hubLots === 0 ? (
-                <p className="text-sm text-gray-500 dark:text-gray-500">No lots yet.</p>
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {STATUS_ORDER.filter(s => (row.statusCounts[s] ?? 0) > 0).map(s => (
-                    <span key={s} className="inline-flex items-center gap-1 rounded-full border border-gray-300 dark:border-gray-700 px-2 py-0.5 text-xs text-gray-700 dark:text-gray-300">
-                      {s} <span className="font-semibold text-gray-900 dark:text-white">{(row.statusCounts[s] ?? 0).toLocaleString()}</span>
-                    </span>
-                  ))}
-                </div>
               )}
             </div>
 
@@ -275,7 +200,6 @@ function ActiveSaleCard({ row, bc, nowMs, open, onToggle }: {
               ) : (
                 <p className="text-sm text-gray-500 dark:text-gray-500">No cataloguer data.</p>
               )}
-              <Link href={`/tools/cataloguing/auctions/${row.id}`} className="inline-block mt-3 text-sm text-[#2AB4A6] hover:text-[#24a090] font-medium">Open in Cataloguing →</Link>
             </div>
           </div>
         </div>
@@ -309,15 +233,6 @@ function CompletedTable({ rows }: { rows: SaleRow[] }) {
         ))}
       </tbody>
     </table>
-  )
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-white dark:bg-[#1C1C1E] rounded-xl border border-gray-300 dark:border-gray-700 p-4">
-      <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">{label}</p>
-      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{value}</p>
-    </div>
   )
 }
 
@@ -366,39 +281,10 @@ export default function ManagerPortalTable({ rows, nowMs }: { rows: SaleRow[]; n
   const filteredCompleted = useMemo(() => completed.filter(r => matches(r, search, type)), [completed, search, type])
   const hasFilter = !!search || type !== "ALL"
 
-  // Headline totals — active sales only, deduped combined from the barcode match.
-  // Only "…" while BC is genuinely loading; once disconnected/errored we fall
-  // back to Hub counts (matching the per-card Total and the "only Hub counts
-  // shown" note) rather than spinning forever.
-  const totalHub = useMemo(() => active.reduce((s, r) => s + r.hubLots, 0), [active])
-  const bcTotals = useMemo(() => {
-    if (bc.status === "loading") return null
-    const sales = bc.status === "ready" ? bc.sales : {}
-    let bcSum = 0, combined = 0, anyBc = false
-    for (const r of active) {
-      const s = sales[r.code]
-      if (s) { bcSum += s.bc; combined += s.combined; anyBc = true }
-      else { combined += r.hubLots }   // BC unknown → at least the Hub lots
-    }
-    return { bcSum, combined, anyBc }
-  }, [active, bc])
-  const totalEstLow  = useMemo(() => active.reduce((s, r) => s + r.estLowSum, 0), [active])
-  const totalEstHigh = useMemo(() => active.reduce((s, r) => s + r.estHighSum, 0), [active])
-
   const selectCls = "rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1C1C1E] px-3 py-2 text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]"
 
   return (
     <>
-      {/* Stat strip — active sales */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-2">
-        <StatCard label="Active Sales" value={active.length.toLocaleString()} />
-        <StatCard label="Hub Lots" value={totalHub.toLocaleString()} />
-        <StatCard label="BC Lots" value={!bcTotals ? "…" : bcTotals.anyBc ? bcTotals.bcSum.toLocaleString() : "—"} />
-        <StatCard label="Combined (deduped)" value={bcTotals ? bcTotals.combined.toLocaleString() : "…"} />
-        <StatCard label="Est. Value" value={totalEstLow || totalEstHigh ? `${gbpShort(totalEstLow)}–${gbpShort(totalEstHigh)}` : "—"} />
-      </div>
-      <p className="text-xs text-gray-500 dark:text-gray-500 mb-6">Combined total is deduped by barcode — Hub lots already in BC aren&apos;t counted twice. Headline figures cover active sales; completed sales are listed below as ticks.</p>
-
       {/* BC connection status */}
       {bc.status === "disconnected" && (
         <div className="mb-4 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-300">

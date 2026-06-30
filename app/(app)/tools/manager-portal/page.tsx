@@ -18,43 +18,16 @@ export default async function ManagerPortalPage() {
   })
   if (!hasAppAccess(dbUser?.role ?? "", dbUser?.allowedApps ?? [], "MANAGER_PORTAL")) redirect("/hub")
 
-  const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000)
-
-  const [auctions, valueAgg, spanAgg, recent7, statusAgg, bcLotsAgg, timingAgg, catAgg] = await Promise.all([
+  const [auctions, spanAgg, timingAgg, catAgg] = await Promise.all([
     prisma.catalogueAuction.findMany({
       orderBy: { auctionDate: "desc" },
       include: { _count: { select: { lots: true } } },
     }),
-    // £ estimate totals + averages per sale
-    prisma.catalogueLot.groupBy({
-      by: ["auctionId"],
-      _sum:   { estimateLow: true, estimateHigh: true },
-      _avg:   { estimateLow: true, estimateHigh: true },
-      _count: { estimateLow: true },
-    }),
-    // First + last lot ever for the sale — pace = lots ÷ that active span (steady,
-    // not skewed by a quiet few days)
+    // First + last lot ever for the sale — pace = lots ÷ that active span
     prisma.catalogueLot.groupBy({
       by: ["auctionId"],
       _min: { createdAt: true },
       _max: { createdAt: true },
-    }),
-    // Lots created in the last 7 days — a recent-activity figure
-    prisma.catalogueLot.groupBy({
-      by: ["auctionId"],
-      where: { createdAt: { gte: sevenDaysAgo } },
-      _count: { _all: true },
-    }),
-    // Status breakdown
-    prisma.catalogueLot.groupBy({
-      by: ["auctionId", "status"],
-      _count: { _all: true },
-    }),
-    // Lots ticked Added-to-BC
-    prisma.catalogueLot.groupBy({
-      by: ["auctionId"],
-      where: { addedToBC: true },
-      _count: { _all: true },
     }),
     // Cataloguing speed (avg ms per lot) from the timing logs
     prisma.catalogueTimingLog.groupBy({
@@ -69,30 +42,8 @@ export default async function ManagerPortalPage() {
     }),
   ])
 
-  // Photo coverage needs an array-length check Prisma groupBy can't express — one
-  // defensive raw query; if it ever fails the page still renders without it.
-  let photoMap = new Map<string, number>()
-  try {
-    const photoRows = await prisma.$queryRaw<{ auctionId: string; n: number }[]>`
-      SELECT "auctionId", COUNT(*)::int AS n
-      FROM "CatalogueLot"
-      WHERE cardinality("imageUrls") > 0
-      GROUP BY "auctionId"`
-    photoMap = new Map(photoRows.map(r => [r.auctionId, Number(r.n)]))
-  } catch { /* photo coverage is optional */ }
-
-  const valueMap = new Map(valueAgg.map(v => [v.auctionId, v]))
-  const spanMap  = new Map(spanAgg.map(v => [v.auctionId, v]))
-  const r7Map    = new Map(recent7.map(v => [v.auctionId, v._count._all]))
-  const bcLotsMap = new Map(bcLotsAgg.map(v => [v.auctionId, v._count._all]))
+  const spanMap   = new Map(spanAgg.map(v => [v.auctionId, v]))
   const timingMap = new Map(timingAgg.map(v => [v.auctionId, v]))
-
-  const statusMap = new Map<string, Record<string, number>>()
-  for (const row of statusAgg) {
-    const m = statusMap.get(row.auctionId) ?? {}
-    m[row.status] = row._count._all
-    statusMap.set(row.auctionId, m)
-  }
 
   const catMap = new Map<string, { name: string; count: number }[]>()
   for (const row of catAgg) {
@@ -100,12 +51,9 @@ export default async function ManagerPortalPage() {
     arr.push({ name: row.userName, count: row._count._all })
     catMap.set(row.auctionId, arr)
   }
-  for (const [k, arr] of catMap) {
-    catMap.set(k, arr.sort((a, b) => b.count - a.count).slice(0, 3))
-  }
+  for (const [k, arr] of catMap) catMap.set(k, arr.sort((a, b) => b.count - a.count).slice(0, 3))
 
   const rows: SaleRow[] = auctions.map(a => {
-    const val  = valueMap.get(a.id)
     const span = spanMap.get(a.id)
     const tim  = timingMap.get(a.id)
     return {
@@ -117,17 +65,8 @@ export default async function ManagerPortalPage() {
       hubLots:     a._count.lots,
       complete:    !!a.complete,
       addedToBC:   !!a.addedToBC,
-      addedToBCLots: bcLotsMap.get(a.id) ?? 0,
-      estLowSum:   val?._sum.estimateLow  ?? 0,
-      estHighSum:  val?._sum.estimateHigh ?? 0,
-      estLowAvg:   val?._avg.estimateLow  ?? null,
-      estHighAvg:  val?._avg.estimateHigh ?? null,
-      estCount:    val?._count.estimateLow ?? 0,
       firstLot:    span?._min.createdAt ? new Date(span._min.createdAt).toISOString() : null,
       lastLot:     span?._max.createdAt ? new Date(span._max.createdAt).toISOString() : null,
-      lots7d:      r7Map.get(a.id) ?? 0,
-      statusCounts: statusMap.get(a.id) ?? {},
-      withPhotos:  photoMap.has(a.id) ? (photoMap.get(a.id) as number) : null,
       avgDurationMs: tim?._avg.durationMs ?? null,
       timedLots:   tim?._count._all ?? 0,
       topCataloguers: catMap.get(a.id) ?? [],
@@ -139,7 +78,7 @@ export default async function ManagerPortalPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Manager Portal</h1>
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-          Lots in every sale across both systems, cataloguing pace with projected milestone dates, and estimate value. Click a sale for the full breakdown.
+          Lots in every sale across both systems, cataloguing pace and projected milestone dates. Click a sale for more.
         </p>
       </div>
 
