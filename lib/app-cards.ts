@@ -2,6 +2,7 @@ import type { AppKey } from "@/lib/apps"
 
 export const SECTION_DEFS = [
   { key: "CATALOGUING_AI",   label: "Cataloguing & AI" },
+  { key: "REPORTS",          label: "Reports" },
   { key: "BUSINESS_CENTRAL", label: "Business Central" },
   { key: "OPERATIONS",       label: "Operations" },
   { key: "AUCTION",          label: "Auction" },
@@ -102,7 +103,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-purple-400",
     btnBg:              "bg-purple-600 hover:bg-purple-500",
     glow:               "hover:shadow-purple-900/40",
-    group:              "CATALOGUING_AI",
+    group:              "REPORTS",
     appKey:             "REPORTS",
   },
   {
@@ -115,7 +116,7 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     iconBg:             "text-pink-400",
     btnBg:              "bg-pink-600 hover:bg-pink-500",
     glow:               "hover:shadow-pink-900/40",
-    group:              "CATALOGUING_AI",
+    group:              "REPORTS",
     appKey:             "MARKETING_REPORTS",
   },
   {
