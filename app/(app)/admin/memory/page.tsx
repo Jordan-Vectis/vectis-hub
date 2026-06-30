@@ -209,7 +209,13 @@ last_updated: 2026-05-29
 # Vectis Hub
 
 ## Manager Portal (/tools/manager-portal) — BUILT 2026-06-30, STAGING
-New home card under Cataloguing & AI (app key MANAGER_PORTAL — grant access in Admin → Users; admins see it automatically). Manager overview of how many lots are in every sale across BOTH cataloguing systems. Per sale it shows: Hub catalogue lot count (CatalogueLot grouped by auctionId), the live BC count (counted from Receipt_Lines_Excel where EVA_SalesAllocation = the auction code, e.g. F089), and a combined Total = Hub + BC (lots are split between systems — some catalogued straight into BC, some into the Hub — so summing is correct). Active sales prominent, completed sales shown dimmed (opacity-70). BC counts load client-side via GET /api/manager-portal/bc-counts (returns connected:false gracefully when BC isn't connected, and "—" per sale on a failed lookup) using a new bcCount(token, endpoint, filter) helper in lib/bc.ts ($count via @odata.count, $top=0, no row download), run per-code in parallel batches. No schema change / no migration.
+Manager dashboard, new home card under Cataloguing & AI (app key MANAGER_PORTAL — grant access in Admin → Users; admins see it automatically). Shows how many lots are in every sale across BOTH cataloguing systems plus cataloguing pace, projected milestone dates and estimate value. No schema change / no migration.
+
+ACTIVE sales table per row: Hub lot count (CatalogueLot grouped by auctionId), live BC count (Receipt_Lines_Excel where EVA_SalesAllocation = the auction code, e.g. F089), Total, Pace (lots/day), Next milestone, Est. value. BC counts load client-side via GET /api/manager-portal/bc-counts (connected:false when BC not linked; "—" per sale on failure) using a bcCount(token, endpoint, filter) helper in lib/bc.ts (OData $count, $top=0, Prefer include-annotations header, THROWS if @odata.count missing so it never shows a wrong 0).
+
+Pace = lots in last 7 days ÷ active span (clamped 1–7 days); reported "idle" if no lots added in the last 3 days so stalled sales aren't over-projected. Projected milestones = next round-hundreds (400/500/600/700) at current pace, date amber if after the sale date (compared at day granularity). Click any row to EXPAND a detail panel: Projected milestones, Progress (added-to-BC %, photo coverage %, published %), Status breakdown, Estimate value (total/avg), Cataloguing speed (avg time/lot from CatalogueTimingLog), Top cataloguers, Timing.
+
+COMPLETED sales: NO counts — just a "✓ Added" tick (CatalogueAuction.addedToBC) + Est. value (slim variant). Reason: once Hub lots are pushed into BC they count in BOTH systems so Hub+BC doubles. Headline strip totals are computed over ACTIVE sales only for the same reason.
 
 **Production URL:** https://vectis-production.up.railway.app
 **Staging URL:** https://vectis-staging.up.railway.app

@@ -152,9 +152,10 @@ export async function bcPageWithNext(
 
 // bcCount: returns the number of rows matching `filter` on `endpoint` using
 // OData $count — it does NOT download the rows ($top=0), so it's cheap even for
-// sales with thousands of lines. Relies on @odata.count, the same annotation
-// bcFetchAllWithProgress reads; falls back to the returned row count if the
-// server omits it.
+// sales with thousands of lines. THROWS if the @odata.count annotation is
+// absent (rather than silently returning 0) so callers can show "—" for an
+// unknown count instead of a wrong zero. Single 15s attempt — a count should be
+// quick, and the caller treats a failure as "unknown".
 export async function bcCount(
   token: string,
   endpoint: string,
@@ -165,9 +166,22 @@ export async function bcCount(
   const qs = Object.entries(params)
     .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
     .join("&")
-  const json = await bcPageJson(token, `${base}?${qs}`)
+  const res = await fetch(`${base}?${qs}`, {
+    headers: {
+      Accept:             "application/json",
+      "OData-MaxVersion": "4.0",
+      Authorization:      `Bearer ${token}`,
+      // Some BC tenants only emit @odata.count when annotations are explicitly
+      // requested (same reason bcPageWithNext sets this).
+      Prefer:             'odata.include-annotations="*"',
+    },
+    signal: AbortSignal.timeout(15_000),
+  })
+  if (!res.ok) throw new Error(`BC API ${res.status}: ${await res.text()}`)
+  const json = await res.json()
   const c = json["@odata.count"]
-  return typeof c === "number" ? c : (json.value ?? []).length
+  if (typeof c !== "number") throw new Error("BC $count returned no @odata.count annotation")
+  return c
 }
 
 export async function bcFetchAll(
