@@ -21,4 +21,12 @@ export async function setAnnouncement(input: { message: string; level: string; a
     create: { id: ANNOUNCEMENT_ID, message, level, active, updatedByName },
   })
   revalidatePath("/admin/announcements")
+
+  // Push to every open tab so the banner appears/updates instantly instead of
+  // waiting for its next 60s poll. `_io` is the Socket.IO server set up in
+  // server.js; optional + try/catch so it's a no-op if the socket isn't running
+  // (e.g. `next dev` without the custom server).
+  try {
+    ;(globalThis as { _io?: { emit: (event: string) => void } })._io?.emit("announcement:changed")
+  } catch { /* socket unavailable — clients fall back to polling */ }
 }

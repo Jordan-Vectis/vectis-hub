@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { io } from "socket.io-client"
 
-const POLL_INTERVAL_MS = 60_000 // 60 seconds
+const POLL_INTERVAL_MS = 60_000 // 60s — fallback safety net; instant updates come via Socket.IO
 const STORAGE_KEY = "announcement_dismissed_at" // stores the updatedAt the user dismissed
 
 type Announcement = { message: string; level: string; updatedAt: string }
@@ -35,7 +36,14 @@ export default function AnnouncementBanner() {
 
     load()
     const id = setInterval(load, POLL_INTERVAL_MS)
-    return () => { cancelled = true; clearInterval(id) }
+
+    // Instant delivery: the admin's save emits "announcement:changed" from the
+    // server (see lib/actions/announcements.ts), so every open tab refetches
+    // immediately rather than waiting up to 60s for the next poll.
+    const socket = io({ path: "/socket.io" })
+    socket.on("announcement:changed", () => load())
+
+    return () => { cancelled = true; clearInterval(id); socket.disconnect() }
   }, [])
 
   if (!current) return null
