@@ -293,7 +293,6 @@ function CompletedTable({ rows }: { rows: SaleRow[] }) {
         <tr className="border-b border-gray-200 dark:border-gray-800">
           {["Code", "Name", "Date", "Type"].map(h => <th key={h} className="text-left px-4 py-2.5 font-medium text-gray-500 dark:text-gray-400">{h}</th>)}
           <th className="text-left px-4 py-2.5 font-medium text-gray-500 dark:text-gray-400">Added to BC</th>
-          <th className="text-right px-4 py-2.5 font-medium text-gray-500 dark:text-gray-400">Est. value</th>
         </tr>
       </thead>
       <tbody>
@@ -306,7 +305,6 @@ function CompletedTable({ rows }: { rows: SaleRow[] }) {
             <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400 whitespace-nowrap">{row.auctionDate ? fmtFullDate(row.auctionDate) : "—"}</td>
             <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400 whitespace-nowrap"><span className="mr-1" title={auctionTypeLabel(row.auctionType)}>{auctionTypeEmoji(row.auctionType)}</span>{row.auctionType}</td>
             <td className="px-4 py-2.5">{row.addedToBC ? <span className="text-green-600 dark:text-green-400 font-semibold">✓ Added</span> : <span className="text-gray-400 dark:text-gray-600">—</span>}</td>
-            <td className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-200 whitespace-nowrap">{row.estLowSum || row.estHighSum ? `${gbpShort(row.estLowSum)}–${gbpShort(row.estHighSum)}` : "—"}</td>
           </tr>
         ))}
       </tbody>

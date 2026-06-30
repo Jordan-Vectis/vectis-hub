@@ -215,7 +215,7 @@ BC count = unique barcodes of lots CATALOGUED in BC, deduped against the Hub —
 
 Pace = Hub lots ÷ full cataloguing span (first→last lot, min 1 day) — a steady ~20–30/day, NOT a few-day window. Projected milestones = next round-hundreds (400/500/600/700) at that pace, amber if after the sale date.
 
-UI: ACTIVE sales are CARDS — header shows Hub/BC/Total, a summary line (pace · next milestone · est value · "X of N Hub lots already in BC"), and a click-to-expand panel with progress bars (added-to-BC %, photos %, published %), stat tiles, milestone ladder, status pills and top cataloguers. COMPLETED sales = compact table, "✓ Added" tick + est value only (no counts — they double). Headline strip (active only) falls back to Hub counts when BC is disconnected. Went through 3 iterations (item-grain count inflated totals; cramped text-dump UI — Jordan: "looks awful, stats totally wrong") before barcode-dedup + cards.
+UI: ACTIVE sales are CARDS — header shows Hub/BC/Total, a summary line (pace · next milestone · est value · "X of N Hub lots already in BC"), and a click-to-expand panel with progress bars (added-to-BC %, photos %, published %), stat tiles, milestone ladder, status pills and top cataloguers. COMPLETED sales = compact table, just a "✓ Added" tick (no counts — they double — and no est value). Headline strip (active only) falls back to Hub counts when BC is disconnected. Went through 3 iterations (item-grain count inflated totals; cramped text-dump UI — Jordan: "looks awful, stats totally wrong") before barcode-dedup + cards.
 
 **Production URL:** https://vectis-production.up.railway.app
 **Staging URL:** https://vectis-staging.up.railway.app
