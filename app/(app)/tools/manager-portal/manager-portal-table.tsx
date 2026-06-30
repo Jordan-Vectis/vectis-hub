@@ -59,14 +59,17 @@ function daysToSale(auctionDate: string | null, nowMs: number): number | null {
 
 type Milestone = { target: number; days: number; date: number; fill: number; late: boolean }
 
-function milestonesFor(hubLots: number, pace: number, nowMs: number, saleTs: number, count = 3): Milestone[] {
+// `current` is the sale's combined (deduped) total — milestones project off the
+// number the manager actually watches, so a 627-lot sale reads 700/800/900, not
+// 500/600. Projected at the (Hub) cataloguing pace.
+function milestonesFor(current: number, pace: number, nowMs: number, saleTs: number, count = 3): Milestone[] {
   if (pace <= 0) return []
   const out: Milestone[] = []
-  let m = Math.floor(hubLots / 100) * 100 + 100
+  let m = Math.floor(current / 100) * 100 + 100
   for (let i = 0; i < count; i++) {
-    const days = Math.ceil((m - hubLots) / pace)
+    const days = Math.ceil((m - current) / pace)
     const date = nowMs + days * DAY
-    out.push({ target: m, days, date, fill: clamp((hubLots - (m - 100)) / 100, 0, 1) * 100, late: startOfDay(date) > startOfDay(saleTs) })
+    out.push({ target: m, days, date, fill: clamp((current - (m - 100)) / 100, 0, 1) * 100, late: startOfDay(date) > startOfDay(saleTs) })
     m += 100
   }
   return out
@@ -196,7 +199,7 @@ function ActiveSaleCard({ row, bc, nowMs, open, onToggle }: {
 
   const spark = row.daily.slice(-14)
   const sparkMax = Math.max(...spark, 1)
-  const ladder = milestonesFor(row.hubLots, pace, nowMs, saleTs)
+  const ladder = milestonesFor(combined, pace, nowMs, saleTs)
   const topCount = Math.max(...row.topCataloguers.map(c => c.count), 1)
 
   const urg = dts == null ? "mp-cool"
