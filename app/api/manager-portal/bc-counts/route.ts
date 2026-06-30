@@ -1,29 +1,32 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
-import { getBCToken, bcCount } from "@/lib/bc"
+import { getBCToken, bcFetchAll } from "@/lib/bc"
 
 export const maxDuration = 120
 
 // GET /api/manager-portal/bc-counts
 //
-// For every Hub catalogue auction, return the number of lots Business Central
-// holds for that sale — matched on EVA_SalesAllocation (the "F089" style sales
-// allocation code) against the live Receipt_Lines_Excel endpoint. Same field +
-// endpoint the warehouse unsold-items route uses, so the matching stays
-// consistent across the app.
+// For every ACTIVE Hub sale, counts the lots Business Central holds for that
+// sales allocation by UNIQUE BARCODE (PTE_InternalBarcode on Receipt_Lines_Excel,
+// matched on EVA_SalesAllocation), and cross-references those barcodes against
+// the sale's Hub lot barcodes. That gives, per sale:
+//   bc       — unique barcodes in BC for the sale
+//   overlap  — Hub lots whose barcode is already in BC (so they aren't counted twice)
+//   combined — the deduped union (Hub ∪ BC), i.e. the true total with no double count
 //
-// Returns { connected: false } (HTTP 200) when no BC token is available so the
-// Manager Portal can still render its Hub counts instead of erroring out.
+// Completed sales are skipped (the portal shows them as ticks, not counts).
+// Returns { connected:false } (HTTP 200) when no BC token, so the page still
+// renders its Hub-side stats. A per-sale failure yields null → shown as "—".
 
-const CONCURRENCY = 8
+const CONCURRENCY = 4
 
-async function inBatches<T, R>(items: T[], size: number, fn: (t: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = []
+const normBarcode = (b: unknown) => String(b ?? "").replace(/[^\x20-\x7E]/g, "").trim().toUpperCase()
+
+async function inBatches<T>(items: T[], size: number, fn: (t: T) => Promise<void>): Promise<void> {
   for (let i = 0; i < items.length; i += size) {
-    out.push(...await Promise.all(items.slice(i, i + size).map(fn)))
+    await Promise.all(items.slice(i, i + size).map(fn))
   }
-  return out
 }
 
 export async function GET() {
@@ -32,24 +35,51 @@ export async function GET() {
     if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
     const token = await getBCToken()
-    if (!token) return NextResponse.json({ connected: false, counts: {} })
+    if (!token) return NextResponse.json({ connected: false, sales: {} })
 
-    const auctions = await prisma.catalogueAuction.findMany({ select: { code: true } })
-    const codes = [...new Set(auctions.map(a => a.code).filter(Boolean))]
+    const active = await prisma.catalogueAuction.findMany({
+      where:  { complete: false },
+      select: { code: true, lots: { select: { barcode: true } } },
+    })
 
-    // counts[code] = number (BC count) or null (lookup failed for that sale)
-    const counts: Record<string, number | null> = {}
-    await inBatches(codes, CONCURRENCY, async code => {
+    const sales: Record<string, { bc: number; overlap: number; combined: number } | null> = {}
+
+    // Wall-clock budget: once exceeded, remaining sales return null ("—") instead
+    // of risking the whole route timing out and erroring every sale.
+    const startedAt = Date.now()
+    const BUDGET_MS = 100_000
+
+    await inBatches(active, CONCURRENCY, async a => {
+      const code = a.code
+      if (Date.now() - startedAt > BUDGET_MS) { sales[code] = null; return }
       try {
-        // Escape single quotes for the OData string literal.
         const safe = code.replace(/'/g, "''")
-        counts[code] = await bcCount(token, "Receipt_Lines_Excel", `EVA_SalesAllocation eq '${safe}'`)
+        const rows = await bcFetchAll(token, "Receipt_Lines_Excel", `EVA_SalesAllocation eq '${safe}'`, "PTE_InternalBarcode")
+
+        const bcSet = new Set<string>()
+        for (const r of rows) {
+          const n = normBarcode((r as any).PTE_InternalBarcode)
+          if (n) bcSet.add(n)
+        }
+
+        // overlap = Hub LOTS (not distinct barcodes) whose barcode is in BC, so
+        // "X of N Hub lots already in BC" lines up with the lot count.
+        let overlap = 0
+        for (const l of a.lots) {
+          const n = normBarcode(l.barcode)
+          if (n && bcSet.has(n)) overlap++
+        }
+
+        const bc = bcSet.size
+        const hubLots = a.lots.length
+        // Deduped union: every BC barcode + every Hub lot not already in BC.
+        sales[code] = { bc, overlap, combined: bc + (hubLots - overlap) }
       } catch {
-        counts[code] = null
+        sales[code] = null
       }
     })
 
-    return NextResponse.json({ connected: true, counts })
+    return NextResponse.json({ connected: true, sales })
   } catch (e: any) {
     console.error("manager-portal/bc-counts error:", e)
     return NextResponse.json({ error: e?.message ?? "BC query failed" }, { status: 500 })

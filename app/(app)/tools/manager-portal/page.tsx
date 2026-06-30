@@ -20,7 +20,7 @@ export default async function ManagerPortalPage() {
 
   const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000)
 
-  const [auctions, valueAgg, recent7, statusAgg, bcLotsAgg, timingAgg, catAgg] = await Promise.all([
+  const [auctions, valueAgg, spanAgg, recent7, statusAgg, bcLotsAgg, timingAgg, catAgg] = await Promise.all([
     prisma.catalogueAuction.findMany({
       orderBy: { auctionDate: "desc" },
       include: { _count: { select: { lots: true } } },
@@ -32,13 +32,18 @@ export default async function ManagerPortalPage() {
       _avg:   { estimateLow: true, estimateHigh: true },
       _count: { estimateLow: true },
     }),
-    // Lots created in the last 7 days — earliest + latest, for an honest, staleness-aware pace
+    // First + last lot ever for the sale — pace = lots ÷ that active span (steady,
+    // not skewed by a quiet few days)
+    prisma.catalogueLot.groupBy({
+      by: ["auctionId"],
+      _min: { createdAt: true },
+      _max: { createdAt: true },
+    }),
+    // Lots created in the last 7 days — a recent-activity figure
     prisma.catalogueLot.groupBy({
       by: ["auctionId"],
       where: { createdAt: { gte: sevenDaysAgo } },
       _count: { _all: true },
-      _min:   { createdAt: true },
-      _max:   { createdAt: true },
     }),
     // Status breakdown
     prisma.catalogueLot.groupBy({
@@ -77,7 +82,8 @@ export default async function ManagerPortalPage() {
   } catch { /* photo coverage is optional */ }
 
   const valueMap = new Map(valueAgg.map(v => [v.auctionId, v]))
-  const r7Map    = new Map(recent7.map(v => [v.auctionId, v]))
+  const spanMap  = new Map(spanAgg.map(v => [v.auctionId, v]))
+  const r7Map    = new Map(recent7.map(v => [v.auctionId, v._count._all]))
   const bcLotsMap = new Map(bcLotsAgg.map(v => [v.auctionId, v._count._all]))
   const timingMap = new Map(timingAgg.map(v => [v.auctionId, v]))
 
@@ -99,9 +105,9 @@ export default async function ManagerPortalPage() {
   }
 
   const rows: SaleRow[] = auctions.map(a => {
-    const val = valueMap.get(a.id)
-    const r7  = r7Map.get(a.id)
-    const tim = timingMap.get(a.id)
+    const val  = valueMap.get(a.id)
+    const span = spanMap.get(a.id)
+    const tim  = timingMap.get(a.id)
     return {
       id:          a.id,
       code:        a.code,
@@ -117,9 +123,9 @@ export default async function ManagerPortalPage() {
       estLowAvg:   val?._avg.estimateLow  ?? null,
       estHighAvg:  val?._avg.estimateHigh ?? null,
       estCount:    val?._count.estimateLow ?? 0,
-      lots7d:      r7?._count._all ?? 0,
-      firstLot7d:  r7?._min.createdAt ? new Date(r7._min.createdAt).toISOString() : null,
-      lastLot7d:   r7?._max.createdAt ? new Date(r7._max.createdAt).toISOString() : null,
+      firstLot:    span?._min.createdAt ? new Date(span._min.createdAt).toISOString() : null,
+      lastLot:     span?._max.createdAt ? new Date(span._max.createdAt).toISOString() : null,
+      lots7d:      r7Map.get(a.id) ?? 0,
       statusCounts: statusMap.get(a.id) ?? {},
       withPhotos:  photoMap.has(a.id) ? (photoMap.get(a.id) as number) : null,
       avgDurationMs: tim?._avg.durationMs ?? null,
@@ -137,7 +143,7 @@ export default async function ManagerPortalPage() {
         </p>
       </div>
 
-      <ManagerPortalTable rows={rows} />
+      <ManagerPortalTable rows={rows} nowMs={Date.now()} />
     </div>
   )
 }

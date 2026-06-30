@@ -208,14 +208,14 @@ last_updated: 2026-05-29
 
 # Vectis Hub
 
-## Manager Portal (/tools/manager-portal) — BUILT 2026-06-30, STAGING
-Manager dashboard, new home card under Cataloguing & AI (app key MANAGER_PORTAL — grant access in Admin → Users; admins see it automatically). Shows how many lots are in every sale across BOTH cataloguing systems plus cataloguing pace, projected milestone dates and estimate value. No schema change / no migration.
+## Manager Portal (/tools/manager-portal) — BUILT + REDESIGNED 2026-06-30, STAGING
+Manager dashboard, home card under Cataloguing & AI (app key MANAGER_PORTAL — grant access in Admin → Users; admins see it automatically). Shows how many lots are in every sale across BOTH cataloguing systems plus cataloguing pace, projected milestone dates and estimate value. No schema change / no migration. Page passes nowMs from the server to the client so date maths never causes a hydration mismatch.
 
-ACTIVE sales table per row: Hub lot count (CatalogueLot grouped by auctionId), live BC count (Receipt_Lines_Excel where EVA_SalesAllocation = the auction code, e.g. F089), Total, Pace (lots/day), Next milestone, Est. value. BC counts load client-side via GET /api/manager-portal/bc-counts (connected:false when BC not linked; "—" per sale on failure) using a bcCount(token, endpoint, filter) helper in lib/bc.ts (OData $count, $top=0, Prefer include-annotations header, THROWS if @odata.count missing so it never shows a wrong 0).
+BC count = UNIQUE BARCODES, deduped against the Hub — the key fix. Lots get counted in BOTH systems once pushed to BC, so a naive Hub+BC total DOUBLES. GET /api/manager-portal/bc-counts (active sales only) fetches Receipt_Lines_Excel by EVA_SalesAllocation, builds a Set of unique PTE_InternalBarcode (bc), counts lot-level overlap = Hub lots whose barcode is in that set, and returns combined = bc + (hubLots − overlap) = deduped union. connected:false when BC not linked; per-sale failure → "—"; 100s wall-clock budget so a slow sale degrades to "—" instead of erroring everything.
 
-Pace = lots in last 7 days ÷ active span (clamped 1–7 days); reported "idle" if no lots added in the last 3 days so stalled sales aren't over-projected. Projected milestones = next round-hundreds (400/500/600/700) at current pace, date amber if after the sale date (compared at day granularity). Click any row to EXPAND a detail panel: Projected milestones, Progress (added-to-BC %, photo coverage %, published %), Status breakdown, Estimate value (total/avg), Cataloguing speed (avg time/lot from CatalogueTimingLog), Top cataloguers, Timing.
+Pace = Hub lots ÷ full cataloguing span (first→last lot, min 1 day) — a steady ~20–30/day, NOT a few-day window. Projected milestones = next round-hundreds (400/500/600/700) at that pace, amber if after the sale date.
 
-COMPLETED sales: NO counts — just a "✓ Added" tick (CatalogueAuction.addedToBC) + Est. value (slim variant). Reason: once Hub lots are pushed into BC they count in BOTH systems so Hub+BC doubles. Headline strip totals are computed over ACTIVE sales only for the same reason.
+UI: ACTIVE sales are CARDS — header shows Hub/BC/Total, a summary line (pace · next milestone · est value · "X of N Hub lots already in BC"), and a click-to-expand panel with progress bars (added-to-BC %, photos %, published %), stat tiles, milestone ladder, status pills and top cataloguers. COMPLETED sales = compact table, "✓ Added" tick + est value only (no counts — they double). Headline strip (active only) falls back to Hub counts when BC is disconnected. Went through 3 iterations (item-grain count inflated totals; cramped text-dump UI — Jordan: "looks awful, stats totally wrong") before barcode-dedup + cards.
 
 **Production URL:** https://vectis-production.up.railway.app
 **Staging URL:** https://vectis-staging.up.railway.app
