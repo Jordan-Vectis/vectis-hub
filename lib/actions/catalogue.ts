@@ -378,7 +378,13 @@ export async function updateLot(lotId: string, auctionId: string, formData: Form
 export async function deleteLot(lotId: string, auctionId: string) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
-  await prisma.catalogueLot.delete({ where: { id: lotId } })
+  // Delete the lot's cataloguing timing logs with it. CatalogueTimingLog.lotId is
+  // not a FK, so without this the log is orphaned and keeps counting forever in
+  // the reports as a "phantom" lot that no longer exists.
+  await prisma.$transaction([
+    prisma.catalogueTimingLog.deleteMany({ where: { lotId } }),
+    prisma.catalogueLot.delete({ where: { id: lotId } }),
+  ])
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
@@ -839,20 +845,17 @@ export async function transferLots(lotIds: string[], sourceAuctionId: string, ta
   return lotIds.length
 }
 
-// One-off repair for the historic transferLots bug: re-home every timing log
-// whose lot now lives in a different auction than the log says (logs stranded in
-// a source/holding auction by a transfer). Safe + idempotent — only touches
-// rows where the log's auction disagrees with the lot's current auction, and
-// keeps the work credited to the right cataloguer/sale. Admin-only, UI-triggered.
-export async function repairStrandedTimingLogs(): Promise<{ count: number }> {
+// One-off cleanup: remove cataloguing timing logs whose lot no longer exists
+// ("deleted lot" / phantom rows that keep inflating the reports). Logs with a
+// null lotId are legacy/legit and left alone. Admin-only, UI-triggered,
+// idempotent. (deleteLot now removes logs at source, so this is for the history.)
+export async function removeOrphanedTimingLogs(): Promise<{ count: number }> {
   const session = await auth()
   if (!session || session.user.role !== "ADMIN") throw new Error("Unauthorised")
   const count = await prisma.$executeRaw`
-    UPDATE "CatalogueTimingLog" t
-    SET "auctionId" = l."auctionId"
-    FROM "CatalogueLot" l
-    WHERE t."lotId" = l."id" AND t."auctionId" <> l."auctionId"`
-  revalidatePath("/admin/cataloguing-reports")
+    DELETE FROM "CatalogueTimingLog"
+    WHERE "lotId" IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM "CatalogueLot" l WHERE l."id" = "CatalogueTimingLog"."lotId")`
   revalidatePath("/tools/reports")
   return { count }
 }

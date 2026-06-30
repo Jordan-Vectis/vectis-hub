@@ -4,6 +4,7 @@ import { redirect } from "next/navigation"
 import { format, subDays, subMonths, startOfDay } from "date-fns"
 import Link from "next/link"
 import CataloguingReportsCharts, { type UserChartData, type MonthBucket } from "./charts"
+import CleanupOrphanLogsButton from "./cleanup-orphan-logs-button"
 
 export const dynamic = "force-dynamic"
 
@@ -194,6 +195,7 @@ export default async function ReportsOverviewPage({
             <div>
               <h1 className="text-xl font-bold text-gray-900 dark:text-white">Reports</h1>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Cataloguing performance — speed, output and team comparisons.</p>
+              {session.user.role === "ADMIN" && <div className="mt-3"><CleanupOrphanLogsButton /></div>}
             </div>
             {/* Range pills */}
             <div className="flex items-center gap-1 bg-gray-100 dark:bg-[#141416] border border-gray-200 dark:border-gray-800 rounded-lg p-1">
