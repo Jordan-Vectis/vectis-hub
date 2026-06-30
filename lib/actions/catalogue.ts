@@ -821,10 +821,19 @@ async function maxReceiptSuffix(base: string): Promise<number> {
 export async function transferLots(lotIds: string[], sourceAuctionId: string, targetAuctionId: string) {
   const session = await requireCataloguer()
   await requireNotBCLocked(sourceAuctionId, session)
-  await prisma.catalogueLot.updateMany({
-    where: { id: { in: lotIds }, auctionId: sourceAuctionId },
-    data: { auctionId: targetAuctionId },
-  })
+  await prisma.$transaction([
+    prisma.catalogueLot.updateMany({
+      where: { id: { in: lotIds }, auctionId: sourceAuctionId },
+      data: { auctionId: targetAuctionId },
+    }),
+    // Move the cataloguing timing logs WITH the lots. Without this they were
+    // stranded in the source auction (which then shows 0 lots but inflated
+    // report counts for everyone) — the phantom-count bug.
+    prisma.catalogueTimingLog.updateMany({
+      where: { lotId: { in: lotIds }, auctionId: sourceAuctionId },
+      data: { auctionId: targetAuctionId },
+    }),
+  ])
   revalidatePath(`/tools/cataloguing/auctions/${sourceAuctionId}`)
   revalidatePath(`/tools/cataloguing/auctions/${targetAuctionId}`)
   return lotIds.length

@@ -4,6 +4,7 @@ import { redirect, notFound } from "next/navigation"
 import { format, subDays, subMonths, startOfDay } from "date-fns"
 import Link from "next/link"
 import { CollapsibleLotsTable, CollapsibleIdleTable, TodayProductivityCard } from "./collapsible-sections"
+import { buildLotMap, lotRef } from "@/lib/cataloguing-reports"
 
 export const dynamic = "force-dynamic"
 
@@ -105,6 +106,9 @@ export default async function CataloguingUserReportPage({
   const anyLog = await prisma.catalogueTimingLog.findFirst({ where: { userId } })
   if (!anyLog) notFound()
   const userName = anyLog.userName
+
+  // Resolve each log's lotId to the real lot (barcode + whether it was moved/deleted)
+  const lotMap = await buildLotMap(logs)
 
   // ── Research summary ──
   const totalResearchMs = researchLogs.reduce((s, r) => s + r.durationMs, 0)
@@ -352,7 +356,7 @@ export default async function CataloguingUserReportPage({
               id:          l.id,
               savedAt:     l.savedAt.toISOString(),
               auctionCode: l.auction.code,
-              lotId:       l.lotId ?? null,
+              ...lotRef(lotMap, l),
               method:      l.method,
               keyPointsMs: l.keyPointsMs,
               durationMs:  l.durationMs,

@@ -299,7 +299,9 @@ export type SerialLotLog = {
   id: string
   savedAt: string
   auctionCode: string
-  lotId: string | null
+  barcode: string | null       // resolved real barcode (or receipt unique id)
+  movedToCode: string | null    // lot was transferred to this auction — log left behind
+  lotDeleted: boolean           // the lot no longer exists
   method: string
   keyPointsMs: number | null
   durationMs: number
@@ -377,7 +379,18 @@ export function CollapsibleLotsTable({ logs }: { logs: SerialLotLog[] }) {
                       {format(new Date(log.savedAt), "dd/MM/yyyy HH:mm:ss")}
                     </td>
                     <td className="px-5 py-3 font-mono text-slate-600 dark:text-gray-300 text-xs">{log.auctionCode}</td>
-                    <td className="px-5 py-3 font-mono text-gray-500 dark:text-gray-400 text-xs">{log.lotId ? log.lotId.slice(-6) : "—"}</td>
+                    <td className="px-5 py-3 font-mono text-gray-500 dark:text-gray-400 text-xs whitespace-nowrap">
+                      {log.lotDeleted ? (
+                        <span className="text-amber-500" title="The lot for this timing log no longer exists">⚠ deleted lot</span>
+                      ) : (
+                        <>
+                          {log.barcode ?? "—"}
+                          {log.movedToCode && (
+                            <span className="ml-1.5 text-amber-500" title="This lot was transferred to another auction — this timing log was left behind in the source auction">→ now in {log.movedToCode}</span>
+                          )}
+                        </>
+                      )}
+                    </td>
                     <td className="px-5 py-3">
                       <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
                         log.method === "WIZARD"
