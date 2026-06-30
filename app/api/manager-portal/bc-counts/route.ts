@@ -23,6 +23,9 @@ const CONCURRENCY = 4
 
 const normBarcode = (b: unknown) => String(b ?? "").replace(/[^\x20-\x7E]/g, "").trim().toUpperCase()
 
+// Mirrors parseBool in the warehouse receipt-lines sync.
+const isCatalogued = (v: unknown) => v === true || v === 1 || v === "true" || v === "Yes"
+
 async function inBatches<T>(items: T[], size: number, fn: (t: T) => Promise<void>): Promise<void> {
   for (let i = 0; i < items.length; i += size) {
     await Promise.all(items.slice(i, i + size).map(fn))
@@ -54,10 +57,14 @@ export async function GET() {
       if (Date.now() - startedAt > BUDGET_MS) { sales[code] = null; return }
       try {
         const safe = code.replace(/'/g, "''")
-        const rows = await bcFetchAll(token, "Receipt_Lines_Excel", `EVA_SalesAllocation eq '${safe}'`, "PTE_InternalBarcode")
+        const rows = await bcFetchAll(token, "Receipt_Lines_Excel", `EVA_SalesAllocation eq '${safe}'`, "PTE_InternalBarcode,EVA_Catalogued")
 
+        // Only count lots actually CATALOGUED in BC (not everything received) —
+        // otherwise every Hub lot, having been received into BC, matches and the
+        // combined union collapses to the BC received total (Hub adds nothing).
         const bcSet = new Set<string>()
         for (const r of rows) {
+          if (!isCatalogued((r as any).EVA_Catalogued)) continue
           const n = normBarcode((r as any).PTE_InternalBarcode)
           if (n) bcSet.add(n)
         }
