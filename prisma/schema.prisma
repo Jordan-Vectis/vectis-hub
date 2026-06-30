@@ -1010,6 +1010,14 @@ model DisabledModel {
   updatedAt DateTime @updatedAt
 }
 
+// Per-tool default AI model, set in Admin → AI Models. One row per tool "slot"
+// (keys defined in lib/ai-models.ts). Missing row = the tool's built-in default.
+model ToolModel {
+  slot      String   @id
+  modelId   String
+  updatedAt DateTime @updatedAt
+}
+
 // Invoice file storage — flat list backed by Cloudflare R2.
 // Accessible from /admin/invoices.
 model InvoiceFile {

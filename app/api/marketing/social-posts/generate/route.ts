@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { getToolModel } from "@/lib/ai-models"
 
 export const maxDuration = 60
 
@@ -32,7 +33,7 @@ ${context ? `Additional context: ${context}` : ""}
 Write the post now (copy first, then hashtags on a new line starting with #):`
 
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: modelId ?? "gemini-2.5-flash-preview-04-17" })
+    const model = genAI.getGenerativeModel({ model: modelId ?? (await getToolModel("marketing_social")) })
 
     const result = await model.generateContent(prompt)
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { parseModelJson } from "@/lib/model-json"
+import { getToolModel } from "@/lib/ai-models"
 
 export const maxDuration = 300
 
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
 
   const formData = await req.formData()
   const systemInstruction = formData.get("systemInstruction") as string ?? ""
-  const modelId           = formData.get("model") as string || "gemini-3-flash-preview"
+  const modelId           = formData.get("model") as string || (await getToolModel("catalogue_batch"))
   const grounded          = formData.get("grounded") === "true"
 
   // Each lot is submitted as: lot_{name}_image_{i} files

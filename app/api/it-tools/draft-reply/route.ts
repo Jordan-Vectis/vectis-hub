@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { getToolModel } from "@/lib/ai-models"
 
 export const maxDuration = 60
 
@@ -138,7 +139,7 @@ DRAFTED REPLY:`
 
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
-      model: modelId || "gemini-3-flash-preview",
+      model: modelId || (await getToolModel("it_draft_reply")),
       generationConfig: { maxOutputTokens: 2048 },
     })
 

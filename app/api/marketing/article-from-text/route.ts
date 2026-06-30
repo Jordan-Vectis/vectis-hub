@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { getToolModel } from "@/lib/ai-models"
 
 export const maxDuration = 120
 
@@ -155,7 +156,7 @@ export async function POST(req: NextRequest) {
 
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
-      model: modelId || "gemini-2.5-flash-preview-04-17",
+      model: modelId || (await getToolModel("marketing_article_text")),
       generationConfig: { maxOutputTokens: maxTokens },
     })
 

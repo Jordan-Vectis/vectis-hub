@@ -410,3 +410,14 @@ HTTP status codes used:
 
 Run sequentially with a **1-second gap** between models — never `Promise.all`.
 Firing all models concurrently burns quota and causes the 429s that show up in the test results.
+
+---
+
+## AI Model Selection — central config (Admin → AI Models)
+
+The model each AI feature uses is configured in **Admin → AI Models** (`/admin/ai-models`), backed by the `ToolModel` table. **Never hardcode a Gemini model default in a route.** Instead:
+
+- `lib/ai-models.ts` holds the `AI_TOOLS` registry (one `slot` per AI feature, with a built-in `default`) and `getToolModel(slot)` — read it for the model when the request didn't pass one: `const m = passedModel || (await getToolModel("slot"))`. A user's on-screen picker (the value posted in the request) still wins; `getToolModel` is only the fallback.
+- **When adding a new AI feature, add a slot to `AI_TOOLS`** and use `getToolModel` — don't invent a new hardcoded default.
+- The dropdowns reuse the enabled-models list from `/api/auction-ai/models` (which already respects the `DisabledModel` enable/disable toggles in Auction AI → Models). The two are complementary: Models tab = which models are *available*; AI Models = which model each *tool* defaults to.
+- ⚠ Google **retires** models (e.g. `gemini-2.0-flash` 404'd 2026-06-29 and broke auto-fix + 3 other routes that hardcoded it). With this config, a retirement is a one-click admin fix, not a code change. The current safe default is `gemini-3-flash-preview`.

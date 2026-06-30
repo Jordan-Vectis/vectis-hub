@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { prisma } from "@/lib/prisma"
 import { getObjectBuffer } from "@/lib/r2"
+import { getToolModel } from "@/lib/ai-models"
 
 export const maxDuration = 180
 
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
 
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
-      model: modelId || "gemini-3-flash-preview",
+      model: modelId || (await getToolModel("accounts_statement")),
       generationConfig: { responseMimeType: "application/json" },
     })
 

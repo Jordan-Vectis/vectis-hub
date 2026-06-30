@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { getToolModel } from "@/lib/ai-models"
 
 export const maxDuration = 120
 
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest) {
   const systemInstruction = formData.get("systemInstruction") as string ?? ""
   const historyRaw        = formData.get("history") as string ?? "[]"
   const imageFiles        = formData.getAll("images") as File[]
-  const modelId           = formData.get("model") as string || "gemini-3-flash-preview"
+  const modelId           = formData.get("model") as string || (await getToolModel("catalogue_chat"))
 
   // Build image parts from uploaded files
   const imageParts = await Promise.all(

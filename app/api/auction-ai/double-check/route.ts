@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { DOUBLE_CHECK_INSTRUCTION } from "@/lib/double-check-instruction"
 import { parseModelJson, extractJsonField } from "@/lib/model-json"
+import { getToolModel } from "@/lib/ai-models"
 
 export const maxDuration = 60
 
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
 
     const genAI = new GoogleGenerativeAI(apiKey)
     const ai = genAI.getGenerativeModel({
-      model: model ?? "gemini-2.5-flash-preview-04-17",
+      model: model ?? (await getToolModel("catalogue_doublecheck")),
       systemInstruction: DOUBLE_CHECK_INSTRUCTION,
     })
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { getToolModel } from "@/lib/ai-models"
 
 const MODE_INSTRUCTIONS: Record<string, string> = {
   shorten:          "Shorten the description — remove unnecessary words and padding while keeping all factual detail.",
@@ -54,7 +55,7 @@ Rules:
 - Join lines with \\n, never collapse multi-paragraph or list formatting into a single paragraph.${kpRule}`
 
     const genai  = new GoogleGenerativeAI(apiKey)
-    const gemini = genai.getGenerativeModel({ model: model || "gemini-3-flash-preview", systemInstruction })
+    const gemini = genai.getGenerativeModel({ model: model || (await getToolModel("catalogue_upgrade")), systemInstruction })
     const result = await gemini.generateContent(description.trim())
 
     const blockReason = (result.response as any).promptFeedback?.blockReason

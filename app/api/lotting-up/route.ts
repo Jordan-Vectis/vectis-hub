@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { getToolModel } from "@/lib/ai-models"
 
 export const maxDuration = 120
 
@@ -103,7 +104,7 @@ export async function POST(req: NextRequest) {
     const mimeType = file.type || "image/jpeg"
 
     const genai = new GoogleGenerativeAI(apiKey)
-    const model = genai.getGenerativeModel({ model: modelId })
+    const model = genai.getGenerativeModel({ model: modelId || (await getToolModel("catalogue_lotting_up")) })
 
     const minValueInstruction = minLotValue
       ? `\n\nIMPORTANT OVERRIDE — Minimum lot value: Every lot MUST have an estimateLow of at least £${minLotValue}. ` +

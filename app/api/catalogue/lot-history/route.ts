@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { getToolModel } from "@/lib/ai-models"
 
 export const maxDuration = 120
 
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
     const prompt = buildPrompt(lot, instructions)
 
     const genai  = new GoogleGenerativeAI(apiKey)
-    const model  = genai.getGenerativeModel({ model: modelId || "gemini-2.5-flash-preview-04-17" })
+    const model  = genai.getGenerativeModel({ model: modelId || (await getToolModel("catalogue_lot_history")) })
 
     const result   = await model.generateContent(prompt)
     const response = result.response

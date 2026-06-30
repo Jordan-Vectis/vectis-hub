@@ -8,6 +8,7 @@
  */
 
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { getToolModel } from "@/lib/ai-models"
 
 export type AuctionCandidate = { id: string; code: string; name: string; date: string | null }
 
@@ -31,7 +32,7 @@ export async function extractConditionDetails(
   try {
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
-      model: process.env.CONDITION_AI_MODEL || "gemini-3-flash-preview",
+      model: process.env.CONDITION_AI_MODEL || (await getToolModel("condition_extract")),
     })
 
     const candidateList = candidates

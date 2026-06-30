@@ -4,6 +4,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { getObjectBuffer } from "@/lib/r2"
+import { getToolModel } from "@/lib/ai-models"
 
 export const maxDuration = 120
 
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
     const parts = buffers.map((buf, i) => ({ inlineData: { data: buf.toString("base64"), mimeType: mimeForKey(firstKey(ordered[i])) } }))
 
     const genai = new GoogleGenerativeAI(apiKey)
-    const model = genai.getGenerativeModel({ model: "gemini-3-flash-preview", generationConfig: { responseMimeType: "application/json" } })
+    const model = genai.getGenerativeModel({ model: await getToolModel("accounts_stitch"), generationConfig: { responseMimeType: "application/json" } })
 
     let groups: number[][] = []
     try {

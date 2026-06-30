@@ -4,6 +4,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { PDFDocument } from "pdf-lib"
 import { prisma } from "@/lib/prisma"
 import { getObjectBuffer } from "@/lib/r2"
+import { getToolModel } from "@/lib/ai-models"
 
 export const maxDuration = 120
 
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
     try { pageCount = (await PDFDocument.load(buf)).getPageCount() } catch { /* unreadable */ }
 
     const genai = new GoogleGenerativeAI(apiKey)
-    const model = genai.getGenerativeModel({ model: modelId || "gemini-3-flash-preview", generationConfig: { responseMimeType: "application/json" } })
+    const model = genai.getGenerativeModel({ model: modelId || (await getToolModel("accounts_split")), generationConfig: { responseMimeType: "application/json" } })
 
     let groups: number[][] = []
     try {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { getToolModel } from "@/lib/ai-models"
 
 export const maxDuration = 120
 
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest) {
   const systemInstruction = formData.get("systemInstruction") as string ?? ""
   const historyRaw        = formData.get("history") as string ?? "[]"
   const imageFiles        = formData.getAll("images") as File[]
-  const modelId           = formData.get("model") as string || "gemini-3-flash-preview"
+  const modelId           = formData.get("model") as string || (await getToolModel("catalogue_chat_grounded"))
 
   // Build image parts from uploaded files
   const imageParts = await Promise.all(
@@ -95,7 +96,7 @@ export async function POST(req: NextRequest) {
     // Give a clear message if the model doesn't support grounding
     if (msg.includes("400") || msg.toLowerCase().includes("tool") || msg.toLowerCase().includes("grounding")) {
       return NextResponse.json(
-        { error: `This model does not support Google Search grounding. Try switching to gemini-2.0-flash or gemini-1.5-pro in the sidebar.` },
+        { error: `This model does not support Google Search grounding. Try switching to a different model in the sidebar.` },
         { status: 400 }
       )
     }

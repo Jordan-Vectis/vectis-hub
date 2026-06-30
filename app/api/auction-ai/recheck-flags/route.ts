@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { getToolModel } from "@/lib/ai-models"
 
 export const maxDuration = 60
 
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
 
-    const { keyPoints, description, model: modelId = "gemini-3-flash-preview" } = await req.json()
+    const { keyPoints, description, model: modelId = "" } = await req.json()
 
     if (!keyPoints?.trim() || !description?.trim()) {
       return NextResponse.json({ flag: null })
@@ -42,7 +43,7 @@ export async function POST(req: NextRequest) {
 
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
-      model: modelId,
+      model: modelId || (await getToolModel("catalogue_flags")),
       systemInstruction: PROMPT,
       tools: [{ googleSearch: {} } as any],
     })

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { getToolModel } from "@/lib/ai-models"
 
 export const maxDuration = 60
 
@@ -86,7 +87,7 @@ ${keyPointSamples ? `\nKey points (sample):\n${keyPointSamples}` : ""}
 Write the auction description now:`
 
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: modelId ?? "gemini-2.5-flash-preview-04-17" })
+    const model = genAI.getGenerativeModel({ model: modelId ?? (await getToolModel("marketing_web")) })
 
     const result = await model.generateContent(prompt)
 

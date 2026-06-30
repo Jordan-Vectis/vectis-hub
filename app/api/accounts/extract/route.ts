@@ -8,6 +8,7 @@ import {
   NOMINAL_KEYS, isValidColumn, isValidVatCode,
   vatFromGross, netFromGross, normaliseSupplier,
 } from "@/lib/accounting"
+import { getToolModel } from "@/lib/ai-models"
 
 export const maxDuration = 120
 
@@ -143,7 +144,7 @@ export async function POST(req: NextRequest) {
 
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
-      model: modelId || "gemini-3-flash-preview",
+      model: modelId || (await getToolModel("accounts_extract")),
       generationConfig: { responseMimeType: "application/json" },
     })
 

@@ -12,6 +12,12 @@ const MIGRATIONS = [
   `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastTote"    TEXT`,
   `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastVendor"  TEXT`,
   `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastReceipt" TEXT`,
+  `CREATE TABLE IF NOT EXISTS "ToolModel" (
+    "slot"      TEXT NOT NULL,
+    "modelId"   TEXT NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "ToolModel_pkey" PRIMARY KEY ("slot")
+  )`,
   `CREATE TABLE IF NOT EXISTS "ConditionWording" (
     "id"        TEXT NOT NULL,
     "label"     TEXT NOT NULL,

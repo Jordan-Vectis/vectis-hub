@@ -94,6 +94,12 @@ const sections = [
     description: "Show a custom banner to everyone using the app — e.g. after an update or to warn of planned downtime.",
     icon:        "📣",
   },
+  {
+    href:        "/admin/ai-models",
+    label:       "AI Models",
+    description: "Choose which Gemini model each AI feature uses across the app. Fix a retired model in one place instead of in code.",
+    icon:        "🤖",
+  },
 ]
 
 export default async function AdminOverviewPage() {
