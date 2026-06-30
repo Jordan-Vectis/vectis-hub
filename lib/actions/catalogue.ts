@@ -839,6 +839,24 @@ export async function transferLots(lotIds: string[], sourceAuctionId: string, ta
   return lotIds.length
 }
 
+// One-off repair for the historic transferLots bug: re-home every timing log
+// whose lot now lives in a different auction than the log says (logs stranded in
+// a source/holding auction by a transfer). Safe + idempotent — only touches
+// rows where the log's auction disagrees with the lot's current auction, and
+// keeps the work credited to the right cataloguer/sale. Admin-only, UI-triggered.
+export async function repairStrandedTimingLogs(): Promise<{ count: number }> {
+  const session = await auth()
+  if (!session || session.user.role !== "ADMIN") throw new Error("Unauthorised")
+  const count = await prisma.$executeRaw`
+    UPDATE "CatalogueTimingLog" t
+    SET "auctionId" = l."auctionId"
+    FROM "CatalogueLot" l
+    WHERE t."lotId" = l."id" AND t."auctionId" <> l."auctionId"`
+  revalidatePath("/admin/cataloguing-reports")
+  revalidatePath("/tools/reports")
+  return { count }
+}
+
 export async function massCreateLots(
   auctionId: string,
   auctionCode: string,

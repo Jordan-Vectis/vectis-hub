@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { format } from "date-fns"
 import Link from "next/link"
+import RepairStrandedLogsButton from "./repair-stranded-logs-button"
 
 export const dynamic = "force-dynamic"
 
@@ -134,9 +135,12 @@ export default async function CataloguingReportsPage() {
     <div className="p-8 max-w-6xl space-y-10">
 
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Cataloguing Reports</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Time tracked per lot — from barcode entry to save. Admin only.</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Cataloguing Reports</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Time tracked per lot — from barcode entry to save. Admin only.</p>
+        </div>
+        <RepairStrandedLogsButton />
       </div>
 
       {/* Summary cards */}
