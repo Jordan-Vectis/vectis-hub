@@ -18,31 +18,44 @@ export default async function ManagerPortalPage() {
   })
   if (!hasAppAccess(dbUser?.role ?? "", dbUser?.allowedApps ?? [], "MANAGER_PORTAL")) redirect("/hub")
 
-  const [auctions, spanAgg, timingAgg, catAgg] = await Promise.all([
+  const [auctions, dailyRows, timingAgg, catAgg] = await Promise.all([
     prisma.catalogueAuction.findMany({
       orderBy: { auctionDate: "desc" },
       include: { _count: { select: { lots: true } } },
     }),
-    // First + last lot ever for the sale — pace = lots ÷ that active span
-    prisma.catalogueLot.groupBy({
-      by: ["auctionId"],
-      _min: { createdAt: true },
-      _max: { createdAt: true },
-    }),
-    // Cataloguing speed (avg ms per lot) from the timing logs
+    // Lots catalogued per day, per ACTIVE sale — drives the pace, the "active
+    // days" denominator and the sparkline. Defensive: a failure just omits it.
+    (async () => {
+      try {
+        return await prisma.$queryRaw<{ auctionId: string; day: Date; n: number }[]>`
+          SELECT l."auctionId" AS "auctionId", date_trunc('day', l."createdAt") AS day, COUNT(*)::int AS n
+          FROM "CatalogueLot" l
+          JOIN "CatalogueAuction" a ON a.id = l."auctionId"
+          WHERE a.complete = false
+          GROUP BY l."auctionId", date_trunc('day', l."createdAt")
+          ORDER BY day ASC`
+      } catch {
+        return [] as { auctionId: string; day: Date; n: number }[]
+      }
+    })(),
     prisma.catalogueTimingLog.groupBy({
       by: ["auctionId"],
       _avg:   { durationMs: true },
       _count: { _all: true },
     }),
-    // Per-cataloguer lot counts → top contributors per sale
     prisma.catalogueTimingLog.groupBy({
       by: ["auctionId", "userName"],
       _count: { _all: true },
     }),
   ])
 
-  const spanMap   = new Map(spanAgg.map(v => [v.auctionId, v]))
+  const dailyMap = new Map<string, number[]>()  // auctionId → chronological per-day lot counts
+  for (const r of dailyRows) {
+    const arr = dailyMap.get(r.auctionId) ?? []
+    arr.push(Number(r.n))
+    dailyMap.set(r.auctionId, arr)
+  }
+
   const timingMap = new Map(timingAgg.map(v => [v.auctionId, v]))
 
   const catMap = new Map<string, { name: string; count: number }[]>()
@@ -54,8 +67,7 @@ export default async function ManagerPortalPage() {
   for (const [k, arr] of catMap) catMap.set(k, arr.sort((a, b) => b.count - a.count).slice(0, 3))
 
   const rows: SaleRow[] = auctions.map(a => {
-    const span = spanMap.get(a.id)
-    const tim  = timingMap.get(a.id)
+    const tim = timingMap.get(a.id)
     return {
       id:          a.id,
       code:        a.code,
@@ -65,8 +77,7 @@ export default async function ManagerPortalPage() {
       hubLots:     a._count.lots,
       complete:    !!a.complete,
       addedToBC:   !!a.addedToBC,
-      firstLot:    span?._min.createdAt ? new Date(span._min.createdAt).toISOString() : null,
-      lastLot:     span?._max.createdAt ? new Date(span._max.createdAt).toISOString() : null,
+      daily:       dailyMap.get(a.id) ?? [],
       avgDurationMs: tim?._avg.durationMs ?? null,
       timedLots:   tim?._count._all ?? 0,
       topCataloguers: catMap.get(a.id) ?? [],
@@ -78,7 +89,7 @@ export default async function ManagerPortalPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Manager Portal</h1>
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-          Lots in every sale across both systems, cataloguing pace and projected milestone dates. Click a sale for more.
+          Lots in every sale across both systems, cataloguing pace and projected milestone dates. Click a sale for the full breakdown.
         </p>
       </div>
 
