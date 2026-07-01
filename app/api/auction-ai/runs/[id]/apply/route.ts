@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { logLotCreated, logLotFieldChanges } from "@/lib/lot-log"
 
 function parseEstimate(est: string): { low: number | null; high: number | null } {
   const m = est.match(/£([\d,]+)\s*[–\-]\s*£?([\d,]+)/)
@@ -70,6 +71,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     let created = 0
     let updated = 0
+    const logCtx = { changedBy: session.user.name ?? session.user.email ?? "Unknown", source: "ai_apply", batchId: crypto.randomUUID() }
 
     await Promise.all(
       uniqueLots.map(async l => {
@@ -79,20 +81,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
         if (existingId) {
           // Update existing lot — description + AI estimate only, never touch human estimate
-          await prisma.catalogueLot.update({
+          const before = await prisma.catalogueLot.findUnique({
             where: { id: existingId },
-            data: {
-              title:          titleFromDescription(l.description),
-              description:    l.description,
-              aiEstimateLow:  low,
-              aiEstimateHigh: high,
-              aiUpgraded:     true,
-            },
+            select: { barcode: true, title: true, description: true, aiEstimateLow: true, aiEstimateHigh: true, aiUpgraded: true },
           })
+          const data = { title: titleFromDescription(l.description), description: l.description, aiEstimateLow: low, aiEstimateHigh: high, aiUpgraded: true }
+          await prisma.catalogueLot.update({ where: { id: existingId }, data })
+          if (before) await logLotFieldChanges(before, data, { id: existingId, auctionId: auction.id, barcode: before.barcode, title: data.title }, run.code, logCtx)
           updated++
         } else {
           // Create new lot — AI is the starting point so populate both estimate fields
-          await prisma.catalogueLot.create({
+          const lot = await prisma.catalogueLot.create({
             data: {
               auctionId:       auction.id,
               receiptUniqueId: isUniqueId ? l.lot : null,
@@ -105,6 +104,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
               aiUpgraded:      true,
             },
           })
+          await logLotCreated(lot, run.code, logCtx)
           created++
         }
       }),

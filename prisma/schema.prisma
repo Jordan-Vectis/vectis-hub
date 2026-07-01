@@ -1055,15 +1055,19 @@ model CatalogueLotEvent {
   auctionCode String
   lotBarcode  String?
   lotTitle    String?
+  action      String   @default("updated")  // created | updated | deleted | photo_added | photo_removed | photo_reordered
+  source      String?                        // which tool made the change: lot_wizard, lot_editor, review_tab, photo_tab, ai_pipeline, ai_batch, bulk, import, admin_db, warehouse_fill, restore
+  batchId     String?                        // groups one user action that touched many lots (e.g. a bulk toggle)
   field       String
-  oldValue    String?
-  newValue    String?
+  oldValue    String?  @db.Text
+  newValue    String?  @db.Text
   changedBy   String
   changedAt   DateTime @default(now())
 
   @@index([lotId])
   @@index([auctionId])
   @@index([changedAt])
+  @@index([batchId])
   @@index([field])
 }
 

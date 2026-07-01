@@ -5,7 +5,20 @@ import Link from "next/link"
 
 const PAGE_SIZE = 50
 
-type SearchParams = { page?: string; auction?: string; barcode?: string; field?: string; user?: string }
+type SearchParams = { page?: string; auction?: string; barcode?: string; field?: string; user?: string; action?: string; source?: string }
+
+// How each action / source reads in the UI.
+const ACTION_LABELS: Record<string, string> = {
+  created: "Created", updated: "Updated", deleted: "Deleted",
+  photo_added: "Photo added", photo_removed: "Photo removed", photo_reordered: "Photos reordered",
+}
+const SOURCE_LABELS: Record<string, string> = {
+  lot_create: "Lot wizard / Add lot", lot_wizard: "Lot wizard", photo_only: "Photo-only lot",
+  lot_editor: "Lot editor", review_tab: "Review tab", photo_tab: "Photos",
+  ai_apply: "AI (applied)", ai_flag: "AI flag", bulk: "Bulk action", import: "Import",
+  mass_create: "Mass create", warehouse_fill: "Warehouse fill", transfer: "Transfer",
+  admin_db: "Admin databases", restore: "Backup restore",
+}
 
 export default async function LotLogPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const session = await auth()
@@ -18,26 +31,32 @@ export default async function LotLogPage({ searchParams }: { searchParams: Promi
   const fBarcode = sp.barcode?.trim() ?? ""
   const fField   = sp.field?.trim() ?? ""
   const fUser    = sp.user?.trim() ?? ""
+  const fAction  = sp.action?.trim() ?? ""
+  const fSource  = sp.source?.trim() ?? ""
 
   const where = {
     ...(fAuction ? { auctionCode: { contains: fAuction, mode: "insensitive" as const } } : {}),
     ...(fBarcode ? { lotBarcode:  { contains: fBarcode,  mode: "insensitive" as const } } : {}),
     ...(fField   ? { field:       { contains: fField,    mode: "insensitive" as const } } : {}),
     ...(fUser    ? { changedBy:   { contains: fUser,     mode: "insensitive" as const } } : {}),
+    ...(fAction  ? { action:      fAction } : {}),
+    ...(fSource  ? { source:      fSource } : {}),
   }
 
-  const [events, total, allFields, allUsers] = await Promise.all([
+  const [events, total, allFields, allUsers, allActions, allSources] = await Promise.all([
     prisma.catalogueLotEvent.findMany({ where, orderBy: { changedAt: "desc" }, skip, take: PAGE_SIZE }),
     prisma.catalogueLotEvent.count({ where }),
     prisma.catalogueLotEvent.findMany({ distinct: ["field"],     select: { field: true },     orderBy: { field: "asc" } }),
     prisma.catalogueLotEvent.findMany({ distinct: ["changedBy"], select: { changedBy: true }, orderBy: { changedBy: "asc" } }),
+    prisma.catalogueLotEvent.findMany({ distinct: ["action"],    select: { action: true },    orderBy: { action: "asc" } }),
+    prisma.catalogueLotEvent.findMany({ distinct: ["source"],    select: { source: true },    orderBy: { source: "asc" } }),
   ])
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   function buildUrl(overrides: Partial<SearchParams>) {
     const params = new URLSearchParams()
-    const merged = { page: String(page), auction: fAuction, barcode: fBarcode, field: fField, user: fUser, ...overrides }
+    const merged = { page: String(page), auction: fAuction, barcode: fBarcode, field: fField, user: fUser, action: fAction, source: fSource, ...overrides }
     Object.entries(merged).forEach(([k, v]) => { if (v) params.set(k, v) })
     return `/admin/lot-log?${params.toString()}`
   }
@@ -58,6 +77,14 @@ export default async function LotLogPage({ searchParams }: { searchParams: Promi
       <form method="get" action="/admin/lot-log" className="flex flex-wrap gap-3 mb-5">
         <input name="auction" defaultValue={fAuction} placeholder="Auction code…" className={input} style={{ width: 160 }} />
         <input name="barcode" defaultValue={fBarcode} placeholder="Barcode…"      className={input} style={{ width: 140 }} />
+        <select name="action" defaultValue={fAction} className={sel}>
+          <option value="">All actions</option>
+          {allActions.map(a => <option key={a.action} value={a.action}>{ACTION_LABELS[a.action] ?? a.action}</option>)}
+        </select>
+        <select name="source" defaultValue={fSource} className={sel}>
+          <option value="">All tools</option>
+          {allSources.filter(s => s.source).map(s => <option key={s.source!} value={s.source!}>{SOURCE_LABELS[s.source!] ?? s.source}</option>)}
+        </select>
         <select name="field" defaultValue={fField} className={sel}>
           <option value="">All fields</option>
           {allFields.map(f => <option key={f.field} value={f.field}>{f.field}</option>)}
@@ -67,7 +94,7 @@ export default async function LotLogPage({ searchParams }: { searchParams: Promi
           {allUsers.map(u => <option key={u.changedBy} value={u.changedBy}>{u.changedBy}</option>)}
         </select>
         <button type="submit" className="px-4 py-1.5 rounded-lg bg-[#2AB4A6] text-white text-sm font-medium hover:bg-[#24a090] transition-colors">Filter</button>
-        {(fAuction || fBarcode || fField || fUser) && (
+        {(fAuction || fBarcode || fField || fUser || fAction || fSource) && (
           <Link href="/admin/lot-log" className="px-4 py-1.5 rounded-lg border border-gray-700 text-gray-400 text-sm hover:text-gray-200 transition-colors">Clear</Link>
         )}
       </form>
@@ -75,7 +102,7 @@ export default async function LotLogPage({ searchParams }: { searchParams: Promi
       {/* Table */}
       {events.length === 0 ? (
         <div className="text-center py-16 text-gray-500">
-          {total === 0 ? "No changes recorded yet — the log fills as lots are edited." : "No events match your filters."}
+          {total === 0 ? "No events recorded yet — the log fills as lots are created, edited and deleted." : "No events match your filters."}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-gray-800">
@@ -85,10 +112,12 @@ export default async function LotLogPage({ searchParams }: { searchParams: Promi
                 <th className="text-left px-4 py-2.5 text-gray-400 font-medium whitespace-nowrap">Date / Time</th>
                 <th className="text-left px-4 py-2.5 text-gray-400 font-medium">Auction</th>
                 <th className="text-left px-4 py-2.5 text-gray-400 font-medium">Lot</th>
+                <th className="text-left px-4 py-2.5 text-gray-400 font-medium">Action</th>
                 <th className="text-left px-4 py-2.5 text-gray-400 font-medium">Field</th>
                 <th className="text-left px-4 py-2.5 text-gray-400 font-medium">Old value</th>
                 <th className="text-left px-4 py-2.5 text-gray-400 font-medium">New value</th>
                 <th className="text-left px-4 py-2.5 text-gray-400 font-medium whitespace-nowrap">Changed by</th>
+                <th className="text-left px-4 py-2.5 text-gray-400 font-medium whitespace-nowrap">Tool</th>
               </tr>
             </thead>
             <tbody>
@@ -111,6 +140,15 @@ export default async function LotLogPage({ searchParams }: { searchParams: Promi
                       {e.lotTitle && <span className="block text-xs text-gray-600 truncate">{e.lotTitle}</span>}
                     </td>
                     <td className="px-4 py-2.5">
+                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${
+                        e.action === "created" ? "bg-green-900/30 text-green-300"
+                        : e.action === "deleted" ? "bg-red-900/30 text-red-300"
+                        : e.action?.startsWith("photo") ? "bg-blue-900/30 text-blue-300"
+                        : "bg-gray-800 text-gray-400"}`}>
+                        {ACTION_LABELS[e.action] ?? e.action}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5">
                       <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${isEstimate ? "bg-amber-900/30 text-amber-300" : "bg-gray-800 text-gray-300"}`}>
                         {e.field}
                       </span>
@@ -130,6 +168,7 @@ export default async function LotLogPage({ searchParams }: { searchParams: Promi
                         : <span className="text-red-400 text-xs italic">cleared</span>}
                     </td>
                     <td className="px-4 py-2.5 text-gray-400 text-xs whitespace-nowrap">{e.changedBy}</td>
+                    <td className="px-4 py-2.5 text-gray-500 text-xs whitespace-nowrap">{e.source ? (SOURCE_LABELS[e.source] ?? e.source) : "—"}</td>
                   </tr>
                 )
               })}

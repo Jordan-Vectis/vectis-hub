@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { logLotCreated } from "@/lib/lot-log"
 import * as XLSX from "xlsx"
 
 // POST /api/catalogue/import
@@ -65,6 +66,7 @@ export async function POST(req: NextRequest) {
     let created = 0
     let skipped = 0
     const errors: string[] = []
+    const importCtx = { changedBy: session.user.name ?? session.user.email ?? "Unknown", source: "import", batchId: crypto.randomUUID() }
 
     for (const row of rows) {
       try {
@@ -129,9 +131,10 @@ export async function POST(req: NextRequest) {
           skipped++
         } else {
           // New lot
-          await prisma.catalogueLot.create({
+          const lot = await prisma.catalogueLot.create({
             data: { ...data, auctionId: auction.id },
           })
+          await logLotCreated({ ...lot, id: lot.id, auctionId: auction.id }, code, importCtx)
           created++
         }
       } catch (e: any) {

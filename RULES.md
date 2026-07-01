@@ -425,6 +425,27 @@ HTTP status codes used:
 
 ---
 
+## Lot Change Log — log EVERY lot mutation
+
+The `CatalogueLotEvent` table is the audit trail behind `/admin/lot-log`. It must capture **who
+did what, when, and in which tool** for every way a lot changes — creation (with the details
+entered), field edits, deletion, and photo changes. It used to be fed by `updateLot` alone (1 of
+~36 mutation paths); now every path logs.
+
+- **All logging goes through `lib/lot-log.ts`** — `logLotCreated` / `logLotsCreated`,
+  `logLotDeleted`, `logLotFieldChanges` (diffs a before/after snapshot), `logLotPhoto`,
+  `buildLotEventRow` + `writeLotEvents` (bulk). **Never write `catalogueLotEvent` rows directly.**
+- In `lib/actions/catalogue.ts`, single-lot updates go through the local **`updateLotLogged(lotId,
+  data, ctx)`** helper (fetches before, updates, logs the diff) instead of a bare
+  `prisma.catalogueLot.update`. Bulk `updateMany` paths snapshot before, then log the changed lots
+  under one `batchId`.
+- **When you add ANY new code that creates, edits or deletes a lot (or its photos), you MUST log it.**
+  Every event carries `action` (created/updated/deleted/photo_*), `source` (which tool — e.g.
+  `lot_create`, `lot_editor`, `review_tab`, `photo_tab`, `ai_apply`, `bulk`, `import`, `mass_create`,
+  `warehouse_fill`, `transfer`, `admin_db`) and, for bulk actions, a shared `batchId`.
+- Schema: `CatalogueLotEvent.action` / `source` / `batchId` (**NEEDS Run Migrations**). Backup
+  **restore** deliberately does NOT log (it's disaster recovery, not user edits).
+
 ## Hardcoded Constants
 
 | Constant | Value | Location |

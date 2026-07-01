@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
+import { logLotFieldChanges } from "@/lib/lot-log"
 
 async function requireAuth() {
   const session = await auth()
@@ -81,7 +82,24 @@ export async function updateLotDb(id: string, data: {
   hammerPrice?: number | null
   status?: string
 }) {
-  await requireAuth()
+  const session = await requireAuth()
+  const old = await prisma.catalogueLot.findUnique({
+    where: { id },
+    select: {
+      id: true, auctionId: true, barcode: true, title: true,
+      vendor: true, receipt: true, tote: true, category: true, subCategory: true,
+      condition: true, notes: true, brand: true, estimateLow: true, estimateHigh: true,
+      reserve: true, hammerPrice: true, status: true, auction: { select: { code: true } },
+    },
+  })
   await prisma.catalogueLot.update({ where: { id }, data })
+  if (old) {
+    await logLotFieldChanges(
+      old, data,
+      { id: old.id, auctionId: old.auctionId, barcode: old.barcode, title: old.title },
+      old.auction?.code ?? "",
+      { changedBy: session.user.name ?? session.user.email ?? "Unknown", source: "admin_db" },
+    )
+  }
   revalidatePath("/databases")
 }

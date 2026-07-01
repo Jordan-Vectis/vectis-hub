@@ -3,6 +3,10 @@ import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { uploadBufferToR2, deleteObjectsFromR2 } from "@/lib/r2"
+import {
+  logLotCreated, logLotsCreated, logLotDeleted, logLotFieldChanges, logLotPhoto,
+  buildLotEventRow, writeLotEvents, type LotLogCtx,
+} from "@/lib/lot-log"
 
 // First 83 characters of the description — no sentence splitting, full stops do not break title
 function titleFromDescription(desc: string): string {
@@ -28,6 +32,42 @@ async function requireNotBCLocked(auctionId: string, session: Awaited<ReturnType
   if (session.user.role === "ADMIN") return
   const auction = await prisma.catalogueAuction.findUnique({ where: { id: auctionId }, select: { addedToBC: true } })
   if (auction?.addedToBC) throw new Error("This auction has been added to BC and is locked. Only admins can make changes.")
+}
+
+function changedByOf(session: Awaited<ReturnType<typeof requireCataloguer>>): string {
+  return session.user.name ?? session.user.email ?? "Unknown"
+}
+
+// A short id grouping every lot event from one bulk action.
+function newBatchId(): string {
+  return crypto.randomUUID()
+}
+
+// Every loggable field + the identifiers/auction code, for before/after diffing.
+const LOGGABLE_SELECT = {
+  id: true, auctionId: true, barcode: true, title: true,
+  keyPoints: true, description: true, estimateLow: true, estimateHigh: true,
+  aiEstimateLow: true, aiEstimateHigh: true, startingBid: true, reserve: true,
+  currentBid: true, hammerPrice: true, condition: true, vendor: true, tote: true,
+  receipt: true, receiptUniqueId: true, category: true, subCategory: true, brand: true,
+  notes: true, extraDetails: true, status: true, aiExcluded: true, aiUpgraded: true,
+  addedToBC: true, reviewFlag: true, reviewFlaggedBy: true, aiFlagNote: true,
+  auction: { select: { code: true } },
+} as const
+
+// Update one lot AND log every changed field. Replaces a bare
+// prisma.catalogueLot.update so no single-lot edit escapes the change log.
+async function updateLotLogged(lotId: string, data: Record<string, any>, ctx: LotLogCtx) {
+  const old = await prisma.catalogueLot.findUnique({ where: { id: lotId }, select: LOGGABLE_SELECT })
+  await prisma.catalogueLot.update({ where: { id: lotId }, data })
+  if (old) {
+    await logLotFieldChanges(
+      old, data,
+      { id: old.id, auctionId: old.auctionId, barcode: old.barcode, title: old.title },
+      old.auction?.code ?? "", ctx,
+    )
+  }
+  return old
 }
 
 export async function createAuction(formData: FormData) {
@@ -76,11 +116,12 @@ export async function deleteAuction(id: string) {
 export async function generateTitlesFromDescriptions(auctionId: string, lotIds: string[]) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
+  const batchId = newBatchId()
   const lots = await prisma.catalogueLot.findMany({ where: { id: { in: lotIds } }, select: { id: true, description: true } })
   await Promise.all(lots.map(l => {
     const title = titleFromDescription(l.description ?? "")
     if (!title || title === "Untitled") return Promise.resolve()
-    return prisma.catalogueLot.update({ where: { id: l.id }, data: { title } })
+    return updateLotLogged(l.id, { title }, { changedBy: changedByOf(session), source: "bulk", batchId })
   }))
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
@@ -89,8 +130,9 @@ export async function generateTitlesFromDescriptions(auctionId: string, lotIds: 
 export async function setStartingBids(auctionId: string, updates: { id: string; startingBid: number }[]) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
+  const batchId = newBatchId()
   await Promise.all(updates.map(u =>
-    prisma.catalogueLot.update({ where: { id: u.id }, data: { startingBid: u.startingBid } })
+    updateLotLogged(u.id, { startingBid: u.startingBid }, { changedBy: changedByOf(session), source: "bulk", batchId })
   ))
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
@@ -99,19 +141,17 @@ export async function applyAiDescriptions(
   auctionId: string,
   updates: { id: string; description: string; aiEstimateLow: number | null; aiEstimateHigh: number | null }[]
 ) {
-  await requireCataloguer()
+  const session = await requireCataloguer()
+  const batchId = newBatchId()
   await Promise.all(
     updates.map(u =>
-      prisma.catalogueLot.update({
-        where: { id: u.id },
-        data: {
-          description:    u.description,
-          title:          titleFromDescription(u.description),
-          aiEstimateLow:  u.aiEstimateLow,
-          aiEstimateHigh: u.aiEstimateHigh,
-          aiUpgraded:     true,
-        },
-      })
+      updateLotLogged(u.id, {
+        description:    u.description,
+        title:          titleFromDescription(u.description),
+        aiEstimateLow:  u.aiEstimateLow,
+        aiEstimateHigh: u.aiEstimateHigh,
+        aiUpgraded:     true,
+      }, { changedBy: changedByOf(session), source: "ai_apply", batchId })
     )
   )
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
@@ -121,18 +161,15 @@ export async function applyAiDescriptionOne(
   auctionId: string,
   update: { id: string; description: string; aiEstimateLow?: number | null; aiEstimateHigh?: number | null }
 ) {
-  await requireCataloguer()
-  await prisma.catalogueLot.update({
-    where: { id: update.id },
-    data: {
-      description:    update.description,
-      title:          titleFromDescription(update.description),
-      // Only update estimate fields if explicitly provided — omitting preserves existing values
-      ...(update.aiEstimateLow  !== undefined ? { aiEstimateLow:  update.aiEstimateLow  } : {}),
-      ...(update.aiEstimateHigh !== undefined ? { aiEstimateHigh: update.aiEstimateHigh } : {}),
-      aiUpgraded:     true,
-    },
-  })
+  const session = await requireCataloguer()
+  await updateLotLogged(update.id, {
+    description:    update.description,
+    title:          titleFromDescription(update.description),
+    // Only update estimate fields if explicitly provided — omitting preserves existing values
+    ...(update.aiEstimateLow  !== undefined ? { aiEstimateLow:  update.aiEstimateLow  } : {}),
+    ...(update.aiEstimateHigh !== undefined ? { aiEstimateHigh: update.aiEstimateHigh } : {}),
+    aiUpgraded:     true,
+  }, { changedBy: changedByOf(session), source: "ai_apply" })
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
@@ -144,14 +181,11 @@ export async function applyAiEstimateOne(
   auctionId: string,
   update: { id: string; aiEstimateLow: number; aiEstimateHigh: number }
 ) {
-  await requireCataloguer()
-  await prisma.catalogueLot.update({
-    where: { id: update.id },
-    data: {
-      aiEstimateLow:  update.aiEstimateLow,
-      aiEstimateHigh: update.aiEstimateHigh,
-    },
-  })
+  const session = await requireCataloguer()
+  await updateLotLogged(update.id, {
+    aiEstimateLow:  update.aiEstimateLow,
+    aiEstimateHigh: update.aiEstimateHigh,
+  }, { changedBy: changedByOf(session), source: "ai_apply" })
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
@@ -248,8 +282,13 @@ export async function createLot(auctionId: string, formData: FormData) {
       }
       receiptUniqueId = `${data.receipt}-${max + 1}`
     }
-    return tx.catalogueLot.create({ data: { ...data, auctionId, createdByName, imageUrls, receiptUniqueId } })
+    return tx.catalogueLot.create({
+      data: { ...data, auctionId, createdByName, imageUrls, receiptUniqueId },
+      include: { auction: { select: { code: true } } },
+    })
   })
+
+  await logLotCreated(lot, lot.auction?.code ?? "", { changedBy: createdByName, source: "lot_create" })
 
   // Log timing if provided
   const durationMs  = parseInt(formData.get("durationMs")  as string ?? "0") || 0
@@ -293,7 +332,10 @@ export async function createPhotoOnlyLot(auctionId: string, formData: FormData) 
   const createdByName = session.user.name ?? session.user.email ?? "Unknown"
   const lot = await prisma.catalogueLot.create({
     data: { auctionId, title: "", description: "", tote: toteNumber || null, notes, status: "ENTERED", imageUrls, createdByName },
+    include: { auction: { select: { code: true } } },
   })
+
+  await logLotCreated(lot, lot.auction?.code ?? "", { changedBy: createdByName, source: "photo_only" })
 
   // Log timing if provided
   const durationMs = parseInt(formData.get("durationMs") as string ?? "0") || 0
@@ -311,30 +353,6 @@ export async function createPhotoOnlyLot(auctionId: string, formData: FormData) 
   }
 
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
-}
-
-const LOT_FIELD_LABELS: Record<string, string> = {
-  barcode:        "Barcode",
-  title:          "Title",
-  keyPoints:      "Key Points",
-  description:    "Description",
-  estimateLow:    "Estimate Low",
-  estimateHigh:   "Estimate High",
-  startingBid:    "Starting Bid",
-  reserve:        "Reserve",
-  hammerPrice:    "Hammer Price",
-  condition:      "Condition",
-  vendor:         "Vendor",
-  tote:           "Tote",
-  receipt:        "Receipt",
-  receiptUniqueId:"Receipt Unique ID",
-  category:       "Category",
-  subCategory:    "Sub-Category",
-  brand:          "Brand",
-  notes:          "Parcel Size",
-  extraDetails:   "Extra Details",
-  status:         "Status",
-  aiExcluded:     "AI Excluded",
 }
 
 export async function updateLot(lotId: string, auctionId: string, formData: FormData) {
@@ -364,25 +382,12 @@ export async function updateLot(lotId: string, auctionId: string, formData: Form
   await prisma.catalogueLot.update({ where: { id: lotId }, data: updateData })
 
   if (old) {
-    const events: { lotId: string; auctionId: string; auctionCode: string; lotBarcode: string | null; lotTitle: string | null; field: string; oldValue: string | null; newValue: string | null; changedBy: string }[] = []
-    const changedBy = session.user.name ?? session.user.email ?? "Unknown"
-    const auctionCode = old.auction?.code ?? ""
-    const lotBarcode  = data.barcode ?? old.barcode ?? null
-    const lotTitle    = data.title ?? old.title ?? null
-
-    for (const key of Object.keys(LOT_FIELD_LABELS) as (keyof typeof LOT_FIELD_LABELS)[]) {
-      // Skip receiptUniqueId comparison when it wasn't in the form — it wasn't updated
-      if (key === "receiptUniqueId" && !hasUniqueIdField) continue
-      const oldVal = String(old[key as keyof typeof old] ?? "")
-      const newVal = String((data as Record<string, unknown>)[key] ?? "")
-      if (oldVal !== newVal) {
-        events.push({ lotId, auctionId, auctionCode, lotBarcode, lotTitle: lotTitle?.slice(0, 83) ?? null, field: LOT_FIELD_LABELS[key], oldValue: oldVal || null, newValue: newVal || null, changedBy })
-      }
-    }
-
-    if (events.length > 0) {
-      await prisma.catalogueLotEvent.createMany({ data: events.map(e => ({ ...e, id: crypto.randomUUID() })) })
-    }
+    await logLotFieldChanges(
+      old, updateData,
+      { id: lotId, auctionId, barcode: updateData.barcode ?? old.barcode ?? null, title: updateData.title ?? old.title ?? null },
+      old.auction?.code ?? "",
+      { changedBy: changedByOf(session), source: "lot_editor" },
+    )
   }
 
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
@@ -391,6 +396,8 @@ export async function updateLot(lotId: string, auctionId: string, formData: Form
 export async function deleteLot(lotId: string, auctionId: string) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
+  // Snapshot before deleting so the log keeps a record of who deleted what.
+  const lot = await prisma.catalogueLot.findUnique({ where: { id: lotId }, include: { auction: { select: { code: true } } } })
   // Delete the lot's cataloguing timing logs with it. CatalogueTimingLog.lotId is
   // not a FK, so without this the log is orphaned and keeps counting forever in
   // the reports as a "phantom" lot that no longer exists.
@@ -398,13 +405,14 @@ export async function deleteLot(lotId: string, auctionId: string) {
     prisma.catalogueTimingLog.deleteMany({ where: { lotId } }),
     prisma.catalogueLot.delete({ where: { id: lotId } }),
   ])
+  if (lot) await logLotDeleted(lot, lot.auction?.code ?? "", { changedBy: changedByOf(session), source: "lot_editor" })
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
 export async function toggleLotAiUpgraded(lotId: string, auctionId: string, value: boolean) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
-  await prisma.catalogueLot.update({ where: { id: lotId }, data: { aiUpgraded: value } })
+  await updateLotLogged(lotId, { aiUpgraded: value }, { changedBy: changedByOf(session), source: "lot_editor" })
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
@@ -412,18 +420,29 @@ export async function toggleLotAiUpgraded(lotId: string, auctionId: string, valu
 export async function toggleLotAddedToBC(lotId: string, auctionId: string, value: boolean) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
-  await prisma.catalogueLot.update({ where: { id: lotId }, data: { addedToBC: value } })
+  await updateLotLogged(lotId, { addedToBC: value }, { changedBy: changedByOf(session), source: "lot_editor" })
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+}
+
+// Log a bulk flag change: snapshot the flag before, update, log only the lots that changed.
+async function logBulkFlag(lotIds: string[], auctionId: string, field: keyof typeof LOGGABLE_SELECT, label: string, value: boolean, ctx: LotLogCtx) {
+  const before = await prisma.catalogueLot.findMany({
+    where:  { id: { in: lotIds }, auctionId },
+    select: { id: true, auctionId: true, barcode: true, title: true, [field]: true, auction: { select: { code: true } } } as any,
+  })
+  const rows = before
+    .filter((l: any) => l[field] !== value)
+    .map((l: any) => buildLotEventRow({ id: l.id, auctionId: l.auctionId, barcode: l.barcode, title: l.title }, l.auction?.code ?? "", "updated", label, l[field], value, ctx))
+  await writeLotEvents(rows)
 }
 
 // Bulk set AI excluded — used by the mass-select action on Manage Lots.
 export async function bulkSetLotsAiExcluded(lotIds: string[], auctionId: string, value: boolean) {
-  await requireCataloguer()
+  const session = await requireCataloguer()
   if (lotIds.length === 0) return { count: 0 }
-  const r = await prisma.catalogueLot.updateMany({
-    where: { id: { in: lotIds }, auctionId },
-    data:  { aiExcluded: value },
-  })
+  const ctx = { changedBy: changedByOf(session), source: "bulk", batchId: newBatchId() }
+  await logBulkFlag(lotIds, auctionId, "aiExcluded", "AI Excluded", value, ctx)
+  const r = await prisma.catalogueLot.updateMany({ where: { id: { in: lotIds }, auctionId }, data: { aiExcluded: value } })
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
   return { count: r.count }
 }
@@ -433,10 +452,9 @@ export async function bulkSetLotsAddedToBC(lotIds: string[], auctionId: string, 
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
   if (lotIds.length === 0) return { count: 0 }
-  const r = await prisma.catalogueLot.updateMany({
-    where: { id: { in: lotIds }, auctionId },
-    data:  { addedToBC: value },
-  })
+  const ctx = { changedBy: changedByOf(session), source: "bulk", batchId: newBatchId() }
+  await logBulkFlag(lotIds, auctionId, "addedToBC", "Added to BC", value, ctx)
+  const r = await prisma.catalogueLot.updateMany({ where: { id: { in: lotIds }, auctionId }, data: { addedToBC: value } })
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
   return { count: r.count }
 }
@@ -448,11 +466,12 @@ export async function bulkClearLotPhotos(lotIds: string[], auctionId: string, de
   await requireNotBCLocked(auctionId, session)
   if (lotIds.length === 0) return { count: 0 }
 
+  const lots = await prisma.catalogueLot.findMany({
+    where:  { id: { in: lotIds }, auctionId },
+    select: { id: true, auctionId: true, barcode: true, title: true, imageUrls: true, auction: { select: { code: true } } },
+  })
+
   if (deleteFromStorage) {
-    const lots = await prisma.catalogueLot.findMany({
-      where:  { id: { in: lotIds }, auctionId },
-      select: { imageUrls: true },
-    })
     const allKeys = lots.flatMap(l => l.imageUrls)
     await deleteObjectsFromR2(allKeys)
   }
@@ -461,6 +480,12 @@ export async function bulkClearLotPhotos(lotIds: string[], auctionId: string, de
     where: { id: { in: lotIds }, auctionId },
     data:  { imageUrls: [] },
   })
+
+  const ctx = { changedBy: changedByOf(session), source: "bulk", batchId: newBatchId() }
+  const rows = lots.filter(l => l.imageUrls.length > 0).map(l =>
+    buildLotEventRow({ id: l.id, auctionId: l.auctionId, barcode: l.barcode, title: l.title }, l.auction?.code ?? "", "photo_removed", "Photos removed", `${l.imageUrls.length} photo${l.imageUrls.length !== 1 ? "s" : ""} cleared`, "", ctx))
+  await writeLotEvents(rows)
+
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
   return { count: r.count }
 }
@@ -469,33 +494,33 @@ export async function bulkClearLotPhotos(lotIds: string[], auctionId: string, de
 export async function setLotReviewFlag(lotId: string, auctionId: string, flag: string | null) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
-  await prisma.catalogueLot.update({
-    where: { id: lotId },
-    data: flag?.trim()
-      ? { reviewFlag: flag.trim(), reviewFlaggedBy: session.user.name ?? session.user.email ?? "Unknown", reviewFlaggedAt: new Date() }
+  await updateLotLogged(lotId,
+    flag?.trim()
+      ? { reviewFlag: flag.trim(), reviewFlaggedBy: changedByOf(session), reviewFlaggedAt: new Date() }
       : { reviewFlag: null, reviewFlaggedBy: null, reviewFlaggedAt: null },
-  })
+    { changedBy: changedByOf(session), source: "review_tab" },
+  )
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
 // Pipeline — save the AI's potential-cataloguer-mistake note to the lot.
 export async function saveAiFlagNote(lotId: string, flagNote: string | null) {
-  await requireCataloguer()
-  await prisma.catalogueLot.update({ where: { id: lotId }, data: { aiFlagNote: flagNote ?? null } })
+  const session = await requireCataloguer()
+  await updateLotLogged(lotId, { aiFlagNote: flagNote ?? null }, { changedBy: changedByOf(session), source: "ai_flag" })
 }
 
 // Review tab — save a manually edited description for a lot.
 export async function saveLotDescription(lotId: string, auctionId: string, description: string) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
-  await prisma.catalogueLot.update({ where: { id: lotId }, data: { description, title: titleFromDescription(description), aiFlagNote: null } })
+  await updateLotLogged(lotId, { description, title: titleFromDescription(description), aiFlagNote: null }, { changedBy: changedByOf(session), source: "review_tab" })
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
 export async function saveLotExtraDetails(lotId: string, auctionId: string, extraDetails: string) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
-  await prisma.catalogueLot.update({ where: { id: lotId }, data: { extraDetails } })
+  await updateLotLogged(lotId, { extraDetails }, { changedBy: changedByOf(session), source: "review_tab" })
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }
 
@@ -599,6 +624,7 @@ export async function fillLotsFromTotes(auctionId: string) {
   }
 
   let updated = 0
+  const fillCtx: LotLogCtx = { changedBy: changedByOf(session), source: "warehouse_fill", batchId: newBatchId() }
   for (const lot of lots) {
     if (!lot.tote) continue
     const info = toteMap.get(lot.tote)
@@ -622,14 +648,11 @@ export async function fillLotsFromTotes(auctionId: string) {
       (lot.receiptUniqueId ?? null) !== (desiredUniqueId ?? null)
 
     if (needsUpdate) {
-      await prisma.catalogueLot.update({
-        where: { id: lot.id },
-        data: {
-          vendor:          desiredVendor,
-          receipt:         desiredReceipt,
-          receiptUniqueId: desiredUniqueId,
-        },
-      })
+      await updateLotLogged(lot.id, {
+        vendor:          desiredVendor,
+        receipt:         desiredReceipt,
+        receiptUniqueId: desiredUniqueId,
+      }, fillCtx)
       updated++
     }
   }
@@ -656,9 +679,10 @@ export async function uploadLotPhoto(lotId: string, auctionId: string, formData:
   const lot = await prisma.catalogueLot.update({
     where: { id: lotId },
     data: { imageUrls: { push: key } },
-    select: { imageUrls: true },
+    include: { auction: { select: { code: true } } },
   })
 
+  await logLotPhoto({ id: lot.id, auctionId: lot.auctionId, barcode: lot.barcode, title: lot.title }, lot.auction?.code ?? "", "photo_added", { changedBy: changedByOf(session), source: "photo_tab" }, safeName)
   return lot.imageUrls
 }
 
@@ -666,12 +690,13 @@ export async function deleteLotPhoto(lotId: string, auctionId: string, key: stri
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
 
-  const lot = await prisma.catalogueLot.findUnique({ where: { id: lotId }, select: { imageUrls: true } })
+  const lot = await prisma.catalogueLot.findUnique({ where: { id: lotId }, select: { id: true, auctionId: true, barcode: true, title: true, imageUrls: true, auction: { select: { code: true } } } })
   if (!lot) throw new Error("Lot not found")
 
   const updated = lot.imageUrls.filter(k => k !== key)
   await prisma.catalogueLot.update({ where: { id: lotId }, data: { imageUrls: updated } })
 
+  await logLotPhoto({ id: lot.id, auctionId: lot.auctionId, barcode: lot.barcode, title: lot.title }, lot.auction?.code ?? "", "photo_removed", { changedBy: changedByOf(session), source: "photo_tab" }, key.split("/").pop())
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
   return updated
 }
@@ -679,7 +704,8 @@ export async function deleteLotPhoto(lotId: string, auctionId: string, key: stri
 export async function reorderLotPhotos(lotId: string, auctionId: string, imageUrls: string[]) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
-  await prisma.catalogueLot.update({ where: { id: lotId }, data: { imageUrls } })
+  const lot = await prisma.catalogueLot.update({ where: { id: lotId }, data: { imageUrls }, include: { auction: { select: { code: true } } } })
+  await logLotPhoto({ id: lot.id, auctionId: lot.auctionId, barcode: lot.barcode, title: lot.title }, lot.auction?.code ?? "", "photo_reordered", { changedBy: changedByOf(session), source: "photo_tab" }, `${imageUrls.length} photo${imageUrls.length !== 1 ? "s" : ""}`)
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
   return imageUrls
 }
@@ -694,6 +720,8 @@ export async function importLots(auctionId: string, rows: {
 }[]) {
   const session = await requireCataloguer()
   const createdByName = session.user.name ?? session.user.email ?? "Unknown"
+  const auctionCode = (await prisma.catalogueAuction.findUnique({ where: { id: auctionId }, select: { code: true } }))?.code ?? ""
+  const ctx: LotLogCtx = { changedBy: createdByName, source: "import", batchId: newBatchId() }
 
   // Seed each receipt base from its highest existing suffix (MAX, not COUNT),
   // then track in-batch additions. Keyed by UPPERCASE base to match the
@@ -711,7 +739,7 @@ export async function importLots(auctionId: string, rows: {
       receiptUniqueId = `${receiptBase}-${receiptOffset[receiptBase]}`
     }
 
-    await prisma.catalogueLot.create({
+    const lot = await prisma.catalogueLot.create({
       data: {
         auctionId,
         createdByName,
@@ -736,6 +764,7 @@ export async function importLots(auctionId: string, rows: {
         imageUrls:      [],
       },
     })
+    await logLotCreated(lot, auctionCode, ctx)
   }
 
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
@@ -763,14 +792,12 @@ export async function bulkAssignUniqueIds(
 
   let updated = 0
   let skipped = 0
+  const ctx: LotLogCtx = { changedBy: changedByOf(session), source: "bulk", batchId: newBatchId() }
 
   for (const { barcode, uniqueId } of pairs) {
     const lotId = barcodeMap.get(barcode.toLowerCase().trim())
     if (!lotId || !uniqueId.trim()) { skipped++; continue }
-    await prisma.catalogueLot.update({
-      where: { id: lotId },
-      data:  { receiptUniqueId: uniqueId.trim() },
-    })
+    await updateLotLogged(lotId, { receiptUniqueId: uniqueId.trim() }, ctx)
     updated++
   }
 
@@ -794,6 +821,7 @@ export async function bulkAddConditionsToDescriptions(
 
   let updated = 0
   let skipped = 0
+  const ctx: LotLogCtx = { changedBy: changedByOf(session), source: "bulk", batchId: newBatchId() }
 
   for (const lot of lots) {
     const condition = lot.condition?.trim()
@@ -808,10 +836,7 @@ export async function bulkAddConditionsToDescriptions(
       ? `${lot.description.trimEnd()} ${condText}`
       : condText
 
-    await prisma.catalogueLot.update({
-      where: { id: lot.id },
-      data:  { description: newDesc },
-    })
+    await updateLotLogged(lot.id, { description: newDesc }, ctx)
     updated++
   }
 
@@ -840,6 +865,14 @@ async function maxReceiptSuffix(base: string): Promise<number> {
 export async function transferLots(lotIds: string[], sourceAuctionId: string, targetAuctionId: string) {
   const session = await requireCataloguer()
   await requireNotBCLocked(sourceAuctionId, session)
+  // Snapshot lot identifiers + both auction codes before the move, so we can log the transfer.
+  const before = await prisma.catalogueLot.findMany({
+    where: { id: { in: lotIds }, auctionId: sourceAuctionId },
+    select: { id: true, barcode: true, title: true },
+  })
+  const codes = await prisma.catalogueAuction.findMany({ where: { id: { in: [sourceAuctionId, targetAuctionId] } }, select: { id: true, code: true } })
+  const sourceCode = codes.find(c => c.id === sourceAuctionId)?.code ?? ""
+  const targetCode = codes.find(c => c.id === targetAuctionId)?.code ?? ""
   await prisma.$transaction([
     prisma.catalogueLot.updateMany({
       where: { id: { in: lotIds }, auctionId: sourceAuctionId },
@@ -853,6 +886,10 @@ export async function transferLots(lotIds: string[], sourceAuctionId: string, ta
       data: { auctionId: targetAuctionId },
     }),
   ])
+  const ctx: LotLogCtx = { changedBy: changedByOf(session), source: "transfer", batchId: newBatchId() }
+  await writeLotEvents(before.map(l =>
+    buildLotEventRow({ id: l.id, auctionId: targetAuctionId, barcode: l.barcode, title: l.title }, targetCode, "updated", "Auction (transferred)", sourceCode, targetCode, ctx)
+  ))
   revalidatePath(`/tools/cataloguing/auctions/${sourceAuctionId}`)
   revalidatePath(`/tools/cataloguing/auctions/${targetAuctionId}`)
   return lotIds.length
@@ -989,6 +1026,14 @@ export async function massCreateLots(
   }))
 
   await prisma.catalogueLot.createMany({ data })
+
+  // createMany returns no ids — read the just-created lots back by their barcodes to log them.
+  const created = await prisma.catalogueLot.findMany({
+    where:  { auctionId, barcode: { in: data.map(d => d.barcode) } },
+    select: LOGGABLE_SELECT,
+  })
+  await logLotsCreated(created as any, auctionCode, { changedBy: createdByName, source: "mass_create", batchId: newBatchId() })
+
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
   return data.length
 }
