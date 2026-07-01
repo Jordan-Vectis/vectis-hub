@@ -32,6 +32,30 @@ The app is hosted on **Railway**, not Vercel. Never reference a `.vercel.app` UR
 - Auto-deploys: push to `main` → production, push to `staging` → staging environment on Railway
 - Never tell the user to open a `vercel.app` URL for any reason
 
+## ⚠ Claude memory sync (multi-developer) — check freshness before trusting local memory
+
+The in-app memory page — the `ENTRIES` array in `app/(app)/admin/memory/page.tsx`, shown at
+`/admin/memory` — is the **shared, committed record** of this project's Claude memory. Each
+developer's *local* Claude memory (`~/.claude/…/memory/*.md`) is **per-machine and drifts**:
+another dev's Claude will not have the facts your Claude recorded, and may be **stale** (still
+describing things that have since changed).
+
+**At the start of a work session — and before relying on memory to make a suggestion or edit —
+compare your local memory against the shared record in `app/(app)/admin/memory/page.tsx`.** If your
+local memory is clearly **behind** it (missing recently-shipped features/decisions, or
+contradicting them), **STOP and warn the user that their local memory looks out of date, then ask
+whether to refresh it from the shared record before continuing.** Do not silently proceed on stale
+memory.
+
+Rules for the refresh:
+- Refresh only **project** and **reference** facts (shared project knowledge). Do **NOT** pull another
+  machine's **user**/**feedback** memories over the local ones — those are personal to each developer.
+- Refresh = fill in what's missing and correct contradictions, then re-sync `MEMORY.md`. The app
+  record is a condensed mirror, so it's a catch-up, not a byte-for-byte clone.
+- **Never push a stale local memory OVER the shared `ENTRIES` array.** When updating the shared record
+  after building, edit only the specific entry for what you built, **pull before pushing**, and never
+  regenerate the whole array from local memory (that would drop entries other devs added).
+
 ## Database — Neon (PostgreSQL)
 
 The database is hosted on **Neon** (console.neon.tech), not Railway. Never suggest looking for a Postgres service inside Railway — it isn't there.
