@@ -41,11 +41,14 @@ another dev's Claude will not have the facts your Claude recorded, and may be **
 describing things that have since changed).
 
 **At the start of a work session — and before relying on memory to make a suggestion or edit —
-compare your local memory against the shared record in `app/(app)/admin/memory/page.tsx`.** If your
-local memory is clearly **behind** it (missing recently-shipped features/decisions, or
-contradicting them), **STOP and warn the user that their local memory looks out of date, then ask
-whether to refresh it from the shared record before continuing.** Do not silently proceed on stale
-memory.
+compare your local memory against the shared record in `app/(app)/admin/memory/page.tsx` on the
+`staging` branch** (`git pull origin staging` first, then read the file — no live URL / login
+needed). **Always use `staging`, never `main`/production:** memory updates are pushed to staging
+first and only reach production on a later merge, so production's copy lags and is not authoritative
+for freshness. If your local memory is clearly **behind** the staging record (missing
+recently-shipped features/decisions, or contradicting them), **STOP and warn the user that their
+local memory looks out of date, then ask whether to refresh it from the shared record before
+continuing.** Do not silently proceed on stale memory.
 
 Rules for the refresh:
 - Refresh only **project** and **reference** facts (shared project knowledge). Do **NOT** pull another
