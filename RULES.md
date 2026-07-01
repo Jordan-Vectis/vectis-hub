@@ -177,6 +177,13 @@ drift happened even though nobody edited it in the UI). Do **not** reintroduce a
 - **Instruction is resolved from the DB by `presetKey`** (FormData), not posted as text — see the
   single-source rule above. Missing/unknown key → 400. The empty-key case yields no instruction
   (only the `LANGUAGE_RULE` is applied).
+- **Key points are authoritative.** When `lot_{label}_context` (contextType `keyPoints`) is sent,
+  the route's user prompt forbids overriding a stated **class / model type / catalogue number /
+  running number / livery** with a visual or training-data guess — the cataloguer had the item in
+  hand. A strongly-suspected error must be KEPT in the description and raised on a `FLAG:` line,
+  never silently changed. Both paths that hit this route must honour this: the **Auto Pipeline**
+  sends key points, and the **standalone Batch Run** now also sends them (it looks them up from
+  `/api/auction-ai/catalogue-lots?code=` by barcode/receiptUniqueId when an auction code is set).
 - Rate-limit errors (429 / RESOURCE_EXHAUSTED) must be re-thrown prefixed with `RATE_LIMITED:` so
   the client applies the correct backoff.
 - **Returns HTTP 200 even when individual lots fail.** Status is inside the results array.

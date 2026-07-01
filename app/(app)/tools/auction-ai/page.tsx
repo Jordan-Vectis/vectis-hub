@@ -527,6 +527,7 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
   const [savedLots,    setSavedLots]    = useState<Set<string>>(new Set())
   const [savedRunId,   setSavedRunId]   = useState<string | null>(null)
   const [runList,      setRunList]      = useState<{ id: string; code: string; _count: { lots: number } }[]>([])
+  const [keyPointsMap, setKeyPointsMap] = useState<Record<string, string>>({})
 
   useEffect(() => {
     fetch("/api/auction-ai/presets").then(r => r.json()).then((m: Record<string, string>) => {
@@ -570,6 +571,31 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
       return next.size === s.size ? s : next // avoid re-render if nothing changed
     })
   }, [savedLots])
+
+  // Load the cataloguer's key points for the entered auction so the batch run
+  // honours their recorded facts — same as the Auto Pipeline. Keyed by barcode
+  // AND receiptUniqueId so it matches whichever identifier the photo folders use.
+  // Photos-only runs (no auction code) are unaffected.
+  useEffect(() => {
+    const code = auctionCode.trim().toUpperCase()
+    if (!code) { setKeyPointsMap({}); return }
+    let cancelled = false
+    fetch(`/api/auction-ai/catalogue-lots?code=${encodeURIComponent(code)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (cancelled || !data?.lots) return
+        const map: Record<string, string> = {}
+        for (const l of data.lots) {
+          const kp = (l.keyPoints ?? "").trim()
+          if (!kp) continue
+          if (l.barcode)         map[String(l.barcode).toLowerCase().trim()] = kp
+          if (l.receiptUniqueId) map[String(l.receiptUniqueId).toLowerCase().trim()] = kp
+        }
+        setKeyPointsMap(map)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [auctionCode])
 
   const lotNames           = Object.keys(lots).sort()
   const selectedNames      = lotNames.filter(n => selected.has(n))
@@ -701,6 +727,13 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
           fd.append("model", modelToUse)
           fd.append("grounded", grounded ? "true" : "false")
           files.forEach((f, j) => fd.append(`lot_${lot}_image_${j}`, f, f.name))
+          // Send the cataloguer's key points (if we have them for this lot) so the
+          // batch route honours their recorded facts — same as the Auto Pipeline.
+          const kp = keyPointsMap[lot.toLowerCase().trim()]
+          if (kp) {
+            fd.append(`lot_${lot}_context`, kp)
+            fd.append(`lot_${lot}_contextType`, "keyPoints")
+          }
 
           const res  = await fetch("/api/auction-ai/batch", { method: "POST", body: fd })
           const json = await res.json()
