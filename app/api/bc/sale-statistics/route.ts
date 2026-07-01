@@ -10,21 +10,16 @@ export const maxDuration = 60
 // lines — it varies per vendor — so it comes from EVA_AuctionHeader later.)
 const BUYERS_PREMIUM_RATE = 0.225
 
-// Location code that means a lot has been physically scanned to collected.
-// Tunable — confirm against BC's "Total Items Collected" if it ever looks off.
-const COLLECTED_LOCATION = "COLLECTED"
-
 // Auction_Lines_Excel is item-level (one row per lot) and carries hammer,
-// estimates, category and subcategory — see the BC reference. We aggregate it
+// estimates, category, subcategory and the EVA_Collected flag. We aggregate it
 // into (auction × category × subcategory) buckets so the client can roll up by
-// any combination without re-fetching.
+// any combination without re-fetching. We deliberately do NOT send $select: BC
+// 400s the entire request on any single unknown field name, and the exact field
+// set isn't fully documented — fetching all columns is robust (we only ever keep
+// the aggregates, so the client payload stays small).
 const ENDPOINT = "Auction_Lines_Excel"
-const SELECT = [
-  "EVA_AuctionNo", "EVA_AuctionName", "EVA_AuctionDate",
-  "EVA_HammerPrice", "EVA_LowEstimate", "EVA_HighEstimate",
-  "EVA_ArticleCategoryCode", "EVA_ArticleSubcategoryCode",
-  "EVA_ArticleLocationCode",
-].join(",")
+
+const truthy = (v: unknown) => v === true || v === 1 || v === "true" || v === "Yes" || v === "1"
 
 type Bucket = {
   auctionNo: string; auctionName: string; auctionDate: string
@@ -57,10 +52,11 @@ export async function GET(req: NextRequest) {
         const clauses: string[] = []
         if (from) clauses.push(`EVA_AuctionDate ge ${from}`)
         if (to)   clauses.push(`EVA_AuctionDate le ${to}`)
-        const params: Record<string, string | number> = { $select: SELECT }
+        const params: Record<string, string | number> = {}
         if (clauses.length) params.$filter = clauses.join(" and ")
 
         const buckets = new Map<string, Bucket>()
+        let sampleFields: string[] = []
         let processed = 0
         let partial = false
         const startMs = Date.now()
@@ -77,6 +73,7 @@ export async function GET(req: NextRequest) {
             first ? params : undefined,
           )
           first = false
+          if (!sampleFields.length && rows.length) sampleFields = Object.keys(rows[0] as object)
 
           for (const r of rows as Record<string, unknown>[]) {
             const auctionNo = String(r.EVA_AuctionNo ?? "").trim()
@@ -103,7 +100,7 @@ export async function GET(req: NextRequest) {
             b.hammer += hammer
             b.low  += num(r.EVA_LowEstimate)
             b.high += num(r.EVA_HighEstimate)
-            if (String(r.EVA_ArticleLocationCode ?? "").trim().toUpperCase() === COLLECTED_LOCATION) b.collected += 1
+            if (truthy(r.EVA_Collected)) b.collected += 1
           }
 
           processed += rows.length
@@ -121,6 +118,7 @@ export async function GET(req: NextRequest) {
             partial,
             buyersPremiumRate:  BUYERS_PREMIUM_RATE,
             range:              { from, to },
+            sampleFields,       // field names on the endpoint — for verifying the mapping
           },
         })
       } catch (e: any) {
