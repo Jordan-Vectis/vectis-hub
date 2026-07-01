@@ -137,6 +137,30 @@ Bidding increment rounding:
 
 ---
 
+## Auction AI Instructions — Single Source of Truth
+
+The **`AiPreset` database table is the one and only home** for every Auction AI instruction
+(the presets shown on Auction AI → **Instructions**). This replaced an earlier two-source design
+(code constant + DB override) that silently drifted — the DB was auto-seeded once from code and then
+frozen, so later code edits never reached the live app (this is how the Model Railway "condition"
+drift happened even though nobody edited it in the UI). Do **not** reintroduce a code-vs-DB merge.
+
+- `lib/auction-ai-presets.ts` (`PRESETS`) is **starter defaults only** — used once to seed a
+  brand-new **empty** DB. Editing it does NOT change a seeded environment. It is imported **only**
+  by `lib/ai-instructions.ts`. Never import it into a route or the page to read live instructions.
+- `lib/ai-instructions.ts` is the runtime accessor: `getAllInstructions()` (ordered map, seeds only
+  if the table is empty) and `resolveInstruction(key)` (single lookup, throws if missing).
+- **Runs resolve their instruction server-side by key.** Batch/Chat/Chat-grounded receive a
+  `presetKey` in FormData and call `resolveInstruction(presetKey)` — clients never post instruction
+  **text**. So a stale/open tab cannot run old wording.
+- **No session-only / temporary instructions.** There is no "Custom (paste my own)" box and no inline
+  session editor. If the user wants different text they add or edit a saved instruction (via
+  `PUT /api/auction-ai/presets`), which persists to the DB forever. Delete is permanent (the table is
+  only ever auto-seeded when completely empty, so a deleted built-in does not reappear).
+- The Instructions page is the **only** editor. Do not add editing UIs to the run tabs.
+
+---
+
 ## Batch AI Run — Server (`/api/auction-ai/batch`)
 
 - `maxDuration`: 300 seconds.
@@ -144,6 +168,9 @@ Bidding increment rounding:
 - Files sent as `lot_{name}_image_{i}` keys in FormData.
 - **12-second delay between lots** to stay within Gemini rate limits.
 - **No retries inside the route** — throw immediately so the client's retry loop handles it.
+- **Instruction is resolved from the DB by `presetKey`** (FormData), not posted as text — see the
+  single-source rule above. Missing/unknown key → 400. The empty-key case yields no instruction
+  (only the `LANGUAGE_RULE` is applied).
 - Rate-limit errors (429 / RESOURCE_EXHAUSTED) must be re-thrown prefixed with `RATE_LIMITED:` so
   the client applies the correct backoff.
 - **Returns HTTP 200 even when individual lots fail.** Status is inside the results array.

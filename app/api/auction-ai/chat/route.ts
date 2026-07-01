@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
+import { resolveInstruction } from "@/lib/ai-instructions"
 
 export const maxDuration = 120
 
@@ -15,7 +16,16 @@ export async function POST(req: NextRequest) {
   const formData = await req.formData()
 
   const message           = formData.get("message") as string ?? ""
-  const systemInstruction = formData.get("systemInstruction") as string ?? ""
+  // Resolve the instruction from the database by key (single source of truth).
+  const presetKey         = (formData.get("presetKey") as string) ?? ""
+  let systemInstruction = ""
+  if (presetKey) {
+    try {
+      systemInstruction = await resolveInstruction(presetKey)
+    } catch {
+      return NextResponse.json({ error: `Instruction "${presetKey}" not found` }, { status: 400 })
+    }
+  }
   const historyRaw        = formData.get("history") as string ?? "[]"
   const imageFiles        = formData.getAll("images") as File[]
   const modelId           = formData.get("model") as string || (await getToolModel("catalogue_chat"))

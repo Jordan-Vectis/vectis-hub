@@ -1,8 +1,15 @@
-// Shared system instruction presets for Auction AI
-// Used by both the Auction AI page and the inline AI Upgrade tab
+// ─── Auction AI instruction STARTER DEFAULTS ─────────────────────────────────
+//
+// ⚠ These are NOT the live instructions. They are the one-time starter defaults
+// used to populate a brand-new, EMPTY database. Editing this file does NOT
+// change anything in a running environment whose database has already been
+// seeded — the live instructions live in the AiPreset database table and are
+// viewed/edited on the Auction AI → Instructions page.
+//
+// See lib/ai-instructions.ts (getAllInstructions / resolveInstruction) for how
+// instructions are read at runtime. The database is the single source of truth.
 
 export const PRESETS: Record<string, string> = {
-  "Custom (paste my own)": "",
   "Vectis Strict: Vinyl & Memorabilia": `This GPT specializes in creating auction catalog entries for Vinyl Records and Music Memorabilia, tailored for use by an auction house. It utilizes Discogs.com as a primary reference for identification and valuation. Descriptions must strictly follow paragraph format with no bullet points. Descriptions must not begin with "Lot". Output must be exactly two lines:
 1) One paragraph description (no line breaks)
 2) One estimate line in the form: Estimate: £X–£Y

@@ -168,11 +168,11 @@ const APPS: App[] = [
         ],
       },
       {
-        label: "AI Presets",
+        label: "AI Instructions",
         items: [
-          "Stored in the AiPreset table (key = primary key string, instruction = full TEXT prompt).",
-          "Built-in defaults defined in lib/auction-ai-presets.ts. User edits saved via PUT /api/auction-ai/presets.",
-          "All presets define estimate format as 'Estimate: £X–£Y' and include the bidding increment table in the prompt.",
+          "SINGLE SOURCE OF TRUTH: the AiPreset table (key = primary key string, instruction = full TEXT prompt). Viewed/edited on Auction AI → Instructions; every run resolves its instruction from the DB by key server-side (lib/ai-instructions.ts), so what runs is always exactly what's saved.",
+          "lib/auction-ai-presets.ts holds STARTER DEFAULTS only — used once to seed a brand-new empty DB. Editing that file does NOT change a seeded environment; there is no code-vs-DB merge and no session-only editing.",
+          "All instructions define estimate format as 'Estimate: £X–£Y' and include the bidding increment table in the prompt.",
         ],
       },
     ],

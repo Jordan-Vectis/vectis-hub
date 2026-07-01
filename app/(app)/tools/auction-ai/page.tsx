@@ -2,7 +2,6 @@
 
 import { useState, useRef, useCallback, useEffect, useTransition, Fragment } from "react"
 import * as XLSX from "xlsx"
-import { PRESETS } from "@/lib/auction-ai-presets"
 import { DOUBLE_CHECK_INSTRUCTION } from "@/lib/double-check-instruction"
 import { KEY_POINTS_INSTRUCTION } from "@/lib/key-points-instruction"
 import { applyAiDescriptionOne, applyAiEstimateOne, saveAiFlagNote } from "@/lib/actions/catalogue"
@@ -194,97 +193,18 @@ function toDataURL(file: File): Promise<string> {
 
 // ─── Preset selector ─────────────────────────────────────────────────────────
 
-function PresetSelector({ value, onChange, overrides, onEdit }: {
+function PresetSelector({ value, onChange, options }: {
   value: string
   onChange: (v: string) => void
-  overrides: Record<string, string>
-  onEdit: () => void
+  options: string[]
 }) {
-  const builtInKeys = Object.keys(PRESETS)
-  const customKeys  = Object.keys(overrides).filter(k => !PRESETS[k])
-  const isEdited    = value !== "Custom (paste my own)" && builtInKeys.includes(value) && overrides[value] !== undefined && overrides[value] !== PRESETS[value]
-  const isCustom    = customKeys.includes(value)
-
   return (
     <div className="mb-3">
-      <label className="block text-xs text-gray-600 dark:text-gray-500 mb-1 uppercase tracking-wider">System Instruction Preset</label>
-      <div className="flex gap-2">
-        <select value={value} onChange={(e) => onChange(e.target.value)}
-          className="flex-1 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E]">
-          <optgroup label="Built-in">
-            {builtInKeys.map((k) => <option key={k}>{k}</option>)}
-          </optgroup>
-          {customKeys.length > 0 && (
-            <optgroup label="My Instructions">
-              {customKeys.map((k) => <option key={k}>{k}</option>)}
-            </optgroup>
-          )}
-        </select>
-        {value !== "Custom (paste my own)" && !isCustom && (
-          <button onClick={onEdit}
-            className={`px-3 py-1.5 text-xs rounded border transition-colors flex-shrink-0 ${isEdited ? "border-[#C8A96E] text-[#C8A96E] bg-gray-100 dark:bg-[#2C2C2E] hover:bg-[#3a3a2e]" : "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-[#2C2C2E] hover:border-gray-500"}`}>
-            {isEdited ? "✎ Edited" : "✎ Edit"}
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ─── Preset editor modal ──────────────────────────────────────────────────────
-
-function PresetEditorModal({ presetKey, initialText, onSave, onClose }: {
-  presetKey: string
-  initialText: string
-  onSave: (text: string) => void
-  onClose: () => void
-}) {
-  const isBuiltIn = PRESETS[presetKey] !== undefined
-  const [draft, setDraft] = useState(initialText)
-  const [saving, setSaving] = useState(false)
-
-  async function handleSave() {
-    setSaving(true)
-    await onSave(draft)
-    setSaving(false)
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl p-5 w-full max-w-2xl max-h-[85vh] flex flex-col gap-3"
-        onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">{presetKey}</h3>
-          <button onClick={onClose} className="text-gray-600 dark:text-gray-500 hover:text-gray-300 text-lg leading-none ml-4">✕</button>
-        </div>
-        {isBuiltIn && (
-          <p className="text-xs text-amber-500/80 bg-amber-500/10 border border-amber-500/20 rounded px-3 py-2">
-            This is a built-in preset. Changes apply to this session only — they reset on page reload. To make permanent changes, ask your developer.
-          </p>
-        )}
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          rows={18}
-          className="w-full bg-gray-50 dark:bg-[#141416] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E] resize-none font-mono flex-1"
-        />
-        <div className="flex gap-2 justify-between">
-          <button onClick={() => setDraft(PRESETS[presetKey] ?? "")}
-            className="text-xs px-3 py-1.5 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded hover:border-gray-500 hover:text-gray-300 transition-colors">
-            Reset to default
-          </button>
-          <div className="flex gap-2">
-            <button onClick={onClose}
-              className="text-sm px-4 py-1.5 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded hover:border-gray-500 transition-colors">
-              Cancel
-            </button>
-            <button onClick={handleSave} disabled={saving}
-              className="text-sm px-5 py-1.5 bg-[#C8A96E] hover:bg-[#d4b87a] text-black font-bold rounded transition-colors disabled:opacity-40">
-              {saving ? "Saving…" : isBuiltIn ? "Apply to session" : "Save"}
-            </button>
-          </div>
-        </div>
-      </div>
+      <label className="block text-xs text-gray-600 dark:text-gray-500 mb-1 uppercase tracking-wider">Instruction</label>
+      <select value={value} onChange={(e) => onChange(e.target.value)}
+        className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E]">
+        {options.map((k) => <option key={k}>{k}</option>)}
+      </select>
     </div>
   )
 }
@@ -424,8 +344,7 @@ function Autocomplete({ value, onChange, options, placeholder, accentColor = "#C
 // ─── Chat Tab ─────────────────────────────────────────────────────────────────
 
 function ChatTab({ model }: { model: string }) {
-  const [preset, setPreset]      = useState(Object.keys(PRESETS)[1])
-  const [custom, setCustom]      = useState("")
+  const [preset, setPreset]      = useState("")
   const [images, setImages]      = useState<File[]>([])
   const [message, setMessage]    = useState("")
   const [history, setHistory]    = useState<ChatMessage[]>([])
@@ -433,27 +352,17 @@ function ChatTab({ model }: { model: string }) {
   const [loading, setLoading]    = useState(false)
   const [error, setError]        = useState<string | null>(null)
   const [copied, setCopied]      = useState(false)
-  const [overrides, setOverrides] = useState<Record<string, string>>({})
-  const [editOpen, setEditOpen]   = useState(false)
+  const [instructions, setInstructions] = useState<Record<string, string>>({})
   const [grounded, setGrounded]   = useState(true)
   const [lastSearchQueries, setLastSearchQueries] = useState<string[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    fetch("/api/auction-ai/presets").then(r => r.json()).then(setOverrides).catch(() => {})
+    fetch("/api/auction-ai/presets").then(r => r.json()).then((m: Record<string, string>) => {
+      setInstructions(m)
+      setPreset(p => p || Object.keys(m)[0] || "")
+    }).catch(() => {})
   }, [])
-
-  const systemInstruction = preset === "Custom (paste my own)" ? custom : (overrides[preset] ?? PRESETS[preset])
-
-  async function savePreset(text: string) {
-    await fetch("/api/auction-ai/presets", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: preset, instruction: text }),
-    })
-    setOverrides(prev => ({ ...prev, [preset]: text }))
-    setEditOpen(false)
-  }
 
   async function send() {
     if (!message.trim() && !images.length) return
@@ -465,7 +374,7 @@ function ChatTab({ model }: { model: string }) {
     try {
       const fd = new FormData()
       fd.append("message", message)
-      fd.append("systemInstruction", systemInstruction)
+      if (preset) fd.append("presetKey", preset)
       fd.append("history", JSON.stringify(apiHistory))
       fd.append("model", model)
       images.forEach(img => fd.append("images", img, img.name))
@@ -509,13 +418,7 @@ function ChatTab({ model }: { model: string }) {
           )}
         </div>
       )}
-      <PresetSelector value={preset} onChange={setPreset} overrides={overrides} onEdit={() => setEditOpen(true)} />
-      {editOpen && <PresetEditorModal presetKey={preset} initialText={overrides[preset] ?? PRESETS[preset]} onSave={savePreset} onClose={() => setEditOpen(false)} />}
-      {preset === "Custom (paste my own)" && (
-        <textarea value={custom} onChange={(e) => setCustom(e.target.value)}
-          placeholder="Paste your system instruction here…" rows={3}
-          className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E] mb-3 resize-none" />
-      )}
+      <PresetSelector value={preset} onChange={setPreset} options={Object.keys(instructions)} />
 
       <div className="flex-1 min-h-0 overflow-y-auto bg-gray-50 dark:bg-[#141416] rounded-lg border border-gray-200 dark:border-gray-800 p-4 mb-3 space-y-3">
         {history.length === 0 && (
@@ -605,11 +508,9 @@ function ChatTab({ model }: { model: string }) {
 // ─── Batch Run Tab ────────────────────────────────────────────────────────────
 
 function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: string }) {
-  const [preset,     setPreset]   = useState(Object.keys(PRESETS)[1])
-  const [custom,     setCustom]   = useState("")
+  const [preset,     setPreset]   = useState("")
   const [lots,       setLots]     = useState<Record<string, File[]>>({})
-  const [overrides,  setOverrides] = useState<Record<string, string>>({})
-  const [editOpen,   setEditOpen]  = useState(false)
+  const [instructions, setInstructions] = useState<Record<string, string>>({})
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [results,  setResults]  = useState<BatchResult[]>([])
   const [loading,  setLoading]  = useState(false)
@@ -628,7 +529,10 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
   const [runList,      setRunList]      = useState<{ id: string; code: string; _count: { lots: number } }[]>([])
 
   useEffect(() => {
-    fetch("/api/auction-ai/presets").then(r => r.json()).then(setOverrides).catch(() => {})
+    fetch("/api/auction-ai/presets").then(r => r.json()).then((m: Record<string, string>) => {
+      setInstructions(m)
+      setPreset(p => p || Object.keys(m)[0] || "")
+    }).catch(() => {})
     fetch("/api/auction-ai/runs").then(r => r.json()).then(setRunList).catch(() => {})
     // Pre-load auction code from cataloguing page "Upgrade with AI" button
     const raw = localStorage.getItem("batch_preload")
@@ -667,17 +571,6 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
     })
   }, [savedLots])
 
-  const systemInstruction = preset === "Custom (paste my own)" ? custom : (overrides[preset] ?? PRESETS[preset])
-
-  async function savePreset(text: string) {
-    await fetch("/api/auction-ai/presets", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: preset, instruction: text }),
-    })
-    setOverrides(prev => ({ ...prev, [preset]: text }))
-    setEditOpen(false)
-  }
   const lotNames           = Object.keys(lots).sort()
   const selectedNames      = lotNames.filter(n => selected.has(n))
   const total              = selectedNames.length
@@ -804,7 +697,7 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
           const modelToUse = (attempt % 2 === 0 && fallbackModel) ? fallbackModel : model
           if (attempt > 1) addLog(`  ↳ trying ${modelToUse}`)
           const fd = new FormData()
-          fd.append("systemInstruction", systemInstruction)
+          fd.append("presetKey", preset)
           fd.append("model", modelToUse)
           fd.append("grounded", grounded ? "true" : "false")
           files.forEach((f, j) => fd.append(`lot_${lot}_image_${j}`, f, f.name))
@@ -949,13 +842,7 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
     <div className="flex flex-col h-full gap-3">
       <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Batch Run</h2>
 
-      <PresetSelector value={preset} onChange={setPreset} overrides={overrides} onEdit={() => setEditOpen(true)} />
-      {editOpen && <PresetEditorModal presetKey={preset} initialText={overrides[preset] ?? PRESETS[preset]} onSave={savePreset} onClose={() => setEditOpen(false)} />}
-      {preset === "Custom (paste my own)" && (
-        <textarea value={custom} onChange={(e) => setCustom(e.target.value)}
-          placeholder="Paste your system instruction here…" rows={3}
-          className="w-full bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E] resize-none" />
-      )}
+      <PresetSelector value={preset} onChange={setPreset} options={Object.keys(instructions)} />
 
       {/* ── Google Search grounding ── */}
       <label className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-colors ${grounded ? "bg-blue-950/50 border-blue-600/60 text-blue-300" : "bg-gray-100 dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
@@ -1993,29 +1880,13 @@ function InstructionsTab() {
   const [saving,   setSaving]   = useState(false)
   const [error,    setError]    = useState<string | null>(null)
 
-  const builtInKeys = Object.keys(PRESETS).filter(k => k !== "Custom (paste my own)")
-
   async function load() {
     setLoading(true)
     try {
+      // The database is the single source of truth — GET returns every instruction
+      // already ordered (built-ins first, then user-created), so we render it as-is.
       const data: Record<string, string> = await fetch("/api/auction-ai/presets").then(r => r.json())
-      const dbKeys = new Set(Object.keys(data))
-
-      // Seed any built-ins not yet saved to DB
-      const toSeed = builtInKeys.filter(k => !dbKeys.has(k))
-      await Promise.all(toSeed.map(k =>
-        fetch("/api/auction-ai/presets", {
-          method: "PUT", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ key: k, instruction: PRESETS[k] }),
-        })
-      ))
-
-      // Build unified list: built-in order first, then any DB-only extras
-      const merged: CustomPreset[] = [
-        ...builtInKeys.map(k => ({ key: k, instruction: data[k] ?? PRESETS[k] })),
-        ...Object.entries(data).filter(([k]) => !builtInKeys.includes(k)).map(([key, instruction]) => ({ key, instruction })),
-      ]
-      setPresets(merged)
+      setPresets(Object.entries(data).map(([key, instruction]) => ({ key, instruction })))
     } catch { setError("Failed to load") }
     setLoading(false)
   }
@@ -3561,9 +3432,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   const [progress,    setProgress]    = useState<{ done: number; total: number } | null>(null)
   const [log,         setLog]         = useState<string[]>([])
   const [problemsOnly, setProblemsOnly] = useState(false)   // Results table filter: skipped / issues only
-  const [preset,      setPreset]      = useState(Object.keys(PRESETS)[1])
-  const [overrides,   setOverrides]   = useState<Record<string, string>>({})
-  const [editOpen,     setEditOpen]    = useState(false)
+  const [preset,      setPreset]      = useState("")
+  const [instructions, setInstructions] = useState<Record<string, string>>({})
   const [auctionList, setAuctionList] = useState<{ code: string; name: string }[]>([])
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [grounded,     setGrounded]    = useState(false)
@@ -3587,10 +3457,11 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   const lastBlockRef = useRef("")   // the exact "BLOCKED: …" message from the last blocked lot
   const localModel = globalModel
 
-  const systemInstruction = overrides[preset] ?? PRESETS[preset] ?? ""
-
   useEffect(() => {
-    fetch("/api/auction-ai/presets").then(r => r.json()).then(setOverrides).catch(() => {})
+    fetch("/api/auction-ai/presets").then(r => r.json()).then((m: Record<string, string>) => {
+      setInstructions(m)
+      setPreset(p => p || Object.keys(m)[0] || "")
+    }).catch(() => {})
     fetch("/api/auction-ai/auctions").then(r => r.json()).then(d => { if (Array.isArray(d)) setAuctionList(d) }).catch(() => {})
     // Pre-load auction code from cataloguing "AI Upgrade" button
     const raw = localStorage.getItem("pipeline_preload")
@@ -3610,16 +3481,6 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     document.addEventListener("mousedown", handler)
     return () => document.removeEventListener("mousedown", handler)
   }, [])
-
-  async function savePreset(text: string) {
-    await fetch("/api/auction-ai/presets", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: preset, instruction: text }),
-    })
-    setOverrides(prev => ({ ...prev, [preset]: text }))
-    setEditOpen(false)
-  }
 
   function addLog(msg: string) {
     const ts = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
@@ -3784,7 +3645,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         const modelToUse = (attempt % 2 === 0 && fallbackModel) ? fallbackModel : localModel
         if (attempt > 1) addLog(`  ↳ ${lot.label} trying ${modelToUse}`)
         const fd = new FormData()
-        fd.append("systemInstruction", systemInstruction)
+        fd.append("presetKey", preset)
         fd.append("model", modelToUse)
         fd.append("grounded", grounded ? "true" : "false")
         const urls = lot.imageUrls.slice(0, 24)
@@ -4379,8 +4240,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           {/* Preset */}
           <div>
             <p className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1.5">Batch Preset</p>
-            <PresetSelector value={preset} onChange={setPreset} overrides={overrides} onEdit={() => setEditOpen(true)} />
-            {editOpen && <PresetEditorModal presetKey={preset} initialText={overrides[preset] ?? PRESETS[preset]} onSave={savePreset} onClose={() => setEditOpen(false)} />}
+            <PresetSelector value={preset} onChange={setPreset} options={Object.keys(instructions)} />
           </div>
         </div>
 

@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { parseModelJson } from "@/lib/model-json"
 import { getToolModel } from "@/lib/ai-models"
+import { resolveInstruction } from "@/lib/ai-instructions"
 
 export const maxDuration = 300
 
@@ -25,7 +26,17 @@ export async function POST(req: NextRequest) {
   if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
 
   const formData = await req.formData()
-  const systemInstruction = formData.get("systemInstruction") as string ?? ""
+  // The instruction is resolved server-side from the database by its key, so a
+  // run always uses exactly the saved version — never stale client-side text.
+  const presetKey = (formData.get("presetKey") as string) ?? ""
+  let systemInstruction = ""
+  if (presetKey) {
+    try {
+      systemInstruction = await resolveInstruction(presetKey)
+    } catch {
+      return NextResponse.json({ error: `Instruction "${presetKey}" not found` }, { status: 400 })
+    }
+  }
   const modelId           = formData.get("model") as string || (await getToolModel("catalogue_batch"))
   const grounded          = formData.get("grounded") === "true"
 
