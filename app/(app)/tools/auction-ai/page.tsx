@@ -1901,7 +1901,7 @@ function KPRunsTab() {
 
 // ─── Instructions Tab ─────────────────────────────────────────────────────────
 
-type CustomPreset = { key: string; instruction: string }
+type CustomPreset = { key: string; instruction: string; favourite: boolean }
 
 function InstructionsTab() {
   const [presets,  setPresets]  = useState<CustomPreset[]>([])
@@ -1912,17 +1912,21 @@ function InstructionsTab() {
   const [draftText,setDraftText]= useState("")
   const [saving,   setSaving]   = useState(false)
   const [error,    setError]    = useState<string | null>(null)
-  const [importRows, setImportRows] = useState<{ key: string; instruction: string; status: "new" | "overwrite" | "same"; selected: boolean }[] | null>(null)
+  const [importRows, setImportRows] = useState<{ key: string; instruction: string; status: "new" | "overwrite" | "same"; favourite: boolean; selected: boolean }[] | null>(null)
+  const [importHadFav, setImportHadFav] = useState(false)
   const [importing,  setImporting]  = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function load() {
     setLoading(true)
     try {
-      // The database is the single source of truth — GET returns every instruction
-      // already ordered (built-ins first, then user-created), so we render it as-is.
-      const data: Record<string, string> = await fetch("/api/auction-ai/presets").then(r => r.json())
-      setPresets(Object.entries(data).map(([key, instruction]) => ({ key, instruction })))
+      // ?full=1 returns the ordered list (favourites first) with favourite flags.
+      // The database is the single source of truth.
+      const data = await fetch("/api/auction-ai/presets?full=1").then(r => r.json())
+      const rows: CustomPreset[] = Array.isArray(data)
+        ? data.map((r: any) => ({ key: r.key, instruction: r.instruction, favourite: !!r.favourite }))
+        : Object.entries(data).map(([key, instruction]) => ({ key, instruction: instruction as string, favourite: false }))
+      setPresets(rows)
     } catch { setError("Failed to load") }
     setLoading(false)
   }
@@ -1949,7 +1953,7 @@ function InstructionsTab() {
         body: JSON.stringify({ key: name, instruction: draftText }),
       })
       if (!res.ok) throw new Error("Save failed")
-      setPresets(p => [...p, { key: name, instruction: draftText }])
+      setPresets(p => [...p, { key: name, instruction: draftText, favourite: false }])
       setSelected(name); setMode("view"); setNewName("")
     } catch (e: any) { setError(e.message) }
     setSaving(false)
@@ -1985,11 +1989,29 @@ function InstructionsTab() {
     setSaving(false)
   }
 
+  async function toggleFavourite(key: string) {
+    const p = presets.find(x => x.key === key)
+    if (!p) return
+    const next = !p.favourite
+    setPresets(ps => ps.map(x => x.key === key ? { ...x, favourite: next } : x))   // optimistic
+    try {
+      const res = await fetch("/api/auction-ai/presets", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, favourite: next }),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      setPresets(ps => ps.map(x => x.key === key ? { ...x, favourite: !next } : x))  // revert
+      setError("Couldn't update favourite — has Run Migrations been done on this environment?")
+    }
+  }
+
   // ── Export / Import — sync instructions between environments (e.g. staging → production) ──
   function exportAll() {
     const map: Record<string, string> = {}
     for (const p of presets) map[p.key] = p.instruction
-    const payload = { type: "vectis-ai-instructions", version: 1, exportedAt: new Date().toISOString(), instructions: map }
+    const favourites = presets.filter(p => p.favourite).map(p => p.key)
+    const payload = { type: "vectis-ai-instructions", version: 2, exportedAt: new Date().toISOString(), instructions: map, favourites }
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
@@ -2008,6 +2030,8 @@ function InstructionsTab() {
       const parsed = JSON.parse(await file.text())
       const map = parsed?.instructions
       if (!map || typeof map !== "object" || Array.isArray(map)) throw new Error("not a Vectis instructions file")
+      const favSet = new Set<string>(Array.isArray(parsed?.favourites) ? parsed.favourites : [])
+      setImportHadFav(Array.isArray(parsed?.favourites))
       const current = new Map(presets.map(p => [p.key, p.instruction]))
       const rows = Object.entries(map)
         .filter(([k, v]) => typeof k === "string" && k.trim() && typeof v === "string")
@@ -2015,7 +2039,7 @@ function InstructionsTab() {
           const instruction = v as string
           const status: "new" | "overwrite" | "same" =
             !current.has(key) ? "new" : current.get(key) === instruction ? "same" : "overwrite"
-          return { key, instruction, status, selected: status !== "same" }
+          return { key, instruction, status, favourite: favSet.has(key), selected: status !== "same" }
         })
       if (!rows.length) throw new Error("no instructions found in the file")
       setImportRows(rows)
@@ -2032,9 +2056,12 @@ function InstructionsTab() {
     try {
       const instructions: Record<string, string> = {}
       for (const r of chosen) instructions[r.key] = r.instruction
+      // Only send favourites if the file carried them, so a plain import can't clear favourites.
+      const body: any = { instructions }
+      if (importHadFav) body.favourites = chosen.filter(r => r.favourite).map(r => r.key)
       const res = await fetch("/api/auction-ai/presets", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ instructions }),
+        body: JSON.stringify(body),
       })
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "import failed")
       setImportRows(null)
@@ -2072,17 +2099,40 @@ function InstructionsTab() {
         {loading ? (
           <p className="text-gray-600 dark:text-gray-500 text-xs px-1 mt-2">Loading…</p>
         ) : (
-          <div className="space-y-0.5 mt-1">
-            {presets.map(p => (
-              <button key={p.key} onClick={() => openView(p.key)}
-                className={`w-full text-left px-3 py-2 rounded text-sm transition-colors truncate ${
-                  selected === p.key
-                    ? "bg-[#C8A96E]/15 text-[#C8A96E] border border-[#C8A96E]/30"
-                    : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#2C2C2E]"
-                }`}>
-                {p.key}
-              </button>
-            ))}
+          <div className="mt-1 overflow-y-auto">
+            {(() => {
+              const favs = presets.filter(p => p.favourite)
+              const rest = presets.filter(p => !p.favourite)
+              const row = (p: CustomPreset) => (
+                <div key={p.key} className="flex items-center gap-0.5">
+                  <button onClick={() => toggleFavourite(p.key)}
+                    title={p.favourite ? "Remove from favourites" : "Add to favourites"}
+                    className={`px-1 text-sm leading-none flex-shrink-0 ${p.favourite ? "text-[#C8A96E]" : "text-gray-400 dark:text-gray-600 hover:text-[#C8A96E]"}`}>
+                    {p.favourite ? "★" : "☆"}
+                  </button>
+                  <button onClick={() => openView(p.key)}
+                    className={`flex-1 min-w-0 text-left px-2 py-2 rounded text-sm transition-colors truncate ${
+                      selected === p.key
+                        ? "bg-[#C8A96E]/15 text-[#C8A96E] border border-[#C8A96E]/30"
+                        : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#2C2C2E]"
+                    }`}>
+                    {p.key}
+                  </button>
+                </div>
+              )
+              return (
+                <div className="space-y-0.5">
+                  {favs.length > 0 && (
+                    <>
+                      <p className="text-[10px] uppercase tracking-wider text-[#C8A96E]/70 px-1 pb-0.5">★ Favourites</p>
+                      {favs.map(row)}
+                      {rest.length > 0 && <div className="border-t border-gray-200 dark:border-gray-800 my-1.5" />}
+                    </>
+                  )}
+                  {rest.map(row)}
+                </div>
+              )
+            })()}
           </div>
         )}
       </div>
@@ -2198,7 +2248,7 @@ function InstructionsTab() {
                   <input type="checkbox" checked={r.selected}
                     onChange={e => setImportRows(rows => rows && rows.map((x, j) => j === i ? { ...x, selected: e.target.checked } : x))}
                     className="accent-[#C8A96E]" />
-                  <span className="flex-1 truncate text-gray-700 dark:text-gray-200">{r.key}</span>
+                  <span className="flex-1 truncate text-gray-700 dark:text-gray-200">{r.favourite && <span className="text-[#C8A96E]" title="Favourite">★ </span>}{r.key}</span>
                   <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0 ${
                     r.status === "new" ? "bg-green-500/15 text-green-500"
                     : r.status === "overwrite" ? "bg-amber-500/15 text-amber-500"

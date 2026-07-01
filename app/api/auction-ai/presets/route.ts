@@ -3,17 +3,39 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { getAllInstructions } from "@/lib/ai-instructions"
 
-// GET — every instruction as an ordered { key: text } map. The AiPreset table is
-// the single source of truth; it is seeded from the starter defaults only if
-// completely empty (fresh environment).
-export async function GET() {
+// GET — instructions from the single-source AiPreset table (favourites first).
+// Default: a { key: text } map (used by the run tabs — unchanged shape).
+// ?full=1: the full ordered list [{ key, instruction, favourite }] for the
+// Instructions management tab.
+export async function GET(req: NextRequest) {
   try {
     const session = await auth()
     if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
-    const map = await getAllInstructions()
+    const rows = await getAllInstructions()
+    if (new URL(req.url).searchParams.get("full")) return NextResponse.json(rows)
+    const map: Record<string, string> = {}
+    for (const r of rows) map[r.key] = r.instruction
     return NextResponse.json(map)
   } catch (e: any) {
     console.error("presets GET error:", e)
+    return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
+  }
+}
+
+// PATCH — toggle an instruction's favourite flag.
+export async function PATCH(req: NextRequest) {
+  try {
+    const session = await auth()
+    if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+
+    const { key, favourite } = await req.json()
+    if (!key || typeof favourite !== "boolean")
+      return NextResponse.json({ error: "Invalid body" }, { status: 400 })
+
+    await prisma.aiPreset.update({ where: { key }, data: { favourite } })
+    return NextResponse.json({ ok: true })
+  } catch (e: any) {
+    console.error("presets PATCH error:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
   }
 }
@@ -60,9 +82,18 @@ export async function POST(req: NextRequest) {
     if (!entries.length)
       return NextResponse.json({ error: "No valid instructions found in the file" }, { status: 400 })
 
+    // Favourites are only touched when the file carries a favourites list (v2+),
+    // so importing an older file never clears favourite state.
+    const hasFav = Array.isArray(body?.favourites)
+    const favSet = new Set<string>(hasFav ? body.favourites.filter((k: any) => typeof k === "string") : [])
+
     await prisma.$transaction(
       entries.map(([key, instruction]) =>
-        prisma.aiPreset.upsert({ where: { key }, update: { instruction }, create: { key, instruction } })
+        prisma.aiPreset.upsert({
+          where: { key },
+          update: hasFav ? { instruction, favourite: favSet.has(key) } : { instruction },
+          create: { key, instruction, favourite: hasFav && favSet.has(key) },
+        })
       )
     )
     return NextResponse.json({ imported: entries.length })

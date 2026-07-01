@@ -164,6 +164,15 @@ drift happened even though nobody edited it in the UI). Do **not** reintroduce a
   file → tick which to apply → upserts them). `POST /api/auction-ai/presets` does the bulk upsert
   (add new / overwrite by key). Import **never deletes** — it only adds/overwrites the ticked keys.
   This is the intended way to make production match staging after an instruction change.
+- **Favourites.** `AiPreset.favourite` (Boolean, **NEEDS Run Migrations**) pins instructions to the
+  top of the Instructions list (and the run-tab dropdowns, via favourites-first ordering). Toggled by
+  the ★ button → `PATCH /api/auction-ai/presets {key, favourite}`. `getAllInstructions()` returns the
+  ordered list favourites-first; `GET ?full=1` returns `[{key,instruction,favourite}]` for the
+  Instructions tab, the default GET still returns the `{key:text}` map for the run tabs.
+  Export/Import v2 carries a `favourites` array so they sync between environments (a v1 file without
+  it never clears favourites). `getAllInstructions`/`resolveInstruction` are **migration-safe** — they
+  select only existing columns / fall back if `favourite` isn't there yet, so the deploy can't break
+  the Auction AI tools before Run Migrations is clicked.
 
 ---
 

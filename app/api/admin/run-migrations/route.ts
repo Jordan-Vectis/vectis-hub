@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma"
 const MIGRATIONS = [
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "extraDetails" TEXT`,
   `ALTER TABLE "PipelineLot" ADD COLUMN IF NOT EXISTS "appliedDesc" TEXT`,
+  `ALTER TABLE "AiPreset" ADD COLUMN IF NOT EXISTS "favourite" BOOLEAN NOT NULL DEFAULT FALSE`,
   `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastTote"    TEXT`,
   `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastVendor"  TEXT`,
   `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastReceipt" TEXT`,

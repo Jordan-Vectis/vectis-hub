@@ -256,6 +256,7 @@ model AuctionLot {
 model AiPreset {
   key         String   @id
   instruction String   @db.Text
+  favourite   Boolean  @default(false)
   updatedAt   DateTime @updatedAt
 }
 
