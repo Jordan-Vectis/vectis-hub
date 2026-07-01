@@ -106,7 +106,7 @@ export default async function ReportsUserPage({
   // Today bounds — for the always-visible productivity card
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
 
-  const [logs, researchLogs, idleLogs] = await Promise.all([
+  const [rawLogs, researchLogs, idleLogs] = await Promise.all([
     prisma.catalogueTimingLog.findMany({
       where:   { userId, ...savedAtFilter },
       orderBy: { savedAt: "desc" },
@@ -128,8 +128,12 @@ export default async function ReportsUserPage({
   if (!anyLog) notFound()
   const userName = anyLog.userName
 
-  // Resolve each log's lotId to the real lot (barcode + whether it was moved/deleted)
-  const lotMap = await buildLotMap(logs)
+  // Resolve each log's lotId to the real lot, then EXCLUDE orphaned logs (a lotId
+  // that matches no lot — phantom "deleted lot" rows) so they never count or
+  // show. Logs with no lotId, or whose lot still exists (even in another
+  // auction), are kept.
+  const lotMap = await buildLotMap(rawLogs)
+  const logs = rawLogs.filter(l => !l.lotId || lotMap.has(l.lotId))
 
   // ── Research summary ──
   const totalResearchMs = researchLogs.reduce((s, r) => s + r.durationMs, 0)

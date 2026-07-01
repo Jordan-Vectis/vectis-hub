@@ -5,6 +5,7 @@ import { format, subDays, subMonths, startOfDay } from "date-fns"
 import Link from "next/link"
 import CataloguingReportsCharts, { type UserChartData, type MonthBucket } from "./charts"
 import CleanupOrphanLogsButton from "./cleanup-orphan-logs-button"
+import { buildLotMap } from "@/lib/cataloguing-reports"
 
 export const dynamic = "force-dynamic"
 
@@ -67,7 +68,7 @@ export default async function ReportsOverviewPage({
   const activeRange: RangeKey = (RANGES.find(r => r.key === range)?.key) ?? "30d"
   const since = rangeStart(activeRange)
 
-  const [logs, researchLogs] = await Promise.all([
+  const [rawLogs, researchLogs] = await Promise.all([
     prisma.catalogueTimingLog.findMany({
       where: since ? { savedAt: { gte: since } } : {},
       orderBy: { savedAt: "desc" },
@@ -79,13 +80,20 @@ export default async function ReportsOverviewPage({
     }),
   ])
 
-  // Monthly buckets — last 12 calendar months (always unfiltered)
-  const allTimeLogs = since
+  // Exclude orphaned logs (lotId matches no lot — phantom "deleted lot" rows) so
+  // they never inflate anyone's counts, whether or not they've been cleaned up.
+  const lotMap = await buildLotMap(rawLogs)
+  const logs = rawLogs.filter(l => !l.lotId || lotMap.has(l.lotId))
+
+  // Monthly buckets — last 12 calendar months (always unfiltered), orphans excluded
+  const allTimeRaw = since
     ? await prisma.catalogueTimingLog.findMany({
         where: { savedAt: { gte: startOfDay(subMonths(new Date(), 12)) } },
-        select: { savedAt: true },
+        select: { savedAt: true, lotId: true },
       })
-    : logs.map(l => ({ savedAt: l.savedAt }))
+    : rawLogs.map(l => ({ savedAt: l.savedAt, lotId: l.lotId }))
+  const allTimeMap = since ? await buildLotMap(allTimeRaw) : lotMap
+  const allTimeLogs = allTimeRaw.filter(l => !l.lotId || allTimeMap.has(l.lotId))
 
   const bucketMap = new Map<string, number>()
   for (const l of allTimeLogs) {

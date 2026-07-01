@@ -869,7 +869,7 @@ export async function removeOrphanedTimingLogs(): Promise<{ count: number }> {
     DELETE FROM "CatalogueTimingLog"
     WHERE "lotId" IS NOT NULL
       AND NOT EXISTS (SELECT 1 FROM "CatalogueLot" l WHERE l."id" = "CatalogueTimingLog"."lotId")`
-  revalidatePath("/tools/reports")
+  revalidatePath("/tools/reports", "layout")  // invalidate the per-user pages too
   return { count }
 }
 
