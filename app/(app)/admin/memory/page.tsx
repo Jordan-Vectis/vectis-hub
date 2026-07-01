@@ -465,6 +465,8 @@ Hi Claude. Before we start, here are the rules for working with me:
 
 **Match the complexity of the solution to the simplicity of the request.** If I say "put a copy on the site", embed it statically — don't build a syncing system.
 
+**Don't blame the cataloguers for the phantom report counts.** I've confirmed in person that nobody is making those lots, the barcode scanner isn't used, and the X-vs-F auction code is a red herring — it's an unidentified tablet/code trigger. Do not re-litigate this or suggest the users did it themselves.
+
 ---
 
 ## The app
@@ -700,7 +702,8 @@ Long session on the Accounts tool (/tools/accounts, admin-only) — mostly bank/
 ## Working-style reminders that came up this session
 
 - When unsure how a real-world workflow maps to buttons/actions, ASK one question at a time and write the answers down — don't invent logic (I invented a 1.5s double-bid detector and a same-amount auto-detector that were never asked for).
-- Don't add behaviour that wasn't requested. Build exactly what's asked.`,
+- Don't add behaviour that wasn't requested. Build exactly what's asked.
+- Phantom cataloguing report counts: NEVER blame the cataloguers (confirmed nobody makes those lots; scanner unused; X-vs-F is a red herring). Any new count of CatalogueTimingLog must exclude orphaned logs; when changing report/stat maths, verify the numbers still match before shipping.`,
   },
   {
     filename: "feedback_vectis.md",
