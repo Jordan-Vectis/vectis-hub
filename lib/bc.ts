@@ -85,6 +85,58 @@ export async function getBCToken(): Promise<string | null> {
   return null
 }
 
+// List every published OData web service (the service root document) so we can
+// discover the exact endpoint names BC exposes — e.g. the auction-header /
+// statistics table (EVA_AuctionHeader, table 75003). Returns [{ name, url, kind }].
+export async function bcListServices(
+  token: string,
+): Promise<{ name: string; url: string; kind: string | null }[]> {
+  const res = await fetch(baseUrl(), {
+    headers: {
+      Accept:            "application/json",
+      "OData-MaxVersion": "4.0",
+      Authorization:     `Bearer ${token}`,
+    },
+    signal: AbortSignal.timeout(45_000),
+  })
+  if (!res.ok) throw new Error(`BC API ${res.status}: ${await res.text()}`)
+  const json = await res.json()
+  return (json.value ?? []).map((s: any) => ({
+    name: s.name ?? "",
+    url:  s.url  ?? "",
+    kind: s.kind ?? null,
+  }))
+}
+
+// Raw service-root fetch for diagnostics — returns status + the top-level shape
+// so we can see whether BC returns an empty/absent `value` list and why.
+export async function bcServiceDocRaw(token: string): Promise<{
+  status: number
+  ok: boolean
+  keys: string[]
+  valueLen: number | null
+  rawSnippet: string
+}> {
+  const res = await fetch(baseUrl(), {
+    headers: {
+      Accept:            "application/json",
+      "OData-MaxVersion": "4.0",
+      Authorization:     `Bearer ${token}`,
+    },
+    signal: AbortSignal.timeout(45_000),
+  })
+  const text = await res.text()
+  let json: any = null
+  try { json = JSON.parse(text) } catch { /* not JSON */ }
+  return {
+    status:     res.status,
+    ok:         res.ok,
+    keys:       json && typeof json === "object" ? Object.keys(json) : [],
+    valueLen:   Array.isArray(json?.value) ? json.value.length : null,
+    rawSnippet: text.slice(0, 300),
+  }
+}
+
 export async function bcPage(
   token: string,
   endpoint: string,
