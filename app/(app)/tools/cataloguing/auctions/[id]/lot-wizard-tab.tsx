@@ -716,15 +716,19 @@ export default function LotWizardTab({
     // actually filled in. Lets us identify the external activator on X069.
     try {
       const pointerType = (e?.nativeEvent as { pointerType?: string } | undefined)?.pointerType ?? null
+      const nav = typeof navigator !== "undefined" ? navigator : undefined
       fetch("/api/catalogue/save-attempt", {
         method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true,
         body: JSON.stringify({
-          auctionId, step, pointerType,
+          auctionId, auctionCode: auction.code, step, pointerType,
           isTrusted: e?.isTrusted ?? null,
           detail: e?.detail ?? null,
+          barcode: barcode.trim() || null,
           hasBarcode: !!barcode.trim(),
           hasEstimate: !!estLow.trim() && !!estHigh.trim(),
           hasParcel: !!parcel.trim(),
+          userAgent: nav?.userAgent ?? null,
+          touchPoints: typeof nav?.maxTouchPoints === "number" ? nav.maxTouchPoints : null,
         }),
       }).catch(() => {})
     } catch { /* diagnostic only — never block a save */ }

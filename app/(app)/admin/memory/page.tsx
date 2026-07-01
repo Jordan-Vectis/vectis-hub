@@ -27,7 +27,7 @@ Jordan was adamant (and present in person): the cataloguers are NOT manually cre
 
 ## Root cause (code)
 1. CatalogueTimingLog.lotId is a loose String with NO foreign key to CatalogueLot. Delete a lot and its timing log is orphaned but still counts and shows.
-2. The lot wizard step 8 (Save) had no validation — validateStep only covered steps 1, 2, 5, 7, so any activation of Save minted a lot from whatever was on screen. The external activator that presses Save on the tablet is still UNKNOWN; activation-log instrumentation is live (getSaveAttempts, fed by /api/catalogue/save-attempt).
+2. The lot wizard step 8 (Save) had no validation — validateStep only covered steps 1, 2, 5, 7, so any activation of Save minted a lot from whatever was on screen. The external activator that presses Save on the tablet is still UNKNOWN; activation-log instrumentation is live (getSaveAttempts, fed by /api/catalogue/save-attempt). Both desktop + tablet use the same instrumented LotWizardTab, so tablet saves are logged. Enriched 2026-07-01: also logs auctionCode, barcode value, userAgent + maxTouchPoints (device), and the viewer red-flags suspicious rows (untrusted / synthetic / incomplete / X069 / repeated barcode). OPEN CLUE: all saves log pointerType=mouse, never touch — confirm finger vs trackpad/mouse.
 
 ## The fix (live on production, main == staging on 2026-07-01)
 - Wizard saveLot validates the whole wizard before creating; refuses the same barcode, or a save under 3s after the last.

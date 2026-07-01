@@ -12,6 +12,23 @@ function fmtMs(ms: number | null) {
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`
 }
 
+// Short device label from the user-agent + touch capability. iPadOS Safari reports
+// as "Macintosh", so the touch count is the real tell: "Mac · 5-touch" = an iPad,
+// "Windows · no-touch" = a desktop PC, "Windows · 10-touch" = a Windows touch tablet.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function deviceLabel(a: any): string {
+  const ua: string = a?.userAgent || ""
+  const t = typeof a?.touchPoints === "number" ? a.touchPoints : null
+  let base = ua ? "Other" : "—"
+  if (/iPad/i.test(ua)) base = "iPad"
+  else if (/iPhone/i.test(ua)) base = "iPhone"
+  else if (/Android/i.test(ua)) base = "Android"
+  else if (/Windows/i.test(ua)) base = "Windows"
+  else if (/Macintosh|Mac OS X/i.test(ua)) base = "Mac"
+  if (t != null && base !== "—") base += ` · ${t > 0 ? `${t}-touch` : "no-touch"}`
+  return base
+}
+
 // Admin-only — inspect + clean up cataloguing timing logs whose lot no longer
 // exists (the "deleted lot" phantom rows inflating the reports).
 export default function CleanupOrphanLogsButton() {
@@ -52,6 +69,27 @@ export default function CleanupOrphanLogsButton() {
 
   const btn = "px-3 py-2 rounded-lg border text-sm font-semibold disabled:opacity-40 transition-colors"
 
+  // Flag suspicious activations (the phantom signature): a synthetic/untrusted event,
+  // an incomplete form, the X069 sale, or a barcode that repeats (Save pressed again on
+  // the same lot). Barcode repeats are counted across the whole buffer.
+  const bcCounts = new Map<string, number>()
+  for (const a of attempts ?? []) {
+    const bc = String(a?.barcode ?? "").trim()
+    if (bc) { const k = `${a?.auctionCode ?? a?.auctionId}|${bc}`; bcCounts.set(k, (bcCounts.get(k) ?? 0) + 1) }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const flagsFor = (a: any): string[] => {
+    const f: string[] = []
+    if (a?.isTrusted === false) f.push("not-trusted")
+    if (a?.detail === 0)        f.push("synthetic")
+    if (a?.hasBarcode === false || a?.hasEstimate === false || a?.hasParcel === false) f.push("incomplete")
+    if (String(a?.auctionCode ?? "").toUpperCase() === "X069") f.push("X069")
+    const bc = String(a?.barcode ?? "").trim()
+    if (bc && (bcCounts.get(`${a?.auctionCode ?? a?.auctionId}|${bc}`) ?? 0) > 1) f.push("dup barcode")
+    return f
+  }
+  const flaggedCount = (attempts ?? []).filter(a => flagsFor(a).length > 0).length
+
   return (
     <div className="mt-3 space-y-3">
       <div className="flex items-center gap-3 flex-wrap">
@@ -69,29 +107,36 @@ export default function CleanupOrphanLogsButton() {
 
       {attempts && (
         <div className="rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1C1C1E] p-4 text-sm overflow-x-auto">
-          <p className="font-semibold text-gray-900 dark:text-white mb-2">Last {attempts.length} Save-button activation{attempts.length === 1 ? "" : "s"} <span className="font-normal text-gray-500">(newest first — resets on each deploy)</span></p>
+          <p className="font-semibold text-gray-900 dark:text-white mb-2">Last {attempts.length} Save-button activation{attempts.length === 1 ? "" : "s"} <span className="font-normal text-gray-500">(newest first — resets on each deploy)</span>
+            {flaggedCount > 0 && <span className="ml-2 text-red-600 dark:text-red-400 font-semibold">· {flaggedCount} flagged ⚠</span>}
+          </p>
+          <p className="text-xs text-gray-500 mb-2">Every Save <em>press</em> is logged (even refused ones). A genuine finger tap = trusted · detail 1 · pointer touch. Red rows = phantom signature (untrusted / synthetic / incomplete / X069 / repeated barcode).</p>
           {attempts.length === 0 ? (
             <p className="text-gray-500">No activations recorded yet since the last deploy.</p>
           ) : (
             <table className="w-full text-xs">
               <thead><tr className="text-gray-500 text-left">
-                <th className="py-1 pr-3">When</th><th className="pr-3">User</th><th className="pr-3">Auction</th><th className="pr-3">Step</th><th className="pr-3">Trusted</th><th className="pr-3">detail</th><th className="pr-3">pointer</th><th className="pr-3">barcode</th><th className="pr-3">est</th><th>parcel</th>
+                <th className="py-1 pr-3">When</th><th className="pr-3">User</th><th className="pr-3">Sale</th><th className="pr-3">Device</th><th className="pr-3">Trusted</th><th className="pr-3">detail</th><th className="pr-3">pointer</th><th className="pr-3">Barcode</th><th className="pr-3">est</th><th className="pr-3">parcel</th><th>Flags</th>
               </tr></thead>
               <tbody className="font-mono text-gray-600 dark:text-gray-300">
-                {attempts.map((a, i) => (
-                  <tr key={i} className="border-t border-gray-100 dark:border-gray-800">
-                    <td className="py-1 pr-3 whitespace-nowrap">{a.at ? new Date(a.at).toLocaleString("en-GB") : "—"}</td>
-                    <td className="pr-3 whitespace-nowrap">{a.user ?? "—"}</td>
-                    <td className="pr-3 whitespace-nowrap">{a.auctionId ?? "—"}</td>
-                    <td className="pr-3">{a.step ?? "—"}</td>
-                    <td className="pr-3">{String(a.isTrusted)}</td>
-                    <td className="pr-3">{String(a.detail)}</td>
-                    <td className="pr-3">{a.pointerType ?? "—"}</td>
-                    <td className="pr-3">{a.hasBarcode ? "yes" : "no"}</td>
-                    <td className="pr-3">{a.hasEstimate ? "yes" : "no"}</td>
-                    <td>{a.hasParcel ? "yes" : "no"}</td>
-                  </tr>
-                ))}
+                {attempts.map((a, i) => {
+                  const fl = flagsFor(a)
+                  return (
+                    <tr key={i} className={`border-t border-gray-100 dark:border-gray-800 ${fl.length ? "bg-red-500/10" : ""}`}>
+                      <td className="py-1 pr-3 whitespace-nowrap">{a.at ? new Date(a.at).toLocaleString("en-GB") : "—"}</td>
+                      <td className="pr-3 whitespace-nowrap">{a.user ?? "—"}</td>
+                      <td className="pr-3 whitespace-nowrap font-semibold">{a.auctionCode ?? a.auctionId ?? "—"}</td>
+                      <td className="pr-3 whitespace-nowrap" title={a.userAgent ?? ""}>{deviceLabel(a)}</td>
+                      <td className="pr-3">{String(a.isTrusted)}</td>
+                      <td className="pr-3">{String(a.detail)}</td>
+                      <td className="pr-3">{a.pointerType ?? "—"}</td>
+                      <td className="pr-3 whitespace-nowrap">{a.barcode ?? (a.hasBarcode ? "yes" : "—")}</td>
+                      <td className="pr-3">{a.hasEstimate ? "yes" : "no"}</td>
+                      <td className="pr-3">{a.hasParcel ? "yes" : "no"}</td>
+                      <td className="whitespace-nowrap text-red-600 dark:text-red-400 font-semibold">{fl.length ? `⚠ ${fl.join(", ")}` : ""}</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           )}
