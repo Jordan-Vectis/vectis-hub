@@ -102,8 +102,17 @@ function row(
 }
 
 // Write a batch of prepared event rows (used internally + for bulk).
+// Audit logging is BEST-EFFORT — it must never break the actual lot operation.
+// If the write fails (e.g. the action/source/batchId columns aren't migrated
+// yet, or a transient DB error), swallow it so the cataloguer's save still
+// succeeds; the event is simply not recorded.
 export async function writeLotEvents(rows: EventRow[]) {
-  if (rows.length) await prisma.catalogueLotEvent.createMany({ data: rows })
+  if (!rows.length) return
+  try {
+    await prisma.catalogueLotEvent.createMany({ data: rows })
+  } catch (e) {
+    console.error("lot-log: failed to write change events (not fatal):", e)
+  }
 }
 
 // A short, human-readable summary of the details on a lot — used for the
