@@ -3,11 +3,40 @@
 import { useState } from "react"
 
 // ─── Static memory content ────────────────────────────────────────────────────
-// Updated by Claude alongside memory file changes. Last synced: 2026-06-11
+// Updated by Claude alongside memory file changes. Last synced: 2026-07-01
 
 type Entry = { filename: string; content: string }
 
 const ENTRIES: Entry[] = [
+  {
+    filename: "reference_phantom_catalogue_counts.md",
+    content: `---
+name: Phantom Cataloguing Counts
+purpose: Inflated cataloguing report counts — root cause, fix, ruled-out theories. Read before touching cataloguing reports or the lot wizard.
+last_updated: 2026-07-01
+---
+
+# Phantom cataloguing report counts
+
+Symptom: lots counted into sales that have no real lots (e.g. X069), inflating everyone's counts on /tools/reports; the barcode column showed wrong numbers; rows appeared as "deleted lot".
+
+## DO NOT blame the cataloguers — hard rule
+Jordan was adamant (and present in person): the cataloguers are NOT manually creating these lots. Nobody uses X069; its change log is empty. Never say the users are doing it themselves. Also ruled out:
+- Barcode scanner — not used ("too slow"). Not the cause.
+- X-vs-F auction-code prefix — RED HERRING. The ID regexes accept any letter, and every prefix check uses the actual auction code, not a hardcoded F. An X sale behaves identically to an F sale (confirmed by a full code scan on 2026-07-01).
+
+## Root cause (code)
+1. CatalogueTimingLog.lotId is a loose String with NO foreign key to CatalogueLot. Delete a lot and its timing log is orphaned but still counts and shows.
+2. The lot wizard step 8 (Save) had no validation — validateStep only covered steps 1, 2, 5, 7, so any activation of Save minted a lot from whatever was on screen. The external activator that presses Save on the tablet is still UNKNOWN; activation-log instrumentation is live (getSaveAttempts, fed by /api/catalogue/save-attempt).
+
+## The fix (live on production, main == staging on 2026-07-01)
+- Wizard saveLot validates the whole wizard before creating; refuses the same barcode, or a save under 3s after the last.
+- createLot server backstop rejects a duplicate barcode in the same auction within 60s.
+- deleteLot and transferLots delete/move timing logs alongside lots in a transaction.
+- Admin tooling under /tools/reports: removeOrphanedTimingLogs (delete existing orphans), inspectOrphanedTimingLogs (read-only), and an activation log viewer.
+- Reports filter orphans at query time: lib/cataloguing-reports.ts buildLotMap looks up lots by id across the whole table, and both reports pages keep only logs whose lot still exists (or that have no lotId). Only truly-deleted lots are dropped, so real work is never under-counted.
+`,
+  },
   {
     filename: "audit_2026-06-29_missing.md",
     content: `---
