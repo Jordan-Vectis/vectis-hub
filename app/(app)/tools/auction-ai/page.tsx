@@ -1879,6 +1879,9 @@ function InstructionsTab() {
   const [draftText,setDraftText]= useState("")
   const [saving,   setSaving]   = useState(false)
   const [error,    setError]    = useState<string | null>(null)
+  const [importRows, setImportRows] = useState<{ key: string; instruction: string; status: "new" | "overwrite" | "same"; selected: boolean }[] | null>(null)
+  const [importing,  setImporting]  = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   async function load() {
     setLoading(true)
@@ -1949,6 +1952,64 @@ function InstructionsTab() {
     setSaving(false)
   }
 
+  // ── Export / Import — sync instructions between environments (e.g. staging → production) ──
+  function exportAll() {
+    const map: Record<string, string> = {}
+    for (const p of presets) map[p.key] = p.instruction
+    const payload = { type: "vectis-ai-instructions", version: 1, exportedAt: new Date().toISOString(), instructions: map }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `vectis-instructions-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    setError(null)
+    const file = e.target.files?.[0]
+    if (e.target) e.target.value = ""   // allow re-selecting the same file later
+    if (!file) return
+    try {
+      const parsed = JSON.parse(await file.text())
+      const map = parsed?.instructions
+      if (!map || typeof map !== "object" || Array.isArray(map)) throw new Error("not a Vectis instructions file")
+      const current = new Map(presets.map(p => [p.key, p.instruction]))
+      const rows = Object.entries(map)
+        .filter(([k, v]) => typeof k === "string" && k.trim() && typeof v === "string")
+        .map(([key, v]) => {
+          const instruction = v as string
+          const status: "new" | "overwrite" | "same" =
+            !current.has(key) ? "new" : current.get(key) === instruction ? "same" : "overwrite"
+          return { key, instruction, status, selected: status !== "same" }
+        })
+      if (!rows.length) throw new Error("no instructions found in the file")
+      setImportRows(rows)
+    } catch (err: any) {
+      setError(`Import failed: ${err.message}`)
+    }
+  }
+
+  async function applyImport() {
+    if (!importRows) return
+    const chosen = importRows.filter(r => r.selected)
+    if (!chosen.length) { setImportRows(null); return }
+    setImporting(true); setError(null)
+    try {
+      const instructions: Record<string, string> = {}
+      for (const r of chosen) instructions[r.key] = r.instruction
+      const res = await fetch("/api/auction-ai/presets", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instructions }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "import failed")
+      setImportRows(null)
+      await load()
+    } catch (err: any) { setError(`Import failed: ${err.message}`) }
+    setImporting(false)
+  }
+
   const selectedPreset = presets.find(p => p.key === selected)
 
   return (
@@ -1960,6 +2021,20 @@ function InstructionsTab() {
           className="w-full py-2 bg-[#C8A96E] hover:bg-[#d4b87a] text-black text-sm font-bold rounded transition-colors">
           + New Instruction
         </button>
+
+        <div className="flex gap-2">
+          <button onClick={exportAll} disabled={!presets.length}
+            title="Download all instructions as a file (to import into another environment)"
+            className="flex-1 py-1.5 text-xs bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded hover:border-[#C8A96E] hover:text-[#C8A96E] transition-colors disabled:opacity-40">
+            ⬇ Export all
+          </button>
+          <button onClick={() => fileRef.current?.click()}
+            title="Import instructions from a file exported on another environment"
+            className="flex-1 py-1.5 text-xs bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded hover:border-[#C8A96E] hover:text-[#C8A96E] transition-colors">
+            ⬆ Import
+          </button>
+          <input ref={fileRef} type="file" accept="application/json,.json" onChange={onImportFile} className="hidden" />
+        </div>
 
         {loading ? (
           <p className="text-gray-600 dark:text-gray-500 text-xs px-1 mt-2">Loading…</p>
@@ -2064,6 +2139,56 @@ function InstructionsTab() {
           </div>
         )}
       </div>
+
+      {/* ── Import preview modal ── */}
+      {importRows && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
+          onClick={() => { if (!importing) { setImportRows(null); setError(null) } }}>
+          <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl p-5 w-full max-w-lg max-h-[85vh] flex flex-col gap-3"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Import instructions</h3>
+              <button onClick={() => { if (!importing) { setImportRows(null); setError(null) } }}
+                className="text-gray-600 dark:text-gray-500 hover:text-gray-300 text-lg leading-none">✕</button>
+            </div>
+            <p className="text-xs text-gray-600 dark:text-gray-400">
+              Tick the instructions to import. Existing ones are overwritten by name; nothing is deleted.
+            </p>
+            <div className="flex gap-3 text-xs">
+              <button onClick={() => setImportRows(rows => rows && rows.map(r => ({ ...r, selected: r.status !== "same" })))} className="text-[#C8A96E] hover:underline">Select changed</button>
+              <button onClick={() => setImportRows(rows => rows && rows.map(r => ({ ...r, selected: true })))} className="text-[#C8A96E] hover:underline">Select all</button>
+              <button onClick={() => setImportRows(rows => rows && rows.map(r => ({ ...r, selected: false })))} className="text-gray-500 hover:underline">Select none</button>
+            </div>
+            <div className="flex-1 overflow-y-auto border border-gray-200 dark:border-gray-800 rounded divide-y divide-gray-200 dark:divide-gray-800">
+              {importRows.map((r, i) => (
+                <label key={r.key} className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-[#2C2C2E]">
+                  <input type="checkbox" checked={r.selected}
+                    onChange={e => setImportRows(rows => rows && rows.map((x, j) => j === i ? { ...x, selected: e.target.checked } : x))}
+                    className="accent-[#C8A96E]" />
+                  <span className="flex-1 truncate text-gray-700 dark:text-gray-200">{r.key}</span>
+                  <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0 ${
+                    r.status === "new" ? "bg-green-500/15 text-green-500"
+                    : r.status === "overwrite" ? "bg-amber-500/15 text-amber-500"
+                    : "bg-gray-500/15 text-gray-500"}`}>
+                    {r.status === "new" ? "New" : r.status === "overwrite" ? "Overwrite" : "No change"}
+                  </span>
+                </label>
+              ))}
+            </div>
+            {error && <p className="text-red-400 text-xs">{error}</p>}
+            <div className="flex justify-end gap-2">
+              <button onClick={() => { setImportRows(null); setError(null) }} disabled={importing}
+                className="px-4 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 text-sm rounded hover:border-gray-500 transition-colors disabled:opacity-40">
+                Cancel
+              </button>
+              <button onClick={applyImport} disabled={importing || !importRows.some(r => r.selected)}
+                className="px-5 py-2 bg-[#C8A96E] hover:bg-[#d4b87a] text-black text-sm font-bold rounded transition-colors disabled:opacity-40">
+                {importing ? "Importing…" : `Import ${importRows.filter(r => r.selected).length} selected`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

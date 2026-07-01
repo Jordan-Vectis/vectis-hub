@@ -158,6 +158,12 @@ drift happened even though nobody edited it in the UI). Do **not** reintroduce a
   `PUT /api/auction-ai/presets`), which persists to the DB forever. Delete is permanent (the table is
   only ever auto-seeded when completely empty, so a deleted built-in does not reappear).
 - The Instructions page is the **only** editor. Do not add editing UIs to the run tabs.
+- **Export / Import (sync between environments).** Staging and production are **separate databases**,
+  so instruction edits do not cross over automatically. The Instructions page has **⬇ Export all**
+  (downloads every instruction as `vectis-instructions-<date>.json`) and **⬆ Import** (upload that
+  file → tick which to apply → upserts them). `POST /api/auction-ai/presets` does the bulk upsert
+  (add new / overwrite by key). Import **never deletes** — it only adds/overwrites the ticked keys.
+  This is the intended way to make production match staging after an instruction change.
 
 ---
 
