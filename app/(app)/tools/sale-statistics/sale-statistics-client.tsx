@@ -1,0 +1,338 @@
+"use client"
+
+import { useState, useEffect, useMemo, useCallback } from "react"
+
+// ─── Types (mirror the /api/bc/sale-statistics result) ─────────────────────────
+
+type Bucket = {
+  auctionNo: string; auctionName: string; auctionDate: string
+  category: string; subcategory: string
+  lots: number; sold: number; hammer: number; low: number; high: number; collected: number
+}
+type Result = {
+  buckets: Bucket[]
+  total: number
+  partial: boolean
+  buyersPremiumRate: number
+  range: { from: string; to: string }
+}
+
+// ─── Date helpers (LOCAL calendar — never toISOString, it shifts under BST) ─────
+
+const pad = (n: number) => String(n).padStart(2, "0")
+const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+const today = () => fmt(new Date())
+const startOfMonth = () => { const d = new Date(); return fmt(new Date(d.getFullYear(), d.getMonth(), 1)) }
+const startOfYear = () => fmt(new Date(new Date().getFullYear(), 0, 1))
+const monthsAgo = (n: number) => { const d = new Date(); d.setMonth(d.getMonth() - n); return fmt(d) }
+function lastMonthRange(): [string, string] {
+  const d = new Date()
+  const end = new Date(d.getFullYear(), d.getMonth(), 0)
+  const start = new Date(end.getFullYear(), end.getMonth(), 1)
+  return [fmt(start), fmt(end)]
+}
+
+const PRESETS: { label: string; range: () => [string, string] }[] = [
+  { label: "This month",     range: () => [startOfMonth(), today()] },
+  { label: "Last month",     range: () => lastMonthRange() },
+  { label: "Last 3 months",  range: () => [monthsAgo(3), today()] },
+  { label: "This year",      range: () => [startOfYear(), today()] },
+  { label: "Last 12 months", range: () => [monthsAgo(12), today()] },
+]
+
+// ─── Formatting ────────────────────────────────────────────────────────────────
+
+const gbp0 = (n: number) => "£" + Math.round(n).toLocaleString("en-GB")
+const gbp2 = (n: number) => "£" + n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const int  = (n: number) => n.toLocaleString("en-GB")
+
+// ─── Aggregation ───────────────────────────────────────────────────────────────
+
+type Roll = { lots: number; sold: number; hammer: number; low: number; high: number; collected: number }
+function rollup(bs: Bucket[]): Roll {
+  const r: Roll = { lots: 0, sold: 0, hammer: 0, low: 0, high: 0, collected: 0 }
+  for (const b of bs) { r.lots += b.lots; r.sold += b.sold; r.hammer += b.hammer; r.low += b.low; r.high += b.high; r.collected += b.collected }
+  return r
+}
+const avgLot = (r: Roll) => (r.sold > 0 ? r.hammer / r.sold : 0)
+
+// ─── Stream reader ─────────────────────────────────────────────────────────────
+
+async function runStream(
+  url: string,
+  onProgress: (done: number) => void,
+  onResult: (data: Result) => void,
+  onError: (err: string) => void,
+) {
+  const res = await fetch(url)
+  if (!res.ok) {
+    let m = res.statusText
+    try { const j = await res.json(); m = j.error ?? m } catch {}
+    onError(m); return
+  }
+  const reader = res.body!.getReader()
+  const dec = new TextDecoder()
+  let buf = ""
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += dec.decode(value, { stream: true })
+    const lines = buf.split("\n"); buf = lines.pop()!
+    for (const line of lines) {
+      if (!line.trim()) continue
+      const msg = JSON.parse(line)
+      if (msg.type === "progress") onProgress(msg.done)
+      else if (msg.type === "result") onResult(msg.data)
+      else if (msg.type === "error") onError(msg.error ?? "Unknown error")
+    }
+  }
+}
+
+// ─── Component ─────────────────────────────────────────────────────────────────
+
+const selCls = "bg-white dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#2AB4A6]"
+
+export default function SaleStatisticsClient() {
+  const [preset, setPreset] = useState("This month")
+  const [[from, to], setRange] = useState<[string, string]>(() => PRESETS[0].range())
+  const [data, setData]       = useState<Result | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [error, setError]     = useState<string | null>(null)
+
+  // Client-side drill-down filters (applied over the fetched buckets)
+  const [sale, setSale]           = useState("all")
+  const [category, setCategory]   = useState("all")
+  const [subcategory, setSubcategory] = useState("all")
+
+  const load = useCallback((f: string, t: string) => {
+    if (!f || !t) return
+    setLoading(true); setError(null); setProgress(0); setData(null)
+    runStream(
+      `/api/bc/sale-statistics?from=${f}&to=${t}`,
+      d => setProgress(d),
+      r => setData(r),
+      e => setError(e),
+    ).catch(e => setError(e.message ?? "Failed")).finally(() => setLoading(false))
+  }, [])
+
+  // Debounced so typing into the custom date inputs doesn't fire a fetch per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => load(from, to), 200)
+    return () => clearTimeout(t)
+  }, [from, to, load])
+
+  function applyPreset(label: string) {
+    const p = PRESETS.find(x => x.label === label)
+    if (!p) return
+    setPreset(label); setRange(p.range())
+  }
+
+  const buckets = useMemo(() => data?.buckets ?? [], [data])
+  const rate    = data?.buyersPremiumRate ?? 0.225
+
+  // Distinct sales for the dropdown (most recent first)
+  const sales = useMemo(() => {
+    const m = new Map<string, { name: string; date: string }>()
+    for (const b of buckets) if (!m.has(b.auctionNo)) m.set(b.auctionNo, { name: b.auctionName, date: b.auctionDate })
+    return [...m.entries()].map(([code, v]) => ({ code, ...v })).sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+  }, [buckets])
+
+  // Category / subcategory option lists reflect the sale (and category) selection
+  const categories = useMemo(() => {
+    const s = new Set<string>()
+    for (const b of buckets) if (sale === "all" || b.auctionNo === sale) s.add(b.category)
+    return [...s].sort()
+  }, [buckets, sale])
+
+  const subcategories = useMemo(() => {
+    const s = new Set<string>()
+    for (const b of buckets) {
+      if (sale !== "all" && b.auctionNo !== sale) continue
+      if (category !== "all" && b.category !== category) continue
+      s.add(b.subcategory)
+    }
+    return [...s].sort()
+  }, [buckets, sale, category])
+
+  // Apply the active filters
+  const filtered = useMemo(() => buckets.filter(b =>
+    (sale === "all" || b.auctionNo === sale) &&
+    (category === "all" || b.category === category) &&
+    (subcategory === "all" || b.subcategory === subcategory)
+  ), [buckets, sale, category, subcategory])
+
+  const totals = useMemo(() => rollup(filtered), [filtered])
+
+  // By sale
+  const bySale = useMemo(() => {
+    const m = new Map<string, { code: string; name: string; date: string; roll: Bucket[] }>()
+    for (const b of filtered) {
+      const e = m.get(b.auctionNo) ?? { code: b.auctionNo, name: b.auctionName, date: b.auctionDate, roll: [] }
+      e.roll.push(b); m.set(b.auctionNo, e)
+    }
+    return [...m.values()].map(e => ({ ...e, r: rollup(e.roll) })).sort((a, b) => b.r.hammer - a.r.hammer)
+  }, [filtered])
+
+  // By category + subcategory (the drill-down on average hammer)
+  const byCat = useMemo(() => {
+    const m = new Map<string, { category: string; subcategory: string; roll: Bucket[] }>()
+    for (const b of filtered) {
+      const key = `${b.category}|${b.subcategory}`
+      const e = m.get(key) ?? { category: b.category, subcategory: b.subcategory, roll: [] }
+      e.roll.push(b); m.set(key, e)
+    }
+    return [...m.values()].map(e => ({ ...e, r: rollup(e.roll) })).sort((a, b) => b.r.hammer - a.r.hammer)
+  }, [filtered])
+
+  const cards = [
+    { label: "Hammer achieved",   value: gbp0(totals.hammer),        sub: `${int(totals.sold)} sold of ${int(totals.lots)} lots` },
+    { label: "Total low estimate",  value: gbp0(totals.low),          sub: "sum of low estimates" },
+    { label: "Total high estimate", value: gbp0(totals.high),         sub: "sum of high estimates" },
+    { label: "Average lot value",   value: gbp2(avgLot(totals)),      sub: "hammer ÷ sold" },
+    { label: "Items collected",     value: int(totals.collected),     sub: "scanned to COLLECTED" },
+    { label: "Buyer's premium",     value: gbp0(totals.hammer * rate), sub: `${(rate * 100).toFixed(1)}% of hammer` },
+    { label: "Seller's premium",    value: "—",                        sub: "needs BC header (coming)" },
+  ]
+
+  return (
+    <div className="p-6 max-w-screen-2xl">
+      <div className="mb-5">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sale Statistics</h1>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+          Sale performance from Business Central auction lines — filter by sale, month, year, category and subcategory.
+        </p>
+      </div>
+
+      {/* Date presets + custom range */}
+      <div className="flex flex-wrap items-end gap-3 mb-4">
+        <div className="flex flex-wrap gap-2">
+          {PRESETS.map(p => (
+            <button
+              key={p.label}
+              onClick={() => applyPreset(p.label)}
+              className={`px-3 py-1.5 text-xs font-medium rounded border transition-colors ${
+                preset === p.label
+                  ? "bg-[#2AB4A6] text-white border-[#2AB4A6]"
+                  : "bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:border-gray-500"
+              }`}
+            >{p.label}</button>
+          ))}
+        </div>
+        <div className="flex items-end gap-2">
+          <label className="text-xs text-gray-500 dark:text-gray-400">
+            <span className="block mb-1 uppercase tracking-wider">From</span>
+            <input type="date" value={from} onChange={e => { setPreset(""); setRange([e.target.value, to]) }} className={selCls} />
+          </label>
+          <label className="text-xs text-gray-500 dark:text-gray-400">
+            <span className="block mb-1 uppercase tracking-wider">To</span>
+            <input type="date" value={to} onChange={e => { setPreset(""); setRange([from, e.target.value]) }} className={selCls} />
+          </label>
+          <button onClick={() => load(from, to)} disabled={loading}
+            className="px-4 py-1.5 rounded bg-[#2AB4A6] hover:bg-[#24a090] text-white text-sm font-medium disabled:opacity-50">
+            {loading ? "Loading…" : "↺ Reload"}
+          </button>
+        </div>
+      </div>
+
+      {/* Drill-down filters */}
+      <div className="flex flex-wrap gap-3 mb-4">
+        <select value={sale} onChange={e => { setSale(e.target.value); setCategory("all"); setSubcategory("all") }} className={selCls}>
+          <option value="all">All sales{sales.length ? ` (${sales.length})` : ""}</option>
+          {sales.map(s => <option key={s.code} value={s.code}>{s.code}{s.name ? ` — ${s.name}` : ""}</option>)}
+        </select>
+        <select value={category} onChange={e => { setCategory(e.target.value); setSubcategory("all") }} className={selCls}>
+          <option value="all">All categories</option>
+          {categories.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={subcategory} onChange={e => setSubcategory(e.target.value)} className={selCls}>
+          <option value="all">All subcategories</option>
+          {subcategories.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+
+      {loading && <p className="text-xs text-gray-500 mb-4">Fetching from Business Central… {int(progress)} lots</p>}
+      {error && <p className="text-red-400 text-sm mb-4">{error === "BC_NOT_CONNECTED" ? "Business Central isn't connected on this environment." : error}</p>}
+      {data?.partial && !loading && (
+        <p className="text-amber-500 text-xs mb-4">Showing a partial result — the range is large and hit the fetch time limit. Narrow the dates for a complete figure.</p>
+      )}
+
+      {data && !loading && (
+        <>
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 mb-6">
+            {cards.map(c => (
+              <div key={c.label} className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-4">
+                <p className="text-xs text-gray-500 dark:text-gray-500 mb-1 uppercase tracking-wider">{c.label}</p>
+                <p className="text-xl font-bold text-gray-900 dark:text-white">{c.value}</p>
+                <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-1">{c.sub}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* By sale */}
+          <Section title={`By sale${bySale.length ? ` (${bySale.length})` : ""}`}>
+            <Table
+              head={["Sale", "Name", "Date", "Lots", "Sold", "Hammer", "Avg lot", "Collected", "Buyer's prem."]}
+              rows={bySale.map(s => [
+                <span key="c" className="font-mono text-[#2AB4A6]">{s.code}</span>,
+                <span key="n" className="text-gray-500 dark:text-gray-400">{s.name}</span>,
+                <span key="d" className="text-gray-500 dark:text-gray-500 font-mono text-xs">{s.date}</span>,
+                int(s.r.lots), int(s.r.sold), gbp0(s.r.hammer), gbp2(avgLot(s.r)), int(s.r.collected), gbp0(s.r.hammer * rate),
+              ])}
+              rightFrom={3}
+            />
+          </Section>
+
+          {/* By category / subcategory */}
+          <Section title="By category & subcategory">
+            <Table
+              head={["Category", "Subcategory", "Lots", "Sold", "Hammer", "Avg hammer (sold)"]}
+              rows={byCat.map(c => [
+                <span key="c" className="text-gray-700 dark:text-gray-200">{c.category}</span>,
+                <span key="s" className="text-gray-500 dark:text-gray-400">{c.subcategory}</span>,
+                int(c.r.lots), int(c.r.sold), gbp0(c.r.hammer), gbp2(avgLot(c.r)),
+              ])}
+              rightFrom={2}
+            />
+          </Section>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── Small presentational helpers ──────────────────────────────────────────────
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-6">
+      <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{title}</h2>
+      {children}
+    </div>
+  )
+}
+
+function Table({ head, rows, rightFrom }: { head: string[]; rows: React.ReactNode[][]; rightFrom: number }) {
+  if (rows.length === 0) return <p className="text-sm text-gray-500 py-4">No data for these filters.</p>
+  return (
+    <div className="overflow-x-auto border border-gray-200 dark:border-gray-800 rounded-lg">
+      <table className="w-full text-sm">
+        <thead className="bg-gray-100 dark:bg-gray-900 text-gray-500 dark:text-gray-400 text-xs">
+          <tr>
+            {head.map((h, i) => <th key={h} className={`px-3 py-2 ${i >= rightFrom ? "text-right" : "text-left"}`}>{h}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, ri) => (
+            <tr key={ri} className="border-t border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/40">
+              {r.map((cell, ci) => (
+                <td key={ci} className={`px-3 py-2 ${ci >= rightFrom ? "text-right font-mono text-gray-700 dark:text-gray-200" : ""}`}>{cell}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
