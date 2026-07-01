@@ -929,6 +929,15 @@ export async function inspectOrphanedTimingLogs(): Promise<{
   return { total: rows.length, byAuction }
 }
 
+// Diagnostic — read the in-memory save-attempt buffer (see /api/catalogue/save-attempt)
+// to see WHAT is activating the wizard's Save button. Admin-only.
+export async function getSaveAttempts(): Promise<any[]> {
+  const session = await auth()
+  if (!session || session.user.role !== "ADMIN") throw new Error("Unauthorised")
+  const buf = (globalThis as { __saveAttempts?: any[] }).__saveAttempts ?? []
+  return buf.slice(-200).reverse()
+}
+
 export async function massCreateLots(
   auctionId: string,
   auctionCode: string,

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { removeOrphanedTimingLogs, inspectOrphanedTimingLogs } from "@/lib/actions/catalogue"
+import { removeOrphanedTimingLogs, inspectOrphanedTimingLogs, getSaveAttempts } from "@/lib/actions/catalogue"
 
 type Inspect = Awaited<ReturnType<typeof inspectOrphanedTimingLogs>>
 
@@ -19,11 +19,20 @@ export default function CleanupOrphanLogsButton() {
   const [busy, start] = useTransition()
   const [result, setResult] = useState<string | null>(null)
   const [data, setData] = useState<Inspect | null>(null)
+  const [attempts, setAttempts] = useState<any[] | null>(null)
 
   function inspect() {
-    setResult(null)
+    setResult(null); setAttempts(null)
     start(async () => {
       try { setData(await inspectOrphanedTimingLogs()) }
+      catch (e: any) { setResult(e?.message ?? "Something went wrong") }
+    })
+  }
+
+  function loadAttempts() {
+    setResult(null); setData(null)
+    start(async () => {
+      try { setAttempts(await getSaveAttempts()) }
       catch (e: any) { setResult(e?.message ?? "Something went wrong") }
     })
   }
@@ -52,8 +61,42 @@ export default function CleanupOrphanLogsButton() {
         <button onClick={run} disabled={busy} className={`${btn} border-amber-400 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10`}>
           🧹 Remove phantom logs
         </button>
+        <button onClick={loadAttempts} disabled={busy} className={`${btn} border-gray-400 text-gray-600 dark:text-gray-300 hover:bg-gray-500/10`}>
+          🛰 Activation log
+        </button>
         {result && <span className="text-sm text-gray-600 dark:text-gray-300">{result}</span>}
       </div>
+
+      {attempts && (
+        <div className="rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1C1C1E] p-4 text-sm overflow-x-auto">
+          <p className="font-semibold text-gray-900 dark:text-white mb-2">Last {attempts.length} Save-button activation{attempts.length === 1 ? "" : "s"} <span className="font-normal text-gray-500">(newest first — resets on each deploy)</span></p>
+          {attempts.length === 0 ? (
+            <p className="text-gray-500">No activations recorded yet since the last deploy.</p>
+          ) : (
+            <table className="w-full text-xs">
+              <thead><tr className="text-gray-500 text-left">
+                <th className="py-1 pr-3">When</th><th className="pr-3">User</th><th className="pr-3">Auction</th><th className="pr-3">Step</th><th className="pr-3">Trusted</th><th className="pr-3">detail</th><th className="pr-3">pointer</th><th className="pr-3">barcode</th><th className="pr-3">est</th><th>parcel</th>
+              </tr></thead>
+              <tbody className="font-mono text-gray-600 dark:text-gray-300">
+                {attempts.map((a, i) => (
+                  <tr key={i} className="border-t border-gray-100 dark:border-gray-800">
+                    <td className="py-1 pr-3 whitespace-nowrap">{a.at ? new Date(a.at).toLocaleString("en-GB") : "—"}</td>
+                    <td className="pr-3 whitespace-nowrap">{a.user ?? "—"}</td>
+                    <td className="pr-3 whitespace-nowrap">{a.auctionId ?? "—"}</td>
+                    <td className="pr-3">{a.step ?? "—"}</td>
+                    <td className="pr-3">{String(a.isTrusted)}</td>
+                    <td className="pr-3">{String(a.detail)}</td>
+                    <td className="pr-3">{a.pointerType ?? "—"}</td>
+                    <td className="pr-3">{a.hasBarcode ? "yes" : "no"}</td>
+                    <td className="pr-3">{a.hasEstimate ? "yes" : "no"}</td>
+                    <td>{a.hasParcel ? "yes" : "no"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       {data && (
         <div className="rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1C1C1E] p-4 text-sm overflow-x-auto">

@@ -710,7 +710,25 @@ export default function LotWizardTab({
     return buildConditionStr({ cond1, cond2, boxOn, boxPrefixMode, boxCustomPrefix, boxCond1, boxCond2 })
   }
 
-  function saveLot() {
+  function saveLot(e?: { isTrusted?: boolean; detail?: number; nativeEvent?: unknown }) {
+    // Diagnostic (non-blocking, fire-and-forget): record WHAT activated Save — a
+    // genuine touch vs a synthetic/keyboard event — plus whether the lot was
+    // actually filled in. Lets us identify the external activator on X069.
+    try {
+      const pointerType = (e?.nativeEvent as { pointerType?: string } | undefined)?.pointerType ?? null
+      fetch("/api/catalogue/save-attempt", {
+        method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true,
+        body: JSON.stringify({
+          auctionId, step, pointerType,
+          isTrusted: e?.isTrusted ?? null,
+          detail: e?.detail ?? null,
+          hasBarcode: !!barcode.trim(),
+          hasEstimate: !!estLow.trim() && !!estHigh.trim(),
+          hasParcel: !!parcel.trim(),
+        }),
+      }).catch(() => {})
+    } catch { /* diagnostic only — never block a save */ }
+
     // Validate the WHOLE wizard, not just the current step. Step 8's Save had no
     // validation, so any activation of it minted a lot from whatever was on
     // screen — this is what was auto-creating blank lots.
