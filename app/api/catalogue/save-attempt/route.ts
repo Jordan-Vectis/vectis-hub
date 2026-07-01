@@ -16,9 +16,10 @@ export async function POST(req: Request) {
     const g = globalThis as { __saveAttempts?: unknown[] }
     g.__saveAttempts = g.__saveAttempts ?? []
     g.__saveAttempts.push({
+      ...body,
+      // server-authoritative — spread body FIRST so the client can't spoof these
       at:   new Date().toISOString(),
       user: session.user.name ?? session.user.email ?? "?",
-      ...body,
     })
     // keep the last 300
     if (g.__saveAttempts.length > 300) g.__saveAttempts.splice(0, g.__saveAttempts.length - 300)

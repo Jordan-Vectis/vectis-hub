@@ -35,6 +35,13 @@ Jordan was adamant (and present in person): the cataloguers are NOT manually cre
 - deleteLot and transferLots delete/move timing logs alongside lots in a transaction.
 - Admin tooling under /tools/reports: removeOrphanedTimingLogs (delete existing orphans), inspectOrphanedTimingLogs (read-only), and an activation log viewer.
 - Reports filter orphans at query time: lib/cataloguing-reports.ts buildLotMap looks up lots by id across the whole table, and both reports pages keep only logs whose lot still exists (or that have no lotId). Only truly-deleted lots are dropped, so real work is never under-counted.
+
+## 2026-07-01 — full /tools/reports code review (13 fixes, on staging)
+An adversarial review found 13 confirmed issues; all fixed on staging, verified numerically-equivalent to the old stats. Durable rules:
+- Manager Portal ALSO counted phantoms (plain groupBy, no orphan filter) — now raw SQL with the same exclusion. ANY new place that counts CatalogueTimingLog must exclude orphans with (t."lotId" IS NULL OR EXISTS (SELECT 1 FROM "CatalogueLot" l WHERE l."id" = t."lotId")).
+- Overview stats now computed in orphan-aware SQL (not by loading every row) — don't revert to row-loading, "All time" would OOM/crash.
+- Day/week/month bucketing is Europe/London (not server UTC). Reuse ukDayKey / ukDayStartUtc / minOf / maxOf from lib/cataloguing-reports.ts (never Math.min(...bigArray)).
+- Reports pages re-assert hasAppAccess(..., "REPORTS") via getEffectiveSession() and gate the admin cleanup button on the effective (impersonation-aware) role.
 `,
   },
   {

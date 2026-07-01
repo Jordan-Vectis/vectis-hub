@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma"
-import { auth } from "@/auth"
+import { getEffectiveSession } from "@/lib/impersonation"
+import { hasAppAccess } from "@/lib/apps"
 import { redirect } from "next/navigation"
 import { format, subDays, subMonths, startOfDay } from "date-fns"
 import Link from "next/link"
 import CataloguingReportsCharts, { type UserChartData, type MonthBucket } from "./charts"
 import CleanupOrphanLogsButton from "./cleanup-orphan-logs-button"
-import { buildLotMap } from "@/lib/cataloguing-reports"
+import { minOf, ukDayKey, ukDayStartUtc } from "@/lib/cataloguing-reports"
 
 export const dynamic = "force-dynamic"
 
@@ -22,11 +23,6 @@ function fmtDuration(ms: number): string {
   if (h > 0) return `${h}h ${m}m ${s}s`
   if (m > 0) return `${m}m ${s}s`
   return `${s}s`
-}
-
-function avg(nums: number[]): number {
-  if (nums.length === 0) return 0
-  return Math.round(nums.reduce((a, b) => a + b, 0) / nums.length)
 }
 
 // ─── Range helpers ────────────────────────────────────────────────────────────
@@ -61,117 +57,128 @@ export default async function ReportsOverviewPage({
 }: {
   searchParams: Promise<{ range?: string }>
 }) {
-  const session = await auth()
+  const session = await getEffectiveSession()
   if (!session) redirect("/login")
+  const dbUser = await prisma.user.findUnique({
+    where:  { id: session.user.id },
+    select: { role: true, allowedApps: true },
+  })
+  if (!hasAppAccess(dbUser?.role ?? "", dbUser?.allowedApps ?? [], "REPORTS")) redirect("/hub")
+  const isAdmin = dbUser?.role === "ADMIN"
 
   const { range } = await searchParams
   const activeRange: RangeKey = (RANGES.find(r => r.key === range)?.key) ?? "30d"
-  const since = rangeStart(activeRange)
+  const since = rangeStart(activeRange)                 // null = all time
 
-  const [rawLogs, researchLogs] = await Promise.all([
-    prisma.catalogueTimingLog.findMany({
-      where: since ? { savedAt: { gte: since } } : {},
-      orderBy: { savedAt: "desc" },
-      include: { auction: { select: { name: true, code: true } } },
-    }),
-    prisma.researchLog.findMany({
-      where: since ? { savedAt: { gte: since } } : {},
-      orderBy: { savedAt: "desc" },
-    }),
+  // UK day bounds (server runs UTC; the business is UK-based)
+  const now        = new Date()
+  const todayStart = ukDayStartUtc(now, 0)
+  const weekStart  = ukDayStartUtc(now, 7)
+  const twelveMonthsAgo = startOfDay(subMonths(now, 12))
+
+  // All aggregation happens in SQL — never load the whole log table into memory,
+  // and never spread a data-sized array into Math.min/Math.max. Orphaned logs
+  // (a lotId matching no lot — the phantom "deleted lot" rows) are excluded in
+  // the WHERE clause; logs with a null lotId are kept. Day/month buckets use the
+  // London calendar so work around midnight lands on the right day.
+  type UserRow = {
+    userId: string; userName: string
+    total: number; wizard: number; photo: number
+    sumMs: number; minMs: number; maxMs: number
+    activeDays: number; completedLots: number; completedDays: number
+    thisWeek: number; today: number
+  }
+  const [timingRows, researchRows, monthRows] = await Promise.all([
+    prisma.$queryRaw<UserRow[]>`
+      SELECT t."userId"                                                                AS "userId",
+             MAX(t."userName")                                                         AS "userName",
+             COUNT(*)::int                                                             AS "total",
+             COUNT(*) FILTER (WHERE t.method = 'WIZARD')::int                          AS "wizard",
+             COUNT(*) FILTER (WHERE t.method <> 'WIZARD')::int                         AS "photo",
+             COALESCE(SUM(t."durationMs"), 0)::float8                                  AS "sumMs",
+             COALESCE(MIN(t."durationMs"), 0)::int                                     AS "minMs",
+             COALESCE(MAX(t."durationMs"), 0)::int                                     AS "maxMs",
+             COUNT(DISTINCT (t."savedAt" AT TIME ZONE 'Europe/London')::date)::int     AS "activeDays",
+             COUNT(*) FILTER (WHERE (t."savedAt" AT TIME ZONE 'Europe/London')::date
+                                  <> (now() AT TIME ZONE 'Europe/London')::date)::int  AS "completedLots",
+             COUNT(DISTINCT (t."savedAt" AT TIME ZONE 'Europe/London')::date)
+               FILTER (WHERE (t."savedAt" AT TIME ZONE 'Europe/London')::date
+                          <> (now() AT TIME ZONE 'Europe/London')::date)::int          AS "completedDays",
+             COUNT(*) FILTER (WHERE t."savedAt" >= ${weekStart})::int                  AS "thisWeek",
+             COUNT(*) FILTER (WHERE t."savedAt" >= ${todayStart})::int                 AS "today"
+      FROM "CatalogueTimingLog" t
+      WHERE (t."lotId" IS NULL OR EXISTS (SELECT 1 FROM "CatalogueLot" l WHERE l."id" = t."lotId"))
+        AND (${since}::timestamptz IS NULL OR t."savedAt" >= ${since})
+      GROUP BY t."userId"`,
+    prisma.$queryRaw<{ userId: string; userName: string; totalMs: number; sessions: number }[]>`
+      SELECT r."userId"                          AS "userId",
+             MAX(r."userName")                   AS "userName",
+             COALESCE(SUM(r."durationMs"), 0)::float8 AS "totalMs",
+             COUNT(*)::int                       AS "sessions"
+      FROM "ResearchLog" r
+      WHERE (${since}::timestamptz IS NULL OR r."savedAt" >= ${since})
+      GROUP BY r."userId"`,
+    prisma.$queryRaw<{ y: number; m: number; n: number }[]>`
+      SELECT EXTRACT(YEAR  FROM (t."savedAt" AT TIME ZONE 'Europe/London'))::int AS "y",
+             EXTRACT(MONTH FROM (t."savedAt" AT TIME ZONE 'Europe/London'))::int AS "m",
+             COUNT(*)::int AS "n"
+      FROM "CatalogueTimingLog" t
+      WHERE t."savedAt" >= ${twelveMonthsAgo}
+        AND (t."lotId" IS NULL OR EXISTS (SELECT 1 FROM "CatalogueLot" l WHERE l."id" = t."lotId"))
+      GROUP BY 1, 2`,
   ])
 
-  // Exclude orphaned logs (lotId matches no lot — phantom "deleted lot" rows) so
-  // they never inflate anyone's counts, whether or not they've been cleaned up.
-  const lotMap = await buildLotMap(rawLogs)
-  const logs = rawLogs.filter(l => !l.lotId || lotMap.has(l.lotId))
-
-  // Monthly buckets — last 12 calendar months (always unfiltered), orphans excluded
-  const allTimeRaw = since
-    ? await prisma.catalogueTimingLog.findMany({
-        where: { savedAt: { gte: startOfDay(subMonths(new Date(), 12)) } },
-        select: { savedAt: true, lotId: true },
-      })
-    : rawLogs.map(l => ({ savedAt: l.savedAt, lotId: l.lotId }))
-  const allTimeMap = since ? await buildLotMap(allTimeRaw) : lotMap
-  const allTimeLogs = allTimeRaw.filter(l => !l.lotId || allTimeMap.has(l.lotId))
-
+  // ── Monthly buckets — last 12 calendar months (London), orphans excluded ──
   const bucketMap = new Map<string, number>()
-  for (const l of allTimeLogs) {
-    const key = format(l.savedAt, "MMM yy")
-    bucketMap.set(key, (bucketMap.get(key) ?? 0) + 1)
-  }
-
+  for (const r of monthRows) bucketMap.set(`${r.y}-${r.m}`, Number(r.n))
   const monthlyBuckets: MonthBucket[] = []
   for (let i = 11; i >= 0; i--) {
-    const d = subMonths(new Date(), i)
-    const key = format(d, "MMM yy")
-    monthlyBuckets.push({ month: key, total: bucketMap.get(key) ?? 0 })
+    const d   = subMonths(now, i)
+    const ymd = ukDayKey(d)                       // "yyyy-MM-dd" in London
+    const y   = Number(ymd.slice(0, 4))
+    const m   = Number(ymd.slice(5, 7))
+    monthlyBuckets.push({ month: format(d, "MMM yy"), total: bucketMap.get(`${y}-${m}`) ?? 0 })
   }
 
-  // ── Research stats ──
-  const researchByUser = new Map<string, { name: string; totalMs: number; sessions: number }>()
-  for (const r of researchLogs) {
-    if (!researchByUser.has(r.userId)) {
-      researchByUser.set(r.userId, { name: r.userName, totalMs: 0, sessions: 0 })
-    }
-    const e = researchByUser.get(r.userId)!
-    e.totalMs  += r.durationMs
-    e.sessions += 1
-  }
+  // ── Research per user ──
+  const researchByUser = new Map(researchRows.map(r => [r.userId, { name: r.userName, totalMs: Number(r.totalMs), sessions: Number(r.sessions) }]))
+
+  // ── Per-user stats (research-only users still appear) ──
+  const userStats = [...(() => {
+    const ids = new Set<string>([...timingRows.map(r => r.userId), ...researchRows.map(r => r.userId)])
+    const timById = new Map(timingRows.map(r => [r.userId, r]))
+    return [...ids].map(userId => {
+      const t = timById.get(userId)
+      const research = researchByUser.get(userId)
+      const dailyAvg = t
+        ? (t.completedDays > 0 ? Math.round(t.completedLots / t.completedDays) : t.today)
+        : 0
+      return {
+        userId,
+        name:             t?.userName ?? research?.name ?? "Unknown",
+        totalLots:        t?.total ?? 0,
+        wizardLots:       t?.wizard ?? 0,
+        photoOnlyLots:    t?.photo ?? 0,
+        avgMs:            t && t.total > 0 ? Math.round(t.sumMs / t.total) : 0,
+        fastestMs:        t?.minMs ?? 0,
+        slowestMs:        t?.maxMs ?? 0,
+        dailyAvg,
+        completedDays:    t?.completedDays ?? 0,
+        lotsThisWeek:     t?.thisWeek ?? 0,
+        lotsToday:        t?.today ?? 0,
+        researchMs:       research?.totalMs  ?? 0,
+        researchSessions: research?.sessions ?? 0,
+      }
+    })
+  })()].sort((a, b) => b.totalLots - a.totalLots)
 
   // ── Overall stats ──
-  const allDurations = logs.map(l => l.durationMs)
-  const overallAvg   = avg(allDurations)
-  const overallMin   = allDurations.length ? Math.min(...allDurations) : 0
-  const todayStart   = new Date(); todayStart.setHours(0, 0, 0, 0)
-  const lotsToday    = logs.filter(l => l.savedAt >= todayStart).length
-
-  // ── Per-user stats ──
-  const userMap = new Map<string, {
-    name: string
-    wizardLogs:    typeof logs
-    photoOnlyLogs: typeof logs
-  }>()
-
-  for (const log of logs) {
-    if (!userMap.has(log.userId)) {
-      userMap.set(log.userId, { name: log.userName, wizardLogs: [], photoOnlyLogs: [] })
-    }
-    const entry = userMap.get(log.userId)!
-    if (log.method === "WIZARD") entry.wizardLogs.push(log)
-    else entry.photoOnlyLogs.push(log)
-  }
-
-  const todayStr  = format(new Date(), "yyyy-MM-dd")
-  const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - 7); weekStart.setHours(0, 0, 0, 0)
-
-  const userStats = [...userMap.entries()].map(([userId, data]) => {
-    const allUserLogs   = [...data.wizardLogs, ...data.photoOnlyLogs]
-    const durations     = allUserLogs.map(l => l.durationMs)
-    const research      = researchByUser.get(userId)
-    const completedLogs = allUserLogs.filter(l => format(l.savedAt, "yyyy-MM-dd") !== todayStr)
-    const completedDays = new Set(completedLogs.map(l => format(l.savedAt, "yyyy-MM-dd")))
-    const dailyAvg      = completedDays.size > 0
-      ? Math.round(completedLogs.length / completedDays.size)
-      : allUserLogs.filter(l => l.savedAt >= todayStart).length
-
-    return {
-      userId,
-      name:             data.name,
-      totalLots:        allUserLogs.length,
-      wizardLots:       data.wizardLogs.length,
-      photoOnlyLots:    data.photoOnlyLogs.length,
-      avgMs:            avg(durations),
-      fastestMs:        durations.length ? Math.min(...durations) : 0,
-      slowestMs:        durations.length ? Math.max(...durations) : 0,
-      dailyAvg,
-      completedDays:    completedDays.size,
-      lotsThisWeek:     allUserLogs.filter(l => l.savedAt >= weekStart).length,
-      lotsToday:        allUserLogs.filter(l => l.savedAt >= todayStart).length,
-      researchMs:       research?.totalMs  ?? 0,
-      researchSessions: research?.sessions ?? 0,
-    }
-  }).sort((a, b) => b.totalLots - a.totalLots)
+  const totalLots  = userStats.reduce((s, u) => s + u.totalLots, 0)
+  const sumAllMs   = timingRows.reduce((s, r) => s + r.sumMs, 0)
+  const overallAvg = totalLots > 0 ? Math.round(sumAllMs / totalLots) : 0
+  const overallMin = minOf(timingRows.filter(r => r.total > 0).map(r => r.minMs))
+  const lotsToday  = userStats.reduce((s, u) => s + u.lotsToday, 0)
+  const hasData    = userStats.length > 0
 
   const chartUsers: UserChartData[] = userStats.map(u => ({
     userId:        u.userId,
@@ -203,7 +210,7 @@ export default async function ReportsOverviewPage({
             <div>
               <h1 className="text-xl font-bold text-gray-900 dark:text-white">Reports</h1>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Cataloguing performance — speed, output and team comparisons.</p>
-              {session.user.role === "ADMIN" && <div className="mt-3"><CleanupOrphanLogsButton /></div>}
+              {isAdmin && <div className="mt-3"><CleanupOrphanLogsButton /></div>}
             </div>
             {/* Range pills */}
             <div className="flex items-center gap-1 bg-gray-100 dark:bg-[#141416] border border-gray-200 dark:border-gray-800 rounded-lg p-1">
@@ -230,21 +237,21 @@ export default async function ReportsOverviewPage({
         <div className="max-w-7xl mx-auto space-y-8">
 
           {/* No data */}
-          {logs.length === 0 && (
+          {!hasData && (
             <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl p-16 text-center">
               <p className="text-lg font-semibold text-gray-600 dark:text-gray-300 mb-1">No data for this period</p>
               <p className="text-sm text-gray-500">Try selecting a wider time range above.</p>
             </div>
           )}
 
-          {logs.length > 0 && (
+          {hasData && (
             <>
               {/* ── Stat cards ── */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
                   {
                     label: "Total Lots",
-                    value: logs.length.toLocaleString(),
+                    value: totalLots.toLocaleString(),
                     sub:   activeLabel,
                     accent: "border-l-[#2AB4A6]",
                   },

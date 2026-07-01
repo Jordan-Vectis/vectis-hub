@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
-import { auth } from "@/auth"
+import { getEffectiveSession } from "@/lib/impersonation"
+import { hasAppAccess } from "@/lib/apps"
 import { redirect, notFound } from "next/navigation"
 import { format, subDays, subMonths, startOfDay } from "date-fns"
 import Link from "next/link"
@@ -13,7 +14,7 @@ import {
   CustomRangePicker,
   type DayStats,
 } from "../../../admin/cataloguing-reports/[userId]/collapsible-sections"
-import { buildLotMap, lotRef } from "@/lib/cataloguing-reports"
+import { buildLotMap, lotRef, minOf, maxOf, ukDayKey, ukDayStartUtc } from "@/lib/cataloguing-reports"
 
 export const dynamic = "force-dynamic"
 
@@ -80,21 +81,36 @@ export default async function ReportsUserPage({
   params:       Promise<{ userId: string }>
   searchParams: Promise<{ range?: string; from?: string; to?: string }>
 }) {
-  const session = await auth()
+  const session = await getEffectiveSession()
   if (!session) redirect("/login")
+  const dbUser = await prisma.user.findUnique({
+    where:  { id: session.user.id },
+    select: { role: true, allowedApps: true },
+  })
+  if (!hasAppAccess(dbUser?.role ?? "", dbUser?.allowedApps ?? [], "REPORTS")) redirect("/hub")
 
   const { userId }                       = await params
   const { range, from: fromParam, to: toParam } = await searchParams
   const activeRange: RangeKey            = (RANGES.find(r => r.key === range)?.key) ?? "30d"
-  const isCustomRange                    = !!(fromParam || toParam)
+
+  // Parse the custom range defensively — a malformed ?from / ?to (typo, stale
+  // bookmark, bot) must not reach new Date()/format() and crash the page.
+  const parseDay = (s?: string): Date | null => {
+    if (!s) return null
+    const d = new Date(s)
+    return isNaN(d.getTime()) ? null : d
+  }
+  const fromDate = parseDay(fromParam)
+  const toDate   = parseDay(toParam)
+  const isCustomRange = !!(fromDate || toDate)
 
   // Resolve date bounds
   let since: Date | null
   let until: Date | null = null
 
   if (isCustomRange) {
-    since = fromParam ? startOfDay(new Date(fromParam)) : null
-    until = toParam   ? new Date(toParam + "T23:59:59.999") : null
+    since = fromDate ? startOfDay(fromDate) : null
+    until = toDate   ? new Date(toDate.getTime() + 86_399_999) : null   // end of that day
   } else {
     since = rangeStart(activeRange)
   }
@@ -103,8 +119,10 @@ export default async function ReportsUserPage({
   const savedAtFilter  = since || until ? { savedAt:        { ...(since ? { gte: since } : {}), ...(until ? { lte: until } : {}) } } : {}
   const idleAtFilter   = since || until ? { idleStartedAt:  { ...(since ? { gte: since } : {}), ...(until ? { lte: until } : {}) } } : {}
 
-  // Today bounds — for the always-visible productivity card
-  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+  // Today bounds in UK time (server runs UTC; the business is UK-based) — for the
+  // always-visible productivity card and the timeline.
+  const now        = new Date()
+  const todayStart = ukDayStartUtc(now, 0)
 
   const [rawLogs, researchLogs, idleLogs] = await Promise.all([
     prisma.catalogueTimingLog.findMany({
@@ -140,7 +158,7 @@ export default async function ReportsUserPage({
 
   // ── Range label for display ──
   const rangeLabel = isCustomRange
-    ? `${fromParam ? format(new Date(fromParam), "d MMM yyyy") : "All history"} – ${toParam ? format(new Date(toParam), "d MMM yyyy") : "today"}`
+    ? `${fromDate ? format(fromDate, "d MMM yyyy") : "All history"} – ${toDate ? format(toDate, "d MMM yyyy") : "today"}`
     : RANGES.find(r => r.key === activeRange)?.label ?? "All time"
 
   // ── Split by method ──
@@ -150,8 +168,8 @@ export default async function ReportsUserPage({
   // ── Overall speed ──
   const allDurations = logs.map(l => l.durationMs)
   const overallAvg   = avg(allDurations)
-  const fastest      = allDurations.length ? Math.min(...allDurations) : 0
-  const slowest      = allDurations.length ? Math.max(...allDurations) : 0
+  const fastest      = minOf(allDurations)
+  const slowest      = maxOf(allDurations)
 
   // ── Today stats (derived from range-filtered logs; shows correctly when range includes today) ──
   const todayLogs       = logs.filter(l => l.savedAt >= todayStart)
@@ -159,13 +177,13 @@ export default async function ReportsUserPage({
   const activeTimeToday = todayLogs.reduce((s, l) => s + l.durationMs, 0)
   const todayIdleLogs   = idleLogs.filter(l => l.idleStartedAt >= todayStart)
 
-  const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - 7); weekStart.setHours(0, 0, 0, 0)
+  const weekStart = ukDayStartUtc(now, 7)
   const lotsThisWeek = logs.filter(l => l.savedAt >= weekStart).length
 
   // ── Daily average (completed days only — today excluded as it's partial) ──
-  const todayStr         = format(new Date(), "yyyy-MM-dd")
-  const completedDayLogs = logs.filter(l => format(l.savedAt, "yyyy-MM-dd") !== todayStr)
-  const completedDays    = new Set(completedDayLogs.map(l => format(l.savedAt, "yyyy-MM-dd")))
+  const todayStr         = ukDayKey(now)
+  const completedDayLogs = logs.filter(l => ukDayKey(l.savedAt) !== todayStr)
+  const completedDays    = new Set(completedDayLogs.map(l => ukDayKey(l.savedAt)))
   const dailyAvg         = completedDays.size > 0
     ? Math.round(completedDayLogs.length / completedDays.size)
     : lotsToday
@@ -173,9 +191,12 @@ export default async function ReportsUserPage({
   // ── Key Points ──
   const kpLogs = wizardLogs.filter(l => l.keyPointsMs && l.keyPointsMs > 0)
   const kpAvg  = kpLogs.length ? avg(kpLogs.map(l => l.keyPointsMs!)) : 0
-  const kpFast = kpLogs.length ? Math.min(...kpLogs.map(l => l.keyPointsMs!)) : 0
-  const kpSlow = kpLogs.length ? Math.max(...kpLogs.map(l => l.keyPointsMs!)) : 0
-  const kpPct  = wizardLogs.length && kpAvg > 0 ? Math.round((kpAvg / avg(wizardLogs.map(l => l.durationMs))) * 100) : 0
+  const kpFast = minOf(kpLogs.map(l => l.keyPointsMs!))
+  const kpSlow = maxOf(kpLogs.map(l => l.keyPointsMs!))
+  // Compare key-points time against the total time OF THE SAME lots (kpLogs), not
+  // the average over all wizard lots — otherwise this isn't a real percentage.
+  const kpDurAvg = kpLogs.length ? avg(kpLogs.map(l => l.durationMs)) : 0
+  const kpPct  = kpDurAvg > 0 ? Math.round((kpAvg / kpDurAvg) * 100) : 0
 
   // ── Per-auction ──
   const auctionMap = new Map<string, { name: string; code: string; count: number; durations: number[] }>()
@@ -187,7 +208,7 @@ export default async function ReportsUserPage({
     e.count++; e.durations.push(log.durationMs)
   }
   const auctionStats = [...auctionMap.values()]
-    .map(a => ({ ...a, avgMs: avg(a.durations) }))
+    .map(a => ({ ...a, avgMs: avg(a.durations), fastestMs: minOf(a.durations), slowestMs: maxOf(a.durations) }))
     .sort((a, b) => b.count - a.count)
 
   // ── Daily breakdown: cataloguing vs idle per day ──
@@ -195,7 +216,7 @@ export default async function ReportsUserPage({
   const dayMap = new Map<string, { date: string; lots: number; cataloguingMs: number; idleMs: number }>()
 
   for (const log of logs) {
-    const day = format(log.savedAt, "yyyy-MM-dd")
+    const day = ukDayKey(log.savedAt)
     if (!dayMap.has(day)) dayMap.set(day, { date: day, lots: 0, cataloguingMs: 0, idleMs: 0 })
     const e = dayMap.get(day)!
     e.lots++
@@ -203,7 +224,7 @@ export default async function ReportsUserPage({
   }
   for (const log of idleLogs) {
     if (log.idleDurationMs > MAX_IDLE_MS) continue
-    const day = format(log.idleStartedAt, "yyyy-MM-dd")
+    const day = ukDayKey(log.idleStartedAt)
     if (!dayMap.has(day)) dayMap.set(day, { date: day, lots: 0, cataloguingMs: 0, idleMs: 0 })
     dayMap.get(day)!.idleMs += log.idleDurationMs
   }
@@ -334,6 +355,7 @@ export default async function ReportsUserPage({
             <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl p-5">
               <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">
                 Cataloguing vs Idle — {rangeLabel}
+                <span className="block normal-case font-normal text-gray-400 dark:text-gray-500 mt-0.5">Share of tracked active + idle time (excludes unaccounted time — see the Daily Breakdown below for the full workday split)</span>
               </h2>
               <div className="space-y-3">
                 <div className="flex rounded-full overflow-hidden h-6 bg-gray-100 dark:bg-gray-800">
@@ -472,8 +494,8 @@ export default async function ReportsUserPage({
                             </td>
                             <td className="px-5 py-3 text-right font-bold text-white">{a.count}</td>
                             <td className="px-5 py-3 text-right font-mono text-gray-600 dark:text-gray-300">{fmtDuration(a.avgMs)}</td>
-                            <td className="px-5 py-3 text-right font-mono text-green-400">{fmtDuration(Math.min(...a.durations))}</td>
-                            <td className="px-5 py-3 text-right font-mono text-red-400">{fmtDuration(Math.max(...a.durations))}</td>
+                            <td className="px-5 py-3 text-right font-mono text-green-400">{fmtDuration(a.fastestMs)}</td>
+                            <td className="px-5 py-3 text-right font-mono text-red-400">{fmtDuration(a.slowestMs)}</td>
                           </tr>
                         ))}
                       </tbody>

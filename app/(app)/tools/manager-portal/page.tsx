@@ -38,15 +38,23 @@ export default async function ManagerPortalPage() {
         return [] as { auctionId: string; day: Date; n: number }[]
       }
     })(),
-    prisma.catalogueTimingLog.groupBy({
-      by: ["auctionId"],
-      _avg:   { durationMs: true },
-      _count: { _all: true },
-    }),
-    prisma.catalogueTimingLog.groupBy({
-      by: ["auctionId", "userName"],
-      _count: { _all: true },
-    }),
+    // Exclude orphaned timing logs (a lotId matching no lot — the phantom
+    // "deleted lot" rows) so the pace/leaderboard counts here match the Reports
+    // pages. Logs with a null lotId are kept.
+    prisma.$queryRaw<{ auctionId: string; avgMs: number | null; count: number }[]>`
+      SELECT t."auctionId"            AS "auctionId",
+             AVG(t."durationMs")::float8 AS "avgMs",
+             COUNT(*)::int            AS "count"
+      FROM "CatalogueTimingLog" t
+      WHERE (t."lotId" IS NULL OR EXISTS (SELECT 1 FROM "CatalogueLot" l WHERE l."id" = t."lotId"))
+      GROUP BY t."auctionId"`,
+    prisma.$queryRaw<{ auctionId: string; userName: string; count: number }[]>`
+      SELECT t."auctionId"  AS "auctionId",
+             t."userName"   AS "userName",
+             COUNT(*)::int  AS "count"
+      FROM "CatalogueTimingLog" t
+      WHERE (t."lotId" IS NULL OR EXISTS (SELECT 1 FROM "CatalogueLot" l WHERE l."id" = t."lotId"))
+      GROUP BY t."auctionId", t."userName"`,
   ])
 
   const dailyMap = new Map<string, number[]>()  // auctionId → chronological per-day lot counts
@@ -61,7 +69,7 @@ export default async function ManagerPortalPage() {
   const catMap = new Map<string, { name: string; count: number }[]>()
   for (const row of catAgg) {
     const arr = catMap.get(row.auctionId) ?? []
-    arr.push({ name: row.userName, count: row._count._all })
+    arr.push({ name: row.userName, count: row.count })
     catMap.set(row.auctionId, arr)
   }
   for (const [k, arr] of catMap) catMap.set(k, arr.sort((a, b) => b.count - a.count).slice(0, 3))
@@ -78,8 +86,8 @@ export default async function ManagerPortalPage() {
       complete:    !!a.complete,
       addedToBC:   !!a.addedToBC,
       daily:       dailyMap.get(a.id) ?? [],
-      avgDurationMs: tim?._avg.durationMs ?? null,
-      timedLots:   tim?._count._all ?? 0,
+      avgDurationMs: tim?.avgMs ?? null,
+      timedLots:   tim?.count ?? 0,
       topCataloguers: catMap.get(a.id) ?? [],
     }
   })
