@@ -85,6 +85,29 @@ export async function getBCToken(): Promise<string | null> {
   return null
 }
 
+// List every published OData web service (the service root document) so we can
+// discover the exact endpoint names BC exposes — e.g. the auction-header /
+// statistics table (EVA_AuctionHeader, table 75003). Returns [{ name, url, kind }].
+export async function bcListServices(
+  token: string,
+): Promise<{ name: string; url: string; kind: string | null }[]> {
+  const res = await fetch(baseUrl(), {
+    headers: {
+      Accept:            "application/json",
+      "OData-MaxVersion": "4.0",
+      Authorization:     `Bearer ${token}`,
+    },
+    signal: AbortSignal.timeout(45_000),
+  })
+  if (!res.ok) throw new Error(`BC API ${res.status}: ${await res.text()}`)
+  const json = await res.json()
+  return (json.value ?? []).map((s: any) => ({
+    name: s.name ?? "",
+    url:  s.url  ?? "",
+    kind: s.kind ?? null,
+  }))
+}
+
 export async function bcPage(
   token: string,
   endpoint: string,
