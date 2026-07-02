@@ -31,9 +31,11 @@ type Bucket = {
 // The per-line vendor commission rate field — detected from the row so we don't
 // hardcode a possibly-wrong name. Preferred exact names first, then a pattern.
 function findCommissionField(fields: string[]): string {
-  const prefer = ["EVA_VendorCommissionRate", "EVA_CommissionRate", "EVA_VendorCommission", "EVA_CommissionPct", "EVA_CommissionPercent"]
+  // BC's caption is "Vendor Comm Rate" — abbreviated "Comm", so match /comm/ not
+  // /commiss/. The rate is a percentage (e.g. 25.00 = 25%), normalised below.
+  const prefer = ["EVA_VendorCommRate", "EVA_VendorCommissionRate", "EVA_CommRate", "EVA_CommissionRate", "EVA_VendorCommission", "EVA_CommissionPct"]
   return prefer.find(f => fields.includes(f))
-    ?? fields.find(f => /commiss/i.test(f) && /(rate|pct|percent)/i.test(f))
+    ?? fields.find(f => /comm/i.test(f) && /(rate|pct|percent)/i.test(f))
     ?? ""
 }
 
@@ -107,7 +109,7 @@ export async function GET(req: NextRequest) {
             commissionField = findCommissionField(sampleFields)
             vendorField     = findField(sampleFields, ["EVA_VendorNo", "EVA_VendorCode", "EVA_VendorNumber"], /vendor.*(no|code|number|id)/i)
             withdrawnField  = findField(sampleFields, ["EVA_WithdrawLot", "EVA_Withdrawn", "EVA_WithdrawnLot"], /withdraw/i)
-            buyerField      = findField(sampleFields, ["EVA_BuyerNo", "EVA_BuyerCode", "EVA_BuyerNumber", "EVA_WinningBidderNo"], /buyer.*(no|code|number|id)|winning.*bidder/i)
+            buyerField      = findField(sampleFields, ["EVA_BuyerNo", "EVA_BuyerName", "EVA_BuyerCode", "EVA_BuyerNumber", "EVA_WinningBidderNo"], /buyer.*(no|code|number|id|name)|winning.*bidder/i)
           }
 
           for (const r of rows as Record<string, unknown>[]) {
