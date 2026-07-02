@@ -142,7 +142,7 @@ export default function SaleStatisticsClient() {
   const [subcategory, setSubcategory] = useState("all")
 
   // Compare mode — two periods (month + year) side by side
-  const [mode, setMode] = useState<"single" | "compare">("single")
+  const [mode, setMode] = useState<"single" | "compare" | "best">("single")
   const [pa, setPa] = useState({ m: new Date().getMonth(), y: new Date().getFullYear() })
   const [pb, setPb] = useState({ m: new Date().getMonth(), y: new Date().getFullYear() - 1 })
   const [dataA, setDataA] = useState<Result | null>(null)
@@ -273,6 +273,26 @@ export default function SaleStatisticsClient() {
     return { label: `${s.code} · ${s.date}${nm ? " · " + nm : ""}`, value: s.r.hammer }
   }), [bySale])
   const catChartData = useMemo(() => byCategory.filter(c => c.r.high > 0).slice(0, 14).map(c => ({ category: c.category, pct: vsHigh(c.r) })), [byCategory])
+  const topCatData = useMemo(() => byCategory.slice(0, 8).map(c => ({ label: c.category, value: c.r.hammer })), [byCategory])
+  const topSubData = useMemo(() => byCat.filter(c => c.r.hammer > 0).slice(0, 10).map(c => ({ label: `${c.category} · ${c.subcategory}`, value: c.r.hammer })), [byCat])
+
+  // Seasonality — group the fetched lots by calendar month (best/worst months to sell)
+  const monthAgg = useMemo(() => {
+    const rolls: Roll[] = Array.from({ length: 12 }, () => ({ lots: 0, sold: 0, hammer: 0, low: 0, high: 0, collected: 0, withdrawn: 0, sellerPremium: 0 }))
+    for (const b of data?.buckets ?? []) {
+      if (category !== "all" && b.category !== category) continue
+      if (subcategory !== "all" && b.subcategory !== subcategory) continue
+      const mm = b.auctionDate ? new Date(b.auctionDate + "T00:00:00Z").getUTCMonth() : -1
+      if (mm < 0) continue
+      const r = rolls[mm]
+      r.lots += b.lots; r.sold += b.sold; r.hammer += b.hammer; r.low += b.low; r.high += b.high
+      r.collected += b.collected; r.withdrawn += b.withdrawn; r.sellerPremium += b.sellerPremium
+    }
+    return rolls.map((r, month) => ({ month, r }))
+  }, [data, category, subcategory])
+  const monthsWithData = monthAgg.filter(m => m.r.lots > 0)
+  const bestMonth  = monthsWithData.length ? monthsWithData.reduce((a, b) => (b.r.hammer > a.r.hammer ? b : a)) : null
+  const worstMonth = monthsWithData.length ? monthsWithData.reduce((a, b) => (b.r.hammer < a.r.hammer ? b : a)) : null
 
   // Distinct vendor / buyer counts are per-sale (can't be summed or category-sliced).
   const saleDistinct = useMemo(
@@ -338,18 +358,18 @@ export default function SaleStatisticsClient() {
 
       {/* Mode toggle */}
       <div className="flex gap-1 mb-4">
-        {(["single", "compare"] as const).map(mo => (
+        {(["single", "compare", "best"] as const).map(mo => (
           <button key={mo} onClick={() => setMode(mo)}
             className={`px-3 py-1.5 text-xs font-semibold rounded border transition-colors ${
               mode === mo ? "bg-[#2AB4A6] text-white border-[#2AB4A6]"
                 : "bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:border-gray-500"}`}>
-            {mo === "single" ? "Single period" : "Compare periods"}
+            {mo === "single" ? "Single period" : mo === "compare" ? "Compare periods" : "Best months"}
           </button>
         ))}
       </div>
 
-      {mode === "single" && (<>
-      {/* Date presets + custom range */}
+      {mode !== "compare" && (<>
+      {/* Date presets + custom range (shared by Single period + Best months) */}
       <div className="flex flex-wrap items-end gap-3 mb-4">
         <div className="flex flex-wrap gap-2">
           {PRESETS.map(p => (
@@ -382,10 +402,12 @@ export default function SaleStatisticsClient() {
 
       {/* Drill-down filters */}
       <div className="flex flex-wrap gap-3 mb-4">
-        <select value={sale} onChange={e => { setSale(e.target.value); setCategory("all"); setSubcategory("all") }} className={selCls}>
-          <option value="all">All sales{sales.length ? ` (${sales.length})` : ""}</option>
-          {sales.map(s => <option key={s.code} value={s.code}>{s.code}{s.name ? ` — ${s.name}` : ""}</option>)}
-        </select>
+        {mode === "single" && (
+          <select value={sale} onChange={e => { setSale(e.target.value); setCategory("all"); setSubcategory("all") }} className={selCls}>
+            <option value="all">All sales{sales.length ? ` (${sales.length})` : ""}</option>
+            {sales.map(s => <option key={s.code} value={s.code}>{s.code}{s.name ? ` — ${s.name}` : ""}</option>)}
+          </select>
+        )}
         <select value={category} onChange={e => { setCategory(e.target.value); setSubcategory("all") }} className={selCls}>
           <option value="all">All categories</option>
           {categories.map(c => <option key={c} value={c}>{c}</option>)}
@@ -401,8 +423,9 @@ export default function SaleStatisticsClient() {
       {data?.partial && !loading && (
         <p className="text-amber-500 text-xs mb-4">Showing a partial result — the range is large and hit the fetch time limit. Narrow the dates for a complete figure.</p>
       )}
+      </>)}
 
-      {data && !loading && (
+      {mode === "single" && data && !loading && (
         <>
           {/* Headline KPIs */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
@@ -475,6 +498,14 @@ export default function SaleStatisticsClient() {
                 </ResponsiveContainer>
               ) : <p className="text-sm text-gray-500 py-8 text-center">No data</p>}
             </div>
+
+            <ChartCard title="Top categories by value">
+              <HBarChart data={topCatData} labelWidth={150} />
+            </ChartCard>
+
+            <ChartCard title="Top subcategories by value">
+              <HBarChart data={topSubData} labelWidth={210} />
+            </ChartCard>
           </div>
 
           {/* By sale — matches the manual "2026 by auction" columns */}
@@ -526,7 +557,67 @@ export default function SaleStatisticsClient() {
           </Section>
         </>
       )}
-      </>)}
+
+      {mode === "best" && data && !loading && (
+        <>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            When to sell — pick a wide date range above (a full year, or a custom multi‑year span) and a category to see the seasonal pattern.
+            {category !== "all" ? ` Showing ${category}${subcategory !== "all" ? " · " + subcategory : ""}.` : " Showing all categories."}
+          </p>
+
+          {bestMonth && worstMonth ? (
+            <>
+              <div className="grid grid-cols-2 gap-3 mb-6 max-w-2xl">
+                <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/[0.06] p-4">
+                  <p className="text-[11px] text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-0.5">Best month to sell</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{MONTHS[bestMonth.month]}</p>
+                  <p className="text-xs text-gray-500">{gbp0(bestMonth.r.hammer)} · {pct(sellThrough(bestMonth.r))} sell‑through · {pctS(vsHigh(bestMonth.r))} vs high est</p>
+                </div>
+                <div className="rounded-xl border border-amber-500/40 bg-amber-500/[0.06] p-4">
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-0.5">Quietest month</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{MONTHS[worstMonth.month]}</p>
+                  <p className="text-xs text-gray-500">{gbp0(worstMonth.r.hammer)} · {pct(sellThrough(worstMonth.r))} sell‑through · {pctS(vsHigh(worstMonth.r))} vs high est</p>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <ChartCard title="Sale value by month">
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={monthAgg.map(m => ({ month: MONTHS[m.month].slice(0, 3), value: m.r.hammer }))} margin={{ top: 4, right: 8, left: 0, bottom: 8 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#9ca3af22" />
+                      <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#9ca3af" }} tickLine={false} axisLine={false} />
+                      <YAxis tickFormatter={v => "£" + Math.round(Number(v) / 1000) + "k"} tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} />
+                      <Tooltip cursor={{ fill: "rgba(42,180,166,0.08)" }} contentStyle={{ background: "#111827", border: "1px solid #2d3047", borderRadius: 6, fontSize: 12, color: "#fff" }} formatter={v => gbp0(Number(v))} />
+                      <Bar dataKey="value" radius={[3, 3, 0, 0]} isAnimationActive={false}>
+                        {monthAgg.map((m, i) => <Cell key={i} fill={bestMonth && m.month === bestMonth.month ? "#2AB4A6" : "#3b6ea5"} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartCard>
+              </div>
+
+              <Section title="By month">
+                <DataTable
+                  rows={monthsWithData}
+                  initialSort={{ index: 1, dir: "desc" }}
+                  filterPlaceholder="Filter months…"
+                  columns={[
+                    { label: "Month",        render: m => <span className="text-gray-700 dark:text-gray-200">{MONTHS[m.month]}</span>, sort: m => m.month, text: m => MONTHS[m.month] },
+                    { label: "Sale Value",   align: "right", render: m => gbp0(m.r.hammer),      sort: m => m.r.hammer },
+                    { label: "Lots Sold",    align: "right", render: m => int(m.r.sold),         sort: m => m.r.sold },
+                    { label: "Sell-through", align: "right", render: m => pct(sellThrough(m.r)), sort: m => sellThrough(m.r) },
+                    { label: "Avg Lot",      align: "right", render: m => gbp2(avgLot(m.r)),     sort: m => avgLot(m.r) },
+                    { label: "Vs High Est",  align: "right", sort: m => vsHigh(m.r), render: m => <span className={m.r.hammer - m.r.high >= 0 ? "text-emerald-500" : "text-red-400"}>{pctS(vsHigh(m.r))}</span> },
+                    { label: "Vendor Comm",  align: "right", render: m => gbp0(m.r.sellerPremium), sort: m => m.r.sellerPremium },
+                  ]}
+                />
+              </Section>
+            </>
+          ) : (
+            <p className="text-sm text-gray-500">No lots in this range. Pick a wider date range above.</p>
+          )}
+        </>
+      )}
 
       {mode === "compare" && (
         <>
@@ -591,6 +682,32 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{title}</h2>
       {children}
     </div>
+  )
+}
+
+// ─── Chart helpers ──────────────────────────────────────────────────────────────
+
+function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+      <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">{title}</h2>
+      {children}
+    </div>
+  )
+}
+
+function HBarChart({ data, labelWidth = 190 }: { data: { label: string; value: number }[]; labelWidth?: number }) {
+  if (!data.length) return <p className="text-sm text-gray-500 py-8 text-center">No data</p>
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(160, data.length * 32 + 20)}>
+      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
+        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#9ca3af22" />
+        <XAxis type="number" tickFormatter={v => "£" + Math.round(Number(v) / 1000) + "k"} tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} />
+        <YAxis type="category" dataKey="label" width={labelWidth} tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} />
+        <Tooltip cursor={{ fill: "rgba(42,180,166,0.08)" }} contentStyle={{ background: "#111827", border: "1px solid #2d3047", borderRadius: 6, fontSize: 12, color: "#fff" }} formatter={v => gbp0(Number(v))} />
+        <Bar dataKey="value" fill="#2AB4A6" radius={[0, 3, 3, 0]} isAnimationActive={false} />
+      </BarChart>
+    </ResponsiveContainer>
   )
 }
 
