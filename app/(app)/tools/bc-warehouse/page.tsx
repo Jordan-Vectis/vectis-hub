@@ -3162,7 +3162,29 @@ export default function BCWarehousePage() {
   const [status, setStatus] = useState<SyncStatus | null>(null)
   const [showFirstSync, setShowFirstSync] = useState(false)
   const [guideFocus, setGuideFocus] = useState<string | null>(null)   // which section's guide the "?" jumps to
+  // Personal BC connection (null = still checking). Location History, Collections
+  // Due and Unsold Items query BC with the USER'S OWN sign-in, so a user whose only
+  // app is BC Warehouse must be able to connect from HERE (they can't open BC
+  // Reports, where the only other connect prompt lives).
+  const [bcConnected, setBcConnected] = useState<boolean | null>(null)
+  const [bcNotice, setBcNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null)
   const syncingRef = useRef(false)
+
+  useEffect(() => {
+    // Returning from the Microsoft sign-in: show the outcome, then clean the URL.
+    try {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get("bc_connected") === "1") setBcNotice({ kind: "ok", text: "Connected to Business Central — you're all set." })
+      else if (params.get("bc_error")) setBcNotice({ kind: "error", text: `Business Central sign-in failed: ${params.get("bc_error")}` })
+      if (params.has("bc_connected") || params.has("bc_error")) {
+        window.history.replaceState(null, "", window.location.pathname)
+      }
+    } catch {}
+    fetch("/api/bc/status")
+      .then((r) => r.json())
+      .then((d) => setBcConnected(d.connected === true))
+      .catch(() => setBcConnected(null))
+  }, [])
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -3257,6 +3279,32 @@ export default function BCWarehousePage() {
               {t.label}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Personal BC connection banner — sign-in outcome first, then the prompt */}
+      {bcNotice && (
+        <div className={`flex items-center justify-between gap-3 px-4 py-2 text-sm shrink-0 ${
+          bcNotice.kind === "ok"
+            ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-b border-emerald-200 dark:border-emerald-800/60"
+            : "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 border-b border-red-200 dark:border-red-800/60"
+        }`}>
+          <span className="truncate">{bcNotice.kind === "ok" ? "✓" : "✗"} {bcNotice.text}</span>
+          <button onClick={() => setBcNotice(null)} className="shrink-0 opacity-70 hover:opacity-100 text-lg leading-none">×</button>
+        </div>
+      )}
+      {bcConnected === false && (
+        <div className="flex items-center justify-between gap-3 flex-wrap px-4 py-2.5 bg-sky-50 dark:bg-sky-500/10 border-b border-sky-200 dark:border-sky-800/60 shrink-0">
+          <p className="text-sm text-sky-800 dark:text-sky-200">
+            <span className="font-semibold">🔗 Connect to Business Central</span>
+            <span className="hidden sm:inline"> — Location History, Collections Due and Unsold Items need you to sign in with your Microsoft account once.</span>
+          </p>
+          <a
+            href="/api/bc/auth?return=/tools/bc-warehouse"
+            className="shrink-0 text-sm font-semibold px-3.5 py-1.5 rounded-lg bg-[#0078D4] hover:bg-blue-500 text-white"
+          >
+            Sign in with Microsoft
+          </a>
         </div>
       )}
 

@@ -33,11 +33,13 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       "Card colours are just section branding — they don't mean anything about status. The grey cards (Data Sync, DB Explorer) are the utility sections.",
       "The sync bar at the bottom of every screen: \"N items in DB\", the last sync time, a pulsing yellow \"Syncing…\" while a refresh is running, and a blue \"Sync now\" link.",
       "The tab bar along the top is hidden on Home — it appears once you open a section, with a ⌂ button to come back.",
+      "A blue \"🔗 Connect to Business Central\" banner across the top if you haven't signed in to Business Central with your own Microsoft account yet — some sections need that personal sign-in.",
     ],
     controls: [
       { name: "Open [Section] → (on each card)", what: "Opens that section. Greyed out while Reorder mode is on." },
       { name: "⠿ Reorder / ✓ Done (top right)", what: "Turns card-dragging on and off. While on, drag cards to rearrange the grid — the order saves automatically and is remembered on this browser. Click ✓ Done to finish." },
       { name: "Sync now (sync bar, bottom of screen)", what: "Manually refreshes the warehouse data from Business Central. Greyed out while a refresh is already running." },
+      { name: "Sign in with Microsoft (blue banner)", what: "Appears when you haven't connected Business Central with your own account. One-off sign-in — it's needed for Location History, Collections Due and Unsold Items, which look things up in Business Central as you." },
     ],
     howTo: [
       {
@@ -294,7 +296,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       "The similar-changes search can be slow and times out after 55 seconds — try again in a moment if it does.",
       "If several BC records share a barcode, only the first match is used.",
       "Print Report opens a new tab — allow pop-ups if nothing appears.",
-      "Business Central must be connected — if lookups fail outright, an admin needs to reconnect BC.",
+      "This tab looks things up in Business Central AS YOU — if you see the blue \"Connect to Business Central\" banner at the top, click Sign in with Microsoft first or lookups will fail.",
     ],
   },
 
@@ -391,7 +393,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       "The PDF always uses the flat per-aisle layout — the Group by docket toggle is on-screen only.",
     ],
     gotchas: [
-      "Business Central must be connected — a Data Sync won't help this tab (and isn't needed).",
+      "This tab queries Business Central AS YOU — if the blue \"Connect to Business Central\" banner is showing, sign in with Microsoft first. A Data Sync won't help this tab (and isn't needed).",
       "Only items whose collection number contains \"COL\" are returned — an item without a docket never appears here, by design.",
       "If BC times out for one aisle but not others, the failed aisle's items are silently missing — a suspiciously low count for a busy aisle may mean one query failed.",
       "Results are a snapshot of the moment you searched — the PDF re-queries BC when you download it, so it may differ slightly.",
@@ -447,7 +449,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       "If some aisle queries fail but one succeeds, the screen shows the successful results with no warning about the failed aisles.",
       "The PDF re-queries BC at download time, so it may differ slightly from the screen.",
       "Nothing is remembered between visits — leaving the tab means searching again.",
-      "Business Central must be connected — there is no local fallback.",
+      "This tab queries Business Central AS YOU — if the blue \"Connect to Business Central\" banner is showing, sign in with Microsoft first; there is no local fallback.",
     ],
   },
 
@@ -504,7 +506,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       "Only one sync can run at a time — all sync buttons grey out while one is running.",
       "Incremental syncs can't detect deletions — if something looks missing, only a Full re-sync will fix it.",
       "Stages 3–6 are best-effort: if one fails the sync still reports success with only a yellow warning line — check the log if location scans or totes look stale.",
-      "If BC isn't connected, syncs fail with a connection error — someone needs to sign in to Business Central.",
+      "If Business Central isn't connected at all, syncs fail with a connection error — use the blue \"Connect to Business Central\" banner (Sign in with Microsoft) to connect.",
       "The activity log only records syncs started from this tab — background auto-syncs don't write to it.",
       "Starting a new sync wipes the logs — copy anything you need first.",
     ],

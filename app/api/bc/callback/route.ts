@@ -5,9 +5,32 @@ import { prisma } from "@/lib/prisma"
 
 const APP_URL = process.env.NEXTAUTH_URL ?? "https://vectis-production.up.railway.app"
 
+// Where to send the user afterwards: the validated internal path set by
+// /api/bc/auth?return=… (cookie), else BC Reports — the original behaviour.
+// This lets e.g. BC-Warehouse-only users connect without ever touching BC
+// Reports (which their access level can't open).
+
+// Only accept a simple internal path — no scheme, no host, no query.
+// (Duplicated in the auth route — route files may only export handlers.)
+function safeReturnPath(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  if (!raw.startsWith("/") || raw.startsWith("//")) return null
+  const path = raw.split("?")[0].split("#")[0]
+  return /^\/[A-Za-z0-9\-_/]*$/.test(path) ? path : null
+}
+
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.redirect(new URL(`${APP_URL}/login`))
+
+  const cookieStore = await cookies()
+  const returnPath  = safeReturnPath(cookieStore.get("bc_oauth_return")?.value) ?? "/tools/bc-reports"
+  const redirectTo  = (query: string) => {
+    const res = NextResponse.redirect(new URL(`${APP_URL}${returnPath}?${query}`))
+    res.cookies.delete("bc_oauth_state")
+    res.cookies.delete("bc_oauth_return")
+    return res
+  }
 
   const { searchParams } = req.nextUrl
   const code  = searchParams.get("code")
@@ -15,16 +38,13 @@ export async function GET(req: NextRequest) {
   const error = searchParams.get("error")
 
   if (error) {
-    return NextResponse.redirect(
-      new URL(`${APP_URL}/tools/bc-reports?bc_error=${encodeURIComponent(error)}`)
-    )
+    return redirectTo(`bc_error=${encodeURIComponent(error)}`)
   }
 
   // Verify state from cookie
-  const cookieStore = await cookies()
-  const savedState  = cookieStore.get("bc_oauth_state")?.value
+  const savedState = cookieStore.get("bc_oauth_state")?.value
   if (!state || state !== savedState) {
-    return NextResponse.redirect(new URL(`${APP_URL}/tools/bc-reports?bc_error=invalid_state`))
+    return redirectTo("bc_error=invalid_state")
   }
 
   const clientId     = process.env.BC_CLIENT_ID!
@@ -51,9 +71,7 @@ export async function GET(req: NextRequest) {
 
   if (!tokenRes.ok) {
     const err = await tokenRes.text()
-    return NextResponse.redirect(
-      new URL(`${APP_URL}/tools/bc-reports?bc_error=${encodeURIComponent(err)}`)
-    )
+    return redirectTo(`bc_error=${encodeURIComponent(err)}`)
   }
 
   const tokens = await tokenRes.json()
@@ -74,9 +92,5 @@ export async function GET(req: NextRequest) {
     },
   })
 
-  const response = NextResponse.redirect(
-    new URL(`${APP_URL}/tools/bc-reports?bc_connected=1`)
-  )
-  response.cookies.delete("bc_oauth_state")
-  return response
+  return redirectTo("bc_connected=1")
 }

@@ -9,6 +9,31 @@ type Entry = { filename: string; content: string }
 
 const ENTRIES: Entry[] = [
   {
+    filename: "bc_oauth_connect.md",
+    content: `---
+name: BC OAuth connect — per-user token + warehouse banner
+purpose: How the per-user Business Central sign-in works, the ?return= flow, and the BC Warehouse connect banner. Read before touching /api/bc/auth, /api/bc/callback, or any tool that queries BC with the user's own token.
+last_updated: 2026-07-02
+---
+
+# BC OAuth connect — per-user token + BC Warehouse banner (2026-07-02, STAGING)
+
+BC sign-in is PER-USER: a BCToken row per userId. getBCToken() = the current user's own token (auto-refreshed via its refresh token); getBCTokenAny() = any valid token in the DB (warehouse sync + cron use). The BC Warehouse background sync piggybacks on ANY token, but the live-query tabs — Location History, Collections Due, Unsold Items (and the sale-checklist auction-name backfill) — query BC as the CURRENT user and fail if they have never signed in.
+
+## The problem this fixed
+The only "Sign in with Microsoft" prompt lived in BC Reports — which a user with only BC_WAREHOUSE access cannot open (its layout redirects them to /hub) — and /api/bc/callback hardcoded every redirect back to /tools/bc-reports. So a warehouse-only user could NEVER connect.
+
+## How it works now
+- /api/bc/auth accepts an optional ?return=<internal path>. Validated by safeReturnPath (must start with "/", not "//", no scheme/query/dots — open-redirect safe) and carried in a bc_oauth_return cookie (5 min) beside the state cookie.
+- /api/bc/callback redirects ALL outcomes (success ?bc_connected=1, ?bc_error=..., invalid_state) to that path; default stays /tools/bc-reports so the old flow is unchanged. Both cookies are cleared on redirect.
+- safeReturnPath is deliberately DUPLICATED in both route files — Next route files may only export HTTP handlers, so it cannot be exported from one and imported by the other.
+- BC Warehouse page shell: fetches /api/bc/status on load (= does the CURRENT user have a valid/refreshable token). When false, a blue "Connect to Business Central" banner appears at the top with a "Sign in with Microsoft" button linking to /api/bc/auth?return=/tools/bc-warehouse. On return, a green connected / red error notice is shown from the query params, which are then stripped with history.replaceState.
+- The BC Warehouse guide entries (home, location-history, collections-due, unsold-items, data-sync) mention the banner — keep them in step.
+
+## Pattern for other tools
+Any BC-dependent tool whose users may lack BC Reports access should offer its own connect link: /api/bc/auth?return=<its own path>.`,
+  },
+  {
     filename: "bc_warehouse_guide.md",
     content: `---
 name: BC Warehouse — Guide tab + PDF guides
