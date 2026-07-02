@@ -321,7 +321,8 @@ export default function SaleStatisticsClient() {
       const best  = withData.reduce((a, b) => (b.r.hammer > a.r.hammer ? b : a))
       const worst = withData.reduce((a, b) => (b.r.hammer < a.r.hammer ? b : a))
       const total = months.reduce((s, r) => s + r.hammer, 0)
-      return { category, best, worst, total }
+      const passedTotal = months.reduce((s, r) => s + passed(r), 0)
+      return { category, best, worst, total, passedTotal }
     }).filter((x): x is NonNullable<typeof x> => x !== null).sort((a, b) => b.total - a.total)
   }, [data])
 
@@ -610,6 +611,7 @@ export default function SaleStatisticsClient() {
                     { label: "Vs high",           align: "right", sort: c => vsHigh(c.best.r), render: c => <span className={c.best.r.hammer - c.best.r.high >= 0 ? "text-emerald-500" : "text-red-400"}>{pctS(vsHigh(c.best.r))}</span> },
                     { label: "Quietest month",    render: c => <span className="text-amber-600 dark:text-amber-400">{MONTHS[c.worst.m]}</span>, sort: c => c.worst.m },
                     { label: "Total (range)",     align: "right", render: c => gbp0(c.total), sort: c => c.total },
+                    { label: "Unsold (total)",    align: "right", render: c => int(c.passedTotal), sort: c => c.passedTotal },
                   ]}
                 />
               </Section>
@@ -659,6 +661,7 @@ export default function SaleStatisticsClient() {
                     { label: "Month",        render: m => <span className="text-gray-700 dark:text-gray-200">{MONTHS[m.month]}</span>, sort: m => m.month, text: m => MONTHS[m.month] },
                     { label: "Sale Value",   align: "right", render: m => gbp0(m.r.hammer),      sort: m => m.r.hammer },
                     { label: "Lots Sold",    align: "right", render: m => int(m.r.sold),         sort: m => m.r.sold },
+                    { label: "Lots Passed",  align: "right", render: m => int(passed(m.r)),      sort: m => passed(m.r) },
                     { label: "Sell-through", align: "right", render: m => pct(sellThrough(m.r)), sort: m => sellThrough(m.r) },
                     { label: "Avg Lot",      align: "right", render: m => gbp2(avgLot(m.r)),     sort: m => avgLot(m.r) },
                     { label: "Vs High Est",  align: "right", sort: m => vsHigh(m.r), render: m => <span className={m.r.hammer - m.r.high >= 0 ? "text-emerald-500" : "text-red-400"}>{pctS(vsHigh(m.r))}</span> },
