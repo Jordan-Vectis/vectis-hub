@@ -8,8 +8,9 @@ type Bucket = {
   auctionNo: string; auctionName: string; auctionDate: string
   category: string; subcategory: string
   lots: number; sold: number; hammer: number; low: number; high: number; collected: number
-  sellerPremium: number
+  withdrawn: number; sellerPremium: number
 }
+type SaleDist = { auctionNo: string; vendors: number; successfulBuyers: number }
 type Result = {
   buckets: Bucket[]
   total: number
@@ -17,6 +18,12 @@ type Result = {
   buyersPremiumRate: number
   range: { from: string; to: string }
   commissionField?: string
+  withdrawnField?: string
+  vendorField?: string
+  buyerField?: string
+  saleDistinct?: SaleDist[]
+  totalVendors?: number
+  totalSuccessfulBuyers?: number
 }
 
 // ─── Date helpers (LOCAL calendar — never toISOString, it shifts under BST) ─────
@@ -50,10 +57,10 @@ const int  = (n: number) => n.toLocaleString("en-GB")
 
 // ─── Aggregation ───────────────────────────────────────────────────────────────
 
-type Roll = { lots: number; sold: number; hammer: number; low: number; high: number; collected: number; sellerPremium: number }
+type Roll = { lots: number; sold: number; hammer: number; low: number; high: number; collected: number; withdrawn: number; sellerPremium: number }
 function rollup(bs: Bucket[]): Roll {
-  const r: Roll = { lots: 0, sold: 0, hammer: 0, low: 0, high: 0, collected: 0, sellerPremium: 0 }
-  for (const b of bs) { r.lots += b.lots; r.sold += b.sold; r.hammer += b.hammer; r.low += b.low; r.high += b.high; r.collected += b.collected; r.sellerPremium += b.sellerPremium }
+  const r: Roll = { lots: 0, sold: 0, hammer: 0, low: 0, high: 0, collected: 0, withdrawn: 0, sellerPremium: 0 }
+  for (const b of bs) { r.lots += b.lots; r.sold += b.sold; r.hammer += b.hammer; r.low += b.low; r.high += b.high; r.collected += b.collected; r.withdrawn += b.withdrawn; r.sellerPremium += b.sellerPremium }
   return r
 }
 const avgLot = (r: Roll) => (r.sold > 0 ? r.hammer / r.sold : 0)
@@ -187,13 +194,32 @@ export default function SaleStatisticsClient() {
     return [...m.values()].map(e => ({ ...e, r: rollup(e.roll) })).sort((a, b) => b.r.hammer - a.r.hammer)
   }, [filtered])
 
+  // Distinct vendor / buyer counts are per-sale (can't be summed or category-sliced).
+  const saleDistinct = useMemo(
+    () => new Map((data?.saleDistinct ?? []).map(s => [s.auctionNo, s] as [string, SaleDist])),
+    [data],
+  )
+  const catFiltered = category !== "all" || subcategory !== "all"
+  const distinctCard = (field: string | undefined, total: number | undefined, key: keyof SaleDist, noField: string) =>
+    !field       ? { v: "—", s: noField }
+    : catFiltered ? { v: "—", s: "per sale — clear category" }
+    : sale === "all"
+      ? { v: int(total ?? 0), s: "distinct across range" }
+      : { v: int(Number(saleDistinct.get(sale)?.[key] ?? 0)), s: "in this sale" }
+  const vendorsCard = distinctCard(data?.vendorField, data?.totalVendors, "vendors", "no vendor field found")
+  const buyersCard  = distinctCard(data?.buyerField, data?.totalSuccessfulBuyers, "successfulBuyers", "not on the lines")
+
   const cards = [
-    { label: "Hammer achieved",   value: gbp0(totals.hammer),        sub: `${int(totals.sold)} sold of ${int(totals.lots)} lots` },
-    { label: "Total low estimate",  value: gbp0(totals.low),          sub: "sum of low estimates" },
-    { label: "Total high estimate", value: gbp0(totals.high),         sub: "sum of high estimates" },
-    { label: "Average lot value",   value: gbp2(avgLot(totals)),      sub: "hammer ÷ sold" },
-    { label: "Items collected",     value: int(totals.collected),     sub: "scanned to COLLECTED" },
-    { label: "Buyer's premium",     value: gbp0(totals.hammer * rate), sub: `${(rate * 100).toFixed(1)}% of hammer` },
+    { label: "Hammer achieved",     value: gbp0(totals.hammer),            sub: `${int(totals.sold)} sold of ${int(totals.lots)} lots` },
+    { label: "Total low estimate",  value: gbp0(totals.low),               sub: "sum of low estimates" },
+    { label: "Total high estimate", value: gbp0(totals.high),              sub: "sum of high estimates" },
+    { label: "Average lot value",   value: gbp2(avgLot(totals)),           sub: "hammer ÷ sold" },
+    { label: "Total unsold",        value: int(totals.lots - totals.sold), sub: "£0 hammer" },
+    { label: "Items collected",     value: int(totals.collected),          sub: "scanned to collected" },
+    { label: "Total withdrawn",     value: int(totals.withdrawn),          sub: data?.withdrawnField ? "withdrawn ticked" : "no withdrawn field" },
+    { label: "No. of vendors",      value: vendorsCard.v,                  sub: vendorsCard.s },
+    { label: "Successful buyers",   value: buyersCard.v,                   sub: buyersCard.s },
+    { label: "Buyer's premium",     value: gbp0(totals.hammer * rate),     sub: `${(rate * 100).toFixed(1)}% of hammer` },
     { label: "Seller's premium",    value: data?.commissionField ? gbp0(totals.sellerPremium) : "—",
                                      sub: data?.commissionField ? `from ${data.commissionField}` : "no commission rate field found" },
   ]
@@ -276,12 +302,15 @@ export default function SaleStatisticsClient() {
           {/* By sale */}
           <Section title={`By sale${bySale.length ? ` (${bySale.length})` : ""}`}>
             <Table
-              head={["Sale", "Name", "Date", "Lots", "Sold", "Low est.", "High est.", "Hammer", "Avg lot", "Collected", "Buyer's prem.", "Seller's prem."]}
+              head={["Sale", "Name", "Date", "Lots", "Sold", "Unsold", "Vendors", "Buyers", "Low est.", "High est.", "Hammer", "Avg lot", "Collected", "Withdrawn", "Buyer's prem.", "Seller's prem."]}
               rows={bySale.map(s => [
                 <span key="c" className="font-mono text-[#2AB4A6]">{s.code}</span>,
                 <span key="n" className="text-gray-500 dark:text-gray-400">{s.name}</span>,
                 <span key="d" className="text-gray-500 dark:text-gray-500 font-mono text-xs">{s.date}</span>,
-                int(s.r.lots), int(s.r.sold), gbp0(s.r.low), gbp0(s.r.high), gbp0(s.r.hammer), gbp2(avgLot(s.r)), int(s.r.collected), gbp0(s.r.hammer * rate), gbp0(s.r.sellerPremium),
+                int(s.r.lots), int(s.r.sold), int(s.r.lots - s.r.sold),
+                int(saleDistinct.get(s.code)?.vendors ?? 0),
+                data?.buyerField ? int(saleDistinct.get(s.code)?.successfulBuyers ?? 0) : "—",
+                gbp0(s.r.low), gbp0(s.r.high), gbp0(s.r.hammer), gbp2(avgLot(s.r)), int(s.r.collected), int(s.r.withdrawn), gbp0(s.r.hammer * rate), gbp0(s.r.sellerPremium),
               ])}
               rightFrom={3}
             />
