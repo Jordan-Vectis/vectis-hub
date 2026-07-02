@@ -268,7 +268,10 @@ export default function SaleStatisticsClient() {
     for (const b of filtered) { const a = m.get(b.category) ?? []; a.push(b); m.set(b.category, a) }
     return [...m.entries()].map(([category, bs]) => ({ category, r: rollup(bs) })).sort((x, y) => y.r.hammer - x.r.hammer)
   }, [filtered])
-  const topSalesData = useMemo(() => bySale.slice(0, 10).map(s => ({ label: s.name || s.code, value: s.r.hammer })), [bySale])
+  const topSalesData = useMemo(() => bySale.slice(0, 10).map(s => {
+    const nm = s.name.length > 22 ? s.name.slice(0, 21) + "…" : s.name
+    return { label: `${s.code} · ${s.date}${nm ? " · " + nm : ""}`, value: s.r.hammer }
+  }), [bySale])
   const catChartData = useMemo(() => byCategory.filter(c => c.r.high > 0).slice(0, 14).map(c => ({ category: c.category, pct: vsHigh(c.r) })), [byCategory])
 
   // Distinct vendor / buyer counts are per-sale (can't be summed or category-sliced).
@@ -448,7 +451,7 @@ export default function SaleStatisticsClient() {
                   <BarChart data={topSalesData} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#9ca3af22" />
                     <XAxis type="number" tickFormatter={v => "£" + Math.round(Number(v) / 1000) + "k"} tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} />
-                    <YAxis type="category" dataKey="label" width={150} tick={{ fontSize: 11, fill: "#9ca3af" }} tickLine={false} axisLine={false} />
+                    <YAxis type="category" dataKey="label" width={220} tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} />
                     <Tooltip cursor={{ fill: "rgba(42,180,166,0.08)" }} contentStyle={{ background: "#111827", border: "1px solid #2d3047", borderRadius: 6, fontSize: 12, color: "#fff" }} formatter={v => gbp0(Number(v))} />
                     <Bar dataKey="value" fill="#2AB4A6" radius={[0, 3, 3, 0]} isAnimationActive={false} />
                   </BarChart>
@@ -476,36 +479,49 @@ export default function SaleStatisticsClient() {
 
           {/* By sale — matches the manual "2026 by auction" columns */}
           <Section title={`By sale${bySale.length ? ` (${bySale.length})` : ""}`}>
-            <Table
-              head={["Sale", "Name", "Date", "Lots Sold", "Lots Passed", "Lots Withdrawn", "Sell-through", "Low Estimate", "High Estimate", "Sale Value", "Avg Lot", "Vs High Est", "£ vs High", "BP Earned", "Vendor Commission", "Ave Vendor %", "Collected", "Vendors", "Buyers"]}
-              rows={bySale.map(s => [
-                <span key="c" className="font-mono text-[#2AB4A6]">{s.code}</span>,
-                <span key="n" className="text-gray-500 dark:text-gray-400">{s.name}</span>,
-                <span key="d" className="text-gray-500 dark:text-gray-500 font-mono text-xs">{s.date}</span>,
-                int(s.r.sold), int(passed(s.r)), int(s.r.withdrawn), pct(sellThrough(s.r)),
-                gbp0(s.r.low), gbp0(s.r.high), gbp0(s.r.hammer), gbp2(avgLot(s.r)),
-                <span key="vh" className={s.r.hammer - s.r.high >= 0 ? "text-emerald-500" : "text-red-400"}>{pctS(vsHigh(s.r))}</span>,
-                <span key="ph" className={s.r.hammer - s.r.high >= 0 ? "text-emerald-500" : "text-red-400"}>{gbpSigned(s.r.hammer - s.r.high)}</span>,
-                gbp0(s.r.hammer * rate), gbp0(s.r.sellerPremium), pct(aveVendorPct(s.r)), int(s.r.collected),
-                int(saleDistinct.get(s.code)?.vendors ?? 0),
-                data?.buyerField ? int(saleDistinct.get(s.code)?.successfulBuyers ?? 0) : "—",
-              ])}
-              rightFrom={3}
+            <DataTable
+              rows={bySale}
+              initialSort={{ index: 9, dir: "desc" }}
+              filterPlaceholder="Filter sales by number, name or date…"
+              columns={[
+                { label: "Sale",             render: s => <span className="font-mono text-[#2AB4A6]">{s.code}</span>, sort: s => s.code, text: s => s.code },
+                { label: "Name",             render: s => <span className="text-gray-500 dark:text-gray-400">{s.name}</span>, sort: s => s.name, text: s => s.name },
+                { label: "Date",             render: s => <span className="text-gray-500 dark:text-gray-500 font-mono text-xs">{s.date}</span>, sort: s => s.date, text: s => s.date },
+                { label: "Lots Sold",        align: "right", render: s => int(s.r.sold),          sort: s => s.r.sold },
+                { label: "Lots Passed",      align: "right", render: s => int(passed(s.r)),       sort: s => passed(s.r) },
+                { label: "Lots Withdrawn",   align: "right", render: s => int(s.r.withdrawn),     sort: s => s.r.withdrawn },
+                { label: "Sell-through",     align: "right", render: s => pct(sellThrough(s.r)),  sort: s => sellThrough(s.r) },
+                { label: "Low Estimate",     align: "right", render: s => gbp0(s.r.low),          sort: s => s.r.low },
+                { label: "High Estimate",    align: "right", render: s => gbp0(s.r.high),         sort: s => s.r.high },
+                { label: "Sale Value",       align: "right", render: s => gbp0(s.r.hammer),       sort: s => s.r.hammer },
+                { label: "Avg Lot",          align: "right", render: s => gbp2(avgLot(s.r)),      sort: s => avgLot(s.r) },
+                { label: "Vs High Est",      align: "right", sort: s => vsHigh(s.r), render: s => <span className={s.r.hammer - s.r.high >= 0 ? "text-emerald-500" : "text-red-400"}>{pctS(vsHigh(s.r))}</span> },
+                { label: "£ vs High",        align: "right", sort: s => s.r.hammer - s.r.high, render: s => <span className={s.r.hammer - s.r.high >= 0 ? "text-emerald-500" : "text-red-400"}>{gbpSigned(s.r.hammer - s.r.high)}</span> },
+                { label: "BP Earned",        align: "right", render: s => gbp0(s.r.hammer * rate), sort: s => s.r.hammer * rate },
+                { label: "Vendor Commission",align: "right", render: s => gbp0(s.r.sellerPremium), sort: s => s.r.sellerPremium },
+                { label: "Ave Vendor %",     align: "right", render: s => pct(aveVendorPct(s.r)),  sort: s => aveVendorPct(s.r) },
+                { label: "Collected",        align: "right", render: s => int(s.r.collected),      sort: s => s.r.collected },
+                { label: "Vendors",          align: "right", render: s => int(saleDistinct.get(s.code)?.vendors ?? 0), sort: s => saleDistinct.get(s.code)?.vendors ?? 0 },
+                { label: "Buyers",           align: "right", render: s => data?.buyerField ? int(saleDistinct.get(s.code)?.successfulBuyers ?? 0) : "—", sort: s => saleDistinct.get(s.code)?.successfulBuyers ?? 0 },
+              ]}
             />
           </Section>
 
           {/* Category contribution */}
           <Section title="By category & subcategory">
-            <Table
-              head={["Category", "Subcategory", "Lots", "Sold", "Sale value", "Share", "Avg hammer (sold)"]}
-              rows={byCat.map(c => [
-                <span key="c" className="text-gray-700 dark:text-gray-200">{c.category}</span>,
-                <span key="s" className="text-gray-500 dark:text-gray-400">{c.subcategory}</span>,
-                int(c.r.lots), int(c.r.sold), gbp0(c.r.hammer),
-                totals.hammer > 0 ? pct(c.r.hammer / totals.hammer) : "—",
-                gbp2(avgLot(c.r)),
-              ])}
-              rightFrom={2}
+            <DataTable
+              rows={byCat}
+              initialSort={{ index: 4, dir: "desc" }}
+              filterPlaceholder="Filter by category or subcategory…"
+              columns={[
+                { label: "Category",          render: c => <span className="text-gray-700 dark:text-gray-200">{c.category}</span>, sort: c => c.category, text: c => c.category },
+                { label: "Subcategory",       render: c => <span className="text-gray-500 dark:text-gray-400">{c.subcategory}</span>, sort: c => c.subcategory, text: c => c.subcategory },
+                { label: "Lots",              align: "right", render: c => int(c.r.lots),   sort: c => c.r.lots },
+                { label: "Sold",              align: "right", render: c => int(c.r.sold),   sort: c => c.r.sold },
+                { label: "Sale value",        align: "right", render: c => gbp0(c.r.hammer), sort: c => c.r.hammer },
+                { label: "Share",             align: "right", render: c => totals.hammer > 0 ? pct(c.r.hammer / totals.hammer) : "—", sort: c => c.r.hammer },
+                { label: "Avg hammer (sold)", align: "right", render: c => gbp2(avgLot(c.r)), sort: c => avgLot(c.r) },
+              ]}
             />
           </Section>
         </>
@@ -574,6 +590,78 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     <div className="mb-6">
       <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{title}</h2>
       {children}
+    </div>
+  )
+}
+
+// ─── Sortable + filterable table ───────────────────────────────────────────────
+
+type Col<T> = {
+  label: string
+  align?: "right"
+  render: (r: T) => React.ReactNode
+  sort?: (r: T) => number | string   // omit to make a column non-sortable
+  text?: (r: T) => string            // included in the free-text filter
+}
+
+function DataTable<T>({ columns, rows, initialSort, filterPlaceholder }: {
+  columns: Col<T>[]
+  rows: T[]
+  initialSort?: { index: number; dir: "asc" | "desc" }
+  filterPlaceholder?: string
+}) {
+  const [sortIdx, setSortIdx] = useState(initialSort?.index ?? -1)
+  const [dir, setDir] = useState<"asc" | "desc">(initialSort?.dir ?? "desc")
+  const [q, setQ] = useState("")
+
+  const query = q.trim().toLowerCase()
+  const filtered = query
+    ? rows.filter(r => columns.some(c => (c.text?.(r) ?? "").toLowerCase().includes(query)))
+    : rows
+  const col = sortIdx >= 0 ? columns[sortIdx] : undefined
+  const sorted = col?.sort
+    ? [...filtered].sort((a, b) => {
+        const av = col.sort!(a), bv = col.sort!(b)
+        const cmp = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv))
+        return dir === "asc" ? cmp : -cmp
+      })
+    : filtered
+
+  const toggle = (i: number) => {
+    if (!columns[i].sort) return
+    if (sortIdx === i) setDir(d => (d === "asc" ? "desc" : "asc"))
+    else { setSortIdx(i); setDir("desc") }
+  }
+
+  return (
+    <div>
+      <input value={q} onChange={e => setQ(e.target.value)} placeholder={filterPlaceholder ?? "Filter…"}
+        className="mb-2 bg-white dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#2AB4A6] w-full sm:w-80" />
+      <div className="overflow-x-auto border border-gray-200 dark:border-gray-800 rounded-lg">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-100 dark:bg-gray-900 text-gray-500 dark:text-gray-400 text-xs">
+            <tr>
+              {columns.map((c, i) => (
+                <th key={i} onClick={() => toggle(i)}
+                  className={`px-3 py-2 whitespace-nowrap ${c.align === "right" ? "text-right" : "text-left"} ${c.sort ? "cursor-pointer select-none hover:text-gray-900 dark:hover:text-white" : ""} ${sortIdx === i ? "text-[#2AB4A6]" : ""}`}>
+                  {c.label}{sortIdx === i ? (dir === "asc" ? " ▲" : " ▼") : c.sort ? " ↕" : ""}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.length === 0 ? (
+              <tr><td colSpan={columns.length} className="px-3 py-4 text-gray-500">No rows match.</td></tr>
+            ) : sorted.map((r, ri) => (
+              <tr key={ri} className="border-t border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/40">
+                {columns.map((c, ci) => (
+                  <td key={ci} className={`px-3 py-2 ${c.align === "right" ? "text-right font-mono text-gray-700 dark:text-gray-200" : ""}`}>{c.render(r)}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
