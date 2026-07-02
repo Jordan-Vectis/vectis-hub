@@ -25,7 +25,21 @@ type Bucket = {
   auctionNo: string; auctionName: string; auctionDate: string
   category: string; subcategory: string
   lots: number; sold: number; hammer: number; low: number; high: number; collected: number
+  sellerPremium: number
 }
+
+// The per-line vendor commission rate field — detected from the row so we don't
+// hardcode a possibly-wrong name. Preferred exact names first, then a pattern.
+function findCommissionField(fields: string[]): string {
+  const prefer = ["EVA_VendorCommissionRate", "EVA_CommissionRate", "EVA_VendorCommission", "EVA_CommissionPct", "EVA_CommissionPercent"]
+  return prefer.find(f => fields.includes(f))
+    ?? fields.find(f => /commiss/i.test(f) && /(rate|pct|percent)/i.test(f))
+    ?? ""
+}
+
+// A commission rate may be stored as a percentage (15 → 15%) or a fraction
+// (0.15). Normalise to a fraction of hammer.
+const asFraction = (rate: number) => (rate > 1 ? rate / 100 : rate)
 
 function send(controller: ReadableStreamDefaultController, obj: object) {
   controller.enqueue(new TextEncoder().encode(JSON.stringify(obj) + "\n"))
@@ -57,6 +71,7 @@ export async function GET(req: NextRequest) {
 
         const buckets = new Map<string, Bucket>()
         let sampleFields: string[] = []
+        let commissionField = ""
         let processed = 0
         let partial = false
         const startMs = Date.now()
@@ -73,7 +88,10 @@ export async function GET(req: NextRequest) {
             first ? params : undefined,
           )
           first = false
-          if (!sampleFields.length && rows.length) sampleFields = Object.keys(rows[0] as object)
+          if (!sampleFields.length && rows.length) {
+            sampleFields = Object.keys(rows[0] as object)
+            commissionField = findCommissionField(sampleFields)
+          }
 
           for (const r of rows as Record<string, unknown>[]) {
             const auctionNo = String(r.EVA_AuctionNo ?? "").trim()
@@ -89,7 +107,7 @@ export async function GET(req: NextRequest) {
                 auctionName: String(r.EVA_AuctionName ?? "").trim(),
                 auctionDate: String(r.EVA_AuctionDate ?? "").slice(0, 10),
                 category, subcategory,
-                lots: 0, sold: 0, hammer: 0, low: 0, high: 0, collected: 0,
+                lots: 0, sold: 0, hammer: 0, low: 0, high: 0, collected: 0, sellerPremium: 0,
               }
               buckets.set(key, b)
             }
@@ -101,6 +119,8 @@ export async function GET(req: NextRequest) {
             b.low  += num(r.EVA_LowEstimate)
             b.high += num(r.EVA_HighEstimate)
             if (truthy(r.EVA_Collected)) b.collected += 1
+            // Seller's premium = hammer × per-line vendor commission rate.
+            if (commissionField) b.sellerPremium += hammer * asFraction(num(r[commissionField]))
           }
 
           processed += rows.length
@@ -119,6 +139,7 @@ export async function GET(req: NextRequest) {
             buyersPremiumRate:  BUYERS_PREMIUM_RATE,
             range:              { from, to },
             sampleFields,       // field names on the endpoint — for verifying the mapping
+            commissionField,    // the per-line field used for seller's premium ("" if none found)
           },
         })
       } catch (e: any) {

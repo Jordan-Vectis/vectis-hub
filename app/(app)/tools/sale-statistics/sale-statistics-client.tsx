@@ -8,6 +8,7 @@ type Bucket = {
   auctionNo: string; auctionName: string; auctionDate: string
   category: string; subcategory: string
   lots: number; sold: number; hammer: number; low: number; high: number; collected: number
+  sellerPremium: number
 }
 type Result = {
   buckets: Bucket[]
@@ -15,6 +16,7 @@ type Result = {
   partial: boolean
   buyersPremiumRate: number
   range: { from: string; to: string }
+  commissionField?: string
 }
 
 // ─── Date helpers (LOCAL calendar — never toISOString, it shifts under BST) ─────
@@ -48,10 +50,10 @@ const int  = (n: number) => n.toLocaleString("en-GB")
 
 // ─── Aggregation ───────────────────────────────────────────────────────────────
 
-type Roll = { lots: number; sold: number; hammer: number; low: number; high: number; collected: number }
+type Roll = { lots: number; sold: number; hammer: number; low: number; high: number; collected: number; sellerPremium: number }
 function rollup(bs: Bucket[]): Roll {
-  const r: Roll = { lots: 0, sold: 0, hammer: 0, low: 0, high: 0, collected: 0 }
-  for (const b of bs) { r.lots += b.lots; r.sold += b.sold; r.hammer += b.hammer; r.low += b.low; r.high += b.high; r.collected += b.collected }
+  const r: Roll = { lots: 0, sold: 0, hammer: 0, low: 0, high: 0, collected: 0, sellerPremium: 0 }
+  for (const b of bs) { r.lots += b.lots; r.sold += b.sold; r.hammer += b.hammer; r.low += b.low; r.high += b.high; r.collected += b.collected; r.sellerPremium += b.sellerPremium }
   return r
 }
 const avgLot = (r: Roll) => (r.sold > 0 ? r.hammer / r.sold : 0)
@@ -192,7 +194,8 @@ export default function SaleStatisticsClient() {
     { label: "Average lot value",   value: gbp2(avgLot(totals)),      sub: "hammer ÷ sold" },
     { label: "Items collected",     value: int(totals.collected),     sub: "scanned to COLLECTED" },
     { label: "Buyer's premium",     value: gbp0(totals.hammer * rate), sub: `${(rate * 100).toFixed(1)}% of hammer` },
-    { label: "Seller's premium",    value: "—",                        sub: "needs BC header (coming)" },
+    { label: "Seller's premium",    value: data?.commissionField ? gbp0(totals.sellerPremium) : "—",
+                                     sub: data?.commissionField ? `from ${data.commissionField}` : "no commission rate field found" },
   ]
 
   return (
@@ -273,12 +276,12 @@ export default function SaleStatisticsClient() {
           {/* By sale */}
           <Section title={`By sale${bySale.length ? ` (${bySale.length})` : ""}`}>
             <Table
-              head={["Sale", "Name", "Date", "Lots", "Sold", "Low est.", "High est.", "Hammer", "Avg lot", "Collected", "Buyer's prem."]}
+              head={["Sale", "Name", "Date", "Lots", "Sold", "Low est.", "High est.", "Hammer", "Avg lot", "Collected", "Buyer's prem.", "Seller's prem."]}
               rows={bySale.map(s => [
                 <span key="c" className="font-mono text-[#2AB4A6]">{s.code}</span>,
                 <span key="n" className="text-gray-500 dark:text-gray-400">{s.name}</span>,
                 <span key="d" className="text-gray-500 dark:text-gray-500 font-mono text-xs">{s.date}</span>,
-                int(s.r.lots), int(s.r.sold), gbp0(s.r.low), gbp0(s.r.high), gbp0(s.r.hammer), gbp2(avgLot(s.r)), int(s.r.collected), gbp0(s.r.hammer * rate),
+                int(s.r.lots), int(s.r.sold), gbp0(s.r.low), gbp0(s.r.high), gbp0(s.r.hammer), gbp2(avgLot(s.r)), int(s.r.collected), gbp0(s.r.hammer * rate), gbp0(s.r.sellerPremium),
               ])}
               rightFrom={3}
             />
