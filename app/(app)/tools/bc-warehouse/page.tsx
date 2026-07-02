@@ -1,6 +1,7 @@
 ﻿"use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import GuideTab from "./guide-tab"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -84,7 +85,7 @@ type SearchTote = {
   syncedAt: string | null
 }
 
-type Tab = "home" | "heatmap" | "sale-checklist" | "search" | "location-history" | "tote-data" | "collections-due" | "unsold-items" | "data-sync" | "db-explorer" | "location-barcodes"
+type Tab = "home" | "heatmap" | "sale-checklist" | "search" | "location-history" | "tote-data" | "collections-due" | "unsold-items" | "data-sync" | "db-explorer" | "location-barcodes" | "guide"
 
 const STALE_MS = 15 * 60 * 1000 // 15 minutes
 
@@ -2879,6 +2880,14 @@ const HOME_CARDS: {
     colour:      "border-gray-300 dark:border-gray-400 dark:border-gray-700/60 hover:shadow-gray-800/40",
     btn:         "bg-gray-600 hover:bg-gray-500",
   },
+  {
+    id:          "guide",
+    icon:        "📖",
+    label:       "Guide",
+    description: "How every section of this tool works and how to use it — with a downloadable PDF guide for each section.",
+    colour:      "border-indigo-400 dark:border-indigo-800/60 hover:shadow-indigo-900/40",
+    btn:         "bg-indigo-700 hover:bg-indigo-600",
+  },
 ]
 
 function WarehouseHomeTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
@@ -3152,6 +3161,7 @@ export default function BCWarehousePage() {
   const [tab, setTab] = useState<Tab>("home")
   const [status, setStatus] = useState<SyncStatus | null>(null)
   const [showFirstSync, setShowFirstSync] = useState(false)
+  const [guideFocus, setGuideFocus] = useState<string | null>(null)   // which section's guide the "?" jumps to
   const syncingRef = useRef(false)
 
   const fetchStatus = useCallback(async () => {
@@ -3218,6 +3228,7 @@ export default function BCWarehousePage() {
     { id: "data-sync",          label: "Data Sync" },
     { id: "db-explorer",        label: "DB Explorer" },
     { id: "location-barcodes",  label: "Location Barcodes" },
+    { id: "guide",              label: "📖 Guide" },
   ]
 
   return (
@@ -3250,7 +3261,7 @@ export default function BCWarehousePage() {
       )}
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden relative">
         {showFirstSync ? (
           <FirstSyncPanel onComplete={() => { setShowFirstSync(false); fetchStatus() }} />
         ) : (
@@ -3266,6 +3277,19 @@ export default function BCWarehousePage() {
             {tab === "data-sync"        && <DataSyncTab status={status} onComplete={fetchStatus} />}
             {tab === "db-explorer"        && <DbExplorerTab />}
             {tab === "location-barcodes"  && <LocationBarcodesTab />}
+            {tab === "guide"              && <GuideTab initialId={guideFocus} />}
+
+            {/* Floating "?" — overlaid by the page shell (doesn't touch any tab's own
+                markup); jumps to the current section's guide. */}
+            {tab !== "home" && tab !== "guide" && (
+              <button
+                onClick={() => { setGuideFocus(tab); setTab("guide") }}
+                title="How does this section work? Open its guide"
+                className="absolute bottom-4 right-5 z-20 w-10 h-10 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white text-lg font-bold shadow-lg shadow-indigo-900/30"
+              >
+                ?
+              </button>
+            )}
           </>
         )}
       </div>

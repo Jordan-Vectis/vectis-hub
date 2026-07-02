@@ -9,6 +9,28 @@ type Entry = { filename: string; content: string }
 
 const ENTRIES: Entry[] = [
   {
+    filename: "bc_warehouse_guide.md",
+    content: `---
+name: BC Warehouse — Guide tab + PDF guides
+purpose: In-app user guides for every BC Warehouse section with per-section PDF downloads. Read before changing any BC Warehouse tab (the guide must be kept in step) or the guide/PDF code.
+last_updated: 2026-07-02
+---
+
+# BC Warehouse — Guide tab + per-section PDF guides (2026-07-02, STAGING)
+
+User guides for every BC Warehouse section, in-app and downloadable as branded A4 PDFs. Content was written from a full multi-agent read of each tab's code (one reader per tab), so it documents actual behaviour.
+
+## Where things live
+- Content SINGLE SOURCE OF TRUTH: lib/bc-warehouse-guide.ts (GUIDE_SECTIONS — id/title/icon/intro/dataSource/shows/controls/howTo/tips/gotchas per section; ids match the page's Tab ids). Both the Guide tab UI and the PDF route render from it — edit there and both stay in step. ⚠ If you change a BC Warehouse tab's behaviour, update its guide entry in the same change.
+- Guide tab UI: app/(app)/tools/bc-warehouse/guide-tab.tsx, wired into page.tsx (Tab type + tabs list "Guide" entry + a HOME_CARDS card). Left section list, content sections (intro, data-source callout, What you'll see, Buttons & controls, How to, Tips, Watch out for), and a per-section Download PDF button. The initialId prop follows the floating ?; it uses the state-adjust-during-render pattern, not setState-in-an-effect (eslint blocks that).
+- Floating "?" button: rendered by the PAGE SHELL as an overlay (absolute bottom-right in the content wrapper, shown on every section except home/guide) and jumps to that section's guide. Deliberately an overlay so it touches NO tab's internals — the Location History do-not-change rule stays honoured.
+- PDF route: GET /api/bc/warehouse-guide-pdf?section=<id>, gated by session + hasAppAccess BC_WAREHOUSE (mirrors the layout gate). Renderer in lib/bc-warehouse-guide-pdf.ts — pdf-lib + embedVectisLogo (lib/pdf-logo.ts), A4 portrait, branded first-page banner, running header on continuation pages, cursor-based Writer with automatic page breaks and page numbers, WinAnsi-safe text (emoji stripped; arrows/ticks/warning signs mapped to ASCII).
+
+## Gotchas
+- The Writer class uses explicit constructor field assignments, NOT TypeScript parameter properties — parameter properties are non-erasable TS and break Node's native type-stripping, which is used to test the builder standalone (all 11 sections were rendered to 2-page PDFs as a real test before shipping).
+- PDF filename: bc-warehouse-guide-<id>.pdf. Unknown ?section returns 404 with the list of valid ids.`,
+  },
+  {
     filename: "accounts_simple_mode.md",
     content: `---
 name: Accounts — Simple mode + ACCOUNTS app
