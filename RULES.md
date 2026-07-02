@@ -488,6 +488,12 @@ a **BC-locked** auction (which correctly blocks non-admins) just got the masked 
 (`bcLocked = auction.addedToBC && role !== "ADMIN"` — admins bypass, which is why "works for admin,
 not cataloguers" is the signature of a BC-lock issue.)
 
+**Review tab bypasses the BC lock (2026-07-01).** `saveLotDescription`, `setLotReviewFlag` and
+`saveAiFlagNote` do **not** call `requireNotBCLocked` — the Review tab is QA/corrections and
+cataloguers are allowed to fix lots even after the auction has gone to BC. The lock STILL applies
+everywhere else (`updateLot`/wizard/Manage Lots, `deleteLot`, bulk actions, `transferLots`,
+`saveLotExtraDetails`). Don't re-add the lock to the three Review actions.
+
 ## Hardcoded Constants
 
 | Constant | Value | Location |

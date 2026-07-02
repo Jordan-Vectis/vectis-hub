@@ -498,10 +498,11 @@ export async function bulkClearLotPhotos(lotIds: string[], auctionId: string, de
 type ActionResult = { ok: boolean; error?: string }
 
 // Review tab — raise or clear an error flag on a lot. flag = reason text, null clears it.
+// NOT BC-locked: the Review tab is QA/corrections, which cataloguers are allowed to
+// do even after the auction has gone to BC (the lock still applies everywhere else).
 export async function setLotReviewFlag(lotId: string, auctionId: string, flag: string | null): Promise<ActionResult> {
   try {
     const session = await requireCataloguer()
-    await requireNotBCLocked(auctionId, session)
     await updateLotLogged(lotId,
       flag?.trim()
         ? { reviewFlag: flag.trim(), reviewFlaggedBy: changedByOf(session), reviewFlaggedAt: new Date() }
@@ -529,10 +530,11 @@ export async function saveAiFlagNote(lotId: string, flagNote: string | null): Pr
 }
 
 // Review tab — save a manually edited description for a lot.
+// NOT BC-locked: Review-tab corrections are allowed after an auction has gone to BC
+// (the lock still applies to the wizard, Manage Lots, bulk actions, delete, etc.).
 export async function saveLotDescription(lotId: string, auctionId: string, description: string): Promise<ActionResult> {
   try {
     const session = await requireCataloguer()
-    await requireNotBCLocked(auctionId, session)
     await updateLotLogged(lotId, { description, title: titleFromDescription(description), aiFlagNote: null }, { changedBy: changedByOf(session), source: "review_tab" })
     revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
     return { ok: true }
