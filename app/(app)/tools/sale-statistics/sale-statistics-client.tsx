@@ -190,6 +190,12 @@ export default function SaleStatisticsClient() {
     setPreset(label); setRange(p.range())
   }
 
+  function switchMode(mo: "single" | "compare" | "best") {
+    // Best months needs history — nudge a narrow range to Last 12 months on entry.
+    if (mo === "best" && mode !== "best" && preset !== "This year" && preset !== "Last 12 months") applyPreset("Last 12 months")
+    setMode(mo)
+  }
+
   const buckets = useMemo(() => data?.buckets ?? [], [data])
   const rate    = data?.buyersPremiumRate ?? 0.225
 
@@ -278,12 +284,13 @@ export default function SaleStatisticsClient() {
 
   // Seasonality — group the fetched lots by calendar month (best/worst months to sell)
   const monthAgg = useMemo(() => {
+    const currentYM = `${new Date().getFullYear()}-${pad(new Date().getMonth() + 1)}`
     const rolls: Roll[] = Array.from({ length: 12 }, () => ({ lots: 0, sold: 0, hammer: 0, low: 0, high: 0, collected: 0, withdrawn: 0, sellerPremium: 0 }))
     for (const b of data?.buckets ?? []) {
       if (category !== "all" && b.category !== category) continue
       if (subcategory !== "all" && b.subcategory !== subcategory) continue
-      const mm = b.auctionDate ? new Date(b.auctionDate + "T00:00:00Z").getUTCMonth() : -1
-      if (mm < 0) continue
+      if (!b.auctionDate || b.auctionDate.slice(0, 7) === currentYM) continue  // skip the current, incomplete month
+      const mm = new Date(b.auctionDate + "T00:00:00Z").getUTCMonth()
       const r = rolls[mm]
       r.lots += b.lots; r.sold += b.sold; r.hammer += b.hammer; r.low += b.low; r.high += b.high
       r.collected += b.collected; r.withdrawn += b.withdrawn; r.sellerPremium += b.sellerPremium
@@ -293,6 +300,30 @@ export default function SaleStatisticsClient() {
   const monthsWithData = monthAgg.filter(m => m.r.lots > 0)
   const bestMonth  = monthsWithData.length ? monthsWithData.reduce((a, b) => (b.r.hammer > a.r.hammer ? b : a)) : null
   const worstMonth = monthsWithData.length ? monthsWithData.reduce((a, b) => (b.r.hammer < a.r.hammer ? b : a)) : null
+
+  // Per-category seasonality — the best/quietest month for EVERY category (ignores
+  // the category filter; current incomplete month excluded). "Dolls best in May…".
+  const categorySeasonality = useMemo(() => {
+    const currentYM = `${new Date().getFullYear()}-${pad(new Date().getMonth() + 1)}`
+    const map = new Map<string, Roll[]>()
+    for (const b of data?.buckets ?? []) {
+      if (!b.auctionDate || b.auctionDate.slice(0, 7) === currentYM) continue
+      const mm = new Date(b.auctionDate + "T00:00:00Z").getUTCMonth()
+      let arr = map.get(b.category)
+      if (!arr) { arr = Array.from({ length: 12 }, () => ({ lots: 0, sold: 0, hammer: 0, low: 0, high: 0, collected: 0, withdrawn: 0, sellerPremium: 0 })); map.set(b.category, arr) }
+      const r = arr[mm]
+      r.lots += b.lots; r.sold += b.sold; r.hammer += b.hammer; r.low += b.low; r.high += b.high
+      r.collected += b.collected; r.withdrawn += b.withdrawn; r.sellerPremium += b.sellerPremium
+    }
+    return [...map.entries()].map(([category, months]) => {
+      const withData = months.map((r, m) => ({ m, r })).filter(x => x.r.lots > 0)
+      if (!withData.length) return null
+      const best  = withData.reduce((a, b) => (b.r.hammer > a.r.hammer ? b : a))
+      const worst = withData.reduce((a, b) => (b.r.hammer < a.r.hammer ? b : a))
+      const total = months.reduce((s, r) => s + r.hammer, 0)
+      return { category, best, worst, total }
+    }).filter((x): x is NonNullable<typeof x> => x !== null).sort((a, b) => b.total - a.total)
+  }, [data])
 
   // Distinct vendor / buyer counts are per-sale (can't be summed or category-sliced).
   const saleDistinct = useMemo(
@@ -359,7 +390,7 @@ export default function SaleStatisticsClient() {
       {/* Mode toggle */}
       <div className="flex gap-1 mb-4">
         {(["single", "compare", "best"] as const).map(mo => (
-          <button key={mo} onClick={() => setMode(mo)}
+          <button key={mo} onClick={() => switchMode(mo)}
             className={`px-3 py-1.5 text-xs font-semibold rounded border transition-colors ${
               mode === mo ? "bg-[#2AB4A6] text-white border-[#2AB4A6]"
                 : "bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:border-gray-500"}`}>
@@ -561,10 +592,33 @@ export default function SaleStatisticsClient() {
       {mode === "best" && data && !loading && (
         <>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            When to sell — pick a wide date range above (a full year, or a custom multi‑year span) and a category to see the seasonal pattern.
-            {category !== "all" ? ` Showing ${category}${subcategory !== "all" ? " · " + subcategory : ""}.` : " Showing all categories."}
+            When to sell — grouped by calendar month across the selected range, with the current (incomplete) month excluded. Pick a wide range above (a full year or multi‑year span) for the clearest pattern.
           </p>
 
+          {categorySeasonality.length > 0 && (
+            <div className="mb-8">
+              <Section title="Best month to sell — by category">
+                <DataTable
+                  rows={categorySeasonality}
+                  initialSort={{ index: 6, dir: "desc" }}
+                  filterPlaceholder="Filter categories…"
+                  columns={[
+                    { label: "Category",          render: c => <span className="text-gray-700 dark:text-gray-200 font-medium">{c.category}</span>, sort: c => c.category, text: c => c.category },
+                    { label: "Best month",        render: c => <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{MONTHS[c.best.m]}</span>, sort: c => c.best.m },
+                    { label: "That month's value", align: "right", render: c => gbp0(c.best.r.hammer), sort: c => c.best.r.hammer },
+                    { label: "Sell-through",      align: "right", render: c => pct(sellThrough(c.best.r)), sort: c => sellThrough(c.best.r) },
+                    { label: "Vs high",           align: "right", sort: c => vsHigh(c.best.r), render: c => <span className={c.best.r.hammer - c.best.r.high >= 0 ? "text-emerald-500" : "text-red-400"}>{pctS(vsHigh(c.best.r))}</span> },
+                    { label: "Quietest month",    render: c => <span className="text-amber-600 dark:text-amber-400">{MONTHS[c.worst.m]}</span>, sort: c => c.worst.m },
+                    { label: "Total (range)",     align: "right", render: c => gbp0(c.total), sort: c => c.total },
+                  ]}
+                />
+              </Section>
+            </div>
+          )}
+
+          <h2 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-3">
+            Detailed monthly view{category !== "all" ? ` — ${category}${subcategory !== "all" ? " · " + subcategory : ""}` : " — all categories"}
+          </h2>
           {bestMonth && worstMonth ? (
             <>
               <div className="grid grid-cols-2 gap-3 mb-6 max-w-2xl">
