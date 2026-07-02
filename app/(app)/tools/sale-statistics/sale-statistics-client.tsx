@@ -268,7 +268,10 @@ export default function SaleStatisticsClient() {
     for (const b of filtered) { const a = m.get(b.category) ?? []; a.push(b); m.set(b.category, a) }
     return [...m.entries()].map(([category, bs]) => ({ category, r: rollup(bs) })).sort((x, y) => y.r.hammer - x.r.hammer)
   }, [filtered])
-  const topSalesData = useMemo(() => bySale.slice(0, 10).map(s => ({ label: s.name || s.code, value: s.r.hammer })), [bySale])
+  const topSalesData = useMemo(() => bySale.slice(0, 10).map(s => {
+    const nm = s.name.length > 22 ? s.name.slice(0, 21) + "…" : s.name
+    return { label: `${s.code} · ${s.date}${nm ? " · " + nm : ""}`, value: s.r.hammer }
+  }), [bySale])
   const catChartData = useMemo(() => byCategory.filter(c => c.r.high > 0).slice(0, 14).map(c => ({ category: c.category, pct: vsHigh(c.r) })), [byCategory])
 
   // Distinct vendor / buyer counts are per-sale (can't be summed or category-sliced).
@@ -448,7 +451,7 @@ export default function SaleStatisticsClient() {
                   <BarChart data={topSalesData} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#9ca3af22" />
                     <XAxis type="number" tickFormatter={v => "£" + Math.round(Number(v) / 1000) + "k"} tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} />
-                    <YAxis type="category" dataKey="label" width={150} tick={{ fontSize: 11, fill: "#9ca3af" }} tickLine={false} axisLine={false} />
+                    <YAxis type="category" dataKey="label" width={220} tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} />
                     <Tooltip cursor={{ fill: "rgba(42,180,166,0.08)" }} contentStyle={{ background: "#111827", border: "1px solid #2d3047", borderRadius: 6, fontSize: 12, color: "#fff" }} formatter={v => gbp0(Number(v))} />
                     <Bar dataKey="value" fill="#2AB4A6" radius={[0, 3, 3, 0]} isAnimationActive={false} />
                   </BarChart>
