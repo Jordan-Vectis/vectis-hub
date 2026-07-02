@@ -63,8 +63,26 @@ async function loadConfig(): Promise<Record<string, string>> {
   }
 }
 
-// The model a given tool should use when the request didn't specify one.
-export async function getToolModel(slot: string): Promise<string> {
+// Models Google has retired. A stale client (an old cached app bundle on a
+// shared iPad, or an old model choice saved in localStorage) can still POST one
+// of these as its model, which hard-404s ("model no longer available"). Never
+// trust such a value. Add a name here whenever Google retires a model.
+const RETIRED_MODELS = new Set([
+  "gemini-2.0-flash", "gemini-2.0-flash-001", "gemini-2.0-flash-exp", "gemini-2.0-pro",
+  "gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-1.5-flash-002",
+  "gemini-1.5-pro", "gemini-1.5-pro-latest", "gemini-1.5-pro-002",
+  "gemini-pro", "gemini-pro-vision",
+])
+
+// The model a given tool should use. Pass the client's requested model (a user's
+// per-session picker) as `clientModel` — it wins ONLY if it's a real, non-retired
+// name; a blank or retired value is ignored and the slot's configured default is
+// used instead. So a stale client can't break a feature with a dead model name.
+// Call as getToolModel(slot) when there is no client model, or
+// getToolModel(slot, clientModel) instead of `clientModel || getToolModel(slot)`.
+export async function getToolModel(slot: string, clientModel?: string | null): Promise<string> {
+  const m = (clientModel ?? "").trim()
+  if (m && !RETIRED_MODELS.has(m)) return m
   const map = await loadConfig()
   return map[slot] || SLOT_DEFAULT[slot] || GLOBAL_FALLBACK_MODEL
 }

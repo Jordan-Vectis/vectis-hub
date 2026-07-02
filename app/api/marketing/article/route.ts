@@ -431,7 +431,7 @@ export async function POST(req: NextRequest) {
 
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
-      model: modelId || (await getToolModel("marketing_article")),
+      model: await getToolModel("marketing_article", modelId),
       generationConfig: { maxOutputTokens: maxTokens },
     })
 

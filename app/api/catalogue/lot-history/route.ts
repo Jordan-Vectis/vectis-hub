@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     const prompt = buildPrompt(lot, instructions)
 
     const genai  = new GoogleGenerativeAI(apiKey)
-    const model  = genai.getGenerativeModel({ model: modelId || (await getToolModel("catalogue_lot_history")) })
+    const model  = genai.getGenerativeModel({ model: await getToolModel("catalogue_lot_history", modelId) })
 
     const result   = await model.generateContent(prompt)
     const response = result.response

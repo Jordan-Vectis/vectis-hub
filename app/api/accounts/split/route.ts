@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     try { pageCount = (await PDFDocument.load(buf)).getPageCount() } catch { /* unreadable */ }
 
     const genai = new GoogleGenerativeAI(apiKey)
-    const model = genai.getGenerativeModel({ model: modelId || (await getToolModel("accounts_split")), generationConfig: { responseMimeType: "application/json" } })
+    const model = genai.getGenerativeModel({ model: await getToolModel("accounts_split", modelId), generationConfig: { responseMimeType: "application/json" } })
 
     let groups: number[][] = []
     try {

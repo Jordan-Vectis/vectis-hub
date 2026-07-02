@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     }
 
     const genai = new GoogleGenerativeAI(apiKey)
-    const model = genai.getGenerativeModel({ model: modelId || (await getToolModel("catalogue_flags")), systemInstruction: PROMPT })
+    const model = genai.getGenerativeModel({ model: await getToolModel("catalogue_flags", modelId), systemInstruction: PROMPT })
 
     const prompt = `Key points:\n${String(keyPoints).trim()}\n\nDescription:\n${String(description).trim()}\n\nFlag:\n${String(flagNote).trim()}`
 

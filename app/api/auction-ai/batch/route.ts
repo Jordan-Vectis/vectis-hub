@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Instruction "${presetKey}" not found` }, { status: 400 })
     }
   }
-  const modelId           = formData.get("model") as string || (await getToolModel("catalogue_batch"))
+  const modelId           = await getToolModel("catalogue_batch", formData.get("model") as string | null)
   const grounded          = formData.get("grounded") === "true"
 
   // Each lot is submitted as: lot_{name}_image_{i} files

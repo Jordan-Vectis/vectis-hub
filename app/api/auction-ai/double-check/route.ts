@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
 
     const genAI = new GoogleGenerativeAI(apiKey)
     const ai = genAI.getGenerativeModel({
-      model: model ?? (await getToolModel("catalogue_doublecheck")),
+      model: await getToolModel("catalogue_doublecheck", model),
       systemInstruction: DOUBLE_CHECK_INSTRUCTION,
     })
 

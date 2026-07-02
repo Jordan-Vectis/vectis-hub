@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
     const mimeType = file.type || "image/jpeg"
 
     const genai = new GoogleGenerativeAI(apiKey)
-    const model = genai.getGenerativeModel({ model: modelId || (await getToolModel("catalogue_lotting_up")) })
+    const model = genai.getGenerativeModel({ model: await getToolModel("catalogue_lotting_up", modelId) })
 
     const minValueInstruction = minLotValue
       ? `\n\nIMPORTANT OVERRIDE — Minimum lot value: Every lot MUST have an estimateLow of at least £${minLotValue}. ` +

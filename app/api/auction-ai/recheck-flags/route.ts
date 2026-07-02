@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
-      model: modelId || (await getToolModel("catalogue_flags")),
+      model: await getToolModel("catalogue_flags", modelId),
       systemInstruction: PROMPT,
       tools: [{ googleSearch: {} } as any],
     })

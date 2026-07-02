@@ -33,7 +33,7 @@ ${context ? `Additional context: ${context}` : ""}
 Write the post now (copy first, then hashtags on a new line starting with #):`
 
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: modelId ?? (await getToolModel("marketing_social")) })
+    const model = genAI.getGenerativeModel({ model: await getToolModel("marketing_social", modelId) })
 
     const result = await model.generateContent(prompt)
 

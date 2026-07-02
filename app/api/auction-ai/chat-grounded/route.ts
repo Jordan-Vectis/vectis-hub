@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   }
   const historyRaw        = formData.get("history") as string ?? "[]"
   const imageFiles        = formData.getAll("images") as File[]
-  const modelId           = formData.get("model") as string || (await getToolModel("catalogue_chat_grounded"))
+  const modelId           = await getToolModel("catalogue_chat_grounded", formData.get("model") as string | null)
 
   // Build image parts from uploaded files
   const imageParts = await Promise.all(

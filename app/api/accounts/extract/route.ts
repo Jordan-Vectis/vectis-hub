@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
 
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
-      model: modelId || (await getToolModel("accounts_extract")),
+      model: await getToolModel("accounts_extract", modelId),
       generationConfig: { responseMimeType: "application/json" },
     })
 

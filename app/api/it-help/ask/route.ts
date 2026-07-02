@@ -165,7 +165,7 @@ ANSWER:`
 
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
-      model: modelId || (await getToolModel("it_help")),
+      model: await getToolModel("it_help", modelId),
       generationConfig: { maxOutputTokens: 2048 },
     })
 

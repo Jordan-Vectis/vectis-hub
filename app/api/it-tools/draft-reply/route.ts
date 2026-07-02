@@ -139,7 +139,7 @@ DRAFTED REPLY:`
 
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
-      model: modelId || (await getToolModel("it_draft_reply")),
+      model: await getToolModel("it_draft_reply", modelId),
       generationConfig: { maxOutputTokens: 2048 },
     })
 

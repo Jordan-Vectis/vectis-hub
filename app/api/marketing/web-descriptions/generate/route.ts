@@ -87,7 +87,7 @@ ${keyPointSamples ? `\nKey points (sample):\n${keyPointSamples}` : ""}
 Write the auction description now:`
 
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: modelId ?? (await getToolModel("marketing_web")) })
+    const model = genAI.getGenerativeModel({ model: await getToolModel("marketing_web", modelId) })
 
     const result = await model.generateContent(prompt)
 
