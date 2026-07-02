@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useCallback } from "react"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts"
 
 // ─── Types (mirror the /api/bc/sale-statistics result) ─────────────────────────
 
@@ -56,6 +57,7 @@ const gbp2 = (n: number) => "£" + n.toLocaleString("en-GB", { minimumFractionDi
 const int  = (n: number) => n.toLocaleString("en-GB")
 const pct  = (n: number) => (n * 100).toFixed(1) + "%"
 const pctS = (n: number) => (n >= 0 ? "+" : "") + (n * 100).toFixed(1) + "%"
+const gbpSigned = (n: number) => (n >= 0 ? "+£" : "−£") + Math.abs(Math.round(n)).toLocaleString("en-GB")
 
 // ─── Aggregation ───────────────────────────────────────────────────────────────
 
@@ -259,6 +261,16 @@ export default function SaleStatisticsClient() {
     return [...m.values()].map(e => ({ ...e, r: rollup(e.roll) })).sort((a, b) => b.r.hammer - a.r.hammer)
   }, [filtered])
 
+  // Chart / highlight data (bySale is sorted by hammer desc → [0] is the best sale)
+  const bestSale = bySale.length ? bySale[0] : null
+  const byCategory = useMemo(() => {
+    const m = new Map<string, Bucket[]>()
+    for (const b of filtered) { const a = m.get(b.category) ?? []; a.push(b); m.set(b.category, a) }
+    return [...m.entries()].map(([category, bs]) => ({ category, r: rollup(bs) })).sort((x, y) => y.r.hammer - x.r.hammer)
+  }, [filtered])
+  const topSalesData = useMemo(() => bySale.slice(0, 10).map(s => ({ label: s.name || s.code, value: s.r.hammer })), [bySale])
+  const catChartData = useMemo(() => byCategory.filter(c => c.r.high > 0).slice(0, 14).map(c => ({ category: c.category, pct: vsHigh(c.r) })), [byCategory])
+
   // Distinct vendor / buyer counts are per-sale (can't be summed or category-sliced).
   const saleDistinct = useMemo(
     () => new Map((data?.saleDistinct ?? []).map(s => [s.auctionNo, s] as [string, SaleDist])),
@@ -304,6 +316,7 @@ export default function SaleStatisticsClient() {
     { label: "Low Estimate",      get: r => r.low,           kind: "money" },
     { label: "High Estimate",     get: r => r.high,          kind: "money" },
     { label: "Vs High Est",       get: r => vsHigh(r),       kind: "pct" },
+    { label: "£ vs High Est",     get: r => r.hammer - r.high, kind: "money" },
     { label: "BP Earned",         get: r => r.hammer * rate, kind: "money" },
     { label: "Vendor Commission", get: r => r.sellerPremium, kind: "money" },
     { label: "Ave Vendor %",      get: r => aveVendorPct(r), kind: "pct" },
@@ -412,16 +425,67 @@ export default function SaleStatisticsClient() {
             ))}
           </div>
 
+          {/* Best sale highlight */}
+          {bestSale && (
+            <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/[0.06] p-4 mb-6 flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-0.5">Best sale in period</p>
+                <p className="text-base font-bold text-gray-900 dark:text-white">
+                  <span className="font-mono text-[#2AB4A6] mr-1.5">{bestSale.code}</span>{bestSale.name}
+                </p>
+                <p className="text-xs text-gray-500">{bestSale.date} · {pct(sellThrough(bestSale.r))} sell-through · {pctS(vsHigh(bestSale.r))} vs high est</p>
+              </div>
+              <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">{gbp0(bestSale.r.hammer)}</p>
+            </div>
+          )}
+
+          {/* Charts */}
+          <div className="grid lg:grid-cols-2 gap-4 mb-6">
+            <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+              <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Top sales by value</h2>
+              {topSalesData.length ? (
+                <ResponsiveContainer width="100%" height={Math.max(180, topSalesData.length * 34 + 20)}>
+                  <BarChart data={topSalesData} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#9ca3af22" />
+                    <XAxis type="number" tickFormatter={v => "£" + Math.round(Number(v) / 1000) + "k"} tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} />
+                    <YAxis type="category" dataKey="label" width={150} tick={{ fontSize: 11, fill: "#9ca3af" }} tickLine={false} axisLine={false} />
+                    <Tooltip cursor={{ fill: "rgba(42,180,166,0.08)" }} contentStyle={{ background: "#111827", border: "1px solid #2d3047", borderRadius: 6, fontSize: 12, color: "#fff" }} formatter={v => gbp0(Number(v))} />
+                    <Bar dataKey="value" fill="#2AB4A6" radius={[0, 3, 3, 0]} isAnimationActive={false} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <p className="text-sm text-gray-500 py-8 text-center">No data</p>}
+            </div>
+
+            <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+              <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">% over / under high estimate by category</h2>
+              {catChartData.length ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={catChartData} margin={{ top: 4, right: 8, left: 0, bottom: 60 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#9ca3af22" />
+                    <XAxis dataKey="category" interval={0} angle={-35} textAnchor="end" height={70} tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} />
+                    <YAxis tickFormatter={v => Math.round(Number(v) * 100) + "%"} tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} />
+                    <Tooltip cursor={{ fill: "rgba(255,255,255,0.04)" }} contentStyle={{ background: "#111827", border: "1px solid #2d3047", borderRadius: 6, fontSize: 12, color: "#fff" }} formatter={v => pctS(Number(v))} />
+                    <Bar dataKey="pct" radius={[3, 3, 0, 0]} isAnimationActive={false}>
+                      {catChartData.map((d, i) => <Cell key={i} fill={d.pct >= 0 ? "#2AB4A6" : "#ef4444"} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <p className="text-sm text-gray-500 py-8 text-center">No data</p>}
+            </div>
+          </div>
+
           {/* By sale — matches the manual "2026 by auction" columns */}
           <Section title={`By sale${bySale.length ? ` (${bySale.length})` : ""}`}>
             <Table
-              head={["Sale", "Name", "Date", "Lots Sold", "Lots Passed", "Lots Withdrawn", "Sell-through", "Low Estimate", "High Estimate", "Sale Value", "Avg Lot", "Vs High Est", "BP Earned", "Vendor Commission", "Ave Vendor %", "Collected", "Vendors", "Buyers"]}
+              head={["Sale", "Name", "Date", "Lots Sold", "Lots Passed", "Lots Withdrawn", "Sell-through", "Low Estimate", "High Estimate", "Sale Value", "Avg Lot", "Vs High Est", "£ vs High", "BP Earned", "Vendor Commission", "Ave Vendor %", "Collected", "Vendors", "Buyers"]}
               rows={bySale.map(s => [
                 <span key="c" className="font-mono text-[#2AB4A6]">{s.code}</span>,
                 <span key="n" className="text-gray-500 dark:text-gray-400">{s.name}</span>,
                 <span key="d" className="text-gray-500 dark:text-gray-500 font-mono text-xs">{s.date}</span>,
                 int(s.r.sold), int(passed(s.r)), int(s.r.withdrawn), pct(sellThrough(s.r)),
-                gbp0(s.r.low), gbp0(s.r.high), gbp0(s.r.hammer), gbp2(avgLot(s.r)), pctS(vsHigh(s.r)),
+                gbp0(s.r.low), gbp0(s.r.high), gbp0(s.r.hammer), gbp2(avgLot(s.r)),
+                <span key="vh" className={s.r.hammer - s.r.high >= 0 ? "text-emerald-500" : "text-red-400"}>{pctS(vsHigh(s.r))}</span>,
+                <span key="ph" className={s.r.hammer - s.r.high >= 0 ? "text-emerald-500" : "text-red-400"}>{gbpSigned(s.r.hammer - s.r.high)}</span>,
                 gbp0(s.r.hammer * rate), gbp0(s.r.sellerPremium), pct(aveVendorPct(s.r)), int(s.r.collected),
                 int(saleDistinct.get(s.code)?.vendors ?? 0),
                 data?.buyerField ? int(saleDistinct.get(s.code)?.successfulBuyers ?? 0) : "—",
