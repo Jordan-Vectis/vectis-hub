@@ -48,6 +48,7 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
   const [lots, setLots]       = useState<ReviewLot[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
+  const [saveErr, setSaveErr] = useState<string | null>(null)   // shown inline at the Save button (not the far-off top banner)
   const [search, setSearch]   = useState("")
   const [flaggedOnly, setFlaggedOnly]       = useState(false)
   const [aiFlaggedOnly, setAiFlaggedOnly]   = useState(false)
@@ -138,14 +139,22 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
   }
 
   function saveDesc(lot: ReviewLot, description: string) {
+    setSaveErr(null)
     start(async () => {
       try {
         await saveLotDescription(lot.id, auctionId, description)
         setLots(prev => prev.map(l => l.id === lot.id ? { ...l, description, aiFlagNote: null } : l))
         setEditDescId(null)
         setEditDescText("")
+        setSaveErr(null)
       } catch (e: any) {
-        setError(e?.message ?? "Failed to save description")
+        // Show it inline at the button, and turn the useless generic
+        // "Server Components render" / network error (usually a mid-deploy blip)
+        // into something a cataloguer can act on.
+        const raw = e?.message ?? ""
+        setSaveErr(/server component|digest|failed to fetch|network|load failed|fetch failed|unexpected response/i.test(raw)
+          ? "Couldn't save — the app may have just updated. Please reload the page and try again."
+          : (raw || "Couldn't save — please try again."))
       }
     })
   }
@@ -333,16 +342,17 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
                       autoFocus
                       className="w-full bg-white dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-orange-400"
                     />
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
                       <button onClick={() => saveDesc(lot, editDescText)} disabled={pending || !editDescText.trim()}
                         className="px-4 py-2 text-sm font-semibold rounded-lg bg-orange-600 hover:bg-orange-500 disabled:opacity-40 text-white transition-colors">
                         {pending ? "Saving…" : "Save description"}
                       </button>
-                      <button onClick={() => { setEditDescId(null); setEditDescText("") }}
+                      <button onClick={() => { setEditDescId(null); setEditDescText(""); setSaveErr(null) }}
                         className="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 transition-colors">
                         Cancel
                       </button>
                     </div>
+                    {saveErr && <p className="text-sm text-red-600 dark:text-red-400 font-medium">{saveErr}</p>}
                   </div>
                 ) : (
                   <div className="flex items-center gap-4 flex-wrap">
@@ -451,16 +461,17 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
                   autoFocus
                   className="w-full bg-white dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-[#C8A96E]"
                 />
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
                   <button onClick={() => saveDesc(lot, editDescText)} disabled={pending || !editDescText.trim()}
                     className="px-4 py-2 text-sm font-semibold rounded-lg bg-[#C8A96E] hover:bg-[#b8945a] disabled:opacity-40 text-black transition-colors">
                     {pending ? "Saving…" : "Save description"}
                   </button>
-                  <button onClick={() => { setEditDescId(null); setEditDescText("") }}
+                  <button onClick={() => { setEditDescId(null); setEditDescText(""); setSaveErr(null) }}
                     className="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 transition-colors">
                     Cancel
                   </button>
                 </div>
+                {saveErr && <p className="text-sm text-red-600 dark:text-red-400 font-medium mt-1">{saveErr}</p>}
               </div>
             ) : null}
 
