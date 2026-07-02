@@ -105,6 +105,23 @@ async function runStream(
   }
 }
 
+// Fetch one period and resolve with its aggregated result (used by compare mode).
+function fetchRange(from: string, to: string): Promise<Result> {
+  return new Promise((resolve, reject) => {
+    runStream(`/api/bc/sale-statistics?from=${from}&to=${to}`, () => {}, resolve, e => reject(new Error(e)))
+      .catch(reject)
+  })
+}
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December", "Full year"]
+const YEARS = (() => { const y = new Date().getFullYear(); return Array.from({ length: y - 2021 }, (_, i) => y - i) })()
+// m: 0-11 = that month; 12 = whole year. Returns [from, to] for the given year.
+function monthYearRange(m: number, y: number): [string, string] {
+  if (m >= 12) return [`${y}-01-01`, `${y}-12-31`]
+  const last = new Date(y, m + 1, 0).getDate()
+  return [`${y}-${pad(m + 1)}-01`, `${y}-${pad(m + 1)}-${pad(last)}`]
+}
+
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 const selCls = "bg-white dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#2AB4A6]"
@@ -122,6 +139,15 @@ export default function SaleStatisticsClient() {
   const [category, setCategory]   = useState("all")
   const [subcategory, setSubcategory] = useState("all")
 
+  // Compare mode — two periods (month + year) side by side
+  const [mode, setMode] = useState<"single" | "compare">("single")
+  const [pa, setPa] = useState({ m: new Date().getMonth(), y: new Date().getFullYear() })
+  const [pb, setPb] = useState({ m: new Date().getMonth(), y: new Date().getFullYear() - 1 })
+  const [dataA, setDataA] = useState<Result | null>(null)
+  const [dataB, setDataB] = useState<Result | null>(null)
+  const [cmpLoading, setCmpLoading] = useState(false)
+  const [cmpErr, setCmpErr] = useState<string | null>(null)
+
   const load = useCallback((f: string, t: string) => {
     if (!f || !t) return
     setLoading(true); setError(null); setProgress(0); setData(null)
@@ -138,6 +164,23 @@ export default function SaleStatisticsClient() {
     const t = setTimeout(() => load(from, to), 200)
     return () => clearTimeout(t)
   }, [from, to, load])
+
+  // Compare mode: fetch both periods whenever they change.
+  useEffect(() => {
+    if (mode !== "compare") return
+    let cancelled = false
+    const t = setTimeout(() => {
+      setCmpLoading(true); setCmpErr(null); setDataA(null); setDataB(null)
+      Promise.all([
+        fetchRange(...monthYearRange(pa.m, pa.y)),
+        fetchRange(...monthYearRange(pb.m, pb.y)),
+      ])
+        .then(([a, b]) => { if (!cancelled) { setDataA(a); setDataB(b) } })
+        .catch(e => { if (!cancelled) setCmpErr(e?.message ?? String(e)) })
+        .finally(() => { if (!cancelled) setCmpLoading(false) })
+    }, 0)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [mode, pa, pb])
 
   function applyPreset(label: string) {
     const p = PRESETS.find(x => x.label === label)
@@ -180,6 +223,20 @@ export default function SaleStatisticsClient() {
   ), [buckets, sale, category, subcategory])
 
   const totals = useMemo(() => rollup(filtered), [filtered])
+
+  // Compare rollups — filtered by category/subcategory only (a sale is a single period)
+  const rollA = useMemo(() => rollup((dataA?.buckets ?? []).filter(b =>
+    (category === "all" || b.category === category) && (subcategory === "all" || b.subcategory === subcategory)
+  )), [dataA, category, subcategory])
+  const rollB = useMemo(() => rollup((dataB?.buckets ?? []).filter(b =>
+    (category === "all" || b.category === category) && (subcategory === "all" || b.subcategory === subcategory)
+  )), [dataB, category, subcategory])
+  const cmpCategories = useMemo(() => {
+    const s = new Set<string>()
+    for (const b of dataA?.buckets ?? []) s.add(b.category)
+    for (const b of dataB?.buckets ?? []) s.add(b.category)
+    return [...s].sort()
+  }, [dataA, dataB])
 
   // By sale
   const bySale = useMemo(() => {
@@ -238,6 +295,22 @@ export default function SaleStatisticsClient() {
     { label: "Successful buyers",   value: buyersCard.v,            sub: buyersCard.s },
   ]
 
+  const cmpMetrics: { label: string; get: (r: Roll) => number; kind: "money" | "int" | "pct" }[] = [
+    { label: "Sale Value",        get: r => r.hammer,        kind: "money" },
+    { label: "Lots Sold",         get: r => r.sold,          kind: "int" },
+    { label: "Lots Passed",       get: r => passed(r),       kind: "int" },
+    { label: "Lots Withdrawn",    get: r => r.withdrawn,     kind: "int" },
+    { label: "Sell-through",      get: r => sellThrough(r),  kind: "pct" },
+    { label: "Low Estimate",      get: r => r.low,           kind: "money" },
+    { label: "High Estimate",     get: r => r.high,          kind: "money" },
+    { label: "Vs High Est",       get: r => vsHigh(r),       kind: "pct" },
+    { label: "BP Earned",         get: r => r.hammer * rate, kind: "money" },
+    { label: "Vendor Commission", get: r => r.sellerPremium, kind: "money" },
+    { label: "Ave Vendor %",      get: r => aveVendorPct(r), kind: "pct" },
+    { label: "Avg Lot",           get: r => avgLot(r),       kind: "money" },
+    { label: "Items Collected",   get: r => r.collected,     kind: "int" },
+  ]
+
   return (
     <div className="p-6 max-w-screen-2xl">
       <div className="mb-5">
@@ -247,6 +320,19 @@ export default function SaleStatisticsClient() {
         </p>
       </div>
 
+      {/* Mode toggle */}
+      <div className="flex gap-1 mb-4">
+        {(["single", "compare"] as const).map(mo => (
+          <button key={mo} onClick={() => setMode(mo)}
+            className={`px-3 py-1.5 text-xs font-semibold rounded border transition-colors ${
+              mode === mo ? "bg-[#2AB4A6] text-white border-[#2AB4A6]"
+                : "bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:border-gray-500"}`}>
+            {mo === "single" ? "Single period" : "Compare periods"}
+          </button>
+        ))}
+      </div>
+
+      {mode === "single" && (<>
       {/* Date presets + custom range */}
       <div className="flex flex-wrap items-end gap-3 mb-4">
         <div className="flex flex-wrap gap-2">
@@ -329,14 +415,14 @@ export default function SaleStatisticsClient() {
           {/* By sale — matches the manual "2026 by auction" columns */}
           <Section title={`By sale${bySale.length ? ` (${bySale.length})` : ""}`}>
             <Table
-              head={["Sale", "Name", "Date", "Sold", "Passed", "W/drawn", "Sell-thr", "Low est", "High est", "Sale value", "Vs High", "BP earned", "Vendor comm", "Ave vend%", "Vendors", "Buyers"]}
+              head={["Sale", "Name", "Date", "Lots Sold", "Lots Passed", "Lots Withdrawn", "Sell-through", "Low Estimate", "High Estimate", "Sale Value", "Avg Lot", "Vs High Est", "BP Earned", "Vendor Commission", "Ave Vendor %", "Collected", "Vendors", "Buyers"]}
               rows={bySale.map(s => [
                 <span key="c" className="font-mono text-[#2AB4A6]">{s.code}</span>,
                 <span key="n" className="text-gray-500 dark:text-gray-400">{s.name}</span>,
                 <span key="d" className="text-gray-500 dark:text-gray-500 font-mono text-xs">{s.date}</span>,
                 int(s.r.sold), int(passed(s.r)), int(s.r.withdrawn), pct(sellThrough(s.r)),
-                gbp0(s.r.low), gbp0(s.r.high), gbp0(s.r.hammer), pctS(vsHigh(s.r)),
-                gbp0(s.r.hammer * rate), gbp0(s.r.sellerPremium), pct(aveVendorPct(s.r)),
+                gbp0(s.r.low), gbp0(s.r.high), gbp0(s.r.hammer), gbp2(avgLot(s.r)), pctS(vsHigh(s.r)),
+                gbp0(s.r.hammer * rate), gbp0(s.r.sellerPremium), pct(aveVendorPct(s.r)), int(s.r.collected),
                 int(saleDistinct.get(s.code)?.vendors ?? 0),
                 data?.buyerField ? int(saleDistinct.get(s.code)?.successfulBuyers ?? 0) : "—",
               ])}
@@ -358,6 +444,59 @@ export default function SaleStatisticsClient() {
               rightFrom={2}
             />
           </Section>
+        </>
+      )}
+      </>)}
+
+      {mode === "compare" && (
+        <>
+          {/* Period pickers */}
+          <div className="flex flex-wrap items-end gap-6 mb-4">
+            {([["A", pa, setPa], ["B", pb, setPb]] as const).map(([tag, p, set]) => (
+              <div key={tag} className="flex items-end gap-2">
+                <span className="text-xs text-gray-500 uppercase tracking-wider pb-1.5">Period {tag}</span>
+                <select value={p.m} onChange={e => set({ ...p, m: Number(e.target.value) })} className={selCls}>
+                  {MONTHS.map((mn, i) => <option key={mn} value={i}>{mn}</option>)}
+                </select>
+                <select value={p.y} onChange={e => set({ ...p, y: Number(e.target.value) })} className={selCls}>
+                  {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+
+          {/* Category filter (applies to both periods) */}
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <select value={category} onChange={e => { setCategory(e.target.value); setSubcategory("all") }} className={selCls}>
+              <option value="all">All categories</option>
+              {cmpCategories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            {category !== "all" && (
+              <button onClick={() => setCategory("all")} className="text-xs text-gray-500 hover:text-gray-300 underline">clear</button>
+            )}
+          </div>
+
+          {cmpLoading && <p className="text-xs text-gray-500 mb-4">Fetching both periods from Business Central…</p>}
+          {cmpErr && <p className="text-red-400 text-sm mb-4">{cmpErr === "BC_NOT_CONNECTED" ? "Business Central isn't connected on this environment." : cmpErr}</p>}
+
+          {dataA && dataB && !cmpLoading && (
+            <Section title={`${MONTHS[pa.m]} ${pa.y} vs ${MONTHS[pb.m]} ${pb.y}${category !== "all" ? ` · ${category}` : ""}`}>
+              <Table
+                head={["Metric", `${MONTHS[pa.m]} ${pa.y}`, `${MONTHS[pb.m]} ${pb.y}`, "Change"]}
+                rows={cmpMetrics.map(m => {
+                  const a = m.get(rollA), b = m.get(rollB)
+                  const f = m.kind === "money" ? gbp0 : m.kind === "int" ? int : pct
+                  const d = a - b
+                  const colour = d > 0 ? "text-emerald-500" : d < 0 ? "text-red-400" : "text-gray-500"
+                  const change = m.kind === "pct"
+                    ? <span className={colour}>{pctS(d)} pts</span>
+                    : <span className={colour}>{(d >= 0 ? "+" : "") + f(d)}{b !== 0 ? ` (${pctS(d / b)})` : ""}</span>
+                  return [<span key="m" className="text-gray-700 dark:text-gray-200">{m.label}</span>, f(a), f(b), change]
+                })}
+                rightFrom={1}
+              />
+            </Section>
+          )}
         </>
       )}
     </div>
