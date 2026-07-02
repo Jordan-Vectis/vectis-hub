@@ -1,7 +1,7 @@
-import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
+import { getAccountsAccess } from "@/lib/accounts-auth"
 import NewMonthForm from "./new-month-form"
 import ManageCardholders from "./manage-cardholders"
 import MonthStar from "./month-star"
@@ -13,9 +13,10 @@ export const metadata = { title: "Accounts" }
 const card = "bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800"
 
 export default async function AccountsPage() {
-  const session = await auth()
-  if (!session) redirect("/login")
-  if (session.user.role !== "ADMIN") redirect("/hub")
+  const { canAccess, isAdmin } = await getAccountsAccess()
+  if (!canAccess) redirect("/hub")
+  // Non-admins only ever get the hand-holding Simple mode — never the full table.
+  if (!isAdmin) redirect("/tools/accounts/simple")
 
   const months = await prisma.accountingMonth.findMany({
     orderBy: [{ favourite: "desc" }, { createdAt: "desc" }],
@@ -35,11 +36,21 @@ export default async function AccountsPage() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Accounts</h1>
-        <p className="text-base text-gray-500 mt-1">
-          Scan invoices &amp; receipts, let AI categorise them, review, then export the monthly spreadsheet.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Accounts</h1>
+          <p className="text-base text-gray-500 mt-1">
+            Scan invoices &amp; receipts, let AI categorise them, review, then export the monthly spreadsheet.
+          </p>
+        </div>
+        <Link
+          href="/tools/accounts/simple"
+          prefetch={false}
+          className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2.5 text-sm shadow-sm"
+          title="A big-button, step-by-step version for phones &amp; tablets — hands you through capture, review and matching one screen at a time"
+        >
+          📱 Simple mode →
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">

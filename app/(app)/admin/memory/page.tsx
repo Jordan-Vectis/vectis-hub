@@ -3,11 +3,37 @@
 import { useState } from "react"
 
 // ─── Static memory content ────────────────────────────────────────────────────
-// Updated by Claude alongside memory file changes. Last synced: 2026-07-01
+// Updated by Claude alongside memory file changes. Last synced: 2026-07-02
 
 type Entry = { filename: string; content: string }
 
 const ENTRIES: Entry[] = [
+  {
+    filename: "accounts_simple_mode.md",
+    content: `---
+name: Accounts — Simple mode + ACCOUNTS app
+purpose: Tablet/mobile hand-holding version of the Accounts tool for a non-technical staffer, and the access change that lets them in. Read before touching Accounts access or the wizard.
+last_updated: 2026-07-02
+---
+
+# Accounts — Simple mode (guided) + ACCOUNTS grantable app (2026-07-02, STAGING)
+
+A big-button, one-screen-at-a-time version of the Accounts tool for a non-technical staff member. Whole job, guided: capture -> AI read -> check each receipt -> match statement -> finish/export. NO schema change, so NO migration needed — it is a new front-end + an access change over the existing backend.
+
+## Access
+- ACCOUNTS is now a proper app: added to AppKey + ALL_APPS in lib/apps.ts, and the existing Accounts hub card in lib/app-cards.ts gained appKey ACCOUNTS. Grant it to the one staffer in Admin -> Users & Permissions (the checkbox appears automatically). Admins still auto-see everything.
+- lib/accounts-auth.ts: getAccountsAccess() returns { session, canAccess, isAdmin }; requireAccountsAccess() throws if not allowed. Admins always pass; a non-admin passes only if granted the ACCOUNTS app (reads allowedApps from the DB). Session is typed as Session from next-auth (NOT Awaited<ReturnType<typeof auth>>, which resolves to the middleware overload and will not compile).
+- Routes the wizard needs now gate on accounts-access (were admin-only): upload, extract, apply, statement/upload, statement/parse, export. The other accounts routes (split, stitch, add-page) stay admin-only.
+- In lib/actions/accounting.ts a new requireWizard() (= requireAccountsAccess) loosens EXACTLY 5 actions: saveAccountingDocuments, deleteAccountingDocument, setTransactionMatch, setTransactionReceiptMissing, autoMatchStatement. Everything else keeps requireAdmin() (month/cardholder management, reserves, move-between-months, CSV import, deleteBankStatement, snapDocAmount, setTransactionIgnored, setStatementCardholder, clearStatementMatches).
+
+## Routing / the toggle
+- /tools/accounts (full table) shows a "Simple mode" button for admins; non-admins are redirected to /tools/accounts/simple.
+- The complex pages ([monthId], [monthId]/reconcile, reserves) switched their gate to getAccountsAccess and funnel non-admins to /tools/accounts/simple/[monthId] (or /simple). The full table/reconcile/reserves stay admin-only-view.
+- New files: simple/page.tsx (friendly month picker; favourite month = "Working on this now"), simple/[monthId]/page.tsx (server loader, same data + signed URLs as the month + reconcile pages), simple/[monthId]/wizard-client.tsx (the guided flow).
+
+## The wizard (wizard-client.tsx, all client, reuses existing routes/actions + the shared ImageViewer)
+Home overview with 4 tappable step cards (progress/counts), then linear sub-flows: Capture (camera-first upload with capture=environment + Choose files; pick the card once, persisted in localStorage accounts_cardholder), Read (loops unread SCAN docs through /api/accounts/extract then /api/accounts/apply — same path as the admin client so multi-receipt photos + category splits work — with a progress bar), Review (one receipt at a time: photo + plain-English summary, Looks right / Change something (big fields, VAT as 3 buttons) / Remove; VAT recomputed only when gross or vatCode change), Statement (per card: upload+read, existing statements listed with match progress), Match (one payment at a time: exact-amount suggestions, smart-match subset-sum, show-other-receipts, No receipt, Skip — ports buildUnits/findCombo/statementState from reconcile-client), Done (summary + missing-invoices email + export link). Mutations use optimistic local state + router.refresh() (pages are force-dynamic so refresh re-pulls fresh data). A just-read statement shows a loading state until its transactions load, to avoid a false "all sorted" flash.`,
+  },
   {
     filename: "reference_phantom_catalogue_counts.md",
     content: `---

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/auth"
+import { getAccountsAccess } from "@/lib/accounts-auth"
 import { prisma } from "@/lib/prisma"
 import { uploadBufferToR2, getSignedImageUrl } from "@/lib/r2"
 
@@ -9,10 +9,8 @@ export const maxDuration = 60
 // on the first page; pass statementId to append further pages to the same one.
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth()
-    if (!session || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
-    }
+    const { canAccess } = await getAccountsAccess()
+    if (!canAccess) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
     const form = await req.formData()
     const monthId     = form.get("monthId") as string

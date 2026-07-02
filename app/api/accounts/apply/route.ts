@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/auth"
+import { getAccountsAccess } from "@/lib/accounts-auth"
 import { PDFDocument } from "pdf-lib"
 import { prisma } from "@/lib/prisma"
 import { getObjectBuffer, uploadBufferToR2, getSignedImageUrl, deleteObjectsFromR2 } from "@/lib/r2"
@@ -42,10 +42,8 @@ function clean(r: any) {
 // out of the original PDF; for a photo, lines share a copy of the image.
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth()
-    if (!session || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
-    }
+    const { canAccess } = await getAccountsAccess()
+    if (!canAccess) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
     const { docId, receipts, cardholder } = await req.json()
     if (!docId) return NextResponse.json({ error: "docId required" }, { status: 400 })

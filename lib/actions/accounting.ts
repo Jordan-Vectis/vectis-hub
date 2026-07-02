@@ -8,11 +8,20 @@ import { randomUUID } from "node:crypto"
 import {
   netFromGross, normaliseSupplier, cleanCardholder, isValidColumn, isValidVatCode,
 } from "@/lib/accounting"
+import { requireAccountsAccess } from "@/lib/accounts-auth"
 
+// Management/destructive actions stay ADMIN-only.
 async function requireAdmin() {
   const session = await auth()
   if (!session || session.user.role !== "ADMIN") throw new Error("Unauthorised")
   return session
+}
+
+// Actions the Simple-mode wizard legitimately needs (capture, review, reconcile).
+// A non-admin with the ACCOUNTS app granted may run these; everything else here
+// (month/cardholder management, reserves, moving lines, CSV import) requires admin.
+async function requireWizard() {
+  await requireAccountsAccess()
 }
 
 // ── Cardholders (the "whose card / account" list) ────────────────────────────
@@ -207,7 +216,7 @@ export async function splitAccountingDocument(docId: string) {
 }
 
 export async function deleteAccountingDocument(id: string) {
-  await requireAdmin()
+  await requireWizard()
   const doc = await prisma.accountingDocument.findUnique({ where: { id }, select: { monthId: true, imageKey: true, images: true } })
   if (!doc) return
   const keys = [...(doc.images ?? []), doc.imageKey].filter((k): k is string => !!k)
@@ -287,7 +296,7 @@ type DocEdit = {
 // Bulk-save the review table. Recomputes net, validates, and — for any line the
 // user has ticked as reviewed — learns a supplier rule so it auto-fills next time.
 export async function saveAccountingDocuments(monthId: string, edits: DocEdit[]) {
-  await requireAdmin()
+  await requireWizard()
 
   for (const e of edits) {
     const cardholder = cleanCardholder(e.cardholder) || "Vectis"
@@ -335,7 +344,7 @@ export async function deleteBankStatement(id: string) {
 }
 
 export async function setTransactionMatch(txnId: string, docIds: string[]) {
-  await requireAdmin()
+  await requireWizard()
   const t = await prisma.bankTransaction.findUnique({ where: { id: txnId }, select: { monthId: true } })
   if (!t) return
   await prisma.bankTransaction.update({ where: { id: txnId }, data: { matchedDocIds: docIds.slice(0, 50) } })
@@ -354,7 +363,7 @@ export async function setTransactionIgnored(txnId: string, ignored: boolean) {
 // Clears any match (a missing receipt can't be matched) — it's tracked separately
 // and surfaced in the "Missing invoices" email.
 export async function setTransactionReceiptMissing(txnId: string, missing: boolean) {
-  await requireAdmin()
+  await requireWizard()
   const t = await prisma.bankTransaction.findUnique({ where: { id: txnId }, select: { monthId: true } })
   if (!t) return
   await prisma.bankTransaction.update({ where: { id: txnId }, data: { receiptMissing: missing, ...(missing ? { matchedDocIds: [] } : {}) } })
@@ -403,7 +412,7 @@ export async function clearStatementMatches(statementId: string) {
 }
 
 export async function autoMatchStatement(statementId: string) {
-  await requireAdmin()
+  await requireWizard()
   const stmt = await prisma.bankStatement.findUnique({ where: { id: statementId } })
   if (!stmt) throw new Error("Statement not found")
   const txns = await prisma.bankTransaction.findMany({ where: { statementId }, orderBy: { createdAt: "asc" } })

@@ -273,8 +273,10 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     btnBg:              "bg-emerald-600 hover:bg-emerald-500",
     glow:               "hover:shadow-emerald-900/40",
     group:              "OPERATIONS",
-    // Admin-only (financial data): allUsers false + no appKey ⇒ the hub shows it
-    // to ADMIN only. The page + API also enforce this server-side.
+    // Financial data: admins always get it; a non-admin needs the ACCOUNTS app
+    // granted (Admin → Users & Permissions), which lands them in Simple mode only.
+    // The page + API/actions enforce this server-side.
+    appKey:             "ACCOUNTS",
     allUsers:           false,
   },
   {

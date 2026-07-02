@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/auth"
+import { getAccountsAccess } from "@/lib/accounts-auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { PDFDocument } from "pdf-lib"
 import { prisma } from "@/lib/prisma"
@@ -102,10 +102,8 @@ async function normalise(p: any, extraNote: string | null) {
 //    return several receipts (multi-receipt photo); otherwise exactly one.
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth()
-    if (!session || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
-    }
+    const { canAccess } = await getAccountsAccess()
+    if (!canAccess) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })

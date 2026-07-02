@@ -1,18 +1,18 @@
-import { auth } from "@/auth"
 import { redirect, notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { getSignedImageUrl } from "@/lib/r2"
 import { DEFAULT_CARDHOLDERS } from "@/lib/accounting"
+import { getAccountsAccess } from "@/lib/accounts-auth"
 import AccountsMonthClient from "./accounts-client"
 
 export const dynamic = "force-dynamic"
 
 export default async function AccountsMonthPage({ params }: { params: Promise<{ monthId: string }> }) {
-  const session = await auth()
-  if (!session) redirect("/login")
-  if (session.user.role !== "ADMIN") redirect("/hub")
-
   const { monthId } = await params
+  const { canAccess, isAdmin } = await getAccountsAccess()
+  if (!canAccess) redirect("/hub")
+  // The full month table is admin-only; non-admins get the guided Simple wizard.
+  if (!isAdmin) redirect(`/tools/accounts/simple/${monthId}`)
   const month = await prisma.accountingMonth.findUnique({
     where: { id: monthId },
     include: { documents: { where: { reserved: false }, orderBy: { createdAt: "asc" } } },

@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/auth"
+import { getAccountsAccess } from "@/lib/accounts-auth"
 import * as XLSX from "xlsx"
 import { prisma } from "@/lib/prisma"
 import { NOMINAL_COLUMNS } from "@/lib/accounting"
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await auth()
-    if (!session || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
-    }
+    const { canAccess } = await getAccountsAccess()
+    if (!canAccess) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
     const monthId = req.nextUrl.searchParams.get("monthId")
     if (!monthId) return NextResponse.json({ error: "monthId required" }, { status: 400 })

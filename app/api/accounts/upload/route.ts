@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { uploadBufferToR2, getSignedImageUrl } from "@/lib/r2"
 import { cleanCardholder } from "@/lib/accounting"
+import { getAccountsAccess } from "@/lib/accounts-auth"
 
 export const maxDuration = 60
 
@@ -10,10 +10,8 @@ export const maxDuration = 60
 // snaps/uploads each one, then runs the AI over the whole batch afterwards.
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth()
-    if (!session || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
-    }
+    const { canAccess } = await getAccountsAccess()
+    if (!canAccess) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
     const form = await req.formData()
     const monthId    = form.get("monthId") as string

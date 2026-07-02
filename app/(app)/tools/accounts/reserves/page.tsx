@@ -1,8 +1,8 @@
-import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { getSignedImageUrl } from "@/lib/r2"
 import { DEFAULT_CARDHOLDERS } from "@/lib/accounting"
+import { getAccountsAccess } from "@/lib/accounts-auth"
 import AccountsMonthClient from "../[monthId]/accounts-client"
 
 export const dynamic = "force-dynamic"
@@ -10,9 +10,10 @@ export const metadata = { title: "Reserves" }
 
 // Shared reserve pool shown in the full month grid (read/edit), across all months.
 export default async function ReservesPage() {
-  const session = await auth()
-  if (!session) redirect("/login")
-  if (session.user.role !== "ADMIN") redirect("/hub")
+  const { canAccess, isAdmin } = await getAccountsAccess()
+  if (!canAccess) redirect("/hub")
+  // Reserves is an admin-only power feature — non-admins go to Simple mode.
+  if (!isAdmin) redirect("/tools/accounts/simple")
 
   const docs = await prisma.accountingDocument.findMany({
     where: { reserved: true },
