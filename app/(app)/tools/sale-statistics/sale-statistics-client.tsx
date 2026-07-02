@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useCallback } from "react"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts"
 
 // ─── Types (mirror the /api/bc/sale-statistics result) ─────────────────────────
 
@@ -8,13 +9,22 @@ type Bucket = {
   auctionNo: string; auctionName: string; auctionDate: string
   category: string; subcategory: string
   lots: number; sold: number; hammer: number; low: number; high: number; collected: number
+  withdrawn: number; sellerPremium: number
 }
+type SaleDist = { auctionNo: string; vendors: number; successfulBuyers: number }
 type Result = {
   buckets: Bucket[]
   total: number
   partial: boolean
   buyersPremiumRate: number
   range: { from: string; to: string }
+  commissionField?: string
+  withdrawnField?: string
+  vendorField?: string
+  buyerField?: string
+  saleDistinct?: SaleDist[]
+  totalVendors?: number
+  totalSuccessfulBuyers?: number
 }
 
 // ─── Date helpers (LOCAL calendar — never toISOString, it shifts under BST) ─────
@@ -45,16 +55,25 @@ const PRESETS: { label: string; range: () => [string, string] }[] = [
 const gbp0 = (n: number) => "£" + Math.round(n).toLocaleString("en-GB")
 const gbp2 = (n: number) => "£" + n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const int  = (n: number) => n.toLocaleString("en-GB")
+const pct  = (n: number) => (n * 100).toFixed(1) + "%"
+const pctS = (n: number) => (n >= 0 ? "+" : "") + (n * 100).toFixed(1) + "%"
+const gbpSigned = (n: number) => (n >= 0 ? "+£" : "−£") + Math.abs(Math.round(n)).toLocaleString("en-GB")
 
 // ─── Aggregation ───────────────────────────────────────────────────────────────
 
-type Roll = { lots: number; sold: number; hammer: number; low: number; high: number; collected: number }
+type Roll = { lots: number; sold: number; hammer: number; low: number; high: number; collected: number; withdrawn: number; sellerPremium: number }
 function rollup(bs: Bucket[]): Roll {
-  const r: Roll = { lots: 0, sold: 0, hammer: 0, low: 0, high: 0, collected: 0 }
-  for (const b of bs) { r.lots += b.lots; r.sold += b.sold; r.hammer += b.hammer; r.low += b.low; r.high += b.high; r.collected += b.collected }
+  const r: Roll = { lots: 0, sold: 0, hammer: 0, low: 0, high: 0, collected: 0, withdrawn: 0, sellerPremium: 0 }
+  for (const b of bs) { r.lots += b.lots; r.sold += b.sold; r.hammer += b.hammer; r.low += b.low; r.high += b.high; r.collected += b.collected; r.withdrawn += b.withdrawn; r.sellerPremium += b.sellerPremium }
   return r
 }
 const avgLot = (r: Roll) => (r.sold > 0 ? r.hammer / r.sold : 0)
+// Passed = unsold at auction, excluding withdrawn lots. Sell-through denominator
+// likewise excludes withdrawn (they never went under the hammer).
+const passed = (r: Roll) => Math.max(0, r.lots - r.sold - r.withdrawn)
+const sellThrough = (r: Roll) => { const d = r.lots - r.withdrawn; return d > 0 ? r.sold / d : 0 }
+const vsHigh = (r: Roll) => (r.high > 0 ? r.hammer / r.high - 1 : 0)          // sale value vs high estimate
+const aveVendorPct = (r: Roll) => (r.hammer > 0 ? r.sellerPremium / r.hammer : 0)
 
 // ─── Stream reader ─────────────────────────────────────────────────────────────
 
@@ -88,6 +107,23 @@ async function runStream(
   }
 }
 
+// Fetch one period and resolve with its aggregated result (used by compare mode).
+function fetchRange(from: string, to: string): Promise<Result> {
+  return new Promise((resolve, reject) => {
+    runStream(`/api/bc/sale-statistics?from=${from}&to=${to}`, () => {}, resolve, e => reject(new Error(e)))
+      .catch(reject)
+  })
+}
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December", "Full year"]
+const YEARS = (() => { const y = new Date().getFullYear(); return Array.from({ length: y - 2021 }, (_, i) => y - i) })()
+// m: 0-11 = that month; 12 = whole year. Returns [from, to] for the given year.
+function monthYearRange(m: number, y: number): [string, string] {
+  if (m >= 12) return [`${y}-01-01`, `${y}-12-31`]
+  const last = new Date(y, m + 1, 0).getDate()
+  return [`${y}-${pad(m + 1)}-01`, `${y}-${pad(m + 1)}-${pad(last)}`]
+}
+
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 const selCls = "bg-white dark:bg-[#0d0f1a] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#2AB4A6]"
@@ -105,6 +141,15 @@ export default function SaleStatisticsClient() {
   const [category, setCategory]   = useState("all")
   const [subcategory, setSubcategory] = useState("all")
 
+  // Compare mode — two periods (month + year) side by side
+  const [mode, setMode] = useState<"single" | "compare">("single")
+  const [pa, setPa] = useState({ m: new Date().getMonth(), y: new Date().getFullYear() })
+  const [pb, setPb] = useState({ m: new Date().getMonth(), y: new Date().getFullYear() - 1 })
+  const [dataA, setDataA] = useState<Result | null>(null)
+  const [dataB, setDataB] = useState<Result | null>(null)
+  const [cmpLoading, setCmpLoading] = useState(false)
+  const [cmpErr, setCmpErr] = useState<string | null>(null)
+
   const load = useCallback((f: string, t: string) => {
     if (!f || !t) return
     setLoading(true); setError(null); setProgress(0); setData(null)
@@ -121,6 +166,23 @@ export default function SaleStatisticsClient() {
     const t = setTimeout(() => load(from, to), 200)
     return () => clearTimeout(t)
   }, [from, to, load])
+
+  // Compare mode: fetch both periods whenever they change.
+  useEffect(() => {
+    if (mode !== "compare") return
+    let cancelled = false
+    const t = setTimeout(() => {
+      setCmpLoading(true); setCmpErr(null); setDataA(null); setDataB(null)
+      Promise.all([
+        fetchRange(...monthYearRange(pa.m, pa.y)),
+        fetchRange(...monthYearRange(pb.m, pb.y)),
+      ])
+        .then(([a, b]) => { if (!cancelled) { setDataA(a); setDataB(b) } })
+        .catch(e => { if (!cancelled) setCmpErr(e?.message ?? String(e)) })
+        .finally(() => { if (!cancelled) setCmpLoading(false) })
+    }, 0)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [mode, pa, pb])
 
   function applyPreset(label: string) {
     const p = PRESETS.find(x => x.label === label)
@@ -164,6 +226,20 @@ export default function SaleStatisticsClient() {
 
   const totals = useMemo(() => rollup(filtered), [filtered])
 
+  // Compare rollups — filtered by category/subcategory only (a sale is a single period)
+  const rollA = useMemo(() => rollup((dataA?.buckets ?? []).filter(b =>
+    (category === "all" || b.category === category) && (subcategory === "all" || b.subcategory === subcategory)
+  )), [dataA, category, subcategory])
+  const rollB = useMemo(() => rollup((dataB?.buckets ?? []).filter(b =>
+    (category === "all" || b.category === category) && (subcategory === "all" || b.subcategory === subcategory)
+  )), [dataB, category, subcategory])
+  const cmpCategories = useMemo(() => {
+    const s = new Set<string>()
+    for (const b of dataA?.buckets ?? []) s.add(b.category)
+    for (const b of dataB?.buckets ?? []) s.add(b.category)
+    return [...s].sort()
+  }, [dataA, dataB])
+
   // By sale
   const bySale = useMemo(() => {
     const m = new Map<string, { code: string; name: string; date: string; roll: Bucket[] }>()
@@ -185,14 +261,67 @@ export default function SaleStatisticsClient() {
     return [...m.values()].map(e => ({ ...e, r: rollup(e.roll) })).sort((a, b) => b.r.hammer - a.r.hammer)
   }, [filtered])
 
+  // Chart / highlight data (bySale is sorted by hammer desc → [0] is the best sale)
+  const bestSale = bySale.length ? bySale[0] : null
+  const byCategory = useMemo(() => {
+    const m = new Map<string, Bucket[]>()
+    for (const b of filtered) { const a = m.get(b.category) ?? []; a.push(b); m.set(b.category, a) }
+    return [...m.entries()].map(([category, bs]) => ({ category, r: rollup(bs) })).sort((x, y) => y.r.hammer - x.r.hammer)
+  }, [filtered])
+  const topSalesData = useMemo(() => bySale.slice(0, 10).map(s => ({ label: s.name || s.code, value: s.r.hammer })), [bySale])
+  const catChartData = useMemo(() => byCategory.filter(c => c.r.high > 0).slice(0, 14).map(c => ({ category: c.category, pct: vsHigh(c.r) })), [byCategory])
+
+  // Distinct vendor / buyer counts are per-sale (can't be summed or category-sliced).
+  const saleDistinct = useMemo(
+    () => new Map((data?.saleDistinct ?? []).map(s => [s.auctionNo, s] as [string, SaleDist])),
+    [data],
+  )
+  const catFiltered = category !== "all" || subcategory !== "all"
+  const distinctCard = (field: string | undefined, total: number | undefined, key: keyof SaleDist, noField: string) =>
+    !field       ? { v: "—", s: noField }
+    : catFiltered ? { v: "—", s: "per sale — clear category" }
+    : sale === "all"
+      ? { v: int(total ?? 0), s: "distinct across range" }
+      : { v: int(Number(saleDistinct.get(sale)?.[key] ?? 0)), s: "in this sale" }
+  const vendorsCard = distinctCard(data?.vendorField, data?.totalVendors, "vendors", "no vendor field found")
+  const buyersCard  = distinctCard(data?.buyerField, data?.totalSuccessfulBuyers, "successfulBuyers", "not on the lines")
+
+  const salesCount = bySale.length
+  const hero = [
+    { label: "Total Sale Value",  value: gbp0(totals.hammer),                                       sub: `${int(salesCount)} sale${salesCount === 1 ? "" : "s"} · ${int(totals.sold)} lots sold` },
+    { label: "BP Earned",         value: gbp0(totals.hammer * rate),                                sub: `${(rate * 100).toFixed(1)}% buyer's premium` },
+    { label: "Vendor Commission", value: data?.commissionField ? gbp0(totals.sellerPremium) : "—",  sub: data?.commissionField ? `avg ${pct(aveVendorPct(totals))}` : "no commission field" },
+    { label: "Completed Sales",   value: int(salesCount),                                           sub: "in selected range" },
+    { label: "Avg Sell-through",  value: pct(sellThrough(totals)),                                  sub: `${int(totals.sold)} of ${int(Math.max(0, totals.lots - totals.withdrawn))} lots` },
+    { label: "Avg vs High Est",   value: pctS(vsHigh(totals)),                                      sub: `vs ${gbp0(totals.high)} high est` },
+  ]
+
   const cards = [
-    { label: "Hammer achieved",   value: gbp0(totals.hammer),        sub: `${int(totals.sold)} sold of ${int(totals.lots)} lots` },
-    { label: "Total low estimate",  value: gbp0(totals.low),          sub: "sum of low estimates" },
-    { label: "Total high estimate", value: gbp0(totals.high),         sub: "sum of high estimates" },
-    { label: "Average lot value",   value: gbp2(avgLot(totals)),      sub: "hammer ÷ sold" },
-    { label: "Items collected",     value: int(totals.collected),     sub: "scanned to COLLECTED" },
-    { label: "Buyer's premium",     value: gbp0(totals.hammer * rate), sub: `${(rate * 100).toFixed(1)}% of hammer` },
-    { label: "Seller's premium",    value: "—",                        sub: "needs BC header (coming)" },
+    { label: "Total low estimate",  value: gbp0(totals.low),        sub: "sum of low estimates" },
+    { label: "Total high estimate", value: gbp0(totals.high),       sub: "sum of high estimates" },
+    { label: "Average lot value",   value: gbp2(avgLot(totals)),    sub: "hammer ÷ sold" },
+    { label: "Lots passed",         value: int(passed(totals)),     sub: "unsold (£0 hammer)" },
+    { label: "Lots withdrawn",      value: int(totals.withdrawn),   sub: data?.withdrawnField ? "withdrawn ticked" : "no withdrawn field" },
+    { label: "Items collected",     value: int(totals.collected),   sub: "scanned to collected" },
+    { label: "No. of vendors",      value: vendorsCard.v,           sub: vendorsCard.s },
+    { label: "Successful buyers",   value: buyersCard.v,            sub: buyersCard.s },
+  ]
+
+  const cmpMetrics: { label: string; get: (r: Roll) => number; kind: "money" | "int" | "pct" }[] = [
+    { label: "Sale Value",        get: r => r.hammer,        kind: "money" },
+    { label: "Lots Sold",         get: r => r.sold,          kind: "int" },
+    { label: "Lots Passed",       get: r => passed(r),       kind: "int" },
+    { label: "Lots Withdrawn",    get: r => r.withdrawn,     kind: "int" },
+    { label: "Sell-through",      get: r => sellThrough(r),  kind: "pct" },
+    { label: "Low Estimate",      get: r => r.low,           kind: "money" },
+    { label: "High Estimate",     get: r => r.high,          kind: "money" },
+    { label: "Vs High Est",       get: r => vsHigh(r),       kind: "pct" },
+    { label: "£ vs High Est",     get: r => r.hammer - r.high, kind: "money" },
+    { label: "BP Earned",         get: r => r.hammer * rate, kind: "money" },
+    { label: "Vendor Commission", get: r => r.sellerPremium, kind: "money" },
+    { label: "Ave Vendor %",      get: r => aveVendorPct(r), kind: "pct" },
+    { label: "Avg Lot",           get: r => avgLot(r),       kind: "money" },
+    { label: "Items Collected",   get: r => r.collected,     kind: "int" },
   ]
 
   return (
@@ -204,6 +333,19 @@ export default function SaleStatisticsClient() {
         </p>
       </div>
 
+      {/* Mode toggle */}
+      <div className="flex gap-1 mb-4">
+        {(["single", "compare"] as const).map(mo => (
+          <button key={mo} onClick={() => setMode(mo)}
+            className={`px-3 py-1.5 text-xs font-semibold rounded border transition-colors ${
+              mode === mo ? "bg-[#2AB4A6] text-white border-[#2AB4A6]"
+                : "bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:border-gray-500"}`}>
+            {mo === "single" ? "Single period" : "Compare periods"}
+          </button>
+        ))}
+      </div>
+
+      {mode === "single" && (<>
       {/* Date presets + custom range */}
       <div className="flex flex-wrap items-end gap-3 mb-4">
         <div className="flex flex-wrap gap-2">
@@ -259,43 +401,166 @@ export default function SaleStatisticsClient() {
 
       {data && !loading && (
         <>
-          {/* Summary cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 mb-6">
-            {cards.map(c => (
-              <div key={c.label} className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-4">
-                <p className="text-xs text-gray-500 dark:text-gray-500 mb-1 uppercase tracking-wider">{c.label}</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">{c.value}</p>
+          {/* Headline KPIs */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+            {hero.map((c, i) => (
+              <div key={c.label} className={`rounded-xl border p-4 ${i === 0
+                ? "border-[#2AB4A6] bg-[#2AB4A6]/10"
+                : "border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#0d0f1a]"}`}>
+                <p className="text-[11px] text-gray-500 dark:text-gray-500 uppercase tracking-wider mb-1">{c.label}</p>
+                <p className={`text-2xl font-bold ${i === 0 ? "text-[#1f8d82] dark:text-[#2AB4A6]" : "text-gray-900 dark:text-white"}`}>{c.value}</p>
                 <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-1">{c.sub}</p>
               </div>
             ))}
           </div>
 
-          {/* By sale */}
+          {/* Secondary stats */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-6">
+            {cards.map(c => (
+              <div key={c.label} className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3.5">
+                <p className="text-[11px] text-gray-500 dark:text-gray-500 mb-1 uppercase tracking-wider">{c.label}</p>
+                <p className="text-lg font-bold text-gray-900 dark:text-white">{c.value}</p>
+                <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-0.5">{c.sub}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Best sale highlight */}
+          {bestSale && (
+            <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/[0.06] p-4 mb-6 flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-0.5">Best sale in period</p>
+                <p className="text-base font-bold text-gray-900 dark:text-white">
+                  <span className="font-mono text-[#2AB4A6] mr-1.5">{bestSale.code}</span>{bestSale.name}
+                </p>
+                <p className="text-xs text-gray-500">{bestSale.date} · {pct(sellThrough(bestSale.r))} sell-through · {pctS(vsHigh(bestSale.r))} vs high est</p>
+              </div>
+              <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">{gbp0(bestSale.r.hammer)}</p>
+            </div>
+          )}
+
+          {/* Charts */}
+          <div className="grid lg:grid-cols-2 gap-4 mb-6">
+            <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+              <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Top sales by value</h2>
+              {topSalesData.length ? (
+                <ResponsiveContainer width="100%" height={Math.max(180, topSalesData.length * 34 + 20)}>
+                  <BarChart data={topSalesData} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#9ca3af22" />
+                    <XAxis type="number" tickFormatter={v => "£" + Math.round(Number(v) / 1000) + "k"} tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} />
+                    <YAxis type="category" dataKey="label" width={150} tick={{ fontSize: 11, fill: "#9ca3af" }} tickLine={false} axisLine={false} />
+                    <Tooltip cursor={{ fill: "rgba(42,180,166,0.08)" }} contentStyle={{ background: "#111827", border: "1px solid #2d3047", borderRadius: 6, fontSize: 12, color: "#fff" }} formatter={v => gbp0(Number(v))} />
+                    <Bar dataKey="value" fill="#2AB4A6" radius={[0, 3, 3, 0]} isAnimationActive={false} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <p className="text-sm text-gray-500 py-8 text-center">No data</p>}
+            </div>
+
+            <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+              <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">% over / under high estimate by category</h2>
+              {catChartData.length ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={catChartData} margin={{ top: 4, right: 8, left: 0, bottom: 60 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#9ca3af22" />
+                    <XAxis dataKey="category" interval={0} angle={-35} textAnchor="end" height={70} tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} />
+                    <YAxis tickFormatter={v => Math.round(Number(v) * 100) + "%"} tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} />
+                    <Tooltip cursor={{ fill: "rgba(255,255,255,0.04)" }} contentStyle={{ background: "#111827", border: "1px solid #2d3047", borderRadius: 6, fontSize: 12, color: "#fff" }} formatter={v => pctS(Number(v))} />
+                    <Bar dataKey="pct" radius={[3, 3, 0, 0]} isAnimationActive={false}>
+                      {catChartData.map((d, i) => <Cell key={i} fill={d.pct >= 0 ? "#2AB4A6" : "#ef4444"} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <p className="text-sm text-gray-500 py-8 text-center">No data</p>}
+            </div>
+          </div>
+
+          {/* By sale — matches the manual "2026 by auction" columns */}
           <Section title={`By sale${bySale.length ? ` (${bySale.length})` : ""}`}>
             <Table
-              head={["Sale", "Name", "Date", "Lots", "Sold", "Hammer", "Avg lot", "Collected", "Buyer's prem."]}
+              head={["Sale", "Name", "Date", "Lots Sold", "Lots Passed", "Lots Withdrawn", "Sell-through", "Low Estimate", "High Estimate", "Sale Value", "Avg Lot", "Vs High Est", "£ vs High", "BP Earned", "Vendor Commission", "Ave Vendor %", "Collected", "Vendors", "Buyers"]}
               rows={bySale.map(s => [
                 <span key="c" className="font-mono text-[#2AB4A6]">{s.code}</span>,
                 <span key="n" className="text-gray-500 dark:text-gray-400">{s.name}</span>,
                 <span key="d" className="text-gray-500 dark:text-gray-500 font-mono text-xs">{s.date}</span>,
-                int(s.r.lots), int(s.r.sold), gbp0(s.r.hammer), gbp2(avgLot(s.r)), int(s.r.collected), gbp0(s.r.hammer * rate),
+                int(s.r.sold), int(passed(s.r)), int(s.r.withdrawn), pct(sellThrough(s.r)),
+                gbp0(s.r.low), gbp0(s.r.high), gbp0(s.r.hammer), gbp2(avgLot(s.r)),
+                <span key="vh" className={s.r.hammer - s.r.high >= 0 ? "text-emerald-500" : "text-red-400"}>{pctS(vsHigh(s.r))}</span>,
+                <span key="ph" className={s.r.hammer - s.r.high >= 0 ? "text-emerald-500" : "text-red-400"}>{gbpSigned(s.r.hammer - s.r.high)}</span>,
+                gbp0(s.r.hammer * rate), gbp0(s.r.sellerPremium), pct(aveVendorPct(s.r)), int(s.r.collected),
+                int(saleDistinct.get(s.code)?.vendors ?? 0),
+                data?.buyerField ? int(saleDistinct.get(s.code)?.successfulBuyers ?? 0) : "—",
               ])}
               rightFrom={3}
             />
           </Section>
 
-          {/* By category / subcategory */}
+          {/* Category contribution */}
           <Section title="By category & subcategory">
             <Table
-              head={["Category", "Subcategory", "Lots", "Sold", "Hammer", "Avg hammer (sold)"]}
+              head={["Category", "Subcategory", "Lots", "Sold", "Sale value", "Share", "Avg hammer (sold)"]}
               rows={byCat.map(c => [
                 <span key="c" className="text-gray-700 dark:text-gray-200">{c.category}</span>,
                 <span key="s" className="text-gray-500 dark:text-gray-400">{c.subcategory}</span>,
-                int(c.r.lots), int(c.r.sold), gbp0(c.r.hammer), gbp2(avgLot(c.r)),
+                int(c.r.lots), int(c.r.sold), gbp0(c.r.hammer),
+                totals.hammer > 0 ? pct(c.r.hammer / totals.hammer) : "—",
+                gbp2(avgLot(c.r)),
               ])}
               rightFrom={2}
             />
           </Section>
+        </>
+      )}
+      </>)}
+
+      {mode === "compare" && (
+        <>
+          {/* Period pickers */}
+          <div className="flex flex-wrap items-end gap-6 mb-4">
+            {([["A", pa, setPa], ["B", pb, setPb]] as const).map(([tag, p, set]) => (
+              <div key={tag} className="flex items-end gap-2">
+                <span className="text-xs text-gray-500 uppercase tracking-wider pb-1.5">Period {tag}</span>
+                <select value={p.m} onChange={e => set({ ...p, m: Number(e.target.value) })} className={selCls}>
+                  {MONTHS.map((mn, i) => <option key={mn} value={i}>{mn}</option>)}
+                </select>
+                <select value={p.y} onChange={e => set({ ...p, y: Number(e.target.value) })} className={selCls}>
+                  {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+
+          {/* Category filter (applies to both periods) */}
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <select value={category} onChange={e => { setCategory(e.target.value); setSubcategory("all") }} className={selCls}>
+              <option value="all">All categories</option>
+              {cmpCategories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            {category !== "all" && (
+              <button onClick={() => setCategory("all")} className="text-xs text-gray-500 hover:text-gray-300 underline">clear</button>
+            )}
+          </div>
+
+          {cmpLoading && <p className="text-xs text-gray-500 mb-4">Fetching both periods from Business Central…</p>}
+          {cmpErr && <p className="text-red-400 text-sm mb-4">{cmpErr === "BC_NOT_CONNECTED" ? "Business Central isn't connected on this environment." : cmpErr}</p>}
+
+          {dataA && dataB && !cmpLoading && (
+            <Section title={`${MONTHS[pa.m]} ${pa.y} vs ${MONTHS[pb.m]} ${pb.y}${category !== "all" ? ` · ${category}` : ""}`}>
+              <Table
+                head={["Metric", `${MONTHS[pa.m]} ${pa.y}`, `${MONTHS[pb.m]} ${pb.y}`, "Change"]}
+                rows={cmpMetrics.map(m => {
+                  const a = m.get(rollA), b = m.get(rollB)
+                  const f = m.kind === "money" ? gbp0 : m.kind === "int" ? int : pct
+                  const d = a - b
+                  const colour = d > 0 ? "text-emerald-500" : d < 0 ? "text-red-400" : "text-gray-500"
+                  const change = m.kind === "pct"
+                    ? <span className={colour}>{pctS(d)} pts</span>
+                    : <span className={colour}>{(d >= 0 ? "+" : "") + f(d)}{b !== 0 ? ` (${pctS(d / b)})` : ""}</span>
+                  return [<span key="m" className="text-gray-700 dark:text-gray-200">{m.label}</span>, f(a), f(b), change]
+                })}
+                rightFrom={1}
+              />
+            </Section>
+          )}
         </>
       )}
     </div>

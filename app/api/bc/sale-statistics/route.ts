@@ -25,6 +25,32 @@ type Bucket = {
   auctionNo: string; auctionName: string; auctionDate: string
   category: string; subcategory: string
   lots: number; sold: number; hammer: number; low: number; high: number; collected: number
+  withdrawn: number; sellerPremium: number
+}
+
+// The per-line vendor commission rate field — detected from the row so we don't
+// hardcode a possibly-wrong name. Preferred exact names first, then a pattern.
+function findCommissionField(fields: string[]): string {
+  // BC's caption is "Vendor Comm Rate" — abbreviated "Comm", so match /comm/ not
+  // /commiss/. The rate is a percentage (e.g. 25.00 = 25%), normalised below.
+  const prefer = ["EVA_VendorCommRate", "EVA_VendorCommissionRate", "EVA_CommRate", "EVA_CommissionRate", "EVA_VendorCommission", "EVA_CommissionPct"]
+  return prefer.find(f => fields.includes(f))
+    ?? fields.find(f => /comm/i.test(f) && /(rate|pct|percent)/i.test(f))
+    ?? ""
+}
+
+// Generic field detector: preferred exact names first, then a pattern.
+function findField(fields: string[], prefer: string[], pattern: RegExp): string {
+  return prefer.find(f => fields.includes(f)) ?? fields.find(f => pattern.test(f)) ?? ""
+}
+
+// A commission rate may be stored as a percentage (15 → 15%) or a fraction
+// (0.15). Normalise to a fraction of hammer.
+const asFraction = (rate: number) => (rate > 1 ? rate / 100 : rate)
+
+// Add a value to a per-key Set (for distinct counts — vendors, winning buyers).
+function addTo(m: Map<string, Set<string>>, key: string, val: string) {
+  let s = m.get(key); if (!s) { s = new Set(); m.set(key, s) } s.add(val)
 }
 
 function send(controller: ReadableStreamDefaultController, obj: object) {
@@ -56,7 +82,12 @@ export async function GET(req: NextRequest) {
         if (clauses.length) params.$filter = clauses.join(" and ")
 
         const buckets = new Map<string, Bucket>()
+        const vendorsByAuction = new Map<string, Set<string>>()
+        const buyersByAuction  = new Map<string, Set<string>>()
+        const allVendors = new Set<string>()
+        const allBuyers  = new Set<string>()
         let sampleFields: string[] = []
+        let commissionField = "", vendorField = "", withdrawnField = "", buyerField = ""
         let processed = 0
         let partial = false
         const startMs = Date.now()
@@ -73,7 +104,13 @@ export async function GET(req: NextRequest) {
             first ? params : undefined,
           )
           first = false
-          if (!sampleFields.length && rows.length) sampleFields = Object.keys(rows[0] as object)
+          if (!sampleFields.length && rows.length) {
+            sampleFields    = Object.keys(rows[0] as object)
+            commissionField = findCommissionField(sampleFields)
+            vendorField     = findField(sampleFields, ["EVA_VendorNo", "EVA_VendorCode", "EVA_VendorNumber"], /vendor.*(no|code|number|id)/i)
+            withdrawnField  = findField(sampleFields, ["EVA_WithdrawLot", "EVA_Withdrawn", "EVA_WithdrawnLot"], /withdraw/i)
+            buyerField      = findField(sampleFields, ["EVA_BuyerNo", "EVA_BuyerName", "EVA_BuyerCode", "EVA_BuyerNumber", "EVA_WinningBidderNo"], /buyer.*(no|code|number|id|name)|winning.*bidder/i)
+          }
 
           for (const r of rows as Record<string, unknown>[]) {
             const auctionNo = String(r.EVA_AuctionNo ?? "").trim()
@@ -89,18 +126,24 @@ export async function GET(req: NextRequest) {
                 auctionName: String(r.EVA_AuctionName ?? "").trim(),
                 auctionDate: String(r.EVA_AuctionDate ?? "").slice(0, 10),
                 category, subcategory,
-                lots: 0, sold: 0, hammer: 0, low: 0, high: 0, collected: 0,
+                lots: 0, sold: 0, hammer: 0, low: 0, high: 0, collected: 0, withdrawn: 0, sellerPremium: 0,
               }
               buckets.set(key, b)
             }
 
             const hammer = num(r.EVA_HammerPrice)
             b.lots += 1
-            if (hammer > 0) b.sold += 1
+            if (hammer > 0) b.sold += 1          // sold = has a hammer price; unsold = lots - sold
             b.hammer += hammer
             b.low  += num(r.EVA_LowEstimate)
             b.high += num(r.EVA_HighEstimate)
             if (truthy(r.EVA_Collected)) b.collected += 1
+            if (withdrawnField && truthy(r[withdrawnField])) b.withdrawn += 1
+            // Seller's premium = hammer × per-line vendor commission rate.
+            if (commissionField) b.sellerPremium += hammer * asFraction(num(r[commissionField]))
+            // Distinct vendors (any line) and successful buyers (sold lines) per sale.
+            if (vendorField) { const v = String(r[vendorField] ?? "").trim(); if (v) { addTo(vendorsByAuction, auctionNo, v); allVendors.add(v) } }
+            if (hammer > 0 && buyerField) { const bn = String(r[buyerField] ?? "").trim(); if (bn) { addTo(buyersByAuction, auctionNo, bn); allBuyers.add(bn) } }
           }
 
           processed += rows.length
@@ -110,15 +153,29 @@ export async function GET(req: NextRequest) {
           if (!nextLink) break
         }
 
+        // Distinct vendor / winning-buyer counts per sale (can't be summed from buckets).
+        const saleDistinct = [...new Set([...vendorsByAuction.keys(), ...buyersByAuction.keys()])].map(a => ({
+          auctionNo:        a,
+          vendors:          vendorsByAuction.get(a)?.size ?? 0,
+          successfulBuyers: buyersByAuction.get(a)?.size ?? 0,
+        }))
+
         send(controller, {
           type: "result",
           data: {
-            buckets:            [...buckets.values()],
-            total:              processed,
+            buckets:               [...buckets.values()],
+            total:                 processed,
             partial,
-            buyersPremiumRate:  BUYERS_PREMIUM_RATE,
-            range:              { from, to },
-            sampleFields,       // field names on the endpoint — for verifying the mapping
+            buyersPremiumRate:     BUYERS_PREMIUM_RATE,
+            range:                 { from, to },
+            sampleFields,          // field names on the endpoint — for verifying the mapping
+            commissionField,       // per-line field used for seller's premium ("" if none found)
+            withdrawnField,        // per-line withdrawn flag field ("" if none found)
+            vendorField,           // per-line vendor field ("" if none found)
+            buyerField,            // per-line buyer field ("" if none found → successful buyers N/A)
+            saleDistinct,          // [{ auctionNo, vendors, successfulBuyers }] — distinct per sale
+            totalVendors:          allVendors.size,
+            totalSuccessfulBuyers: allBuyers.size,
           },
         })
       } catch (e: any) {
