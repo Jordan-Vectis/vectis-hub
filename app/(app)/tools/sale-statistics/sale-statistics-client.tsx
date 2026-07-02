@@ -54,6 +54,8 @@ const PRESETS: { label: string; range: () => [string, string] }[] = [
 const gbp0 = (n: number) => "£" + Math.round(n).toLocaleString("en-GB")
 const gbp2 = (n: number) => "£" + n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const int  = (n: number) => n.toLocaleString("en-GB")
+const pct  = (n: number) => (n * 100).toFixed(1) + "%"
+const pctS = (n: number) => (n >= 0 ? "+" : "") + (n * 100).toFixed(1) + "%"
 
 // ─── Aggregation ───────────────────────────────────────────────────────────────
 
@@ -64,6 +66,12 @@ function rollup(bs: Bucket[]): Roll {
   return r
 }
 const avgLot = (r: Roll) => (r.sold > 0 ? r.hammer / r.sold : 0)
+// Passed = unsold at auction, excluding withdrawn lots. Sell-through denominator
+// likewise excludes withdrawn (they never went under the hammer).
+const passed = (r: Roll) => Math.max(0, r.lots - r.sold - r.withdrawn)
+const sellThrough = (r: Roll) => { const d = r.lots - r.withdrawn; return d > 0 ? r.sold / d : 0 }
+const vsHigh = (r: Roll) => (r.high > 0 ? r.hammer / r.high - 1 : 0)          // sale value vs high estimate
+const aveVendorPct = (r: Roll) => (r.hammer > 0 ? r.sellerPremium / r.hammer : 0)
 
 // ─── Stream reader ─────────────────────────────────────────────────────────────
 
@@ -209,19 +217,25 @@ export default function SaleStatisticsClient() {
   const vendorsCard = distinctCard(data?.vendorField, data?.totalVendors, "vendors", "no vendor field found")
   const buyersCard  = distinctCard(data?.buyerField, data?.totalSuccessfulBuyers, "successfulBuyers", "not on the lines")
 
+  const salesCount = bySale.length
+  const hero = [
+    { label: "Total Sale Value",  value: gbp0(totals.hammer),                                       sub: `${int(salesCount)} sale${salesCount === 1 ? "" : "s"} · ${int(totals.sold)} lots sold` },
+    { label: "BP Earned",         value: gbp0(totals.hammer * rate),                                sub: `${(rate * 100).toFixed(1)}% buyer's premium` },
+    { label: "Vendor Commission", value: data?.commissionField ? gbp0(totals.sellerPremium) : "—",  sub: data?.commissionField ? `avg ${pct(aveVendorPct(totals))}` : "no commission field" },
+    { label: "Completed Sales",   value: int(salesCount),                                           sub: "in selected range" },
+    { label: "Avg Sell-through",  value: pct(sellThrough(totals)),                                  sub: `${int(totals.sold)} of ${int(Math.max(0, totals.lots - totals.withdrawn))} lots` },
+    { label: "Avg vs High Est",   value: pctS(vsHigh(totals)),                                      sub: `vs ${gbp0(totals.high)} high est` },
+  ]
+
   const cards = [
-    { label: "Hammer achieved",     value: gbp0(totals.hammer),            sub: `${int(totals.sold)} sold of ${int(totals.lots)} lots` },
-    { label: "Total low estimate",  value: gbp0(totals.low),               sub: "sum of low estimates" },
-    { label: "Total high estimate", value: gbp0(totals.high),              sub: "sum of high estimates" },
-    { label: "Average lot value",   value: gbp2(avgLot(totals)),           sub: "hammer ÷ sold" },
-    { label: "Total unsold",        value: int(totals.lots - totals.sold), sub: "£0 hammer" },
-    { label: "Items collected",     value: int(totals.collected),          sub: "scanned to collected" },
-    { label: "Total withdrawn",     value: int(totals.withdrawn),          sub: data?.withdrawnField ? "withdrawn ticked" : "no withdrawn field" },
-    { label: "No. of vendors",      value: vendorsCard.v,                  sub: vendorsCard.s },
-    { label: "Successful buyers",   value: buyersCard.v,                   sub: buyersCard.s },
-    { label: "Buyer's premium",     value: gbp0(totals.hammer * rate),     sub: `${(rate * 100).toFixed(1)}% of hammer` },
-    { label: "Seller's premium",    value: data?.commissionField ? gbp0(totals.sellerPremium) : "—",
-                                     sub: data?.commissionField ? `from ${data.commissionField}` : "no commission rate field found" },
+    { label: "Total low estimate",  value: gbp0(totals.low),        sub: "sum of low estimates" },
+    { label: "Total high estimate", value: gbp0(totals.high),       sub: "sum of high estimates" },
+    { label: "Average lot value",   value: gbp2(avgLot(totals)),    sub: "hammer ÷ sold" },
+    { label: "Lots passed",         value: int(passed(totals)),     sub: "unsold (£0 hammer)" },
+    { label: "Lots withdrawn",      value: int(totals.withdrawn),   sub: data?.withdrawnField ? "withdrawn ticked" : "no withdrawn field" },
+    { label: "Items collected",     value: int(totals.collected),   sub: "scanned to collected" },
+    { label: "No. of vendors",      value: vendorsCard.v,           sub: vendorsCard.s },
+    { label: "Successful buyers",   value: buyersCard.v,            sub: buyersCard.s },
   ]
 
   return (
@@ -288,42 +302,58 @@ export default function SaleStatisticsClient() {
 
       {data && !loading && (
         <>
-          {/* Summary cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 mb-6">
-            {cards.map(c => (
-              <div key={c.label} className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-4">
-                <p className="text-xs text-gray-500 dark:text-gray-500 mb-1 uppercase tracking-wider">{c.label}</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">{c.value}</p>
+          {/* Headline KPIs */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+            {hero.map((c, i) => (
+              <div key={c.label} className={`rounded-xl border p-4 ${i === 0
+                ? "border-[#2AB4A6] bg-[#2AB4A6]/10"
+                : "border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#0d0f1a]"}`}>
+                <p className="text-[11px] text-gray-500 dark:text-gray-500 uppercase tracking-wider mb-1">{c.label}</p>
+                <p className={`text-2xl font-bold ${i === 0 ? "text-[#1f8d82] dark:text-[#2AB4A6]" : "text-gray-900 dark:text-white"}`}>{c.value}</p>
                 <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-1">{c.sub}</p>
               </div>
             ))}
           </div>
 
-          {/* By sale */}
+          {/* Secondary stats */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-6">
+            {cards.map(c => (
+              <div key={c.label} className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3.5">
+                <p className="text-[11px] text-gray-500 dark:text-gray-500 mb-1 uppercase tracking-wider">{c.label}</p>
+                <p className="text-lg font-bold text-gray-900 dark:text-white">{c.value}</p>
+                <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-0.5">{c.sub}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* By sale — matches the manual "2026 by auction" columns */}
           <Section title={`By sale${bySale.length ? ` (${bySale.length})` : ""}`}>
             <Table
-              head={["Sale", "Name", "Date", "Lots", "Sold", "Unsold", "Vendors", "Buyers", "Low est.", "High est.", "Hammer", "Avg lot", "Collected", "Withdrawn", "Buyer's prem.", "Seller's prem."]}
+              head={["Sale", "Name", "Date", "Sold", "Passed", "W/drawn", "Sell-thr", "Low est", "High est", "Sale value", "Vs High", "BP earned", "Vendor comm", "Ave vend%", "Vendors", "Buyers"]}
               rows={bySale.map(s => [
                 <span key="c" className="font-mono text-[#2AB4A6]">{s.code}</span>,
                 <span key="n" className="text-gray-500 dark:text-gray-400">{s.name}</span>,
                 <span key="d" className="text-gray-500 dark:text-gray-500 font-mono text-xs">{s.date}</span>,
-                int(s.r.lots), int(s.r.sold), int(s.r.lots - s.r.sold),
+                int(s.r.sold), int(passed(s.r)), int(s.r.withdrawn), pct(sellThrough(s.r)),
+                gbp0(s.r.low), gbp0(s.r.high), gbp0(s.r.hammer), pctS(vsHigh(s.r)),
+                gbp0(s.r.hammer * rate), gbp0(s.r.sellerPremium), pct(aveVendorPct(s.r)),
                 int(saleDistinct.get(s.code)?.vendors ?? 0),
                 data?.buyerField ? int(saleDistinct.get(s.code)?.successfulBuyers ?? 0) : "—",
-                gbp0(s.r.low), gbp0(s.r.high), gbp0(s.r.hammer), gbp2(avgLot(s.r)), int(s.r.collected), int(s.r.withdrawn), gbp0(s.r.hammer * rate), gbp0(s.r.sellerPremium),
               ])}
               rightFrom={3}
             />
           </Section>
 
-          {/* By category / subcategory */}
+          {/* Category contribution */}
           <Section title="By category & subcategory">
             <Table
-              head={["Category", "Subcategory", "Lots", "Sold", "Hammer", "Avg hammer (sold)"]}
+              head={["Category", "Subcategory", "Lots", "Sold", "Sale value", "Share", "Avg hammer (sold)"]}
               rows={byCat.map(c => [
                 <span key="c" className="text-gray-700 dark:text-gray-200">{c.category}</span>,
                 <span key="s" className="text-gray-500 dark:text-gray-400">{c.subcategory}</span>,
-                int(c.r.lots), int(c.r.sold), gbp0(c.r.hammer), gbp2(avgLot(c.r)),
+                int(c.r.lots), int(c.r.sold), gbp0(c.r.hammer),
+                totals.hammer > 0 ? pct(c.r.hammer / totals.hammer) : "—",
+                gbp2(avgLot(c.r)),
               ])}
               rightFrom={2}
             />
