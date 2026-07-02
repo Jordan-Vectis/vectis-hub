@@ -490,31 +490,55 @@ export async function bulkClearLotPhotos(lotIds: string[], auctionId: string, de
   return { count: r.count }
 }
 
+// These review-tab actions RETURN their error instead of throwing. In production
+// Next.js redacts a thrown server-action error's message to a generic "Server
+// Components render" string, so a cataloguer hitting the BC lock (or any error)
+// saw gibberish. Returning the message lets the client show the real reason
+// (e.g. "This auction has been added to BC and is locked. Only admins can…").
+type ActionResult = { ok: boolean; error?: string }
+
 // Review tab — raise or clear an error flag on a lot. flag = reason text, null clears it.
-export async function setLotReviewFlag(lotId: string, auctionId: string, flag: string | null) {
-  const session = await requireCataloguer()
-  await requireNotBCLocked(auctionId, session)
-  await updateLotLogged(lotId,
-    flag?.trim()
-      ? { reviewFlag: flag.trim(), reviewFlaggedBy: changedByOf(session), reviewFlaggedAt: new Date() }
-      : { reviewFlag: null, reviewFlaggedBy: null, reviewFlaggedAt: null },
-    { changedBy: changedByOf(session), source: "review_tab" },
-  )
-  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+export async function setLotReviewFlag(lotId: string, auctionId: string, flag: string | null): Promise<ActionResult> {
+  try {
+    const session = await requireCataloguer()
+    await requireNotBCLocked(auctionId, session)
+    await updateLotLogged(lotId,
+      flag?.trim()
+        ? { reviewFlag: flag.trim(), reviewFlaggedBy: changedByOf(session), reviewFlaggedAt: new Date() }
+        : { reviewFlag: null, reviewFlaggedBy: null, reviewFlaggedAt: null },
+      { changedBy: changedByOf(session), source: "review_tab" },
+    )
+    revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+    return { ok: true }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Couldn't save the flag." }
+  }
 }
 
-// Pipeline — save the AI's potential-cataloguer-mistake note to the lot.
-export async function saveAiFlagNote(lotId: string, flagNote: string | null) {
-  const session = await requireCataloguer()
-  await updateLotLogged(lotId, { aiFlagNote: flagNote ?? null }, { changedBy: changedByOf(session), source: "ai_flag" })
+// Pipeline (set) + Review-tab "Ignore" (clear) — the AI's potential-mistake note.
+// No BC lock here on purpose: the pipeline sets these on any auction, and dismissing
+// a note is not a catalogue edit.
+export async function saveAiFlagNote(lotId: string, flagNote: string | null): Promise<ActionResult> {
+  try {
+    const session = await requireCataloguer()
+    await updateLotLogged(lotId, { aiFlagNote: flagNote ?? null }, { changedBy: changedByOf(session), source: "ai_flag" })
+    return { ok: true }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Couldn't update the flag." }
+  }
 }
 
 // Review tab — save a manually edited description for a lot.
-export async function saveLotDescription(lotId: string, auctionId: string, description: string) {
-  const session = await requireCataloguer()
-  await requireNotBCLocked(auctionId, session)
-  await updateLotLogged(lotId, { description, title: titleFromDescription(description), aiFlagNote: null }, { changedBy: changedByOf(session), source: "review_tab" })
-  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+export async function saveLotDescription(lotId: string, auctionId: string, description: string): Promise<ActionResult> {
+  try {
+    const session = await requireCataloguer()
+    await requireNotBCLocked(auctionId, session)
+    await updateLotLogged(lotId, { description, title: titleFromDescription(description), aiFlagNote: null }, { changedBy: changedByOf(session), source: "review_tab" })
+    revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+    return { ok: true }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Couldn't save the description." }
+  }
 }
 
 export async function saveLotExtraDetails(lotId: string, auctionId: string, extraDetails: string) {

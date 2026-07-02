@@ -113,27 +113,31 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
   })
 
   function saveFlag(lot: ReviewLot, flag: string | null) {
+    setError(null)
     start(async () => {
       try {
-        await setLotReviewFlag(lot.id, auctionId, flag)
+        const res = await setLotReviewFlag(lot.id, auctionId, flag)
+        if (!res?.ok) { setError(res?.error ?? "Couldn't save the flag."); return }
         setLots(prev => prev.map(l => l.id === lot.id
           ? { ...l, reviewFlag: flag, reviewFlaggedBy: flag ? "You" : null, reviewFlaggedAt: flag ? new Date().toISOString() : null }
           : l))
         setFlagOpenId(null)
         setFlagText("")
-      } catch (e: any) {
-        setError(e?.message ?? "Failed to save flag")
+      } catch {
+        setError("Couldn't save — the app may have just updated. Please reload the page and try again.")
       }
     })
   }
 
   function ignoreAiFlag(lot: ReviewLot) {
+    setError(null)
     start(async () => {
       try {
-        await saveAiFlagNote(lot.id, null)
+        const res = await saveAiFlagNote(lot.id, null)
+        if (!res?.ok) { setError(res?.error ?? "Couldn't dismiss the flag."); return }
         setLots(prev => prev.map(l => l.id === lot.id ? { ...l, aiFlagNote: null } : l))
-      } catch (e: any) {
-        setError(e?.message ?? "Failed to dismiss flag")
+      } catch {
+        setError("Couldn't update — the app may have just updated. Please reload the page and try again.")
       }
     })
   }
@@ -142,19 +146,17 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
     setSaveErr(null)
     start(async () => {
       try {
-        await saveLotDescription(lot.id, auctionId, description)
+        // The action RETURNS its error (real reason, e.g. the BC lock) rather than
+        // throwing — a thrown message is redacted in production.
+        const res = await saveLotDescription(lot.id, auctionId, description)
+        if (!res?.ok) { setSaveErr(res?.error ?? "Couldn't save — please try again."); return }
         setLots(prev => prev.map(l => l.id === lot.id ? { ...l, description, aiFlagNote: null } : l))
         setEditDescId(null)
         setEditDescText("")
         setSaveErr(null)
-      } catch (e: any) {
-        // Show it inline at the button, and turn the useless generic
-        // "Server Components render" / network error (usually a mid-deploy blip)
-        // into something a cataloguer can act on.
-        const raw = e?.message ?? ""
-        setSaveErr(/server component|digest|failed to fetch|network|load failed|fetch failed|unexpected response/i.test(raw)
-          ? "Couldn't save — the app may have just updated. Please reload the page and try again."
-          : (raw || "Couldn't save — please try again."))
+      } catch {
+        // Transport-level failure (e.g. a mid-deploy blip) — the call itself failed.
+        setSaveErr("Couldn't save — the app may have just updated. Please reload the page and try again.")
       }
     })
   }

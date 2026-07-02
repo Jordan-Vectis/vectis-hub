@@ -473,6 +473,21 @@ entered), field edits, deletion, and photo changes. It used to be fed by `update
 - Schema: `CatalogueLotEvent.action` / `source` / `batchId` (**NEEDS Run Migrations**). Backup
   **restore** deliberately does NOT log (it's disaster recovery, not user edits).
 
+## Server-action errors are REDACTED in production — return them, don't throw
+
+In a production build, when a **server action throws**, Next.js hides the real message and the
+client receives a generic **"An error occurred in the Server Components render… message is omitted
+in production builds…"**. So a user hitting an expected/business error (the **BC lock** in
+`requireNotBCLocked`, a permission failure, etc.) sees gibberish, not the reason.
+
+**For any action whose failure a user needs to understand, RETURN the error, don't throw:**
+`Promise<{ ok: boolean; error?: string }>` — wrap the body in try/catch and `return { ok: false,
+error: e?.message }`, then show `res.error` in the client. The review-tab actions
+(`saveLotDescription`, `setLotReviewFlag`, `saveAiFlagNote`) do this — otherwise a cataloguer editing
+a **BC-locked** auction (which correctly blocks non-admins) just got the masked error.
+(`bcLocked = auction.addedToBC && role !== "ADMIN"` — admins bypass, which is why "works for admin,
+not cataloguers" is the signature of a BC-lock issue.)
+
 ## Hardcoded Constants
 
 | Constant | Value | Location |
