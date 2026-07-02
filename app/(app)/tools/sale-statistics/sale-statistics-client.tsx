@@ -273,12 +273,12 @@ export default function SaleStatisticsClient() {
           {/* By sale */}
           <Section title={`By sale${bySale.length ? ` (${bySale.length})` : ""}`}>
             <Table
-              head={["Sale", "Name", "Date", "Lots", "Sold", "Hammer", "Avg lot", "Collected", "Buyer's prem."]}
+              head={["Sale", "Name", "Date", "Lots", "Sold", "Low est.", "High est.", "Hammer", "Avg lot", "Collected", "Buyer's prem."]}
               rows={bySale.map(s => [
                 <span key="c" className="font-mono text-[#2AB4A6]">{s.code}</span>,
                 <span key="n" className="text-gray-500 dark:text-gray-400">{s.name}</span>,
                 <span key="d" className="text-gray-500 dark:text-gray-500 font-mono text-xs">{s.date}</span>,
-                int(s.r.lots), int(s.r.sold), gbp0(s.r.hammer), gbp2(avgLot(s.r)), int(s.r.collected), gbp0(s.r.hammer * rate),
+                int(s.r.lots), int(s.r.sold), gbp0(s.r.low), gbp0(s.r.high), gbp0(s.r.hammer), gbp2(avgLot(s.r)), int(s.r.collected), gbp0(s.r.hammer * rate),
               ])}
               rightFrom={3}
             />
