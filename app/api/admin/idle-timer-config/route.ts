@@ -45,9 +45,9 @@ export async function PUT(req: NextRequest) {
     const body = await req.json()
     const { reasons } = body
 
-    // Timing thresholds live per-user (User.timerYellowMins/timerRedMins) —
-    // this config only manages the reasons list. The legacy yellow/red columns
-    // are kept in the row (harmless) but no longer edited.
+    // Timing is a single per-user threshold (User.timerRedMins) — this config
+    // only manages the reasons list. The legacy yellow/red columns are kept in
+    // the row (harmless) but no longer edited.
     if (!Array.isArray(reasons) || reasons.length === 0) {
       return NextResponse.json({ error: "Invalid payload — reasons required" }, { status: 400 })
     }

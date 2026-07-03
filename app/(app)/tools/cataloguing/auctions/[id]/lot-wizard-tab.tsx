@@ -383,7 +383,6 @@ export default function LotWizardTab({
   onCreated,
   tablet,
   showScanTimer = true,
-  timerYellowMins = 4,
   timerRedMins = 10,
 }: {
   auctionId: string
@@ -393,7 +392,6 @@ export default function LotWizardTab({
   onCreated: () => void
   tablet?: boolean
   showScanTimer?: boolean
-  timerYellowMins?: number
   timerRedMins?: number
 }) {
   const router = useRouter()
@@ -427,7 +425,8 @@ export default function LotWizardTab({
   // Live timer display
   const [timerActive, setTimerActive] = useState(false)
   const [timerSecs,   setTimerSecs]   = useState(0)
-  const timerYellowSecs = timerYellowMins * 60
+  // Single threshold: the timer is teal until timerRedMins, then red — and the
+  // same value is the idle threshold (one number, set per user in Admin → Users).
   const timerRedSecs    = timerRedMins    * 60
 
   // Step must be declared before the useEffect that depends on it
@@ -945,7 +944,7 @@ export default function LotWizardTab({
         <div className="ml-auto flex items-center gap-4">
           {timerActive && showScanTimer && (
             <span className={`flex items-center gap-1.5 font-mono font-bold tabular-nums ${tablet ? "text-base" : "text-sm"}`}
-              style={{ color: timerSecs > timerRedSecs ? "#ef4444" : timerSecs > timerYellowSecs ? "#f59e0b" : "#2AB4A6" }}>
+              style={{ color: timerSecs > timerRedSecs ? "#ef4444" : "#2AB4A6" }}>
               <svg className="w-3.5 h-3.5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="10" strokeWidth="2"/>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6l4 2"/>

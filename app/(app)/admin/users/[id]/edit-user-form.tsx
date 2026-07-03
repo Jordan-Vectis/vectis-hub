@@ -17,7 +17,6 @@ interface Props {
   allowedApps: string[]
   appPermissions: Record<string, any> | null
   showScanTimer: boolean
-  timerYellowMins: number
   timerRedMins: number
   departments: { id: string; name: string }[]
   roles:       string[]
@@ -28,7 +27,7 @@ function roleLabel(key: string): string {
   return key.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 }
 
-export default function EditUserForm({ userId, name, email, username, role, departmentId, allowedApps, appPermissions, showScanTimer: initialShowScanTimer, timerYellowMins: initialYellow, timerRedMins: initialRed, departments, roles, isSelf }: Props) {
+export default function EditUserForm({ userId, name, email, username, role, departmentId, allowedApps, appPermissions, showScanTimer: initialShowScanTimer, timerRedMins: initialRed, departments, roles, isSelf }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [selectedApps, setSelectedApps] = useState<string[]>(allowedApps)
@@ -76,7 +75,6 @@ export default function EditUserForm({ userId, name, email, username, role, depa
 
   // Cataloguing settings
   const [showScanTimer,    setShowScanTimer]    = useState(initialShowScanTimer)
-  const [timerYellowMins,  setTimerYellowMins]  = useState(initialYellow)
   const [timerRedMins,     setTimerRedMins]     = useState(initialRed)
   const [catPending, startCatTransition]        = useTransition()
   const [catMsg, setCatMsg]                     = useState<string | null>(null)
@@ -180,7 +178,7 @@ export default function EditUserForm({ userId, name, email, username, role, depa
       const res = await fetch(`/api/admin/users/${userId}/settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ showScanTimer, timerYellowMins, timerRedMins }),
+        body: JSON.stringify({ showScanTimer, timerRedMins }),
       })
       setCatMsg(res.ok ? "Saved" : "Failed to save")
       if (res.ok) setTimeout(() => setCatMsg(null), 2000)
@@ -358,29 +356,19 @@ export default function EditUserForm({ userId, name, email, username, role, depa
           </label>
           {showScanTimer && (
             <div className="ml-8 space-y-2 max-w-md">
-              <div className="grid grid-cols-2 gap-4 max-w-xs">
-                <div>
-                  <label className="block text-xs font-medium text-yellow-600 mb-1">🟡 Yellow after (mins)</label>
-                  <input
-                    type="number" min={1} max={59}
-                    value={timerYellowMins}
-                    onChange={e => setTimerYellowMins(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-red-500 mb-1">🔴 Red after (mins)</label>
-                  <input
-                    type="number" min={1} max={120}
-                    value={timerRedMins}
-                    onChange={e => setTimerRedMins(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
-                  />
-                </div>
+              <div className="max-w-[10rem]">
+                <label className="block text-xs font-medium text-red-500 mb-1">⏱ Warn after (mins)</label>
+                <input
+                  type="number" min={1} max={120}
+                  value={timerRedMins}
+                  onChange={e => setTimerRedMins(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                />
               </div>
               <p className="text-xs text-gray-400 dark:text-gray-500">
-                Red is also the idle threshold: when this user starts a new lot after a longer gap than this since
-                their last one, they&apos;re asked why. Only working hours (Mon–Fri, 9–5) count towards the gap.
+                One number does both jobs: the lot timer turns red after this long, and when this user starts a
+                new lot after a longer gap than this since their last one, they&apos;re asked why. Only working
+                hours (Mon–Fri, 9–5) count towards the gap.
               </p>
             </div>
           )}

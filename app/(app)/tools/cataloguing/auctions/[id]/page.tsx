@@ -40,7 +40,7 @@ export default async function AuctionDetailPage({
     }),
     prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { showScanTimer: true, timerYellowMins: true, timerRedMins: true },
+      select: { showScanTimer: true, timerRedMins: true },
     }),
     prisma.catalogueAuction.findMany({
       where: { id: { not: id } },
@@ -79,7 +79,6 @@ export default async function AuctionDetailPage({
         userName={session.user.name ?? session.user.email ?? "Unknown"}
         userRole={session.user.role}
         showScanTimer={currentUser?.showScanTimer ?? true}
-        timerYellowMins={currentUser?.timerYellowMins ?? 4}
         timerRedMins={currentUser?.timerRedMins ?? 10}
         allAuctions={allAuctions.map(a => ({ id: a.id, code: a.code, name: a.name, auctionDate: a.auctionDate }))}
         auction={{

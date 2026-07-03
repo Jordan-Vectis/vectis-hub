@@ -202,12 +202,13 @@ export default function IdleTimerSettingsClient({ initialReasons }: { initialRea
 
         {/* ── Where timing lives now ── */}
         <section className="bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-2xl p-5">
-          <h2 className="text-sm font-bold text-sky-800 dark:text-sky-300 uppercase tracking-wider mb-1">Timing thresholds</h2>
+          <h2 className="text-sm font-bold text-sky-800 dark:text-sky-300 uppercase tracking-wider mb-1">Timing threshold</h2>
           <p className="text-xs text-sky-700 dark:text-sky-300 leading-relaxed">
-            The yellow/red minutes are set <b>per user</b> in <b>Admin → Users → (user) → Scan timer</b> — that is the only
-            place timing lives. The idle question appears when a cataloguer <b>starts a new lot</b> after being idle longer
-            than their red threshold, and idle time only counts <b>working hours (Mon–Fri, 9:00–17:00)</b>. Gaps of a full
-            working day or more (holidays, days off) are skipped silently.
+            There is <b>one timer number per user</b>, set in <b>Admin → Users → (user) → Scan timer</b> — that is the only
+            place timing lives. The lot timer turns red after that many minutes, and the idle question appears when a
+            cataloguer <b>starts a new lot</b> after a longer gap than that since their last one. Idle time only counts
+            <b> working hours (Mon–Fri, 9:00–17:00)</b>; gaps of a full working day or more (holidays, days off) are
+            skipped silently.
           </p>
         </section>
 

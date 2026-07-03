@@ -72,7 +72,7 @@ const lbl = "block text-sm font-semibold uppercase tracking-wider text-gray-400 
 
 // ─── Root component ───────────────────────────────────────────────────────────
 
-export default function TabletTabs({ auction, lots, userRole, userId, userName, showScanTimer, timerYellowMins, timerRedMins }: { auction: Auction; lots: Lot[]; userRole: string; userId?: string; userName?: string; showScanTimer?: boolean; timerYellowMins?: number; timerRedMins?: number }) {
+export default function TabletTabs({ auction, lots, userRole, userId, userName, showScanTimer, timerRedMins }: { auction: Auction; lots: Lot[]; userRole: string; userId?: string; userName?: string; showScanTimer?: boolean; timerRedMins?: number }) {
   const router = useRouter()
   const bcLocked = auction.addedToBC && userRole !== "ADMIN"
   const [tab, setTab] = useState<Tab>("manage")
@@ -169,7 +169,6 @@ export default function TabletTabs({ auction, lots, userRole, userId, userName, 
               onCreated={() => router.refresh()}
               tablet
               showScanTimer={showScanTimer}
-              timerYellowMins={timerYellowMins}
               timerRedMins={timerRedMins}
             />
             )}

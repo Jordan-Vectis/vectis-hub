@@ -24,7 +24,7 @@ export default async function TabletAuctionDetailPage({
     }),
     prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { showScanTimer: true, timerYellowMins: true, timerRedMins: true },
+      select: { showScanTimer: true, timerRedMins: true },
     }),
   ])
 
@@ -33,7 +33,6 @@ export default async function TabletAuctionDetailPage({
   return (
     <TabletTabs
       showScanTimer={currentUser?.showScanTimer ?? true}
-      timerYellowMins={currentUser?.timerYellowMins ?? 4}
       timerRedMins={currentUser?.timerRedMins ?? 10}
       userRole={session.user.role}
       userId={session.user.id}

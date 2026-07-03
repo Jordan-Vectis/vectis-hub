@@ -1,9 +1,10 @@
 // Shared types and defaults for the idle-timer config singleton
 //
-// NOTE (2026-07-02): timing thresholds (yellow/red minutes) live in ONE place —
-// the per-user settings (User.timerYellowMins / timerRedMins, edited in Admin →
-// Users). The Admin → Idle Timer page manages the REASONS list only; its old
-// yellow/red fields were removed because they never drove the wizard.
+// NOTE (2026-07-02): timing is a SINGLE per-user threshold — User.timerRedMins,
+// edited in Admin → Users ("Warn after"). The lot timer turns red at that many
+// minutes AND it doubles as the idle threshold. The old yellow stage was removed
+// (User.timerYellowMins remains in the DB, unused). The Admin → Idle Timer page
+// manages the REASONS list only.
 
 // ─── Working hours ────────────────────────────────────────────────────────────
 // Idle time only counts during working hours: Mon–Fri, 09:00–17:00 local time.
