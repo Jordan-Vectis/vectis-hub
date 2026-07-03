@@ -398,6 +398,11 @@ export default function LotWizardTab({
   const [pending, start] = useTransition()
   const [barcodeWarning, setBarcodeWarning] = useState(false)
   const [step1LengthWarning, setStep1LengthWarning] = useState(false)
+  // Step-4 warning: a hand-typed category that doesn't match the preset list
+  // (which mirrors BC) — "main" or "sub" says which field failed.
+  const [categoryWarning, setCategoryWarning] = useState<"main" | "sub" | null>(null)
+  // Step-5 warning: Estimate Low higher than Estimate High (almost always a swap/typo).
+  const [estimateWarning, setEstimateWarning] = useState(false)
 
   const barcodeStartedAt   = useRef<number | null>(null)
   const keyPointsEnteredAt = useRef<number | null>(null)
@@ -708,10 +713,37 @@ export default function LotWizardTab({
         return
       }
     }
+    // Warn if a hand-typed category doesn't match the preset list (mirrors BC —
+    // a non-preset value won't match up when the sale is pushed to BC). Main is
+    // checked first: the sub-category list depends on a valid main.
+    if (step === 4) {
+      if (mainCat.trim() && !mainCatList.includes(mainCat.trim())) {
+        setCategoryWarning("main")
+        return
+      }
+      if (subCat.trim() && !subCats.includes(subCat.trim())) {
+        setCategoryWarning("sub")
+        return
+      }
+    }
+    // Warn if Estimate Low is above Estimate High (values already validated numeric).
+    if (step === 5) {
+      const lo = Number(estLow.replace(/[£,]/g, ""))
+      const hi = Number(estHigh.replace(/[£,]/g, ""))
+      if (lo > hi) {
+        setEstimateWarning(true)
+        return
+      }
+    }
     if (step < 8) setStep(step + 1)
   }
 
-  function goBack() { setValidErr(""); if (step > 1) setStep(step - 1) }
+  function goBack() {
+    setValidErr("")
+    setCategoryWarning(null)
+    setEstimateWarning(false)
+    if (step > 1) setStep(step - 1)
+  }
 
   function nextBarcodeNumber() {
     const src = barcode || getLastBarcode()
@@ -1203,7 +1235,7 @@ export default function LotWizardTab({
                   {pinnedMain === mainCat && mainCat ? "📌 Pinned" : "Pin"}
                 </button>
               </div>
-              <Autocomplete value={mainCat} onChange={v => { setMainCat(v); if (!categoryMap[v]) setSubCat("") }}
+              <Autocomplete value={mainCat} onChange={v => { setMainCat(v); if (!categoryMap[v]) setSubCat(""); if (categoryWarning) setCategoryWarning(null) }}
                 options={mainCatList} placeholder="Select main category…" tablet={tablet} />
             </div>
             <div>
@@ -1215,27 +1247,69 @@ export default function LotWizardTab({
                   {pinnedSub === subCat && subCat ? "📌 Pinned" : "Pin"}
                 </button>
               </div>
-              <Autocomplete value={subCat} onChange={setSubCat} options={subCats}
+              <Autocomplete value={subCat} onChange={v => { setSubCat(v); if (categoryWarning) setCategoryWarning(null) }} options={subCats}
                 placeholder={mainCat ? "Select sub-category…" : "Select main category first…"} tablet={tablet} />
             </div>
             <div>
               <label className={`${lbl} block mb-1`}>Brand</label>
               <Autocomplete value={brand} onChange={setBrand} options={BRANDS_LIST} placeholder="Search brand…" tablet={tablet} />
             </div>
+
+            {/* Non-preset category warning */}
+            {categoryWarning && (() => {
+              const typed = categoryWarning === "main" ? mainCat.trim() : subCat.trim()
+              const list  = categoryWarning === "main" ? mainCatList : subCats
+              // Often it's only capitalisation that's off — offer the preset as a one-tap fix.
+              const closeMatch = list.find(c => c.toLowerCase() === typed.toLowerCase())
+              return (
+                <div className="rounded-xl border border-amber-600/50 bg-amber-950/40 px-4 py-3 space-y-3">
+                  <p className="text-sm text-amber-300">
+                    ⚠ {categoryWarning === "main"
+                      ? <>Main category <strong>{typed}</strong> isn&apos;t one of the preset categories</>
+                      : <>Sub category <strong>{typed}</strong> isn&apos;t a preset sub-category of <strong>{mainCat.trim()}</strong></>}
+                    {" "}— it won&apos;t match up in BC. Check for a typo, or pick from the list.
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    {closeMatch && (
+                      <button type="button"
+                        onClick={() => {
+                          if (categoryWarning === "main") setMainCat(closeMatch)
+                          else setSubCat(closeMatch)
+                          setCategoryWarning(null)
+                        }}
+                        className="px-3 py-1.5 text-sm font-medium rounded-lg text-[#1C1C1E] transition-colors"
+                        style={{ background: CAT_ACCENT }}>
+                        Use &ldquo;{closeMatch}&rdquo;
+                      </button>
+                    )}
+                    <button type="button"
+                      onClick={() => setCategoryWarning(null)}
+                      className="px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-700/40 hover:bg-gray-700/60 text-gray-300 border border-gray-600/40 transition-colors">
+                      Fix it
+                    </button>
+                    <button type="button"
+                      onClick={() => { setCategoryWarning(null); setStep(5) }}
+                      className="px-3 py-1.5 text-sm font-medium rounded-lg bg-amber-700/40 hover:bg-amber-700/60 text-amber-200 border border-amber-600/40 transition-colors">
+                      Continue anyway
+                    </button>
+                  </div>
+                </div>
+              )
+            })()}
           </div>
         )}
 
         {step === 5 && (
-          <div className="max-w-lg">
+          <div className="max-w-lg space-y-4">
             <div className="flex gap-6">
               <div className="flex-1 space-y-3">
                 <div>
                   <label className={`${lbl} block mb-1`}>Estimate Low £ <span className="text-red-500">*</span></label>
-                  <input value={estLow} onChange={e => setEstLow(e.target.value)} className={inpFocus} placeholder="e.g. 40" autoFocus />
+                  <input value={estLow} onChange={e => { setEstLow(e.target.value); if (estimateWarning) setEstimateWarning(false) }} className={inpFocus} placeholder="e.g. 40" autoFocus />
                 </div>
                 <div>
                   <label className={`${lbl} block mb-1`}>Estimate High £ <span className="text-red-500">*</span></label>
-                  <input value={estHigh} onChange={e => setEstHigh(e.target.value)} className={inpFocus} placeholder="e.g. 60" />
+                  <input value={estHigh} onChange={e => { setEstHigh(e.target.value); if (estimateWarning) setEstimateWarning(false) }} className={inpFocus} placeholder="e.g. 60" />
                 </div>
               </div>
               <div className="space-y-2">
@@ -1244,7 +1318,7 @@ export default function LotWizardTab({
                     <p className={`${lbl} mb-2`}>{label}</p>
                     <div className="flex flex-wrap gap-1">
                       {ESTIMATE_VALUES.map(v => (
-                        <button key={v} type="button" onClick={() => setter(String(v))}
+                        <button key={v} type="button" onClick={() => { setter(String(v)); if (estimateWarning) setEstimateWarning(false) }}
                           className={`rounded transition-colors ${tablet ? "px-2.5 py-2 text-sm" : "px-2 py-1.5 text-xs"}`}
                           style={{
                             background: val === String(v) ? CAT_ACCENT : "#1C1C1E",
@@ -1259,6 +1333,33 @@ export default function LotWizardTab({
                 ))}
               </div>
             </div>
+
+            {/* Low-above-high warning */}
+            {estimateWarning && (
+              <div className="rounded-xl border border-amber-600/50 bg-amber-950/40 px-4 py-3 space-y-3">
+                <p className="text-sm text-amber-300">
+                  ⚠ Estimate Low (<strong>£{estLow.replace(/[£,]/g, "").trim()}</strong>) is higher than Estimate High (<strong>£{estHigh.replace(/[£,]/g, "").trim()}</strong>) — they look the wrong way round.
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  <button type="button"
+                    onClick={() => { const lo = estLow; setEstLow(estHigh); setEstHigh(lo); setEstimateWarning(false); setStep(6) }}
+                    className="px-3 py-1.5 text-sm font-medium rounded-lg text-[#1C1C1E] transition-colors"
+                    style={{ background: CAT_ACCENT }}>
+                    Swap them &amp; continue
+                  </button>
+                  <button type="button"
+                    onClick={() => setEstimateWarning(false)}
+                    className="px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-700/40 hover:bg-gray-700/60 text-gray-300 border border-gray-600/40 transition-colors">
+                    Fix it
+                  </button>
+                  <button type="button"
+                    onClick={() => { setEstimateWarning(false); setStep(6) }}
+                    className="px-3 py-1.5 text-sm font-medium rounded-lg bg-amber-700/40 hover:bg-amber-700/60 text-amber-200 border border-amber-600/40 transition-colors">
+                    Continue anyway
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

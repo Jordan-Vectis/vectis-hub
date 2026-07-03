@@ -9,6 +9,21 @@ type Entry = { filename: string; content: string }
 
 const ENTRIES: Entry[] = [
   {
+    filename: "lot_wizard_warnings.md",
+    content: `---
+name: Lot wizard input warnings
+purpose: The estimate and category sanity warnings in the cataloguing lot wizard. Read before touching goNext()/validateStep in lot-wizard-tab.tsx.
+last_updated: 2026-07-02
+---
+
+# Lot wizard input warnings (2026-07-02, STAGING)
+
+Two goNext() stop-and-warn guards in lot-wizard-tab.tsx, following the existing step-1 length / step-2 barcode warning pattern (amber box; state cleared on field edit and goBack; shared component so desktop AND tablet get them):
+
+- Step 5 (estimates): if Low > High (values already validated numeric) a warning says they look the wrong way round, with three buttons — "Swap them & continue" (one-tap swap, straight to step 6), "Fix it" (close the box), "Continue anyway". Equal low/high is deliberately allowed (single-figure estimates are legitimate).
+- Step 4 (categories): if a hand-typed Main or Sub category is not EXACTLY in the preset list (useCategoryMap — the DB-managed Admin -> Cataloguing Categories list that mirrors BC), a warning says it won't match up in BC. Main is checked before Sub (the sub list depends on a valid main); blank categories never warn (they're optional). If only the capitalisation differs from a preset, a one-tap 'Use "<preset>"' button corrects it. A sub typed under an invalid main gets re-checked once the main is fixed.`,
+  },
+  {
     filename: "idle_timer_redesign.md",
     content: `---
 name: Idle timer — on-lot-start, working hours, per-user config
