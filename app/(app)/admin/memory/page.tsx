@@ -9,6 +9,30 @@ type Entry = { filename: string; content: string }
 
 const ENTRIES: Entry[] = [
   {
+    filename: "accounts_transfer.md",
+    content: `---
+name: Accounts — Transfer between environments
+purpose: Export/import ALL Accounts data (rows + R2 scan files) between staging and production. Read before touching the transfer routes or changing any Accounts schema field (the transfer field-allowlists must be kept in step).
+last_updated: 2026-07-02
+---
+
+# Accounts — Transfer between environments (2026-07-02, STAGING)
+
+A "Transfer between environments" collapsible card on /tools/accounts (transfer-data.tsx) moves ALL Accounts data between staging and production (separate databases). ADD-ONLY like the instructions import: rows keep their original ids, anything already present is skipped, nothing is ever overwritten or deleted — safe to re-run.
+
+## How it works
+- Export: GET /api/accounts/transfer/export (admin) downloads vectis-accounts-<date>.json — every cardholder, supplier rule, month, document, statement and transaction with original ids (so BankTransaction.matchedDocIds keep pointing at the right lines), PLUS files:[{key,url}] — a 24-HOUR signed R2 URL for every scan/statement image. Import within 24 hours or the file links expire (rows still import; re-export for the files).
+- Import: POST /api/accounts/transfer/import (admin). Cardholders keyed by NAME, supplier rules by match, months by id (a unique-label clash imports with an " (imported)" suffix and a note), documents/statements/transactions by id — existing ids are skipped; rows whose parent month/statement is missing are skipped with a note. All fields allowlisted and dates revived.
+- Files: POST /api/accounts/transfer/import-files (admin, chunks of up to 10). For each key: if the object already exists in THIS environment's R2 it is skipped, otherwise it is downloaded from the signed URL and uploaded under the SAME key. This works whether or not the environments share an R2 bucket — shared bucket means every file reports "exists" and nothing is copied. The client loops the chunks with a progress bar; per-file failures are reported with re-export-and-retry guidance (already-copied files skip on the retry).
+
+## Supporting changes
+- lib/r2.ts: new objectExistsInR2(key) (HeadObject); getSignedImageUrl(key, expiresIn = 3600) gained an optional expiry parameter (default unchanged).
+
+## Gotchas
+- To move staging → production, the feature must exist on production too (merge to main first). Export on staging, download the file, then import it on production's /tools/accounts.
+- If a new column is added to any Accounts model, ALSO add it to the export payload and the import field-allowlist, or transfers will silently drop it.`,
+  },
+  {
     filename: "bc_oauth_connect.md",
     content: `---
 name: BC OAuth connect — per-user token + warehouse banner

@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand } from "@aws-sdk/client-s3"
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand, HeadObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 
 export const r2 = new S3Client({
@@ -56,12 +56,24 @@ export async function deleteObjectsFromR2(keys: string[]): Promise<void> {
   }
 }
 
-export async function getSignedImageUrl(key: string): Promise<string> {
+export async function getSignedImageUrl(key: string, expiresIn = 3600): Promise<string> {
   const command = new GetObjectCommand({
     Bucket: process.env.CLOUDFLARE_R2_BUCKET!,
     Key: key,
   })
-  return getSignedUrl(r2, command, { expiresIn: 3600 })
+  return getSignedUrl(r2, command, { expiresIn })
+}
+
+// Does an object exist in THIS environment's bucket? Used by the Accounts
+// environment-transfer import to skip files that are already present (e.g.
+// when staging and production share a bucket).
+export async function objectExistsInR2(key: string): Promise<boolean> {
+  try {
+    await r2.send(new HeadObjectCommand({ Bucket: process.env.CLOUDFLARE_R2_BUCKET!, Key: key }))
+    return true
+  } catch {
+    return false
+  }
 }
 
 export async function getObjectBuffer(key: string): Promise<Buffer> {

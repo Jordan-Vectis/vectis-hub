@@ -6,6 +6,7 @@ import NewMonthForm from "./new-month-form"
 import ManageCardholders from "./manage-cardholders"
 import MonthStar from "./month-star"
 import LinkSpinner from "./link-spinner"
+import TransferData from "./transfer-data"
 
 export const dynamic = "force-dynamic"
 export const metadata = { title: "Accounts" }
@@ -73,7 +74,9 @@ export default async function AccountsPage() {
         <span className="text-amber-600 dark:text-amber-400 font-semibold text-sm">{reservedCount} {reservedCount === 1 ? "line" : "lines"} →</span>
       </Link>
 
-      <div className="space-y-3">
+      <TransferData />
+
+      <div className="space-y-3 mt-3">
         {months.length === 0 ? (
           <div className={`${card} p-6 text-center text-sm text-gray-400`}>
             No months yet — create one above (e.g. &ldquo;April 26&rdquo;) to get started.
