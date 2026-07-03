@@ -43,20 +43,19 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { yellowMins, redMins, reasons } = body
+    const { reasons } = body
 
-    if (
-      typeof yellowMins !== "number" || yellowMins < 1 ||
-      typeof redMins    !== "number" || redMins    < 1 ||
-      !Array.isArray(reasons)
-    ) {
-      return NextResponse.json({ error: "Invalid payload" }, { status: 400 })
+    // Timing thresholds live per-user (User.timerYellowMins/timerRedMins) —
+    // this config only manages the reasons list. The legacy yellow/red columns
+    // are kept in the row (harmless) but no longer edited.
+    if (!Array.isArray(reasons) || reasons.length === 0) {
+      return NextResponse.json({ error: "Invalid payload — reasons required" }, { status: 400 })
     }
 
     const config = await (prisma as any).idleTimerConfig.upsert({
       where:  { id: "global" },
-      create: { id: "global", yellowMins, redMins, reasons },
-      update: { yellowMins, redMins, reasons },
+      create: { id: "global", yellowMins: DEFAULT_CONFIG.yellowMins, redMins: DEFAULT_CONFIG.redMins, reasons },
+      update: { reasons },
     })
 
     return NextResponse.json({

@@ -357,25 +357,31 @@ export default function EditUserForm({ userId, name, email, username, role, depa
             </div>
           </label>
           {showScanTimer && (
-            <div className="ml-8 grid grid-cols-2 gap-4 max-w-xs">
-              <div>
-                <label className="block text-xs font-medium text-yellow-600 mb-1">🟡 Yellow after (mins)</label>
-                <input
-                  type="number" min={1} max={59}
-                  value={timerYellowMins}
-                  onChange={e => setTimerYellowMins(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                />
+            <div className="ml-8 space-y-2 max-w-md">
+              <div className="grid grid-cols-2 gap-4 max-w-xs">
+                <div>
+                  <label className="block text-xs font-medium text-yellow-600 mb-1">🟡 Yellow after (mins)</label>
+                  <input
+                    type="number" min={1} max={59}
+                    value={timerYellowMins}
+                    onChange={e => setTimerYellowMins(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-red-500 mb-1">🔴 Red after (mins)</label>
+                  <input
+                    type="number" min={1} max={120}
+                    value={timerRedMins}
+                    onChange={e => setTimerRedMins(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-red-500 mb-1">🔴 Red after (mins)</label>
-                <input
-                  type="number" min={1} max={120}
-                  value={timerRedMins}
-                  onChange={e => setTimerRedMins(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
-                />
-              </div>
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                Red is also the idle threshold: when this user starts a new lot after a longer gap than this since
+                their last one, they&apos;re asked why. Only working hours (Mon–Fri, 9–5) count towards the gap.
+              </p>
             </div>
           )}
           <div className="flex items-center gap-3">

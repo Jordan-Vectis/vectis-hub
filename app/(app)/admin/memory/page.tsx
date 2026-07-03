@@ -9,6 +9,32 @@ type Entry = { filename: string; content: string }
 
 const ENTRIES: Entry[] = [
   {
+    filename: "idle_timer_redesign.md",
+    content: `---
+name: Idle timer — on-lot-start, working hours, per-user config
+purpose: How the cataloguing idle timer works after the 2026-07-02 redesign. Read before touching the lot wizard's timing/idle code, the idle-timer admin page, or per-user scan-timer settings.
+last_updated: 2026-07-02
+---
+
+# Idle timer redesign (2026-07-02, STAGING)
+
+Jordan's complaints about the old design: the popup appeared spontaneously (intrusive), ignored popups stacked into the next lot's timing, and overnight/weekend gaps counted. The rework (lot-wizard-tab.tsx + lib/idle-timer-config.ts):
+
+## Behaviour
+- NO more 30-second polling / visibility-change popup. The idle question fires ONLY when a NEW lot's timing starts — checkIdleOnLotStart() inside startLotTiming(), the single entry point that replaced both places that set barcodeStartedAt (barcode first character + Next Barcode button). The popup shows a FIXED duration; it no longer ticks while open.
+- WORKING HOURS ONLY: workingMsBetween(start, end) in lib/idle-timer-config.ts sums overlap with Mon-Fri 09:00-17:00 local time (WORK_START_HOUR / WORK_END_HOUR). Day-iteration via Date objects so DST is handled; unit-tested including weekend and DST cases. Fri 16:30 -> Mon 09:20 = 50 minutes. A gap of 8+ WORKING hours (holiday, long absence) is silently skipped and the baseline reset.
+- CROSS-DEVICE TRUTH: before accusing anyone, the check calls GET /api/catalogue/last-activity (max of the user's latest CatalogueTimingLog.savedAt and IdleLog.createdAt — their real last activity on ANY device) and takes the max with the local heartbeat. This kills the false positive where someone lots on the desktop all day and the iPad then accuses them of 7 hours idle. If the fetch fails it falls back to the local heartbeat.
+- BASELINES: lastActivityRef starts at 0 — page-open time is deliberately NOT activity, so a fresh browser / brand-new starter is never asked (the first check just seeds the baseline quietly). The localStorage heartbeat key is per-user (vectis_idle_last_activity_<userId>). bumpActivity(ts) writes ref + heartbeat and is called on lot save, on idle submit, on the 8h silent skip, and on sub-threshold lot starts (so a mid-lot page reload doesn't over-count the next gap).
+- The popup's time no longer pollutes the next lot's duration: submitIdleLog re-baselines barcodeStartedAt + timerSecs after the reason is submitted.
+
+## Config — ONE place
+- Timing thresholds are PER-USER ONLY: Admin -> Users -> (user) -> Scan timer (yellow/red minutes; red doubles as the idle threshold). The Admin -> Idle Timer page is REASONS-ONLY — its yellow/red fields were removed (they never drove the wizard). IdleTimerSettingsClient takes initialReasons; PUT /api/admin/idle-timer-config accepts { reasons } only (empty list rejected; the client blocks deleting the last reason; legacy yellow/red columns remain in the row but are not edited).
+
+## ⚠ Gotchas
+- The TABLET path must pass userId/userName to LotWizardTab (tablet page -> TabletTabs -> wizard). It originally didn't, which made the per-user heartbeat key fall back to a shared key on the shared iPad — cataloguer B got blamed for A's gap. Found by a 3-reviewer verify workflow; keep the prop threaded.
+- KNOWN TRADE-OFF (deliberate, flagged to Jordan): walking away MID-LOT is no longer questioned — that time lands in the lot's CatalogueTimingLog.durationMs and shows as a slow lot in reports. Do NOT clamp lot durations with working hours (staff may legitimately catalogue outside 9-5, and report maths changes need verification per the phantom-counts entry).`,
+  },
+  {
     filename: "accounts_transfer.md",
     content: `---
 name: Accounts — Transfer between environments

@@ -3,7 +3,7 @@
 import { useState, useTransition, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createLot, getLastLotFields, saveLastLotFields } from "@/lib/actions/catalogue"
-import { DEFAULT_REASONS } from "@/lib/idle-timer-config"
+import { DEFAULT_REASONS, workingMsBetween } from "@/lib/idle-timer-config"
 import type { IdleReason } from "@/lib/idle-timer-config"
 import { DEFAULT_CATEGORY_MAP } from "@/lib/lot-categories"
 import { useCategoryMap } from "@/lib/use-category-map"
@@ -368,8 +368,10 @@ function PinBtn({ pinned, onPin, tablet }: { pinned: boolean; onPin: () => void;
   )
 }
 
-// localStorage key for idle-timer heartbeat (persists last-activity time across page closes)
-const IDLE_HEARTBEAT_KEY = "vectis_idle_last_activity"
+// localStorage key base for the idle-timer heartbeat (persists last-activity time
+// across page closes). Keyed per user so a shared iPad doesn't blame one
+// cataloguer for another's gap.
+const IDLE_HEARTBEAT_BASE = "vectis_idle_last_activity"
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -409,8 +411,10 @@ export default function LotWizardTab({
   const lastSavedBarcode   = useRef<string>("")
   const lastSavedAt        = useRef<number>(0)
 
-  // Idle detection
-  const lastActivityRef    = useRef<number>(Date.now())
+  // Idle detection. lastActivityRef = when the user last saved a lot (or answered
+  // an idle prompt). 0 = no baseline known yet — page-open time is deliberately
+  // NOT treated as activity, so a fresh browser never accuses anyone.
+  const lastActivityRef    = useRef<number>(0)
   const idleStartedAtRef   = useRef<number>(0)
   const [idlePopup,        setIdlePopup]      = useState(false)
   const [idleSecs,         setIdleSecs]       = useState(0)
@@ -450,68 +454,81 @@ export default function LotWizardTab({
     return () => clearInterval(id)
   }, [timerActive, showScanTimer])
 
-  // Idle detection — checks every 30 s.
-  // No free pass for staying on a lot page: lot open > threshold also fires the popup.
-  // Persists lastActivityRef to localStorage so page-close gaps are detected on return.
-  // Skips the popup silently if idle ≥ 8 h (went home / weekend).
+  // Idle detection — redesigned 2026-07-02. The popup NO LONGER fires on its own
+  // while someone is away (the old 30-second watcher was intrusive and, when
+  // ignored, stacked up against the next lot's timing). Instead the gap since
+  // the last saved lot is checked at the moment a NEW LOT IS STARTED, and only
+  // WORKING HOURS (Mon–Fri, 09:00–17:00 — see lib/idle-timer-config.ts) count
+  // towards it. lastActivity persists to localStorage (per user) so closing the
+  // page or going home doesn't lose it.
+  const heartbeatKey = userId ? `${IDLE_HEARTBEAT_BASE}_${userId}` : IDLE_HEARTBEAT_BASE
   useEffect(() => {
     if (!showScanTimer) return
-    const IDLE_THRESHOLD = timerRedSecs * 1000
-    const EIGHT_HOURS_MS = 8 * 60 * 60 * 1000
-
-    // On mount / effect re-run: restore last-activity from localStorage.
-    // If the stored timestamp predates our in-memory ref, the page was closed mid-idle;
-    // use the stored value so the gap counts towards the threshold.
+    // Restore last-activity from localStorage (survives page closes).
     try {
-      const stored = Number(localStorage.getItem(IDLE_HEARTBEAT_KEY) || 0)
-      if (stored > 0 && stored < lastActivityRef.current) lastActivityRef.current = stored
+      const stored = Number(localStorage.getItem(heartbeatKey) || 0)
+      if (stored > lastActivityRef.current) lastActivityRef.current = stored
     } catch { /* localStorage unavailable */ }
+  }, [showScanTimer, heartbeatKey])
 
-    function firePopup(idleMs: number, idleStart: number) {
-      if (idleMs >= EIGHT_HOURS_MS) return  // went home / weekend — silent skip
-      idleStartedAtRef.current = idleStart
+  function bumpActivity(ts: number) {
+    lastActivityRef.current = ts
+    try { localStorage.setItem(heartbeatKey, String(ts)) } catch {}
+  }
+
+  // Runs when a new lot's timing starts. Working-hours gap since the last saved
+  // lot ≥ the user's red threshold → ask why. Before accusing anyone it asks the
+  // server for the user's real last activity on ANY device (a save on the desktop
+  // must not read as idle on the iPad — localStorage is per-device). A gap of 8+
+  // working hours (a full working day — holiday / long absence) is skipped
+  // silently, and someone with no history at all is never asked.
+  async function checkIdleOnLotStart() {
+    if (!showScanTimer || idlePopup) return
+    const now = Date.now()
+    try {
+      const r = await fetch("/api/catalogue/last-activity")
+      if (r.ok) {
+        const j = await r.json()
+        const serverMs = Number(j?.lastMs) || 0
+        if (serverMs > lastActivityRef.current) lastActivityRef.current = serverMs
+      }
+    } catch { /* offline — fall back to the local heartbeat */ }
+
+    if (!lastActivityRef.current) {
+      // First-ever use on this browser with no server history — establish a
+      // baseline quietly; there is no "last saved lot" to measure from.
+      bumpActivity(now)
+      return
+    }
+
+    const idleMs = workingMsBetween(lastActivityRef.current, now)
+    const EIGHT_WORK_HOURS_MS = 8 * 60 * 60 * 1000
+    if (idleMs >= EIGHT_WORK_HOURS_MS) {
+      bumpActivity(now)
+      return
+    }
+    if (idleMs >= timerRedSecs * 1000) {
+      idleStartedAtRef.current = lastActivityRef.current
       setIdleSecs(Math.floor(idleMs / 1000))
       setIdleReason(null)
       setIdleTotes("")
       setIdleNotes("")
       setIdlePopup(true)
+    } else {
+      // Below the threshold: starting a lot IS activity — advance the baseline
+      // so a mid-lot page reload doesn't over-count the next measured gap.
+      bumpActivity(now)
     }
+  }
 
-    function checkIdle() {
-      if (idlePopup) return
-      // Idle is measured from the later of: last lot saved OR when the current lot was opened.
-      // Staying on a lot page past the threshold DOES trigger the popup.
-      const lotStart  = barcodeStartedAt.current ?? 0
-      const idleStart = Math.max(lastActivityRef.current, lotStart)
-      const idleMs    = Date.now() - idleStart
-      if (idleMs >= IDLE_THRESHOLD) firePopup(idleMs, idleStart)
-    }
-
-    // Check immediately on mount / effect re-run (covers page-close + tab-switch return)
-    checkIdle()
-
-    // Poll every 30 s; also write heartbeat so page-close gaps are detected on return
-    const id = setInterval(() => {
-      try { localStorage.setItem(IDLE_HEARTBEAT_KEY, String(lastActivityRef.current)) } catch {}
-      checkIdle()
-    }, 30_000)
-
-    // Tab-switch / page-restore detection
-    function onVisibility() {
-      if (document.visibilityState !== "visible") return
-      try {
-        const stored = Number(localStorage.getItem(IDLE_HEARTBEAT_KEY) || 0)
-        if (stored > 0 && stored < lastActivityRef.current) lastActivityRef.current = stored
-      } catch {}
-      checkIdle()
-    }
-    document.addEventListener("visibilitychange", onVisibility)
-
-    return () => {
-      clearInterval(id)
-      document.removeEventListener("visibilitychange", onVisibility)
-    }
-  }, [idlePopup, showScanTimer, timerRedSecs])
+  // Single entry point for "a new lot has begun" — starts the scan timer and
+  // runs the idle check (async; the popup may appear a moment after the first
+  // keystroke). Both places that used to set barcodeStartedAt call this.
+  function startLotTiming() {
+    barcodeStartedAt.current = Date.now()
+    if (showScanTimer) setTimerActive(true)
+    void checkIdleOnLotStart()
+  }
 
   async function submitIdleLog() {
     if (!idleReason) return
@@ -529,18 +546,20 @@ export default function LotWizardTab({
         }),
       })
     } catch { /* non-critical */ }
-    lastActivityRef.current = Date.now()
-    try { localStorage.setItem(IDLE_HEARTBEAT_KEY, String(lastActivityRef.current)) } catch {}
+    bumpActivity(Date.now())
+    // The popup interrupted the start of a lot — re-baseline that lot's clock so
+    // the time spent answering it doesn't inflate the lot's recorded duration.
+    if (barcodeStartedAt.current) {
+      barcodeStartedAt.current = Date.now()
+      setTimerSecs(0)
+    }
     setIdlePopup(false)
     setIdleSubmitting(false)
   }
 
-  // Keep idleSecs ticking while the popup is open — can't exploit it by leaving it up
-  useEffect(() => {
-    if (!idlePopup) return
-    const id = setInterval(() => setIdleSecs(s => s + 1), 1000)
-    return () => clearInterval(id)
-  }, [idlePopup])
+  // (The popup shows a FIXED duration now — the working-hours gap between the
+  // last saved lot and starting this one. It no longer ticks while open,
+  // because the gap it reports is already over by the time it appears.)
 
   // Track time spent on Key Points (step 3)
   useEffect(() => {
@@ -700,7 +719,7 @@ export default function LotWizardTab({
     if (!src) return
     const m = src.match(/(\d+)$/)
     if (!m) return
-    if (!barcodeStartedAt.current) { barcodeStartedAt.current = Date.now(); if (showScanTimer) setTimerActive(true) }
+    if (!barcodeStartedAt.current) startLotTiming()
     setBarcode(src.slice(0, m.index) + String(parseInt(m[1]) + 1).padStart(m[1].length, "0"))
   }
 
@@ -790,8 +809,7 @@ export default function LotWizardTab({
       barcodeStartedAt.current = null
       keyPointsAccumMs.current = 0
       keyPointsEnteredAt.current = null
-      lastActivityRef.current = Date.now()
-      try { localStorage.setItem(IDLE_HEARTBEAT_KEY, String(lastActivityRef.current)) } catch {}
+      bumpActivity(Date.now())
       setTimerActive(false)
       setTimerSecs(0)
       const n = lotCount + 1
@@ -835,7 +853,7 @@ export default function LotWizardTab({
             <div className="text-center mb-5">
               <p className="text-xs font-bold uppercase tracking-widest text-gray-600 dark:text-gray-400 mb-1">Idle Reason</p>
               <p className="text-5xl font-mono font-bold text-gray-900">{fmtIdleDuration(idleSecs)}</p>
-
+              <p className="text-xs text-gray-500 mt-1.5">since your last saved lot — working hours (Mon–Fri, 9–5) only</p>
             </div>
 
             {/* Reason buttons — loaded from admin config */}
@@ -1116,7 +1134,7 @@ export default function LotWizardTab({
               <label className={`${lbl} block mb-1`}>Internal Barcode <span className="text-red-500">*</span></label>
               <input value={barcode} onChange={e => {
                 const v = e.target.value
-                if (v && !barcode && !barcodeStartedAt.current) { barcodeStartedAt.current = Date.now(); if (showScanTimer) setTimerActive(true) }
+                if (v && !barcode && !barcodeStartedAt.current) startLotTiming()
                 setBarcode(v)
                 if (barcodeWarning) setBarcodeWarning(false)
               }} className={inpFocus} placeholder="Scan or type barcode…" autoFocus />

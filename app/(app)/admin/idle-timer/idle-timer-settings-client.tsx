@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import type { IdleReason, IdleTimerConfig } from "@/lib/idle-timer-config"
+import type { IdleReason } from "@/lib/idle-timer-config"
 import { COLOUR_PRESETS } from "@/lib/idle-timer-config"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -122,10 +122,8 @@ function ReasonModal({
 
 // ─── Main settings component ──────────────────────────────────────────────────
 
-export default function IdleTimerSettingsClient({ initial }: { initial: IdleTimerConfig }) {
-  const [yellowMins, setYellowMins] = useState(initial.yellowMins)
-  const [redMins,    setRedMins]    = useState(initial.redMins)
-  const [reasons,    setReasons]    = useState<IdleReason[]>(initial.reasons)
+export default function IdleTimerSettingsClient({ initialReasons }: { initialReasons: IdleReason[] }) {
+  const [reasons,    setReasons]    = useState<IdleReason[]>(initialReasons)
 
   const [editTarget, setEditTarget] = useState<IdleReason | null | "new">(null)
   const [saveMsg,    setSaveMsg]    = useState<{ ok: boolean; text: string } | null>(null)
@@ -146,6 +144,7 @@ export default function IdleTimerSettingsClient({ initial }: { initial: IdleTime
   }
 
   function deleteReason(key: string) {
+    if (reasons.length <= 1) { alert("At least one reason must remain — add a replacement first."); return }
     if (!confirm("Remove this reason? Existing logs using it are not affected.")) return
     setReasons(prev => prev.filter(r => r.key !== key))
   }
@@ -174,7 +173,7 @@ export default function IdleTimerSettingsClient({ initial }: { initial: IdleTime
       const res = await fetch("/api/admin/idle-timer-config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ yellowMins, redMins, reasons }),
+        body: JSON.stringify({ reasons }),
       })
       if (res.ok) {
         setSaveMsg({ ok: true, text: "Settings saved." })
@@ -201,42 +200,15 @@ export default function IdleTimerSettingsClient({ initial }: { initial: IdleTime
 
       <div className="space-y-8 max-w-2xl">
 
-        {/* ── Timing ── */}
-        <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
-          <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-1">Timing Thresholds</h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-5">
-            Global defaults. Individual users can have their own overrides set in their profile.
+        {/* ── Where timing lives now ── */}
+        <section className="bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-2xl p-5">
+          <h2 className="text-sm font-bold text-sky-800 dark:text-sky-300 uppercase tracking-wider mb-1">Timing thresholds</h2>
+          <p className="text-xs text-sky-700 dark:text-sky-300 leading-relaxed">
+            The yellow/red minutes are set <b>per user</b> in <b>Admin → Users → (user) → Scan timer</b> — that is the only
+            place timing lives. The idle question appears when a cataloguer <b>starts a new lot</b> after being idle longer
+            than their red threshold, and idle time only counts <b>working hours (Mon–Fri, 9:00–17:00)</b>. Gaps of a full
+            working day or more (holidays, days off) are skipped silently.
           </p>
-
-          <div className="grid grid-cols-2 gap-4">
-            {/* Yellow */}
-            <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700">
-              <label className="block text-xs font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider mb-2">
-                ⚠️ Warning (yellow)
-              </label>
-              <div className="flex items-center gap-2">
-                <input type="number" min={1} max={59} value={yellowMins}
-                  onChange={e => setYellowMins(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-20 border border-amber-300 dark:border-amber-600 rounded-lg px-3 py-2 text-sm font-mono font-bold text-gray-900 dark:text-white bg-white dark:bg-gray-800 focus:outline-none focus:border-[#2AB4A6]" />
-                <span className="text-sm text-amber-700 dark:text-amber-400 font-medium">minutes</span>
-              </div>
-              <p className="text-xs text-amber-600 dark:text-amber-500 mt-2">Timer turns amber after this long</p>
-            </div>
-
-            {/* Red */}
-            <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700">
-              <label className="block text-xs font-bold text-red-700 dark:text-red-400 uppercase tracking-wider mb-2">
-                🔴 Popup trigger (red)
-              </label>
-              <div className="flex items-center gap-2">
-                <input type="number" min={1} max={120} value={redMins}
-                  onChange={e => setRedMins(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-20 border border-red-300 dark:border-red-600 rounded-lg px-3 py-2 text-sm font-mono font-bold text-gray-900 dark:text-white bg-white dark:bg-gray-800 focus:outline-none focus:border-[#2AB4A6]" />
-                <span className="text-sm text-red-700 dark:text-red-400 font-medium">minutes</span>
-              </div>
-              <p className="text-xs text-red-600 dark:text-red-500 mt-2">Idle popup fires after this long</p>
-            </div>
-          </div>
         </section>
 
         {/* ── Reasons ── */}

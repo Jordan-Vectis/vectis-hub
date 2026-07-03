@@ -36,6 +36,8 @@ export default async function TabletAuctionDetailPage({
       timerYellowMins={currentUser?.timerYellowMins ?? 4}
       timerRedMins={currentUser?.timerRedMins ?? 10}
       userRole={session.user.role}
+      userId={session.user.id}
+      userName={session.user.name ?? session.user.email ?? ""}
       auction={{
         id: auction.id,
         code: auction.code,
