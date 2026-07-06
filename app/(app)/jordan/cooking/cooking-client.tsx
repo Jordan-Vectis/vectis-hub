@@ -30,6 +30,9 @@ export default function CookingClient() {
   const [applianceNotes, setApplianceNotes] = useState("")
   const [modes, setModes] = useState<string[]>([])
   const [modeInput, setModeInput] = useState("")
+  const scanInput = useRef<HTMLInputElement>(null)
+  const [scanning, setScanning] = useState(false)
+  const [scanMsg, setScanMsg] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -57,6 +60,32 @@ export default function CookingClient() {
   function removeMode(m: string) {
     const next = modes.filter((x) => x !== m)
     setModes(next); saveProfile(applianceNotes, next)
+  }
+
+  async function scanAirFryer(f: File | null) {
+    if (!f || scanning) return
+    setScanning(true); setScanMsg(null)
+    try {
+      const fd = new FormData()
+      fd.append("image", f)
+      const model = getJordanModel()
+      if (model) fd.append("model", model)
+      const res = await fetch("/api/jordan/airfryer-scan", { method: "POST", body: fd })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.error || "Couldn't read the air fryer — try a clearer photo of the control panel.")
+      const found: string[] = Array.isArray(j.modes) ? j.modes : []
+      // Merge new modes in (case-insensitive), keep existing.
+      const merged = [...modes]
+      for (const m of found) if (!merged.some((x) => x.toLowerCase() === m.toLowerCase())) merged.push(m)
+      const nextNotes = j.model && !applianceNotes.trim() ? String(j.model) : applianceNotes
+      setModes(merged); setApplianceNotes(nextNotes); saveProfile(nextNotes, merged)
+      const added = merged.length - modes.length
+      setScanMsg(found.length ? `✓ Found ${found.length} mode${found.length === 1 ? "" : "s"}${added < found.length ? ` (${added} new)` : ""}${j.model ? ` on ${j.model}` : ""}.` : "Couldn't read any modes — add them by hand below.")
+    } catch (e: any) {
+      setScanMsg("✗ " + (e?.message ?? "Scan failed."))
+    } finally {
+      setScanning(false)
+    }
   }
 
   function pick(f: File | null) {
@@ -123,7 +152,14 @@ export default function CookingClient() {
                     style={{ color: GREEN }} />
                 </div>
                 <div>
-                  <label className="block text-[10px] uppercase tracking-widest opacity-60 mb-1">Cooking modes on your machine</label>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <label className="block text-[10px] uppercase tracking-widest opacity-60">Cooking modes on your machine</label>
+                    <button onClick={() => scanInput.current?.click()} disabled={scanning}
+                      className="text-[11px] px-2 py-1 rounded border border-[#33ff66] hover:bg-[#0a2214] disabled:opacity-40 transition-colors">
+                      {scanning ? "READING…" : "📷 Scan my air fryer"}
+                    </button>
+                  </div>
+                  {scanMsg && <p className={`text-[11px] mb-2 ${scanMsg.startsWith("✗") ? "text-red-400" : "opacity-70"}`}>{scanMsg}</p>}
                   {modes.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       {modes.map((m) => (
@@ -208,6 +244,8 @@ export default function CookingClient() {
 
           <input ref={fileInput} type="file" accept="image/*" className="hidden"
             onChange={(e) => { pick(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
+          <input ref={scanInput} type="file" accept="image/*" className="hidden"
+            onChange={(e) => { scanAirFryer(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
         </div>
       )}
 

@@ -6,7 +6,7 @@ import ModelPicker, { getJordanModel } from "./model-picker"
 // Shared retro-terminal chat panel for the secret menu. History persists per
 // browser in localStorage (per storageKey) so a refresh doesn't wipe the chat.
 
-type Msg = { role: "user" | "model"; text: string }
+type Msg = { role: "user" | "model"; text: string; queries?: string[] }
 const GREEN = "#33ff66"
 
 export default function ChatPanel({
@@ -16,6 +16,7 @@ export default function ChatPanel({
   const [input, setInput] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [search, setSearch] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -53,11 +54,11 @@ export default function ChatPanel({
       const res = await fetch("/api/jordan/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, history: messages, mode, model: getJordanModel() }),
+        body: JSON.stringify({ message, history: messages, mode, model: getJordanModel(), search }),
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j.error || "That didn't work — try again.")
-      persist([...withUser, { role: "model", text: j.reply ?? "" }])
+      persist([...withUser, { role: "model", text: j.reply ?? "", queries: Array.isArray(j.queries) ? j.queries : undefined }])
     } catch (e: any) {
       setError(e?.message ?? "That didn't work — try again.")
     } finally {
@@ -81,7 +82,12 @@ export default function ChatPanel({
             {m.role === "user" ? (
               <p><span className="opacity-50 select-none">&gt; </span><span className="text-white">{m.text}</span></p>
             ) : (
-              <p>{m.text}</p>
+              <>
+                {m.queries && m.queries.length > 0 && (
+                  <p className="text-[10px] opacity-50 mb-1">🔎 searched: {m.queries.join(" · ")}</p>
+                )}
+                <p>{m.text}</p>
+              </>
             )}
           </div>
         ))}
@@ -114,8 +120,19 @@ export default function ChatPanel({
             )}
           </div>
         </div>
-        <div className="flex items-center justify-between gap-3 mt-1.5">
-          <p className="text-[10px] opacity-40">ENTER to send · SHIFT+ENTER for a new line</p>
+        <div className="flex items-center justify-between gap-3 mt-1.5 flex-wrap">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSearch((s) => !s)}
+              className={`text-[10px] uppercase tracking-widest px-2 py-1 rounded border transition-colors ${
+                search ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] opacity-60 hover:opacity-100"
+              }`}
+              title="Let the AI look things up on Google in real time (fixtures, prices, news)"
+            >
+              🔎 WEB SEARCH [ {search ? "ON" : "OFF"} ]
+            </button>
+            <p className="text-[10px] opacity-40 hidden sm:block">ENTER to send · SHIFT+ENTER for a new line</p>
+          </div>
           <ModelPicker />
         </div>
       </div>

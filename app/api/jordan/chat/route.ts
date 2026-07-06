@@ -40,9 +40,17 @@ export async function POST(req: NextRequest) {
       .slice(-30)
       .map((m) => ({ role: m.role as "user" | "model", parts: [{ text: m.text as string }] }))
 
+    const search = body?.search === true
     const modelId = await getToolModel("jordan_fun", typeof body?.model === "string" ? body.model : null)
     const genai = new GoogleGenerativeAI(apiKey)
-    const model = genai.getGenerativeModel({ model: modelId, systemInstruction: PROMPTS[mode] })
+    const model = genai.getGenerativeModel({
+      model: modelId,
+      systemInstruction: PROMPTS[mode],
+      // Google Search grounding — real-time facts (fixtures, prices, news) instead
+      // of guessing from training data. Not every model supports it; the catch
+      // block returns a clear "switch model" message if this one doesn't.
+      ...(search ? { tools: [{ googleSearch: {} } as any] } : {}),
+    })
 
     // 503/overloaded is transient — retry quietly before bothering Jordan with it.
     const result = await withGeminiRetry(() => model.startChat({ history }).sendMessage(message))
@@ -57,12 +65,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Blocked by Gemini (${finishReason})` }, { status: 422 })
     }
 
-    return NextResponse.json({ reply: response.text() })
+    const queries = (response.candidates?.[0]?.groundingMetadata as any)?.webSearchQueries ?? []
+    return NextResponse.json({ reply: response.text(), queries })
   } catch (e: any) {
     console.error("jordan/chat error:", e)
     if (isTransientGeminiError(e)) {
       return NextResponse.json({ error: "That model is overloaded right now — try again in a minute, or switch model below." }, { status: 503 })
     }
-    return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
+    const msg = String(e?.message ?? e)
+    if (msg.includes("400") || msg.toLowerCase().includes("tool") || msg.toLowerCase().includes("grounding")) {
+      return NextResponse.json({ error: "This model doesn't support web search — turn it off, or switch model below." }, { status: 400 })
+    }
+    return NextResponse.json({ error: msg || "Unknown error" }, { status: 500 })
   }
 }
