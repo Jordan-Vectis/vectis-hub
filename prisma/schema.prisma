@@ -1352,3 +1352,19 @@ model McocChampion {
   @@unique([ownerId, name, stars])
   @@index([ownerId])
 }
+
+// Global (not per-owner) reference DB of every MCOC champion + an AI-computed
+// capability profile, cached so the counter engine can match locally/instantly.
+// `profileAt` null = catalogued (name/class known) but the full profile hasn't
+// been built yet. Rebuilt/refreshed via the Champion DB tab.
+model McocChampionProfile {
+  id         String    @id @default(cuid())
+  name       String                        // display name
+  nameNorm   String    @unique             // normalised name (matching + dedupe)
+  class      String    @default("")        // Cosmic | Tech | Mutant | Skill | Science | Mystic
+  immunities String[]  @default([])        // e.g. Bleed, Poison, Incinerate…
+  tags       String[]  @default([])        // counter-relevant capabilities (fixed vocab)
+  summary    String    @default("") @db.Text
+  profileAt  DateTime?                      // when the full profile was last computed
+  updatedAt  DateTime  @updatedAt
+}

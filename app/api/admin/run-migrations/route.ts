@@ -38,6 +38,19 @@ const MIGRATIONS = [
   `CREATE UNIQUE INDEX IF NOT EXISTS "McocChampion_ownerId_name_stars_key" ON "McocChampion"("ownerId","name","stars")`,
   `CREATE INDEX IF NOT EXISTS "McocChampion_ownerId_idx" ON "McocChampion"("ownerId")`,
   `ALTER TABLE "McocChampion" ADD COLUMN IF NOT EXISTS "imageKey" TEXT`,
+  `CREATE TABLE IF NOT EXISTS "McocChampionProfile" (
+    "id"         TEXT NOT NULL,
+    "name"       TEXT NOT NULL,
+    "nameNorm"   TEXT NOT NULL,
+    "class"      TEXT NOT NULL DEFAULT '',
+    "immunities" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "tags"       TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "summary"    TEXT NOT NULL DEFAULT '',
+    "profileAt"  TIMESTAMP(3),
+    "updatedAt"  TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "McocChampionProfile_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "McocChampionProfile_nameNorm_key" ON "McocChampionProfile"("nameNorm")`,
   `CREATE TABLE IF NOT EXISTS "ConditionWording" (
     "id"        TEXT NOT NULL,
     "label"     TEXT NOT NULL,

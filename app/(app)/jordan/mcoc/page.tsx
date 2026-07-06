@@ -30,7 +30,7 @@ export default async function JordanMcocPage({ searchParams }: { searchParams: P
           <h1 className="text-lg font-bold tracking-widest">04 · MCOC</h1>
           <Link href="/jordan" prefetch={false} className="text-xs opacity-60 hover:opacity-100">&lt; JORDAN.SYS</Link>
         </div>
-        <McocHub roster={roster} initialTab={tab === "roster" ? "roster" : "counters"} />
+        <McocHub roster={roster} initialTab={tab === "roster" ? "roster" : tab === "champdb" ? "champdb" : "counters"} />
       </div>
     </div>
   )

@@ -13,6 +13,31 @@ export function classColour(cls: string): string {
   return CLASS_COLOUR[(cls ?? "").toLowerCase()] ?? "#33ff66"
 }
 
+// ── Champion profile vocabularies (for the Champion DB) ──────────────────────
+// Fixed lists so AI-computed profiles stay consistent and matchable. IMMUNITIES
+// = damage/effect types a champ can't be affected by (matters vs a defender
+// that deals them). TAGS = counter-relevant capabilities a champ PROVIDES.
+
+export const MCOC_IMMUNITIES = [
+  "Bleed", "Poison", "Incinerate", "Coldsnap", "Frostbite", "Shock",
+  "Degeneration", "Armor Break", "Stun", "Fatigue", "Power Drain", "Power Lock",
+  "Nullify", "Regeneration Block",
+] as const
+
+export const MCOC_TAGS = [
+  "Ability Accuracy Reduction", "Nullify", "Stagger", "Fate Seal",
+  "Power Control", "Power Drain", "Power Lock", "Power Steal",
+  "Heal Block", "Heal Reversal",
+  "Incinerate", "Shock", "Bleed", "Poison", "Coldsnap", "Degeneration",
+  "True Damage", "True Strike", "True Accuracy",
+  "Armor Break", "Unstoppable", "Unblockable",
+  "Evade", "Auto-Block", "Miss / Evade Counter",
+  "Prowess", "Precision", "Cruelty", "Power Gain",
+  "Regeneration", "Life Steal", "Purify / Cleanse",
+  "Immunity Bypass", "Non-Contact / Ranged", "Buff Control", "Debuff Heavy",
+  "Prevent Revive", "Degen on Contact",
+] as const
+
 // Normalise a class string the AI or a human typed to one of the six (or "").
 export function normaliseClass(raw: string): string {
   const s = (raw ?? "").trim().toLowerCase()
