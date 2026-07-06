@@ -8,16 +8,22 @@ export const maxDuration = 120
 // POST /api/jordan/mcoc/aw-path — Alliance War path planner: given the defenders
 // on the player's path (+ optional node notes), recommend the best 3-champion
 // attack team from the roster that can clear them all.
-// JSON body: { defenders: string[], nodes?: string, roster: [{name,stars,rank}], model? }
+// JSON body: { defenders: (string | {name, node?})[], nodes?: string, roster: [{name,stars,rank}], model? }
 
 export async function POST(req: NextRequest) {
   try {
     if (!(await isJordan())) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
     const body = await req.json().catch(() => ({}))
-    const defenders: string[] = (Array.isArray(body?.defenders) ? body.defenders : [])
-      .filter((d: any) => typeof d === "string" && d.trim())
-      .map((d: string) => d.replace(/\s+/g, " ").trim().slice(0, 60))
+    // Defenders may be plain strings (legacy) or { name, node } objects.
+    const defenders: { name: string; node: string }[] = (Array.isArray(body?.defenders) ? body.defenders : [])
+      .map((d: unknown) => {
+        const obj = d && typeof d === "object" ? (d as { name?: unknown; node?: unknown }) : null
+        const name = (typeof d === "string" ? d : String(obj?.name ?? "")).replace(/\s+/g, " ").trim().slice(0, 60)
+        const node = obj?.node != null ? String(obj.node).replace(/[^0-9]/g, "").slice(0, 3) : ""
+        return { name, node }
+      })
+      .filter((d: { name: string }) => d.name)
       .slice(0, 12)
     if (!defenders.length) return NextResponse.json({ error: "Add at least one defender." }, { status: 400 })
 
@@ -29,8 +35,9 @@ export async function POST(req: NextRequest) {
     const rosterList = roster.map((c) => `- ${c.name}${c.stars ? ` (${c.stars}★${c.rank ? ` R${c.rank}` : ""})` : ""}`).join("\n")
 
     const prompt = `You are an expert Marvel Contest of Champions Alliance War strategist. The player must clear an AW path with these DEFENDERS, in this order:
-${defenders.map((d, i) => `${i + 1}. ${d}`).join("\n")}
+${defenders.map((d, i) => `${i + 1}. ${d.name}${d.node ? ` (on node ${d.node})` : ""}`).join("\n")}
 ${nodes ? `\nNode / buff info from the player: ${nodes}` : ""}
+${defenders.some((d) => d.node) ? `\nWhere a node number is given, factor in that AW node's known buff(s) when choosing the attacker and explaining how.` : ""}
 
 THE PLAYER'S ROSTER (pick ONLY from this list, names copied exactly):
 ${rosterList}

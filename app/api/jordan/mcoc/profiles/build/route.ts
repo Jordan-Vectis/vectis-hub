@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
       prisma.mcocChampionProfile.count({ where }),   // still to do this run
     ])
 
-    return NextResponse.json({ done, failed, total, profiled, remaining })
+    return NextResponse.json({ done, failed, total, profiled, remaining, names: batch.map((c) => c.name) })
   } catch (e: any) {
     console.error("jordan/mcoc/profiles/build error:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })

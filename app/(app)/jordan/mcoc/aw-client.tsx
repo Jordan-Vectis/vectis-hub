@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import ModelPicker, { getJordanModel } from "../model-picker"
 import { classColour, normChampName } from "@/lib/mcoc"
 import type { Champ } from "./mcoc-hub"
@@ -18,6 +18,8 @@ type PathResult = {
   risks: string; alternates: string
 }
 type DefResult = { placements: { node: string; champion: string; why: string }[]; notes: string }
+// A defender on the path: name + optional AW node number it sits on.
+type Def = { name: string; node: string }
 
 export default function AwClient({ roster }: { roster: Champ[] }) {
   const [mode, setMode] = useState<"path" | "defence">("path")
@@ -25,18 +27,41 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
   const rosterPayload = () => JSON.stringify(roster.map((c) => ({ name: c.name, stars: c.stars, rank: c.rank })))
 
   // ── Path planner ──
-  const [defenders, setDefenders] = useState<string[]>([])
+  const [defenders, setDefenders] = useState<Def[]>([])
   const [defInput, setDefInput] = useState("")
   const [nodes, setNodes] = useState("")
   const [pathBusy, setPathBusy] = useState(false)
   const [pathErr, setPathErr] = useState<string | null>(null)
   const [path, setPath] = useState<PathResult | null>(null)
 
+  // Every champion in the DB (owned or not) — powers the defender type-ahead and
+  // the class-colour dots. Falls back gracefully to manual typing if unbuilt.
+  const [allNames, setAllNames] = useState<string[]>([])
+  const [classByName, setClassByName] = useState<Record<string, string>>({})
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/jordan/mcoc/profiles/list")
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled || !Array.isArray(d?.champions)) return
+        setAllNames(d.champions.map((c: { name: string }) => c.name).filter(Boolean).sort())
+        const cls: Record<string, string> = {}
+        for (const c of d.champions) if (c?.name) cls[normChampName(c.name)] = c.class || ""
+        setClassByName(cls)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
   function addDefender(raw: string) {
     const d = raw.replace(/\s+/g, " ").trim()
-    if (!d || defenders.some((x) => normChampName(x) === normChampName(d))) { setDefInput(""); return }
-    setDefenders((l) => [...l, d]); setDefInput("")
+    if (!d || defenders.some((x) => normChampName(x.name) === normChampName(d))) { setDefInput(""); return }
+    setDefenders((l) => [...l, { name: d, node: "" }]); setDefInput("")
   }
+  function setDefNode(i: number, node: string) {
+    setDefenders((l) => l.map((d, j) => (j === i ? { ...d, node: node.replace(/[^0-9]/g, "").slice(0, 3) } : d)))
+  }
+  function defClass(name: string) { return classByName[normChampName(name)] || "" }
 
   async function planPath() {
     if (pathBusy || !defenders.length) return
@@ -44,7 +69,12 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
     try {
       const res = await fetch("/api/jordan/mcoc/aw-path", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ defenders, nodes: nodes.trim() || undefined, roster: JSON.parse(rosterPayload()), model: getJordanModel() || undefined }),
+        body: JSON.stringify({
+          defenders: defenders.map((d) => ({ name: d.name, node: d.node || undefined })),
+          nodes: nodes.trim() || undefined,
+          roster: JSON.parse(rosterPayload()),
+          model: getJordanModel() || undefined,
+        }),
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j.error || "Planning failed — try again.")
@@ -53,6 +83,8 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
       setPathErr(e?.message ?? "Planning failed — try again.")
     } finally { setPathBusy(false) }
   }
+  // Node lookup for annotating the fight-by-fight assignments.
+  const nodeFor = (defName: string) => defenders.find((d) => normChampName(d.name) === normChampName(defName))?.node || ""
 
   // ── Defence placer ──
   const defFile = useRef<HTMLInputElement>(null)
@@ -117,30 +149,44 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
 
         {mode === "path" && (
           <div className="space-y-3">
-            <p className="text-sm opacity-70">Add the defenders on your path — get the best 3-champ team from your roster to clear them all.</p>
+            <p className="text-sm opacity-70">Add the defenders on your path (in order) — get the best 3-champ team from your roster to clear them all. Start typing to search every champion; add a node number if you know it.</p>
 
+            <datalist id="mcoc-all-champs">
+              {allNames.map((n) => <option key={n} value={n} />)}
+            </datalist>
             <div className="flex gap-2 items-center flex-wrap">
-              <input value={defInput} onChange={(e) => setDefInput(e.target.value)}
+              <input value={defInput} onChange={(e) => setDefInput(e.target.value)} list="mcoc-all-champs"
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDefender(defInput) } }}
-                placeholder="Defender name + Enter…"
+                placeholder={allNames.length ? "Type a defender's name…" : "Defender name + Enter…"}
                 className={`${input} flex-1 min-w-[12rem]`} style={{ color: GREEN }} />
               <button onClick={() => addDefender(defInput)} disabled={!defInput.trim()}
                 className="px-3 py-2 rounded-lg border border-[#1f5c33] text-xs hover:border-[#33ff66] disabled:opacity-30 transition-colors">ADD</button>
             </div>
 
             {defenders.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {defenders.map((d, i) => (
-                  <span key={i} className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border border-[#1f5c33]">
-                    <span className="opacity-40">{i + 1}</span> <span className="text-white">{d}</span>
-                    <button onClick={() => setDefenders((l) => l.filter((_, j) => j !== i))} className="text-red-400">×</button>
-                  </span>
-                ))}
+              <div className="space-y-1.5">
+                {defenders.map((d, i) => {
+                  const cls = defClass(d.name)
+                  return (
+                    <div key={i} className="flex items-center gap-2 text-sm border border-[#1f5c33] rounded-lg px-2.5 py-1.5">
+                      <span className="opacity-40 w-4 text-right shrink-0">{i + 1}</span>
+                      {cls && <span className="w-2 h-2 rounded-full shrink-0" style={{ background: classColour(cls) }} title={cls} />}
+                      <span className="text-white flex-1 min-w-0 truncate">{d.name}</span>
+                      <label className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest opacity-60 shrink-0">
+                        Node
+                        <input value={d.node} onChange={(e) => setDefNode(i, e.target.value)} inputMode="numeric"
+                          placeholder="–" className="w-12 bg-black border border-[#1f5c33] rounded px-1.5 py-0.5 text-xs text-center focus:outline-none focus:border-[#33ff66] placeholder:text-[#1f5c33]"
+                          style={{ color: GREEN }} />
+                      </label>
+                      <button onClick={() => setDefenders((l) => l.filter((_, j) => j !== i))} className="text-red-400 shrink-0 px-1" title="Remove">×</button>
+                    </div>
+                  )
+                })}
               </div>
             )}
 
             <textarea value={nodes} onChange={(e) => setNodes(e.target.value)} rows={2}
-              placeholder="Optional — node buffs on this path (e.g. node 24 Flow, node 25 Aggression Regen)…"
+              placeholder="Optional — path-wide buffs / notes (e.g. global Aggression, node 24 Flow)…"
               className={`${input} w-full resize-none`} style={{ color: GREEN }} />
 
             <button onClick={planPath} disabled={pathBusy || !defenders.length}
@@ -163,12 +209,18 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                 </div>
                 <p className="text-[10px] uppercase tracking-widest opacity-50">Fight by fight</p>
                 <div className="space-y-1.5">
-                  {path.assignments.map((a, i) => (
-                    <div key={i} className="border border-[#1f5c33] rounded-lg px-3 py-2 text-sm">
-                      <p><span className="opacity-60">{a.defender}</span> <span className="opacity-40">→</span> <ChampInline name={a.attacker} /></p>
-                      {a.how && <p className="text-xs opacity-70 mt-0.5">{a.how}</p>}
-                    </div>
-                  ))}
+                  {path.assignments.map((a, i) => {
+                    const node = nodeFor(a.defender)
+                    return (
+                      <div key={i} className="border border-[#1f5c33] rounded-lg px-3 py-2 text-sm">
+                        <p className="flex items-center gap-1.5 flex-wrap">
+                          {node && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#1f5c33] opacity-80 shrink-0">NODE {node}</span>}
+                          <span className="opacity-60">{a.defender}</span> <span className="opacity-40">→</span> <ChampInline name={a.attacker} />
+                        </p>
+                        {a.how && <p className="text-xs opacity-70 mt-0.5">{a.how}</p>}
+                      </div>
+                    )
+                  })}
                 </div>
                 {path.risks && <p className="text-xs text-amber-300">⚠ {path.risks}</p>}
                 {path.alternates && <p className="text-xs opacity-60">Alternates: {path.alternates}</p>}

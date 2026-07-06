@@ -93,23 +93,33 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
 
   async function buildProfiles(refresh: boolean) {
     if (busy) return
-    setBusy(true); setMsg(null)
+    setBusy(true); setProg(null)
+    setMsg(refresh ? "Re-scanning the meta — reading the first batch (this can take a moment)…" : "Building profiles — reading the first batch (this can take a moment)…")
     const staleBefore = refresh ? new Date().toISOString() : null
+    let runTotal = 0
     let stalls = 0
     try {
       // Loop until nothing remains for this run (or it stalls on failures).
-      for (let guard = 0; guard < 400; guard++) {
+      for (let guard = 0; guard < 600; guard++) {
         const res = await fetch("/api/jordan/mcoc/profiles/build", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ limit: 4, staleBefore, model: model() }),
         })
         const j = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(j.error || "Build failed")
-        setProg({ done: j.profiled ?? 0, total: j.total ?? 0 })
-        setMsg(`Building profiles… ${j.profiled}/${j.total}${j.failed ? ` (${j.failed} retrying)` : ""}`)
+        const remaining = j.remaining ?? 0
+        // Progress = work done THIS run. Total = what's left + what we've done so
+        // far, captured on the first response. (Don't use profiled/total: on a
+        // re-scan every champ already has a profileAt, so profiled sits at total
+        // the whole time and the bar looks frozen — that was the old bug.)
+        if (runTotal === 0) runTotal = remaining + (j.done ?? 0)
+        const completed = Math.max(0, runTotal - remaining)
+        setProg({ done: completed, total: runTotal })
+        const just = Array.isArray(j.names) && j.names.length ? ` · just did ${j.names.slice(0, 3).join(", ")}${j.names.length > 3 ? "…" : ""}` : ""
+        setMsg(`${refresh ? "Re-scanning" : "Building"} champion profiles… ${completed}/${runTotal}${j.failed ? ` · ${j.failed} will retry` : ""}${just}`)
         await refreshData()
-        if ((j.remaining ?? 0) <= 0) { setMsg(`✓ Done — ${j.profiled}/${j.total} champions profiled.`); break }
-        if ((j.done ?? 0) === 0) { stalls++; if (stalls >= 3) { setMsg(`Stopped — ${j.remaining} champions kept failing (likely rate limits). Try again in a bit.`); break } }
+        if (remaining <= 0) { setMsg(`✓ Done — ${refresh ? "re-scanned" : "profiled"} ${runTotal || completed} champion${(runTotal || completed) === 1 ? "" : "s"}.`); break }
+        if ((j.done ?? 0) === 0) { stalls++; if (stalls >= 3) { setMsg(`Paused — ${remaining} still to go but they keep failing (likely AI rate limits). Press the button again to resume.`); break } }
         else stalls = 0
       }
     } catch (e: any) {
@@ -161,11 +171,20 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
           </button>
         </div>
         {msg && <p className={`text-xs ${msg.startsWith("✗") ? "text-red-400" : "opacity-80"}`}>{busy && <span className="animate-pulse">▮ </span>}{msg}</p>}
-        {prog && prog.total > 0 && (
-          <div className="h-1.5 rounded-full bg-[#0a2214] overflow-hidden border border-[#1f5c33]">
-            <div className="h-full bg-[#33ff66] transition-all" style={{ width: `${Math.round((prog.done / prog.total) * 100)}%` }} />
+        {prog && prog.total > 0 ? (
+          <div className="space-y-1">
+            <div className="h-2.5 rounded-full bg-[#0a2214] overflow-hidden border border-[#1f5c33]">
+              <div className="h-full bg-[#33ff66] transition-all duration-500" style={{ width: `${Math.round((prog.done / prog.total) * 100)}%` }} />
+            </div>
+            <p className="text-[10px] opacity-60 text-right">{Math.round((prog.done / prog.total) * 100)}% · {prog.done}/{prog.total}</p>
           </div>
-        )}
+        ) : busy ? (
+          // Indeterminate — the first batch can take 20–40s before it reports back.
+          <div className="h-2.5 rounded-full bg-[#0a2214] overflow-hidden border border-[#1f5c33] relative">
+            <div className="absolute inset-y-0 w-1/3 bg-[#33ff66] rounded-full champdb-indet" />
+          </div>
+        ) : null}
+        <style>{`@keyframes champdbIndet { 0%{left:-35%} 100%{left:100%} } .champdb-indet{ animation: champdbIndet 1.15s ease-in-out infinite; }`}</style>
       </div>
 
       {/* Browse */}
