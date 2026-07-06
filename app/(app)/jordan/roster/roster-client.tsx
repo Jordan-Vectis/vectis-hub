@@ -63,7 +63,11 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
     try {
       const list = await readChampions(f)
       if (!list.length) { setScanMsg("No champions read — try a clearer screenshot, or add by hand below."); return }
-      setScanned(list.map((c) => ({ ...c, include: true, rank: c.rank })))
+      // The Rank selector is the authority (a roster screenshot is one rank
+      // tier). We DON'T trust the AI's per-champ rank read — it misreads the
+      // small badges. Every champ defaults to the selected rank; the per-champ
+      // dropdown is there only for the odd exception.
+      setScanned(list.map((c) => ({ ...c, include: true, rank: addRank })))
     } catch (e: any) {
       setScanMsg("✗ " + (e?.message ?? "Scan failed."))
     } finally { setScanning(false) }
@@ -152,7 +156,6 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
           <select value={addStars} onChange={(e) => setAddStars(Number(e.target.value))} className={input} style={{ color: GREEN }}>
             <option value={7}>7★</option><option value={6}>6★</option>
           </select>
-          <span className="opacity-40">rank if unreadable:</span>
           <select value={addRank} onChange={(e) => setAddRank(Number(e.target.value))} className={input} style={{ color: GREEN }}>
             {[5, 4, 3, 2, 1].map((r) => <option key={r} value={r}>Rank {r}</option>)}
           </select>
@@ -165,7 +168,7 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
 
         {scanned && (
           <div className="border border-[#33ff66] rounded-lg p-3 space-y-2">
-            <p className="text-xs opacity-70">Read {scanned.length} champ{scanned.length === 1 ? "" : "s"} as {addStars}★ — untick wrong ones, fix any rank, then save.</p>
+            <p className="text-xs opacity-70">Read {scanned.length} champ{scanned.length === 1 ? "" : "s"}, set to {addStars}★ Rank {addRank} — untick wrong ones, change rank on any exceptions, then save.</p>
             <div className="flex flex-wrap gap-1.5 max-h-56 overflow-y-auto">
               {scanned.map((s, i) => (
                 <span key={i} className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-lg border text-xs ${s.include ? "border-[#33ff66]" : "border-[#1f5c33] opacity-40"}`}>
