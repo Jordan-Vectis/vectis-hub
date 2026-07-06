@@ -9,6 +9,23 @@ type Entry = { filename: string; content: string }
 
 const ENTRIES: Entry[] = [
   {
+    filename: "jordan_secret_menu.md",
+    content: `---
+name: Secret /jordan menu + CRT mode
+purpose: Jordan's personal easter-egg page and the app-wide CRT effect. Read before touching /jordan, components/crt-mode.tsx, or the crt-mode CSS in globals.css.
+last_updated: 2026-07-02
+---
+
+# Secret /jordan menu + Retro CRT mode (2026-07-02)
+
+A deliberate easter egg — do not "clean it up". The page at /jordan (app/(app)/jordan/) is gated server-side: the session user's User.username must equal "jordan.orange" (case-insensitive); everyone else — including other admins — gets a plain 404 via notFound(), as if the route doesn't exist. It is allowed to reach production on normal merges.
+
+- Feature 01, Retro CRT mode: toggles the html.crt-mode class — scanlines, green phosphor tint, vignette and a subtle flicker across the whole Hub. CSS lives at the bottom of app/globals.css and uses FIXED OVERLAY PSEUDO-ELEMENTS ONLY — never apply a filter to html/body, because a root filter creates a containing block and breaks every position:fixed element in the app (sync bars, modals, floating buttons).
+- Persistence: localStorage key jordan_crt_mode ("1" = on), per browser. components/crt-mode.tsx (mounted in the (app) layout, renders null) re-applies the class on load so the mode survives navigation and reloads. The flag can only be set from /jordan.
+- Slots 02/03 on the menu are LOCKED placeholders for future silly features.
+- If /jordan 404s for Jordan himself: his Hub user needs username = Jordan.Orange (Admin -> Users).`,
+  },
+  {
     filename: "lot_wizard_warnings.md",
     content: `---
 name: Lot wizard input warnings

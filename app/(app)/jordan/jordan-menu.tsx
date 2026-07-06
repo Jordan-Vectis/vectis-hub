@@ -1,0 +1,77 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { CRT_KEY } from "@/components/crt-mode"
+
+// The secret menu UI — retro terminal styling, because obviously.
+// Feature 01: RETRO CRT MODE — scanlines/phosphor overlay across the whole Hub,
+// per browser (localStorage), applied everywhere by components/crt-mode.tsx.
+
+const GREEN = "#33ff66"
+
+export default function JordanMenu() {
+  const [crt, setCrt] = useState(false)
+  const [booted, setBooted] = useState(false)
+
+  useEffect(() => {
+    try { setCrt(localStorage.getItem(CRT_KEY) === "1") } catch {}
+    const t = setTimeout(() => setBooted(true), 400)
+    return () => clearTimeout(t)
+  }, [])
+
+  function toggleCrt() {
+    const next = !crt
+    setCrt(next)
+    try {
+      if (next) localStorage.setItem(CRT_KEY, "1")
+      else localStorage.removeItem(CRT_KEY)
+    } catch {}
+    document.documentElement.classList.toggle("crt-mode", next)
+  }
+
+  const row = "flex items-center justify-between gap-4 px-4 py-3 border border-[#1f5c33] rounded-lg"
+
+  return (
+    <div className="min-h-full bg-black p-6 font-mono" style={{ color: GREEN }}>
+      <div className="max-w-2xl mx-auto pt-10">
+        <pre className="text-xs sm:text-sm leading-tight mb-1 select-none" style={{ color: GREEN }}>
+{String.raw`     __  ____  ____  ____  ___    _  __    _______  __ _____
+    / / / __ \/ __ \/ __ \/   |  / |/ /   / ___/\ \/ // ___/
+   / / / / / / /_/ / / / / /| | /   /     \__ \  \  / \__ \
+  / /_/ /_/ / _, _/ /_/ / ___ |/ /| | _  ___/ /  / / ___/ /
+  \____\____/_/ |_/_____/_/  |_/_/ |_|(_)/____/  /_/ /____/`}
+        </pre>
+        <p className="text-xs mb-8 opacity-70">
+          PERSONAL CONTROL PANEL v1.0 — ACCESS GRANTED: JORDAN.ORANGE
+          <span className="inline-block w-2 h-3.5 ml-1 align-middle animate-pulse" style={{ background: GREEN }} />
+        </p>
+
+        {!booted ? (
+          <p className="text-sm">INITIALISING…</p>
+        ) : (
+          <div className="space-y-3 text-sm">
+            <button onClick={toggleCrt} className={`${row} w-full text-left hover:bg-[#0a2214] transition-colors`}>
+              <span>01 &nbsp;RETRO CRT MODE <span className="opacity-50">— scanlines &amp; phosphor, whole Hub, this browser</span></span>
+              <span className="shrink-0 font-bold" style={{ color: crt ? GREEN : "#777" }}>
+                [ {crt ? "ON " : "OFF"} ]
+              </span>
+            </button>
+
+            <div className={`${row} opacity-40 select-none`}>
+              <span>02 &nbsp;????????????</span>
+              <span className="shrink-0">[ LOCKED ]</span>
+            </div>
+            <div className={`${row} opacity-40 select-none`}>
+              <span>03 &nbsp;????????????</span>
+              <span className="shrink-0">[ LOCKED ]</span>
+            </div>
+
+            <p className="text-xs opacity-50 pt-4">
+              &gt; CRT mode stays on everywhere in the Hub until switched off here. More features when you think of them.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

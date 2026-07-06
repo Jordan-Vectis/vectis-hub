@@ -5,6 +5,7 @@ import CrmSidebar from "@/components/crm-sidebar"
 import AdminSidebar from "@/components/admin-sidebar"
 import ImpersonationBanner from "@/components/impersonation-banner"
 import AnnouncementBanner from "@/components/announcement-banner"
+import CrtMode from "@/components/crt-mode"
 import { getEffectiveSession } from "@/lib/impersonation"
 
 export default async function AppLayout({
@@ -20,6 +21,7 @@ export default async function AppLayout({
 
   return (
     <div className="flex flex-col h-full min-h-screen">
+      <CrtMode />
       <ImpersonationBanner />
       <AnnouncementBanner />
       <TopBar

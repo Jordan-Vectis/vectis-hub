@@ -191,3 +191,42 @@ label {
   .print\:block { display: block !important; }
   .print\:hidden { display: none !important; }
 }
+
+/* ── Retro CRT mode — toggled from the secret /jordan menu ──────────────────
+   Overlay layers only: a `filter` on html/body would turn the root into a
+   containing block and break every position:fixed element (sync bars, modals,
+   floating buttons), so the phosphor look is built from fixed overlays. */
+html.crt-mode::before {
+  /* scanlines */
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2147483000;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0)    0px,
+    rgba(0, 0, 0, 0)    2px,
+    rgba(0, 0, 0, 0.14) 3px
+  );
+}
+html.crt-mode::after {
+  /* vignette + green phosphor tint + subtle flicker */
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2147483001;
+  background:
+    radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.3) 100%),
+    linear-gradient(rgba(57, 255, 20, 0.04), rgba(57, 255, 20, 0.04));
+  animation: crt-flicker 0.14s infinite;
+}
+@keyframes crt-flicker {
+  0%   { opacity: 1; }
+  50%  { opacity: 0.96; }
+  100% { opacity: 1; }
+}
+html.crt-mode body {
+  text-shadow: 0 0 2px rgba(140, 255, 170, 0.35);
+}
