@@ -83,22 +83,24 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
 
   async function scanBgs(f: File | null) {
     if (!f || bgsScanning) return
+    if (!champs.length) { setBgsMsg("✗ Add champions to your roster first — the deck photo matches against them."); return }
     setBgsScanning(true); setBgsMsg(null); setBgsReview(null)
     try {
-      const list = await readChampions(f)
-      const wanted = list.map((c) => normChampName(c.name)).filter(Boolean)
-      if (!wanted.length) { setBgsMsg("✗ No champions read — try a clearer deck screenshot."); return }
-      const wantedSet = new Set(wanted)
-      // Exact normalised match against the roster (no loose contains — that was
-      // matching the wrong champs). A name can hit both 6★ and 7★ copies.
+      // A deck screen is mostly portraits (few/no names), so instead of reading
+      // names blind we hand the AI the roster and ask which of THOSE appear —
+      // recognition against a known list, far more reliable + can't return a
+      // champ Jordan doesn't own.
+      const fd = new FormData()
+      fd.append("image", f)
+      fd.append("roster", JSON.stringify(champs.map((c) => c.name)))
+      const model = getJordanModel(); if (model) fd.append("model", model)
+      const res = await fetch("/api/jordan/mcoc/scan-bgs", { method: "POST", body: fd })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.error || "Couldn't read that deck screenshot.")
+      const wantedSet = new Set((j.matched ?? []).map((n: string) => normChampName(n)))
       const matched = champs.filter((c) => wantedSet.has(normChampName(c.name)))
-      const rosterNorms = new Set(champs.map((c) => normChampName(c.name)))
-      const unmatched = list.filter((c) => !rosterNorms.has(normChampName(c.name))).map((c) => c.name)
-      if (!matched.length) {
-        setBgsMsg(`✗ None of those matched your roster${unmatched.length ? ` (${unmatched.join(", ")})` : ""} — add them to the roster first, then re-scan.`)
-        return
-      }
-      setBgsReview({ champs: matched, selected: new Set(matched.map((c) => c.id)), unmatched })
+      if (!matched.length) { setBgsMsg("✗ Couldn't spot any of your champions in that photo — try a clearer, full-deck screenshot."); return }
+      setBgsReview({ champs: matched, selected: new Set(matched.map((c) => c.id)), unmatched: [] })
     } catch (e: any) {
       setBgsMsg("✗ " + (e?.message ?? "Scan failed."))
     } finally { setBgsScanning(false) }
@@ -215,7 +217,7 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
             </button>
           </div>
         </div>
-        <p className="text-[11px] opacity-50">Reads your deck photo, matches to your roster, and shows the matches to confirm before setting.</p>
+        <p className="text-[11px] opacity-50">Checks your deck photo against your roster (by portrait) and shows the matches to confirm — so it only ever picks champs you own. You can also just tap ★ on any roster champ below.</p>
         {bgsMsg && <p className={`text-xs ${bgsMsg.startsWith("✗") ? "text-red-400" : "opacity-80"}`}>{bgsMsg}</p>}
 
         {bgsReview && (
