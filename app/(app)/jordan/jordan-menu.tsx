@@ -68,8 +68,12 @@ export default function JordanMenu() {
               <span>03 &nbsp;COOKING <span className="opacity-50">— expert chef chat + air fryer photo converter</span></span>
               <span className="shrink-0 font-bold">[ OPEN ]</span>
             </Link>
+            <Link href="/jordan/mcoc" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
+              <span>04 &nbsp;MCOC COUNTERS <span className="opacity-50">— who to use against a defender</span></span>
+              <span className="shrink-0 font-bold">[ OPEN ]</span>
+            </Link>
             <div className={`${row} opacity-40 select-none`}>
-              <span>04 &nbsp;????????????</span>
+              <span>05 &nbsp;????????????</span>
               <span className="shrink-0">[ LOCKED ]</span>
             </div>
 
