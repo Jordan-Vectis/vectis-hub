@@ -23,6 +23,20 @@ const MIGRATIONS = [
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
     CONSTRAINT "ToolModel_pkey" PRIMARY KEY ("slot")
   )`,
+  `CREATE TABLE IF NOT EXISTS "McocChampion" (
+    "id"        TEXT NOT NULL,
+    "ownerId"   TEXT NOT NULL,
+    "name"      TEXT NOT NULL,
+    "class"     TEXT NOT NULL DEFAULT '',
+    "stars"     INTEGER NOT NULL DEFAULT 7,
+    "rank"      INTEGER NOT NULL DEFAULT 1,
+    "bgsDeck"   BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "McocChampion_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "McocChampion_ownerId_name_stars_key" ON "McocChampion"("ownerId","name","stars")`,
+  `CREATE INDEX IF NOT EXISTS "McocChampion_ownerId_idx" ON "McocChampion"("ownerId")`,
   `CREATE TABLE IF NOT EXISTS "ConditionWording" (
     "id"        TEXT NOT NULL,
     "label"     TEXT NOT NULL,

@@ -1332,3 +1332,22 @@ model ConditionMailboxAuth {
   folderName   String?                       // display name of that folder, for the UI
   updatedAt    DateTime @updatedAt
 }
+
+// ── MCOC (Jordan's secret-menu Marvel Contest of Champions tools) ────────────
+// The player's champion roster. A champ can exist at more than one star level,
+// so uniqueness is per (owner, name, stars). `bgsDeck` flags the subset used in
+// Battlegrounds. Feeds the counter advisor.
+model McocChampion {
+  id        String   @id @default(cuid())
+  ownerId   String
+  name      String
+  class     String   @default("")   // Cosmic | Tech | Mutant | Skill | Science | Mystic
+  stars     Int      @default(7)     // 6 or 7
+  rank      Int      @default(1)     // 1–5
+  bgsDeck   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([ownerId, name, stars])
+  @@index([ownerId])
+}
