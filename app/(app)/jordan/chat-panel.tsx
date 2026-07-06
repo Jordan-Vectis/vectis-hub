@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import ModelPicker, { getJordanModel } from "./model-picker"
 
 // Shared retro-terminal chat panel for the secret menu. History persists per
 // browser in localStorage (per storageKey) so a refresh doesn't wipe the chat.
@@ -52,7 +53,7 @@ export default function ChatPanel({
       const res = await fetch("/api/jordan/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, history: messages, mode }),
+        body: JSON.stringify({ message, history: messages, mode, model: getJordanModel() }),
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j.error || "That didn't work — try again.")
@@ -113,7 +114,10 @@ export default function ChatPanel({
             )}
           </div>
         </div>
-        <p className="text-[10px] opacity-40 mt-1.5">ENTER to send · SHIFT+ENTER for a new line</p>
+        <div className="flex items-center justify-between gap-3 mt-1.5">
+          <p className="text-[10px] opacity-40">ENTER to send · SHIFT+ENTER for a new line</p>
+          <ModelPicker />
+        </div>
       </div>
     </div>
   )

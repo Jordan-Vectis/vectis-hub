@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react"
 import ChatPanel from "../chat-panel"
+import ModelPicker, { getJordanModel } from "../model-picker"
 
 // 03 · COOKING — two tools in one: the Air Fryer Converter (photo → settings)
 // and a cooking-expert chat.
@@ -35,6 +36,8 @@ export default function CookingClient() {
     try {
       const fd = new FormData()
       fd.append("image", file)
+      const model = getJordanModel()
+      if (model) fd.append("model", model)
       const res = await fetch("/api/jordan/airfryer", { method: "POST", body: fd })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j.error || "Couldn't read that photo — try another.")
@@ -60,7 +63,10 @@ export default function CookingClient() {
 
       {tab === "airfryer" && (
         <div className="flex-1 min-h-0 overflow-y-auto border border-[#1f5c33] rounded-xl p-4 space-y-4">
-          <p className="text-sm opacity-70">Photograph the food (packaging counts) and get basket-style air-fryer settings back.</p>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-sm opacity-70">Photograph the food (packaging counts) and get basket-style air-fryer settings back.</p>
+            <ModelPicker />
+          </div>
 
           <div className="flex gap-2 flex-wrap">
             <button onClick={() => fileInput.current?.click()} disabled={busy}

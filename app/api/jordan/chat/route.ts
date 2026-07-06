@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
 import { isJordan } from "@/lib/jordan-auth"
+import { withGeminiRetry, isTransientGeminiError } from "@/lib/gemini-retry"
 
 export const maxDuration = 120
 
@@ -39,12 +40,12 @@ export async function POST(req: NextRequest) {
       .slice(-30)
       .map((m) => ({ role: m.role as "user" | "model", parts: [{ text: m.text as string }] }))
 
-    const modelId = await getToolModel("jordan_fun")
+    const modelId = await getToolModel("jordan_fun", typeof body?.model === "string" ? body.model : null)
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({ model: modelId, systemInstruction: PROMPTS[mode] })
 
-    const chat = model.startChat({ history })
-    const result = await chat.sendMessage(message)
+    // 503/overloaded is transient — retry quietly before bothering Jordan with it.
+    const result = await withGeminiRetry(() => model.startChat({ history }).sendMessage(message))
     const response = result.response
 
     const promptBlock = response.promptFeedback?.blockReason
@@ -59,6 +60,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ reply: response.text() })
   } catch (e: any) {
     console.error("jordan/chat error:", e)
+    if (isTransientGeminiError(e)) {
+      return NextResponse.json({ error: "That model is overloaded right now — try again in a minute, or switch model below." }, { status: 503 })
+    }
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
   }
 }
