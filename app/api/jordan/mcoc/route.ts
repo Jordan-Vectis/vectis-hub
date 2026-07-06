@@ -3,6 +3,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
 import { isJordan } from "@/lib/jordan-auth"
 import { withGeminiRetry, isTransientGeminiError } from "@/lib/gemini-retry"
+import { parseLooseJson } from "@/lib/mcoc-ai"
 
 export const maxDuration = 120
 
@@ -35,14 +36,6 @@ Return STRICT JSON only (no prose, no markdown fences):
 
 Give 3–6 counters, best first. If you can't identify the defender from the input, set confident false and put your best generic advice in strategy.`
 
-function parseLooseJson(text: string): any {
-  const clean = text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim()
-  try { return JSON.parse(clean) } catch {}
-  const s = clean.indexOf("{"), e = clean.lastIndexOf("}")
-  if (s >= 0 && e > s) return JSON.parse(clean.slice(s, e + 1))
-  throw new Error("Couldn't read the AI's answer — try again.")
-}
-
 export async function POST(req: NextRequest) {
   try {
     if (!(await isJordan())) return NextResponse.json({ error: "Not found" }, { status: 404 })
@@ -73,33 +66,38 @@ export async function POST(req: NextRequest) {
         model: modelId,
         ...(useSearch ? { tools: [{ googleSearch: {} } as any] } : { generationConfig: { responseMimeType: "application/json" } }),
       })
-      return withGeminiRetry(() => model.generateContent(parts))
+      const resp = (await withGeminiRetry(() => model.generateContent(parts))).response
+      const block = resp.promptFeedback?.blockReason
+      if (block) throw Object.assign(new Error(`Blocked by Gemini: ${block}`), { http: 422 })
+      const finish = resp.candidates?.[0]?.finishReason
+      if (finish && finish !== "STOP" && finish !== "MAX_TOKENS") throw Object.assign(new Error(`Blocked by Gemini (${finish})`), { http: 422 })
+      return { resp, parsed: parseLooseJson(resp.text()) }
     }
 
+    // Grounded first (live meta). Fall back to an ungrounded strict-JSON call if
+    // the model can't ground OR the grounded reply won't parse — grounding can't
+    // use JSON response-mime, so the model sometimes leaks prose into the JSON.
     let groundedFallback = false
-    let result
+    let out
     try {
-      result = await ask(wantSearch)
+      out = await ask(wantSearch)
     } catch (e: any) {
+      if (e?.http === 422) return NextResponse.json({ error: e.message }, { status: 422 })
       const msg = String(e?.message ?? e).toLowerCase()
-      // Model doesn't support grounding → retry once without it rather than failing.
-      if (wantSearch && (msg.includes("tool") || msg.includes("grounding") || msg.includes("400"))) {
-        groundedFallback = true
-        result = await ask(false)
-      } else {
-        throw e
+      const recoverable = msg.includes("tool") || msg.includes("grounding") || msg.includes("400") ||
+        msg.includes("couldn't read") || msg.includes("not valid json") || msg.includes("unexpected token")
+      if (!(wantSearch && recoverable)) throw e
+      groundedFallback = true
+      try {
+        out = await ask(false)
+      } catch (e2: any) {
+        if (e2?.http === 422) return NextResponse.json({ error: e2.message }, { status: 422 })
+        throw e2
       }
     }
 
-    const response = result.response
-    const block = response.promptFeedback?.blockReason
-    if (block) return NextResponse.json({ error: `Blocked by Gemini: ${block}` }, { status: 422 })
-    const finish = response.candidates?.[0]?.finishReason
-    if (finish && finish !== "STOP" && finish !== "MAX_TOKENS") {
-      return NextResponse.json({ error: `Blocked by Gemini (${finish})` }, { status: 422 })
-    }
-
-    const parsed = parseLooseJson(response.text())
+    const response = out.resp
+    const parsed = out.parsed
     const counters = Array.isArray(parsed?.counters)
       ? parsed.counters.slice(0, 8).map((c: any) => ({
           champion: typeof c?.champion === "string" ? c.champion : "?",

@@ -8,12 +8,19 @@ import { getToolModel } from "@/lib/ai-models"
 import { withGeminiRetry } from "@/lib/gemini-retry"
 
 export function parseLooseJson(text: string): any {
-  const clean = text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim()
-  try { return JSON.parse(clean) } catch {}
+  const clean = text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim()
+  // Try the whole thing, then the outermost {...} and [...] slices; each with a
+  // trailing-comma repair. Never throws the raw V8 SyntaxError (callers key their
+  // grounded→ungrounded fallback off this message).
+  const candidates = [clean]
   const s = clean.indexOf("{"), e = clean.lastIndexOf("}")
-  if (s >= 0 && e > s) return JSON.parse(clean.slice(s, e + 1))
+  if (s >= 0 && e > s) candidates.push(clean.slice(s, e + 1))
   const a = clean.indexOf("["), b = clean.lastIndexOf("]")
-  if (a >= 0 && b > a) return JSON.parse(clean.slice(a, b + 1))
+  if (a >= 0 && b > a) candidates.push(clean.slice(a, b + 1))
+  for (const c of candidates) {
+    try { return JSON.parse(c) } catch {}
+    try { return JSON.parse(c.replace(/,\s*([}\]])/g, "$1")) } catch {}
+  }
   throw new Error("Couldn't read the AI's answer")
 }
 
@@ -33,22 +40,24 @@ export async function groundedJson(input: GeminiParts, clientModel?: string | nu
       model: modelId,
       ...(useSearch ? { tools: [{ googleSearch: {} } as any] } : { generationConfig: { responseMimeType: "application/json" } }),
     })
-    return withGeminiRetry(() => model.generateContent(input as any))
+    const resp = (await withGeminiRetry(() => model.generateContent(input as any))).response
+    const block = resp.promptFeedback?.blockReason
+    if (block) throw new Error(`Blocked by Gemini: ${block}`)
+    const finish = resp.candidates?.[0]?.finishReason
+    if (finish && finish !== "STOP" && finish !== "MAX_TOKENS") throw new Error(`Blocked by Gemini (${finish})`)
+    return parseLooseJson(resp.text())
   }
 
-  let result
+  // Grounded (live meta) first. Fall back to an ungrounded strict-JSON call if
+  // the model can't ground OR the grounded reply won't parse — grounding forbids
+  // JSON response-mime, so the model sometimes leaks prose into the JSON.
   try {
-    result = await run(true)
+    return await run(true)
   } catch (e: any) {
     const msg = String(e?.message ?? e).toLowerCase()
-    if (msg.includes("tool") || msg.includes("grounding") || msg.includes("400")) result = await run(false)
-    else throw e
+    const groundingUnsupported = msg.includes("tool") || msg.includes("grounding") || msg.includes("400")
+    const unparseable = msg.includes("couldn't read") || msg.includes("not valid json") || msg.includes("unexpected token")
+    if (groundingUnsupported || unparseable) return run(false)
+    throw e
   }
-
-  const resp = result.response
-  const block = resp.promptFeedback?.blockReason
-  if (block) throw new Error(`Blocked by Gemini: ${block}`)
-  const finish = resp.candidates?.[0]?.finishReason
-  if (finish && finish !== "STOP" && finish !== "MAX_TOKENS") throw new Error(`Blocked by Gemini (${finish})`)
-  return parseLooseJson(resp.text())
 }
