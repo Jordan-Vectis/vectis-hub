@@ -69,7 +69,7 @@ export default function JordanMenu() {
               <span className="shrink-0 font-bold">[ OPEN ]</span>
             </Link>
             <Link href="/jordan/mcoc" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
-              <span>04 &nbsp;MCOC <span className="opacity-50">— defender counters + your roster &amp; Battlegrounds deck</span></span>
+              <span>04 &nbsp;MCOC <span className="opacity-50">— counters, roster, deck builder, war planner &amp; champion DB</span></span>
               <span className="shrink-0 font-bold">[ OPEN ]</span>
             </Link>
             <div className={`${row} opacity-40 select-none`}>

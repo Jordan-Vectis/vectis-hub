@@ -44,6 +44,16 @@ export function normaliseClass(raw: string): string {
   return MCOC_CLASSES.find((c) => c.toLowerCase() === s) ?? ""
 }
 
+// The class wheel: Cosmic>Tech>Mutant>Skill>Science>Mystic>Cosmic.
+// Returns the ATTACKER class that has advantage against the given defender class.
+export function classAdvantageAgainst(defenderClass: string): string {
+  const wheel: Record<string, string> = {
+    tech: "Cosmic", mutant: "Tech", skill: "Mutant",
+    science: "Skill", mystic: "Science", cosmic: "Mystic",
+  }
+  return wheel[(defenderClass ?? "").toLowerCase()] ?? ""
+}
+
 export function cleanChampName(raw: string): string {
   return (raw ?? "").replace(/\s+/g, " ").trim().slice(0, 60)
 }

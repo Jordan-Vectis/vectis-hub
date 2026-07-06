@@ -51,6 +51,9 @@ const MIGRATIONS = [
     CONSTRAINT "McocChampionProfile_pkey" PRIMARY KEY ("id")
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "McocChampionProfile_nameNorm_key" ON "McocChampionProfile"("nameNorm")`,
+  `ALTER TABLE "McocChampionProfile" ADD COLUMN IF NOT EXISTS "abilities" JSONB`,
+  `ALTER TABLE "McocChampionProfile" ADD COLUMN IF NOT EXISTS "counters" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
+  `ALTER TABLE "McocChampionProfile" ADD COLUMN IF NOT EXISTS "defenderNotes" TEXT NOT NULL DEFAULT ''`,
   `CREATE TABLE IF NOT EXISTS "ConditionWording" (
     "id"        TEXT NOT NULL,
     "label"     TEXT NOT NULL,

@@ -17,9 +17,12 @@ export function parseLooseJson(text: string): any {
   throw new Error("Couldn't read the AI's answer")
 }
 
-// Run a prompt (optionally grounded) and return parsed JSON. Throws on Gemini
-// block; on a grounding-unsupported error it retries once without search.
-export async function groundedJson(prompt: string, clientModel?: string | null): Promise<any> {
+// Run a prompt (optionally grounded) and return parsed JSON. Accepts a plain
+// prompt string OR a parts array (e.g. [imagePart, {text}]) for vision calls.
+// Throws on Gemini block; on a grounding-unsupported error it retries once
+// without search.
+export type GeminiParts = string | any[]
+export async function groundedJson(input: GeminiParts, clientModel?: string | null): Promise<any> {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) throw new Error("GEMINI_API_KEY not configured")
   const modelId = await getToolModel("jordan_fun", clientModel ?? null)
@@ -30,7 +33,7 @@ export async function groundedJson(prompt: string, clientModel?: string | null):
       model: modelId,
       ...(useSearch ? { tools: [{ googleSearch: {} } as any] } : { generationConfig: { responseMimeType: "application/json" } }),
     })
-    return withGeminiRetry(() => model.generateContent(prompt))
+    return withGeminiRetry(() => model.generateContent(input as any))
   }
 
   let result

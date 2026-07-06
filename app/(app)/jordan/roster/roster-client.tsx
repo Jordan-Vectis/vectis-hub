@@ -37,6 +37,7 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
   const [bgsScanning, setBgsScanning] = useState(false)
   const [bgsMsg, setBgsMsg] = useState<string | null>(null)
   const [bgsReview, setBgsReview] = useState<BgsReview | null>(null)
+  const [deckAdd, setDeckAdd] = useState("")
 
   // Manual add
   const [mName, setMName] = useState("")
@@ -218,6 +219,42 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
           </div>
         </div>
         <p className="text-[11px] opacity-50">Checks your deck photo against your roster (by portrait) and shows the matches to confirm — so it only ever picks champs you own. You can also just tap ★ on any roster champ below.</p>
+
+        {/* Manual add — search the roster and drop straight into the deck */}
+        <div className="flex gap-2 items-center flex-wrap">
+          <input
+            value={deckAdd}
+            onChange={(e) => setDeckAdd(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return
+              e.preventDefault()
+              const norm = normChampName(deckAdd)
+              const hit = champs.find((c) => normChampName(c.name) === norm) ?? champs.find((c) => c.name.toLowerCase().startsWith(deckAdd.trim().toLowerCase()))
+              if (hit && !hit.bgsDeck) { toggleBgs(hit); setDeckAdd("") }
+              else if (hit) setDeckAdd("")
+            }}
+            list="deck-add-names"
+            placeholder="Add by name — type + Enter…"
+            className={`${input} flex-1 min-w-[11rem] py-1.5 text-xs`}
+            style={{ color: GREEN }}
+          />
+          <datalist id="deck-add-names">
+            {champs.filter((c) => !c.bgsDeck).map((c) => <option key={c.id} value={c.name} />)}
+          </datalist>
+        </div>
+
+        {/* Current deck at a glance — tap to remove */}
+        {bgsCount > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {champs.filter((c) => c.bgsDeck).map((c) => (
+              <button key={c.id} onClick={() => toggleBgs(c)} title="Remove from deck"
+                className="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg border border-[#33ff66] text-white hover:opacity-70 transition-opacity">
+                {c.imageUrl && <img src={c.imageUrl} alt="" width={18} height={18} className="rounded object-cover" />}
+                {c.name} <span className="opacity-50">{c.stars}★</span> <span className="text-red-400">×</span>
+              </button>
+            ))}
+          </div>
+        )}
         {bgsMsg && <p className={`text-xs ${bgsMsg.startsWith("✗") ? "text-red-400" : "opacity-80"}`}>{bgsMsg}</p>}
 
         {bgsReview && (
