@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { MCOC_CLASSES, classColour } from "@/lib/mcoc"
-import { addChampions, updateChampion, deleteChampion } from "@/lib/actions/mcoc"
+import { addChampions, updateChampion, deleteChampion, setBgsDeckByNames } from "@/lib/actions/mcoc"
 import ModelPicker, { getJordanModel } from "../model-picker"
 
 type Champ = { id: string; name: string; class: string; stars: number; rank: number; bgsDeck: boolean }
@@ -21,14 +21,19 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
   const [query, setQuery] = useState("")
   const [editing, setEditing] = useState<string | null>(null)
 
-  // Add-by-photo
+  // Add-by-photo (roster)
   const scanInput = useRef<HTMLInputElement>(null)
   const [addStars, setAddStars] = useState(7)
   const [addRank, setAddRank] = useState(5)
-  const [addToBgs, setAddToBgs] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [scanned, setScanned] = useState<Scanned[] | null>(null)
   const [scanMsg, setScanMsg] = useState<string | null>(null)
+
+  // BGS deck photo
+  const bgsInput = useRef<HTMLInputElement>(null)
+  const [replaceDeck, setReplaceDeck] = useState(true)
+  const [bgsScanning, setBgsScanning] = useState(false)
+  const [bgsMsg, setBgsMsg] = useState<string | null>(null)
 
   // Manual add
   const [mName, setMName] = useState("")
@@ -40,37 +45,56 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
     .filter((c) => { const q = query.trim().toLowerCase(); return !q || c.name.toLowerCase().includes(q) })
   const byRank = [5, 4, 3, 2, 1].map((r) => ({ rank: r, list: shown.filter((c) => c.rank === r) })).filter((g) => g.list.length)
 
+  // Read champion names off a screenshot via the shared vision route.
+  async function readChampions(f: File): Promise<{ name: string; class: string }[]> {
+    const fd = new FormData(); fd.append("image", f)
+    const model = getJordanModel(); if (model) fd.append("model", model)
+    const res = await fetch("/api/jordan/mcoc/scan-roster", { method: "POST", body: fd })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(j.error || "Couldn't read that screenshot.")
+    return j.champions ?? []
+  }
+
   async function scan(f: File | null) {
     if (!f || scanning) return
     setScanning(true); setScanMsg(null); setScanned(null)
     try {
-      const fd = new FormData(); fd.append("image", f)
-      const model = getJordanModel(); if (model) fd.append("model", model)
-      const res = await fetch("/api/jordan/mcoc/scan-roster", { method: "POST", body: fd })
-      const j = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(j.error || "Couldn't read that screenshot.")
-      const list: Scanned[] = (j.champions ?? []).map((c: { name: string; class: string }) => ({ name: c.name, class: c.class, include: true }))
+      const list = await readChampions(f)
       if (!list.length) { setScanMsg("No champions read — try a clearer screenshot, or add by hand below."); return }
-      setScanned(list)
+      setScanned(list.map((c) => ({ name: c.name, class: c.class, include: true })))
     } catch (e: any) {
       setScanMsg("✗ " + (e?.message ?? "Scan failed."))
-    } finally {
-      setScanning(false)
-    }
+    } finally { setScanning(false) }
   }
 
   function saveScanned() {
-    const list = (scanned ?? []).filter((s) => s.include).map((s) => ({ name: s.name, class: s.class, stars: addStars, rank: addRank, bgsDeck: addToBgs }))
-    if (!list.length) { setScanned(null); return }
+    const list = (scanned ?? []).filter((s) => s.include).map((s) => ({ name: s.name, class: s.class, stars: addStars, rank: addRank }))
     setScanned(null); setScanMsg(null)
-    run(() => addChampions(list))
+    if (list.length) run(() => addChampions(list))
+  }
+
+  async function scanBgs(f: File | null) {
+    if (!f || bgsScanning) return
+    setBgsScanning(true); setBgsMsg(null)
+    try {
+      const list = await readChampions(f)
+      const names = list.map((c) => c.name).filter(Boolean)
+      if (!names.length) { setBgsMsg("✗ No champions read — try a clearer deck screenshot."); return }
+      const r = await setBgsDeckByNames(names, replaceDeck)
+      const parts = [`✓ ${r.matched} champ${r.matched === 1 ? "" : "s"} marked as your BGS deck.`]
+      if (r.unmatched.length) parts.push(`Not found in your roster: ${r.unmatched.join(", ")} — add them to the roster first, then re-scan.`)
+      setBgsMsg(parts.join(" "))
+      router.refresh()
+    } catch (e: any) {
+      setBgsMsg("✗ " + (e?.message ?? "Scan failed."))
+    } finally { setBgsScanning(false) }
   }
 
   function addManual() {
     const name = mName.trim()
     if (!name) return
     setMName(""); setMClass("")
-    run(() => addChampions([{ name, class: mClass, stars: addStars, rank: addRank, bgsDeck: addToBgs }]))
+    run(() => addChampions([{ name, class: mClass, stars: addStars, rank: addRank }]))
   }
 
   function toggleBgs(c: Champ) {
@@ -91,41 +115,31 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto font-mono space-y-4" style={{ color: GREEN }}>
-      {/* Add tools */}
+      {/* Add champions */}
       <div className="border border-[#1f5c33] rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <p className="text-sm opacity-70">Add champions — snap a roster screenshot, or type them in.</p>
           <ModelPicker />
         </div>
 
-        {/* Shared: what rank / stars these are */}
         <div className="flex items-center gap-2 flex-wrap text-xs">
           <span className="opacity-60 uppercase tracking-widest">These are:</span>
           <select value={addStars} onChange={(e) => setAddStars(Number(e.target.value))} className={input} style={{ color: GREEN }}>
-            <option value={7}>7★</option>
-            <option value={6}>6★</option>
+            <option value={7}>7★</option><option value={6}>6★</option>
           </select>
           <select value={addRank} onChange={(e) => setAddRank(Number(e.target.value))} className={input} style={{ color: GREEN }}>
             {[5, 4, 3, 2, 1].map((r) => <option key={r} value={r}>Rank {r}</option>)}
           </select>
-          <label className="inline-flex items-center gap-1.5 cursor-pointer">
-            <input type="checkbox" checked={addToBgs} onChange={(e) => setAddToBgs(e.target.checked)} className="accent-[#33ff66]" />
-            <span className="opacity-80">Add to BGS deck</span>
-          </label>
-        </div>
-
-        <div className="flex gap-2 flex-wrap">
           <button onClick={() => scanInput.current?.click()} disabled={scanning}
-            className="px-4 py-2 rounded-lg border border-[#33ff66] text-sm font-bold hover:bg-[#0a2214] disabled:opacity-40 transition-colors">
+            className="px-4 py-2 rounded-lg border border-[#33ff66] text-sm font-bold hover:bg-[#0a2214] disabled:opacity-40 transition-colors ml-auto">
             {scanning ? "READING…" : "📷 Scan roster screenshot"}
           </button>
         </div>
         {scanMsg && <p className={`text-xs ${scanMsg.startsWith("✗") ? "text-red-400" : "opacity-70"}`}>{scanMsg}</p>}
 
-        {/* Scan confirm */}
         {scanned && (
           <div className="border border-[#33ff66] rounded-lg p-3 space-y-2">
-            <p className="text-xs opacity-70">Read {scanned.length} champ{scanned.length === 1 ? "" : "s"} — untick any wrong ones, then add as {addStars}★ Rank {addRank}{addToBgs ? " · BGS deck" : ""}.</p>
+            <p className="text-xs opacity-70">Read {scanned.length} champ{scanned.length === 1 ? "" : "s"} — untick any wrong ones, then add as {addStars}★ Rank {addRank}.</p>
             <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
               {scanned.map((s, i) => (
                 <button key={i} onClick={() => setScanned((list) => list!.map((x, j) => j === i ? { ...x, include: !x.include } : x))}
@@ -142,7 +156,6 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
           </div>
         )}
 
-        {/* Manual add */}
         <div className="flex gap-2 flex-wrap items-center">
           <input value={mName} onChange={(e) => setMName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addManual() }}
             placeholder="Champion name…" className={`${input} flex-1 min-w-[10rem]`} style={{ color: GREEN }} />
@@ -154,9 +167,28 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
         </div>
       </div>
 
+      {/* Battlegrounds deck */}
+      <div className="border border-[#1f5c33] rounded-xl p-4 space-y-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <p className="text-sm font-bold">★ Battlegrounds deck <span className="opacity-50 font-normal">— {bgsCount} champ{bgsCount === 1 ? "" : "s"}</span></p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <label className="inline-flex items-center gap-1.5 text-[11px] opacity-70 cursor-pointer">
+              <input type="checkbox" checked={replaceDeck} onChange={(e) => setReplaceDeck(e.target.checked)} className="accent-[#33ff66]" />
+              Replace deck
+            </label>
+            <button onClick={() => bgsInput.current?.click()} disabled={bgsScanning}
+              className="px-4 py-2 rounded-lg border border-[#33ff66] text-sm font-bold hover:bg-[#0a2214] disabled:opacity-40 transition-colors">
+              {bgsScanning ? "MATCHING…" : "📷 Scan BGS deck photo"}
+            </button>
+          </div>
+        </div>
+        <p className="text-[11px] opacity-50">Upload a photo of your deck — it auto-matches those champs to your roster and stars them. (Add missing ones to the roster first.)</p>
+        {bgsMsg && <p className={`text-xs ${bgsMsg.startsWith("✗") ? "text-red-400" : "opacity-80"}`}>{bgsMsg}</p>}
+      </div>
+
       {/* Roster */}
       <div className="flex items-center gap-3 flex-wrap text-xs">
-        <span className="opacity-70">{champs.length} champ{champs.length === 1 ? "" : "s"} · {bgsCount} in BGS deck</span>
+        <span className="opacity-70">{champs.length} champ{champs.length === 1 ? "" : "s"}</span>
         <div className="flex gap-1">
           <button onClick={() => setFilter("all")} className={`px-2.5 py-1 rounded border ${filter === "all" ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] opacity-60"}`}>All</button>
           <button onClick={() => setFilter("bgs")} className={`px-2.5 py-1 rounded border ${filter === "bgs" ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] opacity-60"}`}>★ BGS deck</button>
@@ -186,6 +218,12 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
           </div>
         </div>
       ))}
+
+      {/* Hidden file inputs */}
+      <input ref={scanInput} type="file" accept="image/*" className="hidden"
+        onChange={(e) => { scan(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
+      <input ref={bgsInput} type="file" accept="image/*" className="hidden"
+        onChange={(e) => { scanBgs(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
     </div>
   )
 }

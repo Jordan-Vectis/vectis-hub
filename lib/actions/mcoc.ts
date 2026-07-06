@@ -71,3 +71,27 @@ export async function setBgsDeck(ids: string[], inDeck: boolean) {
   const owner = await ownerId()
   await prisma.mcocChampion.updateMany({ where: { id: { in: ids }, ownerId: owner }, data: { bgsDeck: inDeck } })
 }
+
+// Match a list of champion names (read from a BGS-deck screenshot) against the
+// roster and flag the matches as bgsDeck. `replace` clears the current deck
+// first (so re-uploading a deck photo just updates it). Returns how many
+// roster champs were flagged and which scanned names weren't found in the
+// roster (so the UI can tell Jordan to add those first).
+const normName = (s: string) => (s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "")
+export async function setBgsDeckByNames(names: string[], replace: boolean) {
+  const owner = await ownerId()
+  const roster = await prisma.mcocChampion.findMany({ where: { ownerId: owner }, select: { id: true, name: true } })
+  const wants = names.map(normName).filter(Boolean)
+  const rosterNorms = roster.map((c) => normName(c.name))
+  const hits = (rn: string) => wants.some((w) => w === rn || rn.includes(w) || w.includes(rn))
+
+  const matchedIds = roster.filter((c) => hits(normName(c.name))).map((c) => c.id)
+  if (replace) await prisma.mcocChampion.updateMany({ where: { ownerId: owner }, data: { bgsDeck: false } })
+  if (matchedIds.length) await prisma.mcocChampion.updateMany({ where: { id: { in: matchedIds }, ownerId: owner }, data: { bgsDeck: true } })
+
+  const unmatched = names.filter((nm) => {
+    const w = normName(nm)
+    return w && !rosterNorms.some((rn) => rn === w || rn.includes(w) || w.includes(rn))
+  })
+  return { matched: matchedIds.length, unmatched }
+}
