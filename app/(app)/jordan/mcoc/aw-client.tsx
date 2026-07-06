@@ -13,9 +13,9 @@ import type { Champ } from "./mcoc-hub"
 const GREEN = "#33ff66"
 
 type PathResult = {
-  team: { champion: string; why: string }[]
-  assignments: { defender: string; attacker: string; how: string }[]
-  risks: string; alternates: string
+  teams: { name: string; summary: string; champions: { champion: string; why: string }[] }[]
+  fights: { defender: string; options: { attacker: string; how: string }[] }[]
+  risks: string; notes: string
 }
 type DefResult = { placements: { node: string; champion: string; why: string }[]; notes: string }
 // A defender on the path: name + optional AW node number it sits on.
@@ -149,7 +149,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
 
         {mode === "path" && (
           <div className="space-y-3">
-            <p className="text-sm opacity-70">Add the defenders on your path (in order) — get the best 3-champ team from your roster to clear them all. Start typing to search every champion; add a node number if you know it.</p>
+            <p className="text-sm opacity-70">Add the defenders on your path (in order) — get a few different 3-champ teams from your roster, plus the best attacker options for each fight. Start typing to search every champion; add a node number if you know it.</p>
 
             <datalist id="mcoc-all-champs">
               {allNames.map((n) => <option key={n} value={n} />)}
@@ -198,32 +198,59 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
 
             {path && (
               <div className="space-y-3 border-t border-[#1f5c33] pt-3">
-                <p className="text-[10px] uppercase tracking-widest opacity-50">Your team</p>
-                <div className="space-y-1.5">
-                  {path.team.map((t, i) => (
-                    <div key={i} className="border border-[#33ff66] rounded-lg px-3 py-2">
-                      <ChampInline name={t.champion} />
-                      {t.why && <p className="text-xs opacity-70 mt-1">{t.why}</p>}
+                {path.teams.length > 0 && (
+                  <>
+                    <p className="text-[10px] uppercase tracking-widest opacity-50">Team options — pick whichever suits you</p>
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {path.teams.map((t, i) => (
+                        <div key={i} className="border border-[#33ff66] rounded-lg p-3 space-y-2">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#0a2214] border border-[#33ff66] shrink-0">{String.fromCharCode(65 + i)}</span>
+                            <p className="text-sm font-bold text-white">{t.name || `Team ${i + 1}`}</p>
+                          </div>
+                          {t.summary && <p className="text-xs opacity-70">{t.summary}</p>}
+                          <div className="space-y-1.5 pt-0.5">
+                            {t.champions.map((c, j) => (
+                              <div key={j}>
+                                <ChampInline name={c.champion} />
+                                {c.why && <p className="text-[11px] opacity-60 mt-0.5">{c.why}</p>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-                <p className="text-[10px] uppercase tracking-widest opacity-50">Fight by fight</p>
-                <div className="space-y-1.5">
-                  {path.assignments.map((a, i) => {
-                    const node = nodeFor(a.defender)
+                  </>
+                )}
+
+                <p className="text-[10px] uppercase tracking-widest opacity-50">Fight by fight — best options for each</p>
+                <div className="grid gap-2 lg:grid-cols-2">
+                  {path.fights.map((f, i) => {
+                    const node = nodeFor(f.defender)
                     return (
                       <div key={i} className="border border-[#1f5c33] rounded-lg px-3 py-2 text-sm">
-                        <p className="flex items-center gap-1.5 flex-wrap">
+                        <p className="flex items-center gap-1.5 flex-wrap mb-1.5">
                           {node && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#1f5c33] opacity-80 shrink-0">NODE {node}</span>}
-                          <span className="opacity-60">{a.defender}</span> <span className="opacity-40">→</span> <ChampInline name={a.attacker} />
+                          <span className="text-white font-bold">{f.defender}</span>
                         </p>
-                        {a.how && <p className="text-xs opacity-70 mt-0.5">{a.how}</p>}
+                        <div className="space-y-1.5">
+                          {f.options.map((o, j) => (
+                            <div key={j} className="flex items-start gap-2">
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded mt-0.5 shrink-0 ${j === 0 ? "text-black" : "border border-[#1f5c33] opacity-60"}`}
+                                style={j === 0 ? { background: GREEN } : undefined}>{j === 0 ? "BEST" : `#${j + 1}`}</span>
+                              <div className="min-w-0">
+                                <ChampInline name={o.attacker} />
+                                {o.how && <p className="text-xs opacity-70 mt-0.5">{o.how}</p>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )
                   })}
                 </div>
                 {path.risks && <p className="text-xs text-amber-300">⚠ {path.risks}</p>}
-                {path.alternates && <p className="text-xs opacity-60">Alternates: {path.alternates}</p>}
+                {path.notes && <p className="text-xs opacity-60">💡 {path.notes}</p>}
               </div>
             )}
           </div>
