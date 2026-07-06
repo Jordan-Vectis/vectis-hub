@@ -54,6 +54,11 @@ type ShipData = {
     revenue: number; rated: boolean; sizes: Record<string, number>
   }[]
   sizesPresent: string[]
+  rateScenario: {
+    band: string; size: string
+    currentFirst: number; currentAdditional: number
+    firstItems: number; additionalItems: number
+  }[]
   meta: {
     total: number; countries: number; cities: number
     itemsWithSize: number; parcelsWithSize: number; parcelsWithoutSize: number
@@ -1591,6 +1596,9 @@ function ShippingTab() {
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const [subTab, setSubTab]   = useState("By Country")
+  // Price calculator uplifts (editable): +£ on each first-item price / extra-item price
+  const [upFirst, setUpFirst] = useState("1.00")
+  const [upExtra, setUpExtra] = useState("0.50")
 
   const load = useCallback(async (f: string, t: string) => {
     if (!f || !t) return
@@ -1678,7 +1686,7 @@ function ShippingTab() {
             <p className="text-xs text-gray-500 dark:text-gray-500 mb-2">Shipping earned: <span className="font-medium text-cyan-700 dark:text-cyan-300">{money(data.meta.estRevenueTotal + data.meta.estRevenueUnlinked)}</span> (posted parcels only — collected items aren&apos;t included). We&apos;d have earned about <span className="font-medium">{money(data.meta.collectedRefund)}</span> more if the items collected in person had been posted instead.</p>
           )}
           <MetaBar text={`${from} — ${to}  ·  ${data.meta.total.toLocaleString()} parcels  ·  ${money(data.meta.estRevenueTotal + data.meta.estRevenueUnlinked)} est. revenue`} />
-          <SubTabs tabs={["By Country", "By Region", "By Month", "Items by Size", "Shipped / Collected", "Country × Size", "By City", "World Map", "UK Map"]} active={subTab} onChange={setSubTab} />
+          <SubTabs tabs={["By Country", "By Region", "By Month", "Items by Size", "Price Calculator", "Shipped / Collected", "Country × Size", "By City", "World Map", "UK Map"]} active={subTab} onChange={setSubTab} />
           {subTab === "By Country" && (
             <>
               <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">How many parcels we sent to each country.</p>
@@ -1847,6 +1855,122 @@ function ShippingTab() {
                 ],
                 "shipping_by_size"
               )} />
+            </>
+            )
+          })()}
+          {subTab === "Price Calculator" && (() => {
+            const uF = parseFloat(upFirst) || 0
+            const uA = parseFloat(upExtra) || 0
+            const rows = data.rateScenario
+            const totFirst = rows.reduce((s, r) => s + r.firstItems, 0)
+            const totExtra = rows.reduce((s, r) => s + r.additionalItems, 0)
+            const curTotal = rows.reduce((s, r) => s + r.firstItems * r.currentFirst + r.additionalItems * r.currentAdditional, 0)
+            const extraTotal = totFirst * uF + totExtra * uA
+            const newTotal = curTotal + extraTotal
+            const pct = curTotal > 0 ? (extraTotal / curTotal) * 100 : 0
+            const inputCls = "w-24 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#0d0f1a] px-2 py-1 text-sm text-right text-gray-900 dark:text-gray-100"
+            return (
+            <>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">Change the prices below to see how much more we&apos;d have earned on the parcels shipped between <span className="font-medium">{from}</span> and <span className="font-medium">{to}</span>. Every parcel pays one <span className="font-medium">first-item</span> price plus an <span className="font-medium">extra-item</span> price for each other thing in the box. Collection-only / &quot;contact us&quot; and Rest-of-World parcels aren&apos;t charged from this matrix, so they aren&apos;t affected.</p>
+
+              <div className="flex flex-wrap items-end gap-4 mb-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#0d0f1a] px-4 py-3">
+                <label className="text-sm text-gray-700 dark:text-gray-300">
+                  <span className="block text-xs text-gray-500 dark:text-gray-500 mb-1">Add to each first-item price</span>
+                  <span className="inline-flex items-center gap-1">£<input type="number" step="0.05" inputMode="decimal" value={upFirst} onChange={e => setUpFirst(e.target.value)} className={inputCls} /></span>
+                </label>
+                <label className="text-sm text-gray-700 dark:text-gray-300">
+                  <span className="block text-xs text-gray-500 dark:text-gray-500 mb-1">Add to each extra-item price</span>
+                  <span className="inline-flex items-center gap-1">£<input type="number" step="0.05" inputMode="decimal" value={upExtra} onChange={e => setUpExtra(e.target.value)} className={inputCls} /></span>
+                </label>
+                <button
+                  onClick={() => { setUpFirst("1.00"); setUpExtra("0.50") }}
+                  className="text-xs text-gray-500 dark:text-gray-400 underline hover:text-gray-700 dark:hover:text-gray-200 pb-1.5"
+                >Reset to +£1.00 / +£0.50</button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
+                  <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Current shipping (these parcels)</p>
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{money(curTotal)}</p>
+                </div>
+                <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
+                  <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">At the new prices</p>
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{money(newTotal)}</p>
+                </div>
+                <div className="bg-emerald-500/10 border border-emerald-500/40 rounded-lg p-3">
+                  <p className="text-xs text-emerald-700 dark:text-emerald-400 mb-1">Extra we&apos;d have earned</p>
+                  <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300">{extraTotal >= 0 ? "+" : ""}{money(extraTotal)}</p>
+                  {curTotal > 0 && <p className="text-[10px] text-emerald-700/70 dark:text-emerald-400/70 mt-0.5">{pct >= 0 ? "+" : ""}{pct.toFixed(1)}% on shipping revenue</p>}
+                </div>
+              </div>
+
+              {rows.length === 0 ? (
+                <p className="text-sm text-gray-500 dark:text-gray-500 mb-3">No charged parcels in this period, so there&apos;s nothing to calculate. (If you expected some, run a full receipt-lines sync in BC Warehouse → Data Sync.)</p>
+              ) : (
+              <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-800 mb-2">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-100 dark:bg-[#0d0f1a] text-gray-600 dark:text-gray-500 text-xs uppercase">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Destination band</th>
+                      <th className="px-4 py-2 text-left">Size</th>
+                      <th className="px-4 py-2 text-right">First-item price</th>
+                      <th className="px-4 py-2 text-right">Extra-item price</th>
+                      <th className="px-4 py-2 text-right">First-item charges</th>
+                      <th className="px-4 py-2 text-right">Extra items</th>
+                      <th className="px-4 py-2 text-right">Extra £</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                    {rows.map((r, i) => {
+                      const showBand = i === 0 || rows[i - 1].band !== r.band
+                      const rowExtra = r.firstItems * uF + r.additionalItems * uA
+                      return (
+                        <tr key={i} className="hover:bg-gray-200 dark:hover:bg-[#0d0f1a]">
+                          <td className="px-4 py-2 text-gray-600 dark:text-gray-300 font-medium">{showBand ? r.band : ""}</td>
+                          <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{r.size}</td>
+                          <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                            {money(r.currentFirst)}{uF !== 0 && <span className="text-cyan-700 dark:text-cyan-300"> → {money(r.currentFirst + uF)}</span>}
+                          </td>
+                          <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                            {money(r.currentAdditional)}{uA !== 0 && <span className="text-cyan-700 dark:text-cyan-300"> → {money(r.currentAdditional + uA)}</span>}
+                          </td>
+                          <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-400">{r.firstItems.toLocaleString()}</td>
+                          <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-400">{r.additionalItems.toLocaleString()}</td>
+                          <td className="px-4 py-2 text-right text-emerald-700 dark:text-emerald-300">{rowExtra >= 0 ? "+" : ""}{money(rowExtra)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-gray-100 dark:bg-[#0d0f1a] font-semibold border-t-2 border-gray-300 dark:border-gray-700">
+                      <td className="px-4 py-2 text-gray-700 dark:text-gray-200" colSpan={4}>Total</td>
+                      <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-200">{totFirst.toLocaleString()}</td>
+                      <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-200">{totExtra.toLocaleString()}</td>
+                      <td className="px-4 py-2 text-right text-emerald-700 dark:text-emerald-300">{extraTotal >= 0 ? "+" : ""}{money(extraTotal)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              )}
+              <p className="text-[11px] text-gray-500 dark:text-gray-500 mb-3">Based on the parcels we can price exactly ({totFirst.toLocaleString()} first-item charges + {totExtra.toLocaleString()} extra items). Parcels with no collection number (the &quot;estimated&quot; ones shown elsewhere) and collected-in-person items aren&apos;t included, so the real gain would be a little higher.</p>
+
+              {rows.length > 0 && <ExportBtn onClick={() => exportXlsx(
+                [
+                  ...rows.map(r => ({
+                    "Band": r.band,
+                    "Size": r.size,
+                    "First price now": +r.currentFirst.toFixed(2),
+                    "First price new": +(r.currentFirst + uF).toFixed(2),
+                    "Extra price now": +r.currentAdditional.toFixed(2),
+                    "Extra price new": +(r.currentAdditional + uA).toFixed(2),
+                    "First-item charges": r.firstItems,
+                    "Extra items": r.additionalItems,
+                    "Extra £": +(r.firstItems * uF + r.additionalItems * uA).toFixed(2),
+                  })),
+                  { "Band": "TOTAL", "Size": "", "First price now": "", "First price new": "", "Extra price now": "", "Extra price new": "", "First-item charges": totFirst, "Extra items": totExtra, "Extra £": +extraTotal.toFixed(2) } as any,
+                ],
+                "shipping_price_calculator"
+              )} />}
             </>
             )
           })()}

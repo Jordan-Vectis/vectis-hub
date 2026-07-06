@@ -168,3 +168,43 @@ export function regionOf(country: string): Region {
   if (EUROPE_CODES.has(c)) return "Europe"
   return "Rest of World"
 }
+
+// ─── Price bands (for the Shipping report's price calculator) ─────────────────
+//
+// The ~50-country matrix above only holds THREE distinct price tiers plus a
+// quote-only "Rest of World". Every country within a tier shares the same
+// Small/Medium/Large first- and extra-item prices, so the calculator groups by
+// band rather than showing 50 near-identical rows.
+
+export type RateBand = "UK" | "Europe (West)" | "Europe (East & rest)" | "Rest of World"
+
+// The three chargeable bands, in display order. "Rest of World" is quote-only
+// (£0) so it's not a calculator row.
+export const RATE_BANDS: RateBand[] = ["UK", "Europe (West)", "Europe (East & rest)"]
+
+// The current price for each band — these mirror the matrix above exactly (any
+// country in the band uses these). Update alongside SHIPPING_RATES if prices
+// change. Small/Medium/Large only; Contact/Collection Only are £0 (not charged).
+export const BAND_RATES: Record<RateBand, Partial<Record<ParcelSize, Rate>>> = {
+  "UK":                   { "Small": { first: 14.95, additional: 1.95 }, "Medium": { first: 19.95, additional: 4.95 }, "Large": { first: 24.95, additional: 19.95 } },
+  "Europe (West)":        { "Small": { first: 34.95, additional: 4.95 }, "Medium": { first: 49.95, additional: 9.95 }, "Large": { first: 64.95, additional: 19.95 } },
+  "Europe (East & rest)": { "Small": { first: 34.95, additional: 9.95 }, "Medium": { first: 66.95, additional: 14.95 }, "Large": { first: 89.95, additional: 19.95 } },
+  "Rest of World":        {},
+}
+
+// Which price band does a destination country fall in? Classified by matching
+// its actual Small-size rates against BAND_RATES (all sizes move together within
+// a band), so it stays correct if the matrix is re-tiered. Countries with no
+// rate-sheet entry are "Rest of World" (quote only). NB this is a PRICE band,
+// not a geographic region — e.g. Northern Ireland is priced on the Europe (West)
+// tier in the sheet, so it bands there even though its region is UK.
+export function rateBandOf(country: string): RateBand {
+  const c = SHIPPING_RATES[String(country ?? "").toUpperCase().trim()]
+  const s = c?.["Small"]
+  if (!s) return "Rest of World"
+  for (const band of RATE_BANDS) {
+    const b = BAND_RATES[band]["Small"]!
+    if (s.first === b.first && s.additional === b.additional) return band
+  }
+  return "Rest of World"
+}

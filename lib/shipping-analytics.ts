@@ -16,7 +16,7 @@
 
 import { bcPageWithNext } from "@/lib/bc"
 import { prisma } from "@/lib/prisma"
-import { parcelLotCharges, hasRate, regionOf, normalizeSize, PARCEL_SIZES, type Region } from "@/lib/shipping-rates"
+import { parcelLotCharges, hasRate, regionOf, rateBandOf, normalizeSize, PARCEL_SIZES, RATE_BANDS, BAND_RATES, type Region, type RateBand } from "@/lib/shipping-rates"
 import { COUNTRY_ALIASES } from "@/lib/country-names"
 
 // Normalise a raw BC country value: uppercase, trim, and fold non-canonical
@@ -47,6 +47,16 @@ export type ShippingAnalytics = {
     sizes:   Record<string, number> // size band → item count
   }[]
   sizesPresent: string[]            // ordered list of size labels seen in the data
+  // Price-calculator input: for each chargeable band × size, how many shipped
+  // items were charged at the first-item rate vs the extra-item rate, plus that
+  // band/size's current prices. Lets the UI recompute revenue under new prices
+  // exactly (Σ firstItems×newFirst + additionalItems×newAdditional). Excludes
+  // Contact / Collection Only / Rest-of-World / unlinked (all £0-charged).
+  rateScenario: {
+    band: string; size: string
+    currentFirst: number; currentAdditional: number
+    firstItems: number; additionalItems: number
+  }[]
   meta: {
     total:              number      // parcels (non-cancelled shipments)
     countries:          number
@@ -102,7 +112,7 @@ export async function computeShippingAnalytics(
 ): Promise<ShippingAnalytics> {
   const empty = (): ShippingAnalytics => ({
     from, to, byCountry: [], byCity: [], byRegion: [], bySize: [], byMonth: [], byDeliveryStatus: [], notScannedLocations: [], byCountrySize: [], sizeByDisposition: [],
-    sizesPresent: [],
+    sizesPresent: [], rateScenario: [],
     meta: {
       total: 0, countries: 0, cities: 0, itemsWithSize: 0, parcelsWithSize: 0,
       parcelsWithoutSize: 0, sizeDataAvailable: false, estRevenueTotal: 0,
@@ -234,6 +244,8 @@ export async function computeShippingAnalytics(
   const sizeRevenue:  Record<string, number> = {}
   const monthItems:   Record<string, number> = {}
   const monthRevenue: Record<string, number> = {}
+  // band|size → { first-item charges, extra-item charges } for the price calculator
+  const scen: Record<string, { firstItems: number; additionalItems: number }> = {}
   const linkedCollByRegion: Record<string, number> = {}  // linked collections per region (for the rough-estimate average)
   let itemsWithSize = 0
   let parcelsWithSize = 0
@@ -251,6 +263,7 @@ export async function computeShippingAnalytics(
     parcelsWithSize++
     const country = colToCountry[col] ?? "Unknown"
     const month   = colToMonth[col] ?? "Unknown"
+    const band    = rateBandOf(country)
     const agg = ensure(country)
     linkedCollByRegion[agg.region] = (linkedCollByRegion[agg.region] ?? 0) + 1
     // parcelLotCharges returns one entry per lot in the SAME order as the sizes
@@ -266,6 +279,13 @@ export async function computeShippingAnalytics(
       monthItems[month]      = (monthItems[month]      ?? 0) + 1
       monthRevenue[month]    = (monthRevenue[month]    ?? 0) + lot.rate
       if (!agg.rated) unratedItems++
+      // Price-calculator tally: only charged lots (rate > 0 ⇒ a real band + a
+      // charged size). Contact/Collection/Unspecified and Rest-of-World are £0.
+      if (lot.rate > 0) {
+        const k = `${band}|${lot.size}`
+        const e = (scen[k] ??= { firstItems: 0, additionalItems: 0 })
+        if (lot.first) e.firstItems++; else e.additionalItems++
+      }
     }
   }
 
@@ -501,8 +521,28 @@ export async function computeShippingAnalytics(
     return !hasRate(country)
   }).length
 
+  // Price-calculator rows: chargeable bands × sizes that actually occurred, in
+  // band then size order, each carrying its current prices + charge counts.
+  // (Σ firstItems×currentFirst + additionalItems×currentAdditional === estRevenueTotal.)
+  const scenSizeOrder = ["Small", "Medium", "Large"]
+  const rateScenario: ShippingAnalytics["rateScenario"] = []
+  for (const band of RATE_BANDS) {
+    for (const size of scenSizeOrder) {
+      const e = scen[`${band}|${size}`]
+      if (!e || (e.firstItems === 0 && e.additionalItems === 0)) continue
+      const r = BAND_RATES[band as RateBand][size as keyof (typeof BAND_RATES)[RateBand]]
+      rateScenario.push({
+        band, size,
+        currentFirst:      r?.first ?? 0,
+        currentAdditional: r?.additional ?? 0,
+        firstItems:        e.firstItems,
+        additionalItems:   e.additionalItems,
+      })
+    }
+  }
+
   return {
-    from, to, byCountry, byCity, byRegion, bySize, byMonth, byDeliveryStatus, notScannedLocations, byCountrySize, sizeByDisposition, sizesPresent,
+    from, to, byCountry, byCity, byRegion, bySize, byMonth, byDeliveryStatus, notScannedLocations, byCountrySize, sizeByDisposition, sizesPresent, rateScenario,
     meta: {
       total: active.length,
       countries: byCountry.length,
