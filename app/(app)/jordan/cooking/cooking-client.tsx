@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import ChatPanel from "../chat-panel"
 import ModelPicker, { getJordanModel } from "../model-picker"
 
@@ -8,9 +8,11 @@ import ModelPicker, { getJordanModel } from "../model-picker"
 // and a cooking-expert chat.
 
 const GREEN = "#33ff66"
+const PROFILE_KEY = "jordan_airfryer_profile"
+const COMMON_MODES = ["Air Fry", "Max Crisp", "Roast", "Bake", "Grill", "Reheat", "Dehydrate", "Frozen", "Fry", "Pizza"]
 
 type AirfryerResult = {
-  food: string; state: string; tempC: number; time: string
+  food: string; state: string; mode: string; tempC: number; time: string
   preheat: boolean; shake: string; safety: string; notes: string; confident: boolean
 }
 
@@ -22,6 +24,40 @@ export default function CookingClient() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<AirfryerResult | null>(null)
+
+  // "My air fryer" profile (persisted per browser).
+  const [setupOpen, setSetupOpen] = useState(false)
+  const [applianceNotes, setApplianceNotes] = useState("")
+  const [modes, setModes] = useState<string[]>([])
+  const [modeInput, setModeInput] = useState("")
+
+  useEffect(() => {
+    let cancelled = false
+    queueMicrotask(() => {
+      if (cancelled) return
+      try {
+        const saved = JSON.parse(localStorage.getItem(PROFILE_KEY) ?? "{}")
+        if (typeof saved?.notes === "string") setApplianceNotes(saved.notes)
+        if (Array.isArray(saved?.modes)) setModes(saved.modes.filter((m: unknown) => typeof m === "string"))
+      } catch {}
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  function saveProfile(notes: string, list: string[]) {
+    try { localStorage.setItem(PROFILE_KEY, JSON.stringify({ notes, modes: list })) } catch {}
+  }
+  function setNotes(v: string) { setApplianceNotes(v); saveProfile(v, modes) }
+  function addMode(raw: string) {
+    const m = raw.trim().slice(0, 40)
+    if (!m || modes.some((x) => x.toLowerCase() === m.toLowerCase())) { setModeInput(""); return }
+    const next = [...modes, m]
+    setModes(next); setModeInput(""); saveProfile(applianceNotes, next)
+  }
+  function removeMode(m: string) {
+    const next = modes.filter((x) => x !== m)
+    setModes(next); saveProfile(applianceNotes, next)
+  }
 
   function pick(f: File | null) {
     setError(null); setResult(null)
@@ -38,6 +74,8 @@ export default function CookingClient() {
       fd.append("image", file)
       const model = getJordanModel()
       if (model) fd.append("model", model)
+      if (applianceNotes.trim()) fd.append("applianceNotes", applianceNotes.trim())
+      if (modes.length) fd.append("applianceModes", JSON.stringify(modes))
       const res = await fetch("/api/jordan/airfryer", { method: "POST", body: fd })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j.error || "Couldn't read that photo — try another.")
@@ -53,6 +91,7 @@ export default function CookingClient() {
     `px-4 py-2 rounded-lg text-sm font-bold border transition-colors ${
       active ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] opacity-60 hover:opacity-100"
     }`
+  const suggestable = COMMON_MODES.filter((m) => !modes.some((x) => x.toLowerCase() === m.toLowerCase()))
 
   return (
     <div className="flex flex-col flex-1 min-h-0 font-mono" style={{ color: GREEN }}>
@@ -66,6 +105,55 @@ export default function CookingClient() {
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <p className="text-sm opacity-70">Photograph the food (packaging counts) and get basket-style air-fryer settings back.</p>
             <ModelPicker />
+          </div>
+
+          {/* ── My air fryer setup ── */}
+          <div className="border border-[#1f5c33] rounded-lg">
+            <button onClick={() => setSetupOpen((o) => !o)} className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-sm">
+              <span>⚙ MY AIR FRYER {modes.length > 0 || applianceNotes ? <span className="opacity-50">— set up ✓</span> : <span className="opacity-50">— tell it your modes for exact settings</span>}</span>
+              <span className="opacity-60">{setupOpen ? "▾" : "▸"}</span>
+            </button>
+            {setupOpen && (
+              <div className="px-3 pb-3 space-y-3 border-t border-[#1f5c33]">
+                <div className="pt-3">
+                  <label className="block text-[10px] uppercase tracking-widest opacity-60 mb-1">Model / notes (optional)</label>
+                  <input value={applianceNotes} onChange={(e) => setNotes(e.target.value)}
+                    placeholder="e.g. Ninja Foodi Dual Zone, 2400W"
+                    className="w-full bg-black border border-[#1f5c33] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#33ff66] placeholder:text-[#1f5c33]"
+                    style={{ color: GREEN }} />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest opacity-60 mb-1">Cooking modes on your machine</label>
+                  {modes.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {modes.map((m) => (
+                        <span key={m} className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[#33ff66] text-xs">
+                          {m}
+                          <button onClick={() => removeMode(m)} className="opacity-60 hover:opacity-100 font-bold">×</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <input value={modeInput} onChange={(e) => setModeInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addMode(modeInput) } }}
+                      placeholder="Type a mode + Enter…"
+                      className="flex-1 bg-black border border-[#1f5c33] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#33ff66] placeholder:text-[#1f5c33]"
+                      style={{ color: GREEN }} />
+                    <button onClick={() => addMode(modeInput)} disabled={!modeInput.trim()}
+                      className="px-3 py-2 rounded-lg border border-[#1f5c33] text-xs disabled:opacity-30 hover:border-[#33ff66] transition-colors">ADD</button>
+                  </div>
+                  {suggestable.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {suggestable.map((m) => (
+                        <button key={m} onClick={() => addMode(m)}
+                          className="px-2 py-0.5 rounded-lg border border-[#1f5c33] text-[11px] opacity-60 hover:opacity-100 hover:border-[#33ff66] transition-all">+ {m}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-2 flex-wrap">
@@ -93,6 +181,12 @@ export default function CookingClient() {
               <p className="text-xs opacity-60 uppercase tracking-widest">— ANALYSIS COMPLETE —</p>
               <p className="text-base font-bold text-white">{result.food}{result.state && result.state !== "unsure" ? ` (${result.state})` : ""}</p>
               {!result.confident && <p className="text-xs text-amber-400">⚠ Not 100% sure what this is — sanity-check the settings.</p>}
+              {result.mode && (
+                <div className="border border-[#33ff66] rounded-lg p-3 text-center bg-[#0a2214]">
+                  <p className="text-2xl font-bold">{result.mode}</p>
+                  <p className="text-[10px] opacity-60 uppercase tracking-widest mt-1">Mode / setting</p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <div className="border border-[#1f5c33] rounded-lg p-3 text-center">
                   <p className="text-3xl font-bold">{result.tempC}°C</p>
