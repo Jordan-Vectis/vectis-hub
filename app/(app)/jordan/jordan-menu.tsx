@@ -34,12 +34,12 @@ export default function JordanMenu() {
   return (
     <div className="min-h-full bg-black p-6 font-mono" style={{ color: GREEN }}>
       <div className="max-w-2xl mx-auto pt-10">
-        <pre className="text-xs sm:text-sm leading-tight mb-1 select-none" style={{ color: GREEN }}>
-{String.raw`     __  ____  ____  ____  ___    _  __    _______  __ _____
-    / / / __ \/ __ \/ __ \/   |  / |/ /   / ___/\ \/ // ___/
-   / / / / / / /_/ / / / / /| | /   /     \__ \  \  / \__ \
-  / /_/ /_/ / _, _/ /_/ / ___ |/ /| | _  ___/ /  / / ___/ /
-  \____\____/_/ |_/_____/_/  |_/_/ |_|(_)/____/  /_/ /____/`}
+        <pre className="text-[9px] sm:text-xs leading-tight mb-1 select-none overflow-x-auto" style={{ color: GREEN }}>
+{`     ██  ██████  ██████  ██████   █████  ███    ██    ███████ ██    ██ ███████
+     ██ ██    ██ ██   ██ ██   ██ ██   ██ ████   ██    ██       ██  ██  ██
+     ██ ██    ██ ██████  ██   ██ ███████ ██ ██  ██    ███████   ████   ███████
+██   ██ ██    ██ ██   ██ ██   ██ ██   ██ ██  ██ ██         ██    ██         ██
+ █████   ██████  ██   ██ ██████  ██   ██ ██   ████ ██ ███████    ██    ███████`}
         </pre>
         <p className="text-xs mb-8 opacity-70">
           PERSONAL CONTROL PANEL v1.0 — ACCESS GRANTED: JORDAN.ORANGE
