@@ -1345,6 +1345,7 @@ model McocChampion {
   stars     Int      @default(7)     // 6 or 7
   rank      Int      @default(1)     // 1–5
   bgsDeck   Boolean  @default(false)
+  imageKey  String?                  // R2 key of the portrait cropped from a roster screenshot
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

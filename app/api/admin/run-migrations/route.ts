@@ -37,6 +37,7 @@ const MIGRATIONS = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "McocChampion_ownerId_name_stars_key" ON "McocChampion"("ownerId","name","stars")`,
   `CREATE INDEX IF NOT EXISTS "McocChampion_ownerId_idx" ON "McocChampion"("ownerId")`,
+  `ALTER TABLE "McocChampion" ADD COLUMN IF NOT EXISTS "imageKey" TEXT`,
   `CREATE TABLE IF NOT EXISTS "ConditionWording" (
     "id"        TEXT NOT NULL,
     "label"     TEXT NOT NULL,

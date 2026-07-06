@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react"
 import ModelPicker, { getJordanModel } from "../model-picker"
+import { classColour as CLASS_COL, normChampName } from "@/lib/mcoc"
+import type { Champ } from "./mcoc-hub"
 
 // 04 · MCOC — "who should I use against this defender?" for Marvel Contest of
 // Champions. Name the defender and/or upload a screenshot; web search is on by
@@ -15,12 +17,16 @@ type Result = {
   confident: boolean; queries?: string[]; groundedFallback?: boolean
 }
 
-const CLASS_COLOUR: Record<string, string> = {
-  cosmic: "#3fb7ff", tech: "#4be0d0", mutant: "#ffd23f", skill: "#ff5a5a",
-  science: "#4bff6a", mystic: "#c77dff",
-}
-
-export default function McocClient() {
+export default function McocClient({ roster }: { roster: Champ[] }) {
+  // Owned-champion lookup: match a counter's name to a roster champ so we can
+  // flag "you own this" (and show its portrait / best copy).
+  const ownedByName = new Map<string, Champ>()
+  for (const c of roster) {
+    const k = normChampName(c.name)
+    const cur = ownedByName.get(k)
+    // Prefer the higher star, then higher rank copy.
+    if (!cur || c.stars > cur.stars || (c.stars === cur.stars && c.rank > cur.rank)) ownedByName.set(k, c)
+  }
   const [defender, setDefender] = useState("")
   const [search, setSearch] = useState(true)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -107,13 +113,18 @@ export default function McocClient() {
             </div>
 
             {result.counters.map((c, i) => {
-              const colour = CLASS_COLOUR[c.class.toLowerCase()] ?? GREEN
+              const owned = ownedByName.get(normChampName(c.champion))
+              const colour = CLASS_COL(c.class || owned?.class || "")
               return (
-                <div key={i} className="border border-[#1f5c33] rounded-lg p-3">
+                <div key={i} className={`border rounded-lg p-3 ${owned ? "border-[#33ff66] bg-[#0a2214]/40" : "border-[#1f5c33]"}`}>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-[11px] opacity-50 font-bold">{i + 1}</span>
+                    {owned?.imageUrl && <img src={owned.imageUrl} alt="" width={26} height={26} className="rounded object-cover" style={{ boxShadow: `0 0 0 1.5px ${colour}` }} />}
                     <span className="text-base font-bold text-white">{c.champion}</span>
                     {c.class && <span className="text-[10px] uppercase tracking-widest px-1.5 py-0.5 rounded border" style={{ color: colour, borderColor: colour + "88" }}>{c.class}</span>}
+                    {owned
+                      ? <span className="text-[10px] font-bold text-[#33ff66]">✓ OWNED · {owned.stars}★ R{owned.rank}</span>
+                      : <span className="text-[10px] opacity-40">not in roster</span>}
                   </div>
                   {c.why && <p className="text-sm"><span className="opacity-50">Why: </span>{c.why}</p>}
                   {c.how && <p className="text-sm opacity-80"><span className="opacity-50">How: </span>{c.how}</p>}

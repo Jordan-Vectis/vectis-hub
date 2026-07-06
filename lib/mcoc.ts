@@ -22,3 +22,14 @@ export function normaliseClass(raw: string): string {
 export function cleanChampName(raw: string): string {
   return (raw ?? "").replace(/\s+/g, " ").trim().slice(0, 60)
 }
+
+// Normalise a champ name for matching: lowercase, strip everything but letters
+// and digits (so "Kitty Pryde" == "kitty pryde", "Ægon" ~ "aegon"-ish handled by
+// callers). Deliberately NOT fuzzy — matching is exact on this normalised form
+// to avoid the wrong-champ matches loose "contains" matching caused.
+export function normChampName(raw: string): string {
+  return (raw ?? "")
+    .toLowerCase()
+    .replace(/æ/g, "ae").replace(/ø/g, "o")
+    .replace(/[^a-z0-9]/g, "")
+}

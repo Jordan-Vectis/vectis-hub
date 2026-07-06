@@ -2,6 +2,7 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { getSignedImageUrl } from "@/lib/r2"
 import { isJordan } from "@/lib/jordan-auth"
 import McocHub from "./mcoc-hub"
 
@@ -17,7 +18,10 @@ export default async function JordanMcocPage({ searchParams }: { searchParams: P
     where: { ownerId: session.user.id },
     orderBy: [{ rank: "desc" }, { name: "asc" }],
   })
-  const roster = rows.map((c) => ({ id: c.id, name: c.name, class: c.class, stars: c.stars, rank: c.rank, bgsDeck: c.bgsDeck }))
+  const roster = await Promise.all(rows.map(async (c) => ({
+    id: c.id, name: c.name, class: c.class, stars: c.stars, rank: c.rank, bgsDeck: c.bgsDeck,
+    imageUrl: c.imageKey ? await getSignedImageUrl(c.imageKey) : null,
+  })))
 
   return (
     <div className="h-full bg-black p-6 font-mono flex flex-col" style={{ color: "#33ff66" }}>

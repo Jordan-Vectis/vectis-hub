@@ -4,7 +4,7 @@ import { useState } from "react"
 import McocClient from "./mcoc-client"
 import RosterClient from "../roster/roster-client"
 
-type Champ = { id: string; name: string; class: string; stars: number; rank: number; bgsDeck: boolean }
+export type Champ = { id: string; name: string; class: string; stars: number; rank: number; bgsDeck: boolean; imageUrl: string | null }
 
 // The single MCOC section — Counters + My Roster as tabs. Both stay mounted
 // (hidden when inactive) so switching tabs doesn't lose a lookup or edits.
@@ -23,7 +23,7 @@ export default function McocHub({ roster, initialTab }: { roster: Champ[]; initi
         <button onClick={() => setTab("roster")} className={btn(tab === "roster")}>★ MY ROSTER</button>
       </div>
       <div className={tab === "counters" ? "flex-1 min-h-0 flex flex-col" : "hidden"}>
-        <McocClient />
+        <McocClient roster={roster} />
       </div>
       <div className={tab === "roster" ? "flex-1 min-h-0 flex flex-col" : "hidden"}>
         <RosterClient initial={roster} />
