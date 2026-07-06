@@ -42,8 +42,8 @@ export default function ModelPicker() {
       <select
         value={value}
         onChange={(e) => pick(e.target.value)}
-        className="bg-black border border-[#1f5c33] rounded px-2 py-1 text-[11px] font-mono focus:outline-none focus:border-[#33ff66] max-w-[14rem]"
-        style={{ color: "#33ff66" }}
+        className="bg-black border rounded px-2 py-1 text-[11px] font-mono focus:outline-none max-w-[14rem]"
+        style={{ color: "var(--jsys-acc, #33ff66)", borderColor: "var(--jsys-dim, #1f5c33)" }}
       >
         <option value="">AUTO (default)</option>
         {models.map((m) => (
