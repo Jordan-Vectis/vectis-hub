@@ -3,7 +3,7 @@
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { isJordan } from "@/lib/jordan-auth"
-import { cleanChampName, normaliseClass } from "@/lib/mcoc"
+import { cleanChampName, normaliseClass, normChampName } from "@/lib/mcoc"
 
 // Server actions for the MCOC roster (secret menu). All jordan-only. Rows are
 // keyed to Jordan's user id; a champ can exist at 6* and 7* separately.
@@ -85,4 +85,34 @@ export async function applyBgsDeck(ids: string[], replace: boolean) {
   const owner = await ownerId()
   if (replace) await prisma.mcocChampion.updateMany({ where: { ownerId: owner }, data: { bgsDeck: false } })
   if (ids.length) await prisma.mcocChampion.updateMany({ where: { id: { in: ids }, ownerId: owner }, data: { bgsDeck: true } })
+}
+
+// ── Personal counters ─────────────────────────────────────────────────────────
+// Jordan's own counter picks per defender, stored on the Champion DB row in
+// `myCounters` — a separate field from the AI-computed `counters`, so profile
+// rebuilds ("Update meta") never touch them.
+
+export async function addMyCounter(defenderName: string, counterName: string) {
+  await ownerId() // gate only — the profile table is global
+  const counter = cleanChampName(counterName)
+  if (!counter) return { ok: false, error: "Name required" }
+  const row = await prisma.mcocChampionProfile.findUnique({ where: { nameNorm: normChampName(defenderName) } })
+  if (!row) return { ok: false, error: "Defender not in the Champion DB" }
+  if (row.myCounters.some((c) => normChampName(c) === normChampName(counter))) return { ok: true }
+  await prisma.mcocChampionProfile.update({
+    where: { id: row.id },
+    data: { myCounters: [...row.myCounters, counter].slice(0, 12) },
+  })
+  return { ok: true }
+}
+
+export async function removeMyCounter(defenderName: string, counterName: string) {
+  await ownerId()
+  const row = await prisma.mcocChampionProfile.findUnique({ where: { nameNorm: normChampName(defenderName) } })
+  if (!row) return { ok: false, error: "Defender not in the Champion DB" }
+  await prisma.mcocChampionProfile.update({
+    where: { id: row.id },
+    data: { myCounters: row.myCounters.filter((c) => normChampName(c) !== normChampName(counterName)) },
+  })
+  return { ok: true }
 }

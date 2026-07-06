@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
       orderBy: { name: "asc" },
       select: {
         name: true, class: true, immunities: true, tags: true, summary: true,
-        counters: true, defenderNotes: true, profileAt: true,
+        counters: true, myCounters: true, defenderNotes: true, profileAt: true,
         ...(full ? { abilities: true } : {}),
       },
     })

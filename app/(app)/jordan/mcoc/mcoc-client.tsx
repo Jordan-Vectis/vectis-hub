@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
 import ModelPicker, { getJordanModel } from "../model-picker"
 import { classColour as CLASS_COL, classAdvantageAgainst, normChampName } from "@/lib/mcoc"
+import { addMyCounter, removeMyCounter } from "@/lib/actions/mcoc"
 import type { Champ } from "./mcoc-hub"
 
 // ⚔ COUNTERS — two modes:
@@ -22,7 +23,7 @@ type Result = {
 }
 type Profile = {
   name: string; class: string; immunities: string[]; tags: string[]
-  summary: string; counters: string[]; defenderNotes: string; profileAt: string | null
+  summary: string; counters: string[]; myCounters: string[]; defenderNotes: string; profileAt: string | null
 }
 
 export default function McocClient({ roster }: { roster: Champ[] }) {
@@ -42,6 +43,28 @@ export default function McocClient({ roster }: { roster: Champ[] }) {
   const [pick, setPick] = useState("")
   const [picked, setPicked] = useState<Profile | null>(null)
   const [deckOnly, setDeckOnly] = useState(false)
+  const [myAdd, setMyAdd] = useState("")
+  const [, startTransition] = useTransition()
+
+  // Update the picked defender's myCounters locally + persist via server action.
+  function mutateMyCounters(next: string[], action: () => Promise<unknown>) {
+    if (!picked) return
+    const updated = { ...picked, myCounters: next }
+    setPicked(updated)
+    setProfiles((ps) => (ps ?? []).map((p) => (p.name === updated.name ? updated : p)))
+    startTransition(async () => { await action() })
+  }
+  function addPersonal(raw: string) {
+    if (!picked) return
+    const name = raw.replace(/\s+/g, " ").trim()
+    if (!name || picked.myCounters.some((c) => normChampName(c) === normChampName(name))) { setMyAdd(""); return }
+    setMyAdd("")
+    mutateMyCounters([...picked.myCounters, name], () => addMyCounter(picked.name, name))
+  }
+  function removePersonal(name: string) {
+    if (!picked) return
+    mutateMyCounters(picked.myCounters.filter((c) => normChampName(c) !== normChampName(name)), () => removeMyCounter(picked.name, name))
+  }
 
   useEffect(() => {
     if (mode !== "instant" || profiles) return
@@ -100,17 +123,25 @@ export default function McocClient({ roster }: { roster: Champ[] }) {
       active ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] opacity-60 hover:opacity-100"
     }`
 
-  // Instant counter list: the defender's stored counters, sorted owned-in-deck
-  // first, then owned, then unowned.
+  // Instant counter list: the defender's stored counters (minus any that are
+  // in the personal list — those show in their own section), sorted
+  // owned-in-deck first, then owned, then unowned.
+  const myNorms = new Set((picked?.myCounters ?? []).map(normChampName))
   const instantCounters = (() => {
     if (!picked) return []
-    const rows = picked.counters.map((n) => {
-      const owned = ownedByName.get(normChampName(n))
-      return { name: n, owned, inDeck: owned?.bgsDeck === true }
-    })
+    const rows = picked.counters
+      .filter((n) => !myNorms.has(normChampName(n)))
+      .map((n) => {
+        const owned = ownedByName.get(normChampName(n))
+        return { name: n, owned, inDeck: owned?.bgsDeck === true }
+      })
     const filtered = deckOnly ? rows.filter((r) => r.inDeck) : rows
     return filtered.sort((a, b) => Number(b.inDeck) - Number(a.inDeck) || Number(!!b.owned) - Number(!!a.owned))
   })()
+  const myCounterRows = (picked?.myCounters ?? []).map((n) => {
+    const owned = ownedByName.get(normChampName(n))
+    return { name: n, owned, inDeck: owned?.bgsDeck === true }
+  }).filter((r) => !deckOnly || r.inDeck)
   const advClass = picked ? classAdvantageAgainst(picked.class) : ""
 
   return (
@@ -168,6 +199,38 @@ export default function McocClient({ roster }: { roster: Champ[] }) {
                         </div>
                       )}
                       {picked.defenderNotes && <p className="text-xs text-amber-300 mt-1.5">⚠ {picked.defenderNotes}</p>}
+                    </div>
+
+                    {/* Personal counters — Jordan's own picks, never touched by re-scans */}
+                    <div>
+                      <p className="text-[10px] uppercase tracking-widest text-[#ffd23f] mb-1.5">👑 My counters{deckOnly ? " (in deck)" : ""}</p>
+                      <div className="space-y-1.5">
+                        {myCounterRows.map((c, i) => (
+                          <div key={i} className={`flex items-center gap-2 border rounded-lg px-2.5 py-1.5 border-[#8a6d1a] ${c.inDeck ? "bg-[#2a2208]/60" : ""}`}>
+                            {c.owned?.imageUrl && <img src={c.owned.imageUrl} alt="" width={24} height={24} className="rounded object-cover" style={{ boxShadow: `0 0 0 1.5px ${CLASS_COL(c.owned.class)}` }} />}
+                            <span className="text-sm font-bold text-white">{c.name}</span>
+                            {c.inDeck
+                              ? <span className="text-[10px] font-bold text-[#33ff66]">★ IN DECK · {c.owned!.stars}★ R{c.owned!.rank}</span>
+                              : c.owned
+                                ? <span className="text-[10px] text-[#33ff66]">✓ owned · {c.owned.stars}★ R{c.owned.rank}</span>
+                                : <span className="text-[10px] opacity-50">not owned</span>}
+                            <button onClick={() => removePersonal(c.name)} className="ml-auto text-red-400 opacity-60 hover:opacity-100 text-xs" title="Remove">×</button>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex gap-2 mt-1.5">
+                        <input value={myAdd} onChange={(e) => setMyAdd(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addPersonal(myAdd) } }}
+                          list="my-counter-names"
+                          placeholder="Add your own counter + Enter…"
+                          className="flex-1 bg-black border border-[#8a6d1a] rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#ffd23f] placeholder:text-[#8a6d1a]"
+                          style={{ color: "#ffd23f" }} />
+                        <datalist id="my-counter-names">
+                          {roster.map((c) => <option key={c.id} value={c.name} />)}
+                        </datalist>
+                        <button onClick={() => addPersonal(myAdd)} disabled={!myAdd.trim()}
+                          className="px-3 py-1.5 rounded-lg border border-[#8a6d1a] text-[#ffd23f] text-xs disabled:opacity-30 hover:border-[#ffd23f] transition-colors">ADD</button>
+                      </div>
                     </div>
 
                     <div>

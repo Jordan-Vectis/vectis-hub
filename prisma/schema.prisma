@@ -1366,7 +1366,8 @@ model McocChampionProfile {
   tags          String[]  @default([])        // counter-relevant capabilities (fixed vocab)
   summary       String    @default("") @db.Text
   abilities     Json?                          // full kit breakdown: [{ name, details[] }]
-  counters      String[]  @default([])        // best attackers INTO this champ as a defender, best first
+  counters      String[]  @default([])        // AI-computed: best attackers INTO this champ as a defender
+  myCounters    String[]  @default([])        // Jordan's own counters — NEVER touched by profile rebuilds
   defenderNotes String    @default("") @db.Text // why it's dangerous on defence + what a counter needs
   profileAt     DateTime?                      // when the full profile was last computed
   updatedAt     DateTime  @updatedAt

@@ -54,6 +54,7 @@ const MIGRATIONS = [
   `ALTER TABLE "McocChampionProfile" ADD COLUMN IF NOT EXISTS "abilities" JSONB`,
   `ALTER TABLE "McocChampionProfile" ADD COLUMN IF NOT EXISTS "counters" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
   `ALTER TABLE "McocChampionProfile" ADD COLUMN IF NOT EXISTS "defenderNotes" TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE "McocChampionProfile" ADD COLUMN IF NOT EXISTS "myCounters" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
   `CREATE TABLE IF NOT EXISTS "ConditionWording" (
     "id"        TEXT NOT NULL,
     "label"     TEXT NOT NULL,

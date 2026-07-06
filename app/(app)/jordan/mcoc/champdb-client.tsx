@@ -17,7 +17,7 @@ type Status = { total: number; profiled: number; unbuilt: number }
 type Ability = { name: string; details: string[] }
 type Profile = {
   name: string; class: string; immunities: string[]; tags: string[]; summary: string
-  abilities?: Ability[] | null; counters: string[]; defenderNotes: string; profileAt: string | null
+  abilities?: Ability[] | null; counters: string[]; myCounters?: string[]; defenderNotes: string; profileAt: string | null
 }
 
 export default function ChampDbClient({ roster }: { roster: Champ[] }) {
@@ -176,6 +176,24 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
                     <div className="flex flex-wrap gap-1">
                       {c.immunities.map((t) => <span key={"i" + t} className="text-[10px] px-1.5 py-0.5 rounded border border-sky-700/60 text-sky-300">🛡 {t}</span>)}
                       {c.tags.map((t) => <span key={"t" + t} className="text-[10px] px-1.5 py-0.5 rounded border border-[#1f5c33] opacity-80">{t}</span>)}
+                    </div>
+                  )}
+
+                  {(c.myCounters?.length ?? 0) > 0 && (
+                    <div>
+                      <p className="text-[10px] uppercase tracking-widest text-[#ffd23f] mb-1">👑 My counters</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {c.myCounters!.map((n) => {
+                          const owned = ownedByName.get(normChampName(n))
+                          return (
+                            <span key={n} className="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg border border-[#8a6d1a] text-white">
+                              {owned?.imageUrl && <img src={owned.imageUrl} alt="" width={18} height={18} className="rounded object-cover" />}
+                              {n}
+                              {owned && <span className="text-[9px] text-[#33ff66]">{owned.stars}★R{owned.rank}</span>}
+                            </span>
+                          )
+                        })}
+                      </div>
                     </div>
                   )}
 
