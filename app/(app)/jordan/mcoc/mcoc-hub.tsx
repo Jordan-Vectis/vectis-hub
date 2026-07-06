@@ -30,7 +30,7 @@ export default function McocHub({ roster, initialTab }: { roster: Champ[]; initi
         <button onClick={() => setTab("champdb")} className={btn(tab === "champdb")}>🧬 CHAMPION DB</button>
       </div>
       <div className={tab === "counters" ? "flex-1 min-h-0 flex flex-col" : "hidden"}>
-        <McocClient roster={roster} />
+        <McocClient roster={roster} active={tab === "counters"} />
       </div>
       <div className={tab === "roster" ? "flex-1 min-h-0 flex flex-col" : "hidden"}>
         <RosterClient initial={roster} />

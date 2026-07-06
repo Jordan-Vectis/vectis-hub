@@ -26,7 +26,7 @@ type Profile = {
   summary: string; counters: string[]; myCounters: string[]; defenderNotes: string; profileAt: string | null
 }
 
-export default function McocClient({ roster }: { roster: Champ[] }) {
+export default function McocClient({ roster, active = true }: { roster: Champ[]; active?: boolean }) {
   const [mode, setMode] = useState<"instant" | "ai">("instant")
 
   // Owned-champion lookup (best copy = highest star, then rank).
@@ -66,13 +66,23 @@ export default function McocClient({ roster }: { roster: Champ[] }) {
     mutateMyCounters(picked.myCounters.filter((c) => normChampName(c) !== normChampName(name)), () => removeMyCounter(picked.name, name))
   }
 
+  // Re-fetch every time the Counters tab is opened in instant mode, so a DB
+  // built/updated in another tab shows up (this component stays mounted, so a
+  // one-time fetch would go stale). Re-syncs the currently-picked defender too.
   useEffect(() => {
-    if (mode !== "instant" || profiles) return
+    if (mode !== "instant" || !active) return
+    let cancelled = false
     fetch("/api/jordan/mcoc/profiles/list")
       .then((r) => r.json())
-      .then((d) => setProfiles(Array.isArray(d?.champions) ? d.champions : []))
-      .catch(() => setProfErr("Couldn't load the Champion DB."))
-  }, [mode, profiles])
+      .then((d) => {
+        if (cancelled) return
+        const list: Profile[] = Array.isArray(d?.champions) ? d.champions : []
+        setProfiles(list)
+        setPicked((prev) => (prev ? (list.find((p) => normChampName(p.name) === normChampName(prev.name)) ?? prev) : prev))
+      })
+      .catch(() => { if (!cancelled) setProfErr("Couldn't load the Champion DB.") })
+    return () => { cancelled = true }
+  }, [mode, active])
 
   function choose(name: string) {
     setPick(name)

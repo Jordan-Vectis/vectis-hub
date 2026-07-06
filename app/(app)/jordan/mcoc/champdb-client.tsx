@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { MCOC_CLASSES, classColour, normChampName } from "@/lib/mcoc"
+import { addMyCounter, removeMyCounter } from "@/lib/actions/mcoc"
 import ModelPicker, { getJordanModel } from "../model-picker"
 import type { Champ } from "./mcoc-hub"
 
@@ -34,6 +35,26 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
   const [msg, setMsg] = useState<string | null>(null)
   const [prog, setProg] = useState<{ done: number; total: number } | null>(null)
   const [query, setQuery] = useState("")
+  const [dbAdd, setDbAdd] = useState("")
+  const [, startTransition] = useTransition()
+
+  const rosterNames = Array.from(new Set(roster.map((c) => c.name))).sort()
+
+  // Add/remove Jordan's own counters straight from the DB detail (optimistic +
+  // persisted). Matched by defender name — same server actions as the instant view.
+  function setMy(champName: string, next: string[], action: () => Promise<unknown>) {
+    setList((l) => l.map((p) => (p.name === champName ? { ...p, myCounters: next } : p)))
+    startTransition(async () => { await action() })
+  }
+  function addMy(champName: string, current: string[], raw: string) {
+    const name = raw.replace(/\s+/g, " ").trim()
+    setDbAdd("")
+    if (!name || current.some((c) => normChampName(c) === normChampName(name))) return
+    setMy(champName, [...current, name], () => addMyCounter(champName, name))
+  }
+  function removeMy(champName: string, current: string[], name: string) {
+    setMy(champName, current.filter((c) => normChampName(c) !== normChampName(name)), () => removeMyCounter(champName, name))
+  }
 
   async function refreshData() {
     try {
@@ -105,6 +126,9 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto font-mono space-y-4" style={{ color: GREEN }}>
+      <datalist id="champdb-roster">
+        {rosterNames.map((n) => <option key={n} value={n} />)}
+      </datalist>
       <div className="border border-[#1f5c33] rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <p className="text-sm opacity-70">Build the all-champions database that powers instant counters. Grounded (live meta) — the build takes a while; leave it running.</p>
@@ -156,7 +180,7 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
           const isOpen = open === c.name
           return (
             <div key={c.name} className={`border rounded-lg px-3 py-2 ${isOpen ? "border-[#33ff66]" : "border-[#1f5c33]"}`}>
-              <button onClick={() => setOpen(isOpen ? null : c.name)} className="w-full text-left">
+              <button onClick={() => { setDbAdd(""); setOpen(isOpen ? null : c.name) }} className="w-full text-left">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-bold text-white">{c.name}</span>
                   {c.class && <span className="text-[10px] uppercase tracking-widest px-1.5 py-0.5 rounded border" style={{ color: classColour(c.class), borderColor: classColour(c.class) + "88" }}>{c.class}</span>}
@@ -179,23 +203,35 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
                     </div>
                   )}
 
-                  {(c.myCounters?.length ?? 0) > 0 && (
-                    <div>
-                      <p className="text-[10px] uppercase tracking-widest text-[#ffd23f] mb-1">👑 My counters</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {c.myCounters!.map((n) => {
-                          const owned = ownedByName.get(normChampName(n))
-                          return (
-                            <span key={n} className="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg border border-[#8a6d1a] text-white">
-                              {owned?.imageUrl && <img src={owned.imageUrl} alt="" width={18} height={18} className="rounded object-cover" />}
-                              {n}
-                              {owned && <span className="text-[9px] text-[#33ff66]">{owned.stars}★R{owned.rank}</span>}
-                            </span>
-                          )
-                        })}
-                      </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-[#ffd23f] mb-1">👑 My counters</p>
+                    <div className="flex flex-wrap gap-1.5 items-center">
+                      {(c.myCounters ?? []).map((n) => {
+                        const owned = ownedByName.get(normChampName(n))
+                        return (
+                          <span key={n} className="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg border border-[#8a6d1a] text-white">
+                            {owned?.imageUrl && <img src={owned.imageUrl} alt="" width={18} height={18} className="rounded object-cover" />}
+                            {n}
+                            {owned && <span className="text-[9px] text-[#33ff66]">{owned.stars}★R{owned.rank}</span>}
+                            <button onClick={() => removeMy(c.name, c.myCounters ?? [], n)} className="text-[#ffd23f]/60 hover:text-red-400 ml-0.5 leading-none" title="Remove">×</button>
+                          </span>
+                        )
+                      })}
+                      <input
+                        list="champdb-roster"
+                        value={dbAdd}
+                        onChange={(e) => setDbAdd(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addMy(c.name, c.myCounters ?? [], dbAdd) } }}
+                        placeholder="+ add your counter"
+                        className="bg-black border border-[#8a6d1a]/60 rounded-lg px-2 py-1 text-[11px] focus:outline-none focus:border-[#ffd23f] placeholder:text-[#8a6d1a] w-40"
+                        style={{ color: "#ffd23f" }}
+                      />
+                      {dbAdd.trim() && (
+                        <button onClick={() => addMy(c.name, c.myCounters ?? [], dbAdd)} className="text-[11px] px-2 py-1 rounded-lg border border-[#ffd23f] text-[#ffd23f] hover:bg-[#ffd23f]/10">Add</button>
+                      )}
                     </div>
-                  )}
+                    <p className="text-[10px] opacity-40 mt-1">Your own picks — never overwritten by Update meta.</p>
+                  </div>
 
                   {c.counters.length > 0 && (
                     <div>
