@@ -41,7 +41,7 @@ export default function AskAi() {
 
   return (
     <div className="h-full bg-black p-6 font-mono flex flex-col" style={themeVars}>
-      <div className="max-w-3xl mx-auto w-full flex flex-col flex-1 min-h-0">
+      <div className="w-full flex flex-col flex-1 min-h-0">
         <div className="flex items-center justify-between gap-3 mb-3 shrink-0 flex-wrap">
           <h1 className="text-lg font-bold tracking-widest">02 · ASK AI</h1>
           <Link href="/jordan" prefetch={false} className="text-xs opacity-60 hover:opacity-100">&lt; JORDAN.SYS</Link>

@@ -36,7 +36,7 @@ export default function JordanMenu() {
 
   return (
     <div className="min-h-full bg-black p-6 font-mono" style={{ color: GREEN }}>
-      <div className="max-w-2xl mx-auto pt-10">
+      <div className="w-full pt-10">
         <pre className="text-[9px] sm:text-xs leading-tight mb-1 select-none overflow-x-auto" style={{ color: GREEN }}>
 {`     ██  ██████  ██████  ██████   █████  ███    ██    ███████ ██    ██ ███████
      ██ ██    ██ ██   ██ ██   ██ ██   ██ ████   ██    ██       ██  ██  ██
