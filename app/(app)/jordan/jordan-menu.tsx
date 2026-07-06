@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { CRT_KEY } from "@/components/crt-mode"
 
 // The secret menu UI — retro terminal styling, because obviously.
@@ -14,7 +15,9 @@ export default function JordanMenu() {
   const [booted, setBooted] = useState(false)
 
   useEffect(() => {
-    try { setCrt(localStorage.getItem(CRT_KEY) === "1") } catch {}
+    queueMicrotask(() => {
+      try { setCrt(localStorage.getItem(CRT_KEY) === "1") } catch {}
+    })
     const t = setTimeout(() => setBooted(true), 400)
     return () => clearTimeout(t)
   }, [])
@@ -57,12 +60,16 @@ export default function JordanMenu() {
               </span>
             </button>
 
+            <Link href="/jordan/chat" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
+              <span>02 &nbsp;ASK AI <span className="opacity-50">— day-to-day chat, silly questions welcome</span></span>
+              <span className="shrink-0 font-bold">[ OPEN ]</span>
+            </Link>
+            <Link href="/jordan/cooking" prefetch={false} className={`${row} w-full hover:bg-[#0a2214] transition-colors`}>
+              <span>03 &nbsp;COOKING <span className="opacity-50">— expert chef chat + air fryer photo converter</span></span>
+              <span className="shrink-0 font-bold">[ OPEN ]</span>
+            </Link>
             <div className={`${row} opacity-40 select-none`}>
-              <span>02 &nbsp;????????????</span>
-              <span className="shrink-0">[ LOCKED ]</span>
-            </div>
-            <div className={`${row} opacity-40 select-none`}>
-              <span>03 &nbsp;????????????</span>
+              <span>04 &nbsp;????????????</span>
               <span className="shrink-0">[ LOCKED ]</span>
             </div>
 
