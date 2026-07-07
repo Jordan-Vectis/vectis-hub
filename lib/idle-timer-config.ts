@@ -44,6 +44,7 @@ export interface IdleReason {
   requiresNotes: boolean  // forces a note before submission
   colour:        string   // Tailwind badge classes
   idleColour:    string   // hex for charts / timeline
+  notePrompt?:   string   // optional follow-up question shown as the note label (e.g. "Who for?")
 }
 
 export interface IdleTimerConfig {

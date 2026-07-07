@@ -929,24 +929,29 @@ export default function LotWizardTab({
               </div>
             )}
 
-            {/* requiresNotes reasons — mandatory text field */}
+            {/* Note / follow-up question — shown for reasons that require a note OR
+                carry a custom follow-up question (notePrompt, e.g. "Who for?"). */}
             {(() => {
               const cfg = idleReasons.find(r => r.key === idleReason)
-              if (!cfg?.requiresNotes || idleReason === "LUNCH_BREAK") return null
+              if (idleReason === "LUNCH_BREAK") return null
+              const prompt   = cfg?.notePrompt?.trim()
+              const required = !!cfg?.requiresNotes
+              if (!required && !prompt) return null
+              const missing = required && !idleNotes.trim()
               return (
                 <div className="mb-4">
                   <label className="block text-xs font-semibold text-gray-600 mb-1">
-                    Note <span className="text-red-500">*</span>
-                    <span className="font-normal text-gray-400 ml-1">required</span>
+                    {prompt || "Note"}
+                    {required && <> <span className="text-red-500">*</span><span className="font-normal text-gray-400 ml-1">required</span></>}
                   </label>
                   <textarea value={idleNotes} onChange={e => setIdleNotes(e.target.value)}
-                    placeholder="Please explain what you were doing…"
+                    placeholder={prompt ? `${prompt}…` : "Please explain what you were doing…"}
                     className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none resize-none transition-colors ${
-                      idleNotes.trim() ? "border-gray-200 focus:border-[#2AB4A6]" : "border-red-300 bg-red-50 focus:border-red-400"
+                      missing ? "border-red-300 bg-red-50 focus:border-red-400" : "border-gray-200 focus:border-[#2AB4A6]"
                     }`}
                     rows={3} />
-                  {!idleNotes.trim() && (
-                    <p className="text-xs text-red-500 mt-1">A note is required before you can continue.</p>
+                  {missing && (
+                    <p className="text-xs text-red-500 mt-1">An answer is required before you can continue.</p>
                   )}
                 </div>
               )

@@ -26,6 +26,7 @@ function ReasonModal({
   const [icon,         setIcon]         = useState(initial?.icon         ?? "📝")
   const [label,        setLabel]        = useState(initial?.label        ?? "")
   const [requiresNotes,setRequiresNotes]= useState(initial?.requiresNotes ?? false)
+  const [notePrompt,   setNotePrompt]   = useState(initial?.notePrompt    ?? "")
   const [colour,       setColour]       = useState(
     initial?.colour ?? COLOUR_PRESETS[7].colour
   )
@@ -44,7 +45,7 @@ function ReasonModal({
 
   function save() {
     if (!canSave) return
-    onSave({ key: derivedKey, label: label.trim(), icon, requiresNotes, colour, idleColour })
+    onSave({ key: derivedKey, label: label.trim(), icon, requiresNotes, colour, idleColour, notePrompt: notePrompt.trim() || undefined })
   }
 
   return (
@@ -96,6 +97,13 @@ function ReasonModal({
             <p className="text-xs text-gray-500">Staff must type an explanation before submitting</p>
           </div>
         </label>
+
+        {/* Follow-up question (optional) */}
+        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Follow-up question (optional)</label>
+        <input value={notePrompt} onChange={e => setNotePrompt(e.target.value)}
+          placeholder={'e.g. "Who for?"'}
+          className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white mb-1 focus:outline-none focus:border-[#2AB4A6]" />
+        <p className="text-xs text-gray-400 mb-6">Shown as the prompt on the note field when this reason is picked. Turn on &ldquo;Requires a note&rdquo; above to make the answer mandatory.</p>
 
         {/* Preview */}
         <div className="mb-5 p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
@@ -222,7 +230,7 @@ export default function IdleTimerSettingsClient({ initialReasons }: { initialRea
             </button>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-5">
-            These appear in the idle popup. Drag the arrows to reorder. "Requires note" forces staff to explain before submitting.
+            These appear in the idle popup. Drag the arrows to reorder. &ldquo;Requires note&rdquo; forces staff to explain before submitting.
           </p>
 
           {reasons.length === 0 && (
@@ -257,6 +265,11 @@ export default function IdleTimerSettingsClient({ initialReasons }: { initialRea
                   <span className="text-xs text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded-full font-semibold shrink-0">
                     note required
                   </span>
+                )}
+
+                {/* Follow-up question */}
+                {r.notePrompt && (
+                  <span className="text-xs text-gray-500 dark:text-gray-400 italic hidden md:block truncate">asks: &ldquo;{r.notePrompt}&rdquo;</span>
                 )}
 
                 <div className="ml-auto flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
