@@ -39,14 +39,22 @@ export async function GET() {
         take: 500,
       }),
 
+      // Category breakdown joins active totes to their items by RECEIPT number,
+      // NOT by tote number: BC's Receipt/Auction line feeds don't populate the
+      // item-level tote field (EVA_ArticleToteNo is empty on ~all 202k items), so a
+      // tote-number join returns nothing. receiptNo is populated on every active tote
+      // and on its items, so this gives a real breakdown. Caveat: a receipt can span
+      // several totes/categories, so a tote can count toward more than one category
+      // (the per-category tote counts are an approximation, not a partition).
       prisma.$queryRaw<{ category: string | null; toteCount: bigint; itemCount: bigint }[]>`
         SELECT
           wi.category,
-          COUNT(DISTINCT wt."toteNo") AS "toteCount",
-          COUNT(wi."uniqueId")        AS "itemCount"
+          COUNT(DISTINCT wt."toteNo")   AS "toteCount",
+          COUNT(DISTINCT wi."uniqueId") AS "itemCount"
         FROM "WarehouseTote" wt
-        INNER JOIN "WarehouseItem" wi ON wi."toteNo" = wt."toteNo"
+        INNER JOIN "WarehouseItem" wi ON wi."receiptNo" = wt."receiptNo"
         WHERE wt.catalogued = false
+          AND wt."receiptNo" IS NOT NULL AND btrim(wt."receiptNo") <> ''
         GROUP BY wi.category
         ORDER BY "toteCount" DESC
       `,

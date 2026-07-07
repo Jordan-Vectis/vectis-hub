@@ -1439,13 +1439,21 @@ function ToteDataTab() {
         {/* ── By Category chart ── */}
         {view === "category" && (
           <div className="space-y-1.5 max-w-3xl">
-            {byCategory.length === 0 && (
+            {byCategory.length === 0 ? (
               <div className="text-gray-600 dark:text-gray-400 text-sm">No active totes found</div>
+            ) : (
+              <p className="text-xs text-gray-500 dark:text-gray-500 mb-2">
+                Active totes grouped by the categories on their receipt (bar = active totes, number in brackets = items).
+                A receipt can hold more than one category, so a tote may appear under several.
+              </p>
             )}
             {byCategory.map(row => (
               <div key={row.category} className="grid items-center gap-3" style={{ gridTemplateColumns: "180px 1fr" }}>
-                <div className="text-xs text-gray-600 dark:text-gray-400 text-right truncate pr-2 font-mono">{row.category}</div>
-                <HorizBar value={row.activeTotes} max={maxTotes} color="bg-blue-500" />
+                <div className="text-xs text-gray-600 dark:text-gray-400 text-right truncate pr-2 font-mono" title={`${row.category} · ${row.itemCount.toLocaleString()} items`}>{row.category}</div>
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex-1 min-w-0"><HorizBar value={row.activeTotes} max={maxTotes} color="bg-blue-500" /></div>
+                  <span className="text-[11px] font-mono text-gray-500 dark:text-gray-500 w-16 text-right flex-shrink-0">({row.itemCount.toLocaleString()})</span>
+                </div>
               </div>
             ))}
             {/* x-axis ticks */}
