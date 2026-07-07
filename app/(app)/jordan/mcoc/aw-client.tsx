@@ -20,7 +20,7 @@ const DEF_KEY = "mcoc_aw_defence"
 
 type PathResult = {
   teams: { name: string; summary: string; champions: { champion: string; why: string }[] }[]
-  fights: { defender: string; options: { attacker: string; how: string }[] }[]
+  fights: { defender: string; node?: string; nodeBuff?: string; options: { attacker: string; how: string }[] }[]
   risks: string; notes: string
 }
 type DefResult = { placements: { node: string; champion: string; why: string }[]; notes: string }
@@ -269,13 +269,14 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                 <p className="text-[10px] uppercase tracking-widest opacity-50">Fight by fight — best options for each</p>
                 <div className="grid gap-2 lg:grid-cols-2">
                   {path.fights.map((f, i) => {
-                    const node = nodeFor(f.defender)
+                    const node = f.node || nodeFor(f.defender)
                     return (
                       <div key={i} className="border border-[#1f5c33] rounded-lg px-3 py-2 text-sm">
-                        <p className="flex items-center gap-1.5 flex-wrap mb-1.5">
+                        <p className="flex items-center gap-1.5 flex-wrap mb-1">
                           {node && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#1f5c33] opacity-80 shrink-0">NODE {node}</span>}
                           <span className="text-white font-bold">{f.defender}</span>
                         </p>
+                        {f.nodeBuff && <p className="text-[11px] text-amber-300 mb-1.5">⚡ {f.nodeBuff}</p>}
                         <div className="space-y-1.5">
                           {f.options.map((o, j) => (
                             <div key={j} className="flex items-start gap-2">

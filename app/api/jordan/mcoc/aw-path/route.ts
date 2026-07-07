@@ -38,9 +38,9 @@ export async function POST(req: NextRequest) {
 
     const prompt = `You are an expert Marvel Contest of Champions Alliance War strategist. The player must clear an AW path with these DEFENDERS, in this order:
 ${defenders.map((d, i) => `${i + 1}. ${d.name}${d.node ? ` (on node ${d.node})` : ""}`).join("\n")}
-${tier ? `\nWar bracket: ${tier} tier — factor in the tougher active nodes, global node buffs and defensive tactics typical of ${tier}-tier Alliance War.` : ""}
-${nodes ? `\nNode / buff info from the player: ${nodes}` : ""}
-${defenders.some((d) => d.node) ? `\nWhere a node number is given, factor in that AW node's known buff(s) when choosing the attacker and explaining how.` : ""}
+${tier ? `\nWar bracket: ${tier} tier — assume the node buffs and defensive tactics of ${tier}-tier Alliance War.` : ""}
+${nodes ? `\nExtra node / buff info from the player (treat as authoritative): ${nodes}` : ""}
+${defenders.some((d) => d.node) ? `\nNODE LOOKUP (important): for each defender that has a node number, LOOK UP what that Alliance War node actually does${tier ? ` in ${tier} tier` : ""} — the node's buff(s) and any global effects — and return it in that fight's "nodeBuff". Factor the node buff into which attacker you pick and into the "how". Use real, current Alliance War node data. If you genuinely don't know a specific node's buff, set "nodeBuff" to "" rather than inventing one — do not guess.` : ""}
 
 THE PLAYER'S ROSTER (pick ONLY from this list, names copied exactly):
 ${rosterList}
@@ -55,8 +55,8 @@ Return STRICT JSON only (no prose, no markdown):
     { "name": string, "summary": string, "champions": [ { "champion": string, "why": string } ] }
   ],   // 2 or 3 teams; exactly 3 champions each; names copied from the roster list
   "fights": [
-    { "defender": string, "options": [ { "attacker": string, "how": string } ] }
-  ],   // one entry per defender, in the same order; 2–3 options each, best first, attackers from the roster
+    { "defender": string, "node": string, "nodeBuff": string, "options": [ { "attacker": string, "how": string } ] }
+  ],   // one per defender, same order. node = its node number (echo it, "" if none). nodeBuff = what that node does at this tier (looked up; "" if truly unknown). 2–3 options each, best first, attackers from the roster
   "risks": string,   // the hardest fight(s) on this path and why, or ""
   "notes": string    // extra tips for the path (boosts to bring, ramp-up champs, order to fight in…), or ""
 }`
@@ -72,6 +72,8 @@ Return STRICT JSON only (no prose, no markdown):
     })).filter((t: { champions: unknown[] }) => t.champions.length)
     const fights = (Array.isArray(parsed?.fights) ? parsed.fights : []).slice(0, defenders.length + 2).map((f: any) => ({
       defender: typeof f?.defender === "string" ? f.defender.trim().slice(0, 60) : "?",
+      node: typeof f?.node === "string" ? f.node.trim().slice(0, 12) : (typeof f?.node === "number" ? String(f.node) : ""),
+      nodeBuff: typeof f?.nodeBuff === "string" ? f.nodeBuff.slice(0, 200) : "",
       options: (Array.isArray(f?.options) ? f.options : []).slice(0, 3).map((o: any) => ({
         attacker: typeof o?.attacker === "string" ? o.attacker.trim().slice(0, 60) : "?",
         how: typeof o?.how === "string" ? o.how.slice(0, 300) : "",
