@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
 
     const form = await req.formData()
     const notes = ((form.get("notes") as string) ?? "").trim().slice(0, 1000)
+    const tier = ((form.get("tier") as string) ?? "").trim().slice(0, 40)
     const count = Math.min(10, Math.max(1, Number(form.get("count")) || 5))
     let roster: { name: string; stars?: number; rank?: number }[] = []
     try { const r = JSON.parse((form.get("roster") as string) ?? "[]"); if (Array.isArray(r)) roster = r } catch {}
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
     const rosterList = roster.map((c) => `- ${c.name}${c.stars ? ` (${c.stars}★${c.rank ? ` R${c.rank}` : ""})` : ""}`).join("\n")
     const prompt = `You are an expert Marvel Contest of Champions Alliance War strategist. Recommend the player's best AW DEFENCE placements.
 
-${parts.length ? "The image shows the defence map / nodes available to the player — read the node numbers and buffs from it." : "No map image was provided — use standard current Alliance War defence nodes and call nodes by their usual numbers."}${notes ? `\nExtra info from the player (tier/map/etc.): ${notes}` : ""}
+${parts.length ? "The image shows the defence map / nodes available to the player — read the node numbers and buffs from it." : "No map image was provided — use standard current Alliance War defence nodes and call nodes by their usual numbers."}${tier ? `\nWar bracket: ${tier} tier — assume the node buffs and defensive tactics typical of ${tier}-tier Alliance War.` : ""}${notes ? `\nExtra info from the player (tier/map/etc.): ${notes}` : ""}
 
 THE PLAYER'S ROSTER (pick ONLY from this list, names copied exactly):
 ${rosterList}

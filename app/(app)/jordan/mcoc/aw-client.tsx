@@ -11,6 +11,12 @@ import type { Champ } from "./mcoc-hub"
 //   DEFENCE: recommend which of your champs to place on which defence nodes.
 
 const GREEN = "#33ff66"
+// AW season reward brackets — passed to the AI as difficulty context.
+const AW_TIERS = ["Bronze", "Silver", "Gold", "Platinum", "Challenger", "Master", "Vibranium"]
+// localStorage keys — remember the last War inputs between visits.
+const TIER_KEY = "mcoc_aw_tier"
+const PATH_KEY = "mcoc_aw_path"
+const DEF_KEY = "mcoc_aw_defence"
 
 type PathResult = {
   teams: { name: string; summary: string; champions: { champion: string; why: string }[] }[]
@@ -23,6 +29,8 @@ type Def = { name: string; node: string }
 
 export default function AwClient({ roster }: { roster: Champ[] }) {
   const [mode, setMode] = useState<"path" | "defence">("path")
+  const [tier, setTier] = useState("")   // AW difficulty bracket, remembered per browser
+  const restored = useRef(false)
   const ownedByName = new Map(roster.map((c) => [normChampName(c.name), c]))
   const rosterPayload = () => JSON.stringify(roster.map((c) => ({ name: c.name, stars: c.stars, rank: c.rank })))
 
@@ -72,6 +80,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
         body: JSON.stringify({
           defenders: defenders.map((d) => ({ name: d.name, node: d.node || undefined })),
           nodes: nodes.trim() || undefined,
+          tier: tier || undefined,
           roster: JSON.parse(rosterPayload()),
           model: getJordanModel() || undefined,
         }),
@@ -96,6 +105,31 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
   const [defErr, setDefErr] = useState<string | null>(null)
   const [defence, setDefence] = useState<DefResult | null>(null)
 
+  // Remember the last War inputs (tier, path defenders/notes, defence notes/count)
+  // between visits. Restore once after mount, then save on change (the `restored`
+  // guard stops the initial empty state clobbering the saved values first).
+  useEffect(() => {
+    queueMicrotask(() => {
+      try {
+        const t = localStorage.getItem(TIER_KEY); if (t) setTier(t)
+        const p = JSON.parse(localStorage.getItem(PATH_KEY) || "null")
+        if (p) {
+          if (Array.isArray(p.defenders)) setDefenders(p.defenders.filter((x: { name?: unknown }) => typeof x?.name === "string").map((x: { name: string; node?: unknown }) => ({ name: x.name, node: typeof x.node === "string" ? x.node : "" })))
+          if (typeof p.nodes === "string") setNodes(p.nodes)
+        }
+        const d = JSON.parse(localStorage.getItem(DEF_KEY) || "null")
+        if (d) {
+          if (typeof d.notes === "string") setDefNotes(d.notes)
+          if (Number(d.count)) setDefCount(Number(d.count))
+        }
+      } catch {}
+      restored.current = true
+    })
+  }, [])
+  useEffect(() => { if (restored.current) try { localStorage.setItem(TIER_KEY, tier) } catch {} }, [tier])
+  useEffect(() => { if (restored.current) try { localStorage.setItem(PATH_KEY, JSON.stringify({ defenders, nodes })) } catch {} }, [defenders, nodes])
+  useEffect(() => { if (restored.current) try { localStorage.setItem(DEF_KEY, JSON.stringify({ notes: defNotes, count: defCount })) } catch {} }, [defNotes, defCount])
+
   function pickMap(f: File | null) {
     setMapFile(f)
     if (mapPreview) URL.revokeObjectURL(mapPreview)
@@ -109,6 +143,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
       const fd = new FormData()
       if (mapFile) fd.append("image", mapFile)
       if (defNotes.trim()) fd.append("notes", defNotes.trim())
+      if (tier) fd.append("tier", tier)
       fd.append("count", String(defCount))
       fd.append("roster", rosterPayload())
       const model = getJordanModel(); if (model) fd.append("model", model)
@@ -144,6 +179,14 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
         <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => setMode("path")} className={modeBtn(mode === "path")}>🗡 ATTACK PATH</button>
           <button onClick={() => setMode("defence")} className={modeBtn(mode === "defence")}>🛡 DEFENCE PLACER</button>
+          <label className="inline-flex items-center gap-1.5 text-xs opacity-70 ml-1" title="Your war bracket — the AI factors in the tougher nodes at higher tiers">
+            🗺 Tier
+            <select value={tier} onChange={(e) => setTier(e.target.value)}
+              className="bg-black border border-[#1f5c33] rounded px-2 py-1 text-xs focus:outline-none focus:border-[#33ff66]" style={{ color: GREEN }}>
+              <option value="">— any —</option>
+              {AW_TIERS.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </label>
           <span className="ml-auto"><ModelPicker /></span>
         </div>
 

@@ -33,10 +33,12 @@ export async function POST(req: NextRequest) {
     if (roster.length < 3) return NextResponse.json({ error: "Your roster needs at least 3 champions." }, { status: 400 })
 
     const nodes = typeof body?.nodes === "string" ? body.nodes.trim().slice(0, 1000) : ""
+    const tier = typeof body?.tier === "string" ? body.tier.trim().slice(0, 40) : ""
     const rosterList = roster.map((c) => `- ${c.name}${c.stars ? ` (${c.stars}★${c.rank ? ` R${c.rank}` : ""})` : ""}`).join("\n")
 
     const prompt = `You are an expert Marvel Contest of Champions Alliance War strategist. The player must clear an AW path with these DEFENDERS, in this order:
 ${defenders.map((d, i) => `${i + 1}. ${d.name}${d.node ? ` (on node ${d.node})` : ""}`).join("\n")}
+${tier ? `\nWar bracket: ${tier} tier — factor in the tougher active nodes, global node buffs and defensive tactics typical of ${tier}-tier Alliance War.` : ""}
 ${nodes ? `\nNode / buff info from the player: ${nodes}` : ""}
 ${defenders.some((d) => d.node) ? `\nWhere a node number is given, factor in that AW node's known buff(s) when choosing the attacker and explaining how.` : ""}
 
