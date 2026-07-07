@@ -36,12 +36,15 @@ export async function GET(req: NextRequest) {
     const CAT_COL        = "EVA_TOT_ArticleCategory"
     const CATALOGUER_COL = "EVA_TOT_AssignToCataloguer"
     const CATALOGUED_COL = "EVA_TOT_Catalogued"
-    const CREATED_COL    = "SystemCreatedAt"   // BC record-creation timestamp = when the tote was created/arrived
+    const CREATED_COL    = "SystemCreatedAt"      // BC record-creation timestamp = when the tote was created/arrived
+    const LOC_COL        = "EVA_TOT_ToteLocation" // physical location (blank = unlocated; "BENCH*" = at a cataloguing bench)
 
-    // Optional date filter on the tote's creation date (YYYY-MM-DD, inclusive).
     const { searchParams } = new URL(req.url)
+    // Optional date filter on the tote's creation date (YYYY-MM-DD, inclusive).
     const fromParam = searchParams.get("from")
     const toParam   = searchParams.get("to")
+    // Optional: drop totes with a blank or bench location (in-progress, not yet shelved).
+    const excludeBench = searchParams.get("excludeBench") === "1"
     const fMs = fromParam ? Date.parse(`${fromParam}T00:00:00.000Z`) : NaN
     const tMs = toParam   ? Date.parse(`${toParam}T23:59:59.999Z`)   : NaN
     const validFrom = Number.isFinite(fMs) ? fMs : null
@@ -57,18 +60,27 @@ export async function GET(req: NextRequest) {
       if (validTo   != null && t > validTo)   return false
       return true
     }
+    // When the box is ticked, drop blank-location and bench totes (not yet shelved).
+    const locOk = (r: any): boolean => {
+      if (!excludeBench) return true
+      const loc = String(r[LOC_COL] ?? "").trim()
+      return loc !== "" && !loc.toUpperCase().includes("BENCH")
+    }
+    const uncat = (r: any): boolean => r[CATALOGUED_COL] !== true
 
-    const allRows    = await bcFetchAll(token, "Receipt_Totes_Excel")
-    const windowRows = allRows.filter(inWindow)
+    const allRows = await bcFetchAll(token, "Receipt_Totes_Excel")
+    const inDate  = allRows.filter(inWindow)
 
-    // Whole report is scoped to totes STILL TO BE CATALOGUED — catalogued totes are
-    // finished work. (By Cataloguer already excluded them; By Category / totals / raw
-    // now match, so every number reflects what's left in the warehouse to catalogue.)
-    const rows = windowRows.filter((r) => r[CATALOGUED_COL] !== true)
-    const cataloguedExcluded = windowRows.length - rows.length
-    // Uncatalogued totes dropped by the date filter for lack of a creation date (transparency).
+    // Whole report is scoped to totes STILL TO BE CATALOGUED (catalogued totes are
+    // finished work) that also pass the optional location filter, so every number
+    // below reflects what's left in the warehouse to catalogue.
+    const rows = inDate.filter((r) => uncat(r) && locOk(r))
+    // Transparency counts, all within the same date window so they reconcile with `rows`.
+    const cataloguedExcluded = inDate.filter((r) => !uncat(r) && locOk(r)).length
+    const locationExcluded   = excludeBench ? inDate.filter((r) => uncat(r) && !locOk(r)).length : 0
+    // Uncatalogued totes dropped by the date filter for lack of a creation date.
     const undated = !dateActive ? 0 : allRows.filter(
-      (r) => r[CATALOGUED_COL] !== true && !Number.isFinite(Date.parse(String(r[CREATED_COL] ?? ""))),
+      (r) => uncat(r) && locOk(r) && !Number.isFinite(Date.parse(String(r[CREATED_COL] ?? ""))),
     ).length
 
     // By category
@@ -100,6 +112,7 @@ export async function GET(req: NextRequest) {
       catalogued: r[CATALOGUED_COL] === true,
       barcode:    r["No_"] ?? r["EVA_TOT_No"] ?? "",
       description: r["Description"] ?? r["EVA_TOT_Description"] ?? "",
+      location:   r[LOC_COL] ?? "",
       created:    r[CREATED_COL] ?? "",
     }))
 
@@ -111,6 +124,8 @@ export async function GET(req: NextRequest) {
         total:              rows.length,
         openTotes:          rows.length,
         cataloguedExcluded,
+        locationExcluded,
+        excludeBench,
         undated,
         from:               fromParam ?? null,
         to:                 toParam ?? null,

@@ -35,8 +35,8 @@ type PackData = {
 type WhData = {
   byCategory:   { category: string; count: number }[]
   byCataloguer: { cataloguer: string; count: number }[]
-  raw:          { category: string; cataloguer: string; catalogued: boolean; barcode: string; description: string; created: string }[]
-  meta:         { total: number; openTotes: number; cataloguedExcluded: number; undated: number; from: string | null; to: string | null; categoryCount: number; largestCategory: string }
+  raw:          { category: string; cataloguer: string; catalogued: boolean; barcode: string; description: string; location: string; created: string }[]
+  meta:         { total: number; openTotes: number; cataloguedExcluded: number; locationExcluded: number; excludeBench: boolean; undated: number; from: string | null; to: string | null; categoryCount: number; largestCategory: string }
 }
 
 type Region = "UK" | "Europe" | "Rest of World"
@@ -1202,16 +1202,18 @@ function WarehouseTab() {
   const [data, setData] = useState<WhData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
-  const [subTab, setSubTab]   = useState("By Category")
-  const [from, setFrom]       = useState("")
-  const [to, setTo]           = useState("")
+  const [subTab, setSubTab]       = useState("By Category")
+  const [from, setFrom]           = useState("")
+  const [to, setTo]               = useState("")
+  const [excludeBench, setExcludeBench] = useState(false)
 
-  const load = useCallback(async (f: string, t: string) => {
+  const load = useCallback(async (f: string, t: string, xb: boolean) => {
     setLoading(true); setError(null)
     try {
       const qs = new URLSearchParams()
       if (f) qs.set("from", f)
       if (t) qs.set("to", t)
+      if (xb) qs.set("excludeBench", "1")
       const res  = await window.fetch(`/api/bc/warehouse${qs.toString() ? `?${qs}` : ""}`)
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? res.statusText)
@@ -1220,11 +1222,11 @@ function WarehouseTab() {
     finally { setLoading(false) }
   }, [])
 
-  // Load on mount and whenever the date range changes (debounced so manual typing doesn't spam).
+  // Load on mount and whenever a filter changes (debounced so manual typing doesn't spam).
   useEffect(() => {
-    const id = setTimeout(() => load(from, to), 300)
+    const id = setTimeout(() => load(from, to, excludeBench), 300)
     return () => clearTimeout(id)
-  }, [from, to]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [from, to, excludeBench]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleDateChange(f: string, t: string) { setFrom(f); setTo(t) }
 
@@ -1233,8 +1235,12 @@ function WarehouseTab() {
       <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Warehouse Report</h2>
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Totes still to be catalogued, live from BC. Optionally filter by when each tote was created (arrived).</p>
       <DateRange from={from} to={to} onChange={handleDateChange} onPreset={handleDateChange} />
+      <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 mb-4 cursor-pointer select-none w-fit">
+        <input type="checkbox" checked={excludeBench} onChange={(e) => setExcludeBench(e.target.checked)} className="w-4 h-4 accent-[#0078D4]" />
+        Hide bench &amp; blank-location totes
+      </label>
       <button
-        onClick={() => load(from, to)} disabled={loading}
+        onClick={() => load(from, to, excludeBench)} disabled={loading}
         className="mb-5 px-5 py-2 bg-[#0078D4] hover:bg-blue-500 text-gray-900 dark:text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
       >
         {loading ? "Loading…" : "↺ Refresh Snapshot"}
@@ -1259,11 +1265,17 @@ function WarehouseTab() {
               <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{data.meta.largestCategory}</p>
             </div>
           </div>
+          {data.meta.locationExcluded > 0 && (
+            <p className="text-[11px] text-gray-500 dark:text-gray-500 mb-1">
+              {data.meta.locationExcluded.toLocaleString()} tote{data.meta.locationExcluded === 1 ? "" : "s"} hidden — blank or bench location.
+            </p>
+          )}
           {data.meta.undated > 0 && (
-            <p className="text-[11px] text-amber-600 dark:text-amber-500 mb-3">
+            <p className="text-[11px] text-amber-600 dark:text-amber-500 mb-1">
               {data.meta.undated.toLocaleString()} tote{data.meta.undated === 1 ? " has" : "s have"} no creation date in BC and {data.meta.undated === 1 ? "is" : "are"} hidden while a date range is set.
             </p>
           )}
+          <div className="mb-3" />
           <SubTabs tabs={["By Category", "By Cataloguer", "Raw Data"]} active={subTab} onChange={setSubTab} />
           {subTab === "By Category"   && <><HBar data={data.byCategory} valueKey="count" labelKey="category" /><ExportBtn onClick={() => exportXlsx(data.byCategory, "warehouse_by_category")} /></>}
           {subTab === "By Cataloguer" && <><HBar data={data.byCataloguer} valueKey="count" labelKey="cataloguer" /><ExportBtn onClick={() => exportXlsx(data.byCataloguer, "warehouse_by_cataloguer")} /></>}
@@ -1277,6 +1289,7 @@ function WarehouseTab() {
                       <th className="px-4 py-2 text-left">Barcode</th>
                       <th className="px-4 py-2 text-left">Category</th>
                       <th className="px-4 py-2 text-left">Cataloguer</th>
+                      <th className="px-4 py-2 text-left">Location</th>
                       <th className="px-4 py-2 text-left">Created</th>
                     </tr>
                   </thead>
@@ -1286,6 +1299,7 @@ function WarehouseTab() {
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-500 font-mono text-xs">{r.barcode}</td>
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{r.category}</td>
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{r.cataloguer}</td>
+                        <td className="px-4 py-2 text-gray-600 dark:text-gray-400 font-mono text-xs">{r.location || "—"}</td>
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-500 text-xs whitespace-nowrap">{r.created ? new Date(r.created).toLocaleDateString("en-GB") : "—"}</td>
                       </tr>
                     ))}
