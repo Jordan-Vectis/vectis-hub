@@ -636,6 +636,26 @@ export default function SaleStatisticsClient() {
                 </div>
               </div>
 
+              {/* Direct best vs quietest comparison — every metric side by side */}
+              <div className="mb-6">
+                <Section title={`Best vs quietest — ${MONTHS[bestMonth.month]} vs ${MONTHS[worstMonth.month]}`}>
+                  <Table
+                    head={["Metric", `${MONTHS[bestMonth.month]} — best`, `${MONTHS[worstMonth.month]} — quietest`, "Difference"]}
+                    rows={cmpMetrics.map(m => {
+                      const a = m.get(bestMonth.r), b = m.get(worstMonth.r)
+                      const f = m.kind === "money" ? gbp0 : m.kind === "int" ? int : pct
+                      const d = a - b
+                      const colour = d > 0 ? "text-emerald-500" : d < 0 ? "text-red-400" : "text-gray-500"
+                      const change = m.kind === "pct"
+                        ? <span className={colour}>{pctS(d)} pts</span>
+                        : <span className={colour}>{(d >= 0 ? "+" : "") + f(d)}{b !== 0 ? ` (${pctS(d / b)})` : ""}</span>
+                      return [<span key="m" className="text-gray-700 dark:text-gray-200">{m.label}</span>, f(a), f(b), change]
+                    })}
+                    rightFrom={1}
+                  />
+                </Section>
+              </div>
+
               <div className="mb-6">
                 <ChartCard title="Sale value by month">
                   <ResponsiveContainer width="100%" height={280}>
