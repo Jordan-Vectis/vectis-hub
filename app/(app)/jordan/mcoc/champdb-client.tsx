@@ -13,6 +13,9 @@ import type { Champ } from "./mcoc-hub"
 // browse list to expand its full spotlight-style detail.
 
 const GREEN = "#33ff66"
+// A re-scan (Update meta) persists its staleBefore here so it can RESUME after a
+// stop (rate limits / closed tab) instead of redoing every champion.
+const RESCAN_KEY = "mcoc_meta_rescan_at"
 
 type Status = { total: number; profiled: number; unbuilt: number }
 type Ability = { name: string; details: string[] }
@@ -36,6 +39,7 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
   const [prog, setProg] = useState<{ done: number; total: number } | null>(null)
   const [query, setQuery] = useState("")
   const [dbAdd, setDbAdd] = useState("")
+  const [metaPending, setMetaPending] = useState(false)
   const [, startTransition] = useTransition()
 
   const rosterNames = Array.from(new Set(roster.map((c) => c.name))).sort()
@@ -67,6 +71,11 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
     } catch {}
   }
   useEffect(() => { refreshData() }, [])
+  useEffect(() => {
+    // Surface a half-finished re-scan so the button offers Resume (deferred a
+    // tick to avoid a synchronous setState in the effect).
+    queueMicrotask(() => { try { setMetaPending(!!localStorage.getItem(RESCAN_KEY)) } catch {} })
+  }, [])
 
   const model = () => { const m = getJordanModel(); return m || undefined }
 
@@ -94,19 +103,51 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
   async function buildProfiles(refresh: boolean) {
     if (busy) return
     setBusy(true); setProg(null)
-    setMsg(refresh ? "Re-scanning the meta — reading the first batch (this can take a moment)…" : "Building profiles — reading the first batch (this can take a moment)…")
-    const staleBefore = refresh ? new Date().toISOString() : null
+
+    // Re-scan (Update meta) is RESUMABLE: persist the run's staleBefore so a stop
+    // half-way resumes rather than redoing every champion. (② Build profiles is
+    // already resumable — it just targets champs with no profile yet.)
+    let staleBefore: string | null = null
+    let resuming = false
+    if (refresh) {
+      try { staleBefore = localStorage.getItem(RESCAN_KEY) } catch {}
+      resuming = !!staleBefore
+      if (!staleBefore) {
+        staleBefore = new Date().toISOString()
+        try { localStorage.setItem(RESCAN_KEY, staleBefore) } catch {}
+      }
+      setMetaPending(true)
+    }
+    setMsg(refresh
+      ? (resuming ? "Resuming the meta re-scan…" : "Re-scanning the meta — reading the first batch (this can take a moment)…")
+      : "Building profiles — reading the first batch (this can take a moment)…")
+
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+    const resumeHint = refresh ? "Resume update meta" : "② Build profiles"
     let runTotal = 0
     let stalls = 0
     try {
-      // Loop until nothing remains for this run (or it stalls on failures).
-      for (let guard = 0; guard < 600; guard++) {
-        const res = await fetch("/api/jordan/mcoc/profiles/build", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ limit: 4, staleBefore, model: model() }),
-        })
-        const j = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(j.error || "Build failed")
+      // Keep looping until nothing remains. Nothing is ever lost — every profiled
+      // champ is saved immediately — so on rate limits we just back off and carry
+      // on, only pausing (never restarting) after a long run of no progress.
+      for (let guard = 0; guard < 3000; guard++) {
+        let j: { error?: string; remaining?: number; done?: number; failed?: number; rateLimited?: boolean; names?: string[] } = {}
+        try {
+          const res = await fetch("/api/jordan/mcoc/profiles/build", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ limit: 3, staleBefore, model: model() }),
+          })
+          j = await res.json().catch(() => ({}))
+          if (!res.ok) throw new Error(j?.error || "Build failed")
+        } catch {
+          stalls++
+          if (stalls >= 6) { setMsg(`Paused — the connection keeps failing. Progress is saved; press ${resumeHint} to carry on.`); break }
+          const wait = Math.min(15000 * stalls, 60000)
+          setMsg(`Hit a snag — waiting ${Math.round(wait / 1000)}s then continuing… (progress saved)`)
+          await sleep(wait)
+          continue
+        }
+
         const remaining = j.remaining ?? 0
         // Progress = work done THIS run. Total = what's left + what we've done so
         // far, captured on the first response. (Don't use profiled/total: on a
@@ -115,16 +156,41 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
         if (runTotal === 0) runTotal = remaining + (j.done ?? 0)
         const completed = Math.max(0, runTotal - remaining)
         setProg({ done: completed, total: runTotal })
-        const just = Array.isArray(j.names) && j.names.length ? ` · just did ${j.names.slice(0, 3).join(", ")}${j.names.length > 3 ? "…" : ""}` : ""
-        setMsg(`${refresh ? "Re-scanning" : "Building"} champion profiles… ${completed}/${runTotal}${j.failed ? ` · ${j.failed} will retry` : ""}${just}`)
         await refreshData()
-        if (remaining <= 0) { setMsg(`✓ Done — ${refresh ? "re-scanned" : "profiled"} ${runTotal || completed} champion${(runTotal || completed) === 1 ? "" : "s"}.`); break }
-        if ((j.done ?? 0) === 0) { stalls++; if (stalls >= 3) { setMsg(`Paused — ${remaining} still to go but they keep failing (likely AI rate limits). Press the button again to resume.`); break } }
-        else stalls = 0
+
+        if (remaining <= 0) {
+          if (refresh) { try { localStorage.removeItem(RESCAN_KEY) } catch {}; setMetaPending(false) }
+          setMsg(`✓ Done — ${refresh ? "re-scanned" : "profiled"} ${completed} champion${completed === 1 ? "" : "s"}.`)
+          break
+        }
+
+        if (j.rateLimited || (j.done ?? 0) === 0) {
+          // No progress (rate limits). Back off and keep going — the run is saved,
+          // so it never starts over. Give up only after a long run of nothing.
+          stalls++
+          if (stalls >= 6) {
+            setMsg(`Paused at ${completed}/${runTotal} — the AI is rate-limiting hard. Progress is saved; press ${resumeHint} in a few minutes to carry on.`)
+            break
+          }
+          const wait = Math.min(20000 * stalls, 90000)
+          setMsg(`Rate limited — waiting ${Math.round(wait / 1000)}s, then continuing… ${completed}/${runTotal} done (saved)`)
+          await sleep(wait)
+        } else {
+          stalls = 0
+          const just = Array.isArray(j.names) && j.names.length ? ` · just did ${j.names.slice(0, 3).join(", ")}${j.names.length > 3 ? "…" : ""}` : ""
+          setMsg(`${refresh ? "Re-scanning" : "Building"} champion profiles… ${completed}/${runTotal}${j.failed ? ` · ${j.failed} will retry` : ""}${just}`)
+          await sleep(1200)   // gentle pace between good batches
+        }
       }
     } catch (e: any) {
       setMsg("✗ " + (e?.message ?? "Build failed."))
     } finally { setBusy(false); setProg(null) }
+  }
+
+  function clearRescan() {
+    try { localStorage.removeItem(RESCAN_KEY) } catch {}
+    setMetaPending(false)
+    setMsg("Cleared the paused re-scan — 'Update meta' will start fresh.")
   }
 
   const shown = list.filter((c) => {
@@ -166,9 +232,16 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
             ② Build profiles{status && status.unbuilt > 0 ? ` (${status.unbuilt})` : ""}
           </button>
           <button onClick={() => buildProfiles(true)} disabled={busy || !status?.profiled}
-            className="px-4 py-2 rounded-lg border border-[#1f5c33] text-sm hover:border-[#33ff66] disabled:opacity-40 transition-colors">
-            🔄 Update meta (re-scan all)
+            className="px-4 py-2 rounded-lg border text-sm hover:border-[#33ff66] disabled:opacity-40 transition-colors"
+            style={{ borderColor: metaPending ? GREEN : "#1f5c33" }}>
+            {metaPending ? "▶ Resume update meta" : "🔄 Update meta (re-scan all)"}
           </button>
+          {metaPending && !busy && (
+            <button onClick={clearRescan}
+              className="px-3 py-2 rounded-lg border border-[#1f5c33] text-xs opacity-60 hover:opacity-100 transition-opacity">
+              ✕ start fresh
+            </button>
+          )}
         </div>
         {msg && <p className={`text-xs ${msg.startsWith("✗") ? "text-red-400" : "opacity-80"}`}>{busy && <span className="animate-pulse">▮ </span>}{msg}</p>}
         {prog && prog.total > 0 ? (

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { isJordan } from "@/lib/jordan-auth"
 import { groundedJson } from "@/lib/mcoc-ai"
+import { isRateLimitError } from "@/lib/gemini-retry"
 import { MCOC_IMMUNITIES, MCOC_TAGS, normaliseClass } from "@/lib/mcoc"
 
 export const maxDuration = 300
@@ -51,7 +52,9 @@ export async function POST(req: NextRequest) {
     if (!(await isJordan())) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
     const body = await req.json().catch(() => ({}))
-    const limit = Math.min(8, Math.max(1, Number(body?.limit) || 4))
+    // Small batches keep concurrent grounded calls low so we don't trip Gemini's
+    // rate limits (the client loops, paces and backs off).
+    const limit = Math.min(6, Math.max(1, Number(body?.limit) || 3))
     // A "build" (default) profiles only champs that have never been built
     // (profileAt null). A "refresh" passes staleBefore = the time it started, so
     // it re-profiles everything built before then, exactly once, then terminates
@@ -102,6 +105,11 @@ export async function POST(req: NextRequest) {
     }))
     const done = results.filter((r) => r.status === "fulfilled").length
     const failed = results.length - done
+    // Was the failure a rate limit? The client uses this to back off + keep going
+    // rather than giving up, and to explain the wait.
+    const rateLimited = results.some((r) => r.status === "rejected" && isRateLimitError((r as PromiseRejectedResult).reason))
+    // Report only the champs that actually succeeded this batch.
+    const names = batch.filter((_, i) => results[i]?.status === "fulfilled").map((c) => c.name)
 
     const [total, profiled, remaining] = await Promise.all([
       prisma.mcocChampionProfile.count(),
@@ -109,7 +117,7 @@ export async function POST(req: NextRequest) {
       prisma.mcocChampionProfile.count({ where }),   // still to do this run
     ])
 
-    return NextResponse.json({ done, failed, total, profiled, remaining, names: batch.map((c) => c.name) })
+    return NextResponse.json({ done, failed, total, profiled, remaining, rateLimited, names })
   } catch (e: any) {
     console.error("jordan/mcoc/profiles/build error:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
