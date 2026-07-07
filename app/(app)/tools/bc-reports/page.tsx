@@ -35,8 +35,8 @@ type PackData = {
 type WhData = {
   byCategory:   { category: string; count: number }[]
   byCataloguer: { cataloguer: string; count: number }[]
-  raw:          { category: string; cataloguer: string; catalogued: boolean; barcode: string; description: string }[]
-  meta:         { total: number; openTotes: number; cataloguedExcluded: number; categoryCount: number; largestCategory: string }
+  raw:          { category: string; cataloguer: string; catalogued: boolean; barcode: string; description: string; created: string }[]
+  meta:         { total: number; openTotes: number; cataloguedExcluded: number; undated: number; from: string | null; to: string | null; categoryCount: number; largestCategory: string }
 }
 
 type Region = "UK" | "Europe" | "Rest of World"
@@ -1203,11 +1203,16 @@ function WarehouseTab() {
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const [subTab, setSubTab]   = useState("By Category")
+  const [from, setFrom]       = useState("")
+  const [to, setTo]           = useState("")
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (f: string, t: string) => {
     setLoading(true); setError(null)
     try {
-      const res  = await window.fetch("/api/bc/warehouse")
+      const qs = new URLSearchParams()
+      if (f) qs.set("from", f)
+      if (t) qs.set("to", t)
+      const res  = await window.fetch(`/api/bc/warehouse${qs.toString() ? `?${qs}` : ""}`)
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? res.statusText)
       setData(json)
@@ -1215,13 +1220,21 @@ function WarehouseTab() {
     finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  // Load on mount and whenever the date range changes (debounced so manual typing doesn't spam).
+  useEffect(() => {
+    const id = setTimeout(() => load(from, to), 300)
+    return () => clearTimeout(id)
+  }, [from, to]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleDateChange(f: string, t: string) { setFrom(f); setTo(t) }
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Warehouse Report</h2>
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Warehouse Report</h2>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Totes still to be catalogued, live from BC. Optionally filter by when each tote was created (arrived).</p>
+      <DateRange from={from} to={to} onChange={handleDateChange} onPreset={handleDateChange} />
       <button
-        onClick={load} disabled={loading}
+        onClick={() => load(from, to)} disabled={loading}
         className="mb-5 px-5 py-2 bg-[#0078D4] hover:bg-blue-500 text-gray-900 dark:text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
       >
         {loading ? "Loading…" : "↺ Refresh Snapshot"}
@@ -1246,6 +1259,11 @@ function WarehouseTab() {
               <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{data.meta.largestCategory}</p>
             </div>
           </div>
+          {data.meta.undated > 0 && (
+            <p className="text-[11px] text-amber-600 dark:text-amber-500 mb-3">
+              {data.meta.undated.toLocaleString()} tote{data.meta.undated === 1 ? " has" : "s have"} no creation date in BC and {data.meta.undated === 1 ? "is" : "are"} hidden while a date range is set.
+            </p>
+          )}
           <SubTabs tabs={["By Category", "By Cataloguer", "Raw Data"]} active={subTab} onChange={setSubTab} />
           {subTab === "By Category"   && <><HBar data={data.byCategory} valueKey="count" labelKey="category" /><ExportBtn onClick={() => exportXlsx(data.byCategory, "warehouse_by_category")} /></>}
           {subTab === "By Cataloguer" && <><HBar data={data.byCataloguer} valueKey="count" labelKey="cataloguer" /><ExportBtn onClick={() => exportXlsx(data.byCataloguer, "warehouse_by_cataloguer")} /></>}
@@ -1259,7 +1277,7 @@ function WarehouseTab() {
                       <th className="px-4 py-2 text-left">Barcode</th>
                       <th className="px-4 py-2 text-left">Category</th>
                       <th className="px-4 py-2 text-left">Cataloguer</th>
-                      <th className="px-4 py-2 text-left">Catalogued</th>
+                      <th className="px-4 py-2 text-left">Created</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
@@ -1268,7 +1286,7 @@ function WarehouseTab() {
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-500 font-mono text-xs">{r.barcode}</td>
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{r.category}</td>
                         <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{r.cataloguer}</td>
-                        <td className="px-4 py-2">{r.catalogued ? <span className="text-green-400 text-xs">✓ Yes</span> : <span className="text-gray-600 text-xs">No</span>}</td>
+                        <td className="px-4 py-2 text-gray-600 dark:text-gray-500 text-xs whitespace-nowrap">{r.created ? new Date(r.created).toLocaleDateString("en-GB") : "—"}</td>
                       </tr>
                     ))}
                   </tbody>
