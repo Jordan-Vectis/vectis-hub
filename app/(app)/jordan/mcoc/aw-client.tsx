@@ -41,6 +41,15 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
   const [pathBusy, setPathBusy] = useState(false)
   const [pathErr, setPathErr] = useState<string | null>(null)
   const [path, setPath] = useState<PathResult | null>(null)
+  // Optional war-map screenshot — lets the AI read the real node buffs.
+  const pathMap = useRef<HTMLInputElement>(null)
+  const [pathMapFile, setPathMapFile] = useState<File | null>(null)
+  const [pathMapPreview, setPathMapPreview] = useState<string | null>(null)
+  function pickPathMap(f: File | null) {
+    setPathMapFile(f)
+    if (pathMapPreview) URL.revokeObjectURL(pathMapPreview)
+    setPathMapPreview(f ? URL.createObjectURL(f) : null)
+  }
 
   // Every champion in the DB (owned or not) — powers the defender type-ahead and
   // the class-colour dots. Falls back gracefully to manual typing if unbuilt.
@@ -75,16 +84,14 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
     if (pathBusy || !defenders.length) return
     setPathBusy(true); setPathErr(null); setPath(null)
     try {
-      const res = await fetch("/api/jordan/mcoc/aw-path", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          defenders: defenders.map((d) => ({ name: d.name, node: d.node || undefined })),
-          nodes: nodes.trim() || undefined,
-          tier: tier || undefined,
-          roster: JSON.parse(rosterPayload()),
-          model: getJordanModel() || undefined,
-        }),
-      })
+      const fd = new FormData()
+      fd.append("defenders", JSON.stringify(defenders.map((d) => ({ name: d.name, node: d.node || undefined }))))
+      if (nodes.trim()) fd.append("nodes", nodes.trim())
+      if (tier) fd.append("tier", tier)
+      fd.append("roster", rosterPayload())
+      const model = getJordanModel(); if (model) fd.append("model", model)
+      if (pathMapFile) fd.append("image", pathMapFile)
+      const res = await fetch("/api/jordan/mcoc/aw-path", { method: "POST", body: fd })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j.error || "Planning failed — try again.")
       setPath(j)
@@ -231,6 +238,18 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
             <textarea value={nodes} onChange={(e) => setNodes(e.target.value)} rows={2}
               placeholder="Optional — path-wide buffs / notes (e.g. global Aggression, node 24 Flow)…"
               className={`${input} w-full resize-none`} style={{ color: GREEN }} />
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <button onClick={() => pathMap.current?.click()} disabled={pathBusy}
+                className="px-4 py-2 rounded-lg border border-[#1f5c33] text-sm hover:border-[#33ff66] disabled:opacity-40 transition-colors">
+                📷 {pathMapFile ? "Change map screenshot" : "Add map screenshot (fix the nodes)"}
+              </button>
+              {pathMapFile && <button onClick={() => pickPathMap(null)} className="text-xs text-red-400 hover:underline">remove</button>}
+              <span className="text-[11px] opacity-50">The AI reads the exact node buffs from your screenshot and corrects its guesses.</span>
+            </div>
+            {pathMapPreview && <img src={pathMapPreview} alt="War map" className="max-h-48 rounded-lg border border-[#1f5c33]" />}
+            <input ref={pathMap} type="file" accept="image/*" className="hidden"
+              onChange={(e) => { pickPathMap(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
 
             <button onClick={planPath} disabled={pathBusy || !defenders.length}
               className="px-5 py-2.5 rounded-lg text-sm font-bold text-black disabled:opacity-40 transition-colors"
