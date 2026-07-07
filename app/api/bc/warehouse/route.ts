@@ -32,11 +32,17 @@ export async function GET() {
   const token = await getBCToken()
   if (!token) return NextResponse.json({ error: "BC_NOT_CONNECTED" }, { status: 401 })
 
-  const rows = await bcFetchAll(token, "Receipt_Totes_Excel")
+  const allRows = await bcFetchAll(token, "Receipt_Totes_Excel")
 
   const CAT_COL        = "EVA_TOT_ArticleCategory"
   const CATALOGUER_COL = "EVA_TOT_AssignToCataloguer"
   const CATALOGUED_COL = "EVA_TOT_Catalogued"
+
+  // Whole report is scoped to totes STILL TO BE CATALOGUED — catalogued totes are
+  // finished work. (By Cataloguer already excluded them; By Category / totals / raw
+  // now match, so every number reflects what's left in the warehouse to catalogue.)
+  const rows = allRows.filter((r) => r[CATALOGUED_COL] !== true)
+  const cataloguedExcluded = allRows.length - rows.length
 
   // By category
   const catCount: Record<string, number> = {}
@@ -48,10 +54,9 @@ export async function GET() {
     .map(([category, count]) => ({ category, count }))
     .sort((a, b) => b.count - a.count)
 
-  // By cataloguer (open / uncatalogued only)
-  const openTotes = rows.filter((r) => r[CATALOGUED_COL] !== true)
+  // By cataloguer
   const catloguerCount: Record<string, number> = {}
-  for (const r of openTotes) {
+  for (const r of rows) {
     const code = String(r[CATALOGUER_COL] ?? "").trim()
     if (!code) continue
     const name = SALESPERSON_NAMES[code] ?? code
@@ -75,10 +80,11 @@ export async function GET() {
     byCataloguer,
     raw,
     meta: {
-      total:           rows.length,
-      openTotes:       openTotes.length,
-      categoryCount:   byCategory.length,
-      largestCategory: byCategory[0]?.category ?? "—",
+      total:              rows.length,
+      openTotes:          rows.length,
+      cataloguedExcluded,
+      categoryCount:      byCategory.length,
+      largestCategory:    byCategory[0]?.category ?? "—",
     },
   })
 }

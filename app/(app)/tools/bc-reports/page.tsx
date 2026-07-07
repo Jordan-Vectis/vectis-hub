@@ -36,7 +36,7 @@ type WhData = {
   byCategory:   { category: string; count: number }[]
   byCataloguer: { cataloguer: string; count: number }[]
   raw:          { category: string; cataloguer: string; catalogued: boolean; barcode: string; description: string }[]
-  meta:         { total: number; openTotes: number; categoryCount: number; largestCategory: string }
+  meta:         { total: number; openTotes: number; cataloguedExcluded: number; categoryCount: number; largestCategory: string }
 }
 
 type Region = "UK" | "Europe" | "Rest of World"
@@ -1231,8 +1231,11 @@ function WarehouseTab() {
         <>
           <div className="grid grid-cols-3 gap-3 mb-4">
             <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
-              <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Total Totes</p>
+              <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Totes to catalogue</p>
               <p className="text-xl font-bold text-gray-900 dark:text-white">{data.meta.total.toLocaleString()}</p>
+              {data.meta.cataloguedExcluded > 0 && (
+                <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-0.5">{data.meta.cataloguedExcluded.toLocaleString()} catalogued excluded</p>
+              )}
             </div>
             <div className="bg-gray-100 dark:bg-[#0d0f1a] border border-gray-200 dark:border-gray-800 rounded-lg p-3">
               <p className="text-xs text-gray-600 dark:text-gray-500 mb-1">Categories</p>
