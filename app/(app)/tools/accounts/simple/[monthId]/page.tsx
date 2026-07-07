@@ -46,6 +46,7 @@ export default async function SimpleMonthPage({ params }: { params: Promise<{ mo
         splitGroupId: d.splitGroupId,
         currency: d.currency ?? "GBP",
         originalAmount: d.originalAmount,
+        cardLast4: d.cardLast4 ?? null,
       }
     })
   )

@@ -49,6 +49,7 @@ export default async function AccountsMonthPage({ params }: { params: Promise<{ 
       splitGroupId: d.splitGroupId,
       currency: d.currency ?? "GBP",
       originalAmount: d.originalAmount,
+      cardLast4: d.cardLast4 ?? null,
       }
     })
   )

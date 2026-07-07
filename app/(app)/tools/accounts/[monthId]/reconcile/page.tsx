@@ -33,6 +33,7 @@ export default async function ReconcilePage({ params }: { params: Promise<{ mont
     splitGroupId: d.splitGroupId,
     docDate: d.docDate ? d.docDate.toISOString().slice(0, 10) : "",
     column: d.column ?? "",
+    cardLast4: d.cardLast4 ?? null,
   }))
 
   // Shared reserve pool — entered lines parked from ANY month (belong to another check).

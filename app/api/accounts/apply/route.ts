@@ -3,7 +3,7 @@ import { getAccountsAccess } from "@/lib/accounts-auth"
 import { PDFDocument } from "pdf-lib"
 import { prisma } from "@/lib/prisma"
 import { getObjectBuffer, uploadBufferToR2, getSignedImageUrl, deleteObjectsFromR2 } from "@/lib/r2"
-import { isValidColumn, isValidVatCode, netFromGross } from "@/lib/accounting"
+import { isValidColumn, isValidVatCode, netFromGross, UNKNOWN_CARDHOLDER, resolveCardholderByLast4 } from "@/lib/accounting"
 import { randomUUID } from "node:crypto"
 
 export const maxDuration = 300
@@ -34,7 +34,8 @@ function clean(r: any) {
   const group = typeof r?.group === "string" ? r.group.trim().slice(0, 120) : ""
   const currency = (typeof r?.currency === "string" && r.currency.trim() ? r.currency.trim().toUpperCase().slice(0, 8) : "GBP")
   const originalAmount = currency !== "GBP" && Number.isFinite(Number(r?.originalAmount)) && Number(r.originalAmount) > 0 ? r2p(Number(r.originalAmount)) : null
-  return { supplier, item, website, docDate, vatCode, gross, vat, net: netFromGross(gross, vat), column, aiNotes, pages, group, currency, originalAmount }
+  const cardLast4 = typeof r?.cardLast4 === "string" && /^\d{4}$/.test(r.cardLast4.trim()) ? r.cardLast4.trim() : null
+  return { supplier, item, website, docDate, vatCode, gross, vat, net: netFromGross(gross, vat), column, aiNotes, pages, group, currency, originalAmount, cardLast4 }
 }
 
 // Commit an approved AI proposal. receipt[0] updates the line; further receipts
@@ -63,6 +64,21 @@ export async function POST(req: NextRequest) {
     const doc = await prisma.accountingDocument.findUnique({ where: { id: docId } })
     if (!doc) return NextResponse.json({ error: "Document not found" }, { status: 404 })
     const keys = (doc.images && doc.images.length) ? doc.images : (doc.imageKey ? [doc.imageKey] : [])
+
+    // Auto match: an "Unknown" doc whose receipt shows the paying card's last 4
+    // digits is assigned to the (single) managed card whose name ends in those
+    // digits. Safety net for apply calls that don't post a cardholder (the preview
+    // modal resolves client-side and posts the result; the detail-modal Re-read
+    // and the Simple wizard don't).
+    let resolvedCardholder: string | null = null
+    if (!newCardholder && doc.cardholder === UNKNOWN_CARDHOLDER) {
+      const last4 = list.find((r) => r.cardLast4)?.cardLast4 ?? null
+      if (last4) {
+        const chRows = await prisma.accountingCardholder.findMany({ select: { name: true } })
+        resolvedCardholder = resolveCardholderByLast4(last4, chRows.map((c) => c.name))
+      }
+    }
+    const effectiveCardholder = newCardholder ?? resolvedCardholder
 
     const isPdfSource = keys.length === 1 && keys[0].toLowerCase().endsWith(".pdf")
     const needBuffer = keys.length > 0 && (list.length > 1 || (isPdfSource && (list[0].pages?.length ?? 0) > 0))
@@ -96,7 +112,7 @@ export async function POST(req: NextRequest) {
     const primaryImages = await imagesFor(list[0], true)
     const { pages: _p0, group: _g0, ...firstData } = list[0]
     const firstSplitId = splitIdFor(list[0])
-    await prisma.accountingDocument.update({ where: { id: doc.id }, data: { ...firstData, images: primaryImages, aiRun: true, splitGroupId: firstSplitId, ...(newCardholder ? { cardholder: newCardholder } : {}) } })
+    await prisma.accountingDocument.update({ where: { id: doc.id }, data: { ...firstData, images: primaryImages, aiRun: true, splitGroupId: firstSplitId, ...(effectiveCardholder ? { cardholder: effectiveCardholder } : {}) } })
 
     const extra: any[] = []
     for (let i = 1; i < list.length && i < 200; i++) {
@@ -104,7 +120,7 @@ export async function POST(req: NextRequest) {
       const splitGroupId = splitIdFor(list[i])
       const imgs = await imagesFor(list[i], false)
       const created = await prisma.accountingDocument.create({
-        data: { monthId: doc.monthId, cardholder: newCardholder ?? doc.cardholder, source: "SCAN", images: imgs, aiRun: true, ...f, splitGroupId },
+        data: { monthId: doc.monthId, cardholder: effectiveCardholder ?? doc.cardholder, source: "SCAN", images: imgs, aiRun: true, ...f, splitGroupId },
       })
       extra.push({
         id: created.id, cardholder: created.cardholder, source: "SCAN",
@@ -113,7 +129,7 @@ export async function POST(req: NextRequest) {
         docDate: f.docDate ? f.docDate.toISOString().slice(0, 10) : "",
         vatCode: f.vatCode, gross: f.gross, vat: f.vat, net: f.net, column: f.column,
         reviewed: false, aiRun: true, aiNotes: f.aiNotes, splitGroupId,
-        currency: f.currency, originalAmount: f.originalAmount,
+        currency: f.currency, originalAmount: f.originalAmount, cardLast4: f.cardLast4,
       })
     }
 
@@ -126,8 +142,8 @@ export async function POST(req: NextRequest) {
       docDate: firstData.docDate ? firstData.docDate.toISOString().slice(0, 10) : "",
       vatCode: firstData.vatCode, gross: firstData.gross, vat: firstData.vat, net: firstData.net, column: firstData.column,
       aiNotes: firstData.aiNotes, splitGroupId: firstSplitId,
-      currency: firstData.currency, originalAmount: firstData.originalAmount,
-      cardholder: newCardholder ?? doc.cardholder,
+      currency: firstData.currency, originalAmount: firstData.originalAmount, cardLast4: firstData.cardLast4,
+      cardholder: effectiveCardholder ?? doc.cardholder,
       images: [await getSignedImageUrl(primaryImages[0])],
       extra,
     })

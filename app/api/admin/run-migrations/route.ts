@@ -911,6 +911,12 @@ const MIGRATIONS = [
   `ALTER TABLE "WarehouseItem" ADD COLUMN IF NOT EXISTS "collectionNo"       TEXT`,
   `ALTER TABLE "WarehouseItem" ADD COLUMN IF NOT EXISTS "sizeClassification" TEXT`,
   `CREATE INDEX IF NOT EXISTS "WarehouseItem_collectionNo_idx" ON "WarehouseItem"("collectionNo")`,
+
+  // 2026-07-07 — Accounts "Auto match / Unknown" card option: the AI reads the paying
+  // card's last 4 digits off the receipt to auto-assign the card (matched against the
+  // digits in the card names, e.g. "B Goodall 5895"); unresolved docs sit under the
+  // "Unknown" cardholder until reconcile matches them to a card's statement.
+  `ALTER TABLE "AccountingDocument" ADD COLUMN IF NOT EXISTS "cardLast4" TEXT`,
 ]
 
 export async function POST() {

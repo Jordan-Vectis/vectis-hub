@@ -7,6 +7,7 @@ import { deleteObjectsFromR2, getObjectBuffer, uploadBufferToR2, getSignedImageU
 import { randomUUID } from "node:crypto"
 import {
   netFromGross, normaliseSupplier, cleanCardholder, isValidColumn, isValidVatCode,
+  UNKNOWN_CARDHOLDER, cardLast4FromName,
 } from "@/lib/accounting"
 import { requireAccountsAccess } from "@/lib/accounts-auth"
 
@@ -29,6 +30,8 @@ export async function createCardholder(name: string) {
   await requireAdmin()
   const n = cleanCardholder(name)
   if (!n) throw new Error("Name required")
+  // "Unknown" is the Auto match / Unknown bucket, not a real card — keep it out of the managed list.
+  if (n.toLowerCase() === UNKNOWN_CARDHOLDER.toLowerCase()) throw new Error(`"${UNKNOWN_CARDHOLDER}" is reserved for the Auto match / Unknown option`)
   const existing = await prisma.accountingCardholder.findUnique({ where: { name: n } })
   if (existing) return { id: existing.id }
   const max = await prisma.accountingCardholder.aggregate({ _max: { sortOrder: true } })
@@ -41,6 +44,7 @@ export async function renameCardholder(id: string, name: string) {
   await requireAdmin()
   const n = cleanCardholder(name)
   if (!n) throw new Error("Name required")
+  if (n.toLowerCase() === UNKNOWN_CARDHOLDER.toLowerCase()) throw new Error(`"${UNKNOWN_CARDHOLDER}" is reserved for the Auto match / Unknown option`)
   const existing = await prisma.accountingCardholder.findUnique({ where: { id } })
   if (!existing) return
   if (existing.name !== n) {
@@ -345,10 +349,17 @@ export async function deleteBankStatement(id: string) {
 
 export async function setTransactionMatch(txnId: string, docIds: string[]) {
   await requireWizard()
-  const t = await prisma.bankTransaction.findUnique({ where: { id: txnId }, select: { monthId: true } })
+  const t = await prisma.bankTransaction.findUnique({ where: { id: txnId }, select: { monthId: true, statement: { select: { cardholder: true } } } })
   if (!t) return
-  await prisma.bankTransaction.update({ where: { id: txnId }, data: { matchedDocIds: docIds.slice(0, 50) } })
+  const ids = docIds.slice(0, 50)
+  await prisma.bankTransaction.update({ where: { id: txnId }, data: { matchedDocIds: ids } })
+  // Matching an "Unknown" line to a card's statement identifies whose card it was —
+  // stamp the line so the month table and export file it under the right card.
+  if (ids.length && t.statement.cardholder && t.statement.cardholder !== UNKNOWN_CARDHOLDER) {
+    await prisma.accountingDocument.updateMany({ where: { id: { in: ids }, cardholder: UNKNOWN_CARDHOLDER }, data: { cardholder: t.statement.cardholder } })
+  }
   revalidatePath(`/tools/accounts/${t.monthId}`)
+  revalidatePath(`/tools/accounts/${t.monthId}/reconcile`)
 }
 
 export async function setTransactionIgnored(txnId: string, ignored: boolean) {
@@ -416,10 +427,14 @@ export async function autoMatchStatement(statementId: string) {
   const stmt = await prisma.bankStatement.findUnique({ where: { id: statementId } })
   if (!stmt) throw new Error("Statement not found")
   const txns = await prisma.bankTransaction.findMany({ where: { statementId }, orderBy: { createdAt: "asc" } })
-  // Only match against entries for THIS statement's cardholder (each card has its own statement).
-  const docs = await prisma.accountingDocument.findMany({
-    where: { monthId: stmt.monthId, ...(stmt.cardholder ? { cardholder: stmt.cardholder } : {}) },
+  // Match against entries for THIS statement's cardholder (each card has its own
+  // statement) — PLUS any "Unknown" lines (Auto match / Unknown option), except an
+  // Unknown line whose receipt showed DIFFERENT card digits to this statement's card.
+  const stmtLast4 = stmt.cardholder ? cardLast4FromName(stmt.cardholder) : null
+  const allDocs = await prisma.accountingDocument.findMany({
+    where: { monthId: stmt.monthId, ...(stmt.cardholder ? { cardholder: { in: [stmt.cardholder, UNKNOWN_CARDHOLDER] } } : {}) },
   })
+  const docs = allDocs.filter((d) => !(d.cardholder === UNKNOWN_CARDHOLDER && stmtLast4 && d.cardLast4 && d.cardLast4 !== stmtLast4))
 
   type Unit = { docIds: string[]; amount: number; currency: string; originalAmount: number | null; date: Date | null; label: string }
   const units: Unit[] = []
@@ -459,7 +474,13 @@ export async function autoMatchStatement(statementId: string) {
   }
 
   for (const u of updates) await prisma.bankTransaction.update({ where: { id: u.id }, data: { matchedDocIds: u.matchedDocIds } })
+  // Any "Unknown" lines matched to this card's statement are now identified — stamp them.
+  if (updates.length && stmt.cardholder && stmt.cardholder !== UNKNOWN_CARDHOLDER) {
+    const matchedIds = updates.flatMap((u) => u.matchedDocIds)
+    await prisma.accountingDocument.updateMany({ where: { id: { in: matchedIds }, cardholder: UNKNOWN_CARDHOLDER }, data: { cardholder: stmt.cardholder } })
+  }
   revalidatePath(`/tools/accounts/${stmt.monthId}`)
+  revalidatePath(`/tools/accounts/${stmt.monthId}/reconcile`)
   return { matched: updates.length, total: txns.filter((t) => !t.ignored && t.direction !== "CREDIT").length }
 }
 

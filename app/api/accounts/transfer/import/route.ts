@@ -109,6 +109,7 @@ export async function POST(req: NextRequest) {
         splitGroupId: strOrNull(doc?.splitGroupId, 60),
         currency: str(doc?.currency, 8) || "GBP",
         originalAmount: numOrNull(doc?.originalAmount),
+        cardLast4: strOrNull(doc?.cardLast4, 4),
         reserved: doc?.reserved === true,
         createdAt: d(doc?.createdAt) ?? undefined,
       })

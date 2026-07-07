@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
   VAT_CODES, NOMINAL_COLUMNS, columnLabel, vatFromGross,
+  UNKNOWN_CARDHOLDER, cardLast4FromName,
 } from "@/lib/accounting"
 import {
   saveAccountingDocuments, deleteAccountingDocument,
@@ -18,7 +19,7 @@ type Row = {
   supplier: string; item: string; website: string; docDate: string
   vatCode: number; gross: number; vat: number; net: number
   column: string; reviewed: boolean; aiRun: boolean; aiNotes: string | null; splitGroupId: string | null
-  currency: string; originalAmount: number | null
+  currency: string; originalAmount: number | null; cardLast4: string | null
 }
 type Txn = {
   id: string; postDate: string; tranDate: string; description: string; reference: string
@@ -27,7 +28,7 @@ type Txn = {
 }
 type Statement = { id: string; label: string; cardholder: string; source: string; images: string[]; transactions: Txn[] }
 type Unit = { key: string; docIds: string[]; amount: number; label: string }
-type Entry = { id: string; cardholder: string; supplier: string; item: string; gross: number; splitGroupId: string | null }
+type Entry = { id: string; cardholder: string; supplier: string; item: string; gross: number; splitGroupId: string | null; cardLast4: string | null }
 
 // ── Small helpers ────────────────────────────────────────────────────────────
 const round = (n: number) => Math.round((n || 0) * 100) / 100
@@ -46,15 +47,17 @@ function descSim(a: string, b: string): number {
 }
 
 function buildUnits(entries: Entry[]): Unit[] {
+  // "Unknown" (Auto match) lines are flagged with ❓ — matching one assigns it to the statement's card.
+  const unk = (e: Entry) => (e.cardholder === UNKNOWN_CARDHOLDER ? "❓ " : "")
   const out: Unit[] = []
   const groups = new Map<string, Entry[]>()
   for (const e of entries) {
     if (e.splitGroupId) { const a = groups.get(e.splitGroupId) ?? []; a.push(e); groups.set(e.splitGroupId, a) }
-    else out.push({ key: e.id, docIds: [e.id], amount: round(e.gross), label: `${e.supplier || "(no description)"}${e.item ? " — " + e.item : ""}` })
+    else out.push({ key: e.id, docIds: [e.id], amount: round(e.gross), label: `${unk(e)}${e.supplier || "(no description)"}${e.item ? " — " + e.item : ""}` })
   }
   for (const [gid, arr] of groups) {
-    if (arr.length === 1) { const e = arr[0]; out.push({ key: e.id, docIds: [e.id], amount: round(e.gross), label: `${e.supplier || "(no description)"}${e.item ? " — " + e.item : ""}` }) }
-    else out.push({ key: gid, docIds: arr.map((e) => e.id), amount: round(arr.reduce((a, e) => a + e.gross, 0)), label: `${arr[0].supplier || "(no description)"} (split, ${arr.length} parts)` })
+    if (arr.length === 1) { const e = arr[0]; out.push({ key: e.id, docIds: [e.id], amount: round(e.gross), label: `${unk(e)}${e.supplier || "(no description)"}${e.item ? " — " + e.item : ""}` }) }
+    else out.push({ key: gid, docIds: arr.map((e) => e.id), amount: round(arr.reduce((a, e) => a + e.gross, 0)), label: `${unk(arr[0])}${arr[0].supplier || "(no description)"} (split, ${arr.length} parts)` })
   }
   return out
 }
@@ -89,7 +92,12 @@ function findCombo(target: number, cands: Unit[], txnText: string): Unit[] | nul
 
 // Everything the matching step needs for one statement.
 function statementState(stmt: Statement, allEntries: Entry[]) {
-  const entries = stmt.cardholder ? allEntries.filter((e) => e.cardholder === stmt.cardholder) : allEntries
+  // A card-scoped statement also matches against "Unknown" (Auto match) lines —
+  // except one whose receipt showed DIFFERENT card digits to this statement's card.
+  const stmtLast4 = stmt.cardholder ? cardLast4FromName(stmt.cardholder) : null
+  const entries = stmt.cardholder
+    ? allEntries.filter((e) => e.cardholder === stmt.cardholder || (e.cardholder === UNKNOWN_CARDHOLDER && !(stmtLast4 && e.cardLast4 && e.cardLast4 !== stmtLast4)))
+    : allEntries
   const units = buildUnits(entries)
   const matchedByUnit = new Map<string, number>()
   const unitsForTxn = (t: Txn) => {
@@ -166,7 +174,7 @@ export default function SimpleWizard({
   // Derived counts
   const toRead = rows.filter((r) => r.source === "SCAN" && !r.aiRun)
   const toReview = rows.filter((r) => r.aiRun && !r.reviewed)
-  const entries: Entry[] = rows.map((d) => ({ id: d.id, cardholder: d.cardholder, supplier: d.supplier, item: d.item, gross: d.gross, splitGroupId: d.splitGroupId }))
+  const entries: Entry[] = rows.map((d) => ({ id: d.id, cardholder: d.cardholder, supplier: d.supplier, item: d.item, gross: d.gross, splitGroupId: d.splitGroupId, cardLast4: d.cardLast4 }))
   const allLive = stmts.flatMap((s) => s.transactions.filter((t) => !t.ignored && t.direction !== "CREDIT"))
   const stmtMatched = allLive.filter((t) => t.matchedDocIds.length).length
   const stmtMissing = allLive.filter((t) => !t.matchedDocIds.length && t.receiptMissing).length
@@ -175,7 +183,7 @@ export default function SimpleWizard({
   const blankRow = (id: string, images: string[], ch: string): Row => ({
     id, cardholder: ch, source: "SCAN", images, supplier: "", item: "", website: "", docDate: "",
     vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiRun: false, aiNotes: null,
-    splitGroupId: null, currency: "GBP", originalAmount: null,
+    splitGroupId: null, currency: "GBP", originalAmount: null, cardLast4: null,
   })
 
   // ── Capture ────────────────────────────────────────────────────────────────

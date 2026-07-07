@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma"
 import { getObjectBuffer } from "@/lib/r2"
 import {
   NOMINAL_KEYS, isValidColumn, isValidVatCode,
-  vatFromGross, netFromGross, normaliseSupplier,
+  vatFromGross, netFromGross, normaliseSupplier, UNKNOWN_CARDHOLDER,
 } from "@/lib/accounting"
 import { getToolModel } from "@/lib/ai-models"
 
@@ -28,7 +28,10 @@ function buildPrompt(cardholder: string, allowSplit: boolean): string {
   const splitRule = allowSplit
     ? `This photo usually shows SEVERAL separate receipts laid out side by side. Scan the WHOLE image carefully — top, bottom, left and right — and return ONE object per SEPARATE physical receipt you can see, even if some are creased, angled, faint, rotated or slightly overlapping. If a receipt is only partly readable, STILL return it and fill in whatever fields you can (use "" or 0 for anything you can't read, and say so in "notes"). Only return a single object if there is genuinely just one receipt. NEVER return an empty list when any receipt is visible.`
     : `Treat the supplied page(s) as ONE invoice/receipt (a multi-page invoice's totals are usually on the last page). Return one object — UNLESS it mixes categories (see the SPLIT MIXED INVOICES rule), in which case return one object per category.`
-  return `You are reading UK business expense receipts/invoices for an auction house. The card/account they belong to is "${cardholder}".
+  const cardContext = cardholder === UNKNOWN_CARDHOLDER
+    ? `The card/account they were paid with is NOT yet known — look carefully for the PAYING card's last 4 digits anywhere on the document (e.g. "**** 5895", "ending 5895", "Visa ...5895", "XXXX-5895") and return them in "cardLast4".`
+    : `The card/account they belong to is "${cardholder}".`
+  return `You are reading UK business expense receipts/invoices for an auction house. ${cardContext}
 ${splitRule}
 
 Return STRICT JSON only (no prose, no markdown):
@@ -45,7 +48,8 @@ Return STRICT JSON only (no prose, no markdown):
   "notes": string,           // "" or a short note if unclear (e.g. mixed VAT)
   "group": string,           // give EVERY part you split from ONE invoice the SAME non-empty value (e.g. supplier + grand total); "" for a normal standalone receipt
   "currency": string,        // ISO currency on the invoice — "GBP" unless it's clearly in another currency (e.g. "EUR", "USD")
-  "originalAmount": number|null // the gross IN THAT foreign currency (e.g. 99 for €99); null when the invoice is in GBP
+  "originalAmount": number|null, // the gross IN THAT foreign currency (e.g. 99 for €99); null when the invoice is in GBP
+  "cardLast4": string|null   // the last 4 digits of the PAYING card if printed on the document (as a 4-digit string, e.g. "5895"); null if no card digits are shown. NEVER guess — only digits actually visible
 } ] }
 
 ${COLUMN_GUIDE}
@@ -85,6 +89,11 @@ async function normalise(p: any, extraNote: string | null) {
   const group = typeof p?.group === "string" ? p.group.trim().slice(0, 120) : ""
   const currency = (typeof p?.currency === "string" && p.currency.trim() ? p.currency.trim().toUpperCase().slice(0, 8) : "GBP")
   const originalAmount = currency !== "GBP" && Number.isFinite(Number(p?.originalAmount)) && Number(p.originalAmount) > 0 ? r2p(Number(p.originalAmount)) : null
+  // Last-4 of the paying card (drives Auto match / Unknown). Accept a stray number
+  // (pad "224" back to "0224" — JSON numbers drop leading zeros) but never anything else.
+  let cardLast4: string | null = null
+  if (typeof p?.cardLast4 === "string" && /^\d{4}$/.test(p.cardLast4.trim())) cardLast4 = p.cardLast4.trim()
+  else if (typeof p?.cardLast4 === "number" && Number.isInteger(p.cardLast4) && p.cardLast4 >= 0 && p.cardLast4 <= 9999) cardLast4 = String(p.cardLast4).padStart(4, "0")
 
   if (supplier) {
     const rule = await prisma.accountingSupplierRule.findUnique({ where: { match: normaliseSupplier(supplier) } })
@@ -92,7 +101,7 @@ async function normalise(p: any, extraNote: string | null) {
   }
   if (vatCode === 1 && vat === 0 && gross > 0) vat = vatFromGross(gross, 1)
   if (vatCode !== 1) vat = 0
-  return { supplier, item, website, docDate, vatCode, gross, vat, net: netFromGross(gross, vat), column, aiNotes: notes, group, currency, originalAmount, priceMissing }
+  return { supplier, item, website, docDate, vatCode, gross, vat, net: netFromGross(gross, vat), column, aiNotes: notes, group, currency, originalAmount, cardLast4, priceMissing }
 }
 
 // READER (preview, no writes). Reads ONE invoice and returns the proposed fields.
@@ -184,7 +193,7 @@ export async function POST(req: NextRequest) {
         supplier: f.supplier, item: f.item, website: f.website,
         docDate: f.docDate ? f.docDate.toISOString().slice(0, 10) : "",
         vatCode: f.vatCode, gross: f.gross, vat: f.vat, net: f.net, column: f.column, aiNotes: f.aiNotes, group: f.group,
-        currency: f.currency, originalAmount: f.originalAmount, priceMissing: f.priceMissing,
+        currency: f.currency, originalAmount: f.originalAmount, cardLast4: f.cardLast4, priceMissing: f.priceMissing,
       })
     }
 

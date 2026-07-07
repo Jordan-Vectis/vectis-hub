@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { VAT_CODES, NOMINAL_COLUMNS, columnLabel } from "@/lib/accounting"
+import { VAT_CODES, NOMINAL_COLUMNS, columnLabel, UNKNOWN_CARDHOLDER, resolveCardholderByLast4 } from "@/lib/accounting"
 import { addManualDocument, deleteAccountingDocument, deleteAccountingMonth, removeDocumentPage, saveAccountingDocuments, splitAccountingDocument, bulkDeleteAccountingDocuments, uncombineDocument, renameAccountingMonth, moveDocumentsToMonth, pullDocumentsFromReserve, setDocumentsReserved } from "@/lib/actions/accounting"
 import ImageViewer from "./accounts-viewer"
 import MonthStar from "../month-star"
@@ -14,7 +14,7 @@ type Row = {
   supplier: string; item: string; website: string; docDate: string
   vatCode: number; gross: number; vat: number; net: number
   column: string; reviewed: boolean; aiRun: boolean; aiNotes: string | null; splitGroupId: string | null
-  currency: string; originalAmount: number | null
+  currency: string; originalAmount: number | null; cardLast4: string | null
 }
 
 const CCY_SYMBOL: Record<string, string> = { GBP: "£", EUR: "€", USD: "$" }
@@ -79,7 +79,7 @@ export default function AccountsMonthClient({
   const [cardholder, setCardholder] = useState<string>(cardholders[0] ?? "Vectis")
   // Pin: remember the last-picked card/account across page loads (saved the moment it's changed).
   useEffect(() => {
-    try { const saved = localStorage.getItem("accounts_cardholder"); if (saved && cardholders.includes(saved)) setCardholder(saved) } catch {}
+    try { const saved = localStorage.getItem("accounts_cardholder"); if (saved && (cardholders.includes(saved) || saved === UNKNOWN_CARDHOLDER)) setCardholder(saved) } catch {}
   }, [])   // eslint-disable-line react-hooks/exhaustive-deps
   function pickCardholder(v: string) {
     setCardholder(v)
@@ -137,7 +137,7 @@ export default function AccountsMonthClient({
             const { id, images } = await res.json()
             setRows((rs) => [...rs, {
               id, cardholder, source: "SCAN", images, supplier: "", item: "", website: "", docDate: "",
-              vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiRun: false, aiNotes: null, splitGroupId: null, currency: "GBP", originalAmount: null,
+              vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiRun: false, aiNotes: null, splitGroupId: null, currency: "GBP", originalAmount: null, cardLast4: null,
             }])
             if (multiPage) { curId = id; setCurrentDocId(id) }
           }
@@ -159,6 +159,15 @@ export default function AccountsMonthClient({
   const aiLabel = `Run AI${selectedToRead.length ? ` (${selectedToRead.length})` : ""}`
   function toggleSel(id: string) {
     setDeselected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+
+  // Auto match / Unknown: a doc uploaded without a known card resolves to the one
+  // managed card whose name ends in the last-4 digits the AI read off the receipt.
+  // No (or ambiguous) digits → it stays "Unknown" until reconcile matches it up.
+  function resolveCard(r: Row, receipts: any[]): string {
+    if (r.cardholder !== UNKNOWN_CARDHOLDER) return r.cardholder
+    const last4 = receipts.find((x: any) => x?.cardLast4)?.cardLast4
+    return resolveCardholderByLast4(last4, cardholders) ?? UNKNOWN_CARDHOLDER
   }
 
   // Preview: ask the AI what it proposes for a document — returns receipts but
@@ -234,16 +243,16 @@ export default function AccountsMonthClient({
               const d = await previewOne(r.id, g)
               for (const rr of (d?.receipts ?? [])) receipts.push({ ...rr, pages: g })
             }
-            if (receipts.length) previews.push({ docId: r.id, receipts, capped: !!s?.capped, cardholder: r.cardholder })
+            if (receipts.length) previews.push({ docId: r.id, receipts, capped: !!s?.capped, cardholder: resolveCard(r, receipts) })
             else errors++
           } else {
             const d = await previewOne(r.id)
-            if (d?.receipts?.length) previews.push({ docId: r.id, receipts: d.receipts.map((x: any) => ({ ...x, pages: groups[0] ?? [] })), capped: !!d.capped, cardholder: r.cardholder })
+            if (d?.receipts?.length) previews.push({ docId: r.id, receipts: d.receipts.map((x: any) => ({ ...x, pages: groups[0] ?? [] })), capped: !!d.capped, cardholder: resolveCard(r, d.receipts) })
             else errors++
           }
         } else {
           const d = await previewOne(r.id)
-          if (d?.receipts) previews.push({ docId: r.id, receipts: d.receipts, capped: !!d.capped, cardholder: r.cardholder })
+          if (d?.receipts) previews.push({ docId: r.id, receipts: d.receipts, capped: !!d.capped, cardholder: resolveCard(r, d.receipts) })
           else errors++
         }
       } catch { errors++ }
@@ -280,16 +289,16 @@ export default function AccountsMonthClient({
               const d = await previewOne(r.id, g)
               for (const rr of (d?.receipts ?? [])) receipts.push({ ...rr, pages: g })
             }
-            if (receipts.length) previews.push({ docId: r.id, receipts, capped: !!s?.capped, cardholder: r.cardholder })
+            if (receipts.length) previews.push({ docId: r.id, receipts, capped: !!s?.capped, cardholder: resolveCard(r, receipts) })
             else errors++
           } else {
             const d = await previewOne(r.id)
-            if (d?.receipts?.length) previews.push({ docId: r.id, receipts: d.receipts.map((x: any) => ({ ...x, pages: groups[0] ?? [] })), capped: !!d.capped, cardholder: r.cardholder })
+            if (d?.receipts?.length) previews.push({ docId: r.id, receipts: d.receipts.map((x: any) => ({ ...x, pages: groups[0] ?? [] })), capped: !!d.capped, cardholder: resolveCard(r, d.receipts) })
             else errors++
           }
         } else {
           const d = await previewOne(r.id)
-          if (d?.receipts?.length) previews.push({ docId: r.id, receipts: d.receipts, capped: !!d.capped, cardholder: r.cardholder })
+          if (d?.receipts?.length) previews.push({ docId: r.id, receipts: d.receipts, capped: !!d.capped, cardholder: resolveCard(r, d.receipts) })
           else errors++
         }
       } catch { errors++ }
@@ -386,7 +395,7 @@ export default function AccountsMonthClient({
       const { id } = await addManualDocument(monthId, cardholder)
       setRows((rs) => [...rs, {
         id, cardholder, source: "MANUAL", images: [], supplier: "", item: "", website: "", docDate: "",
-        vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiRun: true, aiNotes: null, splitGroupId: null, currency: "GBP", originalAmount: null,
+        vatCode: 2, gross: 0, vat: 0, net: 0, column: "vectis", reviewed: false, aiRun: true, aiNotes: null, splitGroupId: null, currency: "GBP", originalAmount: null, cardLast4: null,
       }])
       setFlashId(id)
     })
@@ -566,6 +575,11 @@ export default function AccountsMonthClient({
             <span title="Remembered for next time">📌 Card / account:</span>
             <select value={cardholder} onChange={(e) => pickCardholder(e.target.value)} className={`${input} text-sm`}>
               {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
+              {!cardholders.includes(UNKNOWN_CARDHOLDER) && (
+                <option value={UNKNOWN_CARDHOLDER} title="Run AI matches the card from the last 4 digits on the receipt; anything it can't match waits in an Unknown section and gets assigned when you reconcile">
+                  🔍 Auto match / Unknown
+                </option>
+              )}
             </select>
           </label>
         </div>
@@ -688,7 +702,7 @@ export default function AccountsMonthClient({
             <span className="text-gray-400">Card / account:</span>
             <select value={filterCard} onChange={(e) => setFilterCard(e.target.value)} className={`${input} text-sm`}>
               <option value="">All cards</option>
-              {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
+              {cardOptions.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
             <span className="text-gray-400">— or filter any column in the row below ↓</span>
             {dupeCount > 0 && (
@@ -776,7 +790,9 @@ export default function AccountsMonthClient({
                 {groups.map((g) => (
                   <Fragment key={g.name}>
                     <tr className="bg-gray-50 dark:bg-gray-800/40">
-                      <td colSpan={TOTAL_COLS} className="px-3 py-1.5 font-bold text-gray-700 dark:text-gray-200 text-sm">{g.name}</td>
+                      <td colSpan={TOTAL_COLS} className="px-3 py-1.5 font-bold text-gray-700 dark:text-gray-200 text-sm">
+                        {g.name === UNKNOWN_CARDHOLDER ? <>🔍 Unknown <span className="font-normal text-xs text-gray-400">— card not identified yet; these get assigned when you reconcile (or set one in its detail view)</span></> : g.name}
+                      </td>
                     </tr>
                     {(() => {
                       const ordered = orderGrouped(g.items)
@@ -954,7 +970,9 @@ export default function AccountsMonthClient({
                   <Field label="Card / account">
                     <select value={viewRow.cardholder} onChange={(e) => patch(viewRow.id, { cardholder: e.target.value })} className={`${input} w-full`}>
                       {cardOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+                      {!cardOptions.includes(UNKNOWN_CARDHOLDER) && <option value={UNKNOWN_CARDHOLDER}>Unknown</option>}
                     </select>
+                    {viewRow.cardLast4 && <p className="text-[10px] text-gray-400 mt-0.5">Receipt shows card ending {viewRow.cardLast4}</p>}
                   </Field>
                   <Field label="Date"><input type="date" value={viewRow.docDate} onChange={(e) => patch(viewRow.id, { docDate: e.target.value })} className={`${input} w-full`} /></Field>
                 </div>
@@ -1036,12 +1054,21 @@ export default function AccountsMonthClient({
                       ? <span className="w-12 h-12 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-300 text-[9px] font-bold flex items-center justify-center flex-shrink-0">PDF</span>
                       : <img src={row.images[0]} alt="" className="w-12 h-12 object-cover rounded border border-gray-200 dark:border-gray-700 flex-shrink-0" />)}
                     <div className="text-sm flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-1.5">
+                      <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
                         <span className="text-[11px] text-gray-400">Apply to card:</span>
                         <select value={p.cardholder ?? row?.cardholder ?? cardholders[0]} onChange={(e) => setPreviewCardholder(p.docId, e.target.value)}
                           className="text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500">
                           {cardholders.map((c) => <option key={c} value={c}>{c}</option>)}
+                          {!cardholders.includes(UNKNOWN_CARDHOLDER) && <option value={UNKNOWN_CARDHOLDER}>Unknown</option>}
                         </select>
+                        {row?.cardholder === UNKNOWN_CARDHOLDER && p.cardholder && p.cardholder !== UNKNOWN_CARDHOLDER && (
+                          <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">🔍 Auto-matched via card ending {p.receipts.find((r: any) => r?.cardLast4)?.cardLast4 ?? "…"}</span>
+                        )}
+                        {row?.cardholder === UNKNOWN_CARDHOLDER && (p.cardholder ?? UNKNOWN_CARDHOLDER) === UNKNOWN_CARDHOLDER && (
+                          <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400" title={p.receipts.find((r: any) => r?.cardLast4)?.cardLast4 ? `The receipt shows card ending ${p.receipts.find((r: any) => r?.cardLast4)?.cardLast4}, but no card in your list has those digits` : "No card digits were found on the receipt"}>
+                            ❓ No card matched — stays in Unknown until reconciled
+                          </span>
+                        )}
                       </div>
                       {p.receipts.length > 1 && <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mb-1">Splits into {p.receipts.length} separate receipts:</p>}
                       {p.receipts.map((r: any, i: number) => {

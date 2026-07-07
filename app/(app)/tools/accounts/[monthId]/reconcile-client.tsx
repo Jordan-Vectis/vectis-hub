@@ -9,13 +9,14 @@ import {
   setStatementCardholder, renameAccountingMonth, clearStatementMatches,
   setTransactionReceiptMissing, setDocumentsReserved, pullDocumentsFromReserve,
 } from "@/lib/actions/accounting"
+import { UNKNOWN_CARDHOLDER, cardLast4FromName } from "@/lib/accounting"
 import ImageViewer from "./accounts-viewer"
 import LinkSpinner from "../link-spinner"
 
 type Entry = {
   id: string; cardholder: string; supplier: string; item: string; gross: number
   currency: string; originalAmount: number | null; splitGroupId: string | null
-  docDate: string; column: string
+  docDate: string; column: string; cardLast4: string | null
 }
 type Txn = {
   id: string; postDate: string; tranDate: string; description: string; reference: string
@@ -71,15 +72,18 @@ function findCombo(target: number, cands: Unit[], txnText: string): Unit[] | nul
 }
 
 function buildUnits(entries: Entry[]): Unit[] {
+  // "Unknown" (Auto match) lines are flagged with ❓ so it's obvious that matching
+  // one to this statement will assign it to this statement's card.
+  const unk = (e: Entry) => (e.cardholder === UNKNOWN_CARDHOLDER ? "❓ " : "")
   const out: Unit[] = []
   const groups = new Map<string, Entry[]>()
   for (const e of entries) {
     if (e.splitGroupId) { const a = groups.get(e.splitGroupId) ?? []; a.push(e); groups.set(e.splitGroupId, a) }
-    else out.push({ key: e.id, docIds: [e.id], amount: round(e.gross), label: `${e.supplier || "(no description)"}${e.item ? " — " + e.item : ""}` })
+    else out.push({ key: e.id, docIds: [e.id], amount: round(e.gross), label: `${unk(e)}${e.supplier || "(no description)"}${e.item ? " — " + e.item : ""}` })
   }
   for (const [gid, arr] of groups) {
-    if (arr.length === 1) { const e = arr[0]; out.push({ key: e.id, docIds: [e.id], amount: round(e.gross), label: `${e.supplier || "(no description)"}${e.item ? " — " + e.item : ""}` }) }
-    else out.push({ key: gid, docIds: arr.map((e) => e.id), amount: round(arr.reduce((a, e) => a + e.gross, 0)), label: `${arr[0].supplier || "(no description)"} (split, ${arr.length} parts)` })
+    if (arr.length === 1) { const e = arr[0]; out.push({ key: e.id, docIds: [e.id], amount: round(e.gross), label: `${unk(e)}${e.supplier || "(no description)"}${e.item ? " — " + e.item : ""}` }) }
+    else out.push({ key: gid, docIds: arr.map((e) => e.id), amount: round(arr.reduce((a, e) => a + e.gross, 0)), label: `${unk(arr[0])}${arr[0].supplier || "(no description)"} (split, ${arr.length} parts)` })
   }
   return out
 }
@@ -256,7 +260,12 @@ export default function AccountsReconcile({
       )}
 
       {statements.map((stmt) => {
-        const scopedEntries = stmt.cardholder ? entries.filter((e) => e.cardholder === stmt.cardholder) : entries
+        // A card-scoped statement also matches against "Unknown" (Auto match) lines —
+        // except one whose receipt showed DIFFERENT card digits to this statement's card.
+        const stmtLast4 = stmt.cardholder ? cardLast4FromName(stmt.cardholder) : null
+        const scopedEntries = stmt.cardholder
+          ? entries.filter((e) => e.cardholder === stmt.cardholder || (e.cardholder === UNKNOWN_CARDHOLDER && !(stmtLast4 && e.cardLast4 && e.cardLast4 !== stmtLast4)))
+          : entries
         const stmtUnits = buildUnits(scopedEntries)
         // Two directions of many-to-one matching, both supported:
         //  A) ONE invoice paid by SEVERAL transactions (Google Ads £500 caps) — a txn
@@ -356,7 +365,14 @@ export default function AccountsReconcile({
               </div>
             )}
 
-            {stmt.cardholder && <p className="text-[11px] text-gray-400 px-4 pt-2">Matching against <span className="font-semibold text-gray-500 dark:text-gray-300">{stmt.cardholder}</span>&apos;s entered lines only.</p>}
+            {stmt.cardholder && (
+              <p className="text-[11px] text-gray-400 px-4 pt-2">
+                Matching against <span className="font-semibold text-gray-500 dark:text-gray-300">{stmt.cardholder}</span>&apos;s entered lines
+                {scopedEntries.some((e) => e.cardholder === UNKNOWN_CARDHOLDER)
+                  ? <> — plus <span className="font-semibold text-gray-500 dark:text-gray-300">❓ Unknown</span> lines (matching one assigns it to this card).</>
+                  : " only."}
+              </p>
+            )}
 
             {stmt.transactions.length === 0 ? (
               <p className="text-sm text-gray-400 p-4">{stmt.source === "CSV" ? "No rows imported." : "No transactions yet — press Read (AI) to extract them."}</p>

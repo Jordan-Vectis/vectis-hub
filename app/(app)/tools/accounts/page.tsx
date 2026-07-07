@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
+import { UNKNOWN_CARDHOLDER } from "@/lib/accounting"
 import { getAccountsAccess } from "@/lib/accounts-auth"
 import NewMonthForm from "./new-month-form"
 import ManageCardholders from "./manage-cardholders"
@@ -31,7 +32,9 @@ export default async function AccountsPage() {
   const managedNames = new Set(cardholders.map((c) => c.name))
   const docGroups = await prisma.accountingDocument.groupBy({ by: ["cardholder"], _count: { _all: true } })
   const orphanCardholders = docGroups
-    .filter((g) => g.cardholder && !managedNames.has(g.cardholder))
+    // "Unknown" is the Auto match / Unknown bucket, not an orphaned card name —
+    // offering to merge it onto a real card would mis-tag every unresolved line.
+    .filter((g) => g.cardholder && g.cardholder !== UNKNOWN_CARDHOLDER && !managedNames.has(g.cardholder))
     .map((g) => ({ name: g.cardholder, count: g._count._all }))
     .sort((a, b) => b.count - a.count)
 

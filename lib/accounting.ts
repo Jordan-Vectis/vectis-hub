@@ -7,8 +7,28 @@
 // initial set (see the run-migrations seed) and is a fallback if none exist.
 export const DEFAULT_CARDHOLDERS = ["B Goodall", "J Goodall", "James", "Michael", "Vectis"]
 
+// The "don't know whose card this is" bucket for the Auto match / Unknown option.
+// A real, non-empty name (so it passes upload validation and survives saves); docs
+// tagged with it sit in their own "Unknown" section until the AI resolves the card
+// from the receipt's last-4 digits, or reconciling matches them to a card's statement.
+export const UNKNOWN_CARDHOLDER = "Unknown"
+
 export function cleanCardholder(s: string): string {
   return (s ?? "").trim().slice(0, 60)
+}
+
+// The last 4 card digits embedded in a managed card name (e.g. "B Goodall 5895" → "5895").
+export function cardLast4FromName(name: string): string | null {
+  const m = (name ?? "").trim().match(/(\d{4})$/)
+  return m ? m[1] : null
+}
+
+// Resolve a receipt's card last-4 against the managed card names. Only returns a
+// name when EXACTLY ONE card carries those digits — ambiguous digits stay Unknown.
+export function resolveCardholderByLast4(last4: string | null | undefined, cardholders: string[]): string | null {
+  if (!last4 || !/^\d{4}$/.test(last4)) return null
+  const hits = cardholders.filter((n) => cardLast4FromName(n) === last4)
+  return hits.length === 1 ? hits[0] : null
 }
 
 // VAT codes used on the sheet.
