@@ -601,17 +601,20 @@ export default function SaleStatisticsClient() {
               <Section title="Best month to sell — by category">
                 <DataTable
                   rows={categorySeasonality}
-                  initialSort={{ index: 6, dir: "desc" }}
+                  initialSort={{ index: 9, dir: "desc" }}
                   filterPlaceholder="Filter categories…"
                   columns={[
-                    { label: "Category",          render: c => <span className="text-gray-700 dark:text-gray-200 font-medium">{c.category}</span>, sort: c => c.category, text: c => c.category },
-                    { label: "Best month",        render: c => <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{MONTHS[c.best.m]}</span>, sort: c => c.best.m },
-                    { label: "That month's value", align: "right", render: c => gbp0(c.best.r.hammer), sort: c => c.best.r.hammer },
-                    { label: "Sell-through",      align: "right", render: c => pct(sellThrough(c.best.r)), sort: c => sellThrough(c.best.r) },
-                    { label: "Vs high",           align: "right", sort: c => vsHigh(c.best.r), render: c => <span className={c.best.r.hammer - c.best.r.high >= 0 ? "text-emerald-500" : "text-red-400"}>{pctS(vsHigh(c.best.r))}</span> },
-                    { label: "Quietest month",    render: c => <span className="text-amber-600 dark:text-amber-400">{MONTHS[c.worst.m]}</span>, sort: c => c.worst.m },
-                    { label: "Total (range)",     align: "right", render: c => gbp0(c.total), sort: c => c.total },
-                    { label: "Unsold (total)",    align: "right", render: c => int(c.passedTotal), sort: c => c.passedTotal },
+                    { label: "Category",         render: c => <span className="text-gray-700 dark:text-gray-200 font-medium">{c.category}</span>, sort: c => c.category, text: c => c.category },
+                    { label: "Best month",       render: c => <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{MONTHS[c.best.m]}</span>, sort: c => c.best.m },
+                    { label: "Best value",       align: "right", render: c => gbp0(c.best.r.hammer), sort: c => c.best.r.hammer },
+                    { label: "Best sell-thr",    align: "right", render: c => pct(sellThrough(c.best.r)), sort: c => sellThrough(c.best.r) },
+                    { label: "Best vs high",     align: "right", sort: c => vsHigh(c.best.r), render: c => <span className={c.best.r.hammer - c.best.r.high >= 0 ? "text-emerald-500" : "text-red-400"}>{pctS(vsHigh(c.best.r))}</span> },
+                    { label: "Quietest month",   render: c => <span className="text-amber-600 dark:text-amber-400 font-semibold">{MONTHS[c.worst.m]}</span>, sort: c => c.worst.m },
+                    { label: "Quietest value",   align: "right", render: c => gbp0(c.worst.r.hammer), sort: c => c.worst.r.hammer },
+                    { label: "Quietest sell-thr",align: "right", render: c => pct(sellThrough(c.worst.r)), sort: c => sellThrough(c.worst.r) },
+                    { label: "Quietest vs high", align: "right", sort: c => vsHigh(c.worst.r), render: c => <span className={c.worst.r.hammer - c.worst.r.high >= 0 ? "text-emerald-500" : "text-red-400"}>{pctS(vsHigh(c.worst.r))}</span> },
+                    { label: "Total (range)",    align: "right", render: c => gbp0(c.total), sort: c => c.total },
+                    { label: "Unsold (total)",   align: "right", render: c => int(c.passedTotal), sort: c => c.passedTotal },
                   ]}
                 />
               </Section>
