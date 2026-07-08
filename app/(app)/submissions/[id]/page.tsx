@@ -2,6 +2,7 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
+import { hasAppAccess } from "@/lib/apps"
 import { SubmissionStatus } from "@/app/generated/prisma/enums"
 import ContactForm from "./contact-form"
 import LogisticsForm from "./logistics-form"
@@ -54,7 +55,10 @@ export default async function SubmissionDetailPage({
   })
 
   const { label, color } = statusLabels[submission.status]
-  const isCollectionsOrAdmin = session?.user.role === "ADMIN" || session?.user.role === "COLLECTIONS"
+  // "Can manage the CRM" — anyone granted the CRM app (admins always) plus the
+  // legacy COLLECTIONS role, so no existing user loses access.
+  const crmUser = session ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { role: true, allowedApps: true } }) : null
+  const isCollectionsOrAdmin = !!crmUser && (crmUser.role === "COLLECTIONS" || hasAppAccess(crmUser.role, crmUser.allowedApps, "CRM"))
   const isCataloguer = session?.user.role === "CATALOGUER" || session?.user.role === "ADMIN"
 
   const totalEstimate = submission.items
