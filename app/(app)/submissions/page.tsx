@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
+import { hasAppAccess } from "@/lib/apps"
 import { SubmissionStatus } from "@/app/generated/prisma/enums"
 import DeleteSubmissionButton from "./delete-button"
 
@@ -68,7 +69,10 @@ export default async function SubmissionsPage({
     prisma.department.findMany({ orderBy: { name: "asc" } }),
   ])
 
-  const isCollectionsOrAdmin = session?.user.role === "ADMIN" || session?.user.role === "COLLECTIONS"
+  // "Can manage the CRM" — anyone granted the CRM app (admins always) plus the
+  // legacy COLLECTIONS role, so no existing user loses access.
+  const crmUser = session ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { role: true, allowedApps: true } }) : null
+  const isCollectionsOrAdmin = !!crmUser && (crmUser.role === "COLLECTIONS" || hasAppAccess(crmUser.role, crmUser.allowedApps, "CRM"))
   const hasFilters = status || search || channel || department
 
   // Build a toggle href that preserves the active filters
