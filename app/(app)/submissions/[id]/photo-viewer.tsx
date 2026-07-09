@@ -20,30 +20,19 @@ export default function PhotoViewer({ imageUrls }: { imageUrls: string[] }) {
 
   if (imageUrls.length === 0) return null
 
-  const isPdf = (url: string) => url.includes(".pdf") || url.includes("application%2Fpdf")
+  const isImage = (key: string) => /\.(jpe?g|png|gif|webp|heic|heif|tiff?|bmp)$/i.test(key)
+  // Keys look like "submissions/<timestamp>-<original name>" — recover a display name.
+  const fileName = (key: string) => decodeURIComponent(key.split("/").pop() ?? key).replace(/^\d+-/, "")
 
   return (
     <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-      <p className="text-xs text-gray-400 mb-2">Photos ({imageUrls.length})</p>
+      <p className="text-xs text-gray-400 mb-2">Attachments ({imageUrls.length})</p>
       {signedUrls.length === 0 ? (
         <p className="text-xs text-gray-400">Loading...</p>
       ) : (
         <div className="flex flex-wrap gap-2">
           {signedUrls.map((url, i) => (
-            isPdf(imageUrls[i]) ? (
-              <a
-                key={i}
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 bg-gray-50 dark:bg-[#141416] border border-gray-200 dark:border-gray-800 rounded px-2 py-1"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                </svg>
-                PDF {i + 1}
-              </a>
-            ) : (
+            isImage(imageUrls[i]) ? (
               <img
                 key={i}
                 src={url}
@@ -51,6 +40,20 @@ export default function PhotoViewer({ imageUrls }: { imageUrls: string[] }) {
                 onClick={() => setLightbox(url)}
                 className="w-20 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-800 cursor-pointer hover:opacity-80 transition-opacity"
               />
+            ) : (
+              <a
+                key={i}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={fileName(imageUrls[i])}
+                className="flex items-center gap-1 max-w-[10rem] text-xs text-blue-600 hover:text-blue-800 bg-gray-50 dark:bg-[#141416] border border-gray-200 dark:border-gray-800 rounded px-2 py-1"
+              >
+                <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                <span className="truncate">{fileName(imageUrls[i])}</span>
+              </a>
             )
           ))}
         </div>
