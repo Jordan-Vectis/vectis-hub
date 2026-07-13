@@ -151,14 +151,24 @@ export async function GET(req: NextRequest) {
 
     const buf = buildReportsWorkbook(personList, rangeLabel)
 
-    const who   = userIdParam ? (personList[0]?.userName ?? "cataloguer") : "All cataloguers"
-    const fname = `Idle & lots — ${who} — ${rangeLabel}.xlsx`.replace(/[\/\\?%*:|"<>]/g, "-")
+    const who      = userIdParam ? (personList[0]?.userName ?? "cataloguer") : "All cataloguers"
+    const niceName = `Idle and lots - ${who} - ${rangeLabel}.xlsx`
+    // Content-Disposition header values must be Latin-1 — a non-ASCII character
+    // (em/en dash, accented cataloguer name) throws when the header is built and
+    // 500s the whole export. Strip to ASCII for the plain `filename`, and add a
+    // UTF-8 `filename*` so modern browsers still get the exact name.
+    const asciiName = niceName
+      .replace(/[^\x20-\x7E]/g, "-")
+      .replace(/[\/\\?%*:|"<>]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/\s+/g, " ")
+      .trim()
 
     return new NextResponse(new Uint8Array(buf), {
       status: 200,
       headers: {
         "Content-Type":        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="${fname}"`,
+        "Content-Disposition": `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(niceName)}`,
         "Cache-Control":       "no-store",
       },
     })
