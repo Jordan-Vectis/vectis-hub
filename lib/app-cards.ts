@@ -6,6 +6,7 @@ export const SECTION_DEFS = [
   { key: "BUSINESS_CENTRAL", label: "Business Central" },
   { key: "OPERATIONS",       label: "Operations" },
   { key: "AUCTION",          label: "Auction" },
+  { key: "VECTIS_ADMIN",     label: "Vectis Admin" },
   { key: "IT_ADMIN",         label: "IT & Admin" },
 ] as const
 
@@ -183,6 +184,19 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     glow:               "hover:shadow-indigo-900/40",
     group:              "BUSINESS_CENTRAL",
     appKey:             "BC_WAREHOUSE",
+  },
+  {
+    key:                "LOT_LOOKUP",
+    href:               "/tools/lot-lookup",
+    defaultLabel:       "Lot Lookup",
+    defaultDescription: "Search by receipt, tote or customer (vendor) number and see every lot — what's been catalogued and which sale it's in, across both the Hub and Business Central.",
+    icon:               "🔎",
+    border:             "border-indigo-500",
+    iconBg:             "text-indigo-400",
+    btnBg:              "bg-indigo-600 hover:bg-indigo-500",
+    glow:               "hover:shadow-indigo-900/40",
+    group:              "VECTIS_ADMIN",
+    // no appKey — admin-only
   },
   {
     key:                "ADMIN",
