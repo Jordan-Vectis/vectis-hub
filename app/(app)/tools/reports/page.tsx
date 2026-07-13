@@ -212,21 +212,30 @@ export default async function ReportsOverviewPage({
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Cataloguing performance — speed, output and team comparisons.</p>
               {isAdmin && <div className="mt-3"><CleanupOrphanLogsButton /></div>}
             </div>
-            {/* Range pills */}
-            <div className="flex items-center gap-1 bg-gray-100 dark:bg-[#141416] border border-gray-200 dark:border-gray-800 rounded-lg p-1">
-              {RANGES.map(r => (
-                <Link
-                  key={r.key}
-                  href={`/tools/reports?range=${r.key}`}
-                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap ${
-                    activeRange === r.key
-                      ? "bg-[#2AB4A6] text-white"
-                      : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-                  }`}
-                >
-                  {r.label}
-                </Link>
-              ))}
+            {/* Export + range pills */}
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Export ALL cataloguers (one workbook, one sheet per person, grouped per day) */}
+              <a
+                href={`/api/reports/export?range=${activeRange}`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#2AB4A6] text-white hover:bg-[#249b8f] transition-colors whitespace-nowrap"
+              >
+                ⬇ Export all (Excel)
+              </a>
+              <div className="flex items-center gap-1 bg-gray-100 dark:bg-[#141416] border border-gray-200 dark:border-gray-800 rounded-lg p-1">
+                {RANGES.map(r => (
+                  <Link
+                    key={r.key}
+                    href={`/tools/reports?range=${r.key}`}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap ${
+                      activeRange === r.key
+                        ? "bg-[#2AB4A6] text-white"
+                        : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                    }`}
+                  >
+                    {r.label}
+                  </Link>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -305,6 +314,7 @@ export default async function ReportsOverviewPage({
                           <th className="text-right px-5 py-3">Fastest</th>
                           <th className="text-right px-5 py-3">Slowest</th>
                           <th className="text-right px-5 py-3">Research</th>
+                          <th className="text-right px-5 py-3">Export</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 dark:divide-gray-800/60">
@@ -333,6 +343,14 @@ export default async function ReportsOverviewPage({
                               {u.researchSessions > 0 && (
                                 <span className="text-gray-500 dark:text-gray-600 text-xs ml-1">({u.researchSessions})</span>
                               )}
+                            </td>
+                            <td className="px-5 py-3.5 text-right">
+                              <a
+                                href={`/api/reports/export?userId=${encodeURIComponent(u.userId)}&range=${activeRange}`}
+                                className="inline-flex items-center gap-1 text-xs font-semibold text-[#2AB4A6] hover:underline whitespace-nowrap"
+                              >
+                                ⬇ Excel
+                              </a>
                             </td>
                           </tr>
                         ))}
