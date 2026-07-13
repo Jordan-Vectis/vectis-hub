@@ -645,11 +645,17 @@ export default function LotWizardTab({
     setToteInfo(item)
     setToteResults([])
     setToteOpen(false)
-    if (!vendor) { setVendor(item.vendorNo ?? ""); setVendorHint(item.vendorName ?? null) }
-    if (!receipt && item.receiptNo) setReceipt(item.receiptNo)
+    // A tote belongs to exactly one vendor + receipt, so choosing a tote is the
+    // source of truth: overwrite vendor + receipt even when they're pinned (that
+    // IS the point of switching tote). Only overwrite with a real value so a
+    // sparse BC record can't blank a good one.
+    if (item.vendorNo) setVendor(item.vendorNo)
+    setVendorHint(item.vendorName ?? null)
+    if (item.receiptNo) setReceipt(item.receiptNo)
   }
 
   async function lookupVendorFromBC(params: { receipt?: string; tote?: string }) {
+    const byTote = !!params.tote
     const q = params.receipt
       ? `receipt=${encodeURIComponent(params.receipt)}`
       : `tote=${encodeURIComponent(params.tote ?? "")}`
@@ -657,9 +663,12 @@ export default function LotWizardTab({
       const res  = await fetch(`/api/warehouse/vendor-lookup?${q}`)
       const data = await res.json()
       if (data.vendorNo) {
-        if (!vendor) setVendor(data.vendorNo)
+        // The identifier just entered is authoritative: a typed tote drives BOTH
+        // vendor + receipt; a typed receipt drives the vendor. Overwrite even
+        // pinned values so the details always match what was entered.
+        setVendor(data.vendorNo)
         setVendorHint(data.vendorName ?? null)
-        if (!receipt && data.receiptNo) setReceipt(data.receiptNo)
+        if (byTote && data.receiptNo) setReceipt(data.receiptNo)
       }
     } catch { /* silent — lookup is best-effort */ }
   }

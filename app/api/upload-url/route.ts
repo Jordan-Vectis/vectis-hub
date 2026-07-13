@@ -4,7 +4,24 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { r2 } from "@/lib/r2"
 
 const MAX_TOTAL_SIZE = 5 * 1024 * 1024 * 1024 // 5GB
-const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/jpg", "application/pdf"]
+// Photos AND documents — submissions often arrive with valuation letters,
+// provenance docs, spreadsheets, etc. alongside item photos.
+const ALLOWED_TYPES = [
+  // Images
+  "image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp",
+  "image/heic", "image/heif", "image/tiff", "image/bmp",
+  // Documents
+  "application/pdf",
+  "application/msword",                                                        // .doc
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",   // .docx
+  "application/vnd.ms-excel",                                                  // .xls
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",         // .xlsx
+  "application/vnd.ms-powerpoint",                                             // .ppt
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation", // .pptx
+  "text/plain",                                                                // .txt
+  "text/csv",                                                                  // .csv
+  "application/rtf", "text/rtf",                                               // .rtf
+]
 
 export async function POST(req: NextRequest) {
   const { filename, contentType, size } = await req.json()

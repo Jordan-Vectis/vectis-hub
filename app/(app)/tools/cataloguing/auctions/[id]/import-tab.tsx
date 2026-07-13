@@ -64,7 +64,10 @@ export default function ImportTab({ auctionId, auctionCode, onImported }: Props)
           // New catalogue export format
           parsed = raw.map(r => {
             const kp = col(r, "Key Points")
-            const barcode = col(r, "Internal Barcode").toUpperCase()
+            // Accept "Barcode" as well as "Internal Barcode" — friendly exports
+            // label the column "Barcode", and the file still lands here (catalogue
+            // branch) whenever a "Key Points" column is present.
+            const barcode = col(r, "Internal Barcode", "Barcode").toUpperCase()
             // Derive title from first line of key points (up to 83 chars)
             const title = kp.split("\n")[0].trim().slice(0, 83).trimEnd()
             return {

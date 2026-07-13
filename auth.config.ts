@@ -12,9 +12,13 @@ export const authConfig: NextAuthConfig = {
       const isLoggedIn = !!auth?.user
       const pathname = nextUrl.pathname
 
-      const publicPaths = ["/login", "/setup", "/submit", "/value", "/auctions", "/portal", "/account", "/api/public", "/search", "/api/gap-relay"]
-      // Root path "/" is the public website homepage
-      if (pathname === "/") return true
+      // The public customer website AND the staff Hub now both sit behind the
+      // Hub login (deliberate change 2026-07-09 — the customer site is not yet
+      // meant to be publicly visible, so logged-out visitors are bounced to
+      // /login). Only the login page, first-run setup and server-to-server API
+      // relays stay reachable while logged out. See RULES.md → "Public site is
+      // login-gated".
+      const publicPaths = ["/login", "/setup", "/api/public", "/api/gap-relay"]
       if (publicPaths.some((p) => pathname.startsWith(p))) return true
 
       if (!isLoggedIn) return false

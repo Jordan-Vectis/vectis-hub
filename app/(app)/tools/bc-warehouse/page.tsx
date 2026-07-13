@@ -1316,7 +1316,7 @@ function LocationHistoryTab() {
 // ─── ToteDataTab ─────────────────────────────────────────────────────────────
 
 type ToteReport = {
-  stats: { total: number; active: number; catalogued: number; unknown: number }
+  stats: { onShelf: number; offShelf: number }
   byCategory: { category: string; itemCount: number; activeTotes: number }[]
   byLocation: { location: string | null; toteCount: number }[]
   totes: SearchTote[]
@@ -1379,7 +1379,7 @@ function ToteDataTab() {
       <div className="px-6 pt-5 pb-4 border-b border-gray-200 dark:border-gray-800 flex items-start justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Tote Report</h2>
-          <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">Active totes by category and location</p>
+          <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">Totes on active shelf locations, by category and location</p>
         </div>
         <button
           onClick={load}
@@ -1392,12 +1392,11 @@ function ToteDataTab() {
       {/* Stat cards */}
       <div className="grid grid-cols-3 gap-3 px-6 py-4 border-b border-gray-200 dark:border-gray-800">
         <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-4 py-3">
-          <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Total Totes</div>
-          <div className="text-2xl font-mono font-semibold text-gray-900 dark:text-white">{stats.total.toLocaleString()}</div>
+          <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">On Active Shelves</div>
+          <div className="text-2xl font-mono font-semibold text-gray-900 dark:text-white">{stats.onShelf.toLocaleString()}</div>
           <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-            <span className="text-amber-400">{stats.active.toLocaleString()} active</span>
-            {" · "}
-            <span className="text-gray-600 dark:text-gray-500">{(stats.total - stats.active).toLocaleString()} done</span>
+            <span className="text-gray-600 dark:text-gray-500">{stats.offShelf.toLocaleString()} off-shelf hidden</span>
+            <span className="text-gray-500 dark:text-gray-600"> (bench / query / archive / no location)</span>
           </div>
         </div>
         <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-4 py-3">

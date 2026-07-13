@@ -188,9 +188,18 @@ export default function NewSubmissionPage() {
                   <div>
                     {item.photos.length > 0 && (
                       <div className="flex flex-wrap gap-2 mb-3">
-                        {item.photos.map((photo, pi) => (
-                          <div key={pi} className="relative w-20 h-20 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 group">
-                            <img src={photo.preview} alt="" className="w-full h-full object-cover" />
+                        {item.photos.map((photo, pi) => {
+                          const isImg = photo.file.type.startsWith("image/")
+                          return (
+                          <div key={pi} className="relative w-20 h-20 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 group bg-gray-50 dark:bg-[#141416]">
+                            {isImg ? (
+                              <img src={photo.preview} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center gap-1 p-1 text-center">
+                                <span className="text-xl">📄</span>
+                                <span className="text-[10px] leading-tight text-gray-500 dark:text-gray-400 break-all line-clamp-2">{photo.file.name}</span>
+                              </div>
+                            )}
                             {photo.uploading && (
                               <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                                 <span className="text-white text-sm">…</span>
@@ -206,7 +215,8 @@ export default function NewSubmissionPage() {
                               </button>
                             )}
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
                     <button
@@ -214,12 +224,12 @@ export default function NewSubmissionPage() {
                       onClick={() => fileInputRefs.current[index]?.click()}
                       className="text-base text-blue-600 dark:text-blue-400 hover:text-blue-800 font-semibold flex items-center gap-2"
                     >
-                      <span className="text-lg">📷</span> Add photos
+                      <span className="text-lg">📎</span> Add photos or documents
                     </button>
                     <input
                       ref={el => { fileInputRefs.current[index] = el }}
                       type="file"
-                      accept="image/*"
+                      accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf"
                       multiple
                       className="hidden"
                       onChange={e => { if (e.target.files) handlePhotoFiles(index, e.target.files) }}
@@ -244,7 +254,7 @@ export default function NewSubmissionPage() {
             disabled={isPending || anyUploading}
             className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-xl text-base transition-colors disabled:opacity-50"
           >
-            {anyUploading ? "Uploading photos…" : isPending ? "Creating…" : "Create Submission"}
+            {anyUploading ? "Uploading files…" : isPending ? "Creating…" : "Create Submission"}
           </button>
           <Link
             href="/submissions"

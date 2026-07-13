@@ -32,6 +32,22 @@ The app is hosted on **Railway**, not Vercel. Never reference a `.vercel.app` UR
 - Auto-deploys: push to `main` → production, push to `staging` → staging environment on Railway
 - Never tell the user to open a `vercel.app` URL for any reason
 
+## Public site is login-gated (2026-07-09)
+
+The public **customer website** (`app/(site)` — homepage `/`, `/auctions`, `/portal`, `/account`,
+`/search`, plus the public `/submit` and `/value` links) is **no longer public**. It now sits behind
+the staff **Hub login**, same as the internal Hub. A logged-out visitor to any of these is bounced to
+`/login`. This was a deliberate decision — the customer site is not yet meant to be publicly visible.
+
+- Enforced in the `authorized` callback in **`auth.config.ts`** (wired up by `proxy.ts`, Next 16's
+  renamed middleware). The only paths that stay reachable while logged out are `/login`, `/setup`,
+  and the server-to-server relays `/api/public` / `/api/gap-relay`.
+- ⚠ **Do NOT re-add** `/`, `/auctions`, `/portal`, `/account`, `/search`, `/submit`, `/value` to
+  `publicPaths` "to fix" customers being unable to reach the site — that lock-out is intentional
+  until the customer site is launched. If/when it goes live to customers, that's a deliberate reversal
+  to discuss, not a silent edit.
+- Applies to **both** staging and production (no env flag).
+
 ## ⚠ Claude memory sync (multi-developer) — check freshness before trusting local memory
 
 The in-app memory page — the `ENTRIES` array in `app/(app)/admin/memory/page.tsx`, shown at
