@@ -200,9 +200,9 @@ export const APP_CARD_DEFS: AppCardDef[] = [
   {
     key:                "LOT_LOOKUP",
     href:               "/tools/lot-lookup",
-    defaultLabel:       "Lot Lookup",
-    defaultDescription: "Search by receipt, tote or customer (vendor) number and see every lot — what's been catalogued and which sale it's in, across both the Hub and Business Central.",
-    icon:               "🔎",
+    defaultLabel:       "Admin Centre",
+    defaultDescription: "Admin tools for the team. Search by receipt, tote or customer (vendor) number and see every lot — what's been catalogued and which sale it's in, across both the Hub and Business Central.",
+    icon:               "🎛️",
     border:             "border-red-500",
     iconBg:             "text-red-400",
     btnBg:              "bg-red-600 hover:bg-red-500",

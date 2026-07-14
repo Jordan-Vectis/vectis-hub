@@ -79,10 +79,10 @@ export default function LookupClient() {
       <div className="mb-1 flex items-center gap-2">
         <Link href="/hub" className="text-sm text-gray-400 hover:text-indigo-500">← Hub</Link>
       </div>
-      <h1 className="text-3xl font-bold text-gray-900 dark:text-white">🔎 Lot Lookup</h1>
+      <h1 className="text-3xl font-bold text-gray-900 dark:text-white">🎛️ Admin Centre</h1>
       <p className="text-sm text-gray-500 mt-1 mb-6">
-        Search by receipt, tote or customer (vendor) number to see every lot — what&apos;s been catalogued and which
-        sale it&apos;s in — across both the Hub cataloguing system and Business Central.
+        Lot lookup — search by receipt, tote or customer (vendor) number to see every lot, what&apos;s been catalogued and
+        which sale it&apos;s in, across both the Hub cataloguing system and Business Central.
       </p>
 
       {/* Search bar */}

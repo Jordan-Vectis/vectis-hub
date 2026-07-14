@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useTransition, useRef, useEffect } from "react"
+import { useState, useTransition, useRef, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { createLot, getLastLotFields, saveLastLotFields } from "@/lib/actions/catalogue"
+import { loadSpellDict, findMisspellings } from "@/lib/spellcheck"
 import { DEFAULT_REASONS, workingMsBetween } from "@/lib/idle-timer-config"
 import type { IdleReason } from "@/lib/idle-timer-config"
 import { DEFAULT_CATEGORY_MAP } from "@/lib/lot-categories"
@@ -582,6 +583,24 @@ export default function LotWizardTab({
   const [keyPoints,   setKeyPoints]   = useState("")
   const [aiExcluded,  setAiExcluded]  = useState(false)
   const [manualDesc,  setManualDesc]  = useState("")
+  // Spell FLAGGING for Key Points / Description (step 3) — lists unrecognised words,
+  // ignoring brand names + codes/numbers. See lib/spellcheck.ts.
+  const [misspelled,  setMisspelled]  = useState<string[]>([])
+  const brandTokens = useMemo(() => {
+    const s = new Set<string>()
+    for (const b of BRANDS_LIST) for (const p of b.toLowerCase().split(/[\s/&-]+/)) if (p.length > 1) s.add(p)
+    return s
+  }, [])
+  useEffect(() => {
+    const text = aiExcluded ? manualDesc : keyPoints
+    if (step !== 3 || !text.trim()) { setMisspelled([]); return }
+    let cancelled = false
+    const id = setTimeout(async () => {
+      const d = await loadSpellDict()
+      if (!cancelled) setMisspelled(findMisspellings(text, d, brandTokens))
+    }, 400)
+    return () => { cancelled = true; clearTimeout(id) }
+  }, [step, keyPoints, manualDesc, aiExcluded, brandTokens])
   const [mainCat,     setMainCat]     = useState("")
   const [subCat,      setSubCat]      = useState("")
   const [brand,       setBrand]       = useState("")
@@ -1281,6 +1300,13 @@ export default function LotWizardTab({
                   placeholder="Describe any key points about this lot…"
                   className={`${inpFocus} resize-none`} autoFocus />
               </div>
+            )}
+            {misspelled.length > 0 && (
+              <p className={`text-amber-500 ${tablet ? "text-sm" : "text-xs"}`}>
+                ⚠ Possible spelling {misspelled.length === 1 ? "mistake" : "mistakes"}:{" "}
+                <span className="font-semibold">{misspelled.join(", ")}</span>
+                <span className="text-gray-500"> — please double-check.</span>
+              </p>
             )}
           </div>
         )}

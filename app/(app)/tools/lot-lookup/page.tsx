@@ -3,7 +3,7 @@ import { auth } from "@/auth"
 import LookupClient from "./lookup-client"
 
 export const dynamic = "force-dynamic"
-export const metadata = { title: "Lot Lookup" }
+export const metadata = { title: "Admin Centre" }
 
 // Vectis Admin → Lot Lookup. Admin-only (financial/operational cross-system view).
 export default async function LotLookupPage() {
