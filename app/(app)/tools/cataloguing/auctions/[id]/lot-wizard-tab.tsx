@@ -352,22 +352,6 @@ function CondBtn({ label, selected, onClick, tablet }: { label: string; selected
   )
 }
 
-// ─── Pin button ───────────────────────────────────────────────────────────────
-
-function PinBtn({ pinned, onPin, tablet }: { pinned: boolean; onPin: () => void; tablet?: boolean }) {
-  return (
-    <button type="button" onClick={onPin}
-      className={`rounded transition-colors flex-shrink-0 ${tablet ? "text-sm px-3 py-1.5" : "text-xs px-2 py-0.5"}`}
-      style={{
-        color: pinned ? CAT_ACCENT : "#6b7280",
-        border: `1px solid ${pinned ? CAT_ACCENT + "66" : "#374151"}`,
-        touchAction: tablet ? "manipulation" : undefined,
-      }}>
-      {pinned ? "📌 Pinned" : "Pin"}
-    </button>
-  )
-}
-
 // localStorage key base for the idle-timer heartbeat (persists last-activity time
 // across page closes). Keyed per user so a shared iPad doesn't blame one
 // cataloguer for another's gap.
@@ -591,6 +575,7 @@ export default function LotWizardTab({
       setVendor(v => v || f.vendor)
       setTote(t => t || f.tote)
       setReceipt(r => r || f.receipt)
+      if (f.tote) lookupVendorFromBC({ tote: f.tote, hintOnly: true })   // name label only — values already correct
     }).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -614,10 +599,12 @@ export default function LotWizardTab({
   const [photoFiles,  setPhotoFiles]  = useState<{ file: File; preview: string }[]>([])
   const photoInputRef = useRef<HTMLInputElement>(null)
 
-  // Pinned values — restored after each lot save
-  const [pinnedVendor,  setPinnedVendor]  = useState("")
-  const [pinnedTote,    setPinnedTote]    = useState("")
-  const [pinnedReceipt, setPinnedReceipt] = useState("")
+  // Locked batch identity (tote / vendor / receipt) — set on "Start cataloguing",
+  // carried across every lot until the cataloguer deliberately changes it (which
+  // asks for confirmation). Replaces the old per-field Pin buttons.
+  const [locked,        setLocked]        = useState<null | { tote: string; vendor: string; receipt: string; vendorName: string }>(null)
+  const [changeConfirm, setChangeConfirm] = useState<null | { tote: string; vendor: string; receipt: string; vendorName: string }>(null)
+  // Category pins (separate feature — unchanged): keep a category sticky across lots.
   const [pinnedMain,    setPinnedMain]    = useState("")
   const [pinnedSub,     setPinnedSub]     = useState("")
   const [saveStatus,  setSaveStatus]  = useState("")
@@ -645,11 +632,19 @@ export default function LotWizardTab({
     setToteInfo(item)
     setToteResults([])
     setToteOpen(false)
-    if (!vendor) { setVendor(item.vendorNo ?? ""); setVendorHint(item.vendorName ?? null) }
-    if (!receipt && item.receiptNo) setReceipt(item.receiptNo)
+    // Always overwrite vendor + receipt from the selected tote (the old "only if
+    // blank" guard meant changing the tote kept the PREVIOUS vendor/receipt — the
+    // mismatch bug this rework fixes).
+    setVendor(item.vendorNo ?? "")
+    setVendorHint(item.vendorName ?? null)
+    setReceipt(item.receiptNo ?? "")
   }
 
-  async function lookupVendorFromBC(params: { receipt?: string; tote?: string }) {
+  // Look up vendor/receipt for a tote (or vendor for a receipt) from the BC-synced
+  // warehouse. By default OVERWRITES vendor + receipt so changing the tote always
+  // refreshes them. hintOnly fills just the name label (used when pre-filling the
+  // remembered tote on open, where the values are already correct).
+  async function lookupVendorFromBC(params: { receipt?: string; tote?: string; hintOnly?: boolean }) {
     const q = params.receipt
       ? `receipt=${encodeURIComponent(params.receipt)}`
       : `tote=${encodeURIComponent(params.tote ?? "")}`
@@ -657,9 +652,14 @@ export default function LotWizardTab({
       const res  = await fetch(`/api/warehouse/vendor-lookup?${q}`)
       const data = await res.json()
       if (data.vendorNo) {
-        if (!vendor) setVendor(data.vendorNo)
         setVendorHint(data.vendorName ?? null)
-        if (!receipt && data.receiptNo) setReceipt(data.receiptNo)
+        // A tote that resolves in BC is "found" — record it so the false
+        // "Tote not found in BC warehouse" warning doesn't show (incl. on prefill).
+        if (params.tote) setToteInfo({ vendorNo: data.vendorNo, vendorName: data.vendorName ?? "", receiptNo: data.receiptNo ?? "", location: "" })
+        if (!params.hintOnly) {
+          setVendor(data.vendorNo)
+          if (data.receiptNo) setReceipt(data.receiptNo)
+        }
       }
     } catch { /* silent — lookup is best-effort */ }
   }
@@ -689,6 +689,42 @@ export default function LotWizardTab({
     }
     if (s === 7 && !parcel.trim()) return "Parcel Size is required"
     return ""
+  }
+
+  // ── "Start cataloguing" — lock the tote/vendor/receipt in for the batch ──────
+  // Commit the current (or a confirmed) identity and advance to the barcode step.
+  function commitStart(id?: { tote: string; vendor: string; receipt: string; vendorName: string }) {
+    const next = id ?? { tote: tote.trim(), vendor: vendor.trim(), receipt: receipt.trim(), vendorName: vendorHint ?? toteInfo?.vendorName ?? "" }
+    setLocked(next)
+    setChangeConfirm(null)
+    setStep1LengthWarning(false)
+    setValidErr("")
+    setStep(2)
+  }
+  // After validation + the 7-char gate: if this switches away from an already-locked
+  // vendor, ask "are you sure?" first; otherwise commit straight away.
+  function afterStartChecks() {
+    const cur = { tote: tote.trim(), vendor: vendor.trim(), receipt: receipt.trim(), vendorName: vendorHint ?? toteInfo?.vendorName ?? "" }
+    const changed = !!locked && (locked.tote !== cur.tote || locked.vendor !== cur.vendor || locked.receipt !== cur.receipt)
+    if (changed) setChangeConfirm(cur)
+    else commitStart(cur)
+  }
+  function startCataloguing() {
+    const err = validateStep(1)
+    if (err) { setValidErr(err); return }
+    setValidErr("")
+    const short = tote.trim().length !== 7 || vendor.trim().length !== 7 || receipt.trim().length !== 7
+    if (short) { setStep1LengthWarning(true); return }   // its "Continue anyway" resumes via afterStartChecks
+    afterStartChecks()
+  }
+  // "Change Tote / Vendor" — wipe the tote/vendor/receipt for a clean re-entry, then
+  // go back to step 1. `locked` is kept so switching still asks for confirmation and
+  // the modal can show what you're moving away from.
+  function changeVendor() {
+    setTote(""); setVendor(""); setReceipt("")
+    setToteInfo(null); setToteResults([]); setToteOpen(false); setToteIgnored(false); setVendorHint(null)
+    setStep1LengthWarning(false); setValidErr("")
+    setStep(1)
   }
 
   function goNext() {
@@ -742,6 +778,8 @@ export default function LotWizardTab({
     setValidErr("")
     setCategoryWarning(null)
     setEstimateWarning(false)
+    setBarcodeWarning(false)        // else the top-nav button stays disabled back on step 1
+    setStep1LengthWarning(false)
     if (step > 1) setStep(step - 1)
   }
 
@@ -851,11 +889,8 @@ export default function LotWizardTab({
       // Remember Tote / Vendor / Receipt on the user's account for next time (any device)
       saveLastLotFields({ vendor, tote, receipt }).catch(() => {})
       setSaveStatus(`✓ Lot #${n} saved — ${vendor} / ${tote} / ${barcode}`)
-      // Restore pinned values; vendor/tote/receipt fall back to keeping current value if not pinned
-      setVendor(pinnedVendor || vendor)
-      setTote(pinnedTote || tote)
-      setReceipt(pinnedReceipt || receipt)
-      setVendorHint(null)
+      // Tote / Vendor / Receipt stay locked for the whole batch — leave them (and the
+      // vendor name hint) as-is so the next lot keeps the same identity.
       setBarcode(""); setKeyPoints(""); setAiExcluded(false); setManualDesc("")
       setMainCat(pinnedMain); setSubCat(pinnedSub); setBrand("")
       setEstLow(""); setEstHigh(""); setCond1(""); setCond2(""); setParcel("")
@@ -973,6 +1008,30 @@ export default function LotWizardTab({
         </div>
       )}
 
+      {/* Change vendor/tote confirmation */}
+      {changeConfirm && (
+        <div className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-4" onClick={() => setChangeConfirm(null)}>
+          <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-bold text-gray-900 dark:text-white mb-1">Change vendor?</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">You&apos;re about to switch what you&apos;re cataloguing to:</p>
+            <div className="rounded-xl bg-gray-100 dark:bg-[#2C2C2E] border border-gray-200 dark:border-gray-700 px-4 py-3 text-sm space-y-1 mb-3">
+              <div><span className="text-gray-500">Vendor </span><span className="font-mono text-gray-800 dark:text-gray-100">{changeConfirm.vendor}</span>{changeConfirm.vendorName && <span className="text-gray-500"> · {changeConfirm.vendorName}</span>}</div>
+              <div><span className="text-gray-500">Tote </span><span className="font-mono text-gray-800 dark:text-gray-100">{changeConfirm.tote}</span></div>
+              <div><span className="text-gray-500">Receipt </span><span className="font-mono text-gray-800 dark:text-gray-100">{changeConfirm.receipt}</span></div>
+            </div>
+            {locked && (
+              <p className="text-xs text-gray-500 mb-4">Currently: {locked.vendor}{locked.vendorName ? ` · ${locked.vendorName}` : ""} · Tote {locked.tote} · Receipt {locked.receipt}</p>
+            )}
+            <div className="flex gap-2 justify-end">
+              <button type="button" onClick={() => setChangeConfirm(null)}
+                className="px-4 py-2 text-sm font-semibold rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-400">Cancel</button>
+              <button type="button" onClick={() => commitStart(changeConfirm)}
+                className="px-4 py-2 text-sm font-semibold rounded-lg" style={{ background: CAT_ACCENT, color: "#1C1C1E" }}>Yes, change vendor</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Auction context banner */}
       <div className="flex items-center gap-3 mb-4 px-1">
         <span className={`${tablet ? "text-sm" : "text-xs"} text-gray-600 dark:text-gray-500 uppercase tracking-wider`}>Adding to:</span>
@@ -1031,10 +1090,10 @@ export default function LotWizardTab({
         </button>
         <span className={`text-gray-600 ${tablet ? "text-base" : "text-xs"}`}>{step} / 8</span>
         {step < 8 ? (
-          <button onClick={goNext} disabled={barcodeWarning || step1LengthWarning}
+          <button onClick={step === 1 ? startCataloguing : goNext} disabled={barcodeWarning || step1LengthWarning}
             className={`font-semibold rounded transition-colors disabled:opacity-40 ${tablet ? "px-6 py-3 text-base" : "px-4 py-1.5 text-sm"}`}
             style={{ background: CAT_ACCENT, color: "#1C1C1E", touchAction: tablet ? "manipulation" : undefined }}>
-            Next →
+            {step === 1 ? "Start cataloguing →" : "Next →"}
           </button>
         ) : (
           <button onClick={saveLot} disabled={pending}
@@ -1050,17 +1109,20 @@ export default function LotWizardTab({
 
         {step === 1 && (
           <div className="max-w-lg space-y-4">
-            <p className="text-xs text-gray-600 dark:text-gray-500">These values are remembered between lots.</p>
+            <p className="text-xs text-gray-600 dark:text-gray-500">Type or scan the tote — the vendor &amp; receipt fill in automatically. Press <span className="font-semibold" style={{ color: CAT_ACCENT }}>Start cataloguing</span> to lock them in for the batch (they&apos;re remembered next time too).</p>
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className={lbl}>Tote Number <span className="text-red-500">*</span></label>
-                <PinBtn pinned={pinnedTote === tote && !!tote} onPin={() => setPinnedTote(v => v === tote ? "" : tote)} tablet={tablet} />
-              </div>
+              <label className={`${lbl} block mb-1`}>Tote Number <span className="text-red-500">*</span></label>
               <div className="relative">
                 <div className="flex gap-2">
                   <input
                     value={tote}
-                    onChange={e => { setTote(e.target.value); searchTotes(e.target.value); setStep1LengthWarning(false) }}
+                    onChange={e => {
+                      // Tote is the source of truth: editing it clears the derived vendor/receipt
+                      // so a not-in-BC tote can't keep the previous batch's vendor/receipt (mismatch).
+                      // selectTote / a successful blur lookup re-populate them for a real BC tote.
+                      setTote(e.target.value); setVendor(""); setReceipt(""); setVendorHint(null)
+                      searchTotes(e.target.value); setStep1LengthWarning(false)
+                    }}
                     onFocus={e => { if (e.target.value) searchTotes(e.target.value) }}
                     onBlur={e => {
                       setTimeout(() => setToteOpen(false), 150)
@@ -1072,7 +1134,7 @@ export default function LotWizardTab({
                     autoFocus
                     maxLength={7}
                   />
-                  {tote && <button type="button" onClick={() => { setTote(""); setToteInfo(null); setToteResults([]); setToteOpen(false); setToteIgnored(false); setVendorHint(null) }} className="px-3 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
+                  {tote && <button type="button" onClick={() => { setTote(""); setToteInfo(null); setToteResults([]); setToteOpen(false); setToteIgnored(false); setVendorHint(null); setVendor(""); setReceipt("") }} className="px-3 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400" title="Clear tote, vendor and receipt">✕</button>}
                 </div>
                 {toteOpen && toteResults.length > 0 && (
                   <div className="absolute z-50 w-full mt-1 bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-700 rounded shadow-xl max-h-52 overflow-y-auto">
@@ -1101,10 +1163,7 @@ export default function LotWizardTab({
               )}
             </div>
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className={lbl}>Vendor Number <span className="text-red-500">*</span></label>
-                <PinBtn pinned={pinnedVendor === vendor && !!vendor} onPin={() => setPinnedVendor(v => v === vendor ? "" : vendor)} tablet={tablet} />
-              </div>
+              <label className={`${lbl} block mb-1`}>Vendor Number <span className="text-red-500">*</span> <span className="normal-case font-normal text-gray-500">— auto-filled from the tote</span></label>
               <div className="flex gap-2">
                 <input value={vendor} onChange={e => { setVendor(e.target.value); setVendorHint(null); setStep1LengthWarning(false) }} className={`flex-1 ${inpFocus}`} placeholder="e.g. C224521" maxLength={7} />
                 {vendor && <button type="button" onClick={() => { setVendor(""); setVendorHint(null) }} className="px-3 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-500 text-xs rounded hover:border-red-500 hover:text-red-400">✕</button>}
@@ -1112,15 +1171,12 @@ export default function LotWizardTab({
               {vendorHint && <p className="text-xs text-[#2AB4A6] mt-1">{vendorHint}</p>}
             </div>
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className={lbl}>Receipt Number <span className="text-red-500">*</span></label>
-                <PinBtn pinned={pinnedReceipt === receipt && !!receipt} onPin={() => setPinnedReceipt(v => v === receipt ? "" : receipt)} tablet={tablet} />
-              </div>
+              <label className={`${lbl} block mb-1`}>Receipt Number <span className="text-red-500">*</span> <span className="normal-case font-normal text-gray-500">— auto-filled from the tote</span></label>
               <div className="flex gap-2">
                 <input
                   value={receipt}
                   onChange={e => { setReceipt(e.target.value); setStep1LengthWarning(false) }}
-                  onBlur={e => { if (e.target.value.trim()) lookupVendorFromBC({ receipt: e.target.value.trim() }) }}
+                  onBlur={e => { if (e.target.value.trim() && !tote.trim()) lookupVendorFromBC({ receipt: e.target.value.trim() }) }}
                   className={`flex-1 ${inpFocus}`}
                   placeholder="e.g. R007523"
                   maxLength={7}
@@ -1140,7 +1196,7 @@ export default function LotWizardTab({
                   ⚠ Tote, Vendor and Receipt numbers are normally exactly 7 characters. Please double-check before continuing.
                 </p>
                 <button type="button"
-                  onClick={() => { setStep1LengthWarning(false); setStep(2) }}
+                  onClick={() => { setStep1LengthWarning(false); afterStartChecks() }}
                   className="px-3 py-1.5 text-sm font-medium rounded-lg bg-amber-700/40 hover:bg-amber-700/60 text-amber-200 border border-amber-600/40 transition-colors">
                   Continue anyway
                 </button>
@@ -1159,7 +1215,7 @@ export default function LotWizardTab({
                   {vendor  && <span><span className="text-gray-600 dark:text-gray-500">Vendor </span><span className="text-gray-700 dark:text-gray-200 font-mono">{vendor}</span>{vendorHint && <span className="text-gray-600 dark:text-gray-500"> · {vendorHint}</span>}</span>}
                   {receipt && <span><span className="text-gray-600 dark:text-gray-500">Receipt </span><span className="text-gray-700 dark:text-gray-200 font-mono">{receipt}</span></span>}
                 </span>
-                <button type="button" onClick={() => setStep(1)}
+                <button type="button" onClick={changeVendor}
                   className="text-xs font-semibold px-3 py-1 rounded transition-colors"
                   style={{ color: CAT_ACCENT, border: `1px solid ${CAT_ACCENT}66` }}>
                   Change Tote / Vendor
