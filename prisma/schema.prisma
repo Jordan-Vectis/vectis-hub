@@ -1373,3 +1373,19 @@ model McocChampionProfile {
   profileAt     DateTime?                      // when the full profile was last computed
   updatedAt     DateTime  @updatedAt
 }
+
+// Signed acceptance of the iPad Acceptable Use Policy (see lib/terms.ts + components/terms-gate.tsx).
+// One row per user per policy version; the drawn signature is stored as a PNG data URL.
+// Decoupled from User (plain userId, no FK) so it never affects the login select.
+model TermsAcceptance {
+  id         String   @id @default(cuid())
+  userId     String
+  userName   String   @default("")
+  userEmail  String   @default("")
+  version    String                      // the TERMS_VERSION accepted
+  signature  String   @db.Text           // drawn signature, PNG data URL
+  acceptedAt DateTime @default(now())
+
+  @@unique([userId, version])
+  @@index([userId])
+}

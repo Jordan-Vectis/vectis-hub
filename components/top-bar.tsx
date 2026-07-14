@@ -16,7 +16,10 @@ export default function TopBar({ userName, isAdmin }: TopBarProps) {
   const router = useRouter()
 
   return (
-    <header className="h-12 bg-gray-900 border-b border-gray-700 flex items-center justify-between px-4 flex-shrink-0">
+    <header className="relative h-12 bg-gray-900 border-b border-gray-700 flex items-center justify-between px-4 flex-shrink-0">
+      {/* Centred Vectis logo (hidden on very small screens so it can't overlap the side content) */}
+      <img src="/vectis-logo.svg" alt="Vectis Auctions"
+        className="hidden sm:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-7 w-auto pointer-events-none" />
       <div className="flex items-center gap-2">
         <button
           onClick={() => router.back()}

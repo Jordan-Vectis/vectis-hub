@@ -6,7 +6,10 @@ import AdminSidebar from "@/components/admin-sidebar"
 import ImpersonationBanner from "@/components/impersonation-banner"
 import AnnouncementBanner from "@/components/announcement-banner"
 import CrtMode from "@/components/crt-mode"
+import TermsGate from "@/components/terms-gate"
 import { getEffectiveSession } from "@/lib/impersonation"
+import { prisma } from "@/lib/prisma"
+import { TERMS_VERSION } from "@/lib/terms"
 
 export default async function AppLayout({
   children,
@@ -18,6 +21,18 @@ export default async function AppLayout({
 
   // Use effective session for display name (shows impersonated user's name in top bar)
   const effective = await getEffectiveSession()
+
+  // iPad policy: block the app until the REAL logged-in user (not an impersonated one)
+  // has signed the current policy version. Migration-safe: if the table doesn't exist
+  // yet (before Run Migrations) this fails open so the app still loads.
+  let needsTerms = false
+  try {
+    const accepted = await prisma.termsAcceptance.findUnique({
+      where: { userId_version: { userId: session.user.id, version: TERMS_VERSION } },
+      select: { id: true },
+    })
+    needsTerms = !accepted
+  } catch { needsTerms = false }
 
   return (
     <div className="flex flex-col h-full min-h-screen">
@@ -31,8 +46,11 @@ export default async function AppLayout({
       <div className="flex flex-1 overflow-hidden">
         <CrmSidebar />
         <AdminSidebar />
-        <main className="flex-1 overflow-auto bg-gray-50 dark:bg-[#141416]">{children}</main>
+        {/* Until signed, the app content is NOT rendered/streamed — the gate replaces
+            it, so it can't be revealed by removing the overlay in dev tools. */}
+        <main className="flex-1 overflow-auto bg-gray-50 dark:bg-[#141416]">{needsTerms ? null : children}</main>
       </div>
+      {needsTerms && <TermsGate userName={session.user.name ?? ""} />}
     </div>
   )
 }

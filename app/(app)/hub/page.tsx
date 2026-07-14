@@ -113,21 +113,21 @@ export default async function HubPage() {
         </div>
       )}
 
-      <div className="w-full max-w-6xl space-y-10 px-6 pt-10 pb-16">
+      <div className="w-full space-y-10 px-6 pt-10 pb-16">
         {grouped.map(section => (
           <div key={section.key} id={section.key} className="scroll-mt-12">
             <div className="flex items-center gap-4 mb-5">
               <span className="text-xs font-semibold text-gray-500 dark:text-gray-500 uppercase tracking-widest">{section.label}</span>
               <div className="flex-1 h-px bg-gray-300 dark:bg-white/5" />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-5">
               {section.cards.map(renderCard)}
             </div>
           </div>
         ))}
 
         {standaloneCards.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-5">
             {standaloneCards.map(renderCard)}
           </div>
         )}

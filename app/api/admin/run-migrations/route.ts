@@ -917,6 +917,20 @@ const MIGRATIONS = [
   // digits in the card names, e.g. "B Goodall 5895"); unresolved docs sit under the
   // "Unknown" cardholder until reconcile matches them to a card's statement.
   `ALTER TABLE "AccountingDocument" ADD COLUMN IF NOT EXISTS "cardLast4" TEXT`,
+
+  // 2026-07-14 — iPad Acceptable Use Policy: every user reads + signs it once. One row
+  // per user per policy version; the drawn signature is stored as a PNG data URL.
+  `CREATE TABLE IF NOT EXISTS "TermsAcceptance" (
+     "id"         TEXT NOT NULL PRIMARY KEY,
+     "userId"     TEXT NOT NULL,
+     "userName"   TEXT NOT NULL DEFAULT '',
+     "userEmail"  TEXT NOT NULL DEFAULT '',
+     "version"    TEXT NOT NULL,
+     "signature"  TEXT NOT NULL,
+     "acceptedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "TermsAcceptance_userId_version_key" ON "TermsAcceptance"("userId","version")`,
+  `CREATE INDEX IF NOT EXISTS "TermsAcceptance_userId_idx" ON "TermsAcceptance"("userId")`,
 ]
 
 export async function POST() {
