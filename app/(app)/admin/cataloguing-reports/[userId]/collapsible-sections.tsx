@@ -445,28 +445,51 @@ function NotesCell({ notes, excluded }: { notes: string | null; excluded: boolea
 // ─── Collapsible Idle Time Table ──────────────────────────────────────────────
 
 export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLog[] }) {
-  const reasonConfig            = buildReasonConfig(useIdleReasons())
+  const reasonList              = useIdleReasons()
+  const reasonConfig            = buildReasonConfig(reasonList)
   const [open, setOpen]         = useState(false)
   const [fromDate, setFromDate] = useState("")
   const [toDate, setToDate]     = useState("")
+  const [reasonFilter, setReasonFilter] = useState<Set<string>>(new Set())   // empty = all reasons
   const [logs, setLogs]         = useState<SerialIdleLog[]>(initialLogs)
   const [deleting, setDeleting] = useState<string | null>(null)
 
   const MAX_IDLE_MS = 10 * 60 * 60 * 1000 // 10 hours — anything longer is likely a forgotten open device
 
-  const filtered = useMemo(
+  const dateFiltered = useMemo(
     () => logs.filter(l => inDateRange(l.idleStartedAt, fromDate, toDate)),
     [logs, fromDate, toDate],
+  )
+  // Then narrow to the selected reason(s) — empty selection shows every reason.
+  const filtered = useMemo(
+    () => dateFiltered.filter(l => reasonFilter.size === 0 || reasonFilter.has(l.reason)),
+    [dateFiltered, reasonFilter],
   )
 
   const skipped  = filtered.filter(l => l.idleDurationMs > MAX_IDLE_MS)
   const counted  = filtered.filter(l => l.idleDurationMs <= MAX_IDLE_MS)
+  const totalIdleMs = counted.reduce((s, l) => s + l.idleDurationMs, 0)
 
-  const totalIdleMs   = counted.reduce((s, l) => s + l.idleDurationMs, 0)
-  const reasonCounts  = counted.reduce<Record<string, number>>((acc, l) => {
-    acc[l.reason] = (acc[l.reason] ?? 0) + 1
-    return acc
-  }, {})
+  // Per-reason counts across the whole date range (independent of the reason
+  // filter) so the chips keep stable counts as you toggle them.
+  const reasonCounts = dateFiltered
+    .filter(l => l.idleDurationMs <= MAX_IDLE_MS)
+    .reduce<Record<string, number>>((acc, l) => { acc[l.reason] = (acc[l.reason] ?? 0) + 1; return acc }, {})
+  const countedAll = Object.values(reasonCounts).reduce((a, b) => a + b, 0)
+  // Chip order: configured reasons first, then any stray reasons found in data.
+  const reasonKeys = [
+    ...reasonList.map(r => r.key).filter(k => reasonCounts[k]),
+    ...Object.keys(reasonCounts).filter(k => !reasonConfig[k]),
+  ]
+
+  function toggleReason(key: string) {
+    setReasonFilter(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this idle time entry? This cannot be undone.")) return
@@ -510,18 +533,34 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
             count={filtered.length} total={logs.length}
           />
 
+          {/* Reason filter — click a reason to show only it; click several to combine; "All" clears */}
+          {reasonKeys.length > 0 && (
+            <div className="px-5 py-2.5 border-t border-gray-100 dark:border-gray-800 flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mr-1">Reason</span>
+              <button type="button" onClick={() => setReasonFilter(new Set())}
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${reasonFilter.size === 0 ? "bg-orange-500 text-white border-orange-500" : "bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-orange-300"}`}>
+                All ({countedAll})
+              </button>
+              {reasonKeys.map(key => {
+                const cfg = reasonConfig[key]
+                const label = cfg?.label ?? key.replace(/_/g, " ")
+                const active = reasonFilter.has(key)
+                return (
+                  <button key={key} type="button" onClick={() => toggleReason(key)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${active ? "bg-orange-500 text-white border-orange-500" : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-orange-300"}`}>
+                    {cfg?.icon ? `${cfg.icon} ` : ""}{label} <span className="opacity-70">({reasonCounts[key]})</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
           {/* Summary strip */}
           {counted.length > 0 && (
             <div className="px-5 py-2 bg-orange-50 border-t border-orange-100 flex flex-wrap gap-x-6 gap-y-1 text-xs">
               <span className="text-orange-700 font-semibold">
-                Total idle: <span className="font-bold">{fmtDuration(totalIdleMs)}</span>
-              </span>
-              <span className="text-orange-500">
-                {Object.entries(reasonCounts).map(([reason, count], i, arr) => {
-                  const cfg = reasonConfig[reason]
-                  const label = cfg?.label ?? reason.replace(/_/g, " ").toLowerCase()
-                  return `${count} ${label.toLowerCase()}${i < arr.length - 1 ? " · " : ""}`
-                }).join("")}
+                Total idle{reasonFilter.size > 0 ? " (filtered)" : ""}: <span className="font-bold">{fmtDuration(totalIdleMs)}</span>
+                <span className="ml-1.5 font-normal text-orange-500">· {counted.length} session{counted.length === 1 ? "" : "s"}</span>
               </span>
               {skipped.length > 0 && (
                 <span className="text-gray-400 italic ml-auto">
