@@ -88,8 +88,10 @@ export default function TermsGate({ userName }: { userName: string }) {
     <div className="fixed inset-0 z-[200] bg-black/70 flex items-center justify-center p-3 sm:p-6">
       <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl">
         <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800">
-          {/* Vectis letterhead */}
-          <img src="/vectis-logo.svg" alt="Vectis Auctions" className="h-9 w-auto mb-3" />
+          {/* Vectis letterhead — on a white oval so it stands out in dark mode too */}
+          <span className="inline-flex items-center bg-white rounded-full px-4 py-1.5 mb-3 shadow-sm">
+            <img src="/vectis-logo.svg" alt="Vectis Auctions" className="h-8 w-auto" />
+          </span>
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">{TERMS_TITLE}</h2>
           <p className="text-xs text-gray-500 mt-0.5">Please read this policy carefully. You need to accept and sign it once before using the app.</p>
         </div>
