@@ -445,28 +445,59 @@ function NotesCell({ notes, excluded }: { notes: string | null; excluded: boolea
 // ─── Collapsible Idle Time Table ──────────────────────────────────────────────
 
 export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLog[] }) {
-  const reasonConfig            = buildReasonConfig(useIdleReasons())
+  const reasonList              = useIdleReasons()
+  const reasonConfig            = buildReasonConfig(reasonList)
   const [open, setOpen]         = useState(false)
   const [fromDate, setFromDate] = useState("")
   const [toDate, setToDate]     = useState("")
+  const [reasonFilter, setReasonFilter] = useState<Set<string>>(new Set())   // empty = all reasons
+  const [search, setSearch]     = useState("")
   const [logs, setLogs]         = useState<SerialIdleLog[]>(initialLogs)
   const [deleting, setDeleting] = useState<string | null>(null)
 
   const MAX_IDLE_MS = 10 * 60 * 60 * 1000 // 10 hours — anything longer is likely a forgotten open device
 
-  const filtered = useMemo(
+  const dateFiltered = useMemo(
     () => logs.filter(l => inDateRange(l.idleStartedAt, fromDate, toDate)),
     [logs, fromDate, toDate],
   )
+  // Then narrow by reason chips (empty = every reason) and the free-text search
+  // (matches across auction, tote numbers, notes and the reason label).
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return dateFiltered.filter(l => {
+      if (reasonFilter.size > 0 && !reasonFilter.has(l.reason)) return false
+      if (!q) return true
+      const label = reasonConfig[l.reason]?.label ?? l.reason
+      return [l.auctionCode, l.auctionName, l.toteNumbers, l.notes, label]
+        .some(f => (f ?? "").toLowerCase().includes(q))
+    })
+  }, [dateFiltered, reasonFilter, search, reasonConfig])
 
   const skipped  = filtered.filter(l => l.idleDurationMs > MAX_IDLE_MS)
   const counted  = filtered.filter(l => l.idleDurationMs <= MAX_IDLE_MS)
+  const totalIdleMs = counted.reduce((s, l) => s + l.idleDurationMs, 0)
 
-  const totalIdleMs   = counted.reduce((s, l) => s + l.idleDurationMs, 0)
-  const reasonCounts  = counted.reduce<Record<string, number>>((acc, l) => {
-    acc[l.reason] = (acc[l.reason] ?? 0) + 1
-    return acc
-  }, {})
+  // Per-reason counts across the whole date range (independent of the reason
+  // filter) so the chips keep stable counts as you toggle them.
+  const reasonCounts = dateFiltered
+    .filter(l => l.idleDurationMs <= MAX_IDLE_MS)
+    .reduce<Record<string, number>>((acc, l) => { acc[l.reason] = (acc[l.reason] ?? 0) + 1; return acc }, {})
+  const countedAll = Object.values(reasonCounts).reduce((a, b) => a + b, 0)
+  // Chip order: configured reasons first, then any stray reasons found in data.
+  const reasonKeys = [
+    ...reasonList.map(r => r.key).filter(k => reasonCounts[k]),
+    ...Object.keys(reasonCounts).filter(k => !reasonConfig[k]),
+  ]
+
+  function toggleReason(key: string) {
+    setReasonFilter(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this idle time entry? This cannot be undone.")) return
@@ -510,18 +541,49 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
             count={filtered.length} total={logs.length}
           />
 
+          {/* Filters — free-text search across all columns + reason chips */}
+          {dateFiltered.length > 0 && (
+            <div className="px-5 py-2.5 border-t border-gray-100 dark:border-gray-800 space-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search auction, tote number or notes…"
+                  className="w-full sm:w-80 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-xs text-gray-700 dark:text-gray-200 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                />
+                {search && (
+                  <button type="button" onClick={() => setSearch("")} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Clear</button>
+                )}
+              </div>
+              {reasonKeys.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mr-1">Reason</span>
+                  <button type="button" onClick={() => setReasonFilter(new Set())}
+                    className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${reasonFilter.size === 0 ? "bg-orange-500 text-white border-orange-500" : "bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-orange-300"}`}>
+                    All ({countedAll})
+                  </button>
+                  {reasonKeys.map(key => {
+                    const cfg = reasonConfig[key]
+                    const label = cfg?.label ?? key.replace(/_/g, " ")
+                    const active = reasonFilter.has(key)
+                    return (
+                      <button key={key} type="button" onClick={() => toggleReason(key)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${active ? "bg-orange-500 text-white border-orange-500" : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-orange-300"}`}>
+                        {cfg?.icon ? `${cfg.icon} ` : ""}{label} <span className="opacity-70">({reasonCounts[key]})</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Summary strip */}
           {counted.length > 0 && (
             <div className="px-5 py-2 bg-orange-50 border-t border-orange-100 flex flex-wrap gap-x-6 gap-y-1 text-xs">
               <span className="text-orange-700 font-semibold">
-                Total idle: <span className="font-bold">{fmtDuration(totalIdleMs)}</span>
-              </span>
-              <span className="text-orange-500">
-                {Object.entries(reasonCounts).map(([reason, count], i, arr) => {
-                  const cfg = reasonConfig[reason]
-                  const label = cfg?.label ?? reason.replace(/_/g, " ").toLowerCase()
-                  return `${count} ${label.toLowerCase()}${i < arr.length - 1 ? " · " : ""}`
-                }).join("")}
+                Total idle{reasonFilter.size > 0 ? " (filtered)" : ""}: <span className="font-bold">{fmtDuration(totalIdleMs)}</span>
+                <span className="ml-1.5 font-normal text-orange-500">· {counted.length} session{counted.length === 1 ? "" : "s"}</span>
               </span>
               {skipped.length > 0 && (
                 <span className="text-gray-400 italic ml-auto">
@@ -548,7 +610,7 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
                 {filtered.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-5 py-10 text-center text-gray-400 dark:text-gray-500 text-xs">
-                      No idle sessions match the selected date range.
+                      No idle sessions match the current filters.
                     </td>
                   </tr>
                 ) : filtered.map(log => {
