@@ -27,6 +27,9 @@ type Mode  = "scan" | "filename"
 // 1000+ photos, so these drive how long the AI review takes.
 const BATCH_SIZE     = 8
 const AI_CONCURRENCY = 3
+// Consecutive failed requests (nothing succeeding in between) before we stop
+// asking AI and fall back to barcode scanning for the rest.
+const AI_GIVE_UP_AFTER = 4
 const MODEL_LS_KEY   = "smart_scan_model"
 
 // ── Filename barcode / unique-ID parser ───────────────────────────────────────
@@ -125,8 +128,10 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const [aiCheckedCount, setAiCheckedCount] = useState(0)       // photos that actually got an AI answer
   const [aiNote, setAiNote]                 = useState<string | null>(null)  // live status/error during the AI pass
   const [aiEta, setAiEta]                   = useState<string | null>(null)
-  const skipAiRef  = useRef(false)                              // user pressed "Skip AI check"
-  const aiAbortRef = useRef<AbortController | null>(null)       // in-flight AI request, for skip + timeout
+  const skipAiRef   = useRef(false)                             // user pressed "Skip AI check"
+  // Every in-flight AI request — several run at once, so a single ref would
+  // only ever let Skip abort the most recent one.
+  const aiAbortsRef = useRef(new Set<AbortController>())
 
   // ── AI model picker ────────────────────────────────────────────────────────
   // Starts on the admin default for the catalogue_smart_scan slot (Admin → AI
@@ -137,21 +142,35 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const aiModelRef = useRef("")
   useEffect(() => { aiModelRef.current = modelId }, [modelId])
 
+  // Resolve the list and the admin default together, then pick once. Fetching
+  // the default only when no saved choice exists left the dropdown blank (and
+  // silently falling back server-side) whenever a saved model had since been
+  // retired or disabled.
   useEffect(() => {
-    fetch("/api/auction-ai/models").then(r => r.json()).then(d => {
-      if (d.models?.length) {
-        setModelList(d.models)
-        const saved = typeof window !== "undefined" ? localStorage.getItem(MODEL_LS_KEY) : null
-        setSavedDefault(saved)
-        if (saved && d.models.includes(saved)) setModelId(saved)
-      }
-    }).catch(() => {})
-  }, [])
+    let cancelled = false
+    ;(async () => {
+      const [listRes, defRes] = await Promise.allSettled([
+        fetch("/api/auction-ai/models").then(r => r.json()),
+        fetch("/api/ai-tool-model?slot=catalogue_smart_scan").then(r => r.json()),
+      ])
+      if (cancelled) return
+      const models: string[] =
+        listRes.status === "fulfilled" && Array.isArray(listRes.value?.models) ? listRes.value.models : []
+      const adminDefault: string =
+        defRes.status === "fulfilled" && typeof defRes.value?.model === "string" ? defRes.value.model : ""
+      setModelList(models)
 
-  useEffect(() => {
-    if (typeof window !== "undefined" && localStorage.getItem(MODEL_LS_KEY)) return
-    fetch("/api/ai-tool-model?slot=catalogue_smart_scan").then(r => r.json())
-      .then(j => { if (j?.model) setModelId(j.model) }).catch(() => {})
+      const saved = typeof window !== "undefined" ? localStorage.getItem(MODEL_LS_KEY) : null
+      setSavedDefault(saved)
+      // This user's saved choice wins, but only while it is still an enabled
+      // model; then the admin default; then whatever is available.
+      const pick =
+        saved && models.includes(saved) ? saved
+        : adminDefault && (models.length === 0 || models.includes(adminDefault)) ? adminDefault
+        : models[0] ?? ""
+      setModelId(pick)
+    })()
+    return () => { cancelled = true }
   }, [])
 
   function setAsDefault() { localStorage.setItem(MODEL_LS_KEY, modelId); setSavedDefault(modelId) }
@@ -385,14 +404,21 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       for (let k = 0; k < candidates.length; k += BATCH_SIZE) batches.push(candidates.slice(k, k + BATCH_SIZE))
 
       let doneCount = 0
-      let failures  = 0
+      let consecutiveFails = 0
       const started = Date.now()
 
       // Send one packed request. Returns false if it never succeeded.
       async function postPack(pack: { i: number; payload: Blob | File }[]): Promise<boolean> {
+        // Several workers share the one status line, so only ever clear a
+        // message we put there ourselves — otherwise one worker's success
+        // wipes another's live "rate limited" warning.
+        let myNote: string | null = null
+        const note = (t: string) => { myNote = t; setAiNote(t) }
+        const clearMyNote = () => { if (myNote) setAiNote(prev => (prev === myNote ? null : prev)) }
+
         for (let attempt = 0; attempt < 3 && !skipAiRef.current; attempt++) {
           const ctrl = new AbortController()
-          aiAbortRef.current = ctrl
+          aiAbortsRef.current.add(ctrl)
           const timer = setTimeout(() => ctrl.abort(), 150_000)  // route maxDuration is 120s
           try {
             const fd = new FormData()
@@ -409,21 +435,22 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
                   code:  typeof p?.code === "string" && p.code ? p.code : null,
                 })
               })
+              clearMyNote()
               return true
             }
             const why = data?.error ?? `HTTP ${res.status}`
-            if (res.status === 422) { setAiNote(`AI refused a photo (${why}) — those photos fall back to barcode scanning.`); return false }
-            setAiNote(res.status === 429
-              ? `AI is rate limited — waiting and retrying (${why})`
-              : `AI error: ${why} — retrying`)
+            if (res.status === 422) { note("AI wouldn't look at some photos — those fall back to barcode scanning."); return false }
+            note(res.status === 429
+              ? "AI is busy (rate limited) — waiting and trying again…"
+              : `AI had a problem — trying again (${why})`)
             if (attempt < 2) await new Promise(r => setTimeout(r, res.status === 429 ? (attempt + 1) * 15000 : 4000))
           } catch (e: any) {
             if (e?.name === "AbortError" && skipAiRef.current) return false
-            setAiNote(e?.name === "AbortError" ? "An AI request timed out — retrying" : `AI request failed: ${e?.message ?? "network error"} — retrying`)
+            note(e?.name === "AbortError" ? "An AI request took too long — trying again…" : "Couldn't reach the AI (network problem) — trying again…")
             if (attempt < 2 && !skipAiRef.current) await new Promise(r => setTimeout(r, 4000))
           } finally {
             clearTimeout(timer)
-            aiAbortRef.current = null
+            aiAbortsRef.current.delete(ctrl)
           }
         }
         return false
@@ -458,8 +485,11 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
 
         for (const pack of packs) {
           const ok = await postPack(pack)
-          if (!ok) { aiErrored = true; failures++ }
-          else setAiNote(null)
+          // Count CONSECUTIVE failures only, resetting on every success: an
+          // absolute count would abandon AI review of a 1000-photo folder
+          // after three unrelated blips spread across a long run.
+          if (!ok) { aiErrored = true; consecutiveFails++ }
+          else consecutiveFails = 0
         }
       }
 
@@ -469,7 +499,9 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       async function worker() {
         while (next < batches.length) {
           const b = batches[next++]
-          if (skipAiRef.current || failures >= 3) {
+          // Give up only on a sustained outage (several failures in a row with
+          // nothing succeeding in between), never on scattered blips.
+          if (skipAiRef.current || consecutiveFails >= AI_GIVE_UP_AFTER) {
             aiErrored = true
           } else {
             await runBatch(b)
@@ -485,7 +517,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       }
       await Promise.all(Array.from({ length: Math.min(AI_CONCURRENCY, batches.length) }, worker))
 
-      if (failures >= 3) setAiNote("AI checking stopped after repeated failures — the rest was grouped by barcode scanning only.")
+      if (consecutiveFails >= AI_GIVE_UP_AFTER) setAiNote("AI checking stopped after repeated failures — the rest was grouped by barcode scanning only.")
       if (skipAiRef.current) aiErrored = true
     }
 
@@ -786,7 +818,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             ) : (
               <button onClick={setAsDefault} disabled={!modelId} className="text-xs text-gray-600 dark:text-gray-400 hover:text-purple-500 disabled:opacity-40 px-2 py-1 rounded">Set as default</button>
             )}
-            <span className="text-xs text-gray-500 dark:text-gray-600">
+            <span className="text-xs text-gray-600 dark:text-gray-400">
               Used by Smart scan to double-check every photo. Set for everyone in Admin → AI Models.
             </span>
           </div>
@@ -815,7 +847,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
           </p>
           {scanStage === "ai" && (
             <>
-              <p className="text-xs text-gray-500 dark:text-gray-600">
+              <p className="text-xs text-gray-600 dark:text-gray-400">
                 {aiEta ?? `Checking ${AI_CONCURRENCY * BATCH_SIZE} photos at a time — a big folder takes a few minutes.`}
               </p>
               {aiNote && (
@@ -824,7 +856,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
                 </p>
               )}
               <button
-                onClick={() => { skipAiRef.current = true; aiAbortRef.current?.abort() }}
+                onClick={() => { skipAiRef.current = true; aiAbortsRef.current.forEach(c => c.abort()) }}
                 className="px-4 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 text-xs hover:border-gray-500 transition-colors">
                 Skip AI check — use barcode scanning only
               </button>
