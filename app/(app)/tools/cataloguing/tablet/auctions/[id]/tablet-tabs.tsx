@@ -214,19 +214,28 @@ function TabletManageLots({ lots, auctionId, onEdit, onDelete }: {
 }) {
   const [search,  setSearch]  = useState("")
   const [sortKey, setSortKey] = useState<SortKey>("lot-asc")
+  const [cataloguer, setCataloguer] = useState("")   // "" = all
   const [deleting, setDeleting] = useState<string | null>(null)
   const [pending, start] = useTransition()
 
+  // Who has catalogued lots in this auction (for the filter dropdown).
+  const cataloguers = useMemo(() => {
+    const s = new Set<string>()
+    for (const l of lots) if (l.createdByName) s.add(l.createdByName)
+    return [...s].sort((a, b) => a.localeCompare(b))
+  }, [lots])
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim()
-    const result = q
-      ? lots.filter(l =>
-          (l.barcode ?? "").toLowerCase().includes(q) ||
-          l.title.toLowerCase().includes(q) ||
-          (l.vendor ?? "").toLowerCase().includes(q) ||
-          (l.tote ?? "").toLowerCase().includes(q)
-        )
-      : lots
+    let result = cataloguer ? lots.filter(l => (l.createdByName ?? "") === cataloguer) : lots
+    if (q) {
+      result = result.filter(l =>
+        (l.barcode ?? "").toLowerCase().includes(q) ||
+        l.title.toLowerCase().includes(q) ||
+        (l.vendor ?? "").toLowerCase().includes(q) ||
+        (l.tote ?? "").toLowerCase().includes(q)
+      )
+    }
 
     return [...result].sort((a, b) => {
       if (sortKey === "newest") return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -234,7 +243,7 @@ function TabletManageLots({ lots, auctionId, onEdit, onDelete }: {
       // lot-asc: alphanumeric by barcode
       return (a.barcode ?? "").localeCompare(b.barcode ?? "", undefined, { numeric: true })
     })
-  }, [lots, search, sortKey])
+  }, [lots, search, sortKey, cataloguer])
 
   async function handleDelete(lot: Lot) {
     if (!confirm(`Delete lot ${lot.barcode || lot.id}?`)) return
@@ -284,10 +293,36 @@ function TabletManageLots({ lots, auctionId, onEdit, onDelete }: {
             {opt.label}
           </button>
         ))}
-        {search && (
+        {(search || cataloguer) && (
           <span className="text-xs text-gray-500 ml-auto">{filtered.length} of {lots.length}</span>
         )}
       </div>
+
+      {/* Cataloguer filter — only worth showing when more than one person has catalogued here */}
+      {cataloguers.length > 1 && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-600 font-medium shrink-0">Cataloguer:</span>
+          <select
+            value={cataloguer}
+            onChange={e => setCataloguer(e.target.value)}
+            style={{ touchAction: "manipulation" }}
+            className="flex-1 rounded-xl border border-gray-700 bg-[#2C2C2E] px-3 py-2.5 text-sm font-semibold text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]"
+          >
+            <option value="">All cataloguers</option>
+            {cataloguers.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          {cataloguer && (
+            <button
+              type="button"
+              style={{ touchAction: "manipulation" }}
+              onClick={() => setCataloguer("")}
+              className="px-3 py-2.5 rounded-xl text-sm font-semibold border border-gray-700 bg-[#2C2C2E] text-gray-400 active:bg-[#3C3C3E] shrink-0"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Lot cards */}
       {filtered.map(lot => (

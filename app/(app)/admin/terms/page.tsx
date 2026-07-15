@@ -29,7 +29,11 @@ export default async function TermsSignaturesPage() {
   const signedIds = new Set(signedCurrent.map((s) => s.userId))
   const outstanding = users.filter((u) => !signedIds.has(u.id))
 
-  const fmt = (d: Date) => new Date(d).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+  // Rendered on the server (Railway runs UTC), so pin the zone or BST times show an
+  // hour slow in summer. Europe/London handles BST/GMT automatically.
+  const fmt = (d: Date) => new Date(d).toLocaleString("en-GB", {
+    day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/London",
+  })
   const card = "bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800"
 
   return (

@@ -208,7 +208,12 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     btnBg:              "bg-red-600 hover:bg-red-500",
     glow:               "hover:shadow-red-900/40",
     group:              "CATALOGUING_AI",
-    // no appKey — admin-only
+    // Searches any customer's lots by receipt / tote / vendor across the Hub and
+    // BC, so it stays off by default — admins always have it, a non-admin needs
+    // the ADMIN_CENTRE app granted (Admin → Users & Permissions). Page + API
+    // enforce this server-side. Card key stays LOT_LOOKUP (matches the route and
+    // the AppCard DB rows) even though the label is "Admin Centre".
+    appKey:             "ADMIN_CENTRE",
   },
   {
     key:                "ADMIN",

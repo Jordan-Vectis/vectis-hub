@@ -1,3 +1,4 @@
+import { createHash } from "crypto"
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
@@ -5,6 +6,12 @@ import { prisma } from "@/lib/prisma"
 // POST /api/admin/run-migrations
 // Runs any missing column additions directly via SQL.
 // Safe to call multiple times — all statements use IF NOT EXISTS.
+//
+// GET /api/admin/run-migrations
+// Reports whether this deploy has migrations the DB hasn't had run yet, so the
+// app can show admins a banner instead of a human having to remember. A clean
+// POST stamps the hash of the MIGRATIONS array below into MigrationState; if the
+// array has changed since (or was never run) the hashes differ → pending.
 
 const MIGRATIONS = [
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "extraDetails" TEXT`,
@@ -931,7 +938,49 @@ const MIGRATIONS = [
    )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "TermsAcceptance_userId_version_key" ON "TermsAcceptance"("userId","version")`,
   `CREATE INDEX IF NOT EXISTS "TermsAcceptance_userId_idx" ON "TermsAcceptance"("userId")`,
+
+  // 2026-07-15 — Pending-migrations banner: one row ("current") holding the hash of
+  // this array as of the last clean run, so the app can tell admins when a deploy has
+  // brought new SQL with it.
+  `CREATE TABLE IF NOT EXISTS "MigrationState" (
+     "id"    TEXT NOT NULL PRIMARY KEY,
+     "hash"  TEXT NOT NULL,
+     "ranBy" TEXT,
+     "ranAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+   )`,
 ]
+
+// Fingerprint of every statement above. Changes the moment a migration is added,
+// removed or edited — which is exactly when the banner should come back.
+const MIGRATIONS_HASH = createHash("sha256").update(MIGRATIONS.join("\n")).digest("hex")
+
+// GET — is this deploy's SQL already applied? Admin-only; everyone else gets
+// pending:false so no one but an admin can see the banner.
+export async function GET() {
+  try {
+    const session = await auth()
+    if (!session || session.user.role !== "ADMIN") {
+      return NextResponse.json({ pending: false })
+    }
+
+    // The MigrationState table itself arrives via the array above, so a missing
+    // table means nothing has been run on this DB yet → pending (self-healing).
+    let pending = true
+    let ranAt: Date | null = null
+    try {
+      const row = await prisma.migrationState.findUnique({ where: { id: "current" } })
+      pending = !row || row.hash !== MIGRATIONS_HASH
+      ranAt = row?.ranAt ?? null
+    } catch {
+      pending = true
+    }
+
+    return NextResponse.json({ pending, ranAt })
+  } catch (e: any) {
+    console.error("run-migrations GET error:", e)
+    return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
+  }
+}
 
 export async function POST() {
   try {
@@ -950,6 +999,19 @@ export async function POST() {
         results.push(`OK: ${sql.slice(0, 60)}…`)
       } catch (e: any) {
         errors.push(`FAIL: ${sql.slice(0, 80)}… — ${e?.message ?? e}`)
+      }
+    }
+
+    // Only stamp on a fully clean run — a failure must leave the banner up.
+    if (errors.length === 0) {
+      try {
+        await prisma.migrationState.upsert({
+          where: { id: "current" },
+          create: { id: "current", hash: MIGRATIONS_HASH, ranBy: session.user.name ?? session.user.email ?? null },
+          update: { hash: MIGRATIONS_HASH, ranBy: session.user.name ?? session.user.email ?? null },
+        })
+      } catch (e: any) {
+        errors.push(`FAIL: could not record migration state — ${e?.message ?? e}`)
       }
     }
 

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { hasAppAccess } from "@/lib/apps"
 
 export const dynamic = "force-dynamic"
 
-// Admin-only lookup: given a receipt / tote / customer (vendor) number, list the
+// Admin Centre lookup: given a receipt / tote / customer (vendor) number, list the
 // matching lots in BOTH the Hub cataloguing system (CatalogueLot → CatalogueAuction)
 // and Business Central (the synced WarehouseItem / WarehouseTote cache), so you can
 // see what's been catalogued and which sale each lot is in.
@@ -15,8 +16,14 @@ type LookupType = (typeof TYPES)[number]
 export async function GET(req: NextRequest) {
   try {
     const session = await auth()
-    if (!session || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+    if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+
+    const dbUser = await prisma.user.findUnique({
+      where:  { id: session.user.id },
+      select: { role: true, allowedApps: true },
+    })
+    if (!hasAppAccess(dbUser?.role ?? "", dbUser?.allowedApps ?? [], "ADMIN_CENTRE")) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
     const { searchParams } = new URL(req.url)

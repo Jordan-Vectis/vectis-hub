@@ -1389,3 +1389,13 @@ model TermsAcceptance {
   @@unique([userId, version])
   @@index([userId])
 }
+
+// Tracks which version of the MIGRATIONS array was last run, so admins get an
+// in-app "migrations pending" banner instead of being told to run them.
+// Single row, id = "current". See app/api/admin/run-migrations/route.ts.
+model MigrationState {
+  id    String   @id                  // always "current"
+  hash  String                        // sha256 of the MIGRATIONS array when last run clean
+  ranBy String?
+  ranAt DateTime @updatedAt
+}
