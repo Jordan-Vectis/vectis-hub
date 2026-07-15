@@ -492,8 +492,9 @@ function TabletLotEdit({ lot, allLots, auctionId, entryDir, onDone, onNavigate }
     try {
       const fd = new FormData()
       fd.set("photo", file)
-      const updated = await uploadLotPhoto(lot.id, auctionId, fd)
-      setImageKeys(updated)
+      const res = await uploadLotPhoto(lot.id, auctionId, fd)
+      if (res.ok) setImageKeys(res.imageUrls)
+      else alert(`Photo upload failed: ${res.error}`)
     } finally { setUploadingPhoto(false) }
   }
 

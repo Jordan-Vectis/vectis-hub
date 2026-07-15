@@ -64,7 +64,9 @@ export default function LotPhotosTab({ auctionId, lots: initialLots }: Props) {
     try {
       const fd = new FormData()
       fd.set("photo", file)
-      const updatedKeys = await uploadLotPhoto(lotId, auctionId, fd)
+      const res = await uploadLotPhoto(lotId, auctionId, fd)
+      if (!res.ok) { alert(`Photo upload failed: ${res.error}`); return }
+      const updatedKeys = res.imageUrls
       setLots(prev => prev.map(l => l.id === lotId ? { ...l, imageUrls: updatedKeys } : l))
       const newKeys = updatedKeys.filter(k => !signedUrls[k])
       if (newKeys.length > 0) await loadSignedUrls(newKeys)

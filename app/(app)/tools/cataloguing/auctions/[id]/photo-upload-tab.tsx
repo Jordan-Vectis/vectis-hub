@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { uploadLotPhoto } from "@/lib/actions/catalogue"
 
 interface Props {
@@ -28,16 +28,74 @@ function parseBarcode(filename: string): string {
   return noExt.replace(/_\d+$/, "")               // strip trailing _N suffix
 }
 
+// Order-preserving concurrency pool: results land at their item's index no
+// matter which worker finishes first, so the sequential grouping stays correct.
+async function mapPool<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+  onProgress?: (done: number) => void
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let next = 0
+  let done = 0
+  async function worker() {
+    while (next < items.length) {
+      const i = next++
+      results[i] = await fn(items[i])
+      done++
+      onProgress?.(done)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return results
+}
+
+// Thumbnail with a fallback tile for images the browser can't display
+// (typically HEIC on Windows) — the file still uploads fine.
+function Thumb({ url, name }: { url: string; name: string }) {
+  const [failed, setFailed] = useState(false)
+  if (failed) {
+    return (
+      <div title={name}
+        className="w-14 h-14 rounded-md bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 flex items-center justify-center text-lg flex-shrink-0">
+        🖼️
+      </div>
+    )
+  }
+  return (
+    <img src={url} alt={name} title={name} loading="lazy" onError={() => setFailed(true)}
+      className="w-14 h-14 rounded-md object-cover border border-gray-300 dark:border-gray-700 flex-shrink-0" />
+  )
+}
+
 export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const scanInputRef               = useRef<HTMLInputElement>(null)
   const filenameInputRef           = useRef<HTMLInputElement>(null)
   const [mode, setMode]            = useState<Mode | null>(null)
   const [phase, setPhase]          = useState<Phase>("idle")
   const [groups, setGroups]        = useState<LotGroup[]>([])
+  const [preGroup, setPreGroup]    = useState<File[]>([])       // scan mode: photos before the first barcode
+  const [unreadable, setUnreadable] = useState(0)               // scan mode: files the browser couldn't decode (HEIC etc.)
   const [scanProgress, setScanProgress]     = useState({ done: 0, total: 0 })
   const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 })
   const [error, setError]          = useState<string | null>(null)
   const [skipped, setSkipped]      = useState<string[]>([])
+  const [okLotCount, setOkLotCount] = useState(0)              // lots that actually received ≥1 photo
+
+  // Object URLs for preview thumbnails — created once per file when groups are
+  // built, revoked on reset/unmount.
+  const thumbUrls = useRef(new Map<File, string>())
+  function makeThumbs(files: File[]) {
+    for (const f of files) {
+      if (!thumbUrls.current.has(f)) thumbUrls.current.set(f, URL.createObjectURL(f))
+    }
+  }
+  function revokeThumbs() {
+    thumbUrls.current.forEach(u => URL.revokeObjectURL(u))
+    thumbUrls.current.clear()
+  }
+  useEffect(() => () => revokeThumbs(), [])
 
   // Lookup: barcode / receiptUniqueId → lot id
   const lotMap = new Map([
@@ -47,10 +105,14 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
 
   // ── Reset to idle ─────────────────────────────────────────────────────────────
   function reset() {
+    revokeThumbs()
     setMode(null)
     setPhase("idle")
     setGroups([])
+    setPreGroup([])
+    setUnreadable(0)
     setSkipped([])
+    setOkLotCount(0)
     setError(null)
   }
 
@@ -92,6 +154,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       return
     }
 
+    makeThumbs(files)
     setGroups(result)
     setPhase("preview")
   }
@@ -102,6 +165,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     const files = Array.from(e.target.files ?? []).filter(
       f => f.type.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp|heic)$/i.test(f.name)
     )
+    e.target.value = ""
     if (files.length === 0) return
 
     files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
@@ -138,9 +202,16 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       return /^[A-Za-z]\d{6,7}$/.test(s.trim()) || /^[A-Za-z]\d{4,7}-\d{1,6}$/.test(s.trim())
     }
 
-    async function decodeBarcode(file: File): Promise<string | null> {
+    // unreadable = the browser couldn't decode the image at all (HEIC on
+    // Windows/Android) — a label in such a photo can never be detected.
+    async function decodeBarcode(file: File): Promise<{ barcode: string | null; unreadable: boolean }> {
+      let imgEl: HTMLImageElement
       try {
-        const imgEl    = await loadImgElement(file)
+        imgEl = await loadImgElement(file)
+      } catch {
+        return { barcode: null, unreadable: true }
+      }
+      try {
         const naturalW = imgEl.naturalWidth
         const naturalH = imgEl.naturalHeight
 
@@ -175,7 +246,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
                 const results = await nativeDetector.detect(bmp)
                 if (results.length > 0) {
                   const raw = (results[0].rawValue as string).replace(/[^\x20-\x7E]/g, "").trim()
-                  if (raw && isVectisBarcode(raw)) return raw
+                  if (raw && isVectisBarcode(raw)) return { barcode: raw, unreadable: false }
                 }
               } catch {}
             }
@@ -189,43 +260,59 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
               const luminance = new HTMLCanvasElementLuminanceSource(c)
               const bitmap    = new BinaryBitmap(new HybridBinarizer(luminance))
               const decoded   = zxing.decodeWithState(bitmap).getText().replace(/[^\x20-\x7E]/g, "").trim()
-              if (isVectisBarcode(decoded)) return decoded
+              if (isVectisBarcode(decoded)) return { barcode: decoded, unreadable: false }
             } catch {}
           }
         }
-        return null
+        return { barcode: null, unreadable: false }
       } catch {
-        return null
+        return { barcode: null, unreadable: false }
       }
     }
 
+    // Decode up to 3 images at once (order-preserving), then group sequentially.
+    const decoded = await mapPool(files, 3, decodeBarcode,
+      done => setScanProgress({ done, total: files.length }))
+
     const result: LotGroup[] = []
+    const pre: File[] = []
+    let unreadableCount = 0
     let current: LotGroup | null = null
 
     for (let i = 0; i < files.length; i++) {
-      setScanProgress({ done: i + 1, total: files.length })
-      const file    = files[i]
-      const barcode = await decodeBarcode(file)
-
-      if (barcode) {
-        const key   = barcode.toLowerCase().trim()
+      const d = decoded[i]
+      if (d.unreadable) unreadableCount++
+      if (d.barcode) {
+        const key   = d.barcode.toLowerCase().trim()
         const lotId = lotMap.get(key) ?? null
-        current = { lotId, label: barcode, photos: [] }
+        current = { lotId, label: d.barcode, photos: [] }
         result.push(current)
       } else if (current) {
-        current.photos.push(file)
+        current.photos.push(files[i])
+      } else {
+        pre.push(files[i])
       }
     }
 
-    e.target.value = ""
-
     if (result.length === 0) {
-      setError("No barcodes detected in any of the images. Make sure the lot label photos are included and in focus.")
+      // The most common cause of a total miss is a folder of iPhone HEIC photos
+      // on a Windows machine — the browser can't read them at all, so don't send
+      // the user off to re-shoot "blurry" labels.
+      if (unreadableCount === files.length) {
+        setError(`None of the ${files.length} photos could be read on this device — they're probably HEIC format (the iPhone default). Convert them to JPEG and rescan, or run the scan on an iPad.`)
+      } else if (unreadableCount > 0) {
+        setError(`No barcodes detected. ${unreadableCount} of the ${files.length} photos couldn't be read on this device (probably HEIC format — convert those to JPEG). For the rest, make sure the lot label photos are included and in focus.`)
+      } else {
+        setError("No barcodes detected in any of the images. Make sure the lot label photos are included and in focus.")
+      }
       setPhase("idle")
       return
     }
 
+    makeThumbs(files)
     setGroups(result)
+    setPreGroup(pre)
+    setUnreadable(unreadableCount)
     setPhase("preview")
   }
 
@@ -239,6 +326,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     setPhase("uploading")
 
     const failedList: string[] = []
+    const okLotIds = new Set<string>()
     let done = 0
 
     for (const group of uploadable) {
@@ -246,7 +334,9 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
         try {
           const fd = new FormData()
           fd.set("photo", photo)
-          await uploadLotPhoto(group.lotId!, auctionId, fd)
+          const res = await uploadLotPhoto(group.lotId!, auctionId, fd)
+          if (res.ok) okLotIds.add(group.lotId!)
+          else failedList.push(`${group.label}/${photo.name} — ${res.error}`)
         } catch (e: any) {
           failedList.push(`${group.label}/${photo.name} — ${e?.message ?? "unknown error"}`)
         }
@@ -256,6 +346,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     }
 
     setSkipped(failedList)
+    setOkLotCount(okLotIds.size)
     setPhase("done")
     onUploaded()
   }
@@ -264,6 +355,57 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const unmatchedGroups = groups.filter(g => !g.lotId)
   const emptyGroups     = groups.filter(g => g.lotId && g.photos.length === 0)
   const totalPhotos     = matchedGroups.reduce((sum, g) => sum + g.photos.length, 0)
+  const uploadedCount   = uploadProgress.done - skipped.length
+
+  // Scan mode only: flag groups with far more photos than typical — the classic
+  // sign that the next lot's label photo failed to decode and both lots' photos
+  // ran together. Median-based so one genuinely big lot doesn't flag everything.
+  // LOWER median on even counts: with two groups [4, 9] the upper median (9)
+  // would make the threshold 18 — mathematically unreachable — so the exact
+  // merged-lot case the flag exists for would never fire.
+  const photoCounts   = groups.filter(g => g.photos.length > 0).map(g => g.photos.length).sort((a, b) => a - b)
+  const median        = photoCounts.length ? photoCounts[Math.floor((photoCounts.length - 1) / 2)] : 0
+  const flagThreshold = Math.max(6, median * 2)
+  // Matched lots only, so the banner count always equals the highlighted cards
+  // (unmatched groups already get their own yellow "won't upload" treatment).
+  const isFlagged     = (g: LotGroup) => mode === "scan" && !!g.lotId && g.photos.length >= flagThreshold
+  const flaggedCount  = groups.filter(isFlagged).length
+
+  function renderGroupCard(g: LotGroup, i: number) {
+    const flagged = isFlagged(g)
+    return (
+      <div key={`${g.label}-${i}`}
+        className={`rounded-xl border px-4 py-3 ${
+          !g.lotId
+            ? "bg-yellow-50 border-yellow-400 dark:bg-yellow-900/10 dark:border-yellow-700/50"
+            : flagged
+              ? "bg-amber-50 border-amber-400 dark:bg-amber-900/10 dark:border-amber-500/70"
+              : "bg-white dark:bg-[#1C1C1E] border-gray-300 dark:border-gray-700"
+        }`}>
+        <div className="flex items-center gap-2 flex-wrap mb-2">
+          <span className={`font-mono text-sm ${g.lotId ? "text-[#2AB4A6]" : "text-yellow-700 dark:text-yellow-400"}`}>{g.label}</span>
+          <span className="text-xs text-gray-600 dark:text-gray-500">
+            {g.photos.length} photo{g.photos.length !== 1 ? "s" : ""}
+          </span>
+          {!g.lotId && (
+            <span className="text-xs bg-yellow-200 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-400 rounded-full px-2 py-0.5">
+              not in this auction — won&apos;t upload
+            </span>
+          )}
+          {flagged && (
+            <span className="text-xs bg-amber-200 text-amber-800 dark:bg-amber-900/40 dark:text-amber-400 rounded-full px-2 py-0.5">
+              ⚠ unusually many photos — check none belong to the next lot
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {g.photos.map((p, j) => (
+            <Thumb key={j} url={thumbUrls.current.get(p) ?? ""} name={p.name} />
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="p-4 md:p-6 max-w-3xl">
@@ -367,14 +509,49 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             </div>
           </div>
 
+          {/* Scan-mode warnings */}
+          {unreadable > 0 && (
+            <div className="bg-orange-100 border border-orange-300 dark:bg-orange-900/20 dark:border-orange-700/50 rounded-lg px-3 py-2">
+              <p className="text-xs text-orange-800 dark:text-orange-400">
+                ⚠ {unreadable} photo{unreadable !== 1 ? "s" : ""} couldn&apos;t be read on this device (usually HEIC
+                format from an iPhone). Barcodes in those photos <strong>cannot be detected</strong>, so their lots may
+                have merged into the lot before them — check the groups below carefully, or convert the photos to JPEG
+                and rescan.
+              </p>
+            </div>
+          )}
+          {flaggedCount > 0 && (
+            <div className="bg-amber-100 border border-amber-300 dark:bg-amber-900/20 dark:border-amber-700/50 rounded-lg px-3 py-2">
+              <p className="text-xs text-amber-800 dark:text-amber-400">
+                ⚠ {flaggedCount} lot{flaggedCount !== 1 ? "s have" : " has"} far more photos than the others — often a
+                sign the next lot&apos;s barcode photo didn&apos;t scan and two lots ran together. They&apos;re
+                highlighted below.
+              </p>
+            </div>
+          )}
+          {preGroup.length > 0 && (
+            <div className="bg-yellow-100 border border-yellow-300 dark:bg-yellow-900/20 dark:border-yellow-700/50 rounded-lg px-3 py-2">
+              <p className="text-xs text-yellow-800 dark:text-yellow-400 font-medium mb-2">
+                {preGroup.length} photo{preGroup.length !== 1 ? "s" : ""} came before the first barcode and won&apos;t
+                be uploaded — if one of these is a barcode label that didn&apos;t scan, that lot&apos;s photos are here
+                too:
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {preGroup.map((p, j) => (
+                  <Thumb key={j} url={thumbUrls.current.get(p) ?? ""} name={p.name} />
+                ))}
+              </div>
+            </div>
+          )}
+
           {unmatchedGroups.length > 0 && (
-            <div className="bg-yellow-900/20 border border-yellow-700/50 rounded-lg px-3 py-2">
-              <p className="text-xs text-yellow-400 font-medium mb-1">
+            <div className="bg-yellow-100 border border-yellow-300 dark:bg-yellow-900/20 dark:border-yellow-700/50 rounded-lg px-3 py-2">
+              <p className="text-xs text-yellow-800 dark:text-yellow-400 font-medium">
                 {mode === "filename"
                   ? "IDs not matched to any lot in this auction:"
                   : "Barcodes detected but not found in this auction:"}
               </p>
-              <p className="text-xs text-yellow-600 font-mono">{unmatchedGroups.map(g => g.label).join(", ")}</p>
+              <p className="text-xs text-yellow-700 dark:text-yellow-600 font-mono">{unmatchedGroups.map(g => g.label).join(", ")}</p>
             </div>
           )}
           {emptyGroups.length > 0 && (
@@ -385,26 +562,9 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             </div>
           )}
 
-          {matchedGroups.length > 0 && (
-            <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl overflow-hidden max-h-80 overflow-y-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-gray-50 dark:bg-[#141416] border-b border-gray-300 dark:border-gray-700 sticky top-0">
-                  <tr>
-                    <th className="text-left px-4 py-2 text-gray-600 dark:text-gray-500 font-medium">Barcode / ID</th>
-                    <th className="text-left px-4 py-2 text-gray-600 dark:text-gray-500 font-medium">Photos</th>
-                    <th className="text-left px-4 py-2 text-gray-600 dark:text-gray-500 font-medium">Files</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {matchedGroups.map(g => (
-                    <tr key={g.label} className="border-b border-gray-200 dark:border-gray-800 last:border-0">
-                      <td className="px-4 py-2 font-mono text-[#2AB4A6]">{g.label}</td>
-                      <td className="px-4 py-2 text-gray-600 dark:text-gray-300">{g.photos.length}</td>
-                      <td className="px-4 py-2 text-gray-600 truncate max-w-[200px]">{g.photos.map(p => p.name).join(", ")}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {groups.filter(g => g.photos.length > 0 || !g.lotId).length > 0 && (
+            <div className="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
+              {groups.map((g, i) => (g.photos.length > 0 || !g.lotId) ? renderGroupCard(g, i) : null)}
             </div>
           )}
 
@@ -438,16 +598,37 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       {/* ── Done ── */}
       {phase === "done" && (
         <div className="space-y-4">
-          <div className="bg-[#2AB4A6]/10 border border-[#2AB4A6]/30 rounded-xl px-6 py-8 flex flex-col items-center gap-2">
-            <span className="text-4xl">✓</span>
-            <p className="text-sm font-semibold text-[#2AB4A6]">Upload complete</p>
-            <p className="text-xs text-gray-600 dark:text-gray-400">
-              {uploadProgress.done} photo{uploadProgress.done !== 1 ? "s" : ""} uploaded to {matchedGroups.length} lot{matchedGroups.length !== 1 ? "s" : ""}
-            </p>
-          </div>
+          {uploadedCount === 0 ? (
+            <div className="bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700/50 rounded-xl px-6 py-8 flex flex-col items-center gap-2">
+              <span className="text-4xl">✗</span>
+              <p className="text-sm font-semibold text-red-700 dark:text-red-400">Upload failed — no photos were uploaded</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                All {uploadProgress.total} photo{uploadProgress.total !== 1 ? "s" : ""} failed — the reasons are listed below.
+              </p>
+            </div>
+          ) : (
+            <div className="bg-[#2AB4A6]/10 border border-[#2AB4A6]/30 rounded-xl px-6 py-8 flex flex-col items-center gap-2">
+              <span className="text-4xl">{skipped.length > 0 ? "⚠" : "✓"}</span>
+              <p className="text-sm font-semibold text-[#2AB4A6]">
+                {skipped.length > 0 ? "Upload finished with problems" : "Upload complete"}
+              </p>
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                {uploadedCount} of {uploadProgress.total} photo{uploadProgress.total !== 1 ? "s" : ""} uploaded
+                to {okLotCount} lot{okLotCount !== 1 ? "s" : ""}
+                {skipped.length > 0 ? ` — ${skipped.length} failed (listed below)` : ""}
+              </p>
+            </div>
+          )}
           {skipped.length > 0 && (
-            <div className="bg-yellow-900/20 border border-yellow-700/50 rounded-lg px-3 py-2">
-              <p className="text-xs text-yellow-400">{skipped.length} photo{skipped.length !== 1 ? "s" : ""} failed: {skipped.join(", ")}</p>
+            <div className="bg-yellow-100 border border-yellow-300 dark:bg-yellow-900/20 dark:border-yellow-700/50 rounded-lg px-3 py-2">
+              <p className="text-xs text-yellow-800 dark:text-yellow-400 font-medium mb-1">
+                {skipped.length} photo{skipped.length !== 1 ? "s" : ""} failed:
+              </p>
+              <ul className="space-y-0.5">
+                {skipped.map((s, i) => (
+                  <li key={i} className="text-xs text-yellow-700 dark:text-yellow-500 font-mono">{s}</li>
+                ))}
+              </ul>
             </div>
           )}
           <button onClick={reset}

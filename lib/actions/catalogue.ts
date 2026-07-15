@@ -687,29 +687,39 @@ export async function fillLotsFromTotes(auctionId: string) {
   return { updated }
 }
 
-export async function uploadLotPhoto(lotId: string, auctionId: string, formData: FormData) {
-  const session = await requireCataloguer()
-  await requireNotBCLocked(auctionId, session)
+// Returns { ok, error } instead of throwing: production redacts thrown
+// server-action messages, so a cataloguer hitting the BC lock (or any other
+// expected failure) would see gibberish instead of the reason.
+export async function uploadLotPhoto(
+  lotId: string, auctionId: string, formData: FormData
+): Promise<{ ok: true; imageUrls: string[] } | { ok: false; error: string }> {
+  try {
+    const session = await requireCataloguer()
+    await requireNotBCLocked(auctionId, session)
 
-  const file = formData.get("photo") as File
-  if (!file || file.size === 0) throw new Error("No file provided")
+    const file = formData.get("photo") as File
+    if (!file || file.size === 0) return { ok: false, error: "No file provided" }
 
-  const buf = Buffer.from(await file.arrayBuffer())
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
-  const key = await uploadBufferToR2(
-    buf,
-    `lot-photos/${auctionId}/${lotId}/${Date.now()}-${safeName}`,
-    file.type || "image/jpeg"
-  )
+    const buf = Buffer.from(await file.arrayBuffer())
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
+    const key = await uploadBufferToR2(
+      buf,
+      `lot-photos/${auctionId}/${lotId}/${Date.now()}-${safeName}`,
+      file.type || "image/jpeg"
+    )
 
-  const lot = await prisma.catalogueLot.update({
-    where: { id: lotId },
-    data: { imageUrls: { push: key } },
-    include: { auction: { select: { code: true } } },
-  })
+    const lot = await prisma.catalogueLot.update({
+      where: { id: lotId },
+      data: { imageUrls: { push: key } },
+      include: { auction: { select: { code: true } } },
+    })
 
-  await logLotPhoto({ id: lot.id, auctionId: lot.auctionId, barcode: lot.barcode, title: lot.title }, lot.auction?.code ?? "", "photo_added", { changedBy: changedByOf(session), source: "photo_tab" }, safeName)
-  return lot.imageUrls
+    await logLotPhoto({ id: lot.id, auctionId: lot.auctionId, barcode: lot.barcode, title: lot.title }, lot.auction?.code ?? "", "photo_added", { changedBy: changedByOf(session), source: "photo_tab" }, safeName)
+    return { ok: true, imageUrls: lot.imageUrls }
+  } catch (e: any) {
+    console.error("uploadLotPhoto error:", e)
+    return { ok: false, error: e?.message ?? "Upload failed" }
+  }
 }
 
 export async function deleteLotPhoto(lotId: string, auctionId: string, key: string) {
