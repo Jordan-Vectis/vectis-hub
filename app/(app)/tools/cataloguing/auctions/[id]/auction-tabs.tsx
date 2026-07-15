@@ -9,7 +9,6 @@ import { parseCondition, buildCondition, type BoxPrefixMode } from "@/lib/condit
 import { useConditionWordings } from "@/lib/use-condition-wordings"
 import PhotoOnlyTab from "./photo-only-tab"
 import ImportTab from "./import-tab"
-import PhotoUploadTab from "./photo-upload-tab"
 import AiUpgradeTab from "./ai-upgrade-tab"
 import StatsTab from "./stats-tab"
 import ReviewTab from "./review-tab"
@@ -22,7 +21,7 @@ import JSZip from "jszip"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "settings" | "add-lot" | "manage-lots" | "photo-only" | "import" | "upload-photos" | "ai-upgrade" | "stats" | "lot-history" | "review" | "locking-check" | "bc-check" | "bc-fill"
+type Tab = "settings" | "add-lot" | "manage-lots" | "photo-only" | "import" | "ai-upgrade" | "stats" | "lot-history" | "review" | "locking-check" | "bc-check" | "bc-fill"
 
 interface Auction {
   id: string; code: string; name: string; auctionDate: Date | null
@@ -572,7 +571,6 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
     { id: "add-lot",      label: "Add Lot" },
     { id: "photo-only",   label: "Photo Only Cataloguing" },
     { id: "import",        label: "Import Lots" },
-    { id: "upload-photos", label: "Upload Photos" },
     { id: "ai-upgrade",   label: "✨ AI Upgrade" },
     { id: "review",       label: "🔍 Review" },
     { id: "stats",        label: "📊 Statistics" },
@@ -718,10 +716,6 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
 
         {tab === "import" && (
           <ImportTab auctionId={auction.id} auctionCode={auction.code} onImported={() => router.push(`/tools/cataloguing/auctions/${auction.id}`)} />
-        )}
-
-        {tab === "upload-photos" && (
-          <PhotoUploadTab auctionId={auction.id} lots={lots} onUploaded={() => router.refresh()} />
         )}
 
         {tab === "ai-upgrade" && (

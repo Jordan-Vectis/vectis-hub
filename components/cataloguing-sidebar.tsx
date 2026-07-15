@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation"
 
 const links = [
   { key: "AUCTION_MANAGER",    href: "/tools/cataloguing/auctions",        label: "Auction Manager",    icon: "🏷" },
+  { key: "PHOTOGRAPHY",        href: "/tools/cataloguing/photography",     label: "Photography",        icon: "📷" },
   { key: "TABLET_CATALOGUING", href: "/tools/cataloguing/tablet/auctions", label: "Tablet Cataloguing", icon: "📱" },
   { key: "LOTTING_UP",         href: "/tools/cataloguing/lotting-up",      label: "Lotting Up",         icon: "🔢" },
   { key: "RESEARCH",           href: "/tools/cataloguing/research",         label: "Research",           icon: "🔍" },

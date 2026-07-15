@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import Link from "next/link"
 import { uploadLotPhoto } from "@/lib/actions/catalogue"
 
 interface Props {
@@ -22,6 +23,14 @@ interface LotGroup {
 
 type Phase = "idle" | "scanning" | "preview" | "uploading" | "done"
 type Mode  = "scan" | "filename"
+
+// Per-lot outcome, shown live while uploading and on the results screen.
+interface UploadResult {
+  label:    string
+  uploaded: number
+  failed:   number
+  errors:   string[]
+}
 
 // Photos per AI request, and how many requests run at once. A big sale is
 // 1000+ photos, so these drive how long the AI review takes.
@@ -176,6 +185,9 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   function setAsDefault() { localStorage.setItem(MODEL_LS_KEY, modelId); setSavedDefault(modelId) }
   function clearDefault() { localStorage.removeItem(MODEL_LS_KEY); setSavedDefault(null) }
   const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 })
+  const [uploadingLabel, setUploadingLabel] = useState<string | null>(null)  // lot currently uploading
+  const [uploadLog, setUploadLog]           = useState<UploadResult[]>([])   // fills in live while uploading
+  const [uploadResults, setUploadResults]   = useState<UploadResult[]>([])   // final per-lot outcome
   const [error, setError]          = useState<string | null>(null)
   const [skipped, setSkipped]      = useState<string[]>([])
   const [okLotCount, setOkLotCount] = useState(0)              // lots that actually received ≥1 photo
@@ -217,6 +229,9 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     setAiEta(null)
     setSkipped([])
     setOkLotCount(0)
+    setUploadLog([])
+    setUploadResults([])
+    setUploadingLabel(null)
     setError(null)
   }
 
@@ -601,29 +616,41 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
 
     const total = uploadable.reduce((sum, g) => sum + g.photos.length, 0)
     setUploadProgress({ done: 0, total })
+    setUploadLog([])
     setPhase("uploading")
 
     const failedList: string[] = []
+    const perLot: UploadResult[] = []
     const okLotIds = new Set<string>()
     let done = 0
 
     for (const group of uploadable) {
+      let ok = 0
+      const errs: string[] = []
+      setUploadingLabel(group.label)
       for (const photo of group.photos) {
         try {
           const fd = new FormData()
           fd.set("photo", photo)
           const res = await uploadLotPhoto(group.lotId!, auctionId, fd)
-          if (res.ok) okLotIds.add(group.lotId!)
-          else failedList.push(`${group.label}/${photo.name} — ${res.error}`)
+          if (res.ok) { ok++; okLotIds.add(group.lotId!) }
+          else { errs.push(`${photo.name} — ${res.error}`); failedList.push(`${group.label}/${photo.name} — ${res.error}`) }
         } catch (e: any) {
-          failedList.push(`${group.label}/${photo.name} — ${e?.message ?? "unknown error"}`)
+          const msg = e?.message ?? "unknown error"
+          errs.push(`${photo.name} — ${msg}`)
+          failedList.push(`${group.label}/${photo.name} — ${msg}`)
         }
         done++
         setUploadProgress({ done, total })
       }
+      const row: UploadResult = { label: group.label, uploaded: ok, failed: errs.length, errors: errs }
+      perLot.push(row)
+      setUploadLog(prev => [...prev, row])
     }
 
+    setUploadingLabel(null)
     setSkipped(failedList)
+    setUploadResults(perLot)
     setOkLotCount(okLotIds.size)
     setPhase("done")
     onUploaded()
@@ -751,22 +778,46 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     )
   }
 
-  return (
-    <div className="p-4 md:p-6 max-w-3xl">
+  // ── Small presentational helpers ────────────────────────────────────────────
+  const Stat = ({ label, value, tone = "plain", sub }: {
+    label: string; value: React.ReactNode; tone?: "plain" | "good" | "warn" | "bad" | "ai"; sub?: string
+  }) => (
+    <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3">
+      <p className={`text-2xl font-bold ${
+        tone === "good" ? "text-green-700 dark:text-green-400"
+        : tone === "warn" ? "text-amber-700 dark:text-amber-400"
+        : tone === "bad"  ? "text-red-700 dark:text-red-400"
+        : tone === "ai"   ? "text-purple-700 dark:text-purple-400"
+        : "text-gray-900 dark:text-white"
+      }`}>{value}</p>
+      <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{label}</p>
+      {sub && <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">{sub}</p>}
+    </div>
+  )
 
-      {/* ── Idle — mode selection ── */}
+  const Notice = ({ tone, children }: { tone: "info" | "ai" | "warn" | "bad" | "good"; children: React.ReactNode }) => (
+    <div className={`rounded-lg px-3 py-2 border text-xs ${
+      tone === "ai"   ? "bg-purple-100 border-purple-300 text-purple-800 dark:bg-purple-900/20 dark:border-purple-700/50 dark:text-purple-300"
+      : tone === "warn" ? "bg-amber-100 border-amber-300 text-amber-800 dark:bg-amber-900/20 dark:border-amber-700/50 dark:text-amber-300"
+      : tone === "bad"  ? "bg-red-100 border-red-300 text-red-800 dark:bg-red-900/20 dark:border-red-700/50 dark:text-red-300"
+      : tone === "good" ? "bg-green-100 border-green-300 text-green-800 dark:bg-green-900/20 dark:border-green-700/50 dark:text-green-300"
+      : "bg-gray-100 border-gray-300 text-gray-700 dark:bg-gray-800/50 dark:border-gray-700 dark:text-gray-300"
+    }`}>{children}</div>
+  )
+
+  const stagePct = scanProgress.total > 0 ? (scanProgress.done / scanProgress.total) * 100 : 0
+  const aiPct    = aiProgress.total   > 0 ? (aiProgress.done   / aiProgress.total)   * 100 : 0
+  const upPct    = uploadProgress.total > 0 ? (uploadProgress.done / uploadProgress.total) * 100 : 0
+  const needsALook = aiWarnings + flaggedCount + (preGroup.length > 0 ? 1 : 0)
+
+  return (
+    <div className="pb-6 max-w-5xl">
+
+      {/* ══ Idle — choose how to match ══ */}
       {phase === "idle" && (
         <>
-          <div className="mb-5">
-            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Upload Photos</h2>
-            <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">
-              Choose how to match photos to lots.
-            </p>
-          </div>
-
-          {/* Hidden inputs */}
           <input ref={scanInputRef} type="file" multiple
-            // @ts-ignore
+            // @ts-ignore — folder picking is non-standard but supported everywhere we run
             webkitdirectory=""
             className="hidden"
             onChange={handleScanFiles}
@@ -776,288 +827,375 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             onChange={handleFilenameFiles}
           />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Option A — filename */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Smart scan */}
             <button
-              onClick={() => { setMode("filename"); filenameInputRef.current?.click() }}
-              className="group flex flex-col items-center gap-3 py-10 rounded-xl border-2 border-dashed border-gray-600 hover:border-[#2AB4A6] text-gray-600 dark:text-gray-400 hover:text-[#2AB4A6] transition-colors px-6"
+              onClick={() => { setMode("scan"); scanInputRef.current?.click() }}
+              className="group text-left rounded-xl border-2 border-purple-300 dark:border-purple-700/60 hover:border-purple-500 bg-purple-50/50 dark:bg-purple-900/10 p-6 transition-colors"
             >
-              <span className="text-4xl">📂</span>
-              <span className="text-sm font-semibold text-center">Match by filename</span>
-              <span className="text-xs text-gray-600 text-center leading-relaxed">
-                Filenames must include the barcode or receipt ID.<br />
-                e.g. <span className="font-mono text-gray-600 dark:text-gray-500">F066001.jpg</span>,{" "}
-                <span className="font-mono text-gray-600 dark:text-gray-500">F066001_2.jpg</span>
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-3xl">📷</span>
+                <div>
+                  <p className="text-base font-bold text-gray-900 dark:text-white">Smart scan a folder</p>
+                  <p className="text-xs text-purple-700 dark:text-purple-400 font-medium">Recommended — no renaming needed</p>
+                </div>
+              </div>
+              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed mb-3">
+                Pick the folder straight off the camera. Photograph each lot&apos;s barcode label, then its
+                photos, then the next label — the scan works out the rest.
+              </p>
+              <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                <li>✓ Reads the barcode on every label photo</li>
+                <li>✓ AI double-checks <strong>every</strong> photo and flags anything odd</li>
+                <li>✓ You see every photo grouped by lot before anything is saved</li>
+              </ul>
+              <span className="inline-block mt-4 text-sm font-semibold text-purple-700 dark:text-purple-400 group-hover:underline">
+                Choose folder →
               </span>
             </button>
 
-            {/* Option B — scan */}
+            {/* Filename */}
             <button
-              onClick={() => { setMode("scan"); scanInputRef.current?.click() }}
-              className="group flex flex-col items-center gap-3 py-10 rounded-xl border-2 border-dashed border-gray-600 hover:border-purple-500 text-gray-600 dark:text-gray-400 hover:text-purple-400 transition-colors px-6"
+              onClick={() => { setMode("filename"); filenameInputRef.current?.click() }}
+              className="group text-left rounded-xl border-2 border-gray-300 dark:border-gray-700 hover:border-[#2AB4A6] bg-white dark:bg-[#1C1C1E] p-6 transition-colors"
             >
-              <span className="text-4xl">📷</span>
-              <span className="text-sm font-semibold text-center">Smart scan folder</span>
-              <span className="text-xs text-gray-600 text-center leading-relaxed">
-                Select a photo folder — barcodes are read<br />
-                from each image automatically.
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-3xl">📂</span>
+                <div>
+                  <p className="text-base font-bold text-gray-900 dark:text-white">Match by filename</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">When photos are already named</p>
+                </div>
+              </div>
+              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed mb-3">
+                Each photo&apos;s filename must be the lot&apos;s barcode or receipt ID. No barcode reading and
+                no AI — the filename decides the lot.
+              </p>
+              <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                <li>✓ <span className="font-mono">F066001.jpg</span> → lot F066001</li>
+                <li>✓ <span className="font-mono">F066001_2.jpg</span> → same lot, second photo</li>
+                <li>✓ <span className="font-mono">R000016-413_1.jpg</span> → receipt ID works too</li>
+              </ul>
+              <span className="inline-block mt-4 text-sm font-semibold text-[#2AB4A6] group-hover:underline">
+                Choose photos →
               </span>
             </button>
           </div>
 
-          {/* AI model for the smart scan review */}
-          <div className="mt-4 flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-gray-600 dark:text-gray-500">✨ Smart scan AI model:</span>
+          {/* Model picker */}
+          <div className="mt-5 flex items-center gap-2 flex-wrap bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3">
+            <span className="text-xs font-medium text-gray-700 dark:text-gray-300">✨ AI model for smart scan:</span>
             <select value={modelId} onChange={e => setModelId(e.target.value)}
               className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-purple-500">
               {modelList.length === 0 && <option value="">Loading…</option>}
               {modelList.map(m => <option key={m} value={m}>{m}{savedDefault === m ? " ★" : ""}</option>)}
             </select>
             {savedDefault === modelId && modelId ? (
-              <button onClick={clearDefault} className="text-xs text-amber-600 dark:text-amber-400 hover:text-amber-500 px-2 py-1 rounded">★ Default · clear</button>
+              <button onClick={clearDefault} className="text-xs text-amber-600 dark:text-amber-400 hover:text-amber-500 px-2 py-1 rounded">★ Your default · clear</button>
             ) : (
-              <button onClick={setAsDefault} disabled={!modelId} className="text-xs text-gray-600 dark:text-gray-400 hover:text-purple-500 disabled:opacity-40 px-2 py-1 rounded">Set as default</button>
+              <button onClick={setAsDefault} disabled={!modelId} className="text-xs text-gray-600 dark:text-gray-400 hover:text-purple-500 disabled:opacity-40 px-2 py-1 rounded">Set as my default</button>
             )}
-            <span className="text-xs text-gray-600 dark:text-gray-400">
-              Used by Smart scan to double-check every photo. Set for everyone in Admin → AI Models.
-            </span>
+            <span className="text-xs text-gray-600 dark:text-gray-400">Set for everyone in Admin → AI Models.</span>
           </div>
 
-          {error && <p className="text-xs text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700/50 rounded-lg px-3 py-2 mt-3">{error}</p>}
+          {error && <div className="mt-3"><Notice tone="bad">{error}</Notice></div>}
         </>
       )}
 
-      {/* ── Scanning (scan mode only) ── */}
+      {/* ══ Scanning — two clear stages ══ */}
       {phase === "scanning" && (
-        <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl px-6 py-10 flex flex-col items-center gap-4">
-          <div className={`w-8 h-8 border-2 border-t-transparent rounded-full animate-spin ${scanStage === "ai" ? "border-purple-500" : "border-[#2AB4A6]"}`} />
-          <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">
-            {scanStage === "ai" ? "✨ AI double-checking every photo…" : "Scanning for barcodes…"}
-          </p>
-          <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-2">
-            <div className={`h-2 rounded-full transition-all duration-200 ${scanStage === "ai" ? "bg-purple-500" : "bg-[#2AB4A6]"}`}
-              style={{ width: `${scanStage === "ai"
-                ? (aiProgress.total > 0 ? (aiProgress.done / aiProgress.total) * 100 : 0)
-                : (scanProgress.total > 0 ? (scanProgress.done / scanProgress.total) * 100 : 0)}%` }} />
-          </div>
-          <p className="text-xs text-gray-600 dark:text-gray-500">
-            {scanStage === "ai"
-              ? `${aiProgress.done} / ${aiProgress.total} photos checked by AI`
-              : `${scanProgress.done} / ${scanProgress.total} images scanned`}
-          </p>
-          {scanStage === "ai" && (
-            <>
-              <p className="text-xs text-gray-600 dark:text-gray-400">
-                {aiEta ?? `Checking ${AI_CONCURRENCY * BATCH_SIZE} photos at a time — a big folder takes a few minutes.`}
+        <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl p-6 max-w-2xl">
+          {/* Stage 1 */}
+          <div className="flex items-start gap-3 mb-5">
+            <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+              scanStage === "local" ? "bg-[#2AB4A6] text-white" : "bg-green-500 text-white"
+            }`}>{scanStage === "local" ? "1" : "✓"}</span>
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-semibold ${scanStage === "local" ? "text-gray-900 dark:text-white" : "text-gray-600 dark:text-gray-400"}`}>
+                Reading barcodes
               </p>
-              {aiNote && (
-                <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700/50 rounded-lg px-3 py-1.5 text-center max-w-md">
-                  {aiNote}
-                </p>
+              {scanStage === "local" ? (
+                <>
+                  <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-2 mt-2">
+                    <div className="bg-[#2AB4A6] h-2 rounded-full transition-all duration-200" style={{ width: `${stagePct}%` }} />
+                  </div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1.5">
+                    {scanProgress.done} of {scanProgress.total} photos · looking for a lot label in each one
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{scanProgress.total} photos read</p>
               )}
-              <button
-                onClick={() => { skipAiRef.current = true; aiAbortsRef.current.forEach(c => c.abort()) }}
-                className="px-4 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 text-xs hover:border-gray-500 transition-colors">
-                Skip AI check — use barcode scanning only
-              </button>
-            </>
+            </div>
+          </div>
+
+          {/* Stage 2 */}
+          <div className="flex items-start gap-3">
+            <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+              scanStage === "ai" ? "bg-purple-500 text-white" : "bg-gray-300 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
+            }`}>2</span>
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-semibold ${scanStage === "ai" ? "text-gray-900 dark:text-white" : "text-gray-500 dark:text-gray-500"}`}>
+                ✨ AI double-checking every photo
+              </p>
+              {scanStage === "ai" ? (
+                <>
+                  <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-2 mt-2">
+                    <div className="bg-purple-500 h-2 rounded-full transition-all duration-200" style={{ width: `${aiPct}%` }} />
+                  </div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1.5">
+                    {aiProgress.done} of {aiProgress.total} photos
+                    {aiEta ? <> · {aiEta}</> : <> · checking {AI_CONCURRENCY * BATCH_SIZE} at a time</>}
+                  </p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    Catching labels the barcode reader missed, and anything that looks wrong.
+                  </p>
+                  {aiNote && <div className="mt-2"><Notice tone="warn">{aiNote}</Notice></div>}
+                  <button
+                    onClick={() => { skipAiRef.current = true; aiAbortsRef.current.forEach(c => c.abort()) }}
+                    className="mt-3 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs hover:border-gray-500 transition-colors">
+                    Skip the AI check — group by barcode only
+                  </button>
+                </>
+              ) : (
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">Waiting for the barcode read to finish…</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ Preview — check before saving ══ */}
+      {phase === "preview" && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+              {mode === "filename" ? "Check the filename matches" : "Check before saving"}
+            </h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+              Nothing has been saved yet. Every photo below is shown under the lot it will be added to.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Stat label="Lots matched" value={matchedGroups.length} tone="good" />
+            <Stat label="Photos to save" value={totalPhotos} />
+            <Stat label="Not in this sale" value={unmatchedGroups.length} tone={unmatchedGroups.length > 0 ? "warn" : "plain"} />
+            <Stat label="Need a look" value={needsALook} tone={needsALook > 0 ? "warn" : "good"} />
+          </div>
+
+          {mode === "scan" && aiCheckedCount > 0 && (
+            <Notice tone="ai">
+              ✨ AI reviewed {aiCheckedCount} photo{aiCheckedCount !== 1 ? "s" : ""}: {aiConfirmed} label{aiConfirmed !== 1 ? "s" : ""} confirmed
+              {aiReadCount > 0 ? <>, {aiReadCount} read by AI that the barcode reader missed</> : null}
+              {aiWarnings > 0 ? <>, <strong>{aiWarnings} flagged below</strong></> : <>, nothing suspicious</>}.
+            </Notice>
+          )}
+          {mode === "scan" && aiFailed && (
+            <Notice tone="bad">
+              ⚠ The AI check couldn&apos;t run for some photos (a problem with the AI, the network, or it was
+              skipped). Those photos were grouped by barcode alone, so a missed label could have merged two lots.
+              Check the groups below, or scan again.
+            </Notice>
+          )}
+          {flaggedCount > 0 && (
+            <Notice tone="warn">
+              ⚠ {flaggedCount} lot{flaggedCount !== 1 ? "s have" : " has"} far more photos than the rest — often a
+              sign a label didn&apos;t scan and two lots ran together. Highlighted below.
+            </Notice>
+          )}
+          {unreadableLabelGroups.length > 0 && (
+            <Notice tone="warn">
+              🔎 AI spotted {unreadableLabelGroups.length} label{unreadableLabelGroups.length !== 1 ? "s" : ""} it
+              couldn&apos;t read. Those photos are held separately below so they can&apos;t land on the wrong lot —
+              read the code off the label photo yourself, or use &quot;Not a label&quot; if AI got it wrong.
+            </Notice>
+          )}
+          {unreadable > 0 && (
+            <Notice tone={aiFailed ? "warn" : "info"}>
+              {aiFailed
+                ? <>⚠ {unreadable} photo{unreadable !== 1 ? "s" : ""} couldn&apos;t be read on this device (usually
+                  HEIC from an iPhone) and the AI check didn&apos;t cover them — convert them to JPEG and scan again.</>
+                : <>ℹ {unreadable} photo{unreadable !== 1 ? "s" : ""} can&apos;t be previewed on this device (usually
+                  HEIC from an iPhone). AI still checked them and they will still upload — they just show as a
+                  placeholder tile.</>}
+            </Notice>
+          )}
+          {preGroup.length > 0 && (
+            <div className="rounded-lg px-3 py-2 border bg-amber-100 border-amber-300 dark:bg-amber-900/20 dark:border-amber-700/50">
+              <p className="text-xs text-amber-800 dark:text-amber-300 font-medium mb-2">
+                {preGroup.length} photo{preGroup.length !== 1 ? "s" : ""} came before the first label and won&apos;t be
+                saved — if a label here didn&apos;t scan, its lot&apos;s photos are in this pile too:
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {preGroup.map((p, j) => <Thumb key={j} url={thumbUrls.current.get(p) ?? ""} name={p.name} />)}
+              </div>
+            </div>
+          )}
+          {unmatchedGroups.length > 0 && (
+            <Notice tone="warn">
+              <p className="font-medium mb-1">
+                {unmatchedGroups.length} label{unmatchedGroups.length !== 1 ? "s" : ""} {unmatchedGroups.length !== 1 ? "aren't" : "isn't"} on
+                any lot in this sale — their photos won&apos;t be saved:
+              </p>
+              <p className="font-mono">{unmatchedGroups.map(g => g.label).join(", ")}</p>
+              <p className="mt-1">Check you picked the right sale, and that these lots have been created.</p>
+            </Notice>
+          )}
+          {emptyGroups.length > 0 && (
+            <Notice tone="info">
+              Matched but no photos followed the label: <span className="font-mono">{emptyGroups.map(g => g.label).join(", ")}</span>
+            </Notice>
+          )}
+
+          {groups.filter(showCard).length > 0 && (
+            <div className="space-y-2 max-h-[32rem] overflow-y-auto pr-1">
+              {groups.map((g, i) => showCard(g) ? renderGroupCard(g, i) : null)}
+            </div>
+          )}
+
+          {error && <Notice tone="bad">{error}</Notice>}
+
+          <div className="flex gap-3 sticky bottom-0 bg-gray-50 dark:bg-[#141416] py-3 border-t border-gray-200 dark:border-gray-800">
+            <button onClick={reset}
+              className="px-5 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm hover:border-gray-500 transition-colors">
+              ← Start again
+            </button>
+            <button onClick={handleUpload} disabled={matchedGroups.length === 0}
+              className="flex-1 py-2.5 bg-[#2AB4A6] hover:bg-[#24a090] disabled:opacity-50 text-black font-semibold rounded-lg text-sm transition-colors">
+              Save {totalPhotos} photo{totalPhotos !== 1 ? "s" : ""} to {matchedGroups.length} lot{matchedGroups.length !== 1 ? "s" : ""}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ══ Uploading — live per-lot feedback ══ */}
+      {phase === "uploading" && (
+        <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl p-6 max-w-2xl">
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">Saving photos…</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 mb-3">
+            {uploadingLabel ? <>Currently on <span className="font-mono">{uploadingLabel}</span></> : "Starting…"} — please leave this page open.
+          </p>
+          <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-3">
+            <div className="bg-[#2AB4A6] h-3 rounded-full transition-all duration-300" style={{ width: `${upPct}%` }} />
+          </div>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
+            {uploadProgress.done} of {uploadProgress.total} photos
+          </p>
+          {uploadLog.length > 0 && (
+            <div className="mt-4 max-h-48 overflow-y-auto space-y-1">
+              {uploadLog.map((r, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs">
+                  <span className={r.failed > 0 ? "text-amber-600 dark:text-amber-400" : "text-green-600 dark:text-green-400"}>
+                    {r.failed > 0 ? "⚠" : "✓"}
+                  </span>
+                  <span className="font-mono text-gray-700 dark:text-gray-300">{r.label}</span>
+                  <span className="text-gray-600 dark:text-gray-400">
+                    {r.uploaded} saved{r.failed > 0 ? `, ${r.failed} failed` : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
 
-      {/* ── Preview (shared) ── */}
-      {phase === "preview" && (
+      {/* ══ Done — the results screen ══ */}
+      {phase === "done" && (
         <div className="space-y-4">
-          <div className="mb-2">
-            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
-              {mode === "filename" ? "Filename match preview" : "Scan results preview"}
-            </h2>
-            {mode === "filename" && (
-              <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">
-                IDs extracted from filenames — suffixes like <span className="font-mono">_1</span>, <span className="font-mono">_2</span> are stripped automatically.
+          {uploadedCount === 0 ? (
+            <div className="rounded-xl border bg-red-50 border-red-300 dark:bg-red-900/15 dark:border-red-700/60 px-6 py-6 text-center">
+              <p className="text-4xl mb-1">✗</p>
+              <p className="text-base font-bold text-red-800 dark:text-red-300">Nothing was saved</p>
+              <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                All {uploadProgress.total} photo{uploadProgress.total !== 1 ? "s" : ""} failed. The reasons are listed below.
               </p>
-            )}
+            </div>
+          ) : (
+            <div className={`rounded-xl border px-6 py-6 text-center ${
+              skipped.length > 0
+                ? "bg-amber-50 border-amber-300 dark:bg-amber-900/15 dark:border-amber-700/60"
+                : "bg-green-50 border-green-300 dark:bg-green-900/15 dark:border-green-700/60"
+            }`}>
+              <p className="text-4xl mb-1">{skipped.length > 0 ? "⚠" : "✓"}</p>
+              <p className={`text-base font-bold ${skipped.length > 0 ? "text-amber-800 dark:text-amber-300" : "text-green-800 dark:text-green-300"}`}>
+                {skipped.length > 0 ? "Finished, but some photos failed" : "All photos saved"}
+              </p>
+              <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                {uploadedCount} of {uploadProgress.total} photo{uploadProgress.total !== 1 ? "s" : ""} saved
+                to {okLotCount} lot{okLotCount !== 1 ? "s" : ""}.
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Stat label="Photos saved" value={uploadedCount} tone={uploadedCount > 0 ? "good" : "bad"} />
+            <Stat label="Lots updated" value={okLotCount} />
+            <Stat label="Photos failed" value={skipped.length} tone={skipped.length > 0 ? "bad" : "plain"} />
+            <Stat label="Not saved (unmatched)" value={unmatchedGroups.length} tone={unmatchedGroups.length > 0 ? "warn" : "plain"}
+              sub={unmatchedGroups.length > 0 ? "labels not on a lot in this sale" : undefined} />
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 text-center">
-              <p className="text-2xl font-bold text-[#2AB4A6]">{matchedGroups.length}</p>
-              <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">Lots matched</p>
-            </div>
-            <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 text-center">
-              <p className="text-2xl font-bold text-gray-700 dark:text-gray-200">{totalPhotos}</p>
-              <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">Photos to upload</p>
-            </div>
-            <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 text-center">
-              <p className={`text-2xl font-bold ${unmatchedGroups.length > 0 ? "text-yellow-400" : "text-gray-600"}`}>
-                {unmatchedGroups.length}
-              </p>
-              <p className="text-xs text-gray-600 dark:text-gray-500 mt-0.5">Unmatched</p>
-            </div>
-          </div>
-
-          {/* Scan-mode warnings */}
-          {aiFailed && (
-            <div className="bg-red-100 border border-red-300 dark:bg-red-900/20 dark:border-red-700/50 rounded-lg px-3 py-2">
-              <p className="text-xs text-red-700 dark:text-red-400">
-                ⚠ The AI review couldn&apos;t run for some photos (AI or network problem, or it was skipped) — those
-                photos were grouped by barcode scanning alone, so a missed label could have merged two lots. Check the
-                groups carefully or try the scan again.
-              </p>
-            </div>
-          )}
-          {aiCheckedCount > 0 && (
-            <div className="bg-purple-100 border border-purple-300 dark:bg-purple-900/20 dark:border-purple-700/50 rounded-lg px-3 py-2">
-              <p className="text-xs text-purple-800 dark:text-purple-400">
-                ✨ AI reviewed {aiCheckedCount} photo{aiCheckedCount !== 1 ? "s" : ""}: {aiConfirmed} label{aiConfirmed !== 1 ? "s" : ""} confirmed
-                {aiReadCount > 0 ? <>, {aiReadCount} read by AI that the scanner missed</> : null}
-                {aiWarnings > 0 ? <>, <strong>{aiWarnings} warning{aiWarnings !== 1 ? "s" : ""} below</strong></> : null}.
-              </p>
-            </div>
-          )}
-          {unreadableLabelGroups.length > 0 && (
-            <div className="bg-orange-100 border border-orange-300 dark:bg-orange-900/20 dark:border-orange-700/50 rounded-lg px-3 py-2">
-              <p className="text-xs text-orange-800 dark:text-orange-400">
-                🔎 AI spotted {unreadableLabelGroups.length} barcode label{unreadableLabelGroups.length !== 1 ? "s" : ""} it
-                couldn&apos;t read. Their photos are kept separate below (so they can&apos;t pollute another lot) but
-                won&apos;t upload — each card shows the label photo (tagged &quot;label&quot;), so you can read the code
-                by eye and re-shoot or rename those photos. (A label photo that shows as a placeholder tile can&apos;t
-                be previewed on this device — re-shoot or convert it.) If AI got it wrong, use the card&apos;s
-                &quot;Not a label&quot; button.
-              </p>
-            </div>
-          )}
-          {unreadable > 0 && (
-            <div className="bg-orange-100 border border-orange-300 dark:bg-orange-900/20 dark:border-orange-700/50 rounded-lg px-3 py-2">
-              <p className="text-xs text-orange-800 dark:text-orange-400">
-                {aiFailed ? (
-                  <>⚠ {unreadable} photo{unreadable !== 1 ? "s" : ""} couldn&apos;t be read on this device (usually HEIC
-                  format from an iPhone) and the AI check didn&apos;t run for them — labels in those photos may have
-                  merged their lot into the one before. Check the groups below carefully, or convert the photos to JPEG
-                  and rescan.</>
-                ) : (
-                  <>ℹ {unreadable} photo{unreadable !== 1 ? "s" : ""} can&apos;t be previewed on this device (usually
-                  HEIC format from an iPhone) — they were still checked by AI and will still upload, but show as a
-                  placeholder tile below.</>
-                )}
-              </p>
-            </div>
-          )}
-          {flaggedCount > 0 && (
-            <div className="bg-amber-100 border border-amber-300 dark:bg-amber-900/20 dark:border-amber-700/50 rounded-lg px-3 py-2">
-              <p className="text-xs text-amber-800 dark:text-amber-400">
-                ⚠ {flaggedCount} lot{flaggedCount !== 1 ? "s have" : " has"} far more photos than the others — often a
-                sign the next lot&apos;s barcode photo didn&apos;t scan and two lots ran together. They&apos;re
-                highlighted below.
-              </p>
-            </div>
-          )}
-          {preGroup.length > 0 && (
-            <div className="bg-yellow-100 border border-yellow-300 dark:bg-yellow-900/20 dark:border-yellow-700/50 rounded-lg px-3 py-2">
-              <p className="text-xs text-yellow-800 dark:text-yellow-400 font-medium mb-2">
-                {preGroup.length} photo{preGroup.length !== 1 ? "s" : ""} came before the first barcode and won&apos;t
-                be uploaded — if one of these is a barcode label that didn&apos;t scan, that lot&apos;s photos are here
-                too:
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {preGroup.map((p, j) => (
-                  <Thumb key={j} url={thumbUrls.current.get(p) ?? ""} name={p.name} />
+          {uploadResults.length > 0 && (
+            <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl overflow-hidden">
+              <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#141416]">
+                <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">Lot by lot</p>
+              </div>
+              <div className="max-h-72 overflow-y-auto divide-y divide-gray-200 dark:divide-gray-800">
+                {uploadResults.map((r, i) => (
+                  <div key={i} className="px-4 py-2 flex items-center gap-3">
+                    <span className={r.failed > 0 ? "text-amber-600 dark:text-amber-400" : "text-green-600 dark:text-green-400"}>
+                      {r.failed > 0 ? "⚠" : "✓"}
+                    </span>
+                    <span className="font-mono text-xs text-gray-800 dark:text-gray-200 flex-1 truncate">{r.label}</span>
+                    <span className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                      {r.uploaded} photo{r.uploaded !== 1 ? "s" : ""} saved
+                      {r.failed > 0 ? <span className="text-red-600 dark:text-red-400"> · {r.failed} failed</span> : null}
+                    </span>
+                  </div>
                 ))}
               </div>
             </div>
           )}
 
-          {unmatchedGroups.length > 0 && (
-            <div className="bg-yellow-100 border border-yellow-300 dark:bg-yellow-900/20 dark:border-yellow-700/50 rounded-lg px-3 py-2">
-              <p className="text-xs text-yellow-800 dark:text-yellow-400 font-medium">
-                {mode === "filename"
-                  ? "IDs not matched to any lot in this auction:"
-                  : "Barcodes detected but not found in this auction:"}
-              </p>
-              <p className="text-xs text-yellow-700 dark:text-yellow-600 font-mono">{unmatchedGroups.map(g => g.label).join(", ")}</p>
-            </div>
-          )}
-          {emptyGroups.length > 0 && (
-            <div className="bg-gray-900/50 border border-gray-700 rounded-lg px-3 py-2">
-              <p className="text-xs text-gray-600 dark:text-gray-500">
-                Lots matched but no photos found: <span className="font-mono">{emptyGroups.map(g => g.label).join(", ")}</span>
-              </p>
-            </div>
-          )}
-
-          {groups.filter(showCard).length > 0 && (
-            <div className="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
-              {groups.map((g, i) => showCard(g) ? renderGroupCard(g, i) : null)}
-            </div>
-          )}
-
-          {error && <p className="text-xs text-red-400 bg-red-900/20 rounded-lg px-3 py-2">{error}</p>}
-
-          <div className="flex gap-3">
-            <button onClick={reset}
-              className="px-5 py-2.5 rounded-lg border border-gray-700 text-gray-600 dark:text-gray-400 text-sm hover:border-gray-500 transition-colors">
-              ← Back
-            </button>
-            <button onClick={handleUpload} disabled={matchedGroups.length === 0}
-              className="flex-1 py-2.5 bg-[#2AB4A6] hover:bg-[#24a090] disabled:opacity-50 text-black font-semibold rounded-lg text-sm transition-colors">
-              Upload {totalPhotos} photo{totalPhotos !== 1 ? "s" : ""} to {matchedGroups.length} lot{matchedGroups.length !== 1 ? "s" : ""}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Uploading ── */}
-      {phase === "uploading" && (
-        <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl px-6 py-10 flex flex-col items-center gap-4">
-          <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">Uploading photos…</p>
-          <div className="w-full bg-gray-800 rounded-full h-3">
-            <div className="bg-[#2AB4A6] h-3 rounded-full transition-all duration-300"
-              style={{ width: `${uploadProgress.total > 0 ? (uploadProgress.done / uploadProgress.total) * 100 : 0}%` }} />
-          </div>
-          <p className="text-xs text-gray-600 dark:text-gray-500">{uploadProgress.done} / {uploadProgress.total} photos</p>
-        </div>
-      )}
-
-      {/* ── Done ── */}
-      {phase === "done" && (
-        <div className="space-y-4">
-          {uploadedCount === 0 ? (
-            <div className="bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700/50 rounded-xl px-6 py-8 flex flex-col items-center gap-2">
-              <span className="text-4xl">✗</span>
-              <p className="text-sm font-semibold text-red-700 dark:text-red-400">Upload failed — no photos were uploaded</p>
-              <p className="text-xs text-gray-600 dark:text-gray-400">
-                All {uploadProgress.total} photo{uploadProgress.total !== 1 ? "s" : ""} failed — the reasons are listed below.
-              </p>
-            </div>
-          ) : (
-            <div className="bg-[#2AB4A6]/10 border border-[#2AB4A6]/30 rounded-xl px-6 py-8 flex flex-col items-center gap-2">
-              <span className="text-4xl">{skipped.length > 0 ? "⚠" : "✓"}</span>
-              <p className="text-sm font-semibold text-[#2AB4A6]">
-                {skipped.length > 0 ? "Upload finished with problems" : "Upload complete"}
-              </p>
-              <p className="text-xs text-gray-600 dark:text-gray-400">
-                {uploadedCount} of {uploadProgress.total} photo{uploadProgress.total !== 1 ? "s" : ""} uploaded
-                to {okLotCount} lot{okLotCount !== 1 ? "s" : ""}
-                {skipped.length > 0 ? ` — ${skipped.length} failed (listed below)` : ""}
-              </p>
-            </div>
-          )}
           {skipped.length > 0 && (
-            <div className="bg-yellow-100 border border-yellow-300 dark:bg-yellow-900/20 dark:border-yellow-700/50 rounded-lg px-3 py-2">
-              <p className="text-xs text-yellow-800 dark:text-yellow-400 font-medium mb-1">
-                {skipped.length} photo{skipped.length !== 1 ? "s" : ""} failed:
-              </p>
-              <ul className="space-y-0.5">
+            <div className="rounded-lg px-3 py-2 border bg-red-100 border-red-300 dark:bg-red-900/20 dark:border-red-700/50">
+              <p className="text-xs text-red-800 dark:text-red-300 font-medium mb-1">Why photos failed:</p>
+              <ul className="space-y-0.5 max-h-40 overflow-y-auto">
                 {skipped.map((s, i) => (
-                  <li key={i} className="text-xs text-yellow-700 dark:text-yellow-500 font-mono">{s}</li>
+                  <li key={i} className="text-xs text-red-700 dark:text-red-400 font-mono">{s}</li>
                 ))}
               </ul>
             </div>
           )}
-          <button onClick={reset}
-            className="w-full py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 text-sm hover:border-gray-500 transition-colors">
-            Upload more photos
-          </button>
+
+          {(unmatchedGroups.length > 0 || unreadableLabelGroups.length > 0 || preGroup.length > 0) && (
+            <Notice tone="warn">
+              <p className="font-medium mb-1">Still to sort out:</p>
+              <ul className="space-y-0.5">
+                {unmatchedGroups.length > 0 && (
+                  <li>· {unmatchedGroups.length} label{unmatchedGroups.length !== 1 ? "s" : ""} not on any lot in this sale
+                    (<span className="font-mono">{unmatchedGroups.slice(0, 6).map(g => g.label).join(", ")}{unmatchedGroups.length > 6 ? "…" : ""}</span>)</li>
+                )}
+                {unreadableLabelGroups.length > 0 && (
+                  <li>· {unreadableLabelGroups.length} label{unreadableLabelGroups.length !== 1 ? "s" : ""} AI couldn&apos;t read — those photos weren&apos;t saved</li>
+                )}
+                {preGroup.length > 0 && (
+                  <li>· {preGroup.length} photo{preGroup.length !== 1 ? "s" : ""} before the first label — not saved</li>
+                )}
+              </ul>
+            </Notice>
+          )}
+
+          <div className="flex gap-3">
+            <button onClick={reset}
+              className="flex-1 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold transition-colors">
+              📷 Upload more photos
+            </button>
+            <Link href="/tools/cataloguing/photography"
+              className="px-5 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm hover:border-gray-500 transition-colors flex items-center">
+              Back to Photography
+            </Link>
+          </div>
         </div>
       )}
     </div>
