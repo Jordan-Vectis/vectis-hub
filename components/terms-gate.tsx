@@ -120,7 +120,10 @@ export default function TermsGate({ userName }: { userName: string }) {
         <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-800 space-y-3">
           {!accepted ? (
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <p className="text-xs text-gray-500">By continuing you confirm you have read and understood the above.</p>
+              <p className="text-xs text-gray-500 max-w-md">
+                By continuing you confirm you have read and understood the above. If you&apos;re unable to sign, or you have any
+                trouble signing, please speak to your manager before continuing.
+              </p>
               <button type="button" onClick={() => setAccepted(true)}
                 className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold">
                 I accept — sign below →
