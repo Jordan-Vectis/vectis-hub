@@ -26,16 +26,43 @@ export default async function PhotographyAuctionPage({ params }: { params: Promi
   if (!allowed.includes("PHOTOGRAPHY")) redirect("/tools/cataloguing/auctions")
 
   const { id } = await params
-  const auction = await prisma.catalogueAuction.findUnique({
-    where: { id },
-    select: {
-      id: true, code: true, name: true, auctionType: true, auctionDate: true, addedToBC: true,
-      lots: {
-        orderBy: { createdAt: "asc" },
-        select: { id: true, barcode: true, receiptUniqueId: true, imageUrls: true },
-      },
-    },
-  })
+
+  // Migration-safe: labelPhotoUrl arrives with a deploy but the column only
+  // exists once Run Migrations has been clicked, so selecting it would 500 this
+  // page in the meantime. Fall back to the same query without it.
+  const LOT_SELECT = {
+    id: true, barcode: true, receiptUniqueId: true, imageUrls: true,
+    title: true, keyPoints: true, description: true,
+    condition: true, category: true, vendor: true, tote: true,
+  } as const
+  const AUCTION_SELECT = {
+    id: true, code: true, name: true, auctionType: true, auctionDate: true, addedToBC: true,
+  } as const
+
+  type LotRow = {
+    id: string; barcode: string | null; receiptUniqueId: string | null; imageUrls: string[]
+    title: string; keyPoints: string; description: string
+    condition: string | null; category: string | null; vendor: string | null; tote: string | null
+    labelPhotoUrl?: string | null
+  }
+  type AuctionRow = {
+    id: string; code: string; name: string
+    auctionType: string; auctionDate: Date | null; addedToBC: boolean
+    lots: LotRow[]
+  }
+
+  let auction: AuctionRow | null = null
+  try {
+    auction = await prisma.catalogueAuction.findUnique({
+      where: { id },
+      select: { ...AUCTION_SELECT, lots: { orderBy: { createdAt: "asc" }, select: { ...LOT_SELECT, labelPhotoUrl: true } } },
+    }) as any
+  } catch {
+    auction = await prisma.catalogueAuction.findUnique({
+      where: { id },
+      select: { ...AUCTION_SELECT, lots: { orderBy: { createdAt: "asc" }, select: LOT_SELECT } },
+    }) as any
+  }
   if (!auction) notFound()
 
   const lotsWithPhotos = auction.lots.filter(l => l.imageUrls.length > 0).length
@@ -63,7 +90,20 @@ export default async function PhotographyAuctionPage({ params }: { params: Promi
 
       <PhotographyClient
         auctionId={auction.id}
-        lots={auction.lots.map(l => ({ id: l.id, barcode: l.barcode, receiptUniqueId: l.receiptUniqueId }))}
+        lots={auction.lots.map(l => ({
+          id: l.id,
+          barcode: l.barcode,
+          receiptUniqueId: l.receiptUniqueId,
+          title: l.title,
+          keyPoints: l.keyPoints,
+          description: l.description,
+          condition: l.condition,
+          category: l.category,
+          vendor: l.vendor,
+          tote: l.tote,
+          imageUrls: l.imageUrls,
+          labelPhotoUrl: l.labelPhotoUrl ?? null,
+        }))}
       />
     </div>
   )

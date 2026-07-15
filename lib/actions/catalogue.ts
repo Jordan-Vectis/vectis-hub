@@ -722,6 +722,46 @@ export async function uploadLotPhoto(
   }
 }
 
+// Store the barcode LABEL photo that assigned this lot's photos during a smart
+// scan. Deliberately kept in its own column, never pushed into imageUrls — it
+// is an internal check aid and must not reach the website, BC or AI runs.
+// Returns rather than throws (production redacts thrown server-action errors).
+export async function uploadLotLabelPhoto(
+  lotId: string, auctionId: string, formData: FormData
+): Promise<{ ok: true; key: string } | { ok: false; error: string }> {
+  try {
+    const session = await requireCataloguer()
+    await requireNotBCLocked(auctionId, session)
+
+    const file = formData.get("photo") as File
+    if (!file || file.size === 0) return { ok: false, error: "No file provided" }
+
+    const buf = Buffer.from(await file.arrayBuffer())
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
+    const key = await uploadBufferToR2(
+      buf,
+      `lot-labels/${auctionId}/${lotId}/${Date.now()}-${safeName}`,
+      file.type || "image/jpeg"
+    )
+
+    const lot = await prisma.catalogueLot.update({
+      where: { id: lotId },
+      data: { labelPhotoUrl: key },
+      include: { auction: { select: { code: true } } },
+    })
+
+    await logLotPhoto(
+      { id: lot.id, auctionId: lot.auctionId, barcode: lot.barcode, title: lot.title },
+      lot.auction?.code ?? "", "photo_label",
+      { changedBy: changedByOf(session), source: "photo_tab" }, safeName,
+    )
+    return { ok: true, key }
+  } catch (e: any) {
+    console.error("uploadLotLabelPhoto error:", e)
+    return { ok: false, error: e?.message ?? "Label photo upload failed" }
+  }
+}
+
 export async function deleteLotPhoto(lotId: string, auctionId: string, key: string) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)

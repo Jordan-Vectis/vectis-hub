@@ -948,6 +948,11 @@ const MIGRATIONS = [
      "ranBy" TEXT,
      "ranAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
    )`,
+
+  // 2026-07-15 — Photography: keep the barcode label photo that assigned a lot's
+  // photos during a smart scan, so it can be checked later. Held on its own,
+  // NEVER in imageUrls (which feeds the website / BC / AI descriptions).
+  `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "labelPhotoUrl" TEXT`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

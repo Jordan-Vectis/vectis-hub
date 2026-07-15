@@ -185,18 +185,24 @@ export async function logLotFieldChange(
   await writeLotEvents([row(baseOf(lot, auctionCode), "updated", fieldLabel, String(oldVal ?? ""), String(newVal ?? ""), ctx)])
 }
 
-// A photo was added / removed / reordered.
+// A photo was added / removed / reordered, or a barcode label photo was stored
+// against the lot (photo_label — kept separately from the lot's real photos, so
+// it never reaches the website/BC/AI; see the Photography section).
 export async function logLotPhoto(
   lot: LotRef, auctionCode: string,
-  action: "photo_added" | "photo_removed" | "photo_reordered",
+  action: "photo_added" | "photo_removed" | "photo_reordered" | "photo_label",
   ctx: LotLogCtx, detail?: string,
 ) {
-  const label = action === "photo_added" ? "Photo added" : action === "photo_removed" ? "Photo removed" : "Photos reordered"
+  const label =
+    action === "photo_added"     ? "Photo added"
+    : action === "photo_removed" ? "Photo removed"
+    : action === "photo_label"   ? "Barcode label photo saved"
+    : "Photos reordered"
   const base = baseOf(lot, auctionCode)
   await writeLotEvents([row(
     base, action, label,
     action === "photo_removed" ? (detail ?? null) : null,
-    action === "photo_added" ? (detail ?? null) : (action === "photo_reordered" ? (detail ?? null) : null),
+    action === "photo_removed" ? null : (detail ?? null),
     ctx,
   )])
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { uploadLotPhoto } from "@/lib/actions/catalogue"
+import { uploadLotPhoto, uploadLotLabelPhoto } from "@/lib/actions/catalogue"
 
 interface Props {
   auctionId: string
@@ -643,6 +643,18 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
         done++
         setUploadProgress({ done, total })
       }
+      // Keep the label photo that assigned these photos, so a grouping mistake
+      // can be checked later in the lot viewer. Stored on its own column, never
+      // in the lot's real photos. A failure here is not worth failing the lot
+      // over — the photos are already safely saved.
+      if (ok > 0 && group.labelPhoto) {
+        try {
+          const lfd = new FormData()
+          lfd.set("photo", group.labelPhoto)
+          await uploadLotLabelPhoto(group.lotId!, auctionId, lfd)
+        } catch { /* ignore — the lot's photos matter, the label is a bonus */ }
+      }
+
       const row: UploadResult = { label: group.label, uploaded: ok, failed: errs.length, errors: errs }
       perLot.push(row)
       setUploadLog(prev => [...prev, row])

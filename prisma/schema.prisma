@@ -440,6 +440,10 @@ model CatalogueLot {
   notes        String?
   extraDetails String?  @db.Text
   imageUrls    String[]         @default([])
+  // R2 key of the barcode label photo that assigned this lot's photos during a
+  // smart scan. Deliberately NOT in imageUrls — it is an internal audit aid for
+  // the Photography lot viewer and must never reach the website, BC or AI.
+  labelPhotoUrl String?
   status        String           @default("ENTERED")
   aiExcluded    Boolean          @default(false)  // Lot description was typed manually — exclude from all AI runs
   aiUpgraded    Boolean          @default(false)
