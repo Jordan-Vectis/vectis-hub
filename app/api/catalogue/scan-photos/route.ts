@@ -75,9 +75,13 @@ export async function POST(req: NextRequest) {
       },
     })))
 
+    // The tab's model picker sends its choice in a header (the body is
+    // multipart photo data). getToolModel ignores a blank or retired name and
+    // falls back to the admin-configured default for this slot.
+    const clientModel = req.headers.get("x-ai-model")
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
-      model: await getToolModel("catalogue_smart_scan"),
+      model: await getToolModel("catalogue_smart_scan", clientModel),
       generationConfig: { responseMimeType: "application/json" },
     })
 

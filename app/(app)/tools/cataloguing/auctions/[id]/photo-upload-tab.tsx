@@ -13,12 +13,21 @@ interface LotGroup {
   lotId:    string | null
   label:    string
   photos:   File[]
+  labelPhoto?:      File      // the photo that started this group — shown in the preview, never uploaded
   aiRead?:          boolean   // the barcode scanner missed this label; AI read the printed code
   unreadableLabel?: boolean   // AI says this is a label photo but couldn't read the code
+  aiVerdict?:       "confirmed" | "code-mismatch" | "not-a-label"  // AI's second opinion on a scanner-decoded label
+  aiCode?:          string    // what AI read when it disagrees with the scanner
 }
 
 type Phase = "idle" | "scanning" | "preview" | "uploading" | "done"
 type Mode  = "scan" | "filename"
+
+// Photos per AI request, and how many requests run at once. A big sale is
+// 1000+ photos, so these drive how long the AI review takes.
+const BATCH_SIZE     = 8
+const AI_CONCURRENCY = 3
+const MODEL_LS_KEY   = "smart_scan_model"
 
 // ── Filename barcode / unique-ID parser ───────────────────────────────────────
 // Strips the extension then removes any trailing _N suffix so that:
@@ -111,10 +120,42 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const [scanProgress, setScanProgress]     = useState({ done: 0, total: 0 })
   const [scanStage, setScanStage]           = useState<"local" | "ai">("local")  // scanning phase sub-stage
   const [aiProgress, setAiProgress]         = useState({ done: 0, total: 0 })
-  const [aiFailed, setAiFailed]             = useState(false)   // AI check errored/skipped for some photos — grouping fell back to scanner-only
+  const [aiFailed, setAiFailed]             = useState(false)   // AI check errored/skipped for some photos — those photos are scanner-only
   const [aiReadCount, setAiReadCount]       = useState(0)       // labels the scanner missed but AI read
+  const [aiCheckedCount, setAiCheckedCount] = useState(0)       // photos that actually got an AI answer
+  const [aiNote, setAiNote]                 = useState<string | null>(null)  // live status/error during the AI pass
+  const [aiEta, setAiEta]                   = useState<string | null>(null)
   const skipAiRef  = useRef(false)                              // user pressed "Skip AI check"
   const aiAbortRef = useRef<AbortController | null>(null)       // in-flight AI request, for skip + timeout
+
+  // ── AI model picker ────────────────────────────────────────────────────────
+  // Starts on the admin default for the catalogue_smart_scan slot (Admin → AI
+  // Models) unless this user has saved their own choice here.
+  const [modelList, setModelList] = useState<string[]>([])
+  const [modelId, setModelId]     = useState("")
+  const [savedDefault, setSavedDefault] = useState<string | null>(null)
+  const aiModelRef = useRef("")
+  useEffect(() => { aiModelRef.current = modelId }, [modelId])
+
+  useEffect(() => {
+    fetch("/api/auction-ai/models").then(r => r.json()).then(d => {
+      if (d.models?.length) {
+        setModelList(d.models)
+        const saved = typeof window !== "undefined" ? localStorage.getItem(MODEL_LS_KEY) : null
+        setSavedDefault(saved)
+        if (saved && d.models.includes(saved)) setModelId(saved)
+      }
+    }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && localStorage.getItem(MODEL_LS_KEY)) return
+    fetch("/api/ai-tool-model?slot=catalogue_smart_scan").then(r => r.json())
+      .then(j => { if (j?.model) setModelId(j.model) }).catch(() => {})
+  }, [])
+
+  function setAsDefault() { localStorage.setItem(MODEL_LS_KEY, modelId); setSavedDefault(modelId) }
+  function clearDefault() { localStorage.removeItem(MODEL_LS_KEY); setSavedDefault(null) }
   const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 })
   const [error, setError]          = useState<string | null>(null)
   const [skipped, setSkipped]      = useState<string[]>([])
@@ -152,6 +193,9 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     setAiProgress({ done: 0, total: 0 })
     setAiFailed(false)
     setAiReadCount(0)
+    setAiCheckedCount(0)
+    setAiNote(null)
+    setAiEta(null)
     setSkipped([])
     setOkLotCount(0)
     setError(null)
@@ -217,6 +261,9 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     setAiProgress({ done: 0, total: 0 })
     setAiFailed(false)
     setAiReadCount(0)
+    setAiCheckedCount(0)
+    setAiNote(null)
+    setAiEta(null)
     skipAiRef.current = false
 
     const nativeDetector = "BarcodeDetector" in window
@@ -310,103 +357,136 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     const decoded = await mapPool(files, 3, decodeBarcode,
       done => setScanProgress({ done, total: files.length }))
 
-    // ── AI second pass ────────────────────────────────────────────────────────
-    // Every photo the scanner could NOT decode goes to Gemini, which answers:
-    // is this a barcode LABEL photo or an ITEM photo, and if a label, what does
-    // the printed code say? Two wins: a blurry label the scanner missed can
-    // still be read, and a label AI can SEE but not read still breaks the
-    // grouping (instead of silently merging two lots). Unreadable-in-browser
-    // files (HEIC) are sent as originals — Gemini reads HEIC.
-    // If the AI check fails entirely, grouping proceeds scanner-only + warns.
-    const aiCodes       = new Map<number, string>()   // file index → code AI read
-    const aiLabelUnread = new Set<number>()           // file index → label AI couldn't read
-    let   aiErrored     = false
+    // ── AI review pass — EVERY photo ─────────────────────────────────────────
+    // After the barcode scan, Gemini reviews every single photo (Jordan's
+    // requirement: this upload must not make mistakes). Per photo it answers:
+    // label or item, and the printed code if legible. That gives:
+    //  - a second opinion on every scanner-decoded label (misread codes and
+    //    "a sticker on an item photo started a false group" both get flagged)
+    //  - blurry labels the scanner missed get read anyway
+    //  - a label AI can see but not read BREAKS the grouping instead of
+    //    silently merging two lots
+    // Unreadable-in-browser files (HEIC) are sent as originals — Gemini reads
+    // HEIC. If the AI pass fails, grouping proceeds scanner-only + warns.
+    const aiRes     = new Map<number, { label: boolean; code: string | null }>()
+    let   aiErrored = false
 
-    const candidates = decoded.map((d, i) => (d.barcode ? -1 : i)).filter(i => i >= 0)
+    const candidates = files.map((_, i) => i)
     if (candidates.length > 0) {
       setScanStage("ai")
       setAiProgress({ done: 0, total: candidates.length })
+      setAiNote(null)
 
-      // Build the actual payloads FIRST (a downscaled JPEG is ~200KB; the
-      // original could be 8MB), so batches are sized by what is really sent —
-      // sizing by original bytes collapsed batches to 1-2 photos and swamped
-      // Gemini with 8× the requests.
-      type AiItem = { i: number; payload: Blob | File }
-      const items: AiItem[] = []
-      let unchecked = 0
-      for (const i of candidates) {
-        if (skipAiRef.current) { unchecked += 1; continue }
-        if (files[i].size === 0) { unchecked++; continue }   // glitched transfer / iCloud placeholder
-        const blob = decoded[i].unreadable ? null : await toJpegBlob(files[i])
-        const payload = blob ?? files[i]                     // HEIC original — Gemini reads it
-        if (payload.size > 15_000_000) { unchecked++; continue }
-        items.push({ i, payload })
-      }
+      // Batch by INDEX up front (instant). Each batch prepares its own photos
+      // just before sending them — preparing all of them first meant a folder
+      // of 1000+ photos sat on "0 / 1093" for 25 minutes with no sign of life,
+      // because every photo needs a full-resolution decode to downscale.
+      const batches: number[][] = []
+      for (let k = 0; k < candidates.length; k += BATCH_SIZE) batches.push(candidates.slice(k, k + BATCH_SIZE))
 
-      const batches: AiItem[][] = []
-      let cur: AiItem[] = []
-      let curBytes = 0
-      for (const it of items) {
-        if (cur.length >= 8 || (cur.length > 0 && curBytes + it.payload.size > 12_000_000)) {
-          batches.push(cur); cur = []; curBytes = 0
-        }
-        cur.push(it); curBytes += it.payload.size
-      }
-      if (cur.length > 0) batches.push(cur)
+      let doneCount = 0
+      let failures  = 0
+      const started = Date.now()
 
-      let doneCount = unchecked
-      let consecutiveFails = 0
-      for (const batch of batches) {
-        // Escape hatches: the user pressed Skip, or Gemini is clearly down /
-        // rate-limited (2 whole batches failed in a row) — stop burning time,
-        // fall back to scanner-only grouping and say so.
-        if (skipAiRef.current || consecutiveFails >= 2) {
-          aiErrored = true
-          doneCount += batch.length
-          setAiProgress({ done: doneCount, total: candidates.length })
-          continue
-        }
-
-        const fd = new FormData()
-        batch.forEach((it, j) => fd.append(`photo_${j}`, it.payload, files[it.i].name))
-
-        let ok = false
-        for (let attempt = 0; attempt < 3 && !ok && !skipAiRef.current; attempt++) {
+      // Send one packed request. Returns false if it never succeeded.
+      async function postPack(pack: { i: number; payload: Blob | File }[]): Promise<boolean> {
+        for (let attempt = 0; attempt < 3 && !skipAiRef.current; attempt++) {
           const ctrl = new AbortController()
           aiAbortRef.current = ctrl
           const timer = setTimeout(() => ctrl.abort(), 150_000)  // route maxDuration is 120s
           try {
-            const res  = await fetch("/api/catalogue/scan-photos", { method: "POST", body: fd, signal: ctrl.signal })
+            const fd = new FormData()
+            pack.forEach((it, j) => fd.append(`photo_${j}`, it.payload, files[it.i].name))
+            const res  = await fetch("/api/catalogue/scan-photos", {
+              method: "POST", body: fd, signal: ctrl.signal,
+              headers: { "x-ai-model": aiModelRef.current || "" },
+            })
             const data = await res.json().catch(() => null)
-            if (res.ok && Array.isArray(data?.photos) && data.photos.length === batch.length) {
+            if (res.ok && Array.isArray(data?.photos) && data.photos.length === pack.length) {
               data.photos.forEach((p: any, j: number) => {
-                const i = batch[j].i
-                if (typeof p?.code === "string" && p.code) aiCodes.set(i, p.code)
-                else if (p?.label === true) aiLabelUnread.add(i)
+                aiRes.set(pack[j].i, {
+                  label: p?.label === true,
+                  code:  typeof p?.code === "string" && p.code ? p.code : null,
+                })
               })
-              ok = true
-            } else if (res.status === 422) {
-              break   // content block — retrying can never help
-            } else if (attempt < 2) {
-              // 429 = Gemini rate limit — wait longer. Never sleep after the
-              // final attempt; that was pure dead time.
-              await new Promise(r => setTimeout(r, res.status === 429 ? (attempt + 1) * 15000 : 4000))
+              return true
             }
-          } catch {
+            const why = data?.error ?? `HTTP ${res.status}`
+            if (res.status === 422) { setAiNote(`AI refused a photo (${why}) — those photos fall back to barcode scanning.`); return false }
+            setAiNote(res.status === 429
+              ? `AI is rate limited — waiting and retrying (${why})`
+              : `AI error: ${why} — retrying`)
+            if (attempt < 2) await new Promise(r => setTimeout(r, res.status === 429 ? (attempt + 1) * 15000 : 4000))
+          } catch (e: any) {
+            if (e?.name === "AbortError" && skipAiRef.current) return false
+            setAiNote(e?.name === "AbortError" ? "An AI request timed out — retrying" : `AI request failed: ${e?.message ?? "network error"} — retrying`)
             if (attempt < 2 && !skipAiRef.current) await new Promise(r => setTimeout(r, 4000))
           } finally {
             clearTimeout(timer)
             aiAbortRef.current = null
           }
         }
-        if (ok) consecutiveFails = 0
-        else { aiErrored = true; consecutiveFails++ }
-
-        doneCount += batch.length
-        setAiProgress({ done: doneCount, total: candidates.length })
+        return false
       }
 
-      if (unchecked > 0 || skipAiRef.current) aiErrored = true
+      async function runBatch(idxs: number[]): Promise<void> {
+        // Prepare this batch's payloads only, one at a time. Downscaling needs
+        // a full-resolution decode (~30MB of canvas for an 8MP photo), so with
+        // AI_CONCURRENCY batches in flight this already means several at once —
+        // preparing a whole batch in parallel on top of that risks running the
+        // browser out of memory on a big sale.
+        const items: { i: number; payload: Blob | File }[] = []
+        for (const i of idxs) {
+          if (skipAiRef.current) break
+          if (files[i].size === 0) continue                       // glitched transfer / iCloud placeholder
+          const blob = decoded[i].unreadable ? null : await toJpegBlob(files[i])
+          const payload = blob ?? files[i]                        // HEIC original — Gemini reads it
+          if (payload.size > 15_000_000) continue
+          items.push({ i, payload })
+        }
+        if (items.length < idxs.length) aiErrored = true          // some photos couldn't be checked
+
+        // Pack by real payload bytes — a batch of HEIC originals can be large.
+        const packs: typeof items[] = []
+        let cur: typeof items = []
+        let curBytes = 0
+        for (const it of items) {
+          if (cur.length > 0 && curBytes + it.payload.size > 12_000_000) { packs.push(cur); cur = []; curBytes = 0 }
+          cur.push(it); curBytes += it.payload.size
+        }
+        if (cur.length > 0) packs.push(cur)
+
+        for (const pack of packs) {
+          const ok = await postPack(pack)
+          if (!ok) { aiErrored = true; failures++ }
+          else setAiNote(null)
+        }
+      }
+
+      // Run several batches at once — 1000+ photos strictly one batch at a time
+      // is far too slow. Workers stop early on Skip or a clear AI outage.
+      let next = 0
+      async function worker() {
+        while (next < batches.length) {
+          const b = batches[next++]
+          if (skipAiRef.current || failures >= 3) {
+            aiErrored = true
+          } else {
+            await runBatch(b)
+          }
+          doneCount += b.length
+          setAiProgress({ done: doneCount, total: candidates.length })
+          if (doneCount >= 24 && !skipAiRef.current) {
+            const perPhoto = (Date.now() - started) / doneCount
+            const leftMs   = perPhoto * (candidates.length - doneCount)
+            setAiEta(leftMs > 45_000 ? `about ${Math.ceil(leftMs / 60_000)} min remaining` : "nearly done")
+          }
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(AI_CONCURRENCY, batches.length) }, worker))
+
+      if (failures >= 3) setAiNote("AI checking stopped after repeated failures — the rest was grouped by barcode scanning only.")
+      if (skipAiRef.current) aiErrored = true
     }
 
     const result: LotGroup[] = []
@@ -418,20 +498,34 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     for (let i = 0; i < files.length; i++) {
       const d = decoded[i]
       if (d.unreadable) unreadableCount++
-      const aiCode = aiCodes.get(i)
-      const code   = d.barcode ?? aiCode ?? null
-      if (code) {
-        const key   = code.toLowerCase().trim()
-        const lotId = lotMap.get(key) ?? null
-        const aiOnly = !d.barcode && !!aiCode
-        if (aiOnly) aiRead++
-        current = { lotId, label: code, photos: [], aiRead: aiOnly }
+      const a = aiRes.get(i)
+
+      if (d.barcode) {
+        // Scanner-decoded label — reconcile with AI's second opinion. On a
+        // code disagreement the SCANNER wins (Code 128 has a checksum; AI
+        // misreads printed text more often) but the group is flagged so the
+        // user checks the label photo by eye.
+        let aiVerdict: LotGroup["aiVerdict"]
+        let aiCode: string | undefined
+        if (a) {
+          if (a.code && a.code.toLowerCase() !== d.barcode.toLowerCase()) { aiVerdict = "code-mismatch"; aiCode = a.code }
+          else if (a.label || a.code) aiVerdict = "confirmed"
+          else aiVerdict = "not-a-label"   // likely a sticker on an item photo that zxing decoded
+        }
+        const key = d.barcode.toLowerCase().trim()
+        current = { lotId: lotMap.get(key) ?? null, label: d.barcode, photos: [], labelPhoto: files[i], aiVerdict, aiCode }
         result.push(current)
-      } else if (aiLabelUnread.has(i)) {
+      } else if (a?.code) {
+        // Scanner missed it; AI read the printed code.
+        aiRead++
+        const key = a.code.toLowerCase().trim()
+        current = { lotId: lotMap.get(key) ?? null, label: a.code, photos: [], labelPhoto: files[i], aiRead: true }
+        result.push(current)
+      } else if (a?.label) {
         // AI is sure this is a label photo but couldn't read the code: break
         // the group here so the following photos can't pollute the previous
-        // lot, and KEEP the label photo so the user can read it by eye.
-        current = { lotId: null, label: `Unreadable label — ${files[i].name}`, photos: [files[i]], unreadableLabel: true }
+        // lot, and keep the label photo so the user can read it by eye.
+        current = { lotId: null, label: `Unreadable label — ${files[i].name}`, photos: [], labelPhoto: files[i], unreadableLabel: true }
         result.push(current)
       } else if (current) {
         current.photos.push(files[i])
@@ -464,6 +558,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     setUnreadable(unreadableCount)
     setAiFailed(aiErrored)
     setAiReadCount(aiRead)
+    setAiCheckedCount(aiRes.size)
     setPhase("preview")
   }
 
@@ -506,6 +601,11 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const unmatchedGroups = groups.filter(g => !g.lotId && !g.unreadableLabel)
   const unreadableLabelGroups = groups.filter(g => g.unreadableLabel)
   const emptyGroups     = groups.filter(g => g.lotId && g.photos.length === 0)
+  const aiConfirmed     = groups.filter(g => g.aiVerdict === "confirmed").length
+  const aiWarnings      = groups.filter(g => g.aiVerdict === "code-mismatch" || g.aiVerdict === "not-a-label").length
+    + unreadableLabelGroups.length
+  // A group with an AI warning must always render a card, even with 0 photos.
+  const showCard        = (g: LotGroup) => g.photos.length > 0 || !g.lotId || (g.aiVerdict && g.aiVerdict !== "confirmed")
   const totalPhotos     = matchedGroups.reduce((sum, g) => sum + g.photos.length, 0)
   const uploadedCount   = uploadProgress.done - skipped.length
 
@@ -523,30 +623,35 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const isFlagged     = (g: LotGroup) => mode === "scan" && !!g.lotId && g.photos.length >= flagThreshold
   const flaggedCount  = groups.filter(isFlagged).length
 
-  // Manual recovery for an AI false positive: if AI wrongly called an item
-  // photo an "unreadable label", its group is holding that lot's remaining
-  // photos hostage — this dissolves the group back into the lot above.
-  function dissolveUnreadableGroup(gi: number) {
+  // Manual recovery when a "label" wasn't really a label (AI false positive on
+  // an unreadable-label group, or AI flagging a scanner-decoded sticker as an
+  // item photo): dissolve the group back into the lot above — its photos AND
+  // the not-really-a-label photo itself become that lot's photos.
+  function dissolveGroup(gi: number) {
     const g = groups[gi]
-    if (!g?.unreadableLabel) return
+    if (!g || !(g.unreadableLabel || g.aiVerdict === "not-a-label")) return
+    const moved = [...(g.labelPhoto ? [g.labelPhoto] : []), ...g.photos]
     const next = groups.filter((_, k) => k !== gi)
-    if (gi > 0) next[gi - 1] = { ...next[gi - 1], photos: [...next[gi - 1].photos, ...g.photos] }
-    else setPreGroup(p => [...p, ...g.photos])
+    if (gi > 0) next[gi - 1] = { ...next[gi - 1], photos: [...next[gi - 1].photos, ...moved] }
+    else setPreGroup(p => [...p, ...moved])
     setGroups(next)
   }
 
   function renderGroupCard(g: LotGroup, i: number) {
     const flagged = isFlagged(g)
+    const dissolvable = g.unreadableLabel || g.aiVerdict === "not-a-label"
     return (
       <div key={`${g.label}-${i}`}
         className={`rounded-xl border px-4 py-3 ${
-          g.unreadableLabel
-            ? "bg-orange-50 border-orange-400 dark:bg-orange-900/10 dark:border-orange-500/70"
-            : !g.lotId
-              ? "bg-yellow-50 border-yellow-400 dark:bg-yellow-900/10 dark:border-yellow-700/50"
-              : flagged
-                ? "bg-amber-50 border-amber-400 dark:bg-amber-900/10 dark:border-amber-500/70"
-                : "bg-white dark:bg-[#1C1C1E] border-gray-300 dark:border-gray-700"
+          g.aiVerdict === "code-mismatch"
+            ? "bg-red-50 border-red-400 dark:bg-red-900/10 dark:border-red-500/70"
+            : g.unreadableLabel || g.aiVerdict === "not-a-label"
+              ? "bg-orange-50 border-orange-400 dark:bg-orange-900/10 dark:border-orange-500/70"
+              : !g.lotId
+                ? "bg-yellow-50 border-yellow-400 dark:bg-yellow-900/10 dark:border-yellow-700/50"
+                : flagged
+                  ? "bg-amber-50 border-amber-400 dark:bg-amber-900/10 dark:border-amber-500/70"
+                  : "bg-white dark:bg-[#1C1C1E] border-gray-300 dark:border-gray-700"
         }`}>
         <div className="flex items-center gap-2 flex-wrap mb-2">
           <span className={`font-mono text-sm ${
@@ -556,17 +661,32 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
           <span className="text-xs text-gray-600 dark:text-gray-500">
             {g.photos.length} photo{g.photos.length !== 1 ? "s" : ""}
           </span>
+          {g.aiVerdict === "confirmed" && (
+            <span className="text-xs bg-green-200 text-green-800 dark:bg-green-900/40 dark:text-green-400 rounded-full px-2 py-0.5">
+              ✓ AI confirmed
+            </span>
+          )}
+          {g.aiVerdict === "code-mismatch" && (
+            <span className="text-xs bg-red-200 text-red-800 dark:bg-red-900/40 dark:text-red-400 rounded-full px-2 py-0.5">
+              ⚠ scanner read {g.label} but AI read {g.aiCode} — check the label photo
+            </span>
+          )}
+          {g.aiVerdict === "not-a-label" && (
+            <span className="text-xs bg-orange-200 text-orange-800 dark:bg-orange-900/40 dark:text-orange-400 rounded-full px-2 py-0.5">
+              ⚠ AI thinks this &quot;label&quot; is an item photo — check it
+            </span>
+          )}
           {g.unreadableLabel && (
-            <>
-              <span className="text-xs bg-orange-200 text-orange-800 dark:bg-orange-900/40 dark:text-orange-400 rounded-full px-2 py-0.5">
-                🔎 AI saw a label here it couldn&apos;t read — first photo is the label, check it by eye
-              </span>
-              <button
-                onClick={() => dissolveUnreadableGroup(i)}
-                className="text-xs px-2 py-0.5 rounded-full border border-orange-400 dark:border-orange-500/70 text-orange-800 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-900/40 transition-colors">
-                ✕ Not a label — {i > 0 ? "move these photos to the lot above" : "discard grouping"}
-              </button>
-            </>
+            <span className="text-xs bg-orange-200 text-orange-800 dark:bg-orange-900/40 dark:text-orange-400 rounded-full px-2 py-0.5">
+              🔎 AI saw a label here it couldn&apos;t read — check the label photo by eye
+            </span>
+          )}
+          {dissolvable && (
+            <button
+              onClick={() => dissolveGroup(i)}
+              className="text-xs px-2 py-0.5 rounded-full border border-orange-400 dark:border-orange-500/70 text-orange-800 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-900/40 transition-colors">
+              ✕ Not a label — {i > 0 ? "move these photos to the lot above" : "discard grouping"}
+            </button>
           )}
           {!g.lotId && !g.unreadableLabel && (
             <span className="text-xs bg-yellow-200 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-400 rounded-full px-2 py-0.5">
@@ -585,6 +705,12 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
           )}
         </div>
         <div className="flex flex-wrap gap-1.5">
+          {g.labelPhoto && (
+            <div className="relative flex-shrink-0" title={`Label photo — ${g.labelPhoto.name} (not uploaded)`}>
+              <Thumb url={thumbUrls.current.get(g.labelPhoto) ?? ""} name={g.labelPhoto.name} />
+              <span className="absolute -top-1 -left-1 text-[9px] leading-none bg-gray-700 text-white dark:bg-gray-200 dark:text-gray-900 rounded px-1 py-0.5">label</span>
+            </div>
+          )}
           {g.photos.map((p, j) => (
             <Thumb key={j} url={thumbUrls.current.get(p) ?? ""} name={p.name} />
           ))}
@@ -647,7 +773,25 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             </button>
           </div>
 
-          {error && <p className="text-xs text-red-400 bg-red-900/20 rounded-lg px-3 py-2 mt-3">{error}</p>}
+          {/* AI model for the smart scan review */}
+          <div className="mt-4 flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-gray-600 dark:text-gray-500">✨ Smart scan AI model:</span>
+            <select value={modelId} onChange={e => setModelId(e.target.value)}
+              className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-purple-500">
+              {modelList.length === 0 && <option value="">Loading…</option>}
+              {modelList.map(m => <option key={m} value={m}>{m}{savedDefault === m ? " ★" : ""}</option>)}
+            </select>
+            {savedDefault === modelId && modelId ? (
+              <button onClick={clearDefault} className="text-xs text-amber-600 dark:text-amber-400 hover:text-amber-500 px-2 py-1 rounded">★ Default · clear</button>
+            ) : (
+              <button onClick={setAsDefault} disabled={!modelId} className="text-xs text-gray-600 dark:text-gray-400 hover:text-purple-500 disabled:opacity-40 px-2 py-1 rounded">Set as default</button>
+            )}
+            <span className="text-xs text-gray-500 dark:text-gray-600">
+              Used by Smart scan to double-check every photo. Set for everyone in Admin → AI Models.
+            </span>
+          </div>
+
+          {error && <p className="text-xs text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700/50 rounded-lg px-3 py-2 mt-3">{error}</p>}
         </>
       )}
 
@@ -656,7 +800,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
         <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl px-6 py-10 flex flex-col items-center gap-4">
           <div className={`w-8 h-8 border-2 border-t-transparent rounded-full animate-spin ${scanStage === "ai" ? "border-purple-500" : "border-[#2AB4A6]"}`} />
           <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">
-            {scanStage === "ai" ? "✨ Asking AI about the photos the scanner couldn't read…" : "Scanning for barcodes…"}
+            {scanStage === "ai" ? "✨ AI double-checking every photo…" : "Scanning for barcodes…"}
           </p>
           <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-2">
             <div className={`h-2 rounded-full transition-all duration-200 ${scanStage === "ai" ? "bg-purple-500" : "bg-[#2AB4A6]"}`}
@@ -671,7 +815,14 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
           </p>
           {scanStage === "ai" && (
             <>
-              <p className="text-xs text-gray-500 dark:text-gray-600">This can take a minute or two on big folders.</p>
+              <p className="text-xs text-gray-500 dark:text-gray-600">
+                {aiEta ?? `Checking ${AI_CONCURRENCY * BATCH_SIZE} photos at a time — a big folder takes a few minutes.`}
+              </p>
+              {aiNote && (
+                <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700/50 rounded-lg px-3 py-1.5 text-center max-w-md">
+                  {aiNote}
+                </p>
+              )}
               <button
                 onClick={() => { skipAiRef.current = true; aiAbortRef.current?.abort() }}
                 className="px-4 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 text-xs hover:border-gray-500 transition-colors">
@@ -717,16 +868,18 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
           {aiFailed && (
             <div className="bg-red-100 border border-red-300 dark:bg-red-900/20 dark:border-red-700/50 rounded-lg px-3 py-2">
               <p className="text-xs text-red-700 dark:text-red-400">
-                ⚠ The AI double-check couldn&apos;t run for some photos (AI or network problem) — grouping below relied
-                on barcode scanning alone, so a missed label could have merged two lots. Check the groups carefully or
-                try the scan again.
+                ⚠ The AI review couldn&apos;t run for some photos (AI or network problem, or it was skipped) — those
+                photos were grouped by barcode scanning alone, so a missed label could have merged two lots. Check the
+                groups carefully or try the scan again.
               </p>
             </div>
           )}
-          {aiReadCount > 0 && (
+          {aiCheckedCount > 0 && (
             <div className="bg-purple-100 border border-purple-300 dark:bg-purple-900/20 dark:border-purple-700/50 rounded-lg px-3 py-2">
               <p className="text-xs text-purple-800 dark:text-purple-400">
-                ✨ AI read {aiReadCount} label{aiReadCount !== 1 ? "s" : ""} the barcode scanner missed — marked below.
+                ✨ AI reviewed {aiCheckedCount} photo{aiCheckedCount !== 1 ? "s" : ""}: {aiConfirmed} label{aiConfirmed !== 1 ? "s" : ""} confirmed
+                {aiReadCount > 0 ? <>, {aiReadCount} read by AI that the scanner missed</> : null}
+                {aiWarnings > 0 ? <>, <strong>{aiWarnings} warning{aiWarnings !== 1 ? "s" : ""} below</strong></> : null}.
               </p>
             </div>
           )}
@@ -735,9 +888,9 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
               <p className="text-xs text-orange-800 dark:text-orange-400">
                 🔎 AI spotted {unreadableLabelGroups.length} barcode label{unreadableLabelGroups.length !== 1 ? "s" : ""} it
                 couldn&apos;t read. Their photos are kept separate below (so they can&apos;t pollute another lot) but
-                won&apos;t upload — the first photo in each is the label itself, so you can read the code by eye and
-                re-shoot or rename those photos. (A label photo that shows as a placeholder tile can&apos;t be
-                previewed on this device — re-shoot or convert it.) If AI got it wrong, use the card&apos;s
+                won&apos;t upload — each card shows the label photo (tagged &quot;label&quot;), so you can read the code
+                by eye and re-shoot or rename those photos. (A label photo that shows as a placeholder tile can&apos;t
+                be previewed on this device — re-shoot or convert it.) If AI got it wrong, use the card&apos;s
                 &quot;Not a label&quot; button.
               </p>
             </div>
@@ -800,9 +953,9 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             </div>
           )}
 
-          {groups.filter(g => g.photos.length > 0 || !g.lotId).length > 0 && (
+          {groups.filter(showCard).length > 0 && (
             <div className="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
-              {groups.map((g, i) => (g.photos.length > 0 || !g.lotId) ? renderGroupCard(g, i) : null)}
+              {groups.map((g, i) => showCard(g) ? renderGroupCard(g, i) : null)}
             </div>
           )}
 
