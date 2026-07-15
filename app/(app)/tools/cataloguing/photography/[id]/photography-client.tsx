@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import PhotoUploadTab from "../../auctions/[id]/photo-upload-tab"
 import LotViewer, { type ViewerLot } from "./lot-viewer"
 
@@ -16,7 +16,10 @@ type Tab = "upload" | "view"
 // component, so the tab state and the refresh-after-upload live here.
 export default function PhotographyClient({ auctionId, lots }: Props) {
   const router = useRouter()
-  const [tab, setTab] = useState<Tab>("upload")
+  // ?tab=view lets the auction list's "View lots" button land straight on the
+  // viewer instead of the upload screen.
+  const params = useSearchParams()
+  const [tab, setTab] = useState<Tab>(params.get("tab") === "view" ? "view" : "upload")
 
   const withPhotos = lots.filter(l => l.imageUrls.length > 0).length
 
