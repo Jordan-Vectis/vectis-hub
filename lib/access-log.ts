@@ -14,11 +14,19 @@ import { headers } from "next/headers"
 // Call this immediately BEFORE the redirect, never inside a try/catch that
 // wraps the redirect — Next's redirect() works by throwing.
 
+// ⚠ This is the EFFECTIVE user. getEffectiveSession() returns the impersonation
+// TARGET when an admin is impersonating, so `id` is the target's id and
+// idMismatch would read false — pass isImpersonating/adminId/adminName straight
+// off that same result, or an impersonation problem gets misfiled as "the row
+// genuinely lacked the app".
 export interface DeniedSessionSnapshot {
   id: string
   email?: string | null
   name?: string | null
   role?: string | null
+  isImpersonating?: boolean
+  adminId?: string | null
+  adminName?: string | null
 }
 
 export interface DeniedDbSnapshot {
@@ -48,10 +56,13 @@ export async function logAccessDenied(opts: {
         appKey:        opts.appKey,
         source:        opts.source,
         referer,
-        sessionUserId: opts.session.id,
-        sessionEmail:  opts.session.email ?? null,
-        sessionName:   opts.session.name ?? null,
-        sessionRole:   opts.session.role ?? null,
+        sessionUserId:   opts.session.id,
+        sessionEmail:    opts.session.email ?? null,
+        sessionName:     opts.session.name ?? null,
+        sessionRole:     opts.session.role ?? null,
+        isImpersonating: !!opts.session.isImpersonating,
+        adminId:         opts.session.adminId ?? null,
+        adminName:       opts.session.adminName ?? null,
         dbUserFound:   !!opts.dbUser,
         dbUserId:      opts.dbUser?.id ?? null,
         dbEmail:       opts.dbUser?.email ?? null,

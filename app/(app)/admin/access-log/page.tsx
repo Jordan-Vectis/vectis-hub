@@ -21,6 +21,9 @@ type Row = {
   sessionEmail: string | null
   sessionName: string | null
   sessionRole: string | null
+  isImpersonating: boolean
+  adminId: string | null
+  adminName: string | null
   dbUserFound: boolean
   dbUserId: string | null
   dbEmail: string | null
@@ -34,8 +37,18 @@ const SOURCE_LABELS: Record<string, string> = {
   cataloguing_layout: "Cataloguing (all pages)",
 }
 
-// The whole reason this page exists: name which of the three shapes happened.
+// The whole reason this page exists: name which shape happened.
 function verdict(r: Row): { label: string; detail: string; cls: string } {
+  // Checked first: while impersonating, the "session" IS the target, so the
+  // checks below would describe the wrong person entirely.
+  if (r.isImpersonating) {
+    return {
+      label: "Was being impersonated",
+      detail:
+        `This session was ${r.adminName ?? "an admin"} impersonating them, so the gate judged the impersonated account, not the person sitting at the screen. Check whether an impersonation cookie was left behind on a shared machine.`,
+      cls: "bg-purple-900/50 text-purple-300 border-purple-600",
+    }
+  }
   if (!r.dbUserFound) {
     return {
       label: "Read returned nothing",
@@ -157,6 +170,11 @@ export default async function AccessLogPage() {
                         <div className="font-medium">{r.sessionName ?? "—"}</div>
                         <div className="text-gray-500 text-xs">{r.sessionEmail ?? "—"}</div>
                         <div className="text-gray-500 text-xs">Role: {r.sessionRole ?? "—"}</div>
+                        {r.isImpersonating && (
+                          <div className="mt-1 text-purple-300 text-xs">
+                            Impersonated by {r.adminName ?? "an admin"}
+                          </div>
+                        )}
                         <div className="text-gray-600 text-[11px] font-mono mt-1">{r.sessionUserId}</div>
                       </td>
                       <td className="p-3 text-gray-300">

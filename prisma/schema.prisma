@@ -1093,11 +1093,18 @@ model AccessDenialLog {
   source        String   // which gate ran — e.g. cataloguing_layout
   referer       String?  // the page they were on when they got bounced
 
-  // What the session (JWT) claimed
-  sessionUserId String
-  sessionEmail  String?
-  sessionName   String?
-  sessionRole   String?
+  // What the session claimed. NOTE: these are the EFFECTIVE user — when an admin
+  // is impersonating, getEffectiveSession() returns the TARGET, so sessionUserId
+  // is the target's id and idMismatch would read false. isImpersonating/adminId
+  // are what reveal that case; without them an impersonation bug would be
+  // misfiled as "the row genuinely lacked the app".
+  sessionUserId   String
+  sessionEmail    String?
+  sessionName     String?
+  sessionRole     String?
+  isImpersonating Boolean @default(false)
+  adminId         String? // the real logged-in account when impersonating
+  adminName       String?
 
   // What the permission read actually returned
   dbUserFound   Boolean

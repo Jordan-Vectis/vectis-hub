@@ -20,10 +20,13 @@ export default async function CataloguingLayout({ children }: { children: React.
       appKey: "CATALOGUING",
       source: "cataloguing_layout",
       session: {
-        id:    session.user.id,
-        email: session.user.email,
-        name:  session.user.name,
-        role:  session.user.role,
+        id:              session.user.id,
+        email:           session.user.email,
+        name:            session.user.name,
+        role:            session.user.role,
+        isImpersonating: session.isImpersonating,
+        adminId:         session.adminId,
+        adminName:       session.adminName,
       },
       dbUser,
     })

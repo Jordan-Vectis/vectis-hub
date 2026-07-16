@@ -965,6 +965,9 @@ const MIGRATIONS = [
      "sessionEmail"  TEXT,
      "sessionName"   TEXT,
      "sessionRole"   TEXT,
+     "isImpersonating" BOOLEAN NOT NULL DEFAULT FALSE,
+     "adminId"       TEXT,
+     "adminName"     TEXT,
      "dbUserFound"   BOOLEAN NOT NULL,
      "dbUserId"      TEXT,
      "dbEmail"       TEXT,
@@ -975,6 +978,11 @@ const MIGRATIONS = [
    )`,
   `CREATE INDEX IF NOT EXISTS "AccessDenialLog_createdAt_idx"     ON "AccessDenialLog"("createdAt")`,
   `CREATE INDEX IF NOT EXISTS "AccessDenialLog_sessionUserId_idx" ON "AccessDenialLog"("sessionUserId")`,
+  // Impersonation columns — separate ALTERs so an AccessDenialLog table created
+  // by an earlier run of this list also gets them.
+  `ALTER TABLE "AccessDenialLog" ADD COLUMN IF NOT EXISTS "isImpersonating" BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE "AccessDenialLog" ADD COLUMN IF NOT EXISTS "adminId"   TEXT`,
+  `ALTER TABLE "AccessDenialLog" ADD COLUMN IF NOT EXISTS "adminName" TEXT`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

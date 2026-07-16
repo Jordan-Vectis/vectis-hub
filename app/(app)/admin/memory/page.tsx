@@ -1093,6 +1093,7 @@ MANAGER_PORTAL and CATALOGUING are **both** appKey cards on the hub. If the read
 
 - **AccessDenialLog** model (**NEEDS Run Migrations** — CREATE TABLE + 2 indexes are in app/api/admin/run-migrations/route.ts).
 - **lib/access-log.ts** → logAccessDenied({ appKey, source, session, dbUser, note }). Captures BOTH sides: session id/email/name/role vs the row's id/email/role/allowedApps, plus referer and **idMismatch** (dbUserId !== sessionUserId). Wrapped in try/catch — **a diagnostic must never break the page it diagnoses**, and this also covers the pre-Run-Migrations window.
+- ⚠ **isImpersonating / adminId / adminName are logged too, and this is essential.** getEffectiveSession() returns the impersonation **TARGET**, so session.user.id IS the target's id → **idMismatch reads false while impersonating**. Without these fields an impersonation problem is silently **misfiled as "the row genuinely lacked the app"**. The page checks isImpersonating **first** for the same reason. Relevant because **Test User has email IT@vectis.co.uk** and is filed under CATALOGUER, but the SUPERADMIN_EMAILS hardcode in auth.ts silently makes it **ADMIN** — an account that can sit on a cataloguing machine, **can** impersonate, and whose stale vectis-impersonate cookie would be honoured.
 - **app/(app)/tools/cataloguing/layout.tsx** — the gate that does the bouncing. It now selects id + email **purely so a denial can be logged**, and calls logAccessDenied immediately **before** redirect("/hub"). ⚠ redirect() works by **throwing** — never wrap it in the try/catch.
 - **/admin/access-log** (card under People & Access) — full-width table, migration-safe, "Clear log" button (DELETE /api/admin/access-log), no console needed.
 
@@ -1103,7 +1104,7 @@ MANAGER_PORTAL and CATALOGUING are **both** appKey cards on the hub. If the read
 
 ## Separate real bug found on the way (NOT fixed, NOT confirmed as the cause)
 
-auth.ts login uses prisma.user.findFirst({ where: { email: { equals: input, mode: "insensitive" } } }) with **no orderBy**. If one person ever has **two accounts** (e.g. differing email capitalisation), Postgres may return either row — so which account they log into is arbitrary. It would produce this exact symptom but does **not** explain "a refresh fixes it" (login picks the row, not the refresh). Worth an orderBy + a duplicate-account check regardless.`,
+auth.ts login uses prisma.user.findFirst({ where: { email: { equals: input, mode: "insensitive" } } }) with **no orderBy**. If one person ever has **two accounts** (e.g. differing email capitalisation), Postgres may return either row — so which account they log into is arbitrary. It would produce this exact symptom but does **not** explain "a refresh fixes it" (login picks the row, not the refresh). Worth an orderBy regardless. **Checked 2026-07-16 against the Users page — she is NOT duplicated**, so this is **not** the cause.`,
   },
   {
     filename: "reference_app_access_control.md",
