@@ -190,6 +190,43 @@ async function toJpegBlob(file: File, maxW = 1000): Promise<Blob | null> {
   }
 }
 
+// ── Barcode reader: zxing-cpp (WASM) ──────────────────────────────────────────
+// Far stronger than the pure-JS @zxing/library at photographed / skewed / soft
+// labels (it does its own robust localisation, rotation and downscaling on the
+// whole file). Its 1.1MB module is self-hosted from /public (not a CDN),
+// configured once and loaded lazily on first use.
+let zxWasmConfigured = false
+// Reads are SERIALISED (one at a time) via a promise chain — the WASM module has
+// one shared linear memory, so letting the concurrent scan workers call it at
+// once could race and hand back a WRONG code (the worst possible bug here).
+let zxChain: Promise<unknown> = Promise.resolve()
+function serialiseZx<T>(fn: () => Promise<T>): Promise<T> {
+  const next = zxChain.then(fn, fn)
+  zxChain = next.then(() => {}, () => {})
+  return next
+}
+function isVectisCodeStr(s: string): boolean {
+  const t = s.replace(/[^\x20-\x7E]/g, "").trim()
+  return /^[A-Za-z]\d{6,7}$/.test(t) || /^[A-Za-z]\d{4,7}-\d{1,6}$/.test(t)
+}
+async function readVectisWithZxingCpp(file: File): Promise<string | null> {
+  const mod = await import("zxing-wasm/reader")
+  if (!zxWasmConfigured) {
+    mod.prepareZXingModule({
+      overrides: { locateFile: (p: string, prefix: string) => (p.endsWith(".wasm") ? "/zxing_reader.wasm" : prefix + p) },
+      fireImmediately: false,
+    })
+    zxWasmConfigured = true
+  }
+  const results = await serialiseZx(() =>
+    mod.readBarcodes(file, { tryHarder: true, tryRotate: true, tryInvert: true, tryDownscale: true }))
+  for (const r of results as any[]) {
+    const t = (r?.text ?? "").replace(/[^\x20-\x7E]/g, "").trim().toUpperCase()
+    if (isVectisCodeStr(t)) return t
+  }
+  return null
+}
+
 // Thumbnail with a fallback tile for images the browser can't display
 // (typically HEIC on Windows) — the file still uploads fine.
 function Thumb({ url, name }: { url: string; name: string }) {
@@ -420,100 +457,22 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     troubleRef.current = null
     skipAiRef.current = false
 
-    const nativeDetector = "BarcodeDetector" in window
-      ? new (window as any).BarcodeDetector({ formats: ["code_128", "code_39", "qr_code", "ean_13"] })
-      : null
-
-    const [{ HTMLCanvasElementLuminanceSource }, { MultiFormatReader, BinaryBitmap, HybridBinarizer, DecodeHintType }] =
-      await Promise.all([import("@zxing/browser"), import("@zxing/library")])
-    const hints = new Map()
-    hints.set(DecodeHintType.TRY_HARDER, true)
-    const zxing = new MultiFormatReader()
-    zxing.setHints(hints)
-
-    // Accept both Vectis barcode formats:
-    //   F066001 / F0660012  — tote/item barcodes (letter + 6-7 digits)
-    //   R000016-413         — receipt unique IDs (letter + digits + dash + digits)
-    // Rejects product EANs, ISBNs, etc.
-    function isVectisBarcode(s: string): boolean {
-      return /^[A-Za-z]\d{6,7}$/.test(s.trim()) || /^[A-Za-z]\d{4,7}-\d{1,6}$/.test(s.trim())
-    }
-
-    // unreadable = the browser couldn't decode the image at all (HEIC on
-    // Windows/Android) — a label in such a photo can never be detected.
+    // Read each photo's barcode with zxing-cpp (see readVectisWithZxingCpp) —
+    // it handles photographed / skewed / soft labels the old JS reader couldn't.
+    // Also note whether the BROWSER can render the image: HEIC on Windows can't
+    // be shown or downscaled, so those go to AI as the original and show a
+    // placeholder tile + a "convert to JPEG" hint. zxing-cpp can't read HEIC
+    // either, so the barcode stays null there and AI reads it.
     async function decodeBarcode(file: File): Promise<{ barcode: string | null; unreadable: boolean }> {
-      let imgEl: HTMLImageElement
-      try {
-        imgEl = await loadImgElement(file)
-      } catch {
-        return { barcode: null, unreadable: true }
-      }
-      try {
-        const naturalW = imgEl.naturalWidth
-        const naturalH = imgEl.naturalHeight
-
-        function toCanvas(targetW: number, scanMode: "normal" | "contrast" | "bw" = "normal"): HTMLCanvasElement {
-          const scale = Math.min(1, targetW / naturalW)
-          const w = Math.round(naturalW * scale)
-          const h = Math.round(naturalH * scale)
-          const c = document.createElement("canvas")
-          c.width = w; c.height = h
-          const ctx = c.getContext("2d")!
-          ctx.fillStyle = "#ffffff"
-          ctx.fillRect(0, 0, w, h)
-          if (scanMode === "contrast") ctx.filter = "contrast(400%) grayscale(100%)"
-          ctx.drawImage(imgEl, 0, 0, w, h)
-          if (scanMode === "bw") {
-            const id = ctx.getImageData(0, 0, w, h)
-            for (let i = 0; i < id.data.length; i += 4) {
-              const v = 0.299 * id.data[i] + 0.587 * id.data[i+1] + 0.114 * id.data[i+2] > 128 ? 255 : 0
-              id.data[i] = id.data[i+1] = id.data[i+2] = v
-            }
-            ctx.putImageData(id, 0, 0)
-          }
-          return c
-        }
-
-        if (nativeDetector) {
-          for (const targetW of [naturalW, 900]) {
-            for (const scanMode of ["normal", "contrast", "bw"] as const) {
-              const c = toCanvas(targetW, scanMode)
-              try {
-                const bmp     = await createImageBitmap(c)
-                const results = await nativeDetector.detect(bmp)
-                if (results.length > 0) {
-                  const raw = (results[0].rawValue as string).replace(/[^\x20-\x7E]/g, "").trim()
-                  if (raw && isVectisBarcode(raw)) return { barcode: raw, unreadable: false }
-                }
-              } catch {}
-            }
-          }
-        }
-
-        // zxing fallback — the ONLY reader on Windows/iPad (BarcodeDetector
-        // isn't available there). Three contrast treatments (normal / contrast-
-        // boost / hard black-and-white) with the proven Hybrid binarizer. The
-        // contrast-boost pass (never wired into zxing before) is what rescues
-        // faint silver labels the plain pass misses.
-        // NB: keep ONE binarizer on this shared, STATEFUL reader — mixing in a
-        // second binarizer type here corrupted its state and made it read
-        // nothing at all (2026-07-15). Don't add another without a fresh reader.
-        for (const targetW of [2000, 1200]) {
-          for (const scanMode of ["normal", "contrast", "bw"] as const) {
-            try {
-              const luminance = new HTMLCanvasElementLuminanceSource(toCanvas(targetW, scanMode))
-              const decoded   = zxing.decodeWithState(new BinaryBitmap(new HybridBinarizer(luminance))).getText().replace(/[^\x20-\x7E]/g, "").trim()
-              if (isVectisBarcode(decoded)) return { barcode: decoded, unreadable: false }
-            } catch {}
-          }
-        }
-        return { barcode: null, unreadable: false }
-      } catch {
-        return { barcode: null, unreadable: false }
-      }
+      let barcode: string | null = null
+      try { barcode = await readVectisWithZxingCpp(file) } catch {}
+      let unreadable = false
+      try { await loadImgElement(file) } catch { unreadable = true }
+      return { barcode, unreadable }
     }
 
-    // Decode up to 3 images at once (order-preserving), then group sequentially.
+    // The zxing-cpp reads are serialised internally; the image-render checks run
+    // up to 3 at once. Order-preserving, then grouped sequentially.
     const decoded = await mapPool(files, 3, decodeBarcode,
       done => setScanProgress({ done, total: files.length }))
 
