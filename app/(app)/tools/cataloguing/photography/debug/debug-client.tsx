@@ -8,6 +8,22 @@ function isVectisBarcode(s: string): boolean {
   return /^[A-Za-z]\d{6,7}$/.test(t) || /^[A-Za-z]\d{4,7}-\d{1,6}$/.test(t)
 }
 
+// zxing-cpp (WASM) reads its own 1.1MB module from /public (self-hosted, not a
+// CDN). Configure the path once, lazily.
+let wasmConfigured = false
+async function readWithZxingCpp(file: File): Promise<{ text: string; format: string }[]> {
+  const mod = await import("zxing-wasm/reader")
+  if (!wasmConfigured) {
+    mod.prepareZXingModule({
+      overrides: { locateFile: (p: string, prefix: string) => (p.endsWith(".wasm") ? "/zxing_reader.wasm" : prefix + p) },
+      fireImmediately: false,
+    })
+    wasmConfigured = true
+  }
+  const results = await mod.readBarcodes(file, { tryHarder: true, tryRotate: true, tryInvert: true, tryDownscale: true })
+  return results.map((r: any) => ({ text: r.text ?? "", format: r.format ?? "" })).filter(r => r.text)
+}
+
 type Mode = "normal" | "contrast" | "bw"
 
 interface PassResult {
@@ -28,6 +44,7 @@ export default function BarcodeDebugClient() {
   const [prog, setProg]         = useState({ done: 0, total: 0 })
   const [passes, setPasses]     = useState<PassResult[]>([])
   const [consistency, setConsistency] = useState<{ runs: number; results: Record<string, number> } | null>(null)
+  const [wasm, setWasm]         = useState<{ hits: { text: string; format: string; vectis: boolean }[]; ran: boolean } | null>(null)
   const [canvases, setCanvases] = useState<{ mode: Mode; url: string }[]>([])
   const [aiResult, setAiResult] = useState<string | null>(null)
   const [aiRunning, setAiRunning] = useState(false)
@@ -36,7 +53,7 @@ export default function BarcodeDebugClient() {
   function pick(f: File | null) {
     if (!f) return
     setFile(f)
-    setPasses([]); setConsistency(null); setCanvases([]); setAiResult(null); setError(null)
+    setPasses([]); setConsistency(null); setCanvases([]); setAiResult(null); setWasm(null); setError(null)
     setPreview(URL.createObjectURL(f))
   }
 
@@ -85,10 +102,22 @@ export default function BarcodeDebugClient() {
 
   async function run() {
     if (!file) return
-    setRunning(true); setError(null); setPasses([]); setConsistency(null); setCanvases([]); setProg({ done: 0, total: 0 })
+    setRunning(true); setError(null); setPasses([]); setConsistency(null); setCanvases([]); setWasm(null); setProg({ done: 0, total: 0 })
     try {
       const img = await loadImg(file)
       setInfo({ w: img.naturalWidth, h: img.naturalHeight, type: file.type || "unknown", kb: Math.round(file.size / 1024) })
+
+      // Try the stronger zxing-cpp (WASM) engine FIRST — it does its own robust
+      // localisation/rotation/downscale on the whole file, so it's the real
+      // candidate fix and the most useful result to see up top.
+      try {
+        const hits = await readWithZxingCpp(file)
+        setWasm({ ran: true, hits: hits.map(h => ({ ...h, vectis: isVectisBarcode(h.text) })) })
+      } catch (we: any) {
+        setWasm({ ran: false, hits: [] })
+        console.error("zxing-cpp failed:", we)
+      }
+      await new Promise(r => setTimeout(r, 0))
 
       const [{ HTMLCanvasElementLuminanceSource }, zx] =
         await Promise.all([import("@zxing/browser"), import("@zxing/library")])
@@ -256,6 +285,34 @@ export default function BarcodeDebugClient() {
       {aiResult && (
         <div className="rounded-lg border border-purple-300 dark:border-purple-700/50 bg-purple-100 dark:bg-purple-900/20 px-3 py-2 text-sm text-purple-800 dark:text-purple-300">
           ✨ {aiResult}
+        </div>
+      )}
+
+      {/* zxing-cpp (WASM) — the candidate stronger engine */}
+      {wasm && (
+        <div className={`rounded-xl border px-4 py-3 ${
+          wasm.hits.some(h => h.vectis)
+            ? "border-green-400 dark:border-green-600 bg-green-100 dark:bg-green-900/25"
+            : "border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#141416]"
+        }`}>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">🚀 Stronger engine (zxing-cpp / WASM)</p>
+          {!wasm.ran ? (
+            <p className="text-xs text-red-700 dark:text-red-400 mt-1">Couldn&apos;t load the engine (see console). </p>
+          ) : wasm.hits.length === 0 ? (
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">Also couldn&apos;t read it — this photo may be genuinely too soft, or the barcode too small in frame.</p>
+          ) : (
+            <ul className="mt-1 space-y-0.5">
+              {wasm.hits.map((h, i) => (
+                <li key={i} className="text-sm font-mono">
+                  <span className={h.vectis ? "text-green-700 dark:text-green-400 font-semibold" : "text-gray-600 dark:text-gray-400"}>{h.text}</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-500"> · {h.format}{!h.vectis && " · not a Vectis code"}</span>
+                </li>
+              ))}
+              {wasm.hits.some(h => h.vectis) && (
+                <li className="text-xs text-green-700 dark:text-green-400">✅ This engine reads it — I&apos;ll switch the scan over to it.</li>
+              )}
+            </ul>
+          )}
         </div>
       )}
 
