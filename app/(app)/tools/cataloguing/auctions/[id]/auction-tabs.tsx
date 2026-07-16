@@ -692,7 +692,7 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
               <span>This auction is locked. Adding new lots is disabled. Contact an admin to make changes.</span>
             </div>
           ) : (
-            <LotWizardTab auctionId={auction.id} auction={auction} existingLots={lots}
+            <LotWizardTab auctionId={auction.id} auction={auction}
               userId={userId} userName={userName}
               onCreated={() => router.refresh()} showScanTimer={showScanTimer} timerRedMins={timerRedMins} />
           )}

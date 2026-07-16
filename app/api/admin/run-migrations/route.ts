@@ -983,6 +983,14 @@ const MIGRATIONS = [
   `ALTER TABLE "AccessDenialLog" ADD COLUMN IF NOT EXISTS "isImpersonating" BOOLEAN NOT NULL DEFAULT FALSE`,
   `ALTER TABLE "AccessDenialLog" ADD COLUMN IF NOT EXISTS "adminId"   TEXT`,
   `ALTER TABLE "AccessDenialLog" ADD COLUMN IF NOT EXISTS "adminName" TEXT`,
+
+  // Functional indexes behind checkBarcodeAssigned (the lot wizard's "barcode
+  // already assigned" check, which runs on every press of Next). They match its
+  // LOWER(col) = LOWER($1) lookup; without them that query sequentially scans
+  // every lot ever catalogued. Expression indexes have no schema.prisma syntax,
+  // so this list is their only home — do not "tidy" them away.
+  `CREATE INDEX IF NOT EXISTS "CatalogueLot_barcode_lower_idx"         ON "CatalogueLot" (LOWER("barcode"))`,
+  `CREATE INDEX IF NOT EXISTS "CatalogueLot_receiptUniqueId_lower_idx" ON "CatalogueLot" (LOWER("receiptUniqueId"))`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

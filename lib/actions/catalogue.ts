@@ -214,6 +214,82 @@ export async function saveLastLotFields(fields: { tote?: string; vendor?: string
   })
 }
 
+// Is this barcode already assigned to a lot ANYWHERE in the app? Deliberately
+// a live server lookup rather than a check against the lots the page happens to
+// have loaded — a stale client can't see a lot another cataloguer just created
+// on a different device, which is exactly when a duplicate gets minted.
+//
+// Both identifier fields are checked: the wizard's barcode box legitimately
+// accepts an internal barcode OR a unique ID (RULES.md → Lot Identifiers), and
+// either one landing twice means the same physical item catalogued twice.
+//
+// Returns rather than throws — a thrown server action is redacted in production
+// (RULES.md), and the caller needs to tell "not a duplicate" apart from
+// "couldn't check" so it never silently waves a duplicate through.
+// ⚠ Raw SQL on purpose, and it must stay that way. Prisma's `mode: "insensitive"`
+// compiles to ILIKE, which Postgres cannot serve from a btree index — so the
+// obvious findFirst version sequentially scans every lot ever catalogued, on
+// every press of Next. `LOWER(col) = LOWER($1)` matches the functional indexes
+// created in run-migrations (CatalogueLot_barcode_lower_idx /
+// CatalogueLot_receiptUniqueId_lower_idx), turning it into an index lookup.
+// Those indexes cannot be declared in schema.prisma — Prisma has no syntax for
+// expression indexes — so they live in the migrations list alone.
+export async function checkBarcodeAssigned(barcode: string): Promise<{
+  ok: boolean
+  error?: string
+  taken?: {
+    title: string
+    barcode: string | null
+    receiptUniqueId: string | null
+    auctionCode: string
+    auctionName: string
+    sameAuctionId: string | null
+    createdByName: string | null
+  } | null
+}> {
+  try {
+    await requireCataloguer()
+    const code = (barcode ?? "").trim()
+    if (!code) return { ok: true, taken: null }
+
+    const rows = await prisma.$queryRaw<Array<{
+      title: string
+      barcode: string | null
+      receiptUniqueId: string | null
+      createdByName: string | null
+      auctionId: string
+      auctionCode: string | null
+      auctionName: string | null
+    }>>`
+      SELECT l."title", l."barcode", l."receiptUniqueId", l."createdByName", l."auctionId",
+             a."code" AS "auctionCode", a."name" AS "auctionName"
+      FROM "CatalogueLot" l
+      LEFT JOIN "CatalogueAuction" a ON a."id" = l."auctionId"
+      WHERE LOWER(l."barcode") = LOWER(${code})
+         OR LOWER(l."receiptUniqueId") = LOWER(${code})
+      ORDER BY l."createdAt" ASC
+      LIMIT 1
+    `
+
+    const hit = rows[0]
+    if (!hit) return { ok: true, taken: null }
+    return {
+      ok: true,
+      taken: {
+        title:           hit.title,
+        barcode:         hit.barcode,
+        receiptUniqueId: hit.receiptUniqueId,
+        auctionCode:     hit.auctionCode ?? "",
+        auctionName:     hit.auctionName ?? "",
+        sameAuctionId:   hit.auctionId,
+        createdByName:   hit.createdByName,
+      },
+    }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Could not check the barcode" }
+  }
+}
+
 export async function togglePublished(id: string, published: boolean) {
   await requireCataloguer()
   await prisma.catalogueAuction.update({ where: { id }, data: { published } })

@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { createLot, getLastLotFields, saveLastLotFields } from "@/lib/actions/catalogue"
+import { createLot, getLastLotFields, saveLastLotFields, checkBarcodeAssigned } from "@/lib/actions/catalogue"
 import { loadSpellDict, findMisspellings } from "@/lib/spellcheck"
 import { DEFAULT_REASONS, workingMsBetween } from "@/lib/idle-timer-config"
 import type { IdleReason } from "@/lib/idle-timer-config"
@@ -370,12 +370,23 @@ function CondBtn({ label, selected, onClick, tablet }: { label: string; selected
 // cataloguer for another's gap.
 const IDLE_HEARTBEAT_BASE = "vectis_idle_last_activity"
 
+// A lot that already holds the barcode being entered — the shape returned by
+// checkBarcodeAssigned.
+type DupeHit = {
+  title: string
+  barcode: string | null
+  receiptUniqueId: string | null
+  auctionCode: string
+  auctionName: string
+  sameAuctionId: string | null
+  createdByName: string | null
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function LotWizardTab({
   auctionId,
   auction,
-  existingLots,
   userId,
   userName,
   onCreated,
@@ -385,9 +396,6 @@ export default function LotWizardTab({
 }: {
   auctionId: string
   auction: { code: string; name: string }
-  // Lots already in this auction — used to warn on a duplicate barcode. Kept
-  // fresh by onCreated() → router.refresh() re-rendering the parent.
-  existingLots?: { barcode: string | null; receiptUniqueId: string | null; title: string }[]
   userId?: string
   userName?: string
   onCreated: () => void
@@ -398,8 +406,14 @@ export default function LotWizardTab({
   const router = useRouter()
   const [pending, start] = useTransition()
   const [barcodeWarning, setBarcodeWarning] = useState(false)
-  // Step-2 warning: this barcode is already on a lot in this auction.
-  const [dupeWarning, setDupeWarning] = useState<{ title: string; uniqueId: string | null } | null>(null)
+  // Step-2 warning: this barcode is already assigned to a lot somewhere in the
+  // app. Filled from a live server check, not from the loaded lots — see
+  // checkBarcodeAssigned.
+  const [dupeWarning, setDupeWarning] = useState<DupeHit | null>(null)
+  // The check itself failed (offline, DB down). Surfaced rather than swallowed:
+  // silently continuing would wave through the duplicate it was meant to catch.
+  const [dupeCheckError, setDupeCheckError] = useState<string | null>(null)
+  const [checkingBarcode, setCheckingBarcode] = useState(false)
   const [step1LengthWarning, setStep1LengthWarning] = useState(false)
   // Step-4 warning: a hand-typed category that doesn't match the preset list
   // (which mirrors BC) — "main" or "sub" says which field failed.
@@ -703,20 +717,6 @@ export default function LotWizardTab({
 
   const categoryMap = useCategoryMap()
   const subCats     = mainCat ? (categoryMap[mainCat] ?? []) : []
-  // Every identifier already taken in this auction → the lot holding it. Both
-  // fields are checked because the barcode box legitimately accepts either an
-  // internal barcode or a unique ID (see RULES.md → Lot Identifiers), and either
-  // one landing twice means the same physical item is being catalogued twice.
-  const takenIdentifiers = useMemo(() => {
-    const m = new Map<string, { title: string; uniqueId: string | null }>()
-    for (const l of existingLots ?? []) {
-      const info = { title: l.title, uniqueId: l.receiptUniqueId }
-      if (l.barcode?.trim())         m.set(l.barcode.trim().toLowerCase(), info)
-      if (l.receiptUniqueId?.trim()) m.set(l.receiptUniqueId.trim().toLowerCase(), info)
-    }
-    return m
-  }, [existingLots])
-
   const mainCatList = Object.keys(categoryMap)
   const boxWordings = useConditionWordings()
   const inpFocus    = tablet
@@ -778,7 +778,7 @@ export default function LotWizardTab({
     setStep(1)
   }
 
-  function goNext() {
+  async function goNext() {
     const err = validateStep(step)
     if (err) { setValidErr(err); return }
     setValidErr("")
@@ -792,15 +792,16 @@ export default function LotWizardTab({
         return
       }
     }
-    // Warn if this barcode is already on a lot in this auction. Checked before
-    // the prefix warning below: an exact match against a real lot is a fact,
-    // where the prefix check is only a heuristic.
+    // Is this barcode already assigned to a lot anywhere in the app? A live
+    // server check, so it sees lots created seconds ago on another device.
+    // Checked before the prefix warning below: an exact match against a real
+    // lot is a fact, where the prefix check is only a heuristic.
     if (step === 2 && barcode.trim()) {
-      const hit = takenIdentifiers.get(barcode.trim().toLowerCase())
-      if (hit) {
-        setDupeWarning(hit)
-        return
-      }
+      setCheckingBarcode(true)
+      const res = await checkBarcodeAssigned(barcode.trim())
+      setCheckingBarcode(false)
+      if (!res.ok) { setDupeCheckError(res.error ?? "Could not check the barcode"); return }
+      if (res.taken) { setDupeWarning(res.taken); return }
     }
     // Warn if barcode prefix doesn't match auction code
     if (step === 2 && barcode.trim()) {
@@ -841,6 +842,7 @@ export default function LotWizardTab({
     setEstimateWarning(false)
     setBarcodeWarning(false)        // else the top-nav button stays disabled back on step 1
     setDupeWarning(null)
+    setDupeCheckError(null)
     setStep1LengthWarning(false)
     if (step > 1) setStep(step - 1)
   }
@@ -1152,10 +1154,11 @@ export default function LotWizardTab({
         </button>
         <span className={`text-gray-600 ${tablet ? "text-base" : "text-xs"}`}>{step} / 8</span>
         {step < 8 ? (
-          <button onClick={step === 1 ? startCataloguing : goNext} disabled={barcodeWarning || step1LengthWarning || !!dupeWarning}
+          <button onClick={step === 1 ? startCataloguing : goNext}
+            disabled={barcodeWarning || step1LengthWarning || !!dupeWarning || !!dupeCheckError || checkingBarcode}
             className={`font-semibold rounded transition-colors disabled:opacity-40 ${tablet ? "px-6 py-3 text-base" : "px-4 py-1.5 text-sm"}`}
             style={{ background: CAT_ACCENT, color: "#1C1C1E", touchAction: tablet ? "manipulation" : undefined }}>
-            {step === 1 ? "Start cataloguing →" : "Next →"}
+            {checkingBarcode ? "Checking…" : step === 1 ? "Start cataloguing →" : "Next →"}
           </button>
         ) : (
           <button onClick={saveLot} disabled={pending}
@@ -1292,6 +1295,7 @@ export default function LotWizardTab({
                 setBarcode(v)
                 if (barcodeWarning) setBarcodeWarning(false)
                 if (dupeWarning) setDupeWarning(null)
+                if (dupeCheckError) setDupeCheckError(null)
               }} className={inpFocus} placeholder="Scan or type barcode…" autoFocus />
             </div>
             <button type="button" onClick={nextBarcodeNumber}
@@ -1300,31 +1304,61 @@ export default function LotWizardTab({
               ⊕ Next Barcode Number
             </button>
 
-            {/* Duplicate barcode warning — red rather than the usual amber
-                because this one is a fact, not a heuristic: the barcode is
-                already on a lot in this auction. */}
+            {/* Barcode already assigned — red rather than the house amber
+                because this one is a fact, not a heuristic: a live lookup found
+                the barcode on a real lot. */}
             {dupeWarning && (
               <div className="rounded-xl border border-red-600/60 bg-red-950/40 px-4 py-3 space-y-3">
                 <p className="text-sm text-red-300">
-                  ⚠ Barcode <strong>{barcode.trim().toUpperCase()}</strong> is already on a lot in this auction.
+                  ⚠ Barcode <strong>{barcode.trim().toUpperCase()}</strong> is already assigned.
                   Cataloguing it again would create a duplicate.
                 </p>
-                <div className="rounded-lg bg-black/30 border border-red-800/40 px-3 py-2">
+                <div className="rounded-lg bg-black/30 border border-red-800/40 px-3 py-2 space-y-0.5">
                   <p className="text-xs text-red-200/90">
-                    Existing lot: <strong>{dupeWarning.title || "Untitled"}</strong>
+                    Already on: <strong>{dupeWarning.title || "Untitled"}</strong>
                   </p>
-                  {dupeWarning.uniqueId && (
-                    <p className="text-xs text-red-300/70 mt-0.5">Unique ID: {dupeWarning.uniqueId}</p>
+                  <p className="text-xs text-red-300/70">
+                    {dupeWarning.sameAuctionId === auctionId
+                      ? "In this auction"
+                      : `In auction ${dupeWarning.auctionCode.toUpperCase()}${dupeWarning.auctionName ? ` — ${dupeWarning.auctionName}` : ""}`}
+                    {dupeWarning.createdByName ? ` · catalogued by ${dupeWarning.createdByName}` : ""}
+                  </p>
+                  {dupeWarning.receiptUniqueId && (
+                    <p className="text-xs text-red-300/70">Unique ID: {dupeWarning.receiptUniqueId}</p>
                   )}
                 </div>
                 <div className="flex gap-2 flex-wrap">
                   <button type="button"
                     onClick={() => { setBarcode(""); setDupeWarning(null) }}
                     className="px-3 py-1.5 text-sm font-medium rounded-lg bg-red-700/40 hover:bg-red-700/60 text-red-200 border border-red-600/40 transition-colors">
-                    Clear &amp; scan again
+                    Change barcode
                   </button>
                   <button type="button"
                     onClick={() => { setDupeWarning(null); setStep(3) }}
+                    className="px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-700/40 hover:bg-gray-700/60 text-gray-300 border border-gray-600/40 transition-colors">
+                    Continue anyway
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* The check itself failed. Never silently continue — that would
+                wave through the duplicate this is meant to catch — but never
+                block cataloguing on an outage either: it's their call. */}
+            {dupeCheckError && (
+              <div className="rounded-xl border border-amber-600/50 bg-amber-950/40 px-4 py-3 space-y-3">
+                <p className="text-sm text-amber-300">
+                  ⚠ Couldn&apos;t check whether this barcode is already assigned ({dupeCheckError}).
+                  It may or may not be a duplicate.
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  <button type="button"
+                    onClick={() => { setDupeCheckError(null); goNext() }}
+                    className="px-3 py-1.5 text-sm font-medium rounded-lg bg-amber-700/40 hover:bg-amber-700/60 text-amber-200 border border-amber-600/40 transition-colors">
+                    Try again
+                  </button>
+                  <button type="button"
+                    onClick={() => { setDupeCheckError(null); setStep(3) }}
                     className="px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-700/40 hover:bg-gray-700/60 text-gray-300 border border-gray-600/40 transition-colors">
                     Continue anyway
                   </button>
