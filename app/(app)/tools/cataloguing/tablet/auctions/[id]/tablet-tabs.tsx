@@ -9,7 +9,7 @@ import {
   deleteLotPhoto,
 } from "@/lib/actions/catalogue"
 import LotWizardTab, { BRANDS_LIST } from "../../../auctions/[id]/lot-wizard-tab"
-import LotWizardGuideButton from "../../../auctions/[id]/lot-wizard-guide"
+import CataloguingGuideButton from "../../../auctions/[id]/cataloguing-guide"
 import { useCategoryMap } from "@/lib/use-category-map"
 import { parseCondition, buildCondition, type BoxPrefixMode } from "@/lib/condition"
 import { useConditionWordings } from "@/lib/use-condition-wordings"
@@ -112,7 +112,7 @@ export default function TabletTabs({ auction, lots, userRole, userId, userName, 
           <span className="font-mono font-bold text-[#2AB4A6] text-lg">{auction.code}</span>
           <span className="text-gray-400 text-base ml-2 truncate">{auction.name}</span>
         </div>
-        <LotWizardGuideButton tablet />
+        <CataloguingGuideButton tablet currentTab={tab} />
         <span className="text-sm text-gray-500 flex-shrink-0">{lots.length} lots</span>
       </div>
 

@@ -74,9 +74,11 @@ last_updated: 2026-07-16
 
 # Guide / Help modal (2026-07-16)
 
-app/(app)/tools/cataloguing/auctions/[id]/lot-wizard-guide.tsx — **LotWizardGuideButton**, a **modal** (not a page, so it opens mid-lot without losing the entry in progress). Rendered in the **tablet** header (tablet-tabs.tsx, left of the {lots.length} lots count, where Jordan asked for it) — so it shows on every tablet tab, and the **desktop Auction Manager does NOT have it** (different header).
+app/(app)/tools/cataloguing/auctions/[id]/cataloguing-guide.tsx — **CataloguingGuideButton**, a **modal** (not a page, so it opens mid-lot without losing the entry in progress). Rendered in the **tablet** header (tablet-tabs.tsx, left of the {lots.length} lots count, where Jordan asked for it). The **desktop Auction Manager does NOT have it** (different header, different tab set).
 
-⚠ **It documents real wizard behaviour** — which fields are required, what each warning means, that nothing saves until Save on step 8, and that Save drops you back to step 2 with tote/vendor/receipt still locked. **If you change lot-wizard-tab.tsx, update the guide too — a guide that is quietly wrong is worse than no guide.**
+It covers **all four tablet tabs**, not just the wizard — its own in-modal tab bar mirrors the real one (📋 Lots · ➕ Add Lot · 📷 Photo Only · 🔍 Review) and it **opens on whatever tab the user is already on** (currentTab={tab} from tablet-tabs). Emoji + coloured callouts mirroring the real on-screen amber/red warnings. Was briefly lot-wizard-guide.tsx / LotWizardGuideButton (wizard only) — renamed when Jordan asked for per-tab sections.
+
+⚠ **It documents real behaviour** — required fields per validateStep, what each warning means, that nothing saves until Save on step 8, that Save drops you back to step 2 with tote/vendor/receipt still locked, that Lots search matches barcode/title/vendor/tote, and that Review deliberately still works after BC lock. **If you change lot-wizard-tab.tsx, photo-only-tab.tsx, review-tab.tsx or the Lots list, update the guide too — a guide that is quietly wrong is worse than no guide.**
 
 Tone: plain and respectful. Jordan's brief was "the people using this are idiots so it needs to be really simple" — that means **simple**, not condescending. Never echo that framing into the product; the cataloguers are the ones reading it. Never blame the cataloguers.
 
