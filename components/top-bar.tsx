@@ -17,10 +17,6 @@ export default function TopBar({ userName, isAdmin }: TopBarProps) {
 
   return (
     <header className="relative h-12 bg-gray-900 border-b border-gray-700 flex items-center justify-between px-4 flex-shrink-0">
-      {/* Centred Vectis logo on a white oval (hidden on very small screens so it can't overlap the side content) */}
-      <span className="hidden sm:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center bg-white rounded-full px-4 py-1 shadow-sm pointer-events-none">
-        <img src="/vectis-logo.svg" alt="Vectis Auctions" className="h-6 w-auto" />
-      </span>
       <div className="flex items-center gap-2">
         <button
           onClick={() => router.back()}

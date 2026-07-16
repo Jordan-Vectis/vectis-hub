@@ -14,6 +14,7 @@ const GROUPS: { label: string; cards: Card[] }[] = [
       { href: "/admin/departments",   label: "Departments",         description: "Manage cataloguer departments used across the app.", icon: "🏢" },
       { href: "/admin/devices",       label: "Devices",             description: "Register and track tablets and other devices used by staff. Record serial numbers and assign to users.", icon: "📱" },
       { href: "/admin/terms",         label: "Terms & Signatures",  description: "See who has signed the iPad Acceptable Use Policy — their signature and the date/time — and who is still outstanding.", icon: "✍️" },
+      { href: "/admin/access-log",    label: "Access Log",          description: "Every time someone was turned away from a section they should have reached — what their session said and what the permission check actually read back.", icon: "🚧" },
     ],
   },
   {

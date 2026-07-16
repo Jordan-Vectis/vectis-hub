@@ -953,6 +953,44 @@ const MIGRATIONS = [
   // photos during a smart scan, so it can be checked later. Held on its own,
   // NEVER in imageUrls (which feeds the website / BC / AI descriptions).
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "labelPhotoUrl" TEXT`,
+
+  // Access Denial Log — diagnostic table behind /admin/access-log (2026-07-16).
+  `CREATE TABLE IF NOT EXISTS "AccessDenialLog" (
+     "id"            TEXT NOT NULL PRIMARY KEY,
+     "createdAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     "appKey"        TEXT NOT NULL,
+     "source"        TEXT NOT NULL,
+     "referer"       TEXT,
+     "sessionUserId" TEXT NOT NULL,
+     "sessionEmail"  TEXT,
+     "sessionName"   TEXT,
+     "sessionRole"   TEXT,
+     "isImpersonating" BOOLEAN NOT NULL DEFAULT FALSE,
+     "adminId"       TEXT,
+     "adminName"     TEXT,
+     "dbUserFound"   BOOLEAN NOT NULL,
+     "dbUserId"      TEXT,
+     "dbEmail"       TEXT,
+     "dbRole"        TEXT,
+     "dbAllowedApps" TEXT[],
+     "idMismatch"    BOOLEAN NOT NULL DEFAULT FALSE,
+     "note"          TEXT
+   )`,
+  `CREATE INDEX IF NOT EXISTS "AccessDenialLog_createdAt_idx"     ON "AccessDenialLog"("createdAt")`,
+  `CREATE INDEX IF NOT EXISTS "AccessDenialLog_sessionUserId_idx" ON "AccessDenialLog"("sessionUserId")`,
+  // Impersonation columns — separate ALTERs so an AccessDenialLog table created
+  // by an earlier run of this list also gets them.
+  `ALTER TABLE "AccessDenialLog" ADD COLUMN IF NOT EXISTS "isImpersonating" BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE "AccessDenialLog" ADD COLUMN IF NOT EXISTS "adminId"   TEXT`,
+  `ALTER TABLE "AccessDenialLog" ADD COLUMN IF NOT EXISTS "adminName" TEXT`,
+
+  // Functional indexes behind checkBarcodeAssigned (the lot wizard's "barcode
+  // already assigned" check, which runs on every press of Next). They match its
+  // LOWER(col) = LOWER($1) lookup; without them that query sequentially scans
+  // every lot ever catalogued. Expression indexes have no schema.prisma syntax,
+  // so this list is their only home — do not "tidy" them away.
+  `CREATE INDEX IF NOT EXISTS "CatalogueLot_barcode_lower_idx"         ON "CatalogueLot" (LOWER("barcode"))`,
+  `CREATE INDEX IF NOT EXISTS "CatalogueLot_receiptUniqueId_lower_idx" ON "CatalogueLot" (LOWER("receiptUniqueId"))`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

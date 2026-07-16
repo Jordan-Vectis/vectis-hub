@@ -14,15 +14,105 @@ interface LotGroup {
   lotId:    string | null
   label:    string
   photos:   File[]
-  labelPhoto?:      File      // the photo that started this group — shown in the preview, never uploaded
+  labelPhoto?:      File      // the photo that started this group — shown in the review, never uploaded
+  labelIndex?:      number    // index of the label photo in scanFiles (scan mode only)
+  photoIndices?:    number[]  // scanFiles indices parallel to `photos` (scan mode only — drives the manual tools)
+  needsCode?:       boolean   // a label with no code yet — the user must type it in the final review
   aiRead?:          boolean   // the barcode scanner missed this label; AI read the printed code
-  unreadableLabel?: boolean   // AI says this is a label photo but couldn't read the code
-  aiVerdict?:       "confirmed" | "code-mismatch" | "not-a-label"  // AI's second opinion on a scanner-decoded label
-  aiCode?:          string    // what AI read when it disagrees with the scanner
+  edited?:          boolean   // the user marked/typed this label by hand
 }
 
-type Phase = "idle" | "scanning" | "preview" | "uploading" | "done"
+// One record per photo (scan mode). Scanner + AI results, plus the RESOLVED
+// decision the grouping is built from. Kept as the source of truth so the
+// discrepancy step and the final-review manual tools can re-flow the lots by
+// editing decisions rather than rebuilding groups by hand.
+interface PhotoInfo {
+  scannerCode: string | null   // local barcode reader result (Vectis format), or null
+  aiIsLabel:   boolean         // AI classified this photo as a barcode label
+  aiCode:      string | null   // AI's guess at the printed code (Vectis format), or null
+  aiAnswered:  boolean         // AI actually returned an answer for this photo
+  unreadable:  boolean         // the browser couldn't decode the image (HEIC on Windows)
+  // resolved:
+  isLabel:     boolean         // final: this photo starts a lot
+  code:        string | null   // final code for the label (may be user-typed); null = needs a code
+  source:      "agree" | "scanner" | "ai" | "manual" | "none"
+}
+
+type DiscrepancyType = "mismatch" | "scanner-not-ai" | "ai-not-scanner"
+interface Discrepancy {
+  index:       number
+  type:        DiscrepancyType
+  scannerCode: string | null
+  aiCode:      string | null
+  resolved:    boolean
+}
+
+type Phase = "idle" | "scanning" | "discrepancies" | "preview" | "uploading" | "done"
 type Mode  = "scan" | "filename"
+
+// Reconcile one photo's scanner + AI reads into a starting decision, and say
+// whether it is a discrepancy a human should look at. The SCANNER wins a code
+// disagreement by default (Code 128 has a checksum; AI misreads printed text
+// more often), but every genuine disagreement is surfaced for review.
+function resolvePhoto(
+  scannerCode: string | null, aiAnswered: boolean, aiIsLabel: boolean, aiCode: string | null,
+): { isLabel: boolean; code: string | null; source: PhotoInfo["source"]; discrepancy: DiscrepancyType | null } {
+  const s = scannerCode
+  const a = aiCode
+  if (s && a) {
+    if (s.toLowerCase() === a.toLowerCase()) return { isLabel: true, code: s, source: "agree", discrepancy: null }
+    return { isLabel: true, code: s, source: "scanner", discrepancy: "mismatch" }
+  }
+  if (s && !a) {
+    // Scanner read a Vectis code. If AI actively says "item photo", that's a
+    // conflict (a sticker in an item photo?) — default to keeping the label
+    // (a Vectis code was decoded) but flag it. Otherwise they agree.
+    if (aiAnswered && !aiIsLabel) return { isLabel: true, code: s, source: "scanner", discrepancy: "scanner-not-ai" }
+    return { isLabel: true, code: s, source: "scanner", discrepancy: null }
+  }
+  if (!s && a) {
+    // AI read a code the scanner missed — a real blurry label, or an AI
+    // misread. Default to accepting it, but flag for review.
+    return { isLabel: true, code: a, source: "ai", discrepancy: "ai-not-scanner" }
+  }
+  // Neither read a code.
+  if (aiIsLabel) return { isLabel: true, code: null, source: "ai", discrepancy: null }  // unreadable label — a gap, not a conflict; typed in the final review
+  return { isLabel: false, code: null, source: "none", discrepancy: null }
+}
+
+// Derive the lot groups from the per-photo decisions. A photo whose decision is
+// isLabel starts a lot (its photo is the label, never uploaded); following
+// non-label photos join it; photos before the first label go to preGroup.
+function buildGroups(
+  files: File[], infos: PhotoInfo[], lotMap: Map<string, string>,
+): { groups: LotGroup[]; preGroup: File[] } {
+  const groups: LotGroup[] = []
+  const preGroup: File[] = []
+  let current: LotGroup | null = null
+  for (let i = 0; i < files.length; i++) {
+    const info = infos[i]
+    if (info.isLabel) {
+      const code  = info.code
+      const lotId = code ? (lotMap.get(code.toLowerCase().trim()) ?? null) : null
+      current = {
+        lotId,
+        label: code ?? `Needs code — ${files[i].name}`,
+        photos: [], photoIndices: [],
+        labelPhoto: files[i], labelIndex: i,
+        needsCode: !code,
+        aiRead: info.source === "ai" && !!code,   // AI read a code the scanner missed (not the unread-label case)
+        edited: info.source === "manual",
+      }
+      groups.push(current)
+    } else if (current) {
+      current.photos.push(files[i])
+      current.photoIndices!.push(i)
+    } else {
+      preGroup.push(files[i])
+    }
+  }
+  return { groups, preGroup }
+}
 
 // Per-lot outcome, shown live while uploading and on the results screen.
 interface UploadResult {
@@ -36,9 +126,6 @@ interface UploadResult {
 // 1000+ photos, so these drive how long the AI review takes.
 const BATCH_SIZE     = 8
 const AI_CONCURRENCY = 3
-// Consecutive failed requests (nothing succeeding in between) before we stop
-// asking AI and fall back to barcode scanning for the rest.
-const AI_GIVE_UP_AFTER = 4
 const MODEL_LS_KEY   = "smart_scan_model"
 
 // ── Filename barcode / unique-ID parser ───────────────────────────────────────
@@ -103,6 +190,61 @@ async function toJpegBlob(file: File, maxW = 1000): Promise<Blob | null> {
   }
 }
 
+// ── Barcode reader: zxing-cpp (WASM) ──────────────────────────────────────────
+// Far stronger than the pure-JS @zxing/library at photographed / skewed / soft
+// labels (it does its own robust localisation, rotation and downscaling on the
+// whole file). Its 1.1MB module is self-hosted from /public (not a CDN),
+// configured once and loaded lazily on first use.
+let zxWasmConfigured = false
+// Reads are SERIALISED (one at a time) via a promise chain — the WASM module has
+// one shared linear memory, so letting the concurrent scan workers call it at
+// once could race and hand back a WRONG code (the worst possible bug here).
+let zxChain: Promise<unknown> = Promise.resolve()
+function serialiseZx<T>(fn: () => Promise<T>): Promise<T> {
+  const next = zxChain.then(fn, fn)
+  zxChain = next.then(() => {}, () => {})
+  return next
+}
+// If the engine ever stalls (wasm fetch/instantiate wedged), a serialised queue
+// would wait on it FOREVER and the whole unattended scan would hang. So a read
+// gets a hard time limit, and a stall switches the reader OFF for the rest of
+// the run — every remaining photo then just has no scanner code and AI reads
+// them. Never let one stuck read hold up a 2000-photo folder.
+const ZX_READ_TIMEOUT_MS = 30_000   // a normal read is well under a second
+let zxReaderStalled = false
+function resetZxReader() { zxReaderStalled = false }
+function isZxReaderStalled() { return zxReaderStalled }
+function isVectisCodeStr(s: string): boolean {
+  const t = s.replace(/[^\x20-\x7E]/g, "").trim()
+  return /^[A-Za-z]\d{6,7}$/.test(t) || /^[A-Za-z]\d{4,7}-\d{1,6}$/.test(t)
+}
+async function readVectisWithZxingCpp(file: File): Promise<string | null> {
+  if (zxReaderStalled) return null
+  const mod = await import("zxing-wasm/reader")
+  if (!zxWasmConfigured) {
+    mod.prepareZXingModule({
+      overrides: { locateFile: (p: string, prefix: string) => (p.endsWith(".wasm") ? "/zxing_reader.wasm" : prefix + p) },
+      fireImmediately: false,
+    })
+    zxWasmConfigured = true
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const results = await serialiseZx(() => Promise.race([
+    mod.readBarcodes(file, { tryHarder: true, tryRotate: true, tryInvert: true, tryDownscale: true }),
+    new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Error("zx-timeout")), ZX_READ_TIMEOUT_MS) }),
+  ]).finally(() => clearTimeout(timer))).catch((e: any) => {
+    // A timeout means the engine is wedged — don't queue every other photo
+    // behind it, and don't start a second read that could race the stuck one.
+    if (e?.message === "zx-timeout") zxReaderStalled = true
+    return [] as any[]
+  })
+  for (const r of results as any[]) {
+    const t = (r?.text ?? "").replace(/[^\x20-\x7E]/g, "").trim().toUpperCase()
+    if (isVectisCodeStr(t)) return t
+  }
+  return null
+}
+
 // Thumbnail with a fallback tile for images the browser can't display
 // (typically HEIC on Windows) — the file still uploads fine.
 function Thumb({ url, name }: { url: string; name: string }) {
@@ -129,6 +271,15 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const [groups, setGroups]        = useState<LotGroup[]>([])
   const [preGroup, setPreGroup]    = useState<File[]>([])       // scan mode: photos before the first barcode
   const [unreadable, setUnreadable] = useState(0)               // scan mode: files the browser couldn't decode (HEIC etc.)
+  // Scan mode source of truth: the files and one decision per file. Groups are
+  // DERIVED from these, so the discrepancy step and the manual "this is a
+  // barcode" tool just edit decisions and re-flow.
+  const [scanFiles, setScanFiles]   = useState<File[]>([])
+  const [photoInfos, setPhotoInfos] = useState<PhotoInfo[]>([])
+  const [discrepancies, setDiscrepancies] = useState<Discrepancy[]>([])
+  const [markingIndex, setMarkingIndex] = useState<number | null>(null)  // photo the user is typing a code for
+  const [markingCode, setMarkingCode]   = useState("")
+  const [showAllLots, setShowAllLots]   = useState(false)     // final review: all lots vs only ones needing attention
   const [scanProgress, setScanProgress]     = useState({ done: 0, total: 0 })
   const [scanStage, setScanStage]           = useState<"local" | "ai">("local")  // scanning phase sub-stage
   const [aiProgress, setAiProgress]         = useState({ done: 0, total: 0 })
@@ -137,6 +288,10 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const [aiCheckedCount, setAiCheckedCount] = useState(0)       // photos that actually got an AI answer
   const [aiNote, setAiNote]                 = useState<string | null>(null)  // live status/error during the AI pass
   const [aiEta, setAiEta]                   = useState<string | null>(null)
+  const [aiRetries, setAiRetries]           = useState(0)       // rate-limit / retry pauses ridden out during the run
+  const [aiLog, setAiLog]                   = useState<{ t: number; msg: string }[]>([])  // live activity feed
+  const [troubleSince, setTroubleSince]     = useState<number | null>(null)  // when AI trouble began (for the escalation panel)
+  const troubleRef  = useRef<number | null>(null)               // same, readable inside the scan closures
   const skipAiRef   = useRef(false)                             // user pressed "Skip AI check"
   // Every in-flight AI request — several run at once, so a single ref would
   // only ever let Skip abort the most recent one.
@@ -212,6 +367,12 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     ...lots.filter(l => l.receiptUniqueId).map(l => [l.receiptUniqueId!.toLowerCase().trim(), l.id] as [string, string]),
   ])
 
+  // Append a line to the AI activity feed (component-scope so the Skip button
+  // and the scan closures can both call it).
+  function logEvent(msg: string) {
+    setAiLog(prev => [...prev, { t: Date.now(), msg }].slice(-14))
+  }
+
   // ── Reset to idle ─────────────────────────────────────────────────────────────
   function reset() {
     revokeThumbs()
@@ -220,6 +381,12 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     setGroups([])
     setPreGroup([])
     setUnreadable(0)
+    setScanFiles([])
+    setPhotoInfos([])
+    setDiscrepancies([])
+    setMarkingIndex(null)
+    setMarkingCode("")
+    setShowAllLots(false)
     setScanStage("local")
     setAiProgress({ done: 0, total: 0 })
     setAiFailed(false)
@@ -227,6 +394,10 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     setAiCheckedCount(0)
     setAiNote(null)
     setAiEta(null)
+    setAiRetries(0)
+    setAiLog([])
+    setTroubleSince(null)
+    troubleRef.current = null
     setSkipped([])
     setOkLotCount(0)
     setUploadLog([])
@@ -298,98 +469,33 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     setAiCheckedCount(0)
     setAiNote(null)
     setAiEta(null)
+    setAiRetries(0)
+    setAiLog([])
+    setTroubleSince(null)
+    troubleRef.current = null
     skipAiRef.current = false
+    resetZxReader()   // a stall in an earlier scan shouldn't disable this one
 
-    const nativeDetector = "BarcodeDetector" in window
-      ? new (window as any).BarcodeDetector({ formats: ["code_128", "code_39", "qr_code", "ean_13"] })
-      : null
-
-    const [{ HTMLCanvasElementLuminanceSource }, { MultiFormatReader, BinaryBitmap, HybridBinarizer, DecodeHintType }] =
-      await Promise.all([import("@zxing/browser"), import("@zxing/library")])
-    const hints = new Map()
-    hints.set(DecodeHintType.TRY_HARDER, true)
-    const zxing = new MultiFormatReader()
-    zxing.setHints(hints)
-
-    // Accept both Vectis barcode formats:
-    //   F066001 / F0660012  — tote/item barcodes (letter + 6-7 digits)
-    //   R000016-413         — receipt unique IDs (letter + digits + dash + digits)
-    // Rejects product EANs, ISBNs, etc.
-    function isVectisBarcode(s: string): boolean {
-      return /^[A-Za-z]\d{6,7}$/.test(s.trim()) || /^[A-Za-z]\d{4,7}-\d{1,6}$/.test(s.trim())
+    // Read each photo's barcode with zxing-cpp (see readVectisWithZxingCpp) —
+    // it handles photographed / skewed / soft labels the old JS reader couldn't.
+    // NB: no separate "can the browser render this?" probe here — that used to
+    // decode every photo a THIRD time (zxing-cpp decodes it, and the AI prep's
+    // toJpegBlob decodes it again). The HEIC/unreadable flag is now captured in
+    // the AI prep instead, from toJpegBlob failing.
+    async function decodeBarcode(file: File): Promise<{ barcode: string | null }> {
+      try { return { barcode: await readVectisWithZxingCpp(file) } } catch { return { barcode: null } }
     }
+    // Photos the browser can't render (HEIC on Windows) — filled in during the
+    // AI prep; drives the placeholder tiles and the "convert to JPEG" hint.
+    const unreadableSet = new Set<number>()
 
-    // unreadable = the browser couldn't decode the image at all (HEIC on
-    // Windows/Android) — a label in such a photo can never be detected.
-    async function decodeBarcode(file: File): Promise<{ barcode: string | null; unreadable: boolean }> {
-      let imgEl: HTMLImageElement
-      try {
-        imgEl = await loadImgElement(file)
-      } catch {
-        return { barcode: null, unreadable: true }
-      }
-      try {
-        const naturalW = imgEl.naturalWidth
-        const naturalH = imgEl.naturalHeight
-
-        function toCanvas(targetW: number, scanMode: "normal" | "contrast" | "bw" = "normal"): HTMLCanvasElement {
-          const scale = Math.min(1, targetW / naturalW)
-          const w = Math.round(naturalW * scale)
-          const h = Math.round(naturalH * scale)
-          const c = document.createElement("canvas")
-          c.width = w; c.height = h
-          const ctx = c.getContext("2d")!
-          ctx.fillStyle = "#ffffff"
-          ctx.fillRect(0, 0, w, h)
-          if (scanMode === "contrast") ctx.filter = "contrast(400%) grayscale(100%)"
-          ctx.drawImage(imgEl, 0, 0, w, h)
-          if (scanMode === "bw") {
-            const id = ctx.getImageData(0, 0, w, h)
-            for (let i = 0; i < id.data.length; i += 4) {
-              const v = 0.299 * id.data[i] + 0.587 * id.data[i+1] + 0.114 * id.data[i+2] > 128 ? 255 : 0
-              id.data[i] = id.data[i+1] = id.data[i+2] = v
-            }
-            ctx.putImageData(id, 0, 0)
-          }
-          return c
-        }
-
-        if (nativeDetector) {
-          for (const targetW of [naturalW, 900]) {
-            for (const scanMode of ["normal", "contrast", "bw"] as const) {
-              const c = toCanvas(targetW, scanMode)
-              try {
-                const bmp     = await createImageBitmap(c)
-                const results = await nativeDetector.detect(bmp)
-                if (results.length > 0) {
-                  const raw = (results[0].rawValue as string).replace(/[^\x20-\x7E]/g, "").trim()
-                  if (raw && isVectisBarcode(raw)) return { barcode: raw, unreadable: false }
-                }
-              } catch {}
-            }
-          }
-        }
-
-        for (const targetW of [2000, 1200]) {
-          for (const scanMode of ["normal", "bw"] as const) {
-            const c = toCanvas(targetW, scanMode)
-            try {
-              const luminance = new HTMLCanvasElementLuminanceSource(c)
-              const bitmap    = new BinaryBitmap(new HybridBinarizer(luminance))
-              const decoded   = zxing.decodeWithState(bitmap).getText().replace(/[^\x20-\x7E]/g, "").trim()
-              if (isVectisBarcode(decoded)) return { barcode: decoded, unreadable: false }
-            } catch {}
-          }
-        }
-        return { barcode: null, unreadable: false }
-      } catch {
-        return { barcode: null, unreadable: false }
-      }
-    }
-
-    // Decode up to 3 images at once (order-preserving), then group sequentially.
+    // The zxing-cpp reads are serialised internally; the image-render checks run
+    // up to 3 at once. Order-preserving, then grouped sequentially.
     const decoded = await mapPool(files, 3, decodeBarcode,
       done => setScanProgress({ done, total: files.length }))
+    if (isZxReaderStalled()) {
+      logEvent("⚠ The barcode reader stopped responding — AI is reading the labels instead")
+    }
 
     // ── AI review pass — EVERY photo ─────────────────────────────────────────
     // After the barcode scan, Gemini reviews every single photo (Jordan's
@@ -419,19 +525,84 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       for (let k = 0; k < candidates.length; k += BATCH_SIZE) batches.push(candidates.slice(k, k + BATCH_SIZE))
 
       let doneCount = 0
-      let consecutiveFails = 0
       const started = Date.now()
+      // ETA baseline — reset after a rate-limit recovery so the estimate is
+      // measured from ACTIVE processing time, not cumulative wall-clock that
+      // includes minutes of cooldown (which made it read "about 800 min left").
+      let etaBaseTime = started
+      let etaBaseDone = 0
 
-      // Send one packed request. Returns false if it never succeeded.
+      // Trouble tracking for the escalation panel. Only NOTABLE, low-frequency
+      // events are logged (not every batch) so the feed stays readable and
+      // doesn't thrash re-renders on a 2000-photo run. logEvent is component-scope.
+      const enterTrouble = () => {
+        if (troubleRef.current === null) { troubleRef.current = Date.now(); setTroubleSince(troubleRef.current) }
+      }
+      const clearTrouble = () => {
+        if (troubleRef.current !== null) {
+          troubleRef.current = null; setTroubleSince(null)
+          etaBaseTime = Date.now(); etaBaseDone = doneCount   // measure the ETA fresh from here
+          logEvent("✓ Back to normal — carrying on")
+        }
+      }
+      logEvent(`Started AI check of ${candidates.length} photos`)
+
+      // Rate-limit gate shared by ALL workers. When one request is rate-limited
+      // we push a cooldown that every worker waits behind, then they all carry
+      // on — so a big run rides out a Gemini rate limit by itself instead of
+      // hammering it and needing a human. rlLevel grows on each 429 (longer
+      // waits, up to 5 min) and eases off after good responses.
+      let rlLevel = 0
+      let cooldownUntil = 0
+      let retries = 0
+      const rlBackoff = (level: number) => Math.min(30_000 * 2 ** (level - 1), 300_000)  // 30s→60s→…→5min
+
+      // ── Smart backup-model rotation ──────────────────────────────────────────
+      // Shortlist = the picked model, then the other enabled models (fast
+      // "flash" ones first). When the CURRENT model keeps struggling (sustained
+      // rate limits or errors), move the run onto the next one that responds —
+      // because Gemini's limits are largely per-model, a different model has its
+      // own quota, so this routes around a throttled or down model on its own.
+      const primaryModel = aiModelRef.current || ""
+      const rotation = [
+        primaryModel,
+        ...modelList
+          .filter(m => m && m !== primaryModel)
+          .sort((a, b) => (b.includes("flash") ? 1 : 0) - (a.includes("flash") ? 1 : 0)),
+      ].filter((m, i, arr) => arr.indexOf(m) === i)
+      let modelIdx = 0
+      let struggle = 0                 // failed attempts on the CURRENT model since its last success
+      const ROTATE_AFTER = 4
+      const maybeRotate = () => {
+        // Synchronous (no await) so concurrent workers can't double-advance.
+        if (struggle >= ROTATE_AFTER && modelIdx < rotation.length - 1) {
+          modelIdx += 1
+          struggle = 0; rlLevel = 0; cooldownUntil = 0   // give the new model a clean start (its own quota)
+          logEvent(`Switching to backup model: ${rotation[modelIdx] || "the default"}`)
+          setAiNote(`Switched to backup model ${rotation[modelIdx] || "(default)"} — the previous one kept struggling.`)
+        }
+      }
+
+      async function waitForGate() {
+        while (!skipAiRef.current && Date.now() < cooldownUntil) {
+          const remain = cooldownUntil - Date.now()
+          setAiNote(`⏳ AI is rate limited — pausing ${Math.ceil(remain / 1000)}s, then it carries on by itself. You don't need to wait here.`)
+          await new Promise(r => setTimeout(r, Math.min(remain, 1000)))
+        }
+      }
+
+      // Send one packed request, retrying transient failures (rate limits,
+      // network, timeouts) FOR AS LONG AS IT TAKES so the run finishes on its
+      // own. Only gives up THIS pack on a content block, or after many
+      // non-rate-limit errors on the same pack (so one bad image can't loop for
+      // ever) — never the whole run. A given-up pack's photos fall back to
+      // barcode scanning; false = this pack got no AI answer.
       async function postPack(pack: { i: number; payload: Blob | File }[]): Promise<boolean> {
-        // Several workers share the one status line, so only ever clear a
-        // message we put there ourselves — otherwise one worker's success
-        // wipes another's live "rate limited" warning.
-        let myNote: string | null = null
-        const note = (t: string) => { myNote = t; setAiNote(t) }
-        const clearMyNote = () => { if (myNote) setAiNote(prev => (prev === myNote ? null : prev)) }
-
-        for (let attempt = 0; attempt < 3 && !skipAiRef.current; attempt++) {
+        let softFails = 0                 // consecutive non-rate-limit errors on THIS pack
+        const POISON_CAP = 8
+        while (!skipAiRef.current) {
+          await waitForGate()
+          if (skipAiRef.current) return false
           const ctrl = new AbortController()
           aiAbortsRef.current.add(ctrl)
           const timer = setTimeout(() => ctrl.abort(), 150_000)  // route maxDuration is 120s
@@ -440,7 +611,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             pack.forEach((it, j) => fd.append(`photo_${j}`, it.payload, files[it.i].name))
             const res  = await fetch("/api/catalogue/scan-photos", {
               method: "POST", body: fd, signal: ctrl.signal,
-              headers: { "x-ai-model": aiModelRef.current || "" },
+              headers: { "x-ai-model": rotation[modelIdx] || "" },   // current model in the rotation
             })
             const data = await res.json().catch(() => null)
             if (res.ok && Array.isArray(data?.photos) && data.photos.length === pack.length) {
@@ -450,19 +621,41 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
                   code:  typeof p?.code === "string" && p.code ? p.code : null,
                 })
               })
-              clearMyNote()
+              rlLevel = Math.max(0, rlLevel - 1)               // ease off after a good response
+              struggle = 0                                     // this model is working — reset its strike count
+              clearTrouble()
+              if (Date.now() >= cooldownUntil) setAiNote(null)
               return true
             }
+            if (res.status === 422) {                          // content block — never succeeds
+              setAiNote("AI wouldn't look at some photos — those fall back to barcode scanning.")
+              logEvent("Some photos were refused by AI — barcode only for those")
+              return false
+            }
+            if (res.status === 429) {                          // rate limited — back everyone off, keep going
+              rlLevel += 1; retries += 1; setAiRetries(retries)
+              struggle += 1; maybeRotate()                     // a sustained rate limit → try a backup model
+              const waitS = Math.ceil(rlBackoff(rlLevel) / 1000)
+              cooldownUntil = Math.max(cooldownUntil, Date.now() + rlBackoff(rlLevel))
+              enterTrouble(); setAiEta(null); logEvent(`⏳ Gemini is rate limiting us — pausing ${waitS}s, then carrying on`)
+              continue                                         // no attempt cap — waits it out
+            }
+            // Other server error — retry this pack with a growing wait, up to a cap.
+            softFails += 1; retries += 1; setAiRetries(retries)
+            struggle += 1; maybeRotate()
             const why = data?.error ?? `HTTP ${res.status}`
-            if (res.status === 422) { note("AI wouldn't look at some photos — those fall back to barcode scanning."); return false }
-            note(res.status === 429
-              ? "AI is busy (rate limited) — waiting and trying again…"
-              : `AI had a problem — trying again (${why})`)
-            if (attempt < 2) await new Promise(r => setTimeout(r, res.status === 429 ? (attempt + 1) * 15000 : 4000))
+            enterTrouble()
+            if (softFails >= POISON_CAP) { setAiNote(`AI kept failing on some photos (${why}) — those fall back to barcode scanning; the rest carries on.`); logEvent(`A batch kept failing (${why}) — barcode only for those`); return false }
+            setAiNote(`AI had a problem — trying again (${why})`)
+            await new Promise(r => setTimeout(r, Math.min(softFails * 5000, 60_000)))
           } catch (e: any) {
             if (e?.name === "AbortError" && skipAiRef.current) return false
-            note(e?.name === "AbortError" ? "An AI request took too long — trying again…" : "Couldn't reach the AI (network problem) — trying again…")
-            if (attempt < 2 && !skipAiRef.current) await new Promise(r => setTimeout(r, 4000))
+            softFails += 1; retries += 1; setAiRetries(retries)
+            struggle += 1; maybeRotate()
+            enterTrouble()
+            if (softFails >= POISON_CAP) { setAiNote("AI couldn't be reached for some photos — those fall back to barcode scanning; the rest carries on."); logEvent("Couldn't reach AI for a batch — barcode only for those"); return false }
+            setAiNote(e?.name === "AbortError" ? "An AI request took too long — trying again…" : "Couldn't reach the AI (network problem) — trying again…")
+            await new Promise(r => setTimeout(r, Math.min(softFails * 5000, 60_000)))
           } finally {
             clearTimeout(timer)
             aiAbortsRef.current.delete(ctrl)
@@ -481,7 +674,8 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
         for (const i of idxs) {
           if (skipAiRef.current) break
           if (files[i].size === 0) continue                       // glitched transfer / iCloud placeholder
-          const blob = decoded[i].unreadable ? null : await toJpegBlob(files[i])
+          const blob = await toJpegBlob(files[i])
+          if (!blob) unreadableSet.add(i)   // browser can't render it (HEIC) — send the original to AI
           const payload = blob ?? files[i]                        // HEIC original — Gemini reads it
           if (payload.size > 15_000_000) continue
           items.push({ i, payload })
@@ -500,31 +694,30 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
 
         for (const pack of packs) {
           const ok = await postPack(pack)
-          // Count CONSECUTIVE failures only, resetting on every success: an
-          // absolute count would abandon AI review of a 1000-photo folder
-          // after three unrelated blips spread across a long run.
-          if (!ok) { aiErrored = true; consecutiveFails++ }
-          else consecutiveFails = 0
+          if (!ok) aiErrored = true   // this pack fell back to scanner-only; the run keeps going
         }
       }
 
-      // Run several batches at once — 1000+ photos strictly one batch at a time
-      // is far too slow. Workers stop early on Skip or a clear AI outage.
+      // Run several batches at once. The pass NEVER gives up on the rest of the
+      // folder — postPack retries transient failures until they clear — so a
+      // ~2000-photo run finishes unattended. Only a Skip stops it early.
       let next = 0
       async function worker() {
-        while (next < batches.length) {
+        while (next < batches.length && !skipAiRef.current) {
           const b = batches[next++]
-          // Give up only on a sustained outage (several failures in a row with
-          // nothing succeeding in between), never on scattered blips.
-          if (skipAiRef.current || consecutiveFails >= AI_GIVE_UP_AFTER) {
-            aiErrored = true
-          } else {
-            await runBatch(b)
-          }
+          const before = doneCount
+          await runBatch(b)
           doneCount += b.length
           setAiProgress({ done: doneCount, total: candidates.length })
-          if (doneCount >= 24 && !skipAiRef.current) {
-            const perPhoto = (Date.now() - started) / doneCount
+          // Milestone every 500 photos (low-frequency feed entry).
+          if (Math.floor(doneCount / 500) > Math.floor(before / 500)) {
+            logEvent(`Checked ${Math.floor(doneCount / 500) * 500} of ${candidates.length} photos`)
+          }
+          // ETA only while things are flowing, from a fresh baseline with
+          // enough samples — never during trouble (the countdown covers that),
+          // so a rate-limit pause can't inflate it to a scary number.
+          if (troubleRef.current === null && !skipAiRef.current && doneCount - etaBaseDone >= 16) {
+            const perPhoto = (Date.now() - etaBaseTime) / (doneCount - etaBaseDone)
             const leftMs   = perPhoto * (candidates.length - doneCount)
             setAiEta(leftMs > 45_000 ? `about ${Math.ceil(leftMs / 60_000)} min remaining` : "nearly done")
           }
@@ -532,59 +725,36 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       }
       await Promise.all(Array.from({ length: Math.min(AI_CONCURRENCY, batches.length) }, worker))
 
-      if (consecutiveFails >= AI_GIVE_UP_AFTER) setAiNote("AI checking stopped after repeated failures — the rest was grouped by barcode scanning only.")
       if (skipAiRef.current) aiErrored = true
     }
 
-    const result: LotGroup[] = []
-    const pre: File[] = []
+    // One decision per photo, reconciling scanner + AI, collecting the
+    // disagreements a human should settle before the lots are organised.
+    const infos: PhotoInfo[] = []
+    const discs: Discrepancy[] = []
     let unreadableCount = 0
     let aiRead = 0
-    let current: LotGroup | null = null
-
     for (let i = 0; i < files.length; i++) {
       const d = decoded[i]
-      if (d.unreadable) unreadableCount++
+      const unreadable = unreadableSet.has(i)
+      if (unreadable) unreadableCount++
       const a = aiRes.get(i)
-
-      if (d.barcode) {
-        // Scanner-decoded label — reconcile with AI's second opinion. On a
-        // code disagreement the SCANNER wins (Code 128 has a checksum; AI
-        // misreads printed text more often) but the group is flagged so the
-        // user checks the label photo by eye.
-        let aiVerdict: LotGroup["aiVerdict"]
-        let aiCode: string | undefined
-        if (a) {
-          if (a.code && a.code.toLowerCase() !== d.barcode.toLowerCase()) { aiVerdict = "code-mismatch"; aiCode = a.code }
-          else if (a.label || a.code) aiVerdict = "confirmed"
-          else aiVerdict = "not-a-label"   // likely a sticker on an item photo that zxing decoded
-        }
-        const key = d.barcode.toLowerCase().trim()
-        current = { lotId: lotMap.get(key) ?? null, label: d.barcode, photos: [], labelPhoto: files[i], aiVerdict, aiCode }
-        result.push(current)
-      } else if (a?.code) {
-        // Scanner missed it; AI read the printed code.
-        aiRead++
-        const key = a.code.toLowerCase().trim()
-        current = { lotId: lotMap.get(key) ?? null, label: a.code, photos: [], labelPhoto: files[i], aiRead: true }
-        result.push(current)
-      } else if (a?.label) {
-        // AI is sure this is a label photo but couldn't read the code: break
-        // the group here so the following photos can't pollute the previous
-        // lot, and keep the label photo so the user can read it by eye.
-        current = { lotId: null, label: `Unreadable label — ${files[i].name}`, photos: [], labelPhoto: files[i], unreadableLabel: true }
-        result.push(current)
-      } else if (current) {
-        current.photos.push(files[i])
-      } else {
-        pre.push(files[i])
-      }
+      const aiAnswered = !!a
+      const aiIsLabel  = a?.label === true
+      const aiCode     = a?.code ?? null
+      const r = resolvePhoto(d.barcode, aiAnswered, aiIsLabel, aiCode)
+      if (r.source === "ai" && aiCode) aiRead++
+      infos.push({
+        scannerCode: d.barcode, aiIsLabel, aiCode, aiAnswered, unreadable,
+        isLabel: r.isLabel, code: r.code, source: r.source,
+      })
+      if (r.discrepancy) discs.push({ index: i, type: r.discrepancy, scannerCode: d.barcode, aiCode, resolved: false })
     }
 
-    if (result.length === 0) {
-      // The AI pass has already run at this point, so say what it did — a total
-      // miss with a WORKING AI check means the labels genuinely aren't there,
-      // while a failed AI check on HEIC files means "convert to JPEG" advice.
+    if (!infos.some(x => x.isLabel)) {
+      // Nothing that could start a lot. Say what the AI did — a total miss with
+      // a WORKING AI check means the labels genuinely aren't there, a failed AI
+      // check on HEIC files means "convert to JPEG".
       const aiNote = candidates.length === 0 ? ""
         : aiErrored ? " The AI check couldn't run fully, so it may have missed labels too."
         : " AI also checked every photo and found no readable labels."
@@ -600,14 +770,79 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     }
 
     makeThumbs(files)
-    setGroups(result)
-    setPreGroup(pre)
+    setScanFiles(files)
+    setPhotoInfos(infos)
+    const built = buildGroups(files, infos, lotMap)
+    setGroups(built.groups)
+    setPreGroup(built.preGroup)
     setUnreadable(unreadableCount)
     setAiFailed(aiErrored)
     setAiReadCount(aiRead)
     setAiCheckedCount(aiRes.size)
-    setPhase("preview")
+    setDiscrepancies(discs)
+    // Settle the disagreements first, then the final review; skip straight to
+    // review when scanner and AI agreed on everything.
+    setPhase(discs.length > 0 ? "discrepancies" : "preview")
   }
+
+  // ── Edit decisions → re-flow the lots (scan mode) ────────────────────────────
+  // Every fix works the same way: change one photo's decision, then rebuild the
+  // groups from the whole decision array so the following photos land correctly.
+  function reflow(nextInfos: PhotoInfo[]) {
+    setPhotoInfos(nextInfos)
+    const built = buildGroups(scanFiles, nextInfos, lotMap)
+    setGroups(built.groups)
+    setPreGroup(built.preGroup)
+  }
+  function patchInfo(index: number, patch: Partial<PhotoInfo>) {
+    reflow(photoInfos.map((x, i) => i === index ? { ...x, ...patch } : x))
+  }
+
+  // Settle one discrepancy: trust the scanner's code, trust AI's code, or say
+  // it isn't a label at all (its photos then merge into the lot above).
+  function resolveDiscrepancy(d: Discrepancy, choice: "scanner" | "ai" | "not-label") {
+    const patch: Partial<PhotoInfo> =
+      choice === "scanner" ? { isLabel: true,  code: d.scannerCode, source: "scanner" }
+      : choice === "ai"    ? { isLabel: true,  code: d.aiCode,      source: "ai" }
+      :                      { isLabel: false, code: null,          source: "none" }
+    patchInfo(d.index, patch)
+    setDiscrepancies(prev => prev.map(x => x.index === d.index ? { ...x, resolved: true } : x))
+  }
+  // What the current decision means for a discrepancy, so the buttons can show
+  // which one is active.
+  function discChoice(d: Discrepancy): "scanner" | "ai" | "not-label" {
+    const info = photoInfos[d.index]
+    if (!info?.isLabel) return "not-label"
+    if (d.aiCode && info.code?.toLowerCase() === d.aiCode.toLowerCase()) return "ai"
+    return "scanner"
+  }
+
+  // Final review: the user found a label the scan missed. Mark that photo as a
+  // barcode with the typed code — a new lot starts there and the following
+  // photos re-flow into it.
+  function markPhotoAsBarcode(index: number, code: string) {
+    const clean = code.replace(/[^\x20-\x7E]/g, "").trim().toUpperCase()
+    if (!clean) return
+    patchInfo(index, { isLabel: true, code: clean, source: "manual" })
+    setMarkingIndex(null)
+    setMarkingCode("")
+  }
+  // Fill in the code for a label AI saw but couldn't read.
+  function setLabelCode(index: number, code: string) {
+    const clean = code.replace(/[^\x20-\x7E]/g, "").trim().toUpperCase()
+    if (!clean) return
+    patchInfo(index, { isLabel: true, code: clean, source: "manual" })
+    setMarkingIndex(null)
+    setMarkingCode("")
+  }
+  // The user says a detected label isn't really one — drop it back into the lot
+  // above (its own photo included, since it wasn't a label after all).
+  function unmarkLabel(index: number) {
+    patchInfo(index, { isLabel: false, code: null, source: "none" })
+  }
+
+  const isVectisCode = (s: string) =>
+    /^[A-Za-z]\d{6,7}$/.test(s.trim()) || /^[A-Za-z]\d{4,7}-\d{1,6}$/.test(s.trim())
 
   // ── Upload (shared by both modes) ─────────────────────────────────────────────
   async function handleUpload() {
@@ -669,122 +904,114 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   }
 
   const matchedGroups   = groups.filter(g => g.lotId && g.photos.length > 0)
-  const unmatchedGroups = groups.filter(g => !g.lotId && !g.unreadableLabel)
-  const unreadableLabelGroups = groups.filter(g => g.unreadableLabel)
+  const unmatchedGroups = groups.filter(g => !g.lotId && !g.needsCode)   // has a code, but not a lot in this sale
+  const needsCodeGroups = groups.filter(g => g.needsCode)                // a label with no code typed yet
   const emptyGroups     = groups.filter(g => g.lotId && g.photos.length === 0)
-  const aiConfirmed     = groups.filter(g => g.aiVerdict === "confirmed").length
-  const aiWarnings      = groups.filter(g => g.aiVerdict === "code-mismatch" || g.aiVerdict === "not-a-label").length
-    + unreadableLabelGroups.length
-  // A group with an AI warning must always render a card, even with 0 photos.
-  const showCard        = (g: LotGroup) => g.photos.length > 0 || !g.lotId || (g.aiVerdict && g.aiVerdict !== "confirmed")
+  const editedCount     = groups.filter(g => g.edited).length
   const totalPhotos     = matchedGroups.reduce((sum, g) => sum + g.photos.length, 0)
   const uploadedCount   = uploadProgress.done - skipped.length
 
-  // Scan mode only: flag groups with far more photos than typical — the classic
-  // sign that the next lot's label photo failed to decode and both lots' photos
-  // ran together. Median-based so one genuinely big lot doesn't flag everything.
-  // LOWER median on even counts: with two groups [4, 9] the upper median (9)
-  // would make the threshold 18 — mathematically unreachable — so the exact
-  // merged-lot case the flag exists for would never fire.
+  // Flag groups with far more photos than typical — the classic sign that the
+  // next lot's label failed to scan and two lots ran together. LOWER median on
+  // even counts so the merged-lot case can actually fire.
   const photoCounts   = groups.filter(g => g.photos.length > 0).map(g => g.photos.length).sort((a, b) => a - b)
   const median        = photoCounts.length ? photoCounts[Math.floor((photoCounts.length - 1) / 2)] : 0
   const flagThreshold = Math.max(6, median * 2)
-  // Matched lots only, so the banner count always equals the highlighted cards
-  // (unmatched groups already get their own yellow "won't upload" treatment).
   const isFlagged     = (g: LotGroup) => mode === "scan" && !!g.lotId && g.photos.length >= flagThreshold
   const flaggedCount  = groups.filter(isFlagged).length
 
-  // Manual recovery when a "label" wasn't really a label (AI false positive on
-  // an unreadable-label group, or AI flagging a scanner-decoded sticker as an
-  // item photo): dissolve the group back into the lot above — its photos AND
-  // the not-really-a-label photo itself become that lot's photos.
-  function dissolveGroup(gi: number) {
-    const g = groups[gi]
-    if (!g || !(g.unreadableLabel || g.aiVerdict === "not-a-label")) return
-    const moved = [...(g.labelPhoto ? [g.labelPhoto] : []), ...g.photos]
-    const next = groups.filter((_, k) => k !== gi)
-    if (gi > 0) next[gi - 1] = { ...next[gi - 1], photos: [...next[gi - 1].photos, ...moved] }
-    else setPreGroup(p => [...p, ...moved])
-    setGroups(next)
-  }
+  const needsAttention = (g: LotGroup) => !g.lotId || g.needsCode || isFlagged(g)
+  const attentionCount = groups.filter(needsAttention).length + (preGroup.length > 0 ? 1 : 0)
+  const resolvedCount  = discrepancies.filter(d => d.resolved).length
 
   function renderGroupCard(g: LotGroup, i: number) {
-    const flagged = isFlagged(g)
-    const dissolvable = g.unreadableLabel || g.aiVerdict === "not-a-label"
+    const flagged  = isFlagged(g)
+    const scanMode = g.labelIndex !== undefined   // manual tools only exist in scan mode
     return (
       <div key={`${g.label}-${i}`}
         className={`rounded-xl border px-4 py-3 ${
-          g.aiVerdict === "code-mismatch"
-            ? "bg-red-50 border-red-400 dark:bg-red-900/10 dark:border-red-500/70"
-            : g.unreadableLabel || g.aiVerdict === "not-a-label"
-              ? "bg-orange-50 border-orange-400 dark:bg-orange-900/10 dark:border-orange-500/70"
-              : !g.lotId
-                ? "bg-yellow-50 border-yellow-400 dark:bg-yellow-900/10 dark:border-yellow-700/50"
-                : flagged
-                  ? "bg-amber-50 border-amber-400 dark:bg-amber-900/10 dark:border-amber-500/70"
-                  : "bg-white dark:bg-[#1C1C1E] border-gray-300 dark:border-gray-700"
+          g.needsCode
+            ? "bg-orange-50 border-orange-400 dark:bg-orange-900/10 dark:border-orange-500/70"
+            : !g.lotId
+              ? "bg-yellow-50 border-yellow-400 dark:bg-yellow-900/10 dark:border-yellow-700/50"
+              : flagged
+                ? "bg-amber-50 border-amber-400 dark:bg-amber-900/10 dark:border-amber-500/70"
+                : "bg-white dark:bg-[#1C1C1E] border-gray-300 dark:border-gray-700"
         }`}>
         <div className="flex items-center gap-2 flex-wrap mb-2">
           <span className={`font-mono text-sm ${
-            g.unreadableLabel ? "text-orange-700 dark:text-orange-400"
+            g.needsCode ? "text-orange-700 dark:text-orange-400"
               : g.lotId ? "text-[#2AB4A6]" : "text-yellow-700 dark:text-yellow-400"
           }`}>{g.label}</span>
           <span className="text-xs text-gray-600 dark:text-gray-500">
             {g.photos.length} photo{g.photos.length !== 1 ? "s" : ""}
           </span>
-          {g.aiVerdict === "confirmed" && (
-            <span className="text-xs bg-green-200 text-green-800 dark:bg-green-900/40 dark:text-green-400 rounded-full px-2 py-0.5">
-              ✓ AI confirmed
-            </span>
-          )}
-          {g.aiVerdict === "code-mismatch" && (
-            <span className="text-xs bg-red-200 text-red-800 dark:bg-red-900/40 dark:text-red-400 rounded-full px-2 py-0.5">
-              ⚠ scanner read {g.label} but AI read {g.aiCode} — check the label photo
-            </span>
-          )}
-          {g.aiVerdict === "not-a-label" && (
+          {g.needsCode && (
             <span className="text-xs bg-orange-200 text-orange-800 dark:bg-orange-900/40 dark:text-orange-400 rounded-full px-2 py-0.5">
-              ⚠ AI thinks this &quot;label&quot; is an item photo — check it
+              🔎 label found but not read — type the code
             </span>
           )}
-          {g.unreadableLabel && (
-            <span className="text-xs bg-orange-200 text-orange-800 dark:bg-orange-900/40 dark:text-orange-400 rounded-full px-2 py-0.5">
-              🔎 AI saw a label here it couldn&apos;t read — check the label photo by eye
-            </span>
-          )}
-          {dissolvable && (
-            <button
-              onClick={() => dissolveGroup(i)}
-              className="text-xs px-2 py-0.5 rounded-full border border-orange-400 dark:border-orange-500/70 text-orange-800 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-900/40 transition-colors">
-              ✕ Not a label — {i > 0 ? "move these photos to the lot above" : "discard grouping"}
-            </button>
-          )}
-          {!g.lotId && !g.unreadableLabel && (
+          {!g.lotId && !g.needsCode && (
             <span className="text-xs bg-yellow-200 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-400 rounded-full px-2 py-0.5">
-              not in this auction — won&apos;t upload
+              not a lot in this sale — won&apos;t save
             </span>
           )}
-          {g.aiRead && (
+          {g.aiRead && !g.edited && (
             <span className="text-xs bg-purple-200 text-purple-800 dark:bg-purple-900/40 dark:text-purple-400 rounded-full px-2 py-0.5">
               ✨ read by AI
             </span>
           )}
-          {flagged && (
-            <span className="text-xs bg-amber-200 text-amber-800 dark:bg-amber-900/40 dark:text-amber-400 rounded-full px-2 py-0.5">
-              ⚠ unusually many photos — check none belong to the next lot
+          {g.edited && (
+            <span className="text-xs bg-blue-200 text-blue-800 dark:bg-blue-900/40 dark:text-blue-400 rounded-full px-2 py-0.5">
+              ✎ you set this
             </span>
           )}
+          {flagged && (
+            <span className="text-xs bg-amber-200 text-amber-800 dark:bg-amber-900/40 dark:text-amber-400 rounded-full px-2 py-0.5">
+              ⚠ a lot of photos — check none belong to the next lot
+            </span>
+          )}
+          <span className="ml-auto flex gap-1.5">
+            {g.needsCode && scanMode && (
+              <button onClick={() => { setMarkingIndex(g.labelIndex!); setMarkingCode("") }}
+                className="text-xs px-2 py-0.5 rounded-full bg-orange-500 hover:bg-orange-600 text-white transition-colors">
+                🏷 Type the barcode
+              </button>
+            )}
+            {/* Every scan-mode label can be dismissed — including a needsCode one
+                that AI wrongly flagged (there'd be no code to type), which would
+                otherwise orphan the photos below it with no way back. */}
+            {scanMode && (
+              <button onClick={() => unmarkLabel(g.labelIndex!)}
+                className="text-xs px-2 py-0.5 rounded-full border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-500 transition-colors">
+                ✕ Not a label{g.needsCode ? " — merge into the lot above" : ""}
+              </button>
+            )}
+          </span>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {g.labelPhoto && (
-            <div className="relative flex-shrink-0" title={`Label photo — ${g.labelPhoto.name} (not uploaded)`}>
+            <div className="relative flex-shrink-0" title={`Barcode label — ${g.labelPhoto.name} (not saved)`}>
               <Thumb url={thumbUrls.current.get(g.labelPhoto) ?? ""} name={g.labelPhoto.name} />
               <span className="absolute -top-1 -left-1 text-[9px] leading-none bg-gray-700 text-white dark:bg-gray-200 dark:text-gray-900 rounded px-1 py-0.5">label</span>
             </div>
           )}
-          {g.photos.map((p, j) => (
-            <Thumb key={j} url={thumbUrls.current.get(p) ?? ""} name={p.name} />
-          ))}
+          {g.photos.map((p, j) => {
+            const gi = g.photoIndices?.[j]
+            return (
+              <div key={j} className="relative flex-shrink-0 group/ph">
+                <Thumb url={thumbUrls.current.get(p) ?? ""} name={p.name} />
+                {scanMode && gi !== undefined && (
+                  <button
+                    onClick={() => { setMarkingIndex(gi); setMarkingCode("") }}
+                    title="This photo is actually a barcode label"
+                    className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-purple-600 hover:bg-purple-500 text-white text-[10px] leading-none flex items-center justify-center opacity-0 group-hover/ph:opacity-100 focus:opacity-100 transition-opacity">
+                    🏷
+                  </button>
+                )}
+              </div>
+            )
+          })}
         </div>
       </div>
     )
@@ -820,7 +1047,11 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const stagePct = scanProgress.total > 0 ? (scanProgress.done / scanProgress.total) * 100 : 0
   const aiPct    = aiProgress.total   > 0 ? (aiProgress.done   / aiProgress.total)   * 100 : 0
   const upPct    = uploadProgress.total > 0 ? (uploadProgress.done / uploadProgress.total) * 100 : 0
-  const needsALook = aiWarnings + flaggedCount + (preGroup.length > 0 ? 1 : 0)
+  const needsALook = attentionCount
+  // Escalation panel shows when AI has been in trouble for over ~2 minutes.
+  // The cooldown countdown re-renders every second, so this re-evaluates live.
+  const troubleMins = troubleSince ? Math.floor((Date.now() - troubleSince) / 60_000) : 0
+  const escalated   = troubleSince !== null && (Date.now() - troubleSince) > 120_000
 
   return (
     <div className="pb-6 max-w-5xl">
@@ -962,11 +1193,44 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
                     Catching labels the barcode reader missed, and anything that looks wrong.
                   </p>
                   {aiNote && <div className="mt-2"><Notice tone="warn">{aiNote}</Notice></div>}
+
+                  {/* Escalation — only when AI has struggled for a couple of minutes */}
+                  {escalated && (
+                    <div className="mt-3 rounded-lg border border-red-300 dark:border-red-700/60 bg-red-100 dark:bg-red-900/20 px-3 py-2.5">
+                      <p className="text-xs font-semibold text-red-800 dark:text-red-300">
+                        AI has been struggling for {troubleMins} minute{troubleMins !== 1 ? "s" : ""}.
+                      </p>
+                      <p className="text-xs text-red-800 dark:text-red-300 mt-1">
+                        It keeps trying on its own and will finish if the AI comes back — you can leave it running.
+                        If Gemini looks to be having an outage and you&apos;d rather not wait, press
+                        <strong> Skip</strong> below to finish this scan by barcode grouping only, then check the lots
+                        carefully in the review before saving.
+                      </p>
+                    </div>
+                  )}
+
                   <button
-                    onClick={() => { skipAiRef.current = true; aiAbortsRef.current.forEach(c => c.abort()) }}
+                    onClick={() => { skipAiRef.current = true; aiAbortsRef.current.forEach(c => c.abort()); logEvent("AI check skipped — grouping by barcode only") }}
                     className="mt-3 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs hover:border-gray-500 transition-colors">
                     Skip the AI check — group by barcode only
                   </button>
+
+                  {/* Live activity feed */}
+                  {aiLog.length > 0 && (
+                    <div className="mt-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#141416] max-h-40 overflow-y-auto">
+                      <p className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-500 px-3 pt-2 pb-1">Activity</p>
+                      <ul className="px-3 pb-2 space-y-0.5">
+                        {aiLog.slice().reverse().map((e, i) => (
+                          <li key={aiLog.length - i} className="text-xs text-gray-600 dark:text-gray-400 flex gap-2">
+                            <span className="text-gray-400 dark:text-gray-600 tabular-nums flex-shrink-0">
+                              {new Date(e.t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                            </span>
+                            <span>{e.msg}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </>
               ) : (
                 <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">Waiting for the barcode read to finish…</p>
@@ -976,15 +1240,89 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
         </div>
       )}
 
-      {/* ══ Preview — check before saving ══ */}
+      {/* ══ Discrepancies — settle where the reader and AI disagree ══ */}
+      {phase === "discrepancies" && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Settle the disagreements</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+              The barcode reader and AI didn&apos;t agree on these photos. Pick the right answer for each — then the
+              lots get organised. A sensible default is already chosen, so you can also just continue.
+            </p>
+          </div>
+
+          <Notice tone="ai">
+            {resolvedCount} of {discrepancies.length} settled. The reader has a checksum so it&apos;s usually right on
+            a code; AI is better at spotting a photo that isn&apos;t a label at all.
+          </Notice>
+
+          <div className="space-y-2 max-h-[34rem] overflow-y-auto pr-1">
+            {discrepancies.map(d => {
+              const file   = scanFiles[d.index]
+              const choice = discChoice(d)
+              const Btn = ({ c, label }: { c: "scanner" | "ai" | "not-label"; label: React.ReactNode }) => (
+                <button onClick={() => resolveDiscrepancy(d, c)}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                    choice === c
+                      ? "bg-purple-600 text-white"
+                      : "border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-purple-400"
+                  }`}>
+                  {label}
+                </button>
+              )
+              return (
+                <div key={d.index}
+                  className={`rounded-xl border px-4 py-3 flex gap-4 ${
+                    d.resolved
+                      ? "bg-white dark:bg-[#1C1C1E] border-gray-200 dark:border-gray-800"
+                      : "bg-purple-50 border-purple-300 dark:bg-purple-900/10 dark:border-purple-500/60"
+                  }`}>
+                  <div className="w-20 h-20 flex-shrink-0">
+                    {file && <Thumb url={thumbUrls.current.get(file) ?? ""} name={file.name} />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-gray-700 dark:text-gray-300 mb-2">
+                      {d.type === "mismatch" && <>The reader read <span className="font-mono text-gray-900 dark:text-white">{d.scannerCode}</span> but AI read <span className="font-mono text-gray-900 dark:text-white">{d.aiCode}</span>. Which code is on the label?</>}
+                      {d.type === "scanner-not-ai" && <>The reader read <span className="font-mono text-gray-900 dark:text-white">{d.scannerCode}</span>, but AI thinks this is an item photo, not a barcode label.</>}
+                      {d.type === "ai-not-scanner" && <>AI thinks this is a label reading <span className="font-mono text-gray-900 dark:text-white">{d.aiCode}</span>, but the barcode reader didn&apos;t find one.</>}
+                    </p>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {d.scannerCode && <Btn c="scanner" label={<>Reader — <span className="font-mono">{d.scannerCode}</span></>} />}
+                      {d.aiCode      && <Btn c="ai"      label={<>AI — <span className="font-mono">{d.aiCode}</span></>} />}
+                      <Btn c="not-label" label="Not a barcode label" />
+                    </div>
+                  </div>
+                  {d.resolved && <span className="text-green-600 dark:text-green-400 text-lg flex-shrink-0">✓</span>}
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="flex gap-3 sticky bottom-0 bg-gray-50 dark:bg-[#141416] py-3 border-t border-gray-200 dark:border-gray-800">
+            <button onClick={reset}
+              className="px-5 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm hover:border-gray-500 transition-colors">
+              ← Start again
+            </button>
+            <button onClick={() => setPhase("preview")}
+              className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-semibold rounded-lg text-sm transition-colors">
+              {resolvedCount < discrepancies.length
+                ? `Continue — ${discrepancies.length - resolvedCount} left on the default`
+                : "Continue to final review"} →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ══ Final review — organised lots, fix any missed barcode, then save ══ */}
       {phase === "preview" && (
         <div className="space-y-4">
           <div>
             <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-              {mode === "filename" ? "Check the filename matches" : "Check before saving"}
+              {mode === "filename" ? "Check the filename matches" : "Final review"}
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-              Nothing has been saved yet. Every photo below is shown under the lot it will be added to.
+              Nothing has been saved yet. Each lot shows its barcode label and its photos.
+              {mode === "scan" && <> Missed a label? Hover a photo and press <span className="font-semibold">🏷</span> to set it — the photos re-flow into the right lot.</>}
             </p>
           </div>
 
@@ -997,29 +1335,29 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
 
           {mode === "scan" && aiCheckedCount > 0 && (
             <Notice tone="ai">
-              ✨ AI reviewed {aiCheckedCount} photo{aiCheckedCount !== 1 ? "s" : ""}: {aiConfirmed} label{aiConfirmed !== 1 ? "s" : ""} confirmed
-              {aiReadCount > 0 ? <>, {aiReadCount} read by AI that the barcode reader missed</> : null}
-              {aiWarnings > 0 ? <>, <strong>{aiWarnings} flagged below</strong></> : <>, nothing suspicious</>}.
+              ✨ AI reviewed {aiCheckedCount} photo{aiCheckedCount !== 1 ? "s" : ""}
+              {aiReadCount > 0 ? <>, reading {aiReadCount} label{aiReadCount !== 1 ? "s" : ""} the barcode reader missed</> : null}
+              {editedCount > 0 ? <>. You set {editedCount} by hand</> : null}.
+              {aiRetries > 0 ? <> It rode out {aiRetries} rate-limit/retry pause{aiRetries !== 1 ? "s" : ""} on its own along the way.</> : null}
             </Notice>
           )}
           {mode === "scan" && aiFailed && (
             <Notice tone="bad">
               ⚠ The AI check couldn&apos;t run for some photos (a problem with the AI, the network, or it was
-              skipped). Those photos were grouped by barcode alone, so a missed label could have merged two lots.
-              Check the groups below, or scan again.
+              skipped). Those were grouped by barcode alone, so a missed label could have merged two lots. Check the
+              lots below, or scan again.
+            </Notice>
+          )}
+          {needsCodeGroups.length > 0 && (
+            <Notice tone="warn">
+              🔎 {needsCodeGroups.length} label{needsCodeGroups.length !== 1 ? "s" : ""} {needsCodeGroups.length !== 1 ? "were" : "was"} spotted
+              but couldn&apos;t be read — the orange cards below. Press <span className="font-semibold">🏷 Type the barcode</span> on each to enter the code; until then those photos won&apos;t save.
             </Notice>
           )}
           {flaggedCount > 0 && (
             <Notice tone="warn">
-              ⚠ {flaggedCount} lot{flaggedCount !== 1 ? "s have" : " has"} far more photos than the rest — often a
-              sign a label didn&apos;t scan and two lots ran together. Highlighted below.
-            </Notice>
-          )}
-          {unreadableLabelGroups.length > 0 && (
-            <Notice tone="warn">
-              🔎 AI spotted {unreadableLabelGroups.length} label{unreadableLabelGroups.length !== 1 ? "s" : ""} it
-              couldn&apos;t read. Those photos are held separately below so they can&apos;t land on the wrong lot —
-              read the code off the label photo yourself, or use &quot;Not a label&quot; if AI got it wrong.
+              ⚠ {flaggedCount} lot{flaggedCount !== 1 ? "s have" : " has"} far more photos than the rest — often a sign
+              a label didn&apos;t scan and two lots ran together. If so, hover the label photo and press 🏷 to split it.
             </Notice>
           )}
           {unreadable > 0 && (
@@ -1028,26 +1366,15 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
                 ? <>⚠ {unreadable} photo{unreadable !== 1 ? "s" : ""} couldn&apos;t be read on this device (usually
                   HEIC from an iPhone) and the AI check didn&apos;t cover them — convert them to JPEG and scan again.</>
                 : <>ℹ {unreadable} photo{unreadable !== 1 ? "s" : ""} can&apos;t be previewed on this device (usually
-                  HEIC from an iPhone). AI still checked them and they will still upload — they just show as a
+                  HEIC from an iPhone). AI still checked them and they will still save — they just show as a
                   placeholder tile.</>}
             </Notice>
-          )}
-          {preGroup.length > 0 && (
-            <div className="rounded-lg px-3 py-2 border bg-amber-100 border-amber-300 dark:bg-amber-900/20 dark:border-amber-700/50">
-              <p className="text-xs text-amber-800 dark:text-amber-300 font-medium mb-2">
-                {preGroup.length} photo{preGroup.length !== 1 ? "s" : ""} came before the first label and won&apos;t be
-                saved — if a label here didn&apos;t scan, its lot&apos;s photos are in this pile too:
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {preGroup.map((p, j) => <Thumb key={j} url={thumbUrls.current.get(p) ?? ""} name={p.name} />)}
-              </div>
-            </div>
           )}
           {unmatchedGroups.length > 0 && (
             <Notice tone="warn">
               <p className="font-medium mb-1">
-                {unmatchedGroups.length} label{unmatchedGroups.length !== 1 ? "s" : ""} {unmatchedGroups.length !== 1 ? "aren't" : "isn't"} on
-                any lot in this sale — their photos won&apos;t be saved:
+                {unmatchedGroups.length} label{unmatchedGroups.length !== 1 ? "s" : ""} {unmatchedGroups.length !== 1 ? "aren't" : "isn't"} a
+                lot in this sale — their photos won&apos;t save:
               </p>
               <p className="font-mono">{unmatchedGroups.map(g => g.label).join(", ")}</p>
               <p className="mt-1">Check you picked the right sale, and that these lots have been created.</p>
@@ -1059,10 +1386,58 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             </Notice>
           )}
 
-          {groups.filter(showCard).length > 0 && (
-            <div className="space-y-2 max-h-[32rem] overflow-y-auto pr-1">
-              {groups.map((g, i) => showCard(g) ? renderGroupCard(g, i) : null)}
+          {/* Photos before the first label — recoverable if a label here was missed */}
+          {preGroup.length > 0 && (
+            <div className="rounded-lg px-3 py-2 border bg-amber-100 border-amber-300 dark:bg-amber-900/20 dark:border-amber-700/50">
+              <p className="text-xs text-amber-800 dark:text-amber-300 font-medium mb-2">
+                {preGroup.length} photo{preGroup.length !== 1 ? "s" : ""} came before the first label and won&apos;t save. If
+                one of these is really a barcode, hover it and press 🏷.
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {preGroup.map((p, j) => {
+                  const gi = scanFiles.indexOf(p)
+                  return (
+                    <div key={j} className="relative flex-shrink-0 group/ph">
+                      <Thumb url={thumbUrls.current.get(p) ?? ""} name={p.name} />
+                      {mode === "scan" && gi >= 0 && (
+                        <button onClick={() => { setMarkingIndex(gi); setMarkingCode("") }}
+                          title="This photo is a barcode label"
+                          className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-purple-600 hover:bg-purple-500 text-white text-[10px] leading-none flex items-center justify-center opacity-0 group-hover/ph:opacity-100 focus:opacity-100 transition-opacity">
+                          🏷
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
+          )}
+
+          {/* Lot list with a filter so a big sale doesn't render everything at once */}
+          {groups.length > 0 && (
+            <>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  {showAllLots ? `All ${groups.length} lots` : `${attentionCount} lot${attentionCount !== 1 ? "s" : ""} needing a look`}
+                </p>
+                <div className="flex gap-1">
+                  <button onClick={() => setShowAllLots(false)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${!showAllLots ? "bg-purple-600 text-white" : "border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-500"}`}>
+                    Needs attention ({attentionCount})
+                  </button>
+                  <button onClick={() => setShowAllLots(true)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${showAllLots ? "bg-purple-600 text-white" : "border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-500"}`}>
+                    All lots ({groups.length})
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-2 max-h-[34rem] overflow-y-auto pr-1">
+                {groups.map((g, i) => (showAllLots || needsAttention(g)) ? renderGroupCard(g, i) : null)}
+                {!showAllLots && attentionCount === 0 && (
+                  <Notice tone="good">Everything looks right — nothing needs a second look. Switch to “All lots” to browse them, or save.</Notice>
+                )}
+              </div>
+            </>
           )}
 
           {error && <Notice tone="bad">{error}</Notice>}
@@ -1072,11 +1447,58 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
               className="px-5 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm hover:border-gray-500 transition-colors">
               ← Start again
             </button>
+            {discrepancies.length > 0 && (
+              <button onClick={() => setPhase("discrepancies")}
+                className="px-5 py-2.5 rounded-lg border border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-400 text-sm hover:border-purple-500 transition-colors">
+                ← Disagreements
+              </button>
+            )}
             <button onClick={handleUpload} disabled={matchedGroups.length === 0}
               className="flex-1 py-2.5 bg-[#2AB4A6] hover:bg-[#24a090] disabled:opacity-50 text-black font-semibold rounded-lg text-sm transition-colors">
               Save {totalPhotos} photo{totalPhotos !== 1 ? "s" : ""} to {matchedGroups.length} lot{matchedGroups.length !== 1 ? "s" : ""}
             </button>
           </div>
+
+          {/* Mark-as-barcode modal — set or type a code for a photo */}
+          {markingIndex !== null && scanFiles[markingIndex] && (
+            <div onClick={() => setMarkingIndex(null)}
+              className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+              <div onClick={e => e.stopPropagation()}
+                className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl p-5 w-full max-w-sm">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white mb-1">What barcode is on this photo?</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                  It becomes a lot label, and the photos after it (up to the next label) move into that lot.
+                </p>
+                <div className="flex justify-center mb-3">
+                  <img src={thumbUrls.current.get(scanFiles[markingIndex]) ?? ""} alt=""
+                    className="max-h-48 rounded-lg border border-gray-300 dark:border-gray-700 object-contain" />
+                </div>
+                <input
+                  autoFocus
+                  value={markingCode}
+                  onChange={e => setMarkingCode(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && markingCode.trim()) markPhotoAsBarcode(markingIndex, markingCode) }}
+                  placeholder="e.g. F066001 or R000016-413"
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                {markingCode.trim() && !isVectisCode(markingCode) && (
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-1.5">
+                    That doesn&apos;t look like a Vectis barcode (e.g. F066001 or R000016-413) — you can still use it.
+                  </p>
+                )}
+                <div className="flex gap-2 mt-4">
+                  <button onClick={() => setMarkingIndex(null)}
+                    className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm hover:border-gray-500 transition-colors">
+                    Cancel
+                  </button>
+                  <button onClick={() => markPhotoAsBarcode(markingIndex, markingCode)} disabled={!markingCode.trim()}
+                    className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-sm font-semibold transition-colors">
+                    Set as barcode
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1180,7 +1602,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             </div>
           )}
 
-          {(unmatchedGroups.length > 0 || unreadableLabelGroups.length > 0 || preGroup.length > 0) && (
+          {(unmatchedGroups.length > 0 || needsCodeGroups.length > 0 || preGroup.length > 0) && (
             <Notice tone="warn">
               <p className="font-medium mb-1">Still to sort out:</p>
               <ul className="space-y-0.5">
@@ -1188,8 +1610,8 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
                   <li>· {unmatchedGroups.length} label{unmatchedGroups.length !== 1 ? "s" : ""} not on any lot in this sale
                     (<span className="font-mono">{unmatchedGroups.slice(0, 6).map(g => g.label).join(", ")}{unmatchedGroups.length > 6 ? "…" : ""}</span>)</li>
                 )}
-                {unreadableLabelGroups.length > 0 && (
-                  <li>· {unreadableLabelGroups.length} label{unreadableLabelGroups.length !== 1 ? "s" : ""} AI couldn&apos;t read — those photos weren&apos;t saved</li>
+                {needsCodeGroups.length > 0 && (
+                  <li>· {needsCodeGroups.length} label{needsCodeGroups.length !== 1 ? "s" : ""} left without a code — those photos weren&apos;t saved</li>
                 )}
                 {preGroup.length > 0 && (
                   <li>· {preGroup.length} photo{preGroup.length !== 1 ? "s" : ""} before the first label — not saved</li>

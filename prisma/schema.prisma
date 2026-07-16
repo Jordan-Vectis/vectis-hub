@@ -1075,6 +1075,52 @@ model CatalogueLotEvent {
   @@index([field])
 }
 
+// Access Denial Log — records every time an app gate turned a logged-in user
+// away, capturing BOTH what the session (JWT) claimed AND what the permission
+// read actually returned from the database.
+//
+// Built 2026-07-16 for an intermittent bug: a cataloguer was sometimes bounced
+// to /hub after saving a lot, seeing only the Manager Portal card. Her stored
+// permissions were correct and a plain refresh fixed it, so nothing was writing
+// her row — which left three possibilities that static code reading could not
+// tell apart: the read came back empty, it came back missing an app, or it
+// returned a DIFFERENT user's row (idMismatch). This table captures which,
+// at the moment it happens.
+model AccessDenialLog {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  appKey        String   // which app gate denied — e.g. CATALOGUING
+  source        String   // which gate ran — e.g. cataloguing_layout
+  referer       String?  // the page they were on when they got bounced
+
+  // What the session claimed. NOTE: these are the EFFECTIVE user — when an admin
+  // is impersonating, getEffectiveSession() returns the TARGET, so sessionUserId
+  // is the target's id and idMismatch would read false. isImpersonating/adminId
+  // are what reveal that case; without them an impersonation bug would be
+  // misfiled as "the row genuinely lacked the app".
+  sessionUserId   String
+  sessionEmail    String?
+  sessionName     String?
+  sessionRole     String?
+  isImpersonating Boolean @default(false)
+  adminId         String? // the real logged-in account when impersonating
+  adminName       String?
+
+  // What the permission read actually returned
+  dbUserFound   Boolean
+  dbUserId      String?
+  dbEmail       String?
+  dbRole        String?
+  dbAllowedApps String[]
+
+  // dbUserId !== sessionUserId — would mean the render read someone else's row
+  idMismatch    Boolean  @default(false)
+  note          String?
+
+  @@index([createdAt])
+  @@index([sessionUserId])
+}
+
 // IT Job Board — jobs auto-created from the IT@vectis.co.uk inbox (or added
 // manually). graphMessageId holds the email Message-ID for dedupe/threading;
 // threadKey (normalised subject) is the fallback reply-matching key.

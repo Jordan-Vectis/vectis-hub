@@ -9,6 +9,7 @@ import {
   deleteLotPhoto,
 } from "@/lib/actions/catalogue"
 import LotWizardTab, { BRANDS_LIST } from "../../../auctions/[id]/lot-wizard-tab"
+import CataloguingGuideButton from "../../../auctions/[id]/cataloguing-guide"
 import { useCategoryMap } from "@/lib/use-category-map"
 import { parseCondition, buildCondition, type BoxPrefixMode } from "@/lib/condition"
 import { useConditionWordings } from "@/lib/use-condition-wordings"
@@ -78,6 +79,13 @@ export default function TabletTabs({ auction, lots, userRole, userId, userName, 
   const [tab, setTab] = useState<Tab>("manage")
   const [editingLotId, setEditingLotId] = useState<string | null>(null)
   const [navDir, setNavDir] = useState<"next" | "prev" | null>(null)
+  // The lots list's filters live HERE, in the parent, on purpose: opening a lot
+  // swaps the list out for the editor, which unmounts TabletManageLots — so
+  // holding them in that component wiped the user's search/sort/cataloguer
+  // every time they came back from a lot.
+  const [listSearch, setListSearch]         = useState("")
+  const [listSortKey, setListSortKey]       = useState<SortKey>("lot-asc")
+  const [listCataloguer, setListCataloguer] = useState("")   // "" = all
   const editingLot = lots.find(l => l.id === editingLotId) ?? null
 
   return (
@@ -104,6 +112,7 @@ export default function TabletTabs({ auction, lots, userRole, userId, userName, 
           <span className="font-mono font-bold text-[#2AB4A6] text-lg">{auction.code}</span>
           <span className="text-gray-400 text-base ml-2 truncate">{auction.name}</span>
         </div>
+        <CataloguingGuideButton tablet currentTab={tab} />
         <span className="text-sm text-gray-500 flex-shrink-0">{lots.length} lots</span>
       </div>
 
@@ -149,6 +158,9 @@ export default function TabletTabs({ auction, lots, userRole, userId, userName, 
                 auctionId={auction.id}
                 onEdit={setEditingLotId}
                 onDelete={() => { router.refresh() }}
+                search={listSearch}           setSearch={setListSearch}
+                sortKey={listSortKey}         setSortKey={setListSortKey}
+                cataloguer={listCataloguer}   setCataloguer={setListCataloguer}
               />
         )}
 
@@ -206,15 +218,24 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "oldest",  label: "Oldest"  },
 ]
 
-function TabletManageLots({ lots, auctionId, onEdit, onDelete }: {
+// Filters are OWNED BY THE PARENT (see TabletTabs) so they survive this
+// component unmounting while a lot is open — don't move them back to local
+// state or "go back from a lot" wipes them again.
+function TabletManageLots({
+  lots, auctionId, onEdit, onDelete,
+  search, setSearch, sortKey, setSortKey, cataloguer, setCataloguer,
+}: {
   lots: Lot[]
   auctionId: string
   onEdit: (id: string) => void
   onDelete: () => void
+  search: string
+  setSearch: (v: string) => void
+  sortKey: SortKey
+  setSortKey: (v: SortKey) => void
+  cataloguer: string
+  setCataloguer: (v: string) => void
 }) {
-  const [search,  setSearch]  = useState("")
-  const [sortKey, setSortKey] = useState<SortKey>("lot-asc")
-  const [cataloguer, setCataloguer] = useState("")   // "" = all
   const [deleting, setDeleting] = useState<string | null>(null)
   const [pending, start] = useTransition()
 

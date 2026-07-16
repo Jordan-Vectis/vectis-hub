@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { auctionTypeEmoji, auctionTypeLabel, AUCTION_TYPES } from "@/lib/auction-types"
 
@@ -27,8 +28,13 @@ function fmtDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
 }
 
-function AuctionCard({ a, onStart }: { a: PhotographyAuctionRow; onStart: (id: string) => void }) {
+function AuctionCard({ a, onStart, onView }: {
+  a: PhotographyAuctionRow
+  onStart: (id: string) => void
+  onView:  (id: string) => void
+}) {
   const [going, setGoing] = useState(false)
+  const [viewing, setViewing] = useState(false)
   const pct  = a.lots > 0 ? Math.round((a.lotsWithPhotos / a.lots) * 100) : 0
   const done = a.lots > 0 && a.lotsWithPhotos === a.lots
   const none = a.lotsWithPhotos === 0
@@ -92,13 +98,22 @@ function AuctionCard({ a, onStart }: { a: PhotographyAuctionRow; onStart: (id: s
         )}
       </div>
 
-      <button
-        onClick={() => { setGoing(true); onStart(a.id) }}
-        disabled={going || a.lots === 0}
-        className="w-full py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
-      >
-        {going ? "Opening…" : a.lots === 0 ? "No lots to photograph" : "📷 Start photography"}
-      </button>
+      <div className="flex flex-col gap-2">
+        <button
+          onClick={() => { setGoing(true); onStart(a.id) }}
+          disabled={going || a.lots === 0}
+          className="w-full py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+        >
+          {going ? "Opening…" : a.lots === 0 ? "No lots to photograph" : "📷 Start photography"}
+        </button>
+        <button
+          onClick={() => { setViewing(true); onView(a.id) }}
+          disabled={viewing || a.lots === 0}
+          className="w-full py-2 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-purple-400 disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 dark:text-gray-300 text-sm font-medium transition-colors"
+        >
+          {viewing ? "Opening…" : `🔍 View lots${a.lots > 0 ? ` (${a.lots})` : ""}`}
+        </button>
+      </div>
     </div>
   )
 }
@@ -120,17 +135,24 @@ export default function PhotographyAuctionList({ active, completed }: Props) {
   const shownCompleted = useMemo(() => filter(completed), [completed, search, type])
 
   const start = (id: string) => router.push(`/tools/cataloguing/photography/${id}`)
+  const view  = (id: string) => router.push(`/tools/cataloguing/photography/${id}?tab=view`)
 
   const totalNeeding = active.reduce((n, a) => n + (a.lots - a.lotsWithPhotos), 0)
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">📷 Photography</h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-          Pick a sale, then upload its photos. Barcode labels are read automatically and every photo is
-          double-checked by AI before anything is saved.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">📷 Photography</h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+            Pick a sale, then upload its photos. Barcode labels are read automatically and every photo is
+            double-checked by AI before anything is saved.
+          </p>
+        </div>
+        <Link href="/tools/cataloguing/photography/debug"
+          className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-purple-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">
+          🔧 Barcode debug
+        </Link>
       </div>
 
       {/* Stats */}
@@ -184,7 +206,7 @@ export default function PhotographyAuctionList({ active, completed }: Props) {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
-          {shownActive.map(a => <AuctionCard key={a.id} a={a} onStart={start} />)}
+          {shownActive.map(a => <AuctionCard key={a.id} a={a} onStart={start} onView={view} />)}
         </div>
       )}
 
@@ -199,7 +221,7 @@ export default function PhotographyAuctionList({ active, completed }: Props) {
           </button>
           {showDone && (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 mt-4">
-              {shownCompleted.map(a => <AuctionCard key={a.id} a={a} onStart={start} />)}
+              {shownCompleted.map(a => <AuctionCard key={a.id} a={a} onStart={start} onView={view} />)}
             </div>
           )}
         </div>
