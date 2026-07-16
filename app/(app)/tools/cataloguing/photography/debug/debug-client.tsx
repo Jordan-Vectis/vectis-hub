@@ -14,6 +14,7 @@ interface PassResult {
   reader:  string        // "Native" | "ZXing · Hybrid" | "ZXing · Global"
   size:    string        // e.g. "2000px" or "full (4032px)"
   mode:    Mode
+  rot:     number        // rotation in degrees the image was straightened by
   raw:     string | null // whatever it decoded (may be a non-Vectis value like the date)
   vectis:  boolean       // did it pass the Vectis-format check
 }
@@ -48,18 +49,30 @@ export default function BarcodeDebugClient() {
     })
   }
 
-  function toCanvas(img: HTMLImageElement, targetW: number, mode: Mode): HTMLCanvasElement {
+  // Render the image at a target width, a contrast treatment, and an optional
+  // rotation (degrees). Rotating straightens a skewed label so zxing's
+  // horizontal scan lines can cross all the bars. The canvas grows to the
+  // rotated bounding box so nothing clips.
+  function toCanvas(img: HTMLImageElement, targetW: number, mode: Mode, deg = 0): HTMLCanvasElement {
     const scale = Math.min(1, targetW / img.naturalWidth)
     const w = Math.max(1, Math.round(img.naturalWidth * scale))
     const h = Math.max(1, Math.round(img.naturalHeight * scale))
+    const rad = (deg * Math.PI) / 180
+    const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad))
+    const cw = deg ? Math.ceil(w * cos + h * sin) : w
+    const ch = deg ? Math.ceil(w * sin + h * cos) : h
     const c = document.createElement("canvas")
-    c.width = w; c.height = h
+    c.width = cw; c.height = ch
     const ctx = c.getContext("2d")!
-    ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, w, h)
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, cw, ch)
+    ctx.save()
+    ctx.translate(cw / 2, ch / 2)
+    if (deg) ctx.rotate(rad)
     if (mode === "contrast") ctx.filter = "contrast(400%) grayscale(100%)"
-    ctx.drawImage(img, 0, 0, w, h)
+    ctx.drawImage(img, -w / 2, -h / 2, w, h)
+    ctx.restore()
     if (mode === "bw") {
-      const id = ctx.getImageData(0, 0, w, h)
+      const id = ctx.getImageData(0, 0, cw, ch)
       for (let i = 0; i < id.data.length; i += 4) {
         const v = 0.299 * id.data[i] + 0.587 * id.data[i+1] + 0.114 * id.data[i+2] > 128 ? 255 : 0
         id.data[i] = id.data[i+1] = id.data[i+2] = v
@@ -88,38 +101,43 @@ export default function BarcodeDebugClient() {
       const sizes = [
         { w: img.naturalWidth, label: `full (${img.naturalWidth}px)` },
         { w: 2000, label: "2000px" },
-        { w: 1600, label: "1600px" },
         { w: 1200, label: "1200px" },
-        { w: 900,  label: "900px" },
       ].filter((s, i, arr) => arr.findIndex(x => x.w === s.w) === i)  // dedupe if full < a preset
+      // 0° first, then straighten a few degrees each way — a skewed label often
+      // only reads once the bars are level.
+      const rotations = [0, -4, 4, -8, 8, -12, 12]
 
       const out: PassResult[] = []
 
       // Each attempt uses a FRESH reader (decode, not decodeWithState) so results
       // are independent — that's the point of a debug tool.
       for (const s of sizes) {
-        for (const mode of modes) {
-          const c = toCanvas(img, s.w, mode)
+        for (const rot of rotations) {
+          for (const mode of modes) {
+            const c = toCanvas(img, s.w, mode, rot)
 
-          if (nativeDetector) {
-            try {
-              const bmp = await createImageBitmap(c)
-              const r = await nativeDetector.detect(bmp)
-              const raw = r.length > 0 ? String(r[0].rawValue).replace(/[^\x20-\x7E]/g, "").trim() : null
-              out.push({ reader: "Native", size: s.label, mode, raw, vectis: !!raw && isVectisBarcode(raw) })
-            } catch { out.push({ reader: "Native", size: s.label, mode, raw: null, vectis: false }) }
-          }
+            if (nativeDetector) {
+              try {
+                const bmp = await createImageBitmap(c)
+                const r = await nativeDetector.detect(bmp)
+                const raw = r.length > 0 ? String(r[0].rawValue).replace(/[^\x20-\x7E]/g, "").trim() : null
+                out.push({ reader: "Native", size: s.label, mode, rot, raw, vectis: !!raw && isVectisBarcode(raw) })
+              } catch { out.push({ reader: "Native", size: s.label, mode, rot, raw: null, vectis: false }) }
+            }
 
-          const lum = new HTMLCanvasElementLuminanceSource(c)
-          for (const [name, Bin] of [["ZXing · Hybrid", HybridBinarizer], ["ZXing · Global", GlobalHistogramBinarizer]] as const) {
-            const reader = new MultiFormatReader(); reader.setHints(hints)
-            try {
-              const raw = reader.decode(new BinaryBitmap(new Bin(lum))).getText().replace(/[^\x20-\x7E]/g, "").trim()
-              out.push({ reader: name, size: s.label, mode, raw: raw || null, vectis: isVectisBarcode(raw) })
-            } catch { out.push({ reader: name, size: s.label, mode, raw: null, vectis: false }) }
+            const lum = new HTMLCanvasElementLuminanceSource(c)
+            for (const [name, Bin] of [["ZXing · Hybrid", HybridBinarizer], ["ZXing · Global", GlobalHistogramBinarizer]] as const) {
+              const reader = new MultiFormatReader(); reader.setHints(hints)
+              try {
+                const raw = reader.decode(new BinaryBitmap(new Bin(lum))).getText().replace(/[^\x20-\x7E]/g, "").trim()
+                out.push({ reader: name, size: s.label, mode, rot, raw: raw || null, vectis: isVectisBarcode(raw) })
+              } catch { out.push({ reader: name, size: s.label, mode, rot, raw: null, vectis: false }) }
+            }
           }
         }
       }
+      // Show the passes that READ a valid code first (the useful ones), then the rest.
+      out.sort((a, b) => (b.vectis ? 1 : 0) - (a.vectis ? 1 : 0))
       setPasses(out)
 
       // Canvas previews (small) so you can see what the reader "sees".
@@ -180,6 +198,10 @@ export default function BarcodeDebugClient() {
 
   const anyVectis = passes.some(p => p.vectis)
   const readCount = passes.filter(p => p.vectis).length
+  // Did straightening (a non-zero rotation) rescue it when 0° failed?
+  const readFlat    = passes.some(p => p.vectis && p.rot === 0)
+  const readRotated = passes.some(p => p.vectis && p.rot !== 0)
+  const rotWinners  = Array.from(new Set(passes.filter(p => p.vectis && p.rot !== 0).map(p => p.rot))).sort((a, b) => a - b)
 
   return (
     <div className="space-y-5">
@@ -235,8 +257,14 @@ export default function BarcodeDebugClient() {
           <p className={`text-sm font-semibold ${anyVectis ? "text-green-800 dark:text-green-300" : "text-amber-800 dark:text-amber-300"}`}>
             {anyVectis
               ? `The reader CAN read this — ${readCount} of ${passes.length} passes got a valid code.`
-              : `The reader could NOT read this on any of ${passes.length} passes.`}
+              : `The reader could NOT read this on any of ${passes.length} passes, even straightened.`}
           </p>
+          {!readFlat && readRotated && (
+            <p className="text-xs text-green-800 dark:text-green-300 mt-1">
+              ✅ Straight-on (0°) failed, but it read once <strong>rotated {rotWinners.map(r => `${r > 0 ? "+" : ""}${r}°`).join(", ")}</strong> —
+              so the fix is to add rotation attempts to the scan.
+            </p>
+          )}
           {consistency && (
             <p className="text-xs text-gray-700 dark:text-gray-300 mt-1">
               Consistency (production pipeline ×{consistency.runs}):{" "}
@@ -256,6 +284,7 @@ export default function BarcodeDebugClient() {
                 <tr>
                   <th className="text-left px-3 py-2 font-medium">Reader</th>
                   <th className="text-left px-3 py-2 font-medium">Size</th>
+                  <th className="text-left px-3 py-2 font-medium">Rotation</th>
                   <th className="text-left px-3 py-2 font-medium">Treatment</th>
                   <th className="text-left px-3 py-2 font-medium">Read</th>
                 </tr>
@@ -265,6 +294,7 @@ export default function BarcodeDebugClient() {
                   <tr key={i} className={p.vectis ? "bg-green-50 dark:bg-green-900/10" : ""}>
                     <td className="px-3 py-1.5 text-gray-700 dark:text-gray-300">{p.reader}</td>
                     <td className="px-3 py-1.5 text-gray-600 dark:text-gray-400">{p.size}</td>
+                    <td className="px-3 py-1.5 text-gray-600 dark:text-gray-400">{p.rot === 0 ? "0°" : `${p.rot > 0 ? "+" : ""}${p.rot}°`}</td>
                     <td className="px-3 py-1.5 text-gray-600 dark:text-gray-400">{p.mode}</td>
                     <td className="px-3 py-1.5 font-mono">
                       {p.raw
