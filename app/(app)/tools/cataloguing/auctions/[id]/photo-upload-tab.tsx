@@ -205,11 +205,21 @@ function serialiseZx<T>(fn: () => Promise<T>): Promise<T> {
   zxChain = next.then(() => {}, () => {})
   return next
 }
+// If the engine ever stalls (wasm fetch/instantiate wedged), a serialised queue
+// would wait on it FOREVER and the whole unattended scan would hang. So a read
+// gets a hard time limit, and a stall switches the reader OFF for the rest of
+// the run — every remaining photo then just has no scanner code and AI reads
+// them. Never let one stuck read hold up a 2000-photo folder.
+const ZX_READ_TIMEOUT_MS = 30_000   // a normal read is well under a second
+let zxReaderStalled = false
+function resetZxReader() { zxReaderStalled = false }
+function isZxReaderStalled() { return zxReaderStalled }
 function isVectisCodeStr(s: string): boolean {
   const t = s.replace(/[^\x20-\x7E]/g, "").trim()
   return /^[A-Za-z]\d{6,7}$/.test(t) || /^[A-Za-z]\d{4,7}-\d{1,6}$/.test(t)
 }
 async function readVectisWithZxingCpp(file: File): Promise<string | null> {
+  if (zxReaderStalled) return null
   const mod = await import("zxing-wasm/reader")
   if (!zxWasmConfigured) {
     mod.prepareZXingModule({
@@ -218,8 +228,16 @@ async function readVectisWithZxingCpp(file: File): Promise<string | null> {
     })
     zxWasmConfigured = true
   }
-  const results = await serialiseZx(() =>
-    mod.readBarcodes(file, { tryHarder: true, tryRotate: true, tryInvert: true, tryDownscale: true }))
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const results = await serialiseZx(() => Promise.race([
+    mod.readBarcodes(file, { tryHarder: true, tryRotate: true, tryInvert: true, tryDownscale: true }),
+    new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Error("zx-timeout")), ZX_READ_TIMEOUT_MS) }),
+  ]).finally(() => clearTimeout(timer))).catch((e: any) => {
+    // A timeout means the engine is wedged — don't queue every other photo
+    // behind it, and don't start a second read that could race the stuck one.
+    if (e?.message === "zx-timeout") zxReaderStalled = true
+    return [] as any[]
+  })
   for (const r of results as any[]) {
     const t = (r?.text ?? "").replace(/[^\x20-\x7E]/g, "").trim().toUpperCase()
     if (isVectisCodeStr(t)) return t
@@ -456,25 +474,28 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     setTroubleSince(null)
     troubleRef.current = null
     skipAiRef.current = false
+    resetZxReader()   // a stall in an earlier scan shouldn't disable this one
 
     // Read each photo's barcode with zxing-cpp (see readVectisWithZxingCpp) —
     // it handles photographed / skewed / soft labels the old JS reader couldn't.
-    // Also note whether the BROWSER can render the image: HEIC on Windows can't
-    // be shown or downscaled, so those go to AI as the original and show a
-    // placeholder tile + a "convert to JPEG" hint. zxing-cpp can't read HEIC
-    // either, so the barcode stays null there and AI reads it.
-    async function decodeBarcode(file: File): Promise<{ barcode: string | null; unreadable: boolean }> {
-      let barcode: string | null = null
-      try { barcode = await readVectisWithZxingCpp(file) } catch {}
-      let unreadable = false
-      try { await loadImgElement(file) } catch { unreadable = true }
-      return { barcode, unreadable }
+    // NB: no separate "can the browser render this?" probe here — that used to
+    // decode every photo a THIRD time (zxing-cpp decodes it, and the AI prep's
+    // toJpegBlob decodes it again). The HEIC/unreadable flag is now captured in
+    // the AI prep instead, from toJpegBlob failing.
+    async function decodeBarcode(file: File): Promise<{ barcode: string | null }> {
+      try { return { barcode: await readVectisWithZxingCpp(file) } } catch { return { barcode: null } }
     }
+    // Photos the browser can't render (HEIC on Windows) — filled in during the
+    // AI prep; drives the placeholder tiles and the "convert to JPEG" hint.
+    const unreadableSet = new Set<number>()
 
     // The zxing-cpp reads are serialised internally; the image-render checks run
     // up to 3 at once. Order-preserving, then grouped sequentially.
     const decoded = await mapPool(files, 3, decodeBarcode,
       done => setScanProgress({ done, total: files.length }))
+    if (isZxReaderStalled()) {
+      logEvent("⚠ The barcode reader stopped responding — AI is reading the labels instead")
+    }
 
     // ── AI review pass — EVERY photo ─────────────────────────────────────────
     // After the barcode scan, Gemini reviews every single photo (Jordan's
@@ -653,7 +674,8 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
         for (const i of idxs) {
           if (skipAiRef.current) break
           if (files[i].size === 0) continue                       // glitched transfer / iCloud placeholder
-          const blob = decoded[i].unreadable ? null : await toJpegBlob(files[i])
+          const blob = await toJpegBlob(files[i])
+          if (!blob) unreadableSet.add(i)   // browser can't render it (HEIC) — send the original to AI
           const payload = blob ?? files[i]                        // HEIC original — Gemini reads it
           if (payload.size > 15_000_000) continue
           items.push({ i, payload })
@@ -714,7 +736,8 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     let aiRead = 0
     for (let i = 0; i < files.length; i++) {
       const d = decoded[i]
-      if (d.unreadable) unreadableCount++
+      const unreadable = unreadableSet.has(i)
+      if (unreadable) unreadableCount++
       const a = aiRes.get(i)
       const aiAnswered = !!a
       const aiIsLabel  = a?.label === true
@@ -722,7 +745,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       const r = resolvePhoto(d.barcode, aiAnswered, aiIsLabel, aiCode)
       if (r.source === "ai" && aiCode) aiRead++
       infos.push({
-        scannerCode: d.barcode, aiIsLabel, aiCode, aiAnswered, unreadable: d.unreadable,
+        scannerCode: d.barcode, aiIsLabel, aiCode, aiAnswered, unreadable,
         isLabel: r.isLabel, code: r.code, source: r.source,
       })
       if (r.discrepancy) discs.push({ index: i, type: r.discrepancy, scannerCode: d.barcode, aiCode, resolved: false })
