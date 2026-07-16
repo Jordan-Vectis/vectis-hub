@@ -25,6 +25,7 @@ export default function BarcodeDebugClient() {
   const [preview, setPreview]   = useState<string | null>(null)
   const [info, setInfo]         = useState<{ w: number; h: number; type: string; kb: number } | null>(null)
   const [running, setRunning]   = useState(false)
+  const [prog, setProg]         = useState({ done: 0, total: 0 })
   const [passes, setPasses]     = useState<PassResult[]>([])
   const [consistency, setConsistency] = useState<{ runs: number; results: Record<string, number> } | null>(null)
   const [canvases, setCanvases] = useState<{ mode: Mode; url: string }[]>([])
@@ -84,7 +85,7 @@ export default function BarcodeDebugClient() {
 
   async function run() {
     if (!file) return
-    setRunning(true); setError(null); setPasses([]); setConsistency(null); setCanvases([])
+    setRunning(true); setError(null); setPasses([]); setConsistency(null); setCanvases([]); setProg({ done: 0, total: 0 })
     try {
       const img = await loadImg(file)
       setInfo({ w: img.naturalWidth, h: img.naturalHeight, type: file.type || "unknown", kb: Math.round(file.size / 1024) })
@@ -97,25 +98,29 @@ export default function BarcodeDebugClient() {
         ? new (window as any).BarcodeDetector({ formats: ["code_128", "code_39", "qr_code", "ean_13"] })
         : null
 
+      // Let the browser breathe between passes — zxing.decode is SYNCHRONOUS and
+      // heavy, and on devices with no native reader nothing else here awaits, so
+      // without a yield the whole run blocks the tab ("Page Unresponsive").
+      const yieldToUI = () => new Promise(r => setTimeout(r, 0))
+
       const modes: Mode[] = ["normal", "contrast", "bw"]
+      // Cap at 2000px — bigger just costs CPU without helping a barcode read
+      // (the full 4176px canvases were the main cause of the freeze).
       const sizes = [
-        { w: img.naturalWidth, label: `full (${img.naturalWidth}px)` },
-        { w: 2000, label: "2000px" },
+        { w: Math.min(2000, img.naturalWidth), label: `${Math.min(2000, img.naturalWidth)}px` },
         { w: 1200, label: "1200px" },
-      ].filter((s, i, arr) => arr.findIndex(x => x.w === s.w) === i)  // dedupe if full < a preset
-      // 0° first, then straighten a few degrees each way — a skewed label often
-      // only reads once the bars are level.
-      const rotations = [0, -4, 4, -8, 8, -12, 12]
+      ].filter((s, i, arr) => arr.findIndex(x => x.w === s.w) === i)
+      const rotations = [0, -4, 4, -8, 8, -12, 12]   // 0° first, then straighten a few degrees each way
 
       const out: PassResult[] = []
+      const zxCount = sizes.length * rotations.length * modes.length
+      setProg({ done: 0, total: zxCount + 8 })   // + the 8 consistency runs
+      let done = 0
 
-      // Each attempt uses a FRESH reader (decode, not decodeWithState) so results
-      // are independent — that's the point of a debug tool.
       for (const s of sizes) {
         for (const rot of rotations) {
           for (const mode of modes) {
-            const c = toCanvas(img, s.w, mode, rot)
-
+            const c = toCanvas(img, s.w, mode, rot)   // one canvas, shared by both binarizers
             if (nativeDetector) {
               try {
                 const bmp = await createImageBitmap(c)
@@ -124,7 +129,6 @@ export default function BarcodeDebugClient() {
                 out.push({ reader: "Native", size: s.label, mode, rot, raw, vectis: !!raw && isVectisBarcode(raw) })
               } catch { out.push({ reader: "Native", size: s.label, mode, rot, raw: null, vectis: false }) }
             }
-
             const lum = new HTMLCanvasElementLuminanceSource(c)
             for (const [name, Bin] of [["ZXing · Hybrid", HybridBinarizer], ["ZXing · Global", GlobalHistogramBinarizer]] as const) {
               const reader = new MultiFormatReader(); reader.setHints(hints)
@@ -133,22 +137,19 @@ export default function BarcodeDebugClient() {
                 out.push({ reader: name, size: s.label, mode, rot, raw: raw || null, vectis: isVectisBarcode(raw) })
               } catch { out.push({ reader: name, size: s.label, mode, rot, raw: null, vectis: false }) }
             }
+            done += 1; setProg({ done, total: zxCount + 8 })
+            await yieldToUI()   // keep the tab responsive
           }
         }
       }
-      // Show the passes that READ a valid code first (the useful ones), then the rest.
-      out.sort((a, b) => (b.vectis ? 1 : 0) - (a.vectis ? 1 : 0))
+      out.sort((a, b) => (b.vectis ? 1 : 0) - (a.vectis ? 1 : 0))   // reads first
       setPasses(out)
 
       // Canvas previews (small) so you can see what the reader "sees".
-      setCanvases(modes.map(mode => {
-        const c = toCanvas(img, 500, mode)
-        return { mode, url: c.toDataURL("image/png") }
-      }))
+      setCanvases(modes.map(mode => ({ mode, url: toCanvas(img, 500, mode).toDataURL("image/png") })))
 
-      // Consistency: run the PRODUCTION pipeline exactly (one reused reader with
-      // decodeWithState, [2000,1200] × [normal,contrast,bw] Hybrid) 8 times and
-      // tally the outcomes — reveals order/state-dependent flakiness.
+      // Consistency: run the PRODUCTION pipeline (one reused reader, decodeWithState,
+      // [2000,1200] × normal/contrast/bw Hybrid) 8× and tally — reveals flakiness.
       const tally: Record<string, number> = {}
       for (let n = 0; n < 8; n++) {
         const reader = new MultiFormatReader(); reader.setHints(hints)
@@ -163,8 +164,9 @@ export default function BarcodeDebugClient() {
             } catch {}
           }
         }
-        const key = found ?? "— (not read)"
-        tally[key] = (tally[key] ?? 0) + 1
+        tally[found ?? "— (not read)"] = (tally[found ?? "— (not read)"] ?? 0) + 1
+        done += 1; setProg({ done, total: zxCount + 8 })
+        await yieldToUI()
       }
       setConsistency({ runs: 8, results: tally })
     } catch (e: any) {
@@ -238,6 +240,16 @@ export default function BarcodeDebugClient() {
           {aiRunning ? "Asking AI…" : "✨ Ask AI what it reads"}
         </button>
       </div>
+
+      {running && prog.total > 0 && (
+        <div>
+          <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-2">
+            <div className="bg-purple-500 h-2 rounded-full transition-all duration-150"
+              style={{ width: `${(prog.done / prog.total) * 100}%` }} />
+          </div>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{prog.done} of {prog.total} passes</p>
+        </div>
+      )}
 
       {error && <div className="rounded-lg border border-red-300 dark:border-red-700/50 bg-red-100 dark:bg-red-900/20 px-3 py-2 text-xs text-red-800 dark:text-red-300">{error}</div>}
 
