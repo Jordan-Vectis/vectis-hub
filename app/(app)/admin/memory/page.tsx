@@ -82,6 +82,16 @@ It covers **all four tablet tabs**, not just the wizard — its own in-modal tab
 
 Tone: plain and respectful. Jordan's brief was "the people using this are idiots so it needs to be really simple" — that means **simple**, not condescending. Never echo that framing into the product; the cataloguers are the ones reading it. Never blame the cataloguers.
 
+## ⚠ JSX gotcha this exposed — applies to the WHOLE codebase, not just the guide
+
+**A space between \`</strong>\` and following text that wraps to the next source line is DROPPED in the built output.** Next compiles JSX with **SWC**, which trims it even though the source clearly has a space (Babel would keep it). It shipped "All cataloguersnarrows", "Tap any lot to open itand", "Use the list.Type something…" — 7 instances across the guide, in prose that read perfectly fine in the editor.
+
+- **Fix / always write:** \`<strong>Bold bit</strong>{" "}\` then the text on the next line. \`{" "}\` is an explicit expression and cannot be stripped. (The lines that survived were the ones already using \`{" "}\`.)
+- ⚠ **It is inconsistent** — some multi-line \`</em> text\` kept its space. Don't reason about the rule; **check the rendered DOM.**
+- **How to find them all** (any page, browser console) — by eye you WILL miss most:
+  \`document.querySelectorAll('strong, em').forEach(el => { const n = el.nextSibling; if (n?.nodeType === 3 && /^[A-Za-z]/.test(n.textContent)) console.log('GLUED:', el.textContent, '→', n.textContent.slice(0,30)) })\`
+- **tsc --noEmit cannot catch this** — it is valid TypeScript and valid JSX. Only rendering it does.
+
 # Lot wizard input warnings (2026-07-02, duplicate barcode added 2026-07-16, STAGING)
 
 goNext() stop-and-warn guards in lot-wizard-tab.tsx, following the existing step-1 length / step-2 barcode warning pattern (amber box; state cleared on field edit and goBack; the Next button is disabled while one is showing; shared component so desktop AND tablet get them):
