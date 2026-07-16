@@ -78,7 +78,9 @@ app/(app)/tools/cataloguing/auctions/[id]/cataloguing-guide.tsx — **Cataloguin
 
 It covers **all four tablet tabs**, not just the wizard — its own in-modal tab bar mirrors the real one (📋 Lots · ➕ Add Lot · 📷 Photo Only · 🔍 Review) and it **opens on whatever tab the user is already on** (currentTab={tab} from tablet-tabs). Emoji + coloured callouts mirroring the real on-screen amber/red warnings. Was briefly lot-wizard-guide.tsx / LotWizardGuideButton (wizard only) — renamed when Jordan asked for per-tab sections.
 
-⚠ **It documents real behaviour** — required fields per validateStep, what each warning means, that nothing saves until Save on step 8, that Save drops you back to step 2 with tote/vendor/receipt still locked, that Lots search matches barcode/title/vendor/tote, and that Review deliberately still works after BC lock. **If you change lot-wizard-tab.tsx, photo-only-tab.tsx, review-tab.tsx or the Lots list, update the guide too — a guide that is quietly wrong is worse than no guide.**
+⚠ **It documents real behaviour** — required fields per validateStep, what each warning means, that nothing saves until Save on step 8, that Save drops you back to step 2 with tote/vendor/receipt still locked, and that Lots search matches barcode/title/vendor/tote. **If you change lot-wizard-tab.tsx, photo-only-tab.tsx, review-tab.tsx or the Lots list, update the guide too — a guide that is quietly wrong is worse than no guide.**
+
+⚠ **Do NOT re-add a note about Review bypassing the BC lock.** A "You can always fix things here / Review still works even after a sale has gone to Business Central" callout was written into the Review section and **Jordan asked for it to be removed (2026-07-16)**. The *code* behaviour is unchanged and still deliberate (RULES.md — the three Review actions skip requireNotBCLocked); it simply is not something to advertise to cataloguers in the guide.
 
 Tone: plain and respectful. Jordan's brief was "the people using this are idiots so it needs to be really simple" — that means **simple**, not condescending. Never echo that framing into the product; the cataloguers are the ones reading it. Never blame the cataloguers.
 

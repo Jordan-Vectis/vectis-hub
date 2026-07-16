@@ -373,10 +373,6 @@ export default function CataloguingGuideButton({
                     </p>
                   </div>
 
-                  <Callout tone="teal" title="You can always fix things here">
-                    Review still works even after a sale has gone over to Business Central — it&apos;s for
-                    corrections, so it isn&apos;t locked like the other tabs.
-                  </Callout>
                 </div>
               )}
             </div>
