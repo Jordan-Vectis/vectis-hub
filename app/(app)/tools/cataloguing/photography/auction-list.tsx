@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { auctionTypeEmoji, auctionTypeLabel, AUCTION_TYPES } from "@/lib/auction-types"
 
@@ -140,12 +141,18 @@ export default function PhotographyAuctionList({ active, completed }: Props) {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">📷 Photography</h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-          Pick a sale, then upload its photos. Barcode labels are read automatically and every photo is
-          double-checked by AI before anything is saved.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">📷 Photography</h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+            Pick a sale, then upload its photos. Barcode labels are read automatically and every photo is
+            double-checked by AI before anything is saved.
+          </p>
+        </div>
+        <Link href="/tools/cataloguing/photography/debug"
+          className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-purple-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">
+          🔧 Barcode debug
+        </Link>
       </div>
 
       {/* Stats */}
