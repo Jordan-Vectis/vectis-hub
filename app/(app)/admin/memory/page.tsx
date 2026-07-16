@@ -68,9 +68,17 @@ A deliberate easter egg — do not "clean it up". The page at /jordan (app/(app)
     filename: "lot_wizard_warnings.md",
     content: `---
 name: Lot wizard input warnings
-purpose: The duplicate-barcode, estimate and category sanity warnings in the cataloguing lot wizard. Read before touching goNext()/validateStep in lot-wizard-tab.tsx.
+purpose: The lot wizard's sanity warnings AND its Guide/Help modal. Read before touching goNext()/validateStep in lot-wizard-tab.tsx.
 last_updated: 2026-07-16
 ---
+
+# Guide / Help modal (2026-07-16)
+
+app/(app)/tools/cataloguing/auctions/[id]/lot-wizard-guide.tsx — **LotWizardGuideButton**, a **modal** (not a page, so it opens mid-lot without losing the entry in progress). Rendered in the **tablet** header (tablet-tabs.tsx, left of the {lots.length} lots count, where Jordan asked for it) — so it shows on every tablet tab, and the **desktop Auction Manager does NOT have it** (different header).
+
+⚠ **It documents real wizard behaviour** — which fields are required, what each warning means, that nothing saves until Save on step 8, and that Save drops you back to step 2 with tote/vendor/receipt still locked. **If you change lot-wizard-tab.tsx, update the guide too — a guide that is quietly wrong is worse than no guide.**
+
+Tone: plain and respectful. Jordan's brief was "the people using this are idiots so it needs to be really simple" — that means **simple**, not condescending. Never echo that framing into the product; the cataloguers are the ones reading it. Never blame the cataloguers.
 
 # Lot wizard input warnings (2026-07-02, duplicate barcode added 2026-07-16, STAGING)
 
