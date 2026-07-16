@@ -234,6 +234,9 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const [aiNote, setAiNote]                 = useState<string | null>(null)  // live status/error during the AI pass
   const [aiEta, setAiEta]                   = useState<string | null>(null)
   const [aiRetries, setAiRetries]           = useState(0)       // rate-limit / retry pauses ridden out during the run
+  const [aiLog, setAiLog]                   = useState<{ t: number; msg: string }[]>([])  // live activity feed
+  const [troubleSince, setTroubleSince]     = useState<number | null>(null)  // when AI trouble began (for the escalation panel)
+  const troubleRef  = useRef<number | null>(null)               // same, readable inside the scan closures
   const skipAiRef   = useRef(false)                             // user pressed "Skip AI check"
   // Every in-flight AI request — several run at once, so a single ref would
   // only ever let Skip abort the most recent one.
@@ -309,6 +312,12 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     ...lots.filter(l => l.receiptUniqueId).map(l => [l.receiptUniqueId!.toLowerCase().trim(), l.id] as [string, string]),
   ])
 
+  // Append a line to the AI activity feed (component-scope so the Skip button
+  // and the scan closures can both call it).
+  function logEvent(msg: string) {
+    setAiLog(prev => [...prev, { t: Date.now(), msg }].slice(-14))
+  }
+
   // ── Reset to idle ─────────────────────────────────────────────────────────────
   function reset() {
     revokeThumbs()
@@ -331,6 +340,9 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     setAiNote(null)
     setAiEta(null)
     setAiRetries(0)
+    setAiLog([])
+    setTroubleSince(null)
+    troubleRef.current = null
     setSkipped([])
     setOkLotCount(0)
     setUploadLog([])
@@ -403,6 +415,9 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     setAiNote(null)
     setAiEta(null)
     setAiRetries(0)
+    setAiLog([])
+    setTroubleSince(null)
+    troubleRef.current = null
     skipAiRef.current = false
 
     const nativeDetector = "BarcodeDetector" in window
@@ -531,6 +546,26 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
 
       let doneCount = 0
       const started = Date.now()
+      // ETA baseline — reset after a rate-limit recovery so the estimate is
+      // measured from ACTIVE processing time, not cumulative wall-clock that
+      // includes minutes of cooldown (which made it read "about 800 min left").
+      let etaBaseTime = started
+      let etaBaseDone = 0
+
+      // Trouble tracking for the escalation panel. Only NOTABLE, low-frequency
+      // events are logged (not every batch) so the feed stays readable and
+      // doesn't thrash re-renders on a 2000-photo run. logEvent is component-scope.
+      const enterTrouble = () => {
+        if (troubleRef.current === null) { troubleRef.current = Date.now(); setTroubleSince(troubleRef.current) }
+      }
+      const clearTrouble = () => {
+        if (troubleRef.current !== null) {
+          troubleRef.current = null; setTroubleSince(null)
+          etaBaseTime = Date.now(); etaBaseDone = doneCount   // measure the ETA fresh from here
+          logEvent("✓ Back to normal — carrying on")
+        }
+      }
+      logEvent(`Started AI check of ${candidates.length} photos`)
 
       // Rate-limit gate shared by ALL workers. When one request is rate-limited
       // we push a cooldown that every worker waits behind, then they all carry
@@ -581,28 +616,34 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
                 })
               })
               rlLevel = Math.max(0, rlLevel - 1)               // ease off after a good response
+              clearTrouble()
               if (Date.now() >= cooldownUntil) setAiNote(null)
               return true
             }
             if (res.status === 422) {                          // content block — never succeeds
               setAiNote("AI wouldn't look at some photos — those fall back to barcode scanning.")
+              logEvent("Some photos were refused by AI — barcode only for those")
               return false
             }
             if (res.status === 429) {                          // rate limited — back everyone off, keep going
               rlLevel += 1; retries += 1; setAiRetries(retries)
+              const waitS = Math.ceil(rlBackoff(rlLevel) / 1000)
               cooldownUntil = Math.max(cooldownUntil, Date.now() + rlBackoff(rlLevel))
+              enterTrouble(); setAiEta(null); logEvent(`⏳ Gemini is rate limiting us — pausing ${waitS}s, then carrying on`)
               continue                                         // no attempt cap — waits it out
             }
             // Other server error — retry this pack with a growing wait, up to a cap.
             softFails += 1; retries += 1; setAiRetries(retries)
             const why = data?.error ?? `HTTP ${res.status}`
-            if (softFails >= POISON_CAP) { setAiNote(`AI kept failing on some photos (${why}) — those fall back to barcode scanning; the rest carries on.`); return false }
+            enterTrouble()
+            if (softFails >= POISON_CAP) { setAiNote(`AI kept failing on some photos (${why}) — those fall back to barcode scanning; the rest carries on.`); logEvent(`A batch kept failing (${why}) — barcode only for those`); return false }
             setAiNote(`AI had a problem — trying again (${why})`)
             await new Promise(r => setTimeout(r, Math.min(softFails * 5000, 60_000)))
           } catch (e: any) {
             if (e?.name === "AbortError" && skipAiRef.current) return false
             softFails += 1; retries += 1; setAiRetries(retries)
-            if (softFails >= POISON_CAP) { setAiNote("AI couldn't be reached for some photos — those fall back to barcode scanning; the rest carries on."); return false }
+            enterTrouble()
+            if (softFails >= POISON_CAP) { setAiNote("AI couldn't be reached for some photos — those fall back to barcode scanning; the rest carries on."); logEvent("Couldn't reach AI for a batch — barcode only for those"); return false }
             setAiNote(e?.name === "AbortError" ? "An AI request took too long — trying again…" : "Couldn't reach the AI (network problem) — trying again…")
             await new Promise(r => setTimeout(r, Math.min(softFails * 5000, 60_000)))
           } finally {
@@ -653,11 +694,19 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       async function worker() {
         while (next < batches.length && !skipAiRef.current) {
           const b = batches[next++]
+          const before = doneCount
           await runBatch(b)
           doneCount += b.length
           setAiProgress({ done: doneCount, total: candidates.length })
-          if (doneCount >= 24 && !skipAiRef.current) {
-            const perPhoto = (Date.now() - started) / doneCount
+          // Milestone every 500 photos (low-frequency feed entry).
+          if (Math.floor(doneCount / 500) > Math.floor(before / 500)) {
+            logEvent(`Checked ${Math.floor(doneCount / 500) * 500} of ${candidates.length} photos`)
+          }
+          // ETA only while things are flowing, from a fresh baseline with
+          // enough samples — never during trouble (the countdown covers that),
+          // so a rate-limit pause can't inflate it to a scary number.
+          if (troubleRef.current === null && !skipAiRef.current && doneCount - etaBaseDone >= 16) {
+            const perPhoto = (Date.now() - etaBaseTime) / (doneCount - etaBaseDone)
             const leftMs   = perPhoto * (candidates.length - doneCount)
             setAiEta(leftMs > 45_000 ? `about ${Math.ceil(leftMs / 60_000)} min remaining` : "nearly done")
           }
@@ -987,6 +1036,10 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const aiPct    = aiProgress.total   > 0 ? (aiProgress.done   / aiProgress.total)   * 100 : 0
   const upPct    = uploadProgress.total > 0 ? (uploadProgress.done / uploadProgress.total) * 100 : 0
   const needsALook = attentionCount
+  // Escalation panel shows when AI has been in trouble for over ~2 minutes.
+  // The cooldown countdown re-renders every second, so this re-evaluates live.
+  const troubleMins = troubleSince ? Math.floor((Date.now() - troubleSince) / 60_000) : 0
+  const escalated   = troubleSince !== null && (Date.now() - troubleSince) > 120_000
 
   return (
     <div className="pb-6 max-w-5xl">
@@ -1128,11 +1181,44 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
                     Catching labels the barcode reader missed, and anything that looks wrong.
                   </p>
                   {aiNote && <div className="mt-2"><Notice tone="warn">{aiNote}</Notice></div>}
+
+                  {/* Escalation — only when AI has struggled for a couple of minutes */}
+                  {escalated && (
+                    <div className="mt-3 rounded-lg border border-red-300 dark:border-red-700/60 bg-red-100 dark:bg-red-900/20 px-3 py-2.5">
+                      <p className="text-xs font-semibold text-red-800 dark:text-red-300">
+                        AI has been struggling for {troubleMins} minute{troubleMins !== 1 ? "s" : ""}.
+                      </p>
+                      <p className="text-xs text-red-800 dark:text-red-300 mt-1">
+                        It keeps trying on its own and will finish if the AI comes back — you can leave it running.
+                        If Gemini looks to be having an outage and you&apos;d rather not wait, press
+                        <strong> Skip</strong> below to finish this scan by barcode grouping only, then check the lots
+                        carefully in the review before saving.
+                      </p>
+                    </div>
+                  )}
+
                   <button
-                    onClick={() => { skipAiRef.current = true; aiAbortsRef.current.forEach(c => c.abort()) }}
+                    onClick={() => { skipAiRef.current = true; aiAbortsRef.current.forEach(c => c.abort()); logEvent("AI check skipped — grouping by barcode only") }}
                     className="mt-3 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs hover:border-gray-500 transition-colors">
                     Skip the AI check — group by barcode only
                   </button>
+
+                  {/* Live activity feed */}
+                  {aiLog.length > 0 && (
+                    <div className="mt-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#141416] max-h-40 overflow-y-auto">
+                      <p className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-500 px-3 pt-2 pb-1">Activity</p>
+                      <ul className="px-3 pb-2 space-y-0.5">
+                        {aiLog.slice().reverse().map((e, i) => (
+                          <li key={aiLog.length - i} className="text-xs text-gray-600 dark:text-gray-400 flex gap-2">
+                            <span className="text-gray-400 dark:text-gray-600 tabular-nums flex-shrink-0">
+                              {new Date(e.t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                            </span>
+                            <span>{e.msg}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </>
               ) : (
                 <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">Waiting for the barcode read to finish…</p>
