@@ -577,6 +577,32 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       let retries = 0
       const rlBackoff = (level: number) => Math.min(30_000 * 2 ** (level - 1), 300_000)  // 30s→60s→…→5min
 
+      // ── Smart backup-model rotation ──────────────────────────────────────────
+      // Shortlist = the picked model, then the other enabled models (fast
+      // "flash" ones first). When the CURRENT model keeps struggling (sustained
+      // rate limits or errors), move the run onto the next one that responds —
+      // because Gemini's limits are largely per-model, a different model has its
+      // own quota, so this routes around a throttled or down model on its own.
+      const primaryModel = aiModelRef.current || ""
+      const rotation = [
+        primaryModel,
+        ...modelList
+          .filter(m => m && m !== primaryModel)
+          .sort((a, b) => (b.includes("flash") ? 1 : 0) - (a.includes("flash") ? 1 : 0)),
+      ].filter((m, i, arr) => arr.indexOf(m) === i)
+      let modelIdx = 0
+      let struggle = 0                 // failed attempts on the CURRENT model since its last success
+      const ROTATE_AFTER = 4
+      const maybeRotate = () => {
+        // Synchronous (no await) so concurrent workers can't double-advance.
+        if (struggle >= ROTATE_AFTER && modelIdx < rotation.length - 1) {
+          modelIdx += 1
+          struggle = 0; rlLevel = 0; cooldownUntil = 0   // give the new model a clean start (its own quota)
+          logEvent(`Switching to backup model: ${rotation[modelIdx] || "the default"}`)
+          setAiNote(`Switched to backup model ${rotation[modelIdx] || "(default)"} — the previous one kept struggling.`)
+        }
+      }
+
       async function waitForGate() {
         while (!skipAiRef.current && Date.now() < cooldownUntil) {
           const remain = cooldownUntil - Date.now()
@@ -605,7 +631,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             pack.forEach((it, j) => fd.append(`photo_${j}`, it.payload, files[it.i].name))
             const res  = await fetch("/api/catalogue/scan-photos", {
               method: "POST", body: fd, signal: ctrl.signal,
-              headers: { "x-ai-model": aiModelRef.current || "" },
+              headers: { "x-ai-model": rotation[modelIdx] || "" },   // current model in the rotation
             })
             const data = await res.json().catch(() => null)
             if (res.ok && Array.isArray(data?.photos) && data.photos.length === pack.length) {
@@ -616,6 +642,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
                 })
               })
               rlLevel = Math.max(0, rlLevel - 1)               // ease off after a good response
+              struggle = 0                                     // this model is working — reset its strike count
               clearTrouble()
               if (Date.now() >= cooldownUntil) setAiNote(null)
               return true
@@ -627,6 +654,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             }
             if (res.status === 429) {                          // rate limited — back everyone off, keep going
               rlLevel += 1; retries += 1; setAiRetries(retries)
+              struggle += 1; maybeRotate()                     // a sustained rate limit → try a backup model
               const waitS = Math.ceil(rlBackoff(rlLevel) / 1000)
               cooldownUntil = Math.max(cooldownUntil, Date.now() + rlBackoff(rlLevel))
               enterTrouble(); setAiEta(null); logEvent(`⏳ Gemini is rate limiting us — pausing ${waitS}s, then carrying on`)
@@ -634,6 +662,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             }
             // Other server error — retry this pack with a growing wait, up to a cap.
             softFails += 1; retries += 1; setAiRetries(retries)
+            struggle += 1; maybeRotate()
             const why = data?.error ?? `HTTP ${res.status}`
             enterTrouble()
             if (softFails >= POISON_CAP) { setAiNote(`AI kept failing on some photos (${why}) — those fall back to barcode scanning; the rest carries on.`); logEvent(`A batch kept failing (${why}) — barcode only for those`); return false }
@@ -642,6 +671,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
           } catch (e: any) {
             if (e?.name === "AbortError" && skipAiRef.current) return false
             softFails += 1; retries += 1; setAiRetries(retries)
+            struggle += 1; maybeRotate()
             enterTrouble()
             if (softFails >= POISON_CAP) { setAiNote("AI couldn't be reached for some photos — those fall back to barcode scanning; the rest carries on."); logEvent("Couldn't reach AI for a batch — barcode only for those"); return false }
             setAiNote(e?.name === "AbortError" ? "An AI request took too long — trying again…" : "Couldn't reach the AI (network problem) — trying again…")
