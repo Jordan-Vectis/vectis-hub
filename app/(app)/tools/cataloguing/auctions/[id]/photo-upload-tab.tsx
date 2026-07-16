@@ -14,15 +14,105 @@ interface LotGroup {
   lotId:    string | null
   label:    string
   photos:   File[]
-  labelPhoto?:      File      // the photo that started this group — shown in the preview, never uploaded
+  labelPhoto?:      File      // the photo that started this group — shown in the review, never uploaded
+  labelIndex?:      number    // index of the label photo in scanFiles (scan mode only)
+  photoIndices?:    number[]  // scanFiles indices parallel to `photos` (scan mode only — drives the manual tools)
+  needsCode?:       boolean   // a label with no code yet — the user must type it in the final review
   aiRead?:          boolean   // the barcode scanner missed this label; AI read the printed code
-  unreadableLabel?: boolean   // AI says this is a label photo but couldn't read the code
-  aiVerdict?:       "confirmed" | "code-mismatch" | "not-a-label"  // AI's second opinion on a scanner-decoded label
-  aiCode?:          string    // what AI read when it disagrees with the scanner
+  edited?:          boolean   // the user marked/typed this label by hand
 }
 
-type Phase = "idle" | "scanning" | "preview" | "uploading" | "done"
+// One record per photo (scan mode). Scanner + AI results, plus the RESOLVED
+// decision the grouping is built from. Kept as the source of truth so the
+// discrepancy step and the final-review manual tools can re-flow the lots by
+// editing decisions rather than rebuilding groups by hand.
+interface PhotoInfo {
+  scannerCode: string | null   // local barcode reader result (Vectis format), or null
+  aiIsLabel:   boolean         // AI classified this photo as a barcode label
+  aiCode:      string | null   // AI's guess at the printed code (Vectis format), or null
+  aiAnswered:  boolean         // AI actually returned an answer for this photo
+  unreadable:  boolean         // the browser couldn't decode the image (HEIC on Windows)
+  // resolved:
+  isLabel:     boolean         // final: this photo starts a lot
+  code:        string | null   // final code for the label (may be user-typed); null = needs a code
+  source:      "agree" | "scanner" | "ai" | "manual" | "none"
+}
+
+type DiscrepancyType = "mismatch" | "scanner-not-ai" | "ai-not-scanner"
+interface Discrepancy {
+  index:       number
+  type:        DiscrepancyType
+  scannerCode: string | null
+  aiCode:      string | null
+  resolved:    boolean
+}
+
+type Phase = "idle" | "scanning" | "discrepancies" | "preview" | "uploading" | "done"
 type Mode  = "scan" | "filename"
+
+// Reconcile one photo's scanner + AI reads into a starting decision, and say
+// whether it is a discrepancy a human should look at. The SCANNER wins a code
+// disagreement by default (Code 128 has a checksum; AI misreads printed text
+// more often), but every genuine disagreement is surfaced for review.
+function resolvePhoto(
+  scannerCode: string | null, aiAnswered: boolean, aiIsLabel: boolean, aiCode: string | null,
+): { isLabel: boolean; code: string | null; source: PhotoInfo["source"]; discrepancy: DiscrepancyType | null } {
+  const s = scannerCode
+  const a = aiCode
+  if (s && a) {
+    if (s.toLowerCase() === a.toLowerCase()) return { isLabel: true, code: s, source: "agree", discrepancy: null }
+    return { isLabel: true, code: s, source: "scanner", discrepancy: "mismatch" }
+  }
+  if (s && !a) {
+    // Scanner read a Vectis code. If AI actively says "item photo", that's a
+    // conflict (a sticker in an item photo?) — default to keeping the label
+    // (a Vectis code was decoded) but flag it. Otherwise they agree.
+    if (aiAnswered && !aiIsLabel) return { isLabel: true, code: s, source: "scanner", discrepancy: "scanner-not-ai" }
+    return { isLabel: true, code: s, source: "scanner", discrepancy: null }
+  }
+  if (!s && a) {
+    // AI read a code the scanner missed — a real blurry label, or an AI
+    // misread. Default to accepting it, but flag for review.
+    return { isLabel: true, code: a, source: "ai", discrepancy: "ai-not-scanner" }
+  }
+  // Neither read a code.
+  if (aiIsLabel) return { isLabel: true, code: null, source: "ai", discrepancy: null }  // unreadable label — a gap, not a conflict; typed in the final review
+  return { isLabel: false, code: null, source: "none", discrepancy: null }
+}
+
+// Derive the lot groups from the per-photo decisions. A photo whose decision is
+// isLabel starts a lot (its photo is the label, never uploaded); following
+// non-label photos join it; photos before the first label go to preGroup.
+function buildGroups(
+  files: File[], infos: PhotoInfo[], lotMap: Map<string, string>,
+): { groups: LotGroup[]; preGroup: File[] } {
+  const groups: LotGroup[] = []
+  const preGroup: File[] = []
+  let current: LotGroup | null = null
+  for (let i = 0; i < files.length; i++) {
+    const info = infos[i]
+    if (info.isLabel) {
+      const code  = info.code
+      const lotId = code ? (lotMap.get(code.toLowerCase().trim()) ?? null) : null
+      current = {
+        lotId,
+        label: code ?? `Needs code — ${files[i].name}`,
+        photos: [], photoIndices: [],
+        labelPhoto: files[i], labelIndex: i,
+        needsCode: !code,
+        aiRead: info.source === "ai" && !!code,   // AI read a code the scanner missed (not the unread-label case)
+        edited: info.source === "manual",
+      }
+      groups.push(current)
+    } else if (current) {
+      current.photos.push(files[i])
+      current.photoIndices!.push(i)
+    } else {
+      preGroup.push(files[i])
+    }
+  }
+  return { groups, preGroup }
+}
 
 // Per-lot outcome, shown live while uploading and on the results screen.
 interface UploadResult {
@@ -129,6 +219,16 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const [groups, setGroups]        = useState<LotGroup[]>([])
   const [preGroup, setPreGroup]    = useState<File[]>([])       // scan mode: photos before the first barcode
   const [unreadable, setUnreadable] = useState(0)               // scan mode: files the browser couldn't decode (HEIC etc.)
+  // Scan mode source of truth: the files and one decision per file. Groups are
+  // DERIVED from these, so the discrepancy step and the manual "this is a
+  // barcode" tool just edit decisions and re-flow.
+  const [scanFiles, setScanFiles]   = useState<File[]>([])
+  const [photoInfos, setPhotoInfos] = useState<PhotoInfo[]>([])
+  const [discrepancies, setDiscrepancies] = useState<Discrepancy[]>([])
+  const [discIdx, setDiscIdx]       = useState(0)              // which discrepancy is on screen
+  const [markingIndex, setMarkingIndex] = useState<number | null>(null)  // photo the user is typing a code for
+  const [markingCode, setMarkingCode]   = useState("")
+  const [showAllLots, setShowAllLots]   = useState(false)     // final review: all lots vs only ones needing attention
   const [scanProgress, setScanProgress]     = useState({ done: 0, total: 0 })
   const [scanStage, setScanStage]           = useState<"local" | "ai">("local")  // scanning phase sub-stage
   const [aiProgress, setAiProgress]         = useState({ done: 0, total: 0 })
@@ -220,6 +320,13 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     setGroups([])
     setPreGroup([])
     setUnreadable(0)
+    setScanFiles([])
+    setPhotoInfos([])
+    setDiscrepancies([])
+    setDiscIdx(0)
+    setMarkingIndex(null)
+    setMarkingCode("")
+    setShowAllLots(false)
     setScanStage("local")
     setAiProgress({ done: 0, total: 0 })
     setAiFailed(false)
@@ -536,55 +643,32 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       if (skipAiRef.current) aiErrored = true
     }
 
-    const result: LotGroup[] = []
-    const pre: File[] = []
+    // One decision per photo, reconciling scanner + AI, collecting the
+    // disagreements a human should settle before the lots are organised.
+    const infos: PhotoInfo[] = []
+    const discs: Discrepancy[] = []
     let unreadableCount = 0
     let aiRead = 0
-    let current: LotGroup | null = null
-
     for (let i = 0; i < files.length; i++) {
       const d = decoded[i]
       if (d.unreadable) unreadableCount++
       const a = aiRes.get(i)
-
-      if (d.barcode) {
-        // Scanner-decoded label — reconcile with AI's second opinion. On a
-        // code disagreement the SCANNER wins (Code 128 has a checksum; AI
-        // misreads printed text more often) but the group is flagged so the
-        // user checks the label photo by eye.
-        let aiVerdict: LotGroup["aiVerdict"]
-        let aiCode: string | undefined
-        if (a) {
-          if (a.code && a.code.toLowerCase() !== d.barcode.toLowerCase()) { aiVerdict = "code-mismatch"; aiCode = a.code }
-          else if (a.label || a.code) aiVerdict = "confirmed"
-          else aiVerdict = "not-a-label"   // likely a sticker on an item photo that zxing decoded
-        }
-        const key = d.barcode.toLowerCase().trim()
-        current = { lotId: lotMap.get(key) ?? null, label: d.barcode, photos: [], labelPhoto: files[i], aiVerdict, aiCode }
-        result.push(current)
-      } else if (a?.code) {
-        // Scanner missed it; AI read the printed code.
-        aiRead++
-        const key = a.code.toLowerCase().trim()
-        current = { lotId: lotMap.get(key) ?? null, label: a.code, photos: [], labelPhoto: files[i], aiRead: true }
-        result.push(current)
-      } else if (a?.label) {
-        // AI is sure this is a label photo but couldn't read the code: break
-        // the group here so the following photos can't pollute the previous
-        // lot, and keep the label photo so the user can read it by eye.
-        current = { lotId: null, label: `Unreadable label — ${files[i].name}`, photos: [], labelPhoto: files[i], unreadableLabel: true }
-        result.push(current)
-      } else if (current) {
-        current.photos.push(files[i])
-      } else {
-        pre.push(files[i])
-      }
+      const aiAnswered = !!a
+      const aiIsLabel  = a?.label === true
+      const aiCode     = a?.code ?? null
+      const r = resolvePhoto(d.barcode, aiAnswered, aiIsLabel, aiCode)
+      if (r.source === "ai" && aiCode) aiRead++
+      infos.push({
+        scannerCode: d.barcode, aiIsLabel, aiCode, aiAnswered, unreadable: d.unreadable,
+        isLabel: r.isLabel, code: r.code, source: r.source,
+      })
+      if (r.discrepancy) discs.push({ index: i, type: r.discrepancy, scannerCode: d.barcode, aiCode, resolved: false })
     }
 
-    if (result.length === 0) {
-      // The AI pass has already run at this point, so say what it did — a total
-      // miss with a WORKING AI check means the labels genuinely aren't there,
-      // while a failed AI check on HEIC files means "convert to JPEG" advice.
+    if (!infos.some(x => x.isLabel)) {
+      // Nothing that could start a lot. Say what the AI did — a total miss with
+      // a WORKING AI check means the labels genuinely aren't there, a failed AI
+      // check on HEIC files means "convert to JPEG".
       const aiNote = candidates.length === 0 ? ""
         : aiErrored ? " The AI check couldn't run fully, so it may have missed labels too."
         : " AI also checked every photo and found no readable labels."
@@ -600,14 +684,80 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     }
 
     makeThumbs(files)
-    setGroups(result)
-    setPreGroup(pre)
+    setScanFiles(files)
+    setPhotoInfos(infos)
+    const built = buildGroups(files, infos, lotMap)
+    setGroups(built.groups)
+    setPreGroup(built.preGroup)
     setUnreadable(unreadableCount)
     setAiFailed(aiErrored)
     setAiReadCount(aiRead)
     setAiCheckedCount(aiRes.size)
-    setPhase("preview")
+    setDiscrepancies(discs)
+    setDiscIdx(0)
+    // Settle the disagreements first, then the final review; skip straight to
+    // review when scanner and AI agreed on everything.
+    setPhase(discs.length > 0 ? "discrepancies" : "preview")
   }
+
+  // ── Edit decisions → re-flow the lots (scan mode) ────────────────────────────
+  // Every fix works the same way: change one photo's decision, then rebuild the
+  // groups from the whole decision array so the following photos land correctly.
+  function reflow(nextInfos: PhotoInfo[]) {
+    setPhotoInfos(nextInfos)
+    const built = buildGroups(scanFiles, nextInfos, lotMap)
+    setGroups(built.groups)
+    setPreGroup(built.preGroup)
+  }
+  function patchInfo(index: number, patch: Partial<PhotoInfo>) {
+    reflow(photoInfos.map((x, i) => i === index ? { ...x, ...patch } : x))
+  }
+
+  // Settle one discrepancy: trust the scanner's code, trust AI's code, or say
+  // it isn't a label at all (its photos then merge into the lot above).
+  function resolveDiscrepancy(d: Discrepancy, choice: "scanner" | "ai" | "not-label") {
+    const patch: Partial<PhotoInfo> =
+      choice === "scanner" ? { isLabel: true,  code: d.scannerCode, source: "scanner" }
+      : choice === "ai"    ? { isLabel: true,  code: d.aiCode,      source: "ai" }
+      :                      { isLabel: false, code: null,          source: "none" }
+    patchInfo(d.index, patch)
+    setDiscrepancies(prev => prev.map(x => x.index === d.index ? { ...x, resolved: true } : x))
+  }
+  // What the current decision means for a discrepancy, so the buttons can show
+  // which one is active.
+  function discChoice(d: Discrepancy): "scanner" | "ai" | "not-label" {
+    const info = photoInfos[d.index]
+    if (!info?.isLabel) return "not-label"
+    if (d.aiCode && info.code?.toLowerCase() === d.aiCode.toLowerCase()) return "ai"
+    return "scanner"
+  }
+
+  // Final review: the user found a label the scan missed. Mark that photo as a
+  // barcode with the typed code — a new lot starts there and the following
+  // photos re-flow into it.
+  function markPhotoAsBarcode(index: number, code: string) {
+    const clean = code.replace(/[^\x20-\x7E]/g, "").trim().toUpperCase()
+    if (!clean) return
+    patchInfo(index, { isLabel: true, code: clean, source: "manual" })
+    setMarkingIndex(null)
+    setMarkingCode("")
+  }
+  // Fill in the code for a label AI saw but couldn't read.
+  function setLabelCode(index: number, code: string) {
+    const clean = code.replace(/[^\x20-\x7E]/g, "").trim().toUpperCase()
+    if (!clean) return
+    patchInfo(index, { isLabel: true, code: clean, source: "manual" })
+    setMarkingIndex(null)
+    setMarkingCode("")
+  }
+  // The user says a detected label isn't really one — drop it back into the lot
+  // above (its own photo included, since it wasn't a label after all).
+  function unmarkLabel(index: number) {
+    patchInfo(index, { isLabel: false, code: null, source: "none" })
+  }
+
+  const isVectisCode = (s: string) =>
+    /^[A-Za-z]\d{6,7}$/.test(s.trim()) || /^[A-Za-z]\d{4,7}-\d{1,6}$/.test(s.trim())
 
   // ── Upload (shared by both modes) ─────────────────────────────────────────────
   async function handleUpload() {
@@ -669,122 +819,111 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   }
 
   const matchedGroups   = groups.filter(g => g.lotId && g.photos.length > 0)
-  const unmatchedGroups = groups.filter(g => !g.lotId && !g.unreadableLabel)
-  const unreadableLabelGroups = groups.filter(g => g.unreadableLabel)
+  const unmatchedGroups = groups.filter(g => !g.lotId && !g.needsCode)   // has a code, but not a lot in this sale
+  const needsCodeGroups = groups.filter(g => g.needsCode)                // a label with no code typed yet
   const emptyGroups     = groups.filter(g => g.lotId && g.photos.length === 0)
-  const aiConfirmed     = groups.filter(g => g.aiVerdict === "confirmed").length
-  const aiWarnings      = groups.filter(g => g.aiVerdict === "code-mismatch" || g.aiVerdict === "not-a-label").length
-    + unreadableLabelGroups.length
-  // A group with an AI warning must always render a card, even with 0 photos.
-  const showCard        = (g: LotGroup) => g.photos.length > 0 || !g.lotId || (g.aiVerdict && g.aiVerdict !== "confirmed")
+  const editedCount     = groups.filter(g => g.edited).length
   const totalPhotos     = matchedGroups.reduce((sum, g) => sum + g.photos.length, 0)
   const uploadedCount   = uploadProgress.done - skipped.length
 
-  // Scan mode only: flag groups with far more photos than typical — the classic
-  // sign that the next lot's label photo failed to decode and both lots' photos
-  // ran together. Median-based so one genuinely big lot doesn't flag everything.
-  // LOWER median on even counts: with two groups [4, 9] the upper median (9)
-  // would make the threshold 18 — mathematically unreachable — so the exact
-  // merged-lot case the flag exists for would never fire.
+  // Flag groups with far more photos than typical — the classic sign that the
+  // next lot's label failed to scan and two lots ran together. LOWER median on
+  // even counts so the merged-lot case can actually fire.
   const photoCounts   = groups.filter(g => g.photos.length > 0).map(g => g.photos.length).sort((a, b) => a - b)
   const median        = photoCounts.length ? photoCounts[Math.floor((photoCounts.length - 1) / 2)] : 0
   const flagThreshold = Math.max(6, median * 2)
-  // Matched lots only, so the banner count always equals the highlighted cards
-  // (unmatched groups already get their own yellow "won't upload" treatment).
   const isFlagged     = (g: LotGroup) => mode === "scan" && !!g.lotId && g.photos.length >= flagThreshold
   const flaggedCount  = groups.filter(isFlagged).length
 
-  // Manual recovery when a "label" wasn't really a label (AI false positive on
-  // an unreadable-label group, or AI flagging a scanner-decoded sticker as an
-  // item photo): dissolve the group back into the lot above — its photos AND
-  // the not-really-a-label photo itself become that lot's photos.
-  function dissolveGroup(gi: number) {
-    const g = groups[gi]
-    if (!g || !(g.unreadableLabel || g.aiVerdict === "not-a-label")) return
-    const moved = [...(g.labelPhoto ? [g.labelPhoto] : []), ...g.photos]
-    const next = groups.filter((_, k) => k !== gi)
-    if (gi > 0) next[gi - 1] = { ...next[gi - 1], photos: [...next[gi - 1].photos, ...moved] }
-    else setPreGroup(p => [...p, ...moved])
-    setGroups(next)
-  }
+  const needsAttention = (g: LotGroup) => !g.lotId || g.needsCode || isFlagged(g)
+  const attentionCount = groups.filter(needsAttention).length + (preGroup.length > 0 ? 1 : 0)
+  const resolvedCount  = discrepancies.filter(d => d.resolved).length
 
   function renderGroupCard(g: LotGroup, i: number) {
-    const flagged = isFlagged(g)
-    const dissolvable = g.unreadableLabel || g.aiVerdict === "not-a-label"
+    const flagged  = isFlagged(g)
+    const scanMode = g.labelIndex !== undefined   // manual tools only exist in scan mode
     return (
       <div key={`${g.label}-${i}`}
         className={`rounded-xl border px-4 py-3 ${
-          g.aiVerdict === "code-mismatch"
-            ? "bg-red-50 border-red-400 dark:bg-red-900/10 dark:border-red-500/70"
-            : g.unreadableLabel || g.aiVerdict === "not-a-label"
-              ? "bg-orange-50 border-orange-400 dark:bg-orange-900/10 dark:border-orange-500/70"
-              : !g.lotId
-                ? "bg-yellow-50 border-yellow-400 dark:bg-yellow-900/10 dark:border-yellow-700/50"
-                : flagged
-                  ? "bg-amber-50 border-amber-400 dark:bg-amber-900/10 dark:border-amber-500/70"
-                  : "bg-white dark:bg-[#1C1C1E] border-gray-300 dark:border-gray-700"
+          g.needsCode
+            ? "bg-orange-50 border-orange-400 dark:bg-orange-900/10 dark:border-orange-500/70"
+            : !g.lotId
+              ? "bg-yellow-50 border-yellow-400 dark:bg-yellow-900/10 dark:border-yellow-700/50"
+              : flagged
+                ? "bg-amber-50 border-amber-400 dark:bg-amber-900/10 dark:border-amber-500/70"
+                : "bg-white dark:bg-[#1C1C1E] border-gray-300 dark:border-gray-700"
         }`}>
         <div className="flex items-center gap-2 flex-wrap mb-2">
           <span className={`font-mono text-sm ${
-            g.unreadableLabel ? "text-orange-700 dark:text-orange-400"
+            g.needsCode ? "text-orange-700 dark:text-orange-400"
               : g.lotId ? "text-[#2AB4A6]" : "text-yellow-700 dark:text-yellow-400"
           }`}>{g.label}</span>
           <span className="text-xs text-gray-600 dark:text-gray-500">
             {g.photos.length} photo{g.photos.length !== 1 ? "s" : ""}
           </span>
-          {g.aiVerdict === "confirmed" && (
-            <span className="text-xs bg-green-200 text-green-800 dark:bg-green-900/40 dark:text-green-400 rounded-full px-2 py-0.5">
-              ✓ AI confirmed
-            </span>
-          )}
-          {g.aiVerdict === "code-mismatch" && (
-            <span className="text-xs bg-red-200 text-red-800 dark:bg-red-900/40 dark:text-red-400 rounded-full px-2 py-0.5">
-              ⚠ scanner read {g.label} but AI read {g.aiCode} — check the label photo
-            </span>
-          )}
-          {g.aiVerdict === "not-a-label" && (
+          {g.needsCode && (
             <span className="text-xs bg-orange-200 text-orange-800 dark:bg-orange-900/40 dark:text-orange-400 rounded-full px-2 py-0.5">
-              ⚠ AI thinks this &quot;label&quot; is an item photo — check it
+              🔎 label found but not read — type the code
             </span>
           )}
-          {g.unreadableLabel && (
-            <span className="text-xs bg-orange-200 text-orange-800 dark:bg-orange-900/40 dark:text-orange-400 rounded-full px-2 py-0.5">
-              🔎 AI saw a label here it couldn&apos;t read — check the label photo by eye
-            </span>
-          )}
-          {dissolvable && (
-            <button
-              onClick={() => dissolveGroup(i)}
-              className="text-xs px-2 py-0.5 rounded-full border border-orange-400 dark:border-orange-500/70 text-orange-800 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-900/40 transition-colors">
-              ✕ Not a label — {i > 0 ? "move these photos to the lot above" : "discard grouping"}
-            </button>
-          )}
-          {!g.lotId && !g.unreadableLabel && (
+          {!g.lotId && !g.needsCode && (
             <span className="text-xs bg-yellow-200 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-400 rounded-full px-2 py-0.5">
-              not in this auction — won&apos;t upload
+              not a lot in this sale — won&apos;t save
             </span>
           )}
-          {g.aiRead && (
+          {g.aiRead && !g.edited && (
             <span className="text-xs bg-purple-200 text-purple-800 dark:bg-purple-900/40 dark:text-purple-400 rounded-full px-2 py-0.5">
               ✨ read by AI
             </span>
           )}
-          {flagged && (
-            <span className="text-xs bg-amber-200 text-amber-800 dark:bg-amber-900/40 dark:text-amber-400 rounded-full px-2 py-0.5">
-              ⚠ unusually many photos — check none belong to the next lot
+          {g.edited && (
+            <span className="text-xs bg-blue-200 text-blue-800 dark:bg-blue-900/40 dark:text-blue-400 rounded-full px-2 py-0.5">
+              ✎ you set this
             </span>
           )}
+          {flagged && (
+            <span className="text-xs bg-amber-200 text-amber-800 dark:bg-amber-900/40 dark:text-amber-400 rounded-full px-2 py-0.5">
+              ⚠ a lot of photos — check none belong to the next lot
+            </span>
+          )}
+          <span className="ml-auto flex gap-1.5">
+            {g.needsCode && scanMode && (
+              <button onClick={() => { setMarkingIndex(g.labelIndex!); setMarkingCode("") }}
+                className="text-xs px-2 py-0.5 rounded-full bg-orange-500 hover:bg-orange-600 text-white transition-colors">
+                🏷 Type the barcode
+              </button>
+            )}
+            {scanMode && !g.needsCode && (
+              <button onClick={() => unmarkLabel(g.labelIndex!)}
+                className="text-xs px-2 py-0.5 rounded-full border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-500 transition-colors">
+                ✕ Not a label
+              </button>
+            )}
+          </span>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {g.labelPhoto && (
-            <div className="relative flex-shrink-0" title={`Label photo — ${g.labelPhoto.name} (not uploaded)`}>
+            <div className="relative flex-shrink-0" title={`Barcode label — ${g.labelPhoto.name} (not saved)`}>
               <Thumb url={thumbUrls.current.get(g.labelPhoto) ?? ""} name={g.labelPhoto.name} />
               <span className="absolute -top-1 -left-1 text-[9px] leading-none bg-gray-700 text-white dark:bg-gray-200 dark:text-gray-900 rounded px-1 py-0.5">label</span>
             </div>
           )}
-          {g.photos.map((p, j) => (
-            <Thumb key={j} url={thumbUrls.current.get(p) ?? ""} name={p.name} />
-          ))}
+          {g.photos.map((p, j) => {
+            const gi = g.photoIndices?.[j]
+            return (
+              <div key={j} className="relative flex-shrink-0 group/ph">
+                <Thumb url={thumbUrls.current.get(p) ?? ""} name={p.name} />
+                {scanMode && gi !== undefined && (
+                  <button
+                    onClick={() => { setMarkingIndex(gi); setMarkingCode("") }}
+                    title="This photo is actually a barcode label"
+                    className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-purple-600 hover:bg-purple-500 text-white text-[10px] leading-none flex items-center justify-center opacity-0 group-hover/ph:opacity-100 focus:opacity-100 transition-opacity">
+                    🏷
+                  </button>
+                )}
+              </div>
+            )
+          })}
         </div>
       </div>
     )
@@ -820,7 +959,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const stagePct = scanProgress.total > 0 ? (scanProgress.done / scanProgress.total) * 100 : 0
   const aiPct    = aiProgress.total   > 0 ? (aiProgress.done   / aiProgress.total)   * 100 : 0
   const upPct    = uploadProgress.total > 0 ? (uploadProgress.done / uploadProgress.total) * 100 : 0
-  const needsALook = aiWarnings + flaggedCount + (preGroup.length > 0 ? 1 : 0)
+  const needsALook = attentionCount
 
   return (
     <div className="pb-6 max-w-5xl">
@@ -976,15 +1115,89 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
         </div>
       )}
 
-      {/* ══ Preview — check before saving ══ */}
+      {/* ══ Discrepancies — settle where the reader and AI disagree ══ */}
+      {phase === "discrepancies" && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Settle the disagreements</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+              The barcode reader and AI didn&apos;t agree on these photos. Pick the right answer for each — then the
+              lots get organised. A sensible default is already chosen, so you can also just continue.
+            </p>
+          </div>
+
+          <Notice tone="ai">
+            {resolvedCount} of {discrepancies.length} settled. The reader has a checksum so it&apos;s usually right on
+            a code; AI is better at spotting a photo that isn&apos;t a label at all.
+          </Notice>
+
+          <div className="space-y-2 max-h-[34rem] overflow-y-auto pr-1">
+            {discrepancies.map(d => {
+              const file   = scanFiles[d.index]
+              const choice = discChoice(d)
+              const Btn = ({ c, label }: { c: "scanner" | "ai" | "not-label"; label: React.ReactNode }) => (
+                <button onClick={() => resolveDiscrepancy(d, c)}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                    choice === c
+                      ? "bg-purple-600 text-white"
+                      : "border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-purple-400"
+                  }`}>
+                  {label}
+                </button>
+              )
+              return (
+                <div key={d.index}
+                  className={`rounded-xl border px-4 py-3 flex gap-4 ${
+                    d.resolved
+                      ? "bg-white dark:bg-[#1C1C1E] border-gray-200 dark:border-gray-800"
+                      : "bg-purple-50 border-purple-300 dark:bg-purple-900/10 dark:border-purple-500/60"
+                  }`}>
+                  <div className="w-20 h-20 flex-shrink-0">
+                    {file && <Thumb url={thumbUrls.current.get(file) ?? ""} name={file.name} />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-gray-700 dark:text-gray-300 mb-2">
+                      {d.type === "mismatch" && <>The reader read <span className="font-mono text-gray-900 dark:text-white">{d.scannerCode}</span> but AI read <span className="font-mono text-gray-900 dark:text-white">{d.aiCode}</span>. Which code is on the label?</>}
+                      {d.type === "scanner-not-ai" && <>The reader read <span className="font-mono text-gray-900 dark:text-white">{d.scannerCode}</span>, but AI thinks this is an item photo, not a barcode label.</>}
+                      {d.type === "ai-not-scanner" && <>AI thinks this is a label reading <span className="font-mono text-gray-900 dark:text-white">{d.aiCode}</span>, but the barcode reader didn&apos;t find one.</>}
+                    </p>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {d.scannerCode && <Btn c="scanner" label={<>Reader — <span className="font-mono">{d.scannerCode}</span></>} />}
+                      {d.aiCode      && <Btn c="ai"      label={<>AI — <span className="font-mono">{d.aiCode}</span></>} />}
+                      <Btn c="not-label" label="Not a barcode label" />
+                    </div>
+                  </div>
+                  {d.resolved && <span className="text-green-600 dark:text-green-400 text-lg flex-shrink-0">✓</span>}
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="flex gap-3 sticky bottom-0 bg-gray-50 dark:bg-[#141416] py-3 border-t border-gray-200 dark:border-gray-800">
+            <button onClick={reset}
+              className="px-5 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm hover:border-gray-500 transition-colors">
+              ← Start again
+            </button>
+            <button onClick={() => setPhase("preview")}
+              className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-semibold rounded-lg text-sm transition-colors">
+              {resolvedCount < discrepancies.length
+                ? `Continue — ${discrepancies.length - resolvedCount} left on the default`
+                : "Continue to final review"} →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ══ Final review — organised lots, fix any missed barcode, then save ══ */}
       {phase === "preview" && (
         <div className="space-y-4">
           <div>
             <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-              {mode === "filename" ? "Check the filename matches" : "Check before saving"}
+              {mode === "filename" ? "Check the filename matches" : "Final review"}
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-              Nothing has been saved yet. Every photo below is shown under the lot it will be added to.
+              Nothing has been saved yet. Each lot shows its barcode label and its photos.
+              {mode === "scan" && <> Missed a label? Hover a photo and press <span className="font-semibold">🏷</span> to set it — the photos re-flow into the right lot.</>}
             </p>
           </div>
 
@@ -997,29 +1210,28 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
 
           {mode === "scan" && aiCheckedCount > 0 && (
             <Notice tone="ai">
-              ✨ AI reviewed {aiCheckedCount} photo{aiCheckedCount !== 1 ? "s" : ""}: {aiConfirmed} label{aiConfirmed !== 1 ? "s" : ""} confirmed
-              {aiReadCount > 0 ? <>, {aiReadCount} read by AI that the barcode reader missed</> : null}
-              {aiWarnings > 0 ? <>, <strong>{aiWarnings} flagged below</strong></> : <>, nothing suspicious</>}.
+              ✨ AI reviewed {aiCheckedCount} photo{aiCheckedCount !== 1 ? "s" : ""}
+              {aiReadCount > 0 ? <>, reading {aiReadCount} label{aiReadCount !== 1 ? "s" : ""} the barcode reader missed</> : null}
+              {editedCount > 0 ? <>. You set {editedCount} by hand</> : null}.
             </Notice>
           )}
           {mode === "scan" && aiFailed && (
             <Notice tone="bad">
               ⚠ The AI check couldn&apos;t run for some photos (a problem with the AI, the network, or it was
-              skipped). Those photos were grouped by barcode alone, so a missed label could have merged two lots.
-              Check the groups below, or scan again.
+              skipped). Those were grouped by barcode alone, so a missed label could have merged two lots. Check the
+              lots below, or scan again.
+            </Notice>
+          )}
+          {needsCodeGroups.length > 0 && (
+            <Notice tone="warn">
+              🔎 {needsCodeGroups.length} label{needsCodeGroups.length !== 1 ? "s" : ""} {needsCodeGroups.length !== 1 ? "were" : "was"} spotted
+              but couldn&apos;t be read — the orange cards below. Press <span className="font-semibold">🏷 Type the barcode</span> on each to enter the code; until then those photos won&apos;t save.
             </Notice>
           )}
           {flaggedCount > 0 && (
             <Notice tone="warn">
-              ⚠ {flaggedCount} lot{flaggedCount !== 1 ? "s have" : " has"} far more photos than the rest — often a
-              sign a label didn&apos;t scan and two lots ran together. Highlighted below.
-            </Notice>
-          )}
-          {unreadableLabelGroups.length > 0 && (
-            <Notice tone="warn">
-              🔎 AI spotted {unreadableLabelGroups.length} label{unreadableLabelGroups.length !== 1 ? "s" : ""} it
-              couldn&apos;t read. Those photos are held separately below so they can&apos;t land on the wrong lot —
-              read the code off the label photo yourself, or use &quot;Not a label&quot; if AI got it wrong.
+              ⚠ {flaggedCount} lot{flaggedCount !== 1 ? "s have" : " has"} far more photos than the rest — often a sign
+              a label didn&apos;t scan and two lots ran together. If so, hover the label photo and press 🏷 to split it.
             </Notice>
           )}
           {unreadable > 0 && (
@@ -1028,26 +1240,15 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
                 ? <>⚠ {unreadable} photo{unreadable !== 1 ? "s" : ""} couldn&apos;t be read on this device (usually
                   HEIC from an iPhone) and the AI check didn&apos;t cover them — convert them to JPEG and scan again.</>
                 : <>ℹ {unreadable} photo{unreadable !== 1 ? "s" : ""} can&apos;t be previewed on this device (usually
-                  HEIC from an iPhone). AI still checked them and they will still upload — they just show as a
+                  HEIC from an iPhone). AI still checked them and they will still save — they just show as a
                   placeholder tile.</>}
             </Notice>
-          )}
-          {preGroup.length > 0 && (
-            <div className="rounded-lg px-3 py-2 border bg-amber-100 border-amber-300 dark:bg-amber-900/20 dark:border-amber-700/50">
-              <p className="text-xs text-amber-800 dark:text-amber-300 font-medium mb-2">
-                {preGroup.length} photo{preGroup.length !== 1 ? "s" : ""} came before the first label and won&apos;t be
-                saved — if a label here didn&apos;t scan, its lot&apos;s photos are in this pile too:
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {preGroup.map((p, j) => <Thumb key={j} url={thumbUrls.current.get(p) ?? ""} name={p.name} />)}
-              </div>
-            </div>
           )}
           {unmatchedGroups.length > 0 && (
             <Notice tone="warn">
               <p className="font-medium mb-1">
-                {unmatchedGroups.length} label{unmatchedGroups.length !== 1 ? "s" : ""} {unmatchedGroups.length !== 1 ? "aren't" : "isn't"} on
-                any lot in this sale — their photos won&apos;t be saved:
+                {unmatchedGroups.length} label{unmatchedGroups.length !== 1 ? "s" : ""} {unmatchedGroups.length !== 1 ? "aren't" : "isn't"} a
+                lot in this sale — their photos won&apos;t save:
               </p>
               <p className="font-mono">{unmatchedGroups.map(g => g.label).join(", ")}</p>
               <p className="mt-1">Check you picked the right sale, and that these lots have been created.</p>
@@ -1059,10 +1260,58 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             </Notice>
           )}
 
-          {groups.filter(showCard).length > 0 && (
-            <div className="space-y-2 max-h-[32rem] overflow-y-auto pr-1">
-              {groups.map((g, i) => showCard(g) ? renderGroupCard(g, i) : null)}
+          {/* Photos before the first label — recoverable if a label here was missed */}
+          {preGroup.length > 0 && (
+            <div className="rounded-lg px-3 py-2 border bg-amber-100 border-amber-300 dark:bg-amber-900/20 dark:border-amber-700/50">
+              <p className="text-xs text-amber-800 dark:text-amber-300 font-medium mb-2">
+                {preGroup.length} photo{preGroup.length !== 1 ? "s" : ""} came before the first label and won&apos;t save. If
+                one of these is really a barcode, hover it and press 🏷.
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {preGroup.map((p, j) => {
+                  const gi = scanFiles.indexOf(p)
+                  return (
+                    <div key={j} className="relative flex-shrink-0 group/ph">
+                      <Thumb url={thumbUrls.current.get(p) ?? ""} name={p.name} />
+                      {mode === "scan" && gi >= 0 && (
+                        <button onClick={() => { setMarkingIndex(gi); setMarkingCode("") }}
+                          title="This photo is a barcode label"
+                          className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-purple-600 hover:bg-purple-500 text-white text-[10px] leading-none flex items-center justify-center opacity-0 group-hover/ph:opacity-100 focus:opacity-100 transition-opacity">
+                          🏷
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
+          )}
+
+          {/* Lot list with a filter so a big sale doesn't render everything at once */}
+          {groups.length > 0 && (
+            <>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  {showAllLots ? `All ${groups.length} lots` : `${attentionCount} lot${attentionCount !== 1 ? "s" : ""} needing a look`}
+                </p>
+                <div className="flex gap-1">
+                  <button onClick={() => setShowAllLots(false)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${!showAllLots ? "bg-purple-600 text-white" : "border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-500"}`}>
+                    Needs attention ({attentionCount})
+                  </button>
+                  <button onClick={() => setShowAllLots(true)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${showAllLots ? "bg-purple-600 text-white" : "border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-500"}`}>
+                    All lots ({groups.length})
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-2 max-h-[34rem] overflow-y-auto pr-1">
+                {groups.map((g, i) => (showAllLots || needsAttention(g)) ? renderGroupCard(g, i) : null)}
+                {!showAllLots && attentionCount === 0 && (
+                  <Notice tone="good">Everything looks right — nothing needs a second look. Switch to “All lots” to browse them, or save.</Notice>
+                )}
+              </div>
+            </>
           )}
 
           {error && <Notice tone="bad">{error}</Notice>}
@@ -1072,11 +1321,58 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
               className="px-5 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm hover:border-gray-500 transition-colors">
               ← Start again
             </button>
+            {discrepancies.length > 0 && (
+              <button onClick={() => setPhase("discrepancies")}
+                className="px-5 py-2.5 rounded-lg border border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-400 text-sm hover:border-purple-500 transition-colors">
+                ← Disagreements
+              </button>
+            )}
             <button onClick={handleUpload} disabled={matchedGroups.length === 0}
               className="flex-1 py-2.5 bg-[#2AB4A6] hover:bg-[#24a090] disabled:opacity-50 text-black font-semibold rounded-lg text-sm transition-colors">
               Save {totalPhotos} photo{totalPhotos !== 1 ? "s" : ""} to {matchedGroups.length} lot{matchedGroups.length !== 1 ? "s" : ""}
             </button>
           </div>
+
+          {/* Mark-as-barcode modal — set or type a code for a photo */}
+          {markingIndex !== null && scanFiles[markingIndex] && (
+            <div onClick={() => setMarkingIndex(null)}
+              className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+              <div onClick={e => e.stopPropagation()}
+                className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl p-5 w-full max-w-sm">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white mb-1">What barcode is on this photo?</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                  It becomes a lot label, and the photos after it (up to the next label) move into that lot.
+                </p>
+                <div className="flex justify-center mb-3">
+                  <img src={thumbUrls.current.get(scanFiles[markingIndex]) ?? ""} alt=""
+                    className="max-h-48 rounded-lg border border-gray-300 dark:border-gray-700 object-contain" />
+                </div>
+                <input
+                  autoFocus
+                  value={markingCode}
+                  onChange={e => setMarkingCode(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && markingCode.trim()) markPhotoAsBarcode(markingIndex, markingCode) }}
+                  placeholder="e.g. F066001 or R000016-413"
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                {markingCode.trim() && !isVectisCode(markingCode) && (
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-1.5">
+                    That doesn&apos;t look like a Vectis barcode (e.g. F066001 or R000016-413) — you can still use it.
+                  </p>
+                )}
+                <div className="flex gap-2 mt-4">
+                  <button onClick={() => setMarkingIndex(null)}
+                    className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm hover:border-gray-500 transition-colors">
+                    Cancel
+                  </button>
+                  <button onClick={() => markPhotoAsBarcode(markingIndex, markingCode)} disabled={!markingCode.trim()}
+                    className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-sm font-semibold transition-colors">
+                    Set as barcode
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1180,7 +1476,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             </div>
           )}
 
-          {(unmatchedGroups.length > 0 || unreadableLabelGroups.length > 0 || preGroup.length > 0) && (
+          {(unmatchedGroups.length > 0 || needsCodeGroups.length > 0 || preGroup.length > 0) && (
             <Notice tone="warn">
               <p className="font-medium mb-1">Still to sort out:</p>
               <ul className="space-y-0.5">
@@ -1188,8 +1484,8 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
                   <li>· {unmatchedGroups.length} label{unmatchedGroups.length !== 1 ? "s" : ""} not on any lot in this sale
                     (<span className="font-mono">{unmatchedGroups.slice(0, 6).map(g => g.label).join(", ")}{unmatchedGroups.length > 6 ? "…" : ""}</span>)</li>
                 )}
-                {unreadableLabelGroups.length > 0 && (
-                  <li>· {unreadableLabelGroups.length} label{unreadableLabelGroups.length !== 1 ? "s" : ""} AI couldn&apos;t read — those photos weren&apos;t saved</li>
+                {needsCodeGroups.length > 0 && (
+                  <li>· {needsCodeGroups.length} label{needsCodeGroups.length !== 1 ? "s" : ""} left without a code — those photos weren&apos;t saved</li>
                 )}
                 {preGroup.length > 0 && (
                   <li>· {preGroup.length} photo{preGroup.length !== 1 ? "s" : ""} before the first label — not saved</li>
