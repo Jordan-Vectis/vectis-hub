@@ -1064,6 +1064,48 @@ Inconsistent across machines/browsers. Generate server-side and return as downlo
 Divide the usable page area into a **fixed number of slots** rather than autosizing. Small groups should not produce giant rows.`,
   },
   {
+    filename: "reference_access_log.md",
+    content: `---
+name: Access Log + the cataloguer /hub bounce
+description: /admin/access-log diagnostic + what is RULED OUT in the /hub bounce investigation. Read before touching any app access gate or re-investigating the bounce.
+metadata:
+  type: reference
+---
+
+# Access Log + the cataloguer /hub bounce (2026-07-16)
+
+**The bug (unresolved — evidence-gathering deployed, NOT a fix).** One cataloguer (role CATALOGUER, apps CATALOGUING + MANAGER_PORTAL) is *sometimes* thrown to /hub after pressing Save in the **desktop** Auction Manager Lot Wizard, and reports seeing only the Manager Portal card. **She just has to refresh the page** and it is fine again.
+
+## ⚠ RULED OUT — do not re-investigate these
+
+- **Nothing writes her permissions.** Every allowedApps writer is an admin action or a restore: /api/admin/role-defaults/apply, PUT /api/admin/role-defaults, /api/admin/users/[id]/apps, lib/actions/admin.ts (createUser), /api/admin/restore*, /api/databases/browse. **None fire on save, none run on a schedule.** "A refresh fixes it" independently confirms her stored row is intact — this is a **read/render** problem, not data loss.
+- saveLastLotFields writes **only** lastTote/lastVendor/lastReceipt. It is **fire-and-forget** (.catch(() => {}), not awaited) immediately before onCreated() → router.refresh(), so a user.update does race the layout's user.findUnique — but Postgres MVCC cannot serve a half-row, so it cannot subtract an app.
+- getEffectiveSession() returns early for non-ADMIN — **no impersonation** for her, no cookie read.
+- **The JWT is stable.** auth.config.ts's jwt() callback only writes from \`user\` at sign-in and does **no** per-request DB re-query, so session.user.id cannot change between the bounce and the refresh. (Kills any "picked the wrong duplicate account per request" theory.)
+- hasAppAccess is only \`role === "ADMIN" → true, else allowedApps.includes(appKey)\`. **Role is irrelevant** for a non-admin, so dbUser.role reading wrong cannot cause this.
+- No cross-user cache exists: no unstable_cache, no React cache(), and the only module-level caches (lib/ai-models.ts, lib/ga.ts, lib/pdf-logo.ts) hold config/clients, not user data.
+
+## The contradiction that forced the log
+
+MANAGER_PORTAL and CATALOGUING are **both** appKey cards on the hub. If the read returned **null**, Manager Portal would vanish **too** (she'd get only allUsers cards) — contradicting the report. If it returned **her correct row**, the gate would have passed. A correct row cannot read as a *subset* of itself. So either the second-hand report is imprecise, or a render read **someone else's row** — and MANAGER_PORTAL-without-CATALOGUING is exactly what a **manager** looks like. Static reading cannot settle it; hence the log.
+
+## What was built — /admin/access-log
+
+- **AccessDenialLog** model (**NEEDS Run Migrations** — CREATE TABLE + 2 indexes are in app/api/admin/run-migrations/route.ts).
+- **lib/access-log.ts** → logAccessDenied({ appKey, source, session, dbUser, note }). Captures BOTH sides: session id/email/name/role vs the row's id/email/role/allowedApps, plus referer and **idMismatch** (dbUserId !== sessionUserId). Wrapped in try/catch — **a diagnostic must never break the page it diagnoses**, and this also covers the pre-Run-Migrations window.
+- **app/(app)/tools/cataloguing/layout.tsx** — the gate that does the bouncing. It now selects id + email **purely so a denial can be logged**, and calls logAccessDenied immediately **before** redirect("/hub"). ⚠ redirect() works by **throwing** — never wrap it in the try/catch.
+- **/admin/access-log** (card under People & Access) — full-width table, migration-safe, "Clear log" button (DELETE /api/admin/access-log), no console needed.
+
+**The page names the three failure shapes so the next occurrence is decisive:**
+1. dbUserFound = false → **read returned nothing** (transient DB read; the gate fails closed via \`dbUser?.allowedApps ?? []\`).
+2. idMismatch = true → **read a different user's row** (serious — cross-user permission read).
+3. Row found, app absent → **her row genuinely lacked it** (would contradict "refresh fixes it" and mean something IS writing permissions).
+
+## Separate real bug found on the way (NOT fixed, NOT confirmed as the cause)
+
+auth.ts login uses prisma.user.findFirst({ where: { email: { equals: input, mode: "insensitive" } } }) with **no orderBy**. If one person ever has **two accounts** (e.g. differing email capitalisation), Postgres may return either row — so which account they log into is arbitrary. It would produce this exact symptom but does **not** explain "a refresh fixes it" (login picks the row, not the refresh). Worth an orderBy + a duplicate-account check regardless.`,
+  },
+  {
     filename: "reference_app_access_control.md",
     content: `---
 name: App access control model

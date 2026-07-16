@@ -953,6 +953,28 @@ const MIGRATIONS = [
   // photos during a smart scan, so it can be checked later. Held on its own,
   // NEVER in imageUrls (which feeds the website / BC / AI descriptions).
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "labelPhotoUrl" TEXT`,
+
+  // Access Denial Log — diagnostic table behind /admin/access-log (2026-07-16).
+  `CREATE TABLE IF NOT EXISTS "AccessDenialLog" (
+     "id"            TEXT NOT NULL PRIMARY KEY,
+     "createdAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     "appKey"        TEXT NOT NULL,
+     "source"        TEXT NOT NULL,
+     "referer"       TEXT,
+     "sessionUserId" TEXT NOT NULL,
+     "sessionEmail"  TEXT,
+     "sessionName"   TEXT,
+     "sessionRole"   TEXT,
+     "dbUserFound"   BOOLEAN NOT NULL,
+     "dbUserId"      TEXT,
+     "dbEmail"       TEXT,
+     "dbRole"        TEXT,
+     "dbAllowedApps" TEXT[],
+     "idMismatch"    BOOLEAN NOT NULL DEFAULT FALSE,
+     "note"          TEXT
+   )`,
+  `CREATE INDEX IF NOT EXISTS "AccessDenialLog_createdAt_idx"     ON "AccessDenialLog"("createdAt")`,
+  `CREATE INDEX IF NOT EXISTS "AccessDenialLog_sessionUserId_idx" ON "AccessDenialLog"("sessionUserId")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,
