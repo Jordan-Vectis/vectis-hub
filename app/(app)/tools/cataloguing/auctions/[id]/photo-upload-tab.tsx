@@ -225,7 +225,6 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const [scanFiles, setScanFiles]   = useState<File[]>([])
   const [photoInfos, setPhotoInfos] = useState<PhotoInfo[]>([])
   const [discrepancies, setDiscrepancies] = useState<Discrepancy[]>([])
-  const [discIdx, setDiscIdx]       = useState(0)              // which discrepancy is on screen
   const [markingIndex, setMarkingIndex] = useState<number | null>(null)  // photo the user is typing a code for
   const [markingCode, setMarkingCode]   = useState("")
   const [showAllLots, setShowAllLots]   = useState(false)     // final review: all lots vs only ones needing attention
@@ -323,7 +322,6 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     setScanFiles([])
     setPhotoInfos([])
     setDiscrepancies([])
-    setDiscIdx(0)
     setMarkingIndex(null)
     setMarkingCode("")
     setShowAllLots(false)
@@ -694,7 +692,6 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     setAiReadCount(aiRead)
     setAiCheckedCount(aiRes.size)
     setDiscrepancies(discs)
-    setDiscIdx(0)
     // Settle the disagreements first, then the final review; skip straight to
     // review when scanner and AI agreed on everything.
     setPhase(discs.length > 0 ? "discrepancies" : "preview")
@@ -893,10 +890,13 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
                 🏷 Type the barcode
               </button>
             )}
-            {scanMode && !g.needsCode && (
+            {/* Every scan-mode label can be dismissed — including a needsCode one
+                that AI wrongly flagged (there'd be no code to type), which would
+                otherwise orphan the photos below it with no way back. */}
+            {scanMode && (
               <button onClick={() => unmarkLabel(g.labelIndex!)}
                 className="text-xs px-2 py-0.5 rounded-full border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-500 transition-colors">
-                ✕ Not a label
+                ✕ Not a label{g.needsCode ? " — merge into the lot above" : ""}
               </button>
             )}
           </span>
