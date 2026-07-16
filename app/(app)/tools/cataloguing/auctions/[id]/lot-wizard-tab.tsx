@@ -18,6 +18,18 @@ import { useConditionWordings } from "@/lib/use-condition-wordings"
 export const CATEGORY_MAP = DEFAULT_CATEGORY_MAP
 
 export const BRANDS_LIST: string[] = [
+  // Model railway brands — added 2026-07-16
+  "ACE Trains","Airfix GMR","Artitec","Auhagen","Bachmann Branchline",
+  "Bachmann Brassworks","Bachmann USA","Bayko","Brimtoy","Darstaed",
+  "DCC Concepts","DJ Models","DJH","Dundas Models","Eckon",
+  "EFE Rail","Egger-bahn","ESU","Flangeway","Hammant & Morgan",
+  "Hamo","Hattons","Hornby","Hornby Acho","Ibertren",
+  "Industrial Rail","Kernow Models","Markits","Mashima","Minitrains",
+  "Model Rail Magazine","Model Signal Engineering","N Gauge Society","NCE","NuCast",
+  "Oxford Rail","Parkside Dundas","PECO","Pike Stuff","Proto 1000",
+  "Proto 2000","Ratio","Realtrack","REE Models","Replica Railways",
+  "Revolution Trains","Roxey Mouldings","Slaters","Sommerfeldt","South East Finecast",
+  "Sunset Models","Superquick","T Gauge","Tri-ang Hornby",
   "Accurascale","Admiral Palou","Citadel & Games Workshop","Distler Figuren","Gilbert Erector",
   "Hinchliffe Models","Johann Haffner","Noris","NZG","Otto Models","Phillip Segal Toys",
   "Product Enterprise","Revell Model Racing","Sungroup","Swatch","The Royal Mint",
