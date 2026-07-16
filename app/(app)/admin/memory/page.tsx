@@ -68,13 +68,15 @@ A deliberate easter egg — do not "clean it up". The page at /jordan (app/(app)
     filename: "lot_wizard_warnings.md",
     content: `---
 name: Lot wizard input warnings
-purpose: The estimate and category sanity warnings in the cataloguing lot wizard. Read before touching goNext()/validateStep in lot-wizard-tab.tsx.
-last_updated: 2026-07-02
+purpose: The duplicate-barcode, estimate and category sanity warnings in the cataloguing lot wizard. Read before touching goNext()/validateStep in lot-wizard-tab.tsx.
+last_updated: 2026-07-16
 ---
 
-# Lot wizard input warnings (2026-07-02, STAGING)
+# Lot wizard input warnings (2026-07-02, duplicate barcode added 2026-07-16, STAGING)
 
-Two goNext() stop-and-warn guards in lot-wizard-tab.tsx, following the existing step-1 length / step-2 barcode warning pattern (amber box; state cleared on field edit and goBack; shared component so desktop AND tablet get them):
+goNext() stop-and-warn guards in lot-wizard-tab.tsx, following the existing step-1 length / step-2 barcode warning pattern (amber box; state cleared on field edit and goBack; the Next button is disabled while one is showing; shared component so desktop AND tablet get them):
+
+- **Step 2 (duplicate barcode, 2026-07-16):** if the scanned/typed barcode is already on a lot in THIS auction, a **RED** box (deliberately not the house amber — the others are heuristics, this one is a fact) names the existing lot and its unique ID, offering "Clear & scan again" and "Continue anyway". Checked **BEFORE** the wrong-auction prefix warning, because an exact match against a real lot beats a prefix guess. Matches on **BOTH** barcode AND receiptUniqueId — the barcode box legitimately accepts either format (RULES.md → Lot Identifiers), and either landing twice means the same physical item twice. Fed by an **existingLots** prop passed from auction-tabs.tsx AND tablet-tabs.tsx; stays fresh via onCreated() → router.refresh() re-rendering the parent. ⚠ **It is a CLIENT-side check against the lots already loaded — it will NOT catch a lot another cataloguer added on a different device since the last refresh.** (Adding receiptUniqueId to the tablet's Lot interface also required adding it to the explicit lot map in tablet/auctions/[id]/page.tsx — the tablet query returns every column, the type just hadn't declared it.) Separate from, and additional to, the pre-existing **lastSavedBarcode** guard (refuses to re-save the immediately-previous barcode — stops a stuck/continuous-mode scanner minting duplicates).
 
 - Step 5 (estimates): if Low > High (values already validated numeric) a warning says they look the wrong way round, with three buttons — "Swap them & continue" (one-tap swap, straight to step 6), "Fix it" (close the box), "Continue anyway". Equal low/high is deliberately allowed (single-figure estimates are legitimate).
 - Step 4 (categories): if a hand-typed Main or Sub category is not EXACTLY in the preset list (useCategoryMap — the DB-managed Admin -> Cataloguing Categories list that mirrors BC), a warning says it won't match up in BC. Main is checked before Sub (the sub list depends on a valid main); blank categories never warn (they're optional). If only the capitalisation differs from a preset, a one-tap 'Use "<preset>"' button corrects it. A sub typed under an invalid main gets re-checked once the main is fixed.`,

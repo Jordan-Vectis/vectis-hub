@@ -375,6 +375,7 @@ const IDLE_HEARTBEAT_BASE = "vectis_idle_last_activity"
 export default function LotWizardTab({
   auctionId,
   auction,
+  existingLots,
   userId,
   userName,
   onCreated,
@@ -384,6 +385,9 @@ export default function LotWizardTab({
 }: {
   auctionId: string
   auction: { code: string; name: string }
+  // Lots already in this auction — used to warn on a duplicate barcode. Kept
+  // fresh by onCreated() → router.refresh() re-rendering the parent.
+  existingLots?: { barcode: string | null; receiptUniqueId: string | null; title: string }[]
   userId?: string
   userName?: string
   onCreated: () => void
@@ -394,6 +398,8 @@ export default function LotWizardTab({
   const router = useRouter()
   const [pending, start] = useTransition()
   const [barcodeWarning, setBarcodeWarning] = useState(false)
+  // Step-2 warning: this barcode is already on a lot in this auction.
+  const [dupeWarning, setDupeWarning] = useState<{ title: string; uniqueId: string | null } | null>(null)
   const [step1LengthWarning, setStep1LengthWarning] = useState(false)
   // Step-4 warning: a hand-typed category that doesn't match the preset list
   // (which mirrors BC) — "main" or "sub" says which field failed.
@@ -697,6 +703,20 @@ export default function LotWizardTab({
 
   const categoryMap = useCategoryMap()
   const subCats     = mainCat ? (categoryMap[mainCat] ?? []) : []
+  // Every identifier already taken in this auction → the lot holding it. Both
+  // fields are checked because the barcode box legitimately accepts either an
+  // internal barcode or a unique ID (see RULES.md → Lot Identifiers), and either
+  // one landing twice means the same physical item is being catalogued twice.
+  const takenIdentifiers = useMemo(() => {
+    const m = new Map<string, { title: string; uniqueId: string | null }>()
+    for (const l of existingLots ?? []) {
+      const info = { title: l.title, uniqueId: l.receiptUniqueId }
+      if (l.barcode?.trim())         m.set(l.barcode.trim().toLowerCase(), info)
+      if (l.receiptUniqueId?.trim()) m.set(l.receiptUniqueId.trim().toLowerCase(), info)
+    }
+    return m
+  }, [existingLots])
+
   const mainCatList = Object.keys(categoryMap)
   const boxWordings = useConditionWordings()
   const inpFocus    = tablet
@@ -772,6 +792,16 @@ export default function LotWizardTab({
         return
       }
     }
+    // Warn if this barcode is already on a lot in this auction. Checked before
+    // the prefix warning below: an exact match against a real lot is a fact,
+    // where the prefix check is only a heuristic.
+    if (step === 2 && barcode.trim()) {
+      const hit = takenIdentifiers.get(barcode.trim().toLowerCase())
+      if (hit) {
+        setDupeWarning(hit)
+        return
+      }
+    }
     // Warn if barcode prefix doesn't match auction code
     if (step === 2 && barcode.trim()) {
       const code = auction.code.toUpperCase()
@@ -810,6 +840,7 @@ export default function LotWizardTab({
     setCategoryWarning(null)
     setEstimateWarning(false)
     setBarcodeWarning(false)        // else the top-nav button stays disabled back on step 1
+    setDupeWarning(null)
     setStep1LengthWarning(false)
     if (step > 1) setStep(step - 1)
   }
@@ -1121,7 +1152,7 @@ export default function LotWizardTab({
         </button>
         <span className={`text-gray-600 ${tablet ? "text-base" : "text-xs"}`}>{step} / 8</span>
         {step < 8 ? (
-          <button onClick={step === 1 ? startCataloguing : goNext} disabled={barcodeWarning || step1LengthWarning}
+          <button onClick={step === 1 ? startCataloguing : goNext} disabled={barcodeWarning || step1LengthWarning || !!dupeWarning}
             className={`font-semibold rounded transition-colors disabled:opacity-40 ${tablet ? "px-6 py-3 text-base" : "px-4 py-1.5 text-sm"}`}
             style={{ background: CAT_ACCENT, color: "#1C1C1E", touchAction: tablet ? "manipulation" : undefined }}>
             {step === 1 ? "Start cataloguing →" : "Next →"}
@@ -1260,6 +1291,7 @@ export default function LotWizardTab({
                 if (v && !barcode && !barcodeStartedAt.current) startLotTiming()
                 setBarcode(v)
                 if (barcodeWarning) setBarcodeWarning(false)
+                if (dupeWarning) setDupeWarning(null)
               }} className={inpFocus} placeholder="Scan or type barcode…" autoFocus />
             </div>
             <button type="button" onClick={nextBarcodeNumber}
@@ -1267,6 +1299,38 @@ export default function LotWizardTab({
               style={{ background: "#2C2C2E", color: CAT_ACCENT, border: `1px solid ${CAT_ACCENT}66` }}>
               ⊕ Next Barcode Number
             </button>
+
+            {/* Duplicate barcode warning — red rather than the usual amber
+                because this one is a fact, not a heuristic: the barcode is
+                already on a lot in this auction. */}
+            {dupeWarning && (
+              <div className="rounded-xl border border-red-600/60 bg-red-950/40 px-4 py-3 space-y-3">
+                <p className="text-sm text-red-300">
+                  ⚠ Barcode <strong>{barcode.trim().toUpperCase()}</strong> is already on a lot in this auction.
+                  Cataloguing it again would create a duplicate.
+                </p>
+                <div className="rounded-lg bg-black/30 border border-red-800/40 px-3 py-2">
+                  <p className="text-xs text-red-200/90">
+                    Existing lot: <strong>{dupeWarning.title || "Untitled"}</strong>
+                  </p>
+                  {dupeWarning.uniqueId && (
+                    <p className="text-xs text-red-300/70 mt-0.5">Unique ID: {dupeWarning.uniqueId}</p>
+                  )}
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  <button type="button"
+                    onClick={() => { setBarcode(""); setDupeWarning(null) }}
+                    className="px-3 py-1.5 text-sm font-medium rounded-lg bg-red-700/40 hover:bg-red-700/60 text-red-200 border border-red-600/40 transition-colors">
+                    Clear &amp; scan again
+                  </button>
+                  <button type="button"
+                    onClick={() => { setDupeWarning(null); setStep(3) }}
+                    className="px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-700/40 hover:bg-gray-700/60 text-gray-300 border border-gray-600/40 transition-colors">
+                    Continue anyway
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Barcode mismatch warning */}
             {barcodeWarning && (

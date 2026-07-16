@@ -38,6 +38,7 @@ interface Lot {
   vendor: string | null
   tote: string | null
   receipt: string | null
+  receiptUniqueId: string | null
   category: string | null
   subCategory: string | null
   brand: string | null
@@ -174,6 +175,7 @@ export default function TabletTabs({ auction, lots, userRole, userId, userName, 
             <LotWizardTab
               auctionId={auction.id}
               auction={auction}
+              existingLots={lots}
               userId={userId}
               userName={userName}
               onCreated={() => router.refresh()}
