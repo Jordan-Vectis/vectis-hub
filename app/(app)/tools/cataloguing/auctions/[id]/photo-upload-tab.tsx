@@ -409,7 +409,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       ? new (window as any).BarcodeDetector({ formats: ["code_128", "code_39", "qr_code", "ean_13"] })
       : null
 
-    const [{ HTMLCanvasElementLuminanceSource }, { MultiFormatReader, BinaryBitmap, HybridBinarizer, DecodeHintType }] =
+    const [{ HTMLCanvasElementLuminanceSource }, { MultiFormatReader, BinaryBitmap, HybridBinarizer, GlobalHistogramBinarizer, DecodeHintType }] =
       await Promise.all([import("@zxing/browser"), import("@zxing/library")])
     const hints = new Map()
     hints.set(DecodeHintType.TRY_HARDER, true)
@@ -475,15 +475,23 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
           }
         }
 
+        // zxing fallback — the ONLY reader on Windows/iPad (BarcodeDetector
+        // isn't available there). Three contrast treatments × two thresholding
+        // methods. The contrast-boost pass (never wired into zxing before) plus
+        // the GLOBAL whole-image threshold is what rescues faint silver labels
+        // the plain pass misses; Hybrid's local threshold suits uneven lighting.
         for (const targetW of [2000, 1200]) {
-          for (const scanMode of ["normal", "bw"] as const) {
-            const c = toCanvas(targetW, scanMode)
-            try {
-              const luminance = new HTMLCanvasElementLuminanceSource(c)
-              const bitmap    = new BinaryBitmap(new HybridBinarizer(luminance))
-              const decoded   = zxing.decodeWithState(bitmap).getText().replace(/[^\x20-\x7E]/g, "").trim()
-              if (isVectisBarcode(decoded)) return { barcode: decoded, unreadable: false }
-            } catch {}
+          for (const scanMode of ["normal", "contrast", "bw"] as const) {
+            const luminance = new HTMLCanvasElementLuminanceSource(toCanvas(targetW, scanMode))
+            const binarizers = scanMode === "contrast"
+              ? [new GlobalHistogramBinarizer(luminance), new HybridBinarizer(luminance)]
+              : [new HybridBinarizer(luminance)]
+            for (const binarizer of binarizers) {
+              try {
+                const decoded = zxing.decodeWithState(new BinaryBitmap(binarizer)).getText().replace(/[^\x20-\x7E]/g, "").trim()
+                if (isVectisBarcode(decoded)) return { barcode: decoded, unreadable: false }
+              } catch {}
+            }
           }
         }
         return { barcode: null, unreadable: false }
