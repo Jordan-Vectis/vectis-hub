@@ -126,9 +126,6 @@ interface UploadResult {
 // 1000+ photos, so these drive how long the AI review takes.
 const BATCH_SIZE     = 8
 const AI_CONCURRENCY = 3
-// Consecutive failed requests (nothing succeeding in between) before we stop
-// asking AI and fall back to barcode scanning for the rest.
-const AI_GIVE_UP_AFTER = 4
 const MODEL_LS_KEY   = "smart_scan_model"
 
 // ── Filename barcode / unique-ID parser ───────────────────────────────────────
@@ -236,6 +233,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const [aiCheckedCount, setAiCheckedCount] = useState(0)       // photos that actually got an AI answer
   const [aiNote, setAiNote]                 = useState<string | null>(null)  // live status/error during the AI pass
   const [aiEta, setAiEta]                   = useState<string | null>(null)
+  const [aiRetries, setAiRetries]           = useState(0)       // rate-limit / retry pauses ridden out during the run
   const skipAiRef   = useRef(false)                             // user pressed "Skip AI check"
   // Every in-flight AI request — several run at once, so a single ref would
   // only ever let Skip abort the most recent one.
@@ -332,6 +330,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     setAiCheckedCount(0)
     setAiNote(null)
     setAiEta(null)
+    setAiRetries(0)
     setSkipped([])
     setOkLotCount(0)
     setUploadLog([])
@@ -403,6 +402,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     setAiCheckedCount(0)
     setAiNote(null)
     setAiEta(null)
+    setAiRetries(0)
     skipAiRef.current = false
 
     const nativeDetector = "BarcodeDetector" in window
@@ -530,19 +530,38 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       for (let k = 0; k < candidates.length; k += BATCH_SIZE) batches.push(candidates.slice(k, k + BATCH_SIZE))
 
       let doneCount = 0
-      let consecutiveFails = 0
       const started = Date.now()
 
-      // Send one packed request. Returns false if it never succeeded.
-      async function postPack(pack: { i: number; payload: Blob | File }[]): Promise<boolean> {
-        // Several workers share the one status line, so only ever clear a
-        // message we put there ourselves — otherwise one worker's success
-        // wipes another's live "rate limited" warning.
-        let myNote: string | null = null
-        const note = (t: string) => { myNote = t; setAiNote(t) }
-        const clearMyNote = () => { if (myNote) setAiNote(prev => (prev === myNote ? null : prev)) }
+      // Rate-limit gate shared by ALL workers. When one request is rate-limited
+      // we push a cooldown that every worker waits behind, then they all carry
+      // on — so a big run rides out a Gemini rate limit by itself instead of
+      // hammering it and needing a human. rlLevel grows on each 429 (longer
+      // waits, up to 5 min) and eases off after good responses.
+      let rlLevel = 0
+      let cooldownUntil = 0
+      let retries = 0
+      const rlBackoff = (level: number) => Math.min(30_000 * 2 ** (level - 1), 300_000)  // 30s→60s→…→5min
 
-        for (let attempt = 0; attempt < 3 && !skipAiRef.current; attempt++) {
+      async function waitForGate() {
+        while (!skipAiRef.current && Date.now() < cooldownUntil) {
+          const remain = cooldownUntil - Date.now()
+          setAiNote(`⏳ AI is rate limited — pausing ${Math.ceil(remain / 1000)}s, then it carries on by itself. You don't need to wait here.`)
+          await new Promise(r => setTimeout(r, Math.min(remain, 1000)))
+        }
+      }
+
+      // Send one packed request, retrying transient failures (rate limits,
+      // network, timeouts) FOR AS LONG AS IT TAKES so the run finishes on its
+      // own. Only gives up THIS pack on a content block, or after many
+      // non-rate-limit errors on the same pack (so one bad image can't loop for
+      // ever) — never the whole run. A given-up pack's photos fall back to
+      // barcode scanning; false = this pack got no AI answer.
+      async function postPack(pack: { i: number; payload: Blob | File }[]): Promise<boolean> {
+        let softFails = 0                 // consecutive non-rate-limit errors on THIS pack
+        const POISON_CAP = 8
+        while (!skipAiRef.current) {
+          await waitForGate()
+          if (skipAiRef.current) return false
           const ctrl = new AbortController()
           aiAbortsRef.current.add(ctrl)
           const timer = setTimeout(() => ctrl.abort(), 150_000)  // route maxDuration is 120s
@@ -561,19 +580,31 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
                   code:  typeof p?.code === "string" && p.code ? p.code : null,
                 })
               })
-              clearMyNote()
+              rlLevel = Math.max(0, rlLevel - 1)               // ease off after a good response
+              if (Date.now() >= cooldownUntil) setAiNote(null)
               return true
             }
+            if (res.status === 422) {                          // content block — never succeeds
+              setAiNote("AI wouldn't look at some photos — those fall back to barcode scanning.")
+              return false
+            }
+            if (res.status === 429) {                          // rate limited — back everyone off, keep going
+              rlLevel += 1; retries += 1; setAiRetries(retries)
+              cooldownUntil = Math.max(cooldownUntil, Date.now() + rlBackoff(rlLevel))
+              continue                                         // no attempt cap — waits it out
+            }
+            // Other server error — retry this pack with a growing wait, up to a cap.
+            softFails += 1; retries += 1; setAiRetries(retries)
             const why = data?.error ?? `HTTP ${res.status}`
-            if (res.status === 422) { note("AI wouldn't look at some photos — those fall back to barcode scanning."); return false }
-            note(res.status === 429
-              ? "AI is busy (rate limited) — waiting and trying again…"
-              : `AI had a problem — trying again (${why})`)
-            if (attempt < 2) await new Promise(r => setTimeout(r, res.status === 429 ? (attempt + 1) * 15000 : 4000))
+            if (softFails >= POISON_CAP) { setAiNote(`AI kept failing on some photos (${why}) — those fall back to barcode scanning; the rest carries on.`); return false }
+            setAiNote(`AI had a problem — trying again (${why})`)
+            await new Promise(r => setTimeout(r, Math.min(softFails * 5000, 60_000)))
           } catch (e: any) {
             if (e?.name === "AbortError" && skipAiRef.current) return false
-            note(e?.name === "AbortError" ? "An AI request took too long — trying again…" : "Couldn't reach the AI (network problem) — trying again…")
-            if (attempt < 2 && !skipAiRef.current) await new Promise(r => setTimeout(r, 4000))
+            softFails += 1; retries += 1; setAiRetries(retries)
+            if (softFails >= POISON_CAP) { setAiNote("AI couldn't be reached for some photos — those fall back to barcode scanning; the rest carries on."); return false }
+            setAiNote(e?.name === "AbortError" ? "An AI request took too long — trying again…" : "Couldn't reach the AI (network problem) — trying again…")
+            await new Promise(r => setTimeout(r, Math.min(softFails * 5000, 60_000)))
           } finally {
             clearTimeout(timer)
             aiAbortsRef.current.delete(ctrl)
@@ -611,27 +642,18 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
 
         for (const pack of packs) {
           const ok = await postPack(pack)
-          // Count CONSECUTIVE failures only, resetting on every success: an
-          // absolute count would abandon AI review of a 1000-photo folder
-          // after three unrelated blips spread across a long run.
-          if (!ok) { aiErrored = true; consecutiveFails++ }
-          else consecutiveFails = 0
+          if (!ok) aiErrored = true   // this pack fell back to scanner-only; the run keeps going
         }
       }
 
-      // Run several batches at once — 1000+ photos strictly one batch at a time
-      // is far too slow. Workers stop early on Skip or a clear AI outage.
+      // Run several batches at once. The pass NEVER gives up on the rest of the
+      // folder — postPack retries transient failures until they clear — so a
+      // ~2000-photo run finishes unattended. Only a Skip stops it early.
       let next = 0
       async function worker() {
-        while (next < batches.length) {
+        while (next < batches.length && !skipAiRef.current) {
           const b = batches[next++]
-          // Give up only on a sustained outage (several failures in a row with
-          // nothing succeeding in between), never on scattered blips.
-          if (skipAiRef.current || consecutiveFails >= AI_GIVE_UP_AFTER) {
-            aiErrored = true
-          } else {
-            await runBatch(b)
-          }
+          await runBatch(b)
           doneCount += b.length
           setAiProgress({ done: doneCount, total: candidates.length })
           if (doneCount >= 24 && !skipAiRef.current) {
@@ -643,7 +665,6 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       }
       await Promise.all(Array.from({ length: Math.min(AI_CONCURRENCY, batches.length) }, worker))
 
-      if (consecutiveFails >= AI_GIVE_UP_AFTER) setAiNote("AI checking stopped after repeated failures — the rest was grouped by barcode scanning only.")
       if (skipAiRef.current) aiErrored = true
     }
 
@@ -1219,6 +1240,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
               ✨ AI reviewed {aiCheckedCount} photo{aiCheckedCount !== 1 ? "s" : ""}
               {aiReadCount > 0 ? <>, reading {aiReadCount} label{aiReadCount !== 1 ? "s" : ""} the barcode reader missed</> : null}
               {editedCount > 0 ? <>. You set {editedCount} by hand</> : null}.
+              {aiRetries > 0 ? <> It rode out {aiRetries} rate-limit/retry pause{aiRetries !== 1 ? "s" : ""} on its own along the way.</> : null}
             </Notice>
           )}
           {mode === "scan" && aiFailed && (
