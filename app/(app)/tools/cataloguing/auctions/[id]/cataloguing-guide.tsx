@@ -154,13 +154,13 @@ export default function CataloguingGuideButton({
                       barcode into the box is the quickest way to find one item.
                     </p>
                     <p>
-                      🧑 <strong className="text-white">All cataloguers</strong> narrows it down to one
-                      person&apos;s lots, and you can sort by{" "}
+                      🧑 <strong className="text-white">All cataloguers</strong>{" "}
+                      narrows it down to one person&apos;s lots, and you can sort by{" "}
                       <strong className="text-white">lot order, newest or oldest</strong>.
                     </p>
                     <p>
-                      👆 <strong className="text-white">Tap any lot to open it</strong> and change
-                      anything — title, barcode, vendor, receipt, description, category, condition,
+                      👆 <strong className="text-white">Tap any lot to open it</strong>{" "}
+                      and change anything — title, barcode, vendor, receipt, description, category, condition,
                       estimate, photos. There&apos;s a <strong className="text-white">Delete</strong> button
                       in there too.
                     </p>
@@ -201,8 +201,8 @@ export default function CataloguingGuideButton({
                         and receipt fill themselves in.
                       </p>
                       <p>
-                        Press <strong style={{ color: ACCENT }}>Start cataloguing</strong> to lock all
-                        three in for the whole batch, so every lot goes to the same one. They&apos;re
+                        Press <strong style={{ color: ACCENT }}>Start cataloguing</strong>{" "}
+                        to lock all three in for the whole batch, so every lot goes to the same one. They&apos;re
                         remembered next time, on any device.
                       </p>
                       <p><Req /></p>
@@ -253,8 +253,8 @@ export default function CataloguingGuideButton({
                         it. Start typing and pick from the list.
                       </p>
                       <p>
-                        <strong className="text-white">Use the list.</strong> Type something that isn&apos;t
-                        on it and you&apos;ll be warned it won&apos;t match up in Business Central. If only
+                        <strong className="text-white">Use the list.</strong>{" "}
+                        Type something that isn&apos;t on it and you&apos;ll be warned it won&apos;t match up in Business Central. If only
                         the capitals differ there&apos;s a one-tap fix.
                       </p>
                       <p>
@@ -279,8 +279,8 @@ export default function CataloguingGuideButton({
                     <Step emoji="✨" n={6} title="Condition">
                       <p>Tap the condition. Tap it again to unpick it.</p>
                       <p>
-                        <strong className="text-white">Condition To</strong> is for a range — Good, then
-                        Excellent, gives &ldquo;Good to Excellent&rdquo;. Leave it for a single condition.
+                        <strong className="text-white">Condition To</strong>{" "}
+                        is for a range — Good, then Excellent, gives &ldquo;Good to Excellent&rdquo;. Leave it for a single condition.
                       </p>
                       <p>
                         📦 If the box or packaging is a different condition to the item, tick{" "}
@@ -335,8 +335,8 @@ export default function CataloguingGuideButton({
                   </div>
 
                   <Callout tone="teal" title="What happens next">
-                    It shows on the <strong>Lots</strong> tab as <em>Uncatalogued</em> until someone adds
-                    the details. Open it from there whenever you&apos;re ready.
+                    It shows on the <strong>Lots</strong> tab as <em>Uncatalogued</em>{" "}
+                    until someone adds the details. Open it from there whenever you&apos;re ready.
                   </Callout>
 
                   <Tip>Use Add Lot instead if you&apos;re doing the whole thing in one go.</Tip>
@@ -367,8 +367,8 @@ export default function CataloguingGuideButton({
                       <strong className="text-white">Save description</strong>.
                     </p>
                     <p>
-                      🚩 <strong className="text-white">Flag an error</strong> leaves a note on a lot for
-                      someone else to pick up. The filters at the top show only flagged lots, or only one
+                      🚩 <strong className="text-white">Flag an error</strong>{" "}
+                      leaves a note on a lot for someone else to pick up. The filters at the top show only flagged lots, or only one
                       cataloguer&apos;s.
                     </p>
                   </div>
