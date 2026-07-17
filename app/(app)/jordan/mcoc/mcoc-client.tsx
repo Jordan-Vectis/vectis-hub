@@ -66,11 +66,12 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
     mutateMyCounters(picked.myCounters.filter((c) => normChampName(c) !== normChampName(name)), () => removeMyCounter(picked.name, name))
   }
 
-  // Re-fetch every time the Counters tab is opened in instant mode, so a DB
-  // built/updated in another tab shows up (this component stays mounted, so a
-  // one-time fetch would go stale). Re-syncs the currently-picked defender too.
+  // Re-fetch every time the Counters tab is opened, so a DB built/updated in
+  // another tab shows up (this component stays mounted, so a one-time fetch
+  // would go stale). Re-syncs the currently-picked defender too. Both modes need
+  // it now — AI mode's defender dropdown is fed from the same list.
   useEffect(() => {
-    if (mode !== "instant" || !active) return
+    if (!active) return
     let cancelled = false
     fetch("/api/jordan/mcoc/profiles/list")
       .then((r) => r.json())
@@ -92,28 +93,45 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
   }
 
   // ── AI mode state (the original) ──
+  // dbDefender = optional exact pick from the Champion DB; defender = the free
+  // text box (nodes/buffs, or the defender itself when nothing is picked, which
+  // is how this worked before the dropdown existed).
+  const [dbDefender, setDbDefender] = useState("")
   const [defender, setDefender] = useState("")
   const [search, setSearch] = useState(true)
-  const fileInput = useRef<HTMLInputElement>(null)
-  const [file, setFile] = useState<File | null>(null)
-  const [preview, setPreview] = useState<string | null>(null)
+  const defInput = useRef<HTMLInputElement>(null)
+  const nodeInput = useRef<HTMLInputElement>(null)
+  const [defImage, setDefImage] = useState<File | null>(null)
+  const [defPreview, setDefPreview] = useState<string | null>(null)
+  const [nodeImage, setNodeImage] = useState<File | null>(null)
+  const [nodePreview, setNodePreview] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<Result | null>(null)
 
-  function pickFile(f: File | null) {
-    setFile(f)
-    if (preview) URL.revokeObjectURL(preview)
-    setPreview(f ? URL.createObjectURL(f) : null)
+  function pickDefImage(f: File | null) {
+    setDefImage(f)
+    if (defPreview) URL.revokeObjectURL(defPreview)
+    setDefPreview(f ? URL.createObjectURL(f) : null)
   }
 
+  function pickNodeImage(f: File | null) {
+    setNodeImage(f)
+    if (nodePreview) URL.revokeObjectURL(nodePreview)
+    setNodePreview(f ? URL.createObjectURL(f) : null)
+  }
+
+  const canAsk = !!(dbDefender.trim() || defender.trim() || defImage)
+
   async function findCounters() {
-    if (busy || (!defender.trim() && !file)) return
+    if (busy || !canAsk) return
     setBusy(true); setError(null); setResult(null)
     try {
       const fd = new FormData()
-      if (defender.trim()) fd.append("defender", defender.trim())
-      if (file) fd.append("image", file)
+      if (dbDefender.trim()) fd.append("defender", dbDefender.trim())
+      if (defender.trim()) fd.append("context", defender.trim())
+      if (defImage) fd.append("defenderImage", defImage)
+      if (nodeImage) fd.append("nodesImage", nodeImage)
       fd.append("search", search ? "1" : "0")
       const model = getJordanModel()
       if (model) fd.append("model", model)
@@ -163,6 +181,11 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
           {mode === "ai" && <span className="ml-auto"><ModelPicker /></span>}
         </div>
 
+        {/* Shared by both modes' defender pickers — rendered once. */}
+        <datalist id="mcoc-defender-names">
+          {(profiles ?? []).map((p) => <option key={p.name} value={p.name} />)}
+        </datalist>
+
         {/* ── INSTANT ── */}
         {mode === "instant" && (
           <div className="space-y-3">
@@ -183,9 +206,6 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
                     className="flex-1 min-w-[12rem] bg-black border border-[#1f5c33] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#33ff66] placeholder:text-[#1f5c33]"
                     style={{ color: GREEN }}
                   />
-                  <datalist id="mcoc-defender-names">
-                    {profiles.map((p) => <option key={p.name} value={p.name} />)}
-                  </datalist>
                   <label className="inline-flex items-center gap-1.5 text-[11px] opacity-70 cursor-pointer">
                     <input type="checkbox" checked={deckOnly} onChange={(e) => setDeckOnly(e.target.checked)} className="accent-[#33ff66]" />
                     BGS deck only
@@ -274,22 +294,48 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
         {/* ── AI DEEP DIVE (the original) ── */}
         {mode === "ai" && (
           <div className="space-y-4">
-            <p className="text-sm opacity-70">Name the defender (add node / buffs) and/or upload a screenshot — grounded AI, slower but deeper.</p>
+            <p className="text-sm opacity-70">Pick or name the defender, add the nodes, and/or upload screenshots — grounded AI, slower but deeper.</p>
+
+            <div className="flex gap-2 items-center flex-wrap">
+              <input
+                value={dbDefender}
+                onChange={(e) => setDbDefender(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); findCounters() } }}
+                list="mcoc-defender-names"
+                placeholder="Defender from the Champion DB (optional)…"
+                className="flex-1 min-w-[12rem] bg-black border border-[#1f5c33] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#33ff66] placeholder:text-[#1f5c33]"
+                style={{ color: GREEN }}
+              />
+              {dbDefender && (
+                <button onClick={() => setDbDefender("")} className="text-[10px] uppercase tracking-widest px-2 py-1.5 rounded border border-[#1f5c33] opacity-60 hover:opacity-100 transition-opacity">
+                  ✗ CLEAR
+                </button>
+              )}
+            </div>
+            {profiles && profiles.length === 0 && (
+              <p className="text-[11px] text-amber-400 -mt-2">Champion DB is empty — build it in the 🧬 CHAMPION DB tab, or just type below.</p>
+            )}
 
             <textarea
               value={defender}
               onChange={(e) => setDefender(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); findCounters() } }}
-              placeholder="e.g. Nick Fury on Aggression + Bane, or Mystic Dispersion / Enhanced Special 3…"
+              placeholder={dbDefender
+                ? "Nodes / buffs for this fight — e.g. Aggression + Bane, Mystic Dispersion…"
+                : "e.g. Nick Fury on Aggression + Bane, or Mystic Dispersion / Enhanced Special 3…"}
               rows={2}
               className="w-full bg-black border border-[#1f5c33] rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-[#33ff66] placeholder:text-[#1f5c33]"
               style={{ color: GREEN }}
             />
 
             <div className="flex items-center gap-2 flex-wrap">
-              <button onClick={() => fileInput.current?.click()} disabled={busy}
+              <button onClick={() => defInput.current?.click()} disabled={busy}
                 className="px-4 py-2.5 rounded-lg border border-[#1f5c33] text-sm hover:border-[#33ff66] disabled:opacity-40 transition-colors">
-                📷 {file ? "Change screenshot" : "Add screenshot"}
+                📷 {defImage ? "Change defender shot" : "Defender photo"}
+              </button>
+              <button onClick={() => nodeInput.current?.click()} disabled={busy}
+                className="px-4 py-2.5 rounded-lg border border-[#1f5c33] text-sm hover:border-[#33ff66] disabled:opacity-40 transition-colors">
+                🎯 {nodeImage ? "Change nodes shot" : "Nodes photo"}
               </button>
               <button onClick={() => setSearch((s) => !s)}
                 className={`text-[10px] uppercase tracking-widest px-2 py-1.5 rounded border transition-colors ${
@@ -297,14 +343,35 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
                 }`} title="Look up the current meta on Google">
                 🔎 LIVE META [ {search ? "ON" : "OFF"} ]
               </button>
-              <button onClick={findCounters} disabled={busy || (!defender.trim() && !file)}
+              <button onClick={findCounters} disabled={busy || !canAsk}
                 className="px-5 py-2.5 rounded-lg text-sm font-bold text-black disabled:opacity-40 transition-colors ml-auto"
                 style={{ background: GREEN }}>
                 {busy ? "SCOUTING…" : "⚔ FIND COUNTERS"}
               </button>
             </div>
 
-            {preview && <img src={preview} alt="Defender" className="max-h-48 rounded-lg border border-[#1f5c33]" />}
+            {(defPreview || nodePreview) && (
+              <div className="flex gap-3 flex-wrap">
+                {defPreview && (
+                  <figure className="space-y-1">
+                    <img src={defPreview} alt="Defender" className="max-h-48 rounded-lg border border-[#1f5c33]" />
+                    <figcaption className="text-[10px] opacity-50 uppercase tracking-widest flex items-center gap-2">
+                      Defender
+                      <button onClick={() => pickDefImage(null)} className="opacity-60 hover:opacity-100">✗ remove</button>
+                    </figcaption>
+                  </figure>
+                )}
+                {nodePreview && (
+                  <figure className="space-y-1">
+                    <img src={nodePreview} alt="Nodes" className="max-h-48 rounded-lg border border-[#1f5c33]" />
+                    <figcaption className="text-[10px] opacity-50 uppercase tracking-widest flex items-center gap-2">
+                      Nodes
+                      <button onClick={() => pickNodeImage(null)} className="opacity-60 hover:opacity-100">✗ remove</button>
+                    </figcaption>
+                  </figure>
+                )}
+              </div>
+            )}
             {error && <p className="text-sm text-red-400">✗ {error}</p>}
 
             {result && (
@@ -352,8 +419,10 @@ export default function McocClient({ roster, active = true }: { roster: Champ[];
               </div>
             )}
 
-            <input ref={fileInput} type="file" accept="image/*" className="hidden"
-              onChange={(e) => { pickFile(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
+            <input ref={defInput} type="file" accept="image/*" className="hidden"
+              onChange={(e) => { pickDefImage(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
+            <input ref={nodeInput} type="file" accept="image/*" className="hidden"
+              onChange={(e) => { pickNodeImage(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
             <p className="text-[10px] opacity-40">CTRL/⌘ + ENTER to search</p>
           </div>
         )}

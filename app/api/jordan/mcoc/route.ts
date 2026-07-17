@@ -8,8 +8,11 @@ import { parseLooseJson } from "@/lib/mcoc-ai"
 export const maxDuration = 120
 
 // POST /api/jordan/mcoc — "who should I use against this defender?" for Marvel
-// Contest of Champions. FormData: defender (text, optional), image (optional
-// screenshot), model, search ("1"/"0"). Locked to jordan.orange.
+// Contest of Champions. FormData: defender (text, optional — an exact Champion
+// DB name), context (text, optional — nodes/buffs, or the defender itself when
+// nothing was picked), defenderImage + nodesImage (optional screenshots, kept
+// separate so the model is told which is which), model, search ("1"/"0").
+// Locked to jordan.orange.
 //
 // Web search grounding is used by default because the MCOC meta changes monthly
 // (new champs, reworks) — training-data recall goes stale fast. Grounding can't
@@ -17,6 +20,8 @@ export const maxDuration = 120
 // JSON and we parse it loosely; if the model can't ground we retry ungrounded.
 
 const PROMPT = `You are an expert Marvel Contest of Champions (MCOC) strategist. The user will give you a DEFENDER (by name and/or a screenshot of the fight/champion) plus any node or buff context. Recommend the best ATTACKERS to counter it.
+
+Images are labelled. A DEFENDER image shows the champion you are fighting — identify it. A NODES image shows that fight's node/buff list — read every node off it and factor each one into your advice, calling out the ones that actually change which attacker to bring. Never mistake a node name for the defender's name.
 
 Think about class advantage (Cosmic>Tech>Mutant>Skill>Science>Mystic>Cosmic), the defender's abilities/immunities, common node hazards, and which attacker mechanics neutralise them (ability accuracy reduction, nullify, heal-block, unstoppable, incinerate immunity, evade counters, etc.). Prefer champions that are genuinely good into THIS defender, not just class-advantage picks. Use up-to-date info.
 
@@ -45,18 +50,44 @@ export async function POST(req: NextRequest) {
 
     const form = await req.formData()
     const defender = ((form.get("defender") as string) ?? "").trim().slice(0, 500)
-    const file = form.get("image")
+    const context = ((form.get("context") as string) ?? "").trim().slice(0, 1000)
+    // "image" is the pre-split field name — still accepted so a stale tab (an
+    // old bundle cached on the iPad) doesn't silently drop its screenshot.
+    const defFile = form.get("defenderImage") ?? form.get("image")
+    const nodeFile = form.get("nodesImage")
     const wantSearch = (form.get("search") as string) !== "0"
-    if (!defender && !(file instanceof File)) {
+    if (!defender && !context && !(defFile instanceof File)) {
       return NextResponse.json({ error: "Name a defender or upload a screenshot." }, { status: 400 })
     }
 
-    const parts: any[] = []
-    if (file instanceof File) {
-      const buffer = Buffer.from(await file.arrayBuffer())
-      parts.push({ inlineData: { data: buffer.toString("base64"), mimeType: file.type || "image/jpeg" } })
+    async function imagePart(f: File) {
+      const buffer = Buffer.from(await f.arrayBuffer())
+      return { inlineData: { data: buffer.toString("base64"), mimeType: f.type || "image/jpeg" } }
     }
-    parts.push({ text: `${PROMPT}\n\nDEFENDER / CONTEXT FROM THE USER: ${defender || "(see the screenshot)"}` })
+
+    const parts: any[] = []
+    if (defFile instanceof File) {
+      parts.push({ text: "IMAGE — THE DEFENDER (the champion being fought):" })
+      parts.push(await imagePart(defFile))
+    }
+    if (nodeFile instanceof File) {
+      parts.push({ text: "IMAGE — THE NODES / BUFFS for this fight (not the defender):" })
+      parts.push(await imagePart(nodeFile))
+    }
+
+    // With no explicit pick, the free text carries the defender AND the context,
+    // which is how this worked before the dropdown — keep that reading.
+    const lines: string[] = []
+    if (defender) {
+      lines.push(`DEFENDER: ${defender}`)
+      if (context) lines.push(`NODES / BUFFS / CONTEXT: ${context}`)
+    } else if (context) {
+      lines.push(`DEFENDER / CONTEXT FROM THE USER: ${context}`)
+    } else {
+      lines.push("DEFENDER / CONTEXT FROM THE USER: (see the screenshot)")
+    }
+    if (nodeFile instanceof File) lines.push("The nodes are in the NODES image — read them off it.")
+    parts.push({ text: `${PROMPT}\n\n${lines.join("\n")}` })
 
     const modelId = await getToolModel("jordan_fun", form.get("model") as string | null)
     const genai = new GoogleGenerativeAI(apiKey)
@@ -109,7 +140,7 @@ export async function POST(req: NextRequest) {
     const queries = (response.candidates?.[0]?.groundingMetadata as any)?.webSearchQueries ?? []
 
     return NextResponse.json({
-      defender:  typeof parsed?.defender === "string" ? parsed.defender : (defender || "Unknown defender"),
+      defender:  typeof parsed?.defender === "string" ? parsed.defender : (defender || context || "Unknown defender"),
       counters,
       strategy:  typeof parsed?.strategy === "string" ? parsed.strategy : "",
       warnings:  typeof parsed?.warnings === "string" ? parsed.warnings : "",
