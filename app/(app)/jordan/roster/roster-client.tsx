@@ -12,8 +12,10 @@ type Scanned = ReadChamp & { include: boolean; rank: number | null }
 type BgsReview = { champs: Champ[]; selected: Set<string>; unmatched: string[] }
 type Gap = { tag: string; whyItMatters: string; fixes: string[] }
 type RankUp = { champion: string; class: string; priority: string; why: string; fills: string[] }
+type Unmatched = { name: string; suggestions: string[] }
 type Analysis = {
-  missingTags: string[]; coveredTags: string[]; highRankCount: number; unprofiled: string[]
+  missingTags: string[]; coveredTags: string[]; highRankCount: number
+  unmatched?: Unmatched[]; unprofiled: string[]
   groundedFallback?: boolean
   summary: string; gaps: Gap[]; rankUps: RankUp[]
 }
@@ -299,10 +301,33 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
               )}
             </div>
 
+            {/* Two different problems, two different fixes — telling him to run
+                Build profiles for a name mismatch is a ~250-champ rebuild that
+                cannot help. */}
+            {(analysis.unmatched?.length ?? 0) > 0 && (
+              <div className="text-[11px] text-amber-400/80 space-y-1">
+                <p>
+                  ⚠ {analysis.unmatched!.length} of your rank 4+ champs don&apos;t match any Champion DB entry, so their utility isn&apos;t
+                  counted and some &quot;missing&quot; tags may be wrong. The roster and the Champion DB name champs separately, so variants
+                  drift apart — Build profiles won&apos;t fix this:
+                </p>
+                <ul className="pl-3 space-y-0.5">
+                  {analysis.unmatched!.map((u) => (
+                    <li key={u.name}>
+                      • <span className="font-bold">{u.name}</span>
+                      {u.suggestions.length > 0
+                        ? <> — the Champion DB calls it {u.suggestions.map((s) => `"${s}"`).join(" or ")}. Delete and re-add it under that name.</>
+                        : <> — not in the Champion DB at all. Run Build champion list in the 🧬 CHAMPION DB tab.</>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {analysis.unprofiled.length > 0 && (
               <p className="text-[11px] text-amber-400/80">
-                ⚠ {analysis.unprofiled.length} of your rank 4+ champs aren&apos;t profiled yet, so their utility isn&apos;t counted and some
-                &quot;missing&quot; tags may be wrong: {analysis.unprofiled.join(", ")}. Run Build profiles in the 🧬 CHAMPION DB tab.
+                ⚠ {analysis.unprofiled.length} of your rank 4+ champs are in the Champion DB but not profiled yet, so their utility isn&apos;t
+                counted: {analysis.unprofiled.join(", ")}. Run Build profiles in the 🧬 CHAMPION DB tab.
               </p>
             )}
 
