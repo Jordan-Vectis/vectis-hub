@@ -392,6 +392,40 @@ model Announcement {
   updatedByName String?
 }
 
+// Patch notes — a short "what's changed" note per release, written at
+// /admin/announcements (Patch Notes tab) and shown once as a popup to each user.
+// Separate from the Announcement banner above: that is one live message for
+// something happening now; these are a dated history you add to per release.
+// Nothing reaches staff until an admin presses Push (published stays false on save).
+model PatchNote {
+  id            String   @id @default(cuid())
+  title         String   @default("")
+  body          String   @db.Text @default("")   // one change per line
+  published     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdByName String?
+  seenBy        PatchNoteSeen[]
+
+  @@index([published, createdAt])
+}
+
+// One row per user per patch note they've clicked through. Deliberately minimal:
+// this is NOT an audit trail (unlike TermsAcceptance) — it exists only so the
+// popup knows not to show that note to that person again. It has to be per-user
+// rather than localStorage because the cataloguing iPads are shared: the first
+// person to dismiss would otherwise hide the note from everyone who logs in after.
+model PatchNoteSeen {
+  id          String    @id @default(cuid())
+  patchNoteId String
+  patchNote   PatchNote @relation(fields: [patchNoteId], references: [id], onDelete: Cascade)
+  userId      String
+  seenAt      DateTime  @default(now())
+
+  @@unique([patchNoteId, userId])
+  @@index([userId])
+}
+
 model BidderRegistration {
   id                String           @id @default(cuid())
   auctionId         String

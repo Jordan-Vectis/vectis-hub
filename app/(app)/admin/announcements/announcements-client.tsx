@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation"
 import { setAnnouncement } from "@/lib/actions/announcements"
 import { ANNOUNCEMENT_LEVELS } from "@/lib/announcement-constants"
 
-type Initial = {
+// Exported so the tab shell passes exactly this shape — one definition, no drift.
+export type Initial = {
   message: string
   level: string
   active: boolean
