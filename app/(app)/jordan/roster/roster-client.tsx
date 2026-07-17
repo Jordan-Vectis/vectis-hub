@@ -271,215 +271,163 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto font-mono space-y-4" style={{ color: GREEN }}>
-      {/* Add / update champions */}
-      <div className="border border-[#1f5c33] rounded-xl p-4 space-y-3">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <p className="text-sm opacity-70">
-            Scan roster screenshots — filter by rank in-game, shoot each tier, then pick them all at once and say which rank each shot is.
-            Overlapping shots are merged. Reads names, classes &amp; portraits. Re-scan any time to update ranks.
+
+      {/* ── Full-width work panels — only while a step is in progress. These need
+             room, so they sit above the two-column layout rather than in the
+             narrow rail. ── */}
+
+      {/* Tag each shot's rank before reading — one upload for the whole roster. */}
+      {pending && !scanned && (
+        <div className="border border-[#33ff66] rounded-xl p-4 space-y-2">
+          <p className="text-xs opacity-70">
+            Which rank is in each screenshot? You filtered them, so set each one — all of them go in at {addStars}★.
           </p>
-          <ModelPicker />
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap text-xs">
-          <span className="opacity-60 uppercase tracking-widest">These are:</span>
-          <select value={addStars} onChange={(e) => setAddStars(Number(e.target.value))} className={input} style={{ color: GREEN }}>
-            <option value={7}>7★</option><option value={6}>6★</option>
-          </select>
-          {/* Rank is now set per screenshot after picking; this only seeds the
-              default, and still drives the manual add below. */}
-          <select value={addRank} onChange={(e) => setAddRank(Number(e.target.value))} className={input} style={{ color: GREEN }}
-            title="Starting rank for each screenshot you pick — set them individually on the next step">
-            {[5, 4, 3, 2, 1].map((r) => <option key={r} value={r}>Rank {r}</option>)}
-          </select>
-          <button onClick={() => scanInput.current?.click()} disabled={scanning}
-            className="px-4 py-2 rounded-lg border border-[#33ff66] text-sm font-bold hover:bg-[#0a2214] disabled:opacity-40 transition-colors ml-auto">
-            {scanning ? "READING…" : "📷 Scan roster screenshots"}
-          </button>
-        </div>
-        {scanMsg && <p className={`text-xs ${scanMsg.startsWith("✗") ? "text-red-400" : "opacity-70"}`}>{scanMsg}</p>}
-
-        {/* The server's own words, per file — so a real cause is never hidden
-            behind a guess about image quality. */}
-        {failures.length > 0 && (
-          <ul className="text-[11px] text-red-400/90 space-y-0.5">
-            {failures.map((f, i) => (
-              <li key={i}>• <span className="opacity-70">{f.name}</span> — {f.why}</li>
-            ))}
-          </ul>
-        )}
-
-        {/* Tag each shot's rank before reading — one upload for the whole roster. */}
-        {pending && !scanned && (
-          <div className="border border-[#33ff66] rounded-lg p-3 space-y-2">
-            <p className="text-xs opacity-70">
-              Which rank is in each screenshot? You filtered them, so set each one — all of them go in at {addStars}★.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              {pending.map((p, i) => (
-                <div key={i} className="space-y-1">
-                  <img src={p.url} alt={`Screenshot ${i + 1}`} className="h-28 rounded-lg border border-[#1f5c33] object-cover" />
-                  <select
-                    value={p.rank}
-                    onChange={(e) => setPending((l) => l!.map((x, j) => (j === i ? { ...x, rank: Number(e.target.value) } : x)))}
-                    className="w-full bg-black border border-[#1f5c33] rounded px-1 py-1 text-[11px]"
-                    style={{ color: GREEN }}
-                  >
-                    {[5, 4, 3, 2, 1].map((r) => <option key={r} value={r}>Rank {r}</option>)}
-                  </select>
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-2 flex-wrap items-center">
-              <button onClick={() => scan(pending)} disabled={scanning}
-                className="px-4 py-1.5 rounded-lg text-sm font-bold text-black disabled:opacity-40" style={{ background: GREEN }}>
-                {scanning ? "READING…" : `Read ${pending.length} screenshot${pending.length === 1 ? "" : "s"} →`}
-              </button>
-              <button onClick={cancelPending} disabled={scanning}
-                className="px-4 py-1.5 rounded-lg border border-[#1f5c33] text-sm opacity-60 hover:opacity-100 disabled:opacity-30">
-                Cancel
-              </button>
-              {pending.length > 1 && (
-                <span className="text-[10px] opacity-40 uppercase tracking-widest ml-auto">
-                  Same champ in two shots? The first wins — fix it on the next screen.
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {scanned && (
-          <div className="border border-[#33ff66] rounded-lg p-3 space-y-2">
-            <p className="text-xs opacity-70">
-              Read {scanned.length} champ{scanned.length === 1 ? "" : "s"} at {addStars}★, each on the rank of the screenshot it came from —
-              untick wrong ones, fix any exceptions, then save. ⚠ = not in the Champion DB.
-            </p>
-            <div className="flex flex-wrap gap-1.5 max-h-56 overflow-y-auto">
-              {scanned.map((s, i) => (
-                <span key={i} className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-lg border text-xs ${s.include ? "border-[#33ff66]" : "border-[#1f5c33] opacity-40"}`}>
-                  <button onClick={() => setScanned((l) => l!.map((x, j) => j === i ? { ...x, include: !x.include } : x))} className="inline-flex items-center gap-1.5">
-                    <Portrait url={s.imageUrl} cls={s.class} size={26} />
-                    <span className={s.include ? "text-white" : "line-through"}>{s.name}</span>
-                    {/* Not in the Champion DB = it'll contribute no utility to the
-                        roster analysis. Better seen now than as a mystery gap later. */}
-                    {s.inCatalog === false && (
-                      <span title="Not in the Champion DB — its utility won't count in the roster analysis" className="text-amber-400 text-[10px]">⚠</span>
-                    )}
-                  </button>
-                  <select value={s.rank ?? addRank} onChange={(e) => setScanned((l) => l!.map((x, j) => j === i ? { ...x, rank: Number(e.target.value) } : x))}
-                    className="bg-black border border-[#1f5c33] rounded px-1 text-[10px]" style={{ color: GREEN }}>
-                    {[5,4,3,2,1].map((r) => <option key={r} value={r}>R{r}</option>)}
-                  </select>
-                </span>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <button onClick={saveScanned} className="px-4 py-1.5 rounded-lg text-sm font-bold text-black" style={{ background: GREEN }}>Save {scanned.filter((s) => s.include).length} →</button>
-              <button onClick={() => setScanned(null)} className="px-4 py-1.5 rounded-lg border border-[#1f5c33] text-sm opacity-60 hover:opacity-100">Cancel</button>
-            </div>
-          </div>
-        )}
-
-        <div className="flex gap-2 flex-wrap items-center">
-          <input value={mName} onChange={(e) => setMName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addManual() }}
-            placeholder="Champion name…" className={`${input} flex-1 min-w-[10rem]`} style={{ color: GREEN }} />
-          <select value={mClass} onChange={(e) => setMClass(e.target.value)} className={input} style={{ color: GREEN }}>
-            <option value="">Class…</option>
-            {MCOC_CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <button onClick={addManual} disabled={!mName.trim()} className="px-4 py-2 rounded-lg border border-[#1f5c33] text-sm hover:border-[#33ff66] disabled:opacity-30 transition-colors">ADD</button>
-        </div>
-      </div>
-
-      {/* Roster analysis */}
-      <div className="border border-[#1f5c33] rounded-xl p-4 space-y-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex-1 min-w-[14rem]">
-            <p className="text-sm font-bold">🔬 What should I rank up?</p>
-            <p className="text-xs opacity-60 mt-0.5">
-              Uses the roster below — nothing to upload. Rank 4+ champs count as utility you can field; every champion in the Champion DB is treated as available to rank.
-            </p>
-          </div>
-          <button onClick={analyseRoster} disabled={analysing}
-            className="px-5 py-2.5 rounded-lg text-sm font-bold text-black disabled:opacity-40 transition-colors"
-            style={{ background: GREEN }}>
-            {analysing ? "ANALYSING…" : "🔬 ANALYSE ROSTER"}
-          </button>
-          {analysis && !analysing && (
-            <button onClick={() => setShowAnalysis((s) => !s)}
-              className="text-[10px] uppercase tracking-widest px-2 py-1.5 rounded border border-[#1f5c33] opacity-60 hover:opacity-100 transition-opacity">
-              {showAnalysis ? "▲ HIDE" : "▼ SHOW"}
-            </button>
-          )}
-        </div>
-
-        {analysing && <p className="text-sm opacity-50 animate-pulse">Reading your roster, working out the gaps and checking the current meta…</p>}
-        {analysisErr && <p className="text-sm text-red-400">✗ {analysisErr}</p>}
-
-        {analysis && showAnalysis && (
-          <div className="space-y-4 border-t border-[#1f5c33] pt-3">
-            {analysis.summary && <p className="text-sm leading-relaxed">{analysis.summary}</p>}
-
-            <p className="text-[10px] opacity-40 uppercase tracking-widest">
-              Based on {analysis.highRankCount} rank 4+ champion{analysis.highRankCount === 1 ? "" : "s"}
-            </p>
-
-            {analysis.groundedFallback && (
-              <p className="text-[11px] text-amber-400">
-                ⚠ Live search didn&apos;t work on this run, so this is from the model&apos;s own knowledge and the meta may be out
-                of date — that&apos;s how dated champs creep in. Re-run it, or switch model above.
-              </p>
-            )}
-
-            {/* Counted here, not by the AI — plain set arithmetic over the stored tags. */}
-            <div>
-              <p className="text-[10px] opacity-50 uppercase tracking-widest mb-1.5">
-                Utility you&apos;re missing ({analysis.missingTags.length})
-              </p>
-              {analysis.missingTags.length === 0 ? (
-                <p className="text-xs opacity-60">Nothing — your rank 4+ champs cover every tracked utility.</p>
-              ) : (
-                <div className="flex gap-1.5 flex-wrap">
-                  {analysis.missingTags.map((t) => (
-                    <span key={t} className="text-[11px] px-2 py-0.5 rounded-full border border-amber-600/60 text-amber-400">{t}</span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Two different problems, two different fixes — telling him to run
-                Build profiles for a name mismatch is a ~250-champ rebuild that
-                cannot help. */}
-            {(analysis.unmatched?.length ?? 0) > 0 && (
-              <div className="text-[11px] text-amber-400/80 space-y-1">
-                <p>
-                  ⚠ {analysis.unmatched!.length} of your rank 4+ champs don&apos;t match any Champion DB entry, so their utility isn&apos;t
-                  counted and some &quot;missing&quot; tags may be wrong. The roster and the Champion DB name champs separately, so variants
-                  drift apart — Build profiles won&apos;t fix this:
-                </p>
-                <ul className="pl-3 space-y-0.5">
-                  {analysis.unmatched!.map((u) => (
-                    <li key={u.name}>
-                      • <span className="font-bold">{u.name}</span>
-                      {u.suggestions.length > 0
-                        ? <> — the Champion DB calls it {u.suggestions.map((s) => `"${s}"`).join(" or ")}. Delete and re-add it under that name.</>
-                        : <> — not in the Champion DB at all. Run Build champion list in the 🧬 CHAMPION DB tab.</>}
-                    </li>
-                  ))}
-                </ul>
+          <div className="flex flex-wrap gap-3">
+            {pending.map((p, i) => (
+              <div key={i} className="space-y-1">
+                <img src={p.url} alt={`Screenshot ${i + 1}`} className="h-28 rounded-lg border border-[#1f5c33] object-cover" />
+                <select
+                  value={p.rank}
+                  onChange={(e) => setPending((l) => l!.map((x, j) => (j === i ? { ...x, rank: Number(e.target.value) } : x)))}
+                  className="w-full bg-black border border-[#1f5c33] rounded px-1 py-1 text-[11px]"
+                  style={{ color: GREEN }}
+                >
+                  {[5, 4, 3, 2, 1].map((r) => <option key={r} value={r}>Rank {r}</option>)}
+                </select>
               </div>
+            ))}
+          </div>
+          <div className="flex gap-2 flex-wrap items-center">
+            <button onClick={() => scan(pending)} disabled={scanning}
+              className="px-4 py-1.5 rounded-lg text-sm font-bold text-black disabled:opacity-40" style={{ background: GREEN }}>
+              {scanning ? "READING…" : `Read ${pending.length} screenshot${pending.length === 1 ? "" : "s"} →`}
+            </button>
+            <button onClick={cancelPending} disabled={scanning}
+              className="px-4 py-1.5 rounded-lg border border-[#1f5c33] text-sm opacity-60 hover:opacity-100 disabled:opacity-30">
+              Cancel
+            </button>
+            {pending.length > 1 && (
+              <span className="text-[10px] opacity-40 uppercase tracking-widest ml-auto">
+                Same champ in two shots? The first wins — fix it on the next screen.
+              </span>
             )}
+          </div>
+        </div>
+      )}
 
-            {analysis.unprofiled.length > 0 && (
-              <p className="text-[11px] text-amber-400/80">
-                ⚠ {analysis.unprofiled.length} of your rank 4+ champs are in the Champion DB but not profiled yet, so their utility isn&apos;t
-                counted: {analysis.unprofiled.join(", ")}. Run Build profiles in the 🧬 CHAMPION DB tab.
+      {scanned && (
+        <div className="border border-[#33ff66] rounded-xl p-4 space-y-2">
+          <p className="text-xs opacity-70">
+            Read {scanned.length} champ{scanned.length === 1 ? "" : "s"} at {addStars}★, each on the rank of the screenshot it came from —
+            untick wrong ones, fix any exceptions, then save. ⚠ = not in the Champion DB.
+          </p>
+          <div className="flex flex-wrap gap-1.5 max-h-72 overflow-y-auto">
+            {scanned.map((s, i) => (
+              <span key={i} className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-lg border text-xs ${s.include ? "border-[#33ff66]" : "border-[#1f5c33] opacity-40"}`}>
+                <button onClick={() => setScanned((l) => l!.map((x, j) => j === i ? { ...x, include: !x.include } : x))} className="inline-flex items-center gap-1.5">
+                  <Portrait url={s.imageUrl} cls={s.class} size={26} />
+                  <span className={s.include ? "text-white" : "line-through"}>{s.name}</span>
+                  {/* Not in the Champion DB = it'll contribute no utility to the
+                      roster analysis. Better seen now than as a mystery gap later. */}
+                  {s.inCatalog === false && (
+                    <span title="Not in the Champion DB — its utility won't count in the roster analysis" className="text-amber-400 text-[10px]">⚠</span>
+                  )}
+                </button>
+                <select value={s.rank ?? addRank} onChange={(e) => setScanned((l) => l!.map((x, j) => j === i ? { ...x, rank: Number(e.target.value) } : x))}
+                  className="bg-black border border-[#1f5c33] rounded px-1 text-[10px]" style={{ color: GREEN }}>
+                  {[5,4,3,2,1].map((r) => <option key={r} value={r}>R{r}</option>)}
+                </select>
+              </span>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={saveScanned} className="px-4 py-1.5 rounded-lg text-sm font-bold text-black" style={{ background: GREEN }}>Save {scanned.filter((s) => s.include).length} →</button>
+            <button onClick={() => setScanned(null)} className="px-4 py-1.5 rounded-lg border border-[#1f5c33] text-sm opacity-60 hover:opacity-100">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {bgsReview && (
+        <div className="border border-[#33ff66] rounded-xl p-4 space-y-2">
+          <p className="text-xs opacity-70">Matched {bgsReview.champs.length} — untick any wrong ones, then set as your deck{replaceDeck ? " (replacing the old one)" : ""}.</p>
+          <div className="flex flex-wrap gap-1.5 max-h-60 overflow-y-auto">
+            {bgsReview.champs.map((c) => {
+              const on = bgsReview.selected.has(c.id)
+              return (
+                <button key={c.id} onClick={() => setBgsReview((r) => { if (!r) return r; const s = new Set(r.selected); if (s.has(c.id)) s.delete(c.id); else s.add(c.id); return { ...r, selected: s } })}
+                  className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-lg border text-xs ${on ? "border-[#33ff66]" : "border-[#1f5c33] opacity-40"}`}>
+                  <Portrait url={c.imageUrl} cls={c.class} size={26} />
+                  <span className={on ? "text-white" : "line-through"}>{c.name}</span>
+                  <span className="opacity-40">{c.stars}★</span>
+                </button>
+              )
+            })}
+          </div>
+          {bgsReview.unmatched.length > 0 && <p className="text-[11px] text-amber-400">Not in your roster: {bgsReview.unmatched.join(", ")} — add them first.</p>}
+          <div className="flex gap-2">
+            <button onClick={applyReview} className="px-4 py-1.5 rounded-lg text-sm font-bold text-black" style={{ background: GREEN }}>Set {bgsReview.selected.size} as deck →</button>
+            <button onClick={() => setBgsReview(null)} className="px-4 py-1.5 rounded-lg border border-[#1f5c33] text-sm opacity-60 hover:opacity-100">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Full analysis breakdown — full width so the rank-up cards have room.
+          The rail's Analyse card is the launcher + gap summary. */}
+      {analysis && showAnalysis && (
+        <div className="border border-[#1f5c33] rounded-xl p-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-bold flex-1">🔬 Rank-up plan</p>
+            <button onClick={() => setShowAnalysis(false)}
+              className="text-[10px] uppercase tracking-widest px-2 py-1.5 rounded border border-[#1f5c33] opacity-60 hover:opacity-100 transition-opacity">▲ Hide</button>
+          </div>
+
+          {analysis.summary && <p className="text-sm leading-relaxed">{analysis.summary}</p>}
+
+          <p className="text-[10px] opacity-40 uppercase tracking-widest">
+            Based on {analysis.highRankCount} rank 4+ champion{analysis.highRankCount === 1 ? "" : "s"}
+          </p>
+
+          {analysis.groundedFallback && (
+            <p className="text-[11px] text-amber-400">
+              ⚠ Live search didn&apos;t work on this run, so this is from the model&apos;s own knowledge and the meta may be out
+              of date — that&apos;s how dated champs creep in. Re-run it, or switch model above.
+            </p>
+          )}
+
+          {/* Two different problems, two different fixes — telling him to run
+              Build profiles for a name mismatch is a ~250-champ rebuild that
+              cannot help. */}
+          {(analysis.unmatched?.length ?? 0) > 0 && (
+            <div className="text-[11px] text-amber-400/80 space-y-1">
+              <p>
+                ⚠ {analysis.unmatched!.length} of your rank 4+ champs don&apos;t match any Champion DB entry, so their utility isn&apos;t
+                counted and some &quot;missing&quot; tags may be wrong. The roster and the Champion DB name champs separately, so variants
+                drift apart — Build profiles won&apos;t fix this:
               </p>
-            )}
+              <ul className="pl-3 space-y-0.5">
+                {analysis.unmatched!.map((u) => (
+                  <li key={u.name}>
+                    • <span className="font-bold">{u.name}</span>
+                    {u.suggestions.length > 0
+                      ? <> — the Champion DB calls it {u.suggestions.map((s) => `"${s}"`).join(" or ")}. Delete and re-add it under that name.</>
+                      : <> — not in the Champion DB at all. Run Build champion list in the 🧬 CHAMPION DB tab.</>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
-            {analysis.rankUps.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-[10px] opacity-50 uppercase tracking-widest">Rank these up</p>
+          {analysis.unprofiled.length > 0 && (
+            <p className="text-[11px] text-amber-400/80">
+              ⚠ {analysis.unprofiled.length} of your rank 4+ champs are in the Champion DB but not profiled yet, so their utility isn&apos;t
+              counted: {analysis.unprofiled.join(", ")}. Run Build profiles in the 🧬 CHAMPION DB tab.
+            </p>
+          )}
+
+          {analysis.rankUps.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[10px] opacity-50 uppercase tracking-widest">Rank these up</p>
+              <div className="grid gap-2 sm:grid-cols-2">
                 {analysis.rankUps.map((r, i) => {
                   const owned = champs.find((c) => normChampName(c.name) === normChampName(r.champion))
                   return (
@@ -509,11 +457,13 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
                   )
                 })}
               </div>
-            )}
+            </div>
+          )}
 
-            {analysis.gaps.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-[10px] opacity-50 uppercase tracking-widest">The gaps that cost you most</p>
+          {analysis.gaps.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[10px] opacity-50 uppercase tracking-widest">The gaps that cost you most</p>
+              <div className="grid gap-2 sm:grid-cols-2">
                 {analysis.gaps.map((g, i) => (
                   <div key={`${g.tag}-${i}`} className="border border-[#1f5c33] rounded-lg p-3 space-y-1">
                     <span className="text-sm font-bold text-amber-400">{g.tag}</span>
@@ -524,150 +474,207 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Battlegrounds deck */}
-      <div className="border border-[#1f5c33] rounded-xl p-4 space-y-2">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <p className="text-sm font-bold">★ Battlegrounds deck <span className="opacity-50 font-normal">— {bgsCount} champ{bgsCount === 1 ? "" : "s"}</span></p>
-          <div className="flex items-center gap-2 flex-wrap">
-            <label className="inline-flex items-center gap-1.5 text-[11px] opacity-70 cursor-pointer">
-              <input type="checkbox" checked={replaceDeck} onChange={(e) => setReplaceDeck(e.target.checked)} className="accent-[#33ff66]" /> Replace deck
-            </label>
-            <button onClick={() => bgsInput.current?.click()} disabled={bgsScanning}
-              className="px-4 py-2 rounded-lg border border-[#33ff66] text-sm font-bold hover:bg-[#0a2214] disabled:opacity-40 transition-colors">
-              {bgsScanning ? "READING…" : "📷 Scan BGS deck photo"}
-            </button>
-          </div>
-        </div>
-        <p className="text-[11px] opacity-50">Checks your deck photo against your roster (by portrait) and shows the matches to confirm — so it only ever picks champs you own. You can also just tap ★ on any roster champ below.</p>
-
-        {/* Manual add — search the roster and drop straight into the deck */}
-        <div className="flex gap-2 items-center flex-wrap">
-          <input
-            value={deckAdd}
-            onChange={(e) => setDeckAdd(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key !== "Enter") return
-              e.preventDefault()
-              const norm = normChampName(deckAdd)
-              const hit = champs.find((c) => normChampName(c.name) === norm) ?? champs.find((c) => c.name.toLowerCase().startsWith(deckAdd.trim().toLowerCase()))
-              if (hit && !hit.bgsDeck) { toggleBgs(hit); setDeckAdd("") }
-              else if (hit) setDeckAdd("")
-            }}
-            list="deck-add-names"
-            placeholder="Add by name — type + Enter…"
-            className={`${input} flex-1 min-w-[11rem] py-1.5 text-xs`}
-            style={{ color: GREEN }}
-          />
-          <datalist id="deck-add-names">
-            {champs.filter((c) => !c.bgsDeck).map((c) => <option key={c.id} value={c.name} />)}
-          </datalist>
-        </div>
-
-        {/* Current deck at a glance — tap to remove */}
-        {bgsCount > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {champs.filter((c) => c.bgsDeck).map((c) => (
-              <button key={c.id} onClick={() => toggleBgs(c)} title="Remove from deck"
-                className="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg border border-[#33ff66] text-white hover:opacity-70 transition-opacity">
-                {c.imageUrl && <img src={c.imageUrl} alt="" width={18} height={18} className="rounded object-cover" />}
-                {c.name} <span className="opacity-50">{c.stars}★</span> <span className="text-red-400">×</span>
-              </button>
-            ))}
-          </div>
-        )}
-        {bgsMsg && <p className={`text-xs ${bgsMsg.startsWith("✗") ? "text-red-400" : "opacity-80"}`}>{bgsMsg}</p>}
-
-        {bgsReview && (
-          <div className="border border-[#33ff66] rounded-lg p-3 space-y-2">
-            <p className="text-xs opacity-70">Matched {bgsReview.champs.length} — untick any wrong ones, then set as your deck{replaceDeck ? " (replacing the old one)" : ""}.</p>
-            <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
-              {bgsReview.champs.map((c) => {
-                const on = bgsReview.selected.has(c.id)
-                return (
-                  <button key={c.id} onClick={() => setBgsReview((r) => { if (!r) return r; const s = new Set(r.selected); s.has(c.id) ? s.delete(c.id) : s.add(c.id); return { ...r, selected: s } })}
-                    className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-lg border text-xs ${on ? "border-[#33ff66]" : "border-[#1f5c33] opacity-40"}`}>
-                    <Portrait url={c.imageUrl} cls={c.class} size={26} />
-                    <span className={on ? "text-white" : "line-through"}>{c.name}</span>
-                    <span className="opacity-40">{c.stars}★</span>
-                  </button>
-                )
-              })}
             </div>
-            {bgsReview.unmatched.length > 0 && <p className="text-[11px] text-amber-400">Not in your roster: {bgsReview.unmatched.join(", ")} — add them first.</p>}
-            <div className="flex gap-2">
-              <button onClick={applyReview} className="px-4 py-1.5 rounded-lg text-sm font-bold text-black" style={{ background: GREEN }}>Set {bgsReview.selected.size} as deck →</button>
-              <button onClick={() => setBgsReview(null)} className="px-4 py-1.5 rounded-lg border border-[#1f5c33] text-sm opacity-60 hover:opacity-100">Cancel</button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Roster */}
-      <div className="flex items-center gap-3 flex-wrap text-xs">
-        <span className="opacity-70">{champs.length} champ{champs.length === 1 ? "" : "s"}</span>
-        <div className="flex gap-1">
-          <button onClick={() => setFilter("all")} className={`px-2.5 py-1 rounded border ${filter === "all" ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] opacity-60"}`}>All</button>
-          <button onClick={() => setFilter("bgs")} className={`px-2.5 py-1 rounded border ${filter === "bgs" ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] opacity-60"}`}>★ BGS deck</button>
+          )}
         </div>
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter…" className={`${input} py-1 ml-auto w-40`} style={{ color: GREEN }} />
-
-        {/* Two-step rather than a browser confirm(): nothing else in /jordan uses
-            one, and this deletes the lot with no undo. */}
-        {champs.length > 0 && (
-          confirmClear ? (
-            <span className="inline-flex items-center gap-1.5">
-              <button onClick={clearAll}
-                className="px-2.5 py-1 rounded border border-red-500 text-red-400 hover:bg-red-950/40 transition-colors">
-                Delete all {champs.length}?
-              </button>
-              <button onClick={() => setConfirmClear(false)}
-                className="px-2.5 py-1 rounded border border-[#1f5c33] opacity-60 hover:opacity-100 transition-opacity">
-                Cancel
-              </button>
-            </span>
-          ) : (
-            <button onClick={() => setConfirmClear(true)}
-              className="px-2.5 py-1 rounded border border-[#1f5c33] opacity-50 hover:opacity-100 hover:border-red-500 hover:text-red-400 transition-colors">
-              Clear all
-            </button>
-          )
-        )}
-      </div>
-
-      {confirmClear && (
-        <p className="text-[11px] text-amber-400/90 -mt-2">
-          ⚠ Deletes all {champs.length} champions and your BGS deck with them (the deck is stored on these rows). Can&apos;t be undone —
-          you&apos;d re-scan from screenshots. Your personal counters are safe: they&apos;re stored per champion, not on the roster.
-        </p>
       )}
 
-      {champs.length === 0 && <p className="text-sm opacity-50 text-center py-8">No champions yet — scan a roster screenshot above to get started.</p>}
+      {/* ── Roster left, tools right ── */}
+      <div className="grid gap-4 items-start lg:grid-cols-[minmax(0,1fr)_340px]">
 
-      {byRank.map((g) => (
-        <div key={g.rank}>
-          <p className="text-[10px] uppercase tracking-widest opacity-50 mb-1.5">Rank {g.rank} · {g.list.length}</p>
-          <div className="flex flex-wrap gap-1.5">
-            {g.list.map((c) => (
-              editing === c.id ? (
-                <EditChip key={c.id} champ={c} onSave={(patch) => saveEdit(c, patch)} onCancel={() => setEditing(null)} onDelete={() => { setEditing(null); remove(c) }} />
-              ) : (
-                <span key={c.id} className="inline-flex items-center gap-1.5 px-1.5 py-1 rounded-lg border text-xs group" style={{ borderColor: "#1f5c33" }}>
-                  <button onClick={() => toggleBgs(c)} title="Toggle BGS deck" className={c.bgsDeck ? "text-[#33ff66]" : "opacity-30 hover:opacity-70"}>★</button>
-                  <Portrait url={c.imageUrl} cls={c.class} />
-                  <button onClick={() => setEditing(c.id)} className="text-white hover:underline">{c.name}</button>
-                  <span className="opacity-40">{c.stars}★</span>
-                  <button onClick={() => remove(c)} className="opacity-0 group-hover:opacity-60 hover:!opacity-100 text-red-400" title="Remove">×</button>
+        {/* LEFT — the roster (rail comes first on a narrow screen so the actions
+            aren't buried under 50+ champs). */}
+        <div className="space-y-4 min-w-0 order-2 lg:order-1">
+          <div className="flex items-center gap-3 flex-wrap text-xs">
+            <span className="opacity-70">{champs.length} champ{champs.length === 1 ? "" : "s"}</span>
+            <div className="flex gap-1">
+              <button onClick={() => setFilter("all")} className={`px-2.5 py-1 rounded border ${filter === "all" ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] opacity-60"}`}>All</button>
+              <button onClick={() => setFilter("bgs")} className={`px-2.5 py-1 rounded border ${filter === "bgs" ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] opacity-60"}`}>★ BGS deck</button>
+            </div>
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter…" className={`${input} py-1 ml-auto w-40`} style={{ color: GREEN }} />
+
+            {/* Two-step rather than a browser confirm(): nothing else in /jordan uses
+                one, and this deletes the lot with no undo. */}
+            {champs.length > 0 && (
+              confirmClear ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <button onClick={clearAll}
+                    className="px-2.5 py-1 rounded border border-red-500 text-red-400 hover:bg-red-950/40 transition-colors">
+                    Delete all {champs.length}?
+                  </button>
+                  <button onClick={() => setConfirmClear(false)}
+                    className="px-2.5 py-1 rounded border border-[#1f5c33] opacity-60 hover:opacity-100 transition-opacity">
+                    Cancel
+                  </button>
                 </span>
+              ) : (
+                <button onClick={() => setConfirmClear(true)}
+                  className="px-2.5 py-1 rounded border border-[#1f5c33] opacity-50 hover:opacity-100 hover:border-red-500 hover:text-red-400 transition-colors">
+                  Clear all
+                </button>
               )
-            ))}
+            )}
+          </div>
+
+          {confirmClear && (
+            <p className="text-[11px] text-amber-400/90 -mt-2">
+              ⚠ Deletes all {champs.length} champions and your BGS deck with them (the deck is stored on these rows). Can&apos;t be undone —
+              you&apos;d re-scan from screenshots. Your personal counters are safe: they&apos;re stored per champion, not on the roster.
+            </p>
+          )}
+
+          {champs.length === 0 && <p className="text-sm opacity-50 text-center py-8">No champions yet — scan a roster screenshot in the panel on the right to get started.</p>}
+
+          {byRank.map((g) => (
+            <div key={g.rank}>
+              <p className="text-[10px] uppercase tracking-widest opacity-50 mb-1.5">Rank {g.rank} · {g.list.length}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {g.list.map((c) => (
+                  editing === c.id ? (
+                    <EditChip key={c.id} champ={c} onSave={(patch) => saveEdit(c, patch)} onCancel={() => setEditing(null)} onDelete={() => { setEditing(null); remove(c) }} />
+                  ) : (
+                    <span key={c.id} className="inline-flex items-center gap-1.5 px-1.5 py-1 rounded-lg border text-xs group" style={{ borderColor: "#1f5c33" }}>
+                      <button onClick={() => toggleBgs(c)} title="Toggle BGS deck" className={c.bgsDeck ? "text-[#33ff66]" : "opacity-30 hover:opacity-70"}>★</button>
+                      <Portrait url={c.imageUrl} cls={c.class} />
+                      <button onClick={() => setEditing(c.id)} className="text-white hover:underline">{c.name}</button>
+                      <span className="opacity-40">{c.stars}★</span>
+                      <button onClick={() => remove(c)} className="opacity-0 group-hover:opacity-60 hover:!opacity-100 text-red-400" title="Remove">×</button>
+                    </span>
+                  )
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* RIGHT — tools. Sticky so they stay in reach while scrolling a long roster. */}
+        <div className="space-y-3 order-1 lg:order-2 lg:sticky lg:top-2 self-start">
+
+          {/* Scan / add champions */}
+          <div className="border border-[#1f5c33] rounded-xl p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-bold">📷 Add champions</p>
+              <ModelPicker />
+            </div>
+            <p className="text-[11px] opacity-55">Filter by rank in-game, shoot each tier, then pick them all at once — you set which rank each shot is. Overlapping shots merge.</p>
+            <div className="flex items-center gap-2 flex-wrap text-xs">
+              <span className="opacity-60 uppercase tracking-widest text-[10px]">These are</span>
+              <select value={addStars} onChange={(e) => setAddStars(Number(e.target.value))} className={`${input} py-1.5`} style={{ color: GREEN }}>
+                <option value={7}>7★</option><option value={6}>6★</option>
+              </select>
+              <select value={addRank} onChange={(e) => setAddRank(Number(e.target.value))} className={`${input} py-1.5`} style={{ color: GREEN }}
+                title="Starting rank for each screenshot — set them individually after picking">
+                {[5, 4, 3, 2, 1].map((r) => <option key={r} value={r}>Rank {r}</option>)}
+              </select>
+            </div>
+            <button onClick={() => scanInput.current?.click()} disabled={scanning}
+              className="w-full px-4 py-2 rounded-lg text-sm font-bold text-black disabled:opacity-40 transition-colors" style={{ background: GREEN }}>
+              {scanning ? "READING…" : "📷 Scan roster screenshots"}
+            </button>
+            {scanMsg && <p className={`text-[11px] ${scanMsg.startsWith("✗") ? "text-red-400" : "opacity-70"}`}>{scanMsg}</p>}
+            {/* The server's own words, per file — so a real cause is never hidden
+                behind a guess about image quality. */}
+            {failures.length > 0 && (
+              <ul className="text-[11px] text-red-400/90 space-y-0.5">
+                {failures.map((f, i) => (
+                  <li key={i}>• <span className="opacity-70">{f.name}</span> — {f.why}</li>
+                ))}
+              </ul>
+            )}
+            <div className="border-t border-[#1f5c33] pt-2.5 space-y-2">
+              <p className="text-[10px] opacity-40 uppercase tracking-widest">or add one by hand</p>
+              <input value={mName} onChange={(e) => setMName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addManual() }}
+                placeholder="Champion name…" className={`${input} w-full py-1.5 text-xs`} style={{ color: GREEN }} />
+              <div className="flex gap-2">
+                <select value={mClass} onChange={(e) => setMClass(e.target.value)} className={`${input} py-1.5 flex-1`} style={{ color: GREEN }}>
+                  <option value="">Class…</option>
+                  {MCOC_CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <button onClick={addManual} disabled={!mName.trim()} className="px-4 py-1.5 rounded-lg border border-[#1f5c33] text-sm hover:border-[#33ff66] disabled:opacity-30 transition-colors">ADD</button>
+              </div>
+            </div>
+          </div>
+
+          {/* Battlegrounds deck */}
+          <div className="border border-[#1f5c33] rounded-xl p-3.5 space-y-2.5">
+            <p className="text-sm font-bold">🃏 Battlegrounds deck <span className="opacity-50 font-normal">— {bgsCount}</span></p>
+            <p className="text-[11px] opacity-55">Scan a deck photo (matched against your roster by portrait) or tap ★ on any champ.</p>
+            <label className="inline-flex items-center gap-1.5 text-[11px] opacity-70 cursor-pointer">
+              <input type="checkbox" checked={replaceDeck} onChange={(e) => setReplaceDeck(e.target.checked)} className="accent-[#33ff66]" /> Replace deck on scan
+            </label>
+            <button onClick={() => bgsInput.current?.click()} disabled={bgsScanning}
+              className="w-full px-4 py-2 rounded-lg border border-[#33ff66] text-sm font-bold hover:bg-[#0a2214] disabled:opacity-40 transition-colors">
+              {bgsScanning ? "READING…" : "📷 Scan BGS deck photo"}
+            </button>
+            <input
+              value={deckAdd}
+              onChange={(e) => setDeckAdd(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return
+                e.preventDefault()
+                const norm = normChampName(deckAdd)
+                const hit = champs.find((c) => normChampName(c.name) === norm) ?? champs.find((c) => c.name.toLowerCase().startsWith(deckAdd.trim().toLowerCase()))
+                if (hit && !hit.bgsDeck) { toggleBgs(hit); setDeckAdd("") }
+                else if (hit) setDeckAdd("")
+              }}
+              list="deck-add-names"
+              placeholder="Add by name — type + Enter…"
+              className={`${input} w-full py-1.5 text-xs`}
+              style={{ color: GREEN }}
+            />
+            <datalist id="deck-add-names">
+              {champs.filter((c) => !c.bgsDeck).map((c) => <option key={c.id} value={c.name} />)}
+            </datalist>
+            {bgsCount > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {champs.filter((c) => c.bgsDeck).map((c) => (
+                  <button key={c.id} onClick={() => toggleBgs(c)} title="Remove from deck"
+                    className="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg border border-[#33ff66] text-white hover:opacity-70 transition-opacity">
+                    {c.imageUrl && <img src={c.imageUrl} alt="" width={18} height={18} className="rounded object-cover" />}
+                    {c.name} <span className="opacity-50">{c.stars}★</span> <span className="text-red-400">×</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {bgsMsg && <p className={`text-[11px] ${bgsMsg.startsWith("✗") ? "text-red-400" : "opacity-80"}`}>{bgsMsg}</p>}
+          </div>
+
+          {/* Analyse */}
+          <div className="border border-[#1f5c33] rounded-xl p-3.5 space-y-2.5">
+            <p className="text-sm font-bold">🔬 What should I rank up?</p>
+            <p className="text-[11px] opacity-55">Rank 4+ champs count as what you can field; every Champion DB champ is treated as rankable. Nothing to upload.</p>
+            <button onClick={analyseRoster} disabled={analysing || champs.length === 0}
+              className="w-full px-4 py-2 rounded-lg text-sm font-bold text-black disabled:opacity-40 transition-colors" style={{ background: GREEN }}>
+              {analysing ? "ANALYSING…" : "🔬 Analyse roster"}
+            </button>
+            {analysing && <p className="text-[11px] opacity-50 animate-pulse">Reading your roster, working out the gaps and checking the current meta…</p>}
+            {analysisErr && <p className="text-[11px] text-red-400">✗ {analysisErr}</p>}
+            {analysis && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] opacity-50 uppercase tracking-widest">Missing utility ({analysis.missingTags.length})</p>
+                  <button onClick={() => setShowAnalysis((s) => !s)}
+                    className="text-[10px] uppercase tracking-widest px-2 py-0.5 rounded border border-[#1f5c33] opacity-60 hover:opacity-100 transition-opacity">
+                    {showAnalysis ? "▲ Hide plan" : "▼ Full plan"}
+                  </button>
+                </div>
+                {analysis.missingTags.length === 0 ? (
+                  <p className="text-[11px] opacity-60">Nothing — your rank 4+ champs cover every tracked utility.</p>
+                ) : (
+                  <div className="flex gap-1.5 flex-wrap">
+                    {analysis.missingTags.map((t) => (
+                      <span key={t} className="text-[11px] px-2 py-0.5 rounded-full border border-amber-600/60 text-amber-400">{t}</span>
+                    ))}
+                  </div>
+                )}
+                {!showAnalysis && (analysis.rankUps.length > 0 || analysis.gaps.length > 0) && (
+                  <p className="text-[10px] opacity-40">{analysis.rankUps.length} rank-ups · tap Full plan for the detail (shown above).</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
-      ))}
+      </div>
 
       <input ref={scanInput} type="file" accept="image/*" multiple className="hidden"
         onChange={(e) => { pickShots(Array.from(e.target.files ?? [])); e.currentTarget.value = "" }} />
