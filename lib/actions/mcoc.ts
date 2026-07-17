@@ -53,6 +53,21 @@ export async function addChampions(list: ChampInput[]) {
   return { added, updated }
 }
 
+// Wipe the whole roster so it can be rebuilt from scratch. Exists because a
+// champ CANNOT be renamed — the row is keyed by (owner, name, stars) — so a
+// roster whose names have drifted from the Champion DB's ("Spider-Man" vs
+// "Spider-Man (Classic)") can only be corrected by removing and re-scanning.
+//
+// ⚠ Takes the BGS deck with it: bgsDeck is a column on these rows, so the deck
+// has to be rebuilt afterwards. Personal counters are NOT affected — they live
+// on McocChampionProfile.myCounters, keyed by champion rather than roster row.
+// Portrait objects are left in R2; they're small and keyed per scan anyway.
+export async function clearRoster() {
+  const owner = await ownerId()
+  const { count } = await prisma.mcocChampion.deleteMany({ where: { ownerId: owner } })
+  return { count }
+}
+
 export async function updateChampion(id: string, data: { rank?: number; stars?: number; class?: string; bgsDeck?: boolean }) {
   const owner = await ownerId()
   const row = await prisma.mcocChampion.findFirst({ where: { id, ownerId: owner } })

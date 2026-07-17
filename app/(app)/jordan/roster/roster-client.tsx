@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { MCOC_CLASSES, classColour, normChampName } from "@/lib/mcoc"
-import { addChampions, updateChampion, deleteChampion, applyBgsDeck } from "@/lib/actions/mcoc"
+import { addChampions, updateChampion, deleteChampion, applyBgsDeck, clearRoster } from "@/lib/actions/mcoc"
 import ModelPicker, { getJordanModel } from "../model-picker"
 
 type Champ = { id: string; name: string; class: string; stars: number; rank: number; bgsDeck: boolean; imageUrl: string | null }
@@ -36,6 +36,7 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
   const [filter, setFilter] = useState<"all" | "bgs">("all")
   const [query, setQuery] = useState("")
   const [editing, setEditing] = useState<string | null>(null)
+  const [confirmClear, setConfirmClear] = useState(false)
 
   // Add / update by photo
   const scanInput = useRef<HTMLInputElement>(null)
@@ -210,6 +211,12 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
   function remove(c: Champ) {
     setChamps((cs) => cs.filter((x) => x.id !== c.id))
     run(() => deleteChampion(c.id))
+  }
+  function clearAll() {
+    setConfirmClear(false)
+    setChamps([])
+    setAnalysis(null)          // it described a roster that no longer exists
+    run(() => clearRoster())
   }
   function saveEdit(c: Champ, patch: Partial<Champ>) {
     setChamps((cs) => cs.map((x) => (x.id === c.id ? { ...x, ...patch } : x)))
@@ -515,7 +522,36 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
           <button onClick={() => setFilter("bgs")} className={`px-2.5 py-1 rounded border ${filter === "bgs" ? "border-[#33ff66] bg-[#0a2214]" : "border-[#1f5c33] opacity-60"}`}>★ BGS deck</button>
         </div>
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter…" className={`${input} py-1 ml-auto w-40`} style={{ color: GREEN }} />
+
+        {/* Two-step rather than a browser confirm(): nothing else in /jordan uses
+            one, and this deletes the lot with no undo. */}
+        {champs.length > 0 && (
+          confirmClear ? (
+            <span className="inline-flex items-center gap-1.5">
+              <button onClick={clearAll}
+                className="px-2.5 py-1 rounded border border-red-500 text-red-400 hover:bg-red-950/40 transition-colors">
+                Delete all {champs.length}?
+              </button>
+              <button onClick={() => setConfirmClear(false)}
+                className="px-2.5 py-1 rounded border border-[#1f5c33] opacity-60 hover:opacity-100 transition-opacity">
+                Cancel
+              </button>
+            </span>
+          ) : (
+            <button onClick={() => setConfirmClear(true)}
+              className="px-2.5 py-1 rounded border border-[#1f5c33] opacity-50 hover:opacity-100 hover:border-red-500 hover:text-red-400 transition-colors">
+              Clear all
+            </button>
+          )
+        )}
       </div>
+
+      {confirmClear && (
+        <p className="text-[11px] text-amber-400/90 -mt-2">
+          ⚠ Deletes all {champs.length} champions and your BGS deck with them (the deck is stored on these rows). Can&apos;t be undone —
+          you&apos;d re-scan from screenshots. Your personal counters are safe: they&apos;re stored per champion, not on the roster.
+        </p>
+      )}
 
       {champs.length === 0 && <p className="text-sm opacity-50 text-center py-8">No champions yet — scan a roster screenshot above to get started.</p>}
 
