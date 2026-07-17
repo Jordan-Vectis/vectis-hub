@@ -9,6 +9,50 @@ type Entry = { filename: string; content: string }
 
 const ENTRIES: Entry[] = [
   {
+    filename: "deploy_skew.md",
+    content: `---
+name: Deploy skew — "Failed to find Server Action"
+purpose: Why that Railway error appears, the silent auto-reload fix, and the never-run-npm-run-dev trap it exposed. Read before touching app/error.tsx, components/skew-reload.tsx or lib/skew-reload.ts.
+last_updated: 2026-07-17
+---
+
+# Deploy skew — "Failed to find Server Action" (2026-07-17, STAGING)
+
+**This Railway log line is NOT a code bug — do not chase it as one.** Next hashes server action IDs per build, and Railway serves exactly one build at a time. Any tab left open across a deploy (the shared cataloguing iPads, a login page someone left sitting there) calls IDs the new server has never heard of, so it answers 404 and the call rejects. A refresh fixes it — which is why it looks intermittent and why it shows up "when people try to access the site". The **login page is the most visible victim**.
+
+⚠ The **[auth][error] CredentialsSignin** lines that appear alongside it are **unrelated** — that is NextAuth logging a wrong email/password. Normal noise.
+
+## The fix — silent auto-reload
+
+Next 16.2 exposes **unstable_isUnrecognizedActionError** from next/navigation for exactly this; it does NOT auto-recover for you. Three files:
+
+- **lib/skew-reload.ts** — shared guard (isSkewError / willReloadForSkew / maybeReloadForSkew).
+- **app/error.tsx** — the app's **first ever error boundary** (there were none before). Catches actions dispatched through a **transition** (useActionState — the login form).
+- **components/skew-reload.tsx** — an unhandledrejection listener mounted in app/layout.tsx (renders null, follows the crt-mode.tsx pattern).
+
+⚠ **BOTH are required — don't delete one as redundant.** The error boundary only sees transition-dispatched actions. **Most of the Hub awaits actions directly in a click handler** (await createLot / updateLot / saveLotDescription), where a rejection surfaces as an unhandled rejection the boundary never sees — the button would just silently do nothing. That is the cataloguers' Save path, i.e. the case that actually matters.
+
+**Loop guard:** sessionStorage vectis_skew_reload_at, 10s window. A fresh build resolves the action on the next attempt, so a miss landing back within 10s means the reload didn't help — **fall through to the error card, never a blank screen**. (First cut returned null unconditionally for any skew error = white screen with no way out.)
+
+**Known limit:** a call site that wraps the action in its own try/catch swallows the skew error, so no reload — the user sees that site's own error instead. Not globally fixable.
+
+## Verified, not assumed
+
+Tested by patching window.fetch to return the real post-deploy response (404 + x-nextjs-action-not-found: 1) on any POST carrying a next-action header, then clicking Sign in. Proof of reload = a marker set on window disappears. Console confirmed the UnrecognizedActionError "was handled by the <ErrorBoundaryHandler> error boundary". Reuse this trick — a two-build skew test is otherwise impractical.
+
+## ⚠⚠ NEVER run npm run dev on this project locally
+
+**.env points at the REAL Neon database, and npm run dev runs server.js, which runs prisma migrate deploy on boot.** Starting it locally fires migrations at the shared DB, bypassing the deliberate Run Migrations button flow. **Use npx next dev instead** — it skips server.js entirely and touches no DB for the login page. ⚠ Don't commit a .claude/launch.json into the repo: .claude is **not** gitignored, and an "npm run dev" config there is the footgun above.
+
+## TypeScript gotcha
+
+unstable_isUnrecognizedActionError is a **type predicate**. Aliasing it (const isSkew = unstable_isUnrecognizedActionError(error)) narrows error to **never** after an early return, hiding error.digest. Annotate : boolean, or don't alias it.
+
+## Considered and NOT adopted
+
+next.config.ts **deploymentId** (from RAILWAY_GIT_COMMIT_SHA) would cache-bust assets and force a hard reload on mismatched *navigations*. Rejected for now: it does **not** fix the case that matters (a stale tab submitting without navigating first — the server doesn't reject on the x-deployment-id header, it just fails to find the action), and it must match at **build AND runtime** or every client mismatches forever, causing a reload loop. Revisit only if skew persists.`,
+  },
+  {
     filename: "jordan_secret_menu.md",
     content: `---
 name: Secret /jordan menu + CRT mode

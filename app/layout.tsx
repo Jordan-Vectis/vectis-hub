@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import { ErrorModalProvider } from "@/lib/error-modal";
+import SkewReload from "@/components/skew-reload";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -60,6 +61,7 @@ export default function RootLayout({
             Object.hasOwn = function(obj, key) { return Object.prototype.hasOwnProperty.call(obj, key); };
           }
         `}</Script>
+        <SkewReload />
         <ErrorModalProvider>
           {children}
         </ErrorModalProvider>
