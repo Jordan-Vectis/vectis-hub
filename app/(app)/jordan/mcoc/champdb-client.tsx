@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react"
 import { MCOC_CLASSES, classColour, normChampName } from "@/lib/mcoc"
-import { addMyCounter, removeMyCounter, deleteProfileStubs } from "@/lib/actions/mcoc"
+import { addMyCounter, removeMyCounter, deleteChampionProfile } from "@/lib/actions/mcoc"
 import ModelPicker, { getJordanModel } from "../model-picker"
 import type { Champ } from "./mcoc-hub"
 
@@ -24,7 +24,14 @@ const RESCAN_KEY = "mcoc_meta_rescan_at"
 function nameTokens(name: string): Set<string> {
   return new Set((name ?? "").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean))
 }
-const isSubset = (a: Set<string>, b: Set<string>) => a.size > 0 && [...a].every((t) => b.has(t))
+// Two names are the SAME champ if their token sets are equal — a pure word
+// reorder ("Immortal Hulk" == "Hulk (Immortal)"). This is high-precision: the
+// game names a champ one way, so two orderings are always a catalogue
+// inconsistency, never two real champs. A looser subset test ("Bishop" ⊂ "Kate
+// Bishop", "Warlock" ⊂ "Adam Warlock") flooded the list with false pairs, so
+// it's NOT used — the per-row 🗑 covers the few bare-vs-qualified dupes.
+const sameTokenSet = (a: Set<string>, b: Set<string>) =>
+  a.size > 0 && a.size === b.size && [...a].every((t) => b.has(t))
 
 type Status = { total: number; profiled: number; unbuilt: number }
 type Ability = { name: string; details: string[] }
@@ -49,9 +56,8 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
   const [query, setQuery] = useState("")
   const [dbAdd, setDbAdd] = useState("")
   const [metaPending, setMetaPending] = useState(false)
-  const [dupSel, setDupSel] = useState<Set<string>>(new Set())
-  const [dupBusy, setDupBusy] = useState(false)
-  const [dupMsg, setDupMsg] = useState<string | null>(null)
+  const [confirmDel, setConfirmDel] = useState<string | null>(null)  // row awaiting delete confirm
+  const [delBusy, setDelBusy] = useState<string | null>(null)        // row being deleted
   const [, startTransition] = useTransition()
 
   const rosterNames = Array.from(new Set(roster.map((c) => c.name))).sort()
@@ -212,50 +218,30 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
   })
   const pct = status && status.total ? Math.round((status.profiled / status.total) * 100) : 0
 
-  // Duplicate stubs: an UNPROFILED entry whose name tokens are a subset of a
-  // PROFILED entry's — the AI catalogued the same champ twice under different
-  // spellings ("Maestro" ⊂ "Maestro (Cosmic)", "X-23" ⊂ "Wolverine (X-23)").
-  // The bare stub shadows the real champ during matching, so it's pure harm.
-  // A MORE-specific unprofiled entry (Infamous Iron Man ⊃ Iron Man) is a real
-  // champ that just needs profiling — NOT flagged, so we never suggest deleting
-  // a genuine champion.
-  const profiled = list.filter((c) => c.profileAt)
-  const dupes = list
-    .filter((c) => !c.profileAt)
-    .map((stub) => {
-      const st = nameTokens(stub.name)
-      // Closest profiled superset = the champ it really is (fewest extra tokens).
-      const real = profiled
-        .filter((p) => p.name !== stub.name && isSubset(st, nameTokens(p.name)))
-        .sort((a, b) => nameTokens(a.name).size - nameTokens(b.name).size)[0]
-      return real ? { stub: stub.name, real: real.name } : null
-    })
-    .filter((d): d is { stub: string; real: string } => !!d)
+  // Possible-duplicate hint: a row with an EQUAL token set to another (a word
+  // reorder — "Immortal Hulk" / "Hulk (Immortal)") is the same champ catalogued
+  // twice. High-precision, so it's shown as a real hint. The bare-vs-qualified
+  // dupes it can't safely detect (Spider-Woman, Maestro) are left to the 🗑,
+  // which is on every row. Keyed by name → its twin(s).
+  const dupHint = new Map<string, string[]>()
+  for (const c of list) {
+    const ct = nameTokens(c.name)
+    const twins = list.filter((o) => o.name !== c.name && sameTokenSet(ct, nameTokens(o.name))).map((o) => o.name)
+    if (twins.length) dupHint.set(c.name, twins)
+  }
 
-  // Default every detected duplicate to ticked when the set changes (after a
-  // load or a delete). queueMicrotask keeps the setState out of the effect body,
-  // matching the react-compiler rule the rest of this file follows.
-  const dupSig = dupes.map((d) => d.stub).join("|")
-  useEffect(() => {
-    queueMicrotask(() => setDupSel(new Set(dupSig ? dupSig.split("|") : [])))
-  }, [dupSig])
-
-  const toggleDup = (name: string) =>
-    setDupSel((s) => { const n = new Set(s); if (n.has(name)) n.delete(name); else n.add(name); return n })
-
-  async function deleteDupes() {
-    const names = dupes.map((d) => d.stub).filter((n) => dupSel.has(n))
-    if (!names.length || dupBusy) return
-    setDupBusy(true); setDupMsg(null)
+  async function deleteEntry(name: string) {
+    if (delBusy) return
+    setDelBusy(name)
     try {
-      const res = await deleteProfileStubs(names)
+      const res = await deleteChampionProfile(name)
       if (!res.ok) throw new Error("error" in res ? String(res.error) : "Delete failed")
-      setDupMsg(`✓ Removed ${res.count} duplicate${res.count === 1 ? "" : "s"}.`)
-      setDupSel(new Set())
+      setConfirmDel(null)
+      if (open === name) setOpen(null)
       await refreshData()
-    } catch (e: any) {
-      setDupMsg("✗ " + (e?.message ?? "Delete failed."))
-    } finally { setDupBusy(false) }
+    } catch {
+      // A failed delete just leaves the row in place — Jordan can try again.
+    } finally { setDelBusy(null) }
   }
 
   return (
@@ -318,40 +304,12 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
         <style>{`@keyframes champdbIndet { 0%{left:-35%} 100%{left:100%} } .champdb-indet{ animation: champdbIndet 1.15s ease-in-out infinite; }`}</style>
       </div>
 
-      {/* Possible duplicates — junk stubs the catalog built under two spellings */}
-      {dupes.length > 0 && (
-        <div className="border border-amber-600/50 rounded-xl p-4 space-y-3">
-          <div>
-            <p className="text-sm font-bold text-amber-300">⚠ Possible duplicates ({dupes.length})</p>
-            <p className="text-xs opacity-60 mt-0.5">
-              These unprofiled entries look like the same champion as a real, profiled one — the catalogue spelt it two ways. The bare
-              stub shadows the real champ when your roster is matched, so removing it helps. Untick anything you want to keep.
-            </p>
-          </div>
-          <div className="space-y-1.5">
-            {dupes.map((d) => (
-              <label key={d.stub} className="flex items-center gap-2 text-xs cursor-pointer">
-                <input type="checkbox" checked={dupSel.has(d.stub)} onChange={() => toggleDup(d.stub)} className="accent-[#33ff66]" />
-                <span className="text-white font-bold">{d.stub}</span>
-                <span className="opacity-40">→ duplicate of</span>
-                <span className="text-[#33ff66]">{d.real}</span>
-              </label>
-            ))}
-          </div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <button onClick={deleteDupes} disabled={dupBusy || dupSel.size === 0}
-              className="px-4 py-2 rounded-lg border border-red-500 text-red-400 text-sm font-bold hover:bg-red-950/40 disabled:opacity-30 transition-colors">
-              {dupBusy ? "Removing…" : `Delete ${dupSel.size} duplicate${dupSel.size === 1 ? "" : "s"}`}
-            </button>
-            <span className="text-[10px] opacity-40">Only ever deletes unprofiled entries — a real profiled champion can&apos;t be removed here.</span>
-          </div>
-          {dupMsg && <p className={`text-xs ${dupMsg.startsWith("✗") ? "text-red-400" : "opacity-80"}`}>{dupMsg}</p>}
-        </div>
-      )}
-
       {/* Browse */}
       <div className="flex items-center gap-2 flex-wrap text-xs">
-        <span className="opacity-60">Browse — search name, tag or immunity</span>
+        <span className="opacity-60">Browse &amp; manage — search name, tag or immunity</span>
+        {dupHint.size > 0 && (
+          <span className="text-[10px] text-amber-400/80">· {dupHint.size} flagged ⚠ as a possible duplicate — delete the junk ones with 🗑</span>
+        )}
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. nullify, incinerate, Hercules…"
           className="bg-black border border-[#1f5c33] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#33ff66] placeholder:text-[#1f5c33] ml-auto w-64" style={{ color: GREEN }} />
       </div>
@@ -360,17 +318,38 @@ export default function ChampDbClient({ roster }: { roster: Champ[] }) {
         {shown.map((c) => {
           const isOpen = open === c.name
           return (
-            <div key={c.name} className={`border rounded-lg px-3 py-2 ${isOpen ? "border-[#33ff66]" : "border-[#1f5c33]"}`}>
-              <button onClick={() => { setDbAdd(""); setOpen(isOpen ? null : c.name) }} className="w-full text-left">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-bold text-white">{c.name}</span>
-                  {c.class && <span className="text-[10px] uppercase tracking-widest px-1.5 py-0.5 rounded border" style={{ color: classColour(c.class), borderColor: classColour(c.class) + "88" }}>{c.class}</span>}
-                  {ownedByName.has(normChampName(c.name)) && <span className="text-[10px] text-[#33ff66]">✓ owned</span>}
-                  {!c.profileAt && <span className="text-[10px] opacity-40">not profiled yet</span>}
-                  <span className="ml-auto opacity-40 text-xs">{isOpen ? "▾" : "▸"}</span>
-                </div>
-                {!isOpen && c.summary && <p className="text-xs opacity-70 mt-1">{c.summary}</p>}
-              </button>
+            <div key={c.name} className={`border rounded-lg px-3 py-2 ${isOpen ? "border-[#33ff66]" : dupHint.has(c.name) ? "border-amber-700/50" : "border-[#1f5c33]"}`}>
+              <div className="flex items-start gap-2">
+                <button onClick={() => { setDbAdd(""); setOpen(isOpen ? null : c.name) }} className="flex-1 min-w-0 text-left">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-bold text-white">{c.name}</span>
+                    {c.class && <span className="text-[10px] uppercase tracking-widest px-1.5 py-0.5 rounded border" style={{ color: classColour(c.class), borderColor: classColour(c.class) + "88" }}>{c.class}</span>}
+                    {ownedByName.has(normChampName(c.name)) && <span className="text-[10px] text-[#33ff66]">✓ owned</span>}
+                    {!c.profileAt && <span className="text-[10px] opacity-40">not profiled yet</span>}
+                    {dupHint.has(c.name) && (
+                      <span className="text-[10px] text-amber-400" title={`Might be the same champion as: ${dupHint.get(c.name)!.join(", ")}. If it's a duplicate, delete it — if it's a real separate champ, leave it.`}>
+                        ⚠ maybe same as {dupHint.get(c.name)!.join(", ")}
+                      </span>
+                    )}
+                  </div>
+                  {!isOpen && c.summary && <p className="text-xs opacity-70 mt-1">{c.summary}</p>}
+                </button>
+                {/* Two-step confirm inline — no browser confirm() anywhere in /jordan. */}
+                {confirmDel === c.name ? (
+                  <span className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => deleteEntry(c.name)} disabled={delBusy === c.name}
+                      className="text-[10px] px-2 py-0.5 rounded border border-red-500 text-red-400 hover:bg-red-950/40 disabled:opacity-40 transition-colors">
+                      {delBusy === c.name ? "…" : "Delete?"}
+                    </button>
+                    <button onClick={() => setConfirmDel(null)} disabled={delBusy === c.name}
+                      className="text-[10px] px-2 py-0.5 rounded border border-[#1f5c33] opacity-60 hover:opacity-100 transition-opacity">No</button>
+                  </span>
+                ) : (
+                  <button onClick={() => setConfirmDel(c.name)} title="Delete this entry from the Champion DB"
+                    className="shrink-0 opacity-30 hover:opacity-100 hover:text-red-400 transition-opacity text-sm">🗑</button>
+                )}
+                <button onClick={() => { setDbAdd(""); setOpen(isOpen ? null : c.name) }} className="shrink-0 opacity-40 text-xs pt-0.5">{isOpen ? "▾" : "▸"}</button>
+              </div>
 
               {isOpen && (
                 <div className="mt-2 space-y-3 border-t border-[#1f5c33] pt-2">

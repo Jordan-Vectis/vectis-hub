@@ -107,24 +107,20 @@ export async function applyBgsDeck(ids: string[], replace: boolean) {
 // `myCounters` — a separate field from the AI-computed `counters`, so profile
 // rebuilds ("Update meta") never touch them.
 
-// Delete junk profile stubs from the global Champion DB — the near-duplicate
-// entries the AI-built catalog created under two naming conventions ("Maestro"
-// vs "Maestro (Cosmic)", "Spider-Woman" vs "Spider-Woman (Jessica Drew)"), the
-// bare unprofiled one shadowing the real profiled champ during matching.
+// Delete ONE entry from the global Champion DB by exact name. Used by the
+// per-row delete in the Champion DB browse list to clear the near-duplicate
+// entries the AI-built catalog created under two spellings ("Maestro" vs
+// "Maestro (Cosmic)", "Immortal Hulk" vs "Hulk (Immortal)").
 //
-// ⚠ HARD GUARD: only ever deletes UNPROFILED rows (profileAt IS NULL). Even if
-// the client sends a wrong name, this can never destroy a real, profiled
-// champion's data — the destructive path is fenced to stubs by construction.
-// The review panel that calls this is careful, but the guard is the real safety.
-export async function deleteProfileStubs(names: string[]) {
+// Deletes exactly the one row whose nameNorm matches — no profiled/unprofiled
+// guard, because the duplicates are now profiled too. Jordan reviews each row
+// and clicks delete himself (with a confirm), so the single-exact-name match is
+// the safety: it can't mass-delete or hit the wrong champion.
+export async function deleteChampionProfile(name: string) {
   await ownerId() // gate only — the profile table is global
-  const wanted = (Array.isArray(names) ? names : [])
-    .map((n) => normChampName(String(n ?? "")))
-    .filter(Boolean)
-  if (!wanted.length) return { ok: true, count: 0 }
-  const { count } = await prisma.mcocChampionProfile.deleteMany({
-    where: { nameNorm: { in: wanted }, profileAt: null },
-  })
+  const norm = normChampName(String(name ?? ""))
+  if (!norm) return { ok: false, error: "Name required" }
+  const { count } = await prisma.mcocChampionProfile.deleteMany({ where: { nameNorm: norm } })
   return { ok: true, count }
 }
 
