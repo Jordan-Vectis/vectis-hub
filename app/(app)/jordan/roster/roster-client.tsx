@@ -52,6 +52,9 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
   const [pending, setPending] = useState<Pending[] | null>(null)
   const [scanned, setScanned] = useState<Scanned[] | null>(null)
   const [scanMsg, setScanMsg] = useState<string | null>(null)
+  // Per-file failures, kept so the real server reason is shown per screenshot
+  // rather than collapsed into one vague line.
+  const [failures, setFailures] = useState<{ name: string; why: string }[]>([])
 
   // Roster analysis — what to rank up + what utility is missing. Reads the
   // roster that's already stored (no uploading) and treats the whole Champion
@@ -103,7 +106,10 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
     const model = getJordanModel(); if (model) fd.append("model", model)
     const res = await fetch("/api/jordan/mcoc/scan-roster", { method: "POST", body: fd })
     const j = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(j.error || "Couldn't read that screenshot.")
+    // Keep the HTTP status when the body isn't our JSON — a 413/502/504 returns
+    // an HTML proxy page, and without this it collapsed to a vague message that
+    // hid the real "too big"/"gateway" cause.
+    if (!res.ok) throw new Error(j.error || `Couldn't read that screenshot (HTTP ${res.status}).`)
     return j.champions ?? []
   }
 
@@ -126,20 +132,23 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
   // sink the others.
   async function scan(shots: Pending[]) {
     if (!shots.length || scanning) return
-    setScanning(true); setScanMsg(null); setScanned(null)
+    setScanning(true); setScanMsg(null); setScanned(null); setFailures([])
     try {
       const merged: Scanned[] = []
       const seen = new Map<string, number>()   // normalised name -> index in merged
-      const failed: string[] = []
+      const failed: { name: string; why: string }[] = []
 
       for (let i = 0; i < shots.length; i++) {
         if (shots.length > 1) setScanMsg(`Reading screenshot ${i + 1} of ${shots.length}…`)
         let list: ReadChamp[] = []
         try {
           list = await readChampions(shots[i].file)
-        } catch {
-          // Keep going — losing 2 of 3 screenshots to one bad shot is worse.
-          failed.push(shots[i].file.name || `#${i + 1}`)
+        } catch (e: any) {
+          // Keep going — losing 2 of 3 screenshots to one bad shot is worse —
+          // but KEEP THE REASON. This used to swallow it and blame image
+          // clarity, which sent Jordan off trying to take a sharper screenshot
+          // when the real error was something else entirely.
+          failed.push({ name: shots[i].file.name || `#${i + 1}`, why: e?.message ?? "Unknown error" })
           continue
         }
         for (const c of list) {
@@ -159,16 +168,21 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
         }
       }
 
+      // Show what the server actually said, verbatim. Deduped because the same
+      // reason on 5 screenshots is one problem, not five.
+      const reasons = [...new Set(failed.map((f) => f.why))]
+      setFailures(failed)
+
       if (!merged.length) {
         setScanMsg(failed.length
-          ? `✗ Couldn't read ${failed.length === shots.length ? "any of those screenshots" : "those screenshots"} — try clearer ones, or add by hand below.`
-          : "No champions read — try a clearer screenshot, or add by hand below.")
+          ? `✗ Couldn't read ${failed.length === 1 ? "that screenshot" : `any of those ${failed.length} screenshots`}: ${reasons.join(" · ")}`
+          : "No champions read — the screenshot didn't look like a roster grid. Add by hand below, or try a different shot.")
         return
       }
 
       setScanMsg([
-        shots.length > 1 ? `Read ${shots.length} screenshots.` : "",
-        failed.length ? `⚠ ${failed.length} couldn't be read (${failed.join(", ")}) — the rest are below.` : "",
+        shots.length > 1 ? `Read ${shots.length - failed.length} of ${shots.length} screenshots.` : "",
+        failed.length ? `⚠ ${failed.length} failed: ${reasons.join(" · ")}` : "",
       ].filter(Boolean).join(" ") || null)
 
       setScanned(merged)
@@ -284,6 +298,16 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
           </button>
         </div>
         {scanMsg && <p className={`text-xs ${scanMsg.startsWith("✗") ? "text-red-400" : "opacity-70"}`}>{scanMsg}</p>}
+
+        {/* The server's own words, per file — so a real cause is never hidden
+            behind a guess about image quality. */}
+        {failures.length > 0 && (
+          <ul className="text-[11px] text-red-400/90 space-y-0.5">
+            {failures.map((f, i) => (
+              <li key={i}>• <span className="opacity-70">{f.name}</span> — {f.why}</li>
+            ))}
+          </ul>
+        )}
 
         {/* Tag each shot's rank before reading — one upload for the whole roster. */}
         {pending && !scanned && (

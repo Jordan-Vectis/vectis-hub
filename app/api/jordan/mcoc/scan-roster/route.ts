@@ -7,6 +7,7 @@ import { isJordan } from "@/lib/jordan-auth"
 import { withGeminiRetry, isTransientGeminiError } from "@/lib/gemini-retry"
 import { prisma } from "@/lib/prisma"
 import { normaliseClass, cleanChampName, normChampName } from "@/lib/mcoc"
+import { parseLooseJson } from "@/lib/mcoc-ai"
 import { uploadBufferToR2, getSignedImageUrl } from "@/lib/r2"
 
 export const maxDuration = 120
@@ -67,8 +68,23 @@ export async function POST(req: NextRequest) {
     const file = form.get("image")
     if (!(file instanceof File)) return NextResponse.json({ error: "No photo received" }, { status: 400 })
 
-    const buffer = Buffer.from(await file.arrayBuffer())
-    const imagePart = { inlineData: { data: buffer.toString("base64"), mimeType: file.type || "image/jpeg" } }
+    const original = Buffer.from(await file.arrayBuffer())
+    // Normalise through sharp before sending — the sibling scan-bgs route does
+    // this and works; scan-roster didn't. It (a) re-encodes HEIC/HEIF (an iPhone
+    // may hand over a photo-library HEIC, which Gemini can reject) to plain JPEG,
+    // (b) applies EXIF rotation so a sideways shot reads upright, (c) shrinks a
+    // tall Retina screenshot (~1290x2796) so the request can't trip a body-size
+    // limit, and (d) sharpens small portraits for the OCR. Everything downstream
+    // (Gemini + the 0–1000 normalised crop boxes) uses THIS buffer, so cropping
+    // stays correct at the new size. If sharp can't read it, fall back to the
+    // original bytes rather than fail the scan.
+    let buffer = original
+    let sentMime = file.type || "image/jpeg"
+    try {
+      buffer = Buffer.from(await sharp(original).rotate().resize({ width: 1400, withoutEnlargement: true }).jpeg({ quality: 88 }).toBuffer())
+      sentMime = "image/jpeg"
+    } catch { /* unreadable by sharp — send the original bytes as-is */ }
+    const imagePart = { inlineData: { data: buffer.toString("base64"), mimeType: sentMime } }
 
     // Loaded here rather than posted by the client: the client has no reason to
     // hold the catalog, and a stale tab couldn't send an out-of-date one.
@@ -81,7 +97,9 @@ export async function POST(req: NextRequest) {
 
     const modelId = await getToolModel("jordan_fun", form.get("model") as string | null)
     const genai = new GoogleGenerativeAI(apiKey)
-    const model = genai.getGenerativeModel({ model: modelId, generationConfig: { responseMimeType: "application/json" } })
+    // A full roster grid emits name+class+rank+a 4-int box per champion — raise
+    // the output ceiling so a big screenshot can't get truncated mid-array.
+    const model = genai.getGenerativeModel({ model: modelId, generationConfig: { responseMimeType: "application/json", maxOutputTokens: 8192 } })
 
     const result = await withGeminiRetry(() => model.generateContent([imagePart, { text: prompt }]))
     const response = result.response
@@ -92,8 +110,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Blocked by Gemini (${finish})` }, { status: 422 })
     }
 
-    const raw = response.text().trim().replace(/^```json\s*/i, "").replace(/```$/, "").trim()
-    const parsed = JSON.parse(raw)
+    // Parse with the tolerant house helper (slices the outermost {…}, repairs
+    // trailing commas) rather than a raw JSON.parse that turns any stray prose
+    // into a cryptic V8 SyntaxError. On a genuine failure, name the likely cause
+    // — truncation is a REAL, distinct thing — instead of a 500.
+    const raw = response.text().trim()
+    let parsed: any
+    try {
+      parsed = parseLooseJson(raw)
+    } catch {
+      const why = finish === "MAX_TOKENS"
+        ? "The roster was too big to read in one go — split it into a couple of screenshots and scan again."
+        : "Couldn't read the AI's reply — try again, or switch model above."
+      return NextResponse.json({ error: why }, { status: 422 })
+    }
     const rows: any[] = Array.isArray(parsed?.champions) ? parsed.champions : []
 
     // Prepare the source image once for cropping. If sharp can't read it (e.g.
