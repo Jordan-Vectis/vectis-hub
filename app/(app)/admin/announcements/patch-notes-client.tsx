@@ -23,6 +23,13 @@ export type PatchNotesLoadState = { status: "no-table" } | { status: "error"; me
 const input =
   "w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
 
+// Commit messages have a subject line then a body; only the subject is worth showing
+// back to the admin as "this is what it read".
+const firstLine = (s: string) => {
+  const l = s.split("\n")[0].trim()
+  return l.length > 80 ? `${l.slice(0, 80)}…` : l
+}
+
 const PLACEHOLDER = `- Fixed duplicate barcodes being saved in the lot wizard
 - Smart scan now keeps going if the AI is rate limited
 - Tablet cataloguing remembers your filters when you go back`
@@ -35,14 +42,39 @@ export default function PatchNotesManager({ notes, loadState }: { notes: PatchNo
   const [body, setBody] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
+  const [drafting, setDrafting] = useState(false)
+  const [draftNote, setDraftNote] = useState<string | null>(null)  // why there's no draft
+
+  // Ask the server to summarise the deployed commit into a starting draft. Only ever
+  // fills EMPTY fields — see the guard below.
+  async function draft(force = false) {
+    setDrafting(true); setDraftNote(null)
+    try {
+      const res = await fetch("/api/patch-notes/draft", { method: "POST" })
+      const d = await res.json()
+      if (!res.ok) { setDraftNote(d?.error ?? "Couldn't draft from the latest deploy."); return }
+      if (!d.available) { setDraftNote(d.reason ?? "No draft available."); return }
+      // Never overwrite what the admin has typed — a slow AI response landing on top
+      // of their own words would be infuriating. `force` is the explicit re-draft button.
+      setTitle((t) => (force || !t.trim() ? d.title || t : t))
+      setBody((b) => (force || !b.trim() ? d.body || b : b))
+      setDraftNote(d.commitMessage ? `Drafted from the latest deploy: "${firstLine(d.commitMessage)}" — check it and edit.` : null)
+    } catch {
+      setDraftNote("Couldn't reach the server to draft from the latest deploy.")
+    } finally {
+      setDrafting(false)
+    }
+  }
 
   function openNew() {
-    setEditing("new"); setTitle(""); setBody(""); setError(null); setSaved(null)
+    setEditing("new"); setTitle(""); setBody(""); setError(null); setSaved(null); setDraftNote(null)
+    draft()  // auto-populate; the editor opens immediately and fills in when it lands
   }
   function openEdit(n: PatchNoteRow) {
-    setEditing(n.id); setTitle(n.title); setBody(n.body); setError(null); setSaved(null)
+    // No auto-draft here — an existing note has content the admin wrote.
+    setEditing(n.id); setTitle(n.title); setBody(n.body); setError(null); setSaved(null); setDraftNote(null)
   }
-  function cancel() { setEditing(null); setError(null) }
+  function cancel() { setEditing(null); setError(null); setDraftNote(null) }
 
   function save() {
     const wasLive = notes.find((n) => n.id === editing)?.published
@@ -138,7 +170,7 @@ export default function PatchNotesManager({ notes, loadState }: { notes: PatchNo
       {error && <p className="text-sm text-red-500">{error}</p>}
       {saved && <p className="text-sm text-emerald-600 dark:text-emerald-400">{saved}</p>}
 
-      {editing === "new" && <Editor {...{ title, setTitle, body, setBody, save, cancel, busy }} isNew />}
+      {editing === "new" && <Editor {...{ title, setTitle, body, setBody, save, cancel, busy, drafting, draftNote, draft }} isNew />}
 
       {!notes.length && editing !== "new" && (
         <p className="text-sm text-gray-400 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg px-4 py-6 text-center">
@@ -150,7 +182,7 @@ export default function PatchNotesManager({ notes, loadState }: { notes: PatchNo
         {notes.map((n) => (
           <div key={n.id} className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E] p-4">
             {editing === n.id ? (
-              <Editor {...{ title, setTitle, body, setBody, save, cancel, busy }} />
+              <Editor {...{ title, setTitle, body, setBody, save, cancel, busy, drafting, draftNote, draft }} />
             ) : (
               <>
                 <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -201,24 +233,37 @@ export default function PatchNotesManager({ notes, loadState }: { notes: PatchNo
 }
 
 function Editor({
-  title, setTitle, body, setBody, save, cancel, busy, isNew,
+  title, setTitle, body, setBody, save, cancel, busy, isNew, drafting, draftNote, draft,
 }: {
   title: string; setTitle: (v: string) => void
   body: string; setBody: (v: string) => void
   save: () => void; cancel: () => void
   busy: boolean; isNew?: boolean
+  drafting: boolean; draftNote: string | null; draft: (force?: boolean) => void
 }) {
   return (
     <div className={`space-y-3 ${isNew ? "rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-4" : ""}`}>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <span className="text-xs text-gray-500 dark:text-gray-400">
+          {drafting ? "✨ Drafting from the latest deploy…" : "Everything here is editable."}
+        </span>
+        <button type="button" onClick={() => draft(true)} disabled={drafting || busy}
+          className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-500 text-xs font-semibold disabled:opacity-40">
+          {drafting ? "Drafting…" : "✨ Draft from latest deploy"}
+        </button>
+      </div>
+      {/* Says which commit it read, or why there's no draft — so a thin or missing
+          draft is visible rather than mysterious. */}
+      {draftNote && <p className="text-xs text-amber-600 dark:text-amber-400/90 leading-relaxed">{draftNote}</p>}
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title</label>
         <input value={title} onChange={(e) => setTitle(e.target.value)} className={input}
-          placeholder="e.g. Cataloguing fixes — 16 July" />
+          placeholder={drafting ? "Drafting…" : "e.g. Cataloguing fixes — 16 July"} />
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">What&apos;s changed</label>
         <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={6}
-          placeholder={PLACEHOLDER} className={`${input} resize-y font-mono text-xs`} />
+          placeholder={drafting ? "Drafting from the latest deploy…" : PLACEHOLDER} className={`${input} resize-y font-mono text-xs`} />
         <p className="text-xs text-gray-400 mt-1">One change per line. Start a line with <code>-</code> for a bullet.</p>
       </div>
       <div className="flex gap-2 items-center flex-wrap">

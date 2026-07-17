@@ -42,6 +42,7 @@ export const AI_TOOLS: AiTool[] = [
   { slot: "accounts_statement",     group: "Accounts",     label: "Bank/card statement parse",            default: "gemini-3-flash-preview" },
   // ── Other ──
   { slot: "condition_extract",      group: "Other",        label: "Condition report extract",             default: "gemini-3-flash-preview" },
+  { slot: "patch_notes_draft",      group: "Other",        label: "Patch notes draft (summarise a deploy)", default: "gemini-3-flash-preview" },
   { slot: "jordan_fun",             group: "Other",        label: "Jordan's secret menu (chat, cooking, air fryer)", default: "gemini-3-flash-preview" },
 ]
 
