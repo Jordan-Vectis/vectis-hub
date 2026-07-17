@@ -83,6 +83,27 @@ The database is hosted on **Neon** (console.neon.tech), not Railway. Never sugge
 - The `DATABASE_URL` env var in Railway points to the Neon connection string
 - A scheduled **JSON** backup exists: `/api/cron/db-backup` (run by a `server.js` setInterval loop at midnight UTC, 24h cadence) dumps tables to R2 (`CLOUDFLARE_R2_BACKUP_BUCKET`), keeping the last 30 per env, surfaced at `/admin/backup`. A true `pg_dump` / point-in-time dump is still not configured — Neon branching remains the primary restore path.
 
+### ⚠ `.env` points at the REAL database — server.js only does its jobs in production
+
+The local `.env` `DATABASE_URL` is the **shared Neon database**, not a local copy (same for the R2
+bucket). `server.js` therefore gates its three unattended boot jobs on the module-level `dev` flag
+(`NODE_ENV !== 'production'`), so they run on Railway and **never** from a dev machine:
+
+- `runMigrations()` — would push migrations at the shared DB off a work-in-progress branch,
+  outside the deliberate Run Migrations button flow.
+- `resetStaleLiveAuctions()` — would flip a **genuinely live** auction to `PENDING`, dropping the
+  live banner off the public site mid-sale. (Correct on a real restart; wrong from a laptop.)
+- The four cron loops — db-backup writes to the real R2 bucket; **it-mailbox and
+  condition-mailbox poll every 5 min and turn real emails into Job Board jobs / Condition
+  Reports**. They no-op locally today only because `CRON_SECRET` is absent from `.env` — do not
+  rely on that accident.
+
+Gate on `dev`, not a new env var: it's the same flag passed to `next({ dev })`, so it cannot be
+wrong on Railway without Next already running in dev mode there. ⚠ This is a **seatbelt, not a
+cure** — running the app locally still reads and writes live data. Use `npx next dev` (skips
+`server.js`) to run a page locally, and test anything on this boot path with a deliberately bogus
+`DATABASE_URL` so a mistake can't reach real data.
+
 ### ⚠ Adding columns to the `User` table — login lockout risk
 
 Code deploys to Railway immediately, but migrations are applied manually via the **Run Migrations**

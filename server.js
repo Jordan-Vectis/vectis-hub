@@ -60,8 +60,18 @@ async function resetStaleLiveAuctions() {
 }
 
 app.prepare().then(async () => {
-  await runMigrations()
-  await resetStaleLiveAuctions()
+  // Both of these write to whatever DATABASE_URL points at, and .env on a dev
+  // machine points at the SHARED Neon database — not a local copy. So they are
+  // gated to a real deployment: a local boot would otherwise push migrations
+  // outside the deliberate Run Migrations button, and reset a genuinely live
+  // auction to PENDING, dropping the live banner off the public site mid-sale.
+  // Railway is NODE_ENV=production, so nothing changes there.
+  if (dev) {
+    console.log('> Dev mode — skipping migrations + stale-live-auction reset (they target the shared DB)')
+  } else {
+    await runMigrations()
+    await resetStaleLiveAuctions()
+  }
 
   const httpServer = createServer((req, res) => {
     const parsedUrl = parse(req.url, true)
@@ -81,6 +91,18 @@ app.prepare().then(async () => {
   httpServer.listen(port, () => {
     console.log(`> Vectis Hub ready on http://localhost:${port}`)
     console.log(`> Socket.IO live auction server active`)
+
+    // The loops below drive real integrations: they back up the shared DB to R2
+    // and turn real IT@vectis.co.uk / condition-report emails into records. On a
+    // dev machine they no-op only because CRON_SECRET happens to be absent from
+    // .env — that accident is not worth relying on, since copying the Railway
+    // variables across to run locally would have the mailbox polls processing
+    // live mail 90 seconds later. Railway is NODE_ENV=production and schedules
+    // them exactly as before.
+    if (dev) {
+      console.log('> Dev mode — background cron loops not scheduled')
+      return
+    }
 
     // Background warehouse sync — runs every 12 hours.
     // First run is delayed 2 minutes to let Next.js finish initialising.

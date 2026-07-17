@@ -9,10 +9,45 @@ type Entry = { filename: string; content: string }
 
 const ENTRIES: Entry[] = [
   {
+    filename: "local_boot_safety.md",
+    content: `---
+name: Local boot safety — server.js only does its DB jobs in production
+purpose: Why server.js gates migrations, the live-auction reset and the cron loops on !dev, and what running locally still touches. Read before changing server.js boot.
+last_updated: 2026-07-17
+---
+
+# Local boot safety — server.js (guarded 2026-07-17, STAGING)
+
+server.js used to do three things on **every** boot, local included. **.env on a dev machine points at the REAL shared Neon database** (and the real R2 bucket), not a local copy — so simply starting the app on a laptop fired all of it at live data, unattended, with nobody choosing it:
+
+- **runMigrations()** — prisma migrate deploy against the shared DB, from a laptop, off a work-in-progress branch, completely outside the deliberate Run Migrations button flow.
+- **resetStaleLiveAuctions()** — UPDATE "LiveAuction" SET status='PENDING' on every ACTIVE or PAUSED auction. **During a live sale this drops the live banner off the public site.** Correct on a real restart (in-memory state is lost); wrong from a laptop.
+- **Four cron loops** — bc-warehouse sync, db-backup (dumps the shared DB to the real R2 bucket and eats one of the 30 retained backups), it-mailbox and condition-mailbox. The last two poll every 5 min (first run 90s/100s) and turn **real IT@vectis.co.uk / condition-report emails** into Job Board jobs and Condition Reports.
+
+## The guard
+
+All three are now gated on the module-level **dev** flag (NODE_ENV !== 'production') that server.js already computes: an if/else around runMigrations + resetStaleLiveAuctions in app.prepare().then(), and an early return before the cron block inside httpServer.listen() (the crons are last in the callback, so no re-indent was needed).
+
+**Why dev is the safe signal:** it is the same flag passed to next({ dev }). If it were ever true on Railway, Next would be running in dev mode there — independently catastrophic and obvious. Railway is NODE_ENV=production (proved by app-page-turbo.runtime.prod.js, the prod runtime, in its stack traces). **The production code path was not edited at all** — only an untaken branch was added above it.
+
+## Verified both directions (bogus DATABASE_URL, so the real DB was never at risk)
+
+- NODE_ENV unset → "Dev mode — skipping migrations…" + "Dev mode — background cron loops not scheduled"; no migrate, no reset, no [cron/db-backup] line.
+- NODE_ENV=production → migrate deploy attempted, reset attempted (both failed harmlessly on the bogus URL, caught by the existing try/catch), and "[cron/db-backup] next backup in 808 minutes" printed. **Railway behaviour identical.**
+
+Reuse the bogus-DATABASE_URL trick to test anything on this boot path — it makes the test zero-risk even if the logic is inverted.
+
+## ⚠ Still true — the guard is a seatbelt, not a cure
+
+.env **still points at the shared Neon DB and real R2 bucket**. The guard only stops the **unattended** boot jobs. Anyone running locally and clicking around is still reading and writing **real production data**. CRON_SECRET is absent from local .env, which is a second accidental layer — do not rely on it (copying the Railway variables across to get local dev working is the obvious setup move, and would re-arm the mailbox polls). A real fix = a separate dev database; not worth it while nobody runs locally.
+
+**npx next dev** skips server.js entirely and is the lightest way to run a page locally.`,
+  },
+  {
     filename: "deploy_skew.md",
     content: `---
 name: Deploy skew — "Failed to find Server Action"
-purpose: Why that Railway error appears, the silent auto-reload fix, and the never-run-npm-run-dev trap it exposed. Read before touching app/error.tsx, components/skew-reload.tsx or lib/skew-reload.ts.
+purpose: Why that Railway error appears and how the silent auto-reload fix works. Read before touching app/error.tsx, components/skew-reload.tsx or lib/skew-reload.ts.
 last_updated: 2026-07-17
 ---
 
@@ -40,9 +75,9 @@ Next 16.2 exposes **unstable_isUnrecognizedActionError** from next/navigation fo
 
 Tested by patching window.fetch to return the real post-deploy response (404 + x-nextjs-action-not-found: 1) on any POST carrying a next-action header, then clicking Sign in. Proof of reload = a marker set on window disappears. Console confirmed the UnrecognizedActionError "was handled by the <ErrorBoundaryHandler> error boundary". Reuse this trick — a two-build skew test is otherwise impractical.
 
-## ⚠⚠ NEVER run npm run dev on this project locally
+## Running this project locally
 
-**.env points at the REAL Neon database, and npm run dev runs server.js, which runs prisma migrate deploy on boot.** Starting it locally fires migrations at the shared DB, bypassing the deliberate Run Migrations button flow. **Use npx next dev instead** — it skips server.js entirely and touches no DB for the login page. ⚠ Don't commit a .claude/launch.json into the repo: .claude is **not** gitignored, and an "npm run dev" config there is the footgun above.
+Discovered during this work: server.js fired prisma migrate deploy, the live-auction reset and the cron loops at the **REAL** shared DB on any local boot. **Now guarded (2026-07-17)** — see the Local boot safety entry. **Use npx next dev** — it skips server.js entirely. ⚠ Don't commit a .claude/launch.json into the repo: .claude is **not** gitignored.
 
 ## TypeScript gotcha
 
