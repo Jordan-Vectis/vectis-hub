@@ -14,6 +14,7 @@ type Gap = { tag: string; whyItMatters: string; fixes: string[] }
 type RankUp = { champion: string; class: string; priority: string; why: string; fills: string[] }
 type Analysis = {
   missingTags: string[]; coveredTags: string[]; highRankCount: number; unprofiled: string[]
+  groundedFallback?: boolean
   summary: string; gaps: Gap[]; rankUps: RankUp[]
 }
 const GREEN = "#33ff66"
@@ -274,6 +275,13 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
             <p className="text-[10px] opacity-40 uppercase tracking-widest">
               Based on {analysis.highRankCount} rank 4+ champion{analysis.highRankCount === 1 ? "" : "s"}
             </p>
+
+            {analysis.groundedFallback && (
+              <p className="text-[11px] text-amber-400">
+                ⚠ Live search didn&apos;t work on this run, so this is from the model&apos;s own knowledge and the meta may be out
+                of date — that&apos;s how dated champs creep in. Re-run it, or switch model above.
+              </p>
+            )}
 
             {/* Counted here, not by the AI — plain set arithmetic over the stored tags. */}
             <div>

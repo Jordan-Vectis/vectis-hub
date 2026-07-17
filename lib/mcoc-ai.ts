@@ -29,7 +29,15 @@ export function parseLooseJson(text: string): any {
 // Throws on Gemini block; on a grounding-unsupported error it retries once
 // without search.
 export type GeminiParts = string | any[]
-export async function groundedJson(input: GeminiParts, clientModel?: string | null): Promise<any> {
+// onFallback fires when the grounded call failed and we answered from the
+// model's own (stale) knowledge instead — the MCOC meta shifts monthly, so a
+// caller that cares can tell the user the answer may be out of date. Optional so
+// the existing callers are unaffected.
+export async function groundedJson(
+  input: GeminiParts,
+  clientModel?: string | null,
+  onFallback?: () => void,
+): Promise<any> {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) throw new Error("GEMINI_API_KEY not configured")
   const modelId = await getToolModel("jordan_fun", clientModel ?? null)
@@ -57,7 +65,7 @@ export async function groundedJson(input: GeminiParts, clientModel?: string | nu
     const msg = String(e?.message ?? e).toLowerCase()
     const groundingUnsupported = msg.includes("tool") || msg.includes("grounding") || msg.includes("400")
     const unparseable = msg.includes("couldn't read") || msg.includes("not valid json") || msg.includes("unexpected token")
-    if (groundingUnsupported || unparseable) return run(false)
+    if (groundingUnsupported || unparseable) { onFallback?.(); return run(false) }
     throw e
   }
 }

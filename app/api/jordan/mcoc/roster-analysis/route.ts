@@ -31,11 +31,14 @@ const PROMPT = `You are an expert Marvel Contest of Champions (MCOC) roster advi
 
 You are given: the champions they have ALREADY ranked up (rank 4+, i.e. the utility they can actually field), the utility tags NOT covered by those champions, and the pool of champions available to rank (assume every one of them is owned and available).
 
-Weigh BOTH of these — do not just pick gap-fillers:
-- Raw value: is this champion genuinely worth scarce materials right now (current meta, Battlegrounds, war, story/abyss utility)?
-- Gap filling: does it cover utility the player is missing? A champion that fills a real hole beats a marginally stronger duplicate of something they already have.
+HARD RULES for "rankUps" — a bad recommendation wastes materials that take months to earn, so a SHORT list of genuinely great champions is far better than a long list:
+1. RAW VALUE IS THE GATE. Every pick must be a champion worth scarce endgame materials TODAY, on its own merits (current meta, Battlegrounds, war, endgame content). If it doesn't clear that bar, leave it out — no matter what it fills.
+2. GAP FILLING IS ONLY A TIE-BREAKER, applied AFTER rule 1. Among champions that are ALL genuinely worth materials, prefer the one that covers utility the player lacks. NEVER let gap-filling promote a champion that wouldn't otherwise deserve the materials.
+3. NEVER recommend a champion just because it is the only one with a missing tag. Niche, dated champions often hold rare utility — they are still a bad investment. If a gap can only be filled by a champion that isn't meta-relevant, say exactly that in the gap's "whyItMatters" and leave it OUT of rankUps.
+4. ONLY recommend champions available at 7-STAR. Champions that exist only at 6-star are older and are NOT endgame/meta relevant — never recommend one, whatever utility it has.
+5. If you are not confident a champion is currently meta-relevant and 7-star available, leave it out.
 
-Do not recommend a champion that is already in their rank 4+ list. Prefer champions that are strong NOW — use up-to-date information; the meta shifts monthly.
+Do not recommend a champion that is already in their rank 4+ list. The meta shifts monthly — use up-to-date information, and judge by how the champion is regarded NOW, not by how it was regarded on release.
 
 Return STRICT JSON only (no prose, no markdown fences):
 {
@@ -54,7 +57,7 @@ Return STRICT JSON only (no prose, no markdown fences):
   } ]
 }
 
-Give 5-8 rankUps, best first, and cover the most damaging gaps (up to 6). If the missing list is empty, say so in summary and recommend on raw value alone.`
+Give UP TO 8 rankUps, best first — fewer is correct if only a few clear rule 1, and returning 3 great picks is a better answer than 8 padded ones. Cover the most damaging gaps (up to 6). If the missing list is empty, say so in summary and recommend on raw value alone.`
 
 export async function POST(req: NextRequest) {
   try {
@@ -120,7 +123,12 @@ export async function POST(req: NextRequest) {
       `\nPOOL AVAILABLE TO RANK UP (all assumed owned; tags in brackets):\n${poolList}`,
     ].join("\n")
 
-    const parsed = await groundedJson(prompt, model)
+    // This prompt is large (the whole champion pool), which makes a grounded
+    // reply more likely to leak prose and fail to parse — and the fallback
+    // answers from training data, i.e. a stale meta, which is exactly how dated
+    // champions get recommended. Surface it rather than let it pass silently.
+    let groundedFallback = false
+    const parsed = await groundedJson(prompt, model, () => { groundedFallback = true })
 
     const str = (v: unknown) => (typeof v === "string" ? v : "")
     const strArr = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [])
@@ -131,6 +139,7 @@ export async function POST(req: NextRequest) {
       coveredTags: [...covered].sort(),
       highRankCount: high.length,
       unprofiled,
+      groundedFallback,
       // AI judgement.
       summary: str(parsed?.summary),
       gaps: Array.isArray(parsed?.gaps)
