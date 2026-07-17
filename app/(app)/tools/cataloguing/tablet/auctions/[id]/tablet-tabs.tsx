@@ -15,6 +15,7 @@ import { parseCondition, buildCondition, type BoxPrefixMode } from "@/lib/condit
 import { useConditionWordings } from "@/lib/use-condition-wordings"
 import PhotoOnlyTab from "../../../auctions/[id]/photo-only-tab"
 import ReviewTab from "../../../auctions/[id]/review-tab"
+import AnnouncementBanner from "@/components/announcement-banner"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -98,6 +99,14 @@ export default function TabletTabs({ auction, lots, userRole, userId, userName, 
         WebkitOverflowScrolling: "touch" as any,
       }}
     >
+      {/* The (app) layout renders this too, but this overlay is fixed inset-0 at
+          z-9999 and covers it — so a cataloguer on the iPad, the person an
+          announcement is usually aimed at, never saw one. Rendered inside the
+          overlay it sits above the header and pushes the tabs down. Dismissal is
+          shared with the rest of the Hub (same localStorage key). */}
+      <div className="flex-shrink-0">
+        <AnnouncementBanner />
+      </div>
 
       {/* Header bar */}
       <div className="flex-shrink-0 flex items-center gap-3 px-4 py-4 border-b border-gray-800 bg-[#1C1C1E]">
