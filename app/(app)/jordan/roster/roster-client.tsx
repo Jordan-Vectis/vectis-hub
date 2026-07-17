@@ -9,6 +9,12 @@ import ModelPicker, { getJordanModel } from "../model-picker"
 type Champ = { id: string; name: string; class: string; stars: number; rank: number; bgsDeck: boolean; imageUrl: string | null }
 type ReadChamp = { name: string; class: string; rank: number | null; inCatalog?: boolean; imageKey?: string; imageUrl?: string }
 type Scanned = ReadChamp & { include: boolean; rank: number | null }
+// A picked screenshot waiting to be read, with the rank Jordan says it contains.
+// He filters his roster by rank in-game and shoots each tier, so the rank is a
+// property of the PICTURE — which beats the AI reading the small rank badges
+// (it misreads them) and beats one rank for the whole batch (that forced a
+// separate upload per tier).
+type Pending = { file: File; url: string; rank: number }
 type BgsReview = { champs: Champ[]; selected: Set<string>; unmatched: string[] }
 type Gap = { tag: string; whyItMatters: string; fixes: string[] }
 type RankUp = { champion: string; class: string; priority: string; why: string; fills: string[] }
@@ -43,6 +49,7 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
   const [addStars, setAddStars] = useState(7)
   const [addRank, setAddRank] = useState(5)
   const [scanning, setScanning] = useState(false)
+  const [pending, setPending] = useState<Pending[] | null>(null)
   const [scanned, setScanned] = useState<Scanned[] | null>(null)
   const [scanMsg, setScanMsg] = useState<string | null>(null)
 
@@ -100,25 +107,39 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
     return j.champions ?? []
   }
 
-  // Several screenshots per scan: a rank tier rarely fits on one screen. Each
-  // image is read on its own call rather than batched into one — the grids stay
-  // separate that way, and one unreadable shot can't sink the others.
-  async function scan(files: File[]) {
-    if (!files.length || scanning) return
+  // Pick first, tag each shot's rank, THEN read — so several tiers go up in one
+  // go instead of one upload per tier.
+  function pickShots(files: File[]) {
+    if (!files.length) return
+    pending?.forEach((p) => URL.revokeObjectURL(p.url))
+    setScanMsg(null); setScanned(null)
+    setPending(files.map((f) => ({ file: f, url: URL.createObjectURL(f), rank: addRank })))
+  }
+
+  function cancelPending() {
+    pending?.forEach((p) => URL.revokeObjectURL(p.url))
+    setPending(null)
+  }
+
+  // Each image is read on its own call rather than batched into one prompt — the
+  // grids stay separate, each keeps its own rank, and one unreadable shot can't
+  // sink the others.
+  async function scan(shots: Pending[]) {
+    if (!shots.length || scanning) return
     setScanning(true); setScanMsg(null); setScanned(null)
     try {
-      const merged: ReadChamp[] = []
+      const merged: Scanned[] = []
       const seen = new Map<string, number>()   // normalised name -> index in merged
       const failed: string[] = []
 
-      for (let i = 0; i < files.length; i++) {
-        if (files.length > 1) setScanMsg(`Reading screenshot ${i + 1} of ${files.length}…`)
+      for (let i = 0; i < shots.length; i++) {
+        if (shots.length > 1) setScanMsg(`Reading screenshot ${i + 1} of ${shots.length}…`)
         let list: ReadChamp[] = []
         try {
-          list = await readChampions(files[i])
+          list = await readChampions(shots[i].file)
         } catch {
           // Keep going — losing 2 of 3 screenshots to one bad shot is worse.
-          failed.push(files[i].name || `#${i + 1}`)
+          failed.push(shots[i].file.name || `#${i + 1}`)
           continue
         }
         for (const c of list) {
@@ -127,28 +148,31 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
           // didn't get a usable crop.
           const key = normChampName(c.name)
           const at = seen.get(key)
-          if (at === undefined) { seen.set(key, merged.length); merged.push(c); continue }
+          if (at === undefined) {
+            // The PICTURE's rank wins, not the AI's read of the badge — same
+            // rule as before, just per-shot now.
+            seen.set(key, merged.length)
+            merged.push({ ...c, include: true, rank: shots[i].rank })
+            continue
+          }
           if (!merged[at].imageUrl && c.imageUrl) merged[at] = { ...merged[at], imageKey: c.imageKey, imageUrl: c.imageUrl }
         }
       }
 
       if (!merged.length) {
         setScanMsg(failed.length
-          ? `✗ Couldn't read ${failed.length === files.length ? "any of those screenshots" : "those screenshots"} — try clearer ones, or add by hand below.`
+          ? `✗ Couldn't read ${failed.length === shots.length ? "any of those screenshots" : "those screenshots"} — try clearer ones, or add by hand below.`
           : "No champions read — try a clearer screenshot, or add by hand below.")
         return
       }
 
       setScanMsg([
-        files.length > 1 ? `Read ${files.length} screenshots.` : "",
+        shots.length > 1 ? `Read ${shots.length} screenshots.` : "",
         failed.length ? `⚠ ${failed.length} couldn't be read (${failed.join(", ")}) — the rest are below.` : "",
       ].filter(Boolean).join(" ") || null)
 
-      // The Rank selector is the authority (a roster screenshot is one rank
-      // tier). We DON'T trust the AI's per-champ rank read — it misreads the
-      // small badges. Every champ defaults to the selected rank; the per-champ
-      // dropdown is there only for the odd exception.
-      setScanned(merged.map((c) => ({ ...c, include: true, rank: addRank })))
+      setScanned(merged)
+      cancelPending()
     } catch (e: any) {
       setScanMsg("✗ " + (e?.message ?? "Scan failed."))
     } finally { setScanning(false) }
@@ -237,8 +261,8 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
       <div className="border border-[#1f5c33] rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <p className="text-sm opacity-70">
-            Scan roster screenshots — pick as many as you like for the rank tier below; overlapping shots are merged, so scroll and grab
-            the lot. Reads names, classes &amp; portraits. Re-scan any time to update ranks.
+            Scan roster screenshots — filter by rank in-game, shoot each tier, then pick them all at once and say which rank each shot is.
+            Overlapping shots are merged. Reads names, classes &amp; portraits. Re-scan any time to update ranks.
           </p>
           <ModelPicker />
         </div>
@@ -248,7 +272,10 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
           <select value={addStars} onChange={(e) => setAddStars(Number(e.target.value))} className={input} style={{ color: GREEN }}>
             <option value={7}>7★</option><option value={6}>6★</option>
           </select>
-          <select value={addRank} onChange={(e) => setAddRank(Number(e.target.value))} className={input} style={{ color: GREEN }}>
+          {/* Rank is now set per screenshot after picking; this only seeds the
+              default, and still drives the manual add below. */}
+          <select value={addRank} onChange={(e) => setAddRank(Number(e.target.value))} className={input} style={{ color: GREEN }}
+            title="Starting rank for each screenshot you pick — set them individually on the next step">
             {[5, 4, 3, 2, 1].map((r) => <option key={r} value={r}>Rank {r}</option>)}
           </select>
           <button onClick={() => scanInput.current?.click()} disabled={scanning}
@@ -258,9 +285,51 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
         </div>
         {scanMsg && <p className={`text-xs ${scanMsg.startsWith("✗") ? "text-red-400" : "opacity-70"}`}>{scanMsg}</p>}
 
+        {/* Tag each shot's rank before reading — one upload for the whole roster. */}
+        {pending && !scanned && (
+          <div className="border border-[#33ff66] rounded-lg p-3 space-y-2">
+            <p className="text-xs opacity-70">
+              Which rank is in each screenshot? You filtered them, so set each one — all of them go in at {addStars}★.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              {pending.map((p, i) => (
+                <div key={i} className="space-y-1">
+                  <img src={p.url} alt={`Screenshot ${i + 1}`} className="h-28 rounded-lg border border-[#1f5c33] object-cover" />
+                  <select
+                    value={p.rank}
+                    onChange={(e) => setPending((l) => l!.map((x, j) => (j === i ? { ...x, rank: Number(e.target.value) } : x)))}
+                    className="w-full bg-black border border-[#1f5c33] rounded px-1 py-1 text-[11px]"
+                    style={{ color: GREEN }}
+                  >
+                    {[5, 4, 3, 2, 1].map((r) => <option key={r} value={r}>Rank {r}</option>)}
+                  </select>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 flex-wrap items-center">
+              <button onClick={() => scan(pending)} disabled={scanning}
+                className="px-4 py-1.5 rounded-lg text-sm font-bold text-black disabled:opacity-40" style={{ background: GREEN }}>
+                {scanning ? "READING…" : `Read ${pending.length} screenshot${pending.length === 1 ? "" : "s"} →`}
+              </button>
+              <button onClick={cancelPending} disabled={scanning}
+                className="px-4 py-1.5 rounded-lg border border-[#1f5c33] text-sm opacity-60 hover:opacity-100 disabled:opacity-30">
+                Cancel
+              </button>
+              {pending.length > 1 && (
+                <span className="text-[10px] opacity-40 uppercase tracking-widest ml-auto">
+                  Same champ in two shots? The first wins — fix it on the next screen.
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         {scanned && (
           <div className="border border-[#33ff66] rounded-lg p-3 space-y-2">
-            <p className="text-xs opacity-70">Read {scanned.length} champ{scanned.length === 1 ? "" : "s"}, set to {addStars}★ Rank {addRank} — untick wrong ones, change rank on any exceptions, then save.</p>
+            <p className="text-xs opacity-70">
+              Read {scanned.length} champ{scanned.length === 1 ? "" : "s"} at {addStars}★, each on the rank of the screenshot it came from —
+              untick wrong ones, fix any exceptions, then save. ⚠ = not in the Champion DB.
+            </p>
             <div className="flex flex-wrap gap-1.5 max-h-56 overflow-y-auto">
               {scanned.map((s, i) => (
                 <span key={i} className={`inline-flex items-center gap-1.5 px-1.5 py-1 rounded-lg border text-xs ${s.include ? "border-[#33ff66]" : "border-[#1f5c33] opacity-40"}`}>
@@ -577,7 +646,7 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
       ))}
 
       <input ref={scanInput} type="file" accept="image/*" multiple className="hidden"
-        onChange={(e) => { scan(Array.from(e.target.files ?? [])); e.currentTarget.value = "" }} />
+        onChange={(e) => { pickShots(Array.from(e.target.files ?? [])); e.currentTarget.value = "" }} />
       <input ref={bgsInput} type="file" accept="image/*" className="hidden"
         onChange={(e) => { scanBgs(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
     </div>
