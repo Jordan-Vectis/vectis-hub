@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { isMissingTable } from "@/lib/prisma-errors"
 
 // Server-only reads of the patch notes. Imported by the admin page (server component)
 // and the read API — never by client components.
@@ -20,14 +21,6 @@ export type PatchNotesResult =
   | { status: "ok"; notes: AdminPatchNote[] }
   | { status: "no-table" }
   | { status: "error"; message: string }
-
-// Prisma P2021 = table does not exist; 42P01 is the underlying Postgres code, which
-// can surface through the pg adapter instead. Same precedent as the message-matching
-// in app/api/bc/cataloguing/route.ts.
-function isMissingTable(e: any): boolean {
-  if (e?.code === "P2021" || e?.code === "42P01") return true
-  return /does not exist|relation .* does not exist/i.test(e?.message ?? "")
-}
 
 // Every note, newest first, for the admin list.
 export async function readAllPatchNotes(): Promise<PatchNotesResult> {

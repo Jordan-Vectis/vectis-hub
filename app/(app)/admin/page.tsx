@@ -42,6 +42,7 @@ const GROUPS: { label: string; cards: Card[] }[] = [
       { href: "/admin/ai-models",  label: "AI Models",        description: "Choose which Gemini model each AI feature uses across the app. Fix a retired model in one place instead of in code.", icon: "🤖" },
       { href: "/admin/backup",     label: "Database Backup",  description: "View stored database backups, check when the last backup ran, and trigger a manual backup.", icon: "💾" },
       { href: "/admin/memory",     label: "Claude Memory",    description: "Browse what Claude remembers about you, this project, and how to work with you.", icon: "🧠" },
+      { href: "/admin/refresh",    label: "Force Refresh",    description: "Reload everyone's screen onto the latest version after an update. Warns before it interrupts anyone.", icon: "🔄" },
     ],
   },
 ]

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { io } from "socket.io-client"
+import { acquireAppSocket, releaseAppSocket } from "@/lib/app-socket"
 
 const POLL_INTERVAL_MS = 60_000 // 60s — fallback safety net; instant updates come via Socket.IO
 const STORAGE_KEY = "announcement_dismissed_at" // stores the updatedAt the user dismissed
@@ -70,11 +70,18 @@ export default function AnnouncementBanner() {
 
     // Instant delivery: the admin's save emits "announcement:changed" from the
     // server (see lib/actions/announcements.ts), so every open tab refetches
-    // immediately rather than waiting up to 60s for the next poll.
-    const socket = io({ path: "/socket.io" })
-    socket.on("announcement:changed", () => load())
+    // immediately rather than waiting up to 60s for the next poll. The connection
+    // is shared with the other app-wide listeners — one socket per tab.
+    const socket = acquireAppSocket()
+    const onChanged = () => load()
+    socket.on("announcement:changed", onChanged)
 
-    return () => { cancelled = true; clearInterval(id); socket.disconnect() }
+    return () => {
+      cancelled = true
+      clearInterval(id)
+      socket.off("announcement:changed", onChanged)
+      releaseAppSocket()
+    }
   }, [])
 
   if (!current) return null

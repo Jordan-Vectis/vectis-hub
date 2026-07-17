@@ -392,6 +392,23 @@ model Announcement {
   updatedByName String?
 }
 
+// Force-refresh signal (one "current" row). An admin bumps `token` from
+// /admin/refresh and every open tab reloads onto the newly deployed build.
+//
+// ⚠ It is a stored token rather than a bare Socket.IO broadcast ON PURPOSE.
+// globalThis._io is a single in-process instance with no Redis adapter, so an
+// emit only reaches tabs connected to THAT replica — at more than one replica a
+// broadcast-only design would silently refresh some iPads and not others, which
+// is worse than useless for "everyone must be on the new build". Clients poll
+// this token and treat the socket as the fast path. Don't "simplify" it to an
+// emit-only design.
+model AppReload {
+  id              String   @id            // always "current"
+  token           String   @default("")   // changes on every forced refresh
+  requestedAt     DateTime @updatedAt
+  requestedByName String?
+}
+
 // Patch notes — a short "what's changed" note per release, written at
 // /admin/announcements (Patch Notes tab) and shown once as a popup to each user.
 // Separate from the Announcement banner above: that is one live message for

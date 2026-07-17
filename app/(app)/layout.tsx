@@ -6,6 +6,7 @@ import AdminSidebar from "@/components/admin-sidebar"
 import ImpersonationBanner from "@/components/impersonation-banner"
 import AnnouncementBanner from "@/components/announcement-banner"
 import PatchNotesPopup from "@/components/patch-notes-popup"
+import ForceReloadListener from "@/components/force-reload-listener"
 import MigrationBanner from "@/components/migration-banner"
 import CrtMode from "@/components/crt-mode"
 import TermsGate from "@/components/terms-gate"
@@ -39,6 +40,10 @@ export default async function AppLayout({
   return (
     <div className="flex flex-col h-full min-h-screen">
       <CrtMode />
+      {/* App-wide on purpose: the deploy banner lives only in the cataloguing
+          shell, so an iPad parked on any other page would never hear about a
+          refresh. Renders nothing. */}
+      <ForceReloadListener />
       <ImpersonationBanner />
       <AnnouncementBanner />
       {session.user.role === "ADMIN" && <MigrationBanner />}
