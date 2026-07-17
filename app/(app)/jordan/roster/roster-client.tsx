@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { MCOC_CLASSES, classColour, normChampName } from "@/lib/mcoc"
-import { addChampions, updateChampion, deleteChampion, applyBgsDeck, clearRoster } from "@/lib/actions/mcoc"
+import { addChampions, updateChampion, deleteChampion, applyBgsDeck, clearRoster, renameChampion } from "@/lib/actions/mcoc"
 import ModelPicker, { getJordanModel } from "../model-picker"
 
 type Champ = { id: string; name: string; class: string; stars: number; rank: number; bgsDeck: boolean; imageUrl: string | null }
@@ -43,6 +43,42 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
   const [query, setQuery] = useState("")
   const [editing, setEditing] = useState<string | null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
+
+  // Champion DB names — to spot roster champs whose name doesn't match one (so
+  // they can't be matched in analysis / counters) and offer to correct them.
+  const [catalogNames, setCatalogNames] = useState<string[] | null>(null)
+  const [showFixNames, setShowFixNames] = useState(false)
+  const [fixBusy, setFixBusy] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/jordan/mcoc/profiles/list")
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) setCatalogNames(Array.isArray(d?.champions) ? d.champions.map((c: { name: string }) => c.name).filter(Boolean) : []) })
+      .catch(() => { if (!cancelled) setCatalogNames([]) })
+    return () => { cancelled = true }
+  }, [])
+
+  // Roster champs with no exact Champion DB match, each with the closest catalog
+  // names (prefix either way) to pick from. normChampName is the same key the
+  // analysis/counters match on, so "no match here" = "won't match there".
+  const catalogSet = new Set((catalogNames ?? []).map((n) => normChampName(n)))
+  const unmatched = catalogNames === null ? [] : champs.filter((c) => !catalogSet.has(normChampName(c.name))).map((c) => {
+    const key = normChampName(c.name)
+    const suggestions = (catalogNames ?? [])
+      .filter((n) => { const nn = normChampName(n); return nn.startsWith(key) || key.startsWith(nn) })
+      .slice(0, 6)
+    return { champ: c, suggestions }
+  })
+
+  async function fixName(id: string, newName: string) {
+    const name = newName.trim()
+    if (!name || fixBusy) return
+    setFixBusy(id)
+    try {
+      const res = await renameChampion(id, name)
+      if (res.ok) router.refresh()
+    } finally { setFixBusy(null) }
+  }
 
   // Add / update by photo
   const scanInput = useRef<HTMLInputElement>(null)
@@ -371,6 +407,29 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
         </div>
       )}
 
+      {/* Fix names — roster champs that don't match a Champion DB entry, so they
+          can't be counted in the analysis. Full width for the pickers. */}
+      {showFixNames && unmatched.length > 0 && (
+        <div className="border border-amber-600/50 rounded-xl p-4 space-y-3">
+          <div className="flex items-start gap-2">
+            <div className="flex-1">
+              <p className="text-sm font-bold text-amber-300">🔤 Fix unmatched names ({unmatched.length})</p>
+              <p className="text-xs opacity-60 mt-0.5">
+                These don&apos;t match a Champion DB entry, so their utility isn&apos;t counted. Pick the right name and rename — the picker
+                suggests the closest matches. If one genuinely isn&apos;t in the Champion DB, build it there first.
+              </p>
+            </div>
+            <button onClick={() => setShowFixNames(false)}
+              className="text-[10px] uppercase tracking-widest px-2 py-1.5 rounded border border-[#1f5c33] opacity-60 hover:opacity-100 transition-opacity shrink-0">▲ Hide</button>
+          </div>
+          <div className="space-y-1.5">
+            {unmatched.map(({ champ, suggestions }) => (
+              <FixNameRow key={champ.id} champ={champ} suggestions={suggestions} busy={fixBusy === champ.id} onFix={(name) => fixName(champ.id, name)} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Full analysis breakdown — full width so the rank-up cards have room.
           The rail's Analyse card is the launcher + gap summary. */}
       {analysis && showAnalysis && (
@@ -581,6 +640,13 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
                 ))}
               </ul>
             )}
+            {/* Only when some champ doesn't match the Champion DB. */}
+            {unmatched.length > 0 && (
+              <button onClick={() => setShowFixNames((s) => !s)}
+                className="w-full px-3 py-1.5 rounded-lg border border-amber-600/60 text-amber-300 text-xs font-bold hover:bg-amber-950/30 transition-colors">
+                🔤 Fix {unmatched.length} unmatched name{unmatched.length === 1 ? "" : "s"} {showFixNames ? "▲" : "▼"}
+              </button>
+            )}
             <div className="border-t border-[#1f5c33] pt-2.5 space-y-2">
               <p className="text-[10px] opacity-40 uppercase tracking-widest">or add one by hand</p>
               <input value={mName} onChange={(e) => setMName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addManual() }}
@@ -680,6 +746,30 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
         onChange={(e) => { pickShots(Array.from(e.target.files ?? [])); e.currentTarget.value = "" }} />
       <input ref={bgsInput} type="file" accept="image/*" className="hidden"
         onChange={(e) => { scanBgs(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
+    </div>
+  )
+}
+
+// One unmatched champ + a picker to rename it to a Champion DB name. Holds its
+// own input so each row edits independently; seeds with the top suggestion.
+function FixNameRow({ champ, suggestions, busy, onFix }: {
+  champ: Champ; suggestions: string[]; busy: boolean; onFix: (name: string) => void
+}) {
+  const [val, setVal] = useState(suggestions[0] ?? "")
+  const listId = `fix-${champ.id}`
+  return (
+    <div className="flex items-center gap-2 flex-wrap text-xs border border-[#1f5c33] rounded-lg px-2.5 py-1.5">
+      <span className="text-white font-bold">{champ.name}</span>
+      <span className="opacity-40">{champ.stars}★ R{champ.rank}</span>
+      <span className="opacity-40">→</span>
+      <input value={val} onChange={(e) => setVal(e.target.value)} list={listId}
+        placeholder={suggestions.length ? "" : "type the Champion DB name…"}
+        className="flex-1 min-w-[10rem] bg-black border border-[#1f5c33] rounded px-2 py-1 focus:outline-none focus:border-[#33ff66]" style={{ color: "#33ff66" }} />
+      <datalist id={listId}>{suggestions.map((s) => <option key={s} value={s} />)}</datalist>
+      <button onClick={() => onFix(val)} disabled={busy || !val.trim()}
+        className="px-3 py-1 rounded border border-[#33ff66] font-bold hover:bg-[#0a2214] disabled:opacity-30 transition-colors">
+        {busy ? "…" : "Rename"}
+      </button>
     </div>
   )
 }

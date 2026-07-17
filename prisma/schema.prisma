@@ -1475,6 +1475,21 @@ model McocChampionProfile {
   updatedAt     DateTime  @updatedAt
 }
 
+// A saved Alliance War attack path (secret /jordan MCOC). One row per fight,
+// ordered, per owner. The nodes photo is uploaded once and reused every war
+// (the path's nodes don't change); only the defender is overtyped each week.
+model McocWarFight {
+  id            String   @id @default(cuid())
+  ownerId       String
+  order         Int      @default(0)   // position on the path, 0-based
+  defender      String   @default("")  // who's on this node this war (overtyped each week)
+  nodesImageKey String?                // R2 key of the nodes photo for this fight
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([ownerId])
+}
+
 // Signed acceptance of the iPad Acceptable Use Policy (see lib/terms.ts + components/terms-gate.tsx).
 // One row per user per policy version; the drawn signature is stored as a PNG data URL.
 // Decoupled from User (plain userId, no FK) so it never affects the login select.

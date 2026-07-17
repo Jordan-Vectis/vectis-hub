@@ -62,6 +62,17 @@ const MIGRATIONS = [
   `ALTER TABLE "McocChampionProfile" ADD COLUMN IF NOT EXISTS "counters" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
   `ALTER TABLE "McocChampionProfile" ADD COLUMN IF NOT EXISTS "defenderNotes" TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE "McocChampionProfile" ADD COLUMN IF NOT EXISTS "myCounters" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
+  `CREATE TABLE IF NOT EXISTS "McocWarFight" (
+    "id"            TEXT NOT NULL,
+    "ownerId"       TEXT NOT NULL,
+    "order"         INTEGER NOT NULL DEFAULT 0,
+    "defender"      TEXT NOT NULL DEFAULT '',
+    "nodesImageKey" TEXT,
+    "createdAt"     TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt"     TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "McocWarFight_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "McocWarFight_ownerId_idx" ON "McocWarFight"("ownerId")`,
   `CREATE TABLE IF NOT EXISTS "ConditionWording" (
     "id"        TEXT NOT NULL,
     "label"     TEXT NOT NULL,
