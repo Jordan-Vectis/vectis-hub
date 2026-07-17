@@ -5,6 +5,7 @@ import CrmSidebar from "@/components/crm-sidebar"
 import AdminSidebar from "@/components/admin-sidebar"
 import ImpersonationBanner from "@/components/impersonation-banner"
 import AnnouncementBanner from "@/components/announcement-banner"
+import PatchNotesPopup from "@/components/patch-notes-popup"
 import MigrationBanner from "@/components/migration-banner"
 import CrtMode from "@/components/crt-mode"
 import TermsGate from "@/components/terms-gate"
@@ -53,6 +54,9 @@ export default async function AppLayout({
         <main className="flex-1 overflow-auto bg-gray-50 dark:bg-[#141416]">{needsTerms ? null : children}</main>
       </div>
       {needsTerms && <TermsGate userName={session.user.name ?? ""} />}
+      {/* Not while the terms gate is up — signing the policy comes first, and two
+          stacked modals would be a mess. They'll get the notes on the next load. */}
+      {!needsTerms && <PatchNotesPopup />}
     </div>
   )
 }
