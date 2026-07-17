@@ -10,7 +10,18 @@ type Champ = { id: string; name: string; class: string; stars: number; rank: num
 type ReadChamp = { name: string; class: string; rank: number | null; imageKey?: string; imageUrl?: string }
 type Scanned = ReadChamp & { include: boolean; rank: number | null }
 type BgsReview = { champs: Champ[]; selected: Set<string>; unmatched: string[] }
+type Gap = { tag: string; whyItMatters: string; fixes: string[] }
+type RankUp = { champion: string; class: string; priority: string; why: string; fills: string[] }
+type Analysis = {
+  missingTags: string[]; coveredTags: string[]; highRankCount: number; unprofiled: string[]
+  summary: string; gaps: Gap[]; rankUps: RankUp[]
+}
 const GREEN = "#33ff66"
+const PRIORITY_COL: Record<string, string> = {
+  high:   "border-[#33ff66] text-[#33ff66]",
+  medium: "border-amber-500 text-amber-400",
+  low:    "border-[#1f5c33] opacity-60",
+}
 
 export default function RosterClient({ initial }: { initial: Champ[] }) {
   const router = useRouter()
@@ -30,6 +41,33 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
   const [scanning, setScanning] = useState(false)
   const [scanned, setScanned] = useState<Scanned[] | null>(null)
   const [scanMsg, setScanMsg] = useState<string | null>(null)
+
+  // Roster analysis — what to rank up + what utility is missing. Reads the
+  // roster that's already stored (no uploading) and treats the whole Champion
+  // DB as rankable.
+  const [analysing, setAnalysing] = useState(false)
+  const [analysis, setAnalysis] = useState<Analysis | null>(null)
+  const [analysisErr, setAnalysisErr] = useState<string | null>(null)
+  const [showAnalysis, setShowAnalysis] = useState(false)
+
+  async function analyseRoster() {
+    if (analysing) return
+    setAnalysing(true); setAnalysisErr(null); setAnalysis(null); setShowAnalysis(true)
+    try {
+      const res = await fetch("/api/jordan/mcoc/roster-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: getJordanModel() || undefined }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.error || "That didn't work — try again.")
+      setAnalysis(j)
+    } catch (e: any) {
+      setAnalysisErr(e?.message ?? "That didn't work — try again.")
+    } finally {
+      setAnalysing(false)
+    }
+  }
 
   // BGS deck photo
   const bgsInput = useRef<HTMLInputElement>(null)
@@ -202,6 +240,114 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
           </select>
           <button onClick={addManual} disabled={!mName.trim()} className="px-4 py-2 rounded-lg border border-[#1f5c33] text-sm hover:border-[#33ff66] disabled:opacity-30 transition-colors">ADD</button>
         </div>
+      </div>
+
+      {/* Roster analysis */}
+      <div className="border border-[#1f5c33] rounded-xl p-4 space-y-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex-1 min-w-[14rem]">
+            <p className="text-sm font-bold">🔬 What should I rank up?</p>
+            <p className="text-xs opacity-60 mt-0.5">
+              Uses the roster below — nothing to upload. Rank 4+ champs count as utility you can field; every champion in the Champion DB is treated as available to rank.
+            </p>
+          </div>
+          <button onClick={analyseRoster} disabled={analysing}
+            className="px-5 py-2.5 rounded-lg text-sm font-bold text-black disabled:opacity-40 transition-colors"
+            style={{ background: GREEN }}>
+            {analysing ? "ANALYSING…" : "🔬 ANALYSE ROSTER"}
+          </button>
+          {analysis && !analysing && (
+            <button onClick={() => setShowAnalysis((s) => !s)}
+              className="text-[10px] uppercase tracking-widest px-2 py-1.5 rounded border border-[#1f5c33] opacity-60 hover:opacity-100 transition-opacity">
+              {showAnalysis ? "▲ HIDE" : "▼ SHOW"}
+            </button>
+          )}
+        </div>
+
+        {analysing && <p className="text-sm opacity-50 animate-pulse">Reading your roster, working out the gaps and checking the current meta…</p>}
+        {analysisErr && <p className="text-sm text-red-400">✗ {analysisErr}</p>}
+
+        {analysis && showAnalysis && (
+          <div className="space-y-4 border-t border-[#1f5c33] pt-3">
+            {analysis.summary && <p className="text-sm leading-relaxed">{analysis.summary}</p>}
+
+            <p className="text-[10px] opacity-40 uppercase tracking-widest">
+              Based on {analysis.highRankCount} rank 4+ champion{analysis.highRankCount === 1 ? "" : "s"}
+            </p>
+
+            {/* Counted here, not by the AI — plain set arithmetic over the stored tags. */}
+            <div>
+              <p className="text-[10px] opacity-50 uppercase tracking-widest mb-1.5">
+                Utility you&apos;re missing ({analysis.missingTags.length})
+              </p>
+              {analysis.missingTags.length === 0 ? (
+                <p className="text-xs opacity-60">Nothing — your rank 4+ champs cover every tracked utility.</p>
+              ) : (
+                <div className="flex gap-1.5 flex-wrap">
+                  {analysis.missingTags.map((t) => (
+                    <span key={t} className="text-[11px] px-2 py-0.5 rounded-full border border-amber-600/60 text-amber-400">{t}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {analysis.unprofiled.length > 0 && (
+              <p className="text-[11px] text-amber-400/80">
+                ⚠ {analysis.unprofiled.length} of your rank 4+ champs aren&apos;t profiled yet, so their utility isn&apos;t counted and some
+                &quot;missing&quot; tags may be wrong: {analysis.unprofiled.join(", ")}. Run Build profiles in the 🧬 CHAMPION DB tab.
+              </p>
+            )}
+
+            {analysis.rankUps.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-[10px] opacity-50 uppercase tracking-widest">Rank these up</p>
+                {analysis.rankUps.map((r, i) => {
+                  const owned = champs.find((c) => normChampName(c.name) === normChampName(r.champion))
+                  return (
+                    <div key={`${r.champion}-${i}`} className="border border-[#1f5c33] rounded-lg p-3 space-y-1.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold" style={{ color: classColour(r.class || owned?.class || "") }}>{r.champion}</span>
+                        {r.class && <span className="text-[10px] opacity-50 uppercase tracking-widest">{r.class}</span>}
+                        <span className={`text-[10px] uppercase tracking-widest px-1.5 py-0.5 rounded border ${PRIORITY_COL[r.priority] ?? PRIORITY_COL.medium}`}>
+                          {r.priority}
+                        </span>
+                        {owned && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-[#1f5c33] opacity-70">
+                            you have {owned.stars}★ r{owned.rank}
+                          </span>
+                        )}
+                      </div>
+                      {r.why && <p className="text-xs opacity-80 leading-relaxed">{r.why}</p>}
+                      {r.fills.length > 0 && (
+                        <div className="flex gap-1.5 flex-wrap items-center">
+                          <span className="text-[10px] opacity-40 uppercase tracking-widest">Fills</span>
+                          {r.fills.map((f) => (
+                            <span key={f} className="text-[10px] px-1.5 py-0.5 rounded-full border border-[#1f5c33]">{f}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {analysis.gaps.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-[10px] opacity-50 uppercase tracking-widest">The gaps that cost you most</p>
+                {analysis.gaps.map((g, i) => (
+                  <div key={`${g.tag}-${i}`} className="border border-[#1f5c33] rounded-lg p-3 space-y-1">
+                    <span className="text-sm font-bold text-amber-400">{g.tag}</span>
+                    {g.whyItMatters && <p className="text-xs opacity-80 leading-relaxed">{g.whyItMatters}</p>}
+                    {g.fixes.length > 0 && (
+                      <p className="text-xs opacity-60">Best fixes: {g.fixes.join(" · ")}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Battlegrounds deck */}
