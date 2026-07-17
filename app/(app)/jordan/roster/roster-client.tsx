@@ -99,17 +99,55 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
     return j.champions ?? []
   }
 
-  async function scan(f: File | null) {
-    if (!f || scanning) return
+  // Several screenshots per scan: a rank tier rarely fits on one screen. Each
+  // image is read on its own call rather than batched into one — the grids stay
+  // separate that way, and one unreadable shot can't sink the others.
+  async function scan(files: File[]) {
+    if (!files.length || scanning) return
     setScanning(true); setScanMsg(null); setScanned(null)
     try {
-      const list = await readChampions(f)
-      if (!list.length) { setScanMsg("No champions read — try a clearer screenshot, or add by hand below."); return }
+      const merged: ReadChamp[] = []
+      const seen = new Map<string, number>()   // normalised name -> index in merged
+      const failed: string[] = []
+
+      for (let i = 0; i < files.length; i++) {
+        if (files.length > 1) setScanMsg(`Reading screenshot ${i + 1} of ${files.length}…`)
+        let list: ReadChamp[] = []
+        try {
+          list = await readChampions(files[i])
+        } catch {
+          // Keep going — losing 2 of 3 screenshots to one bad shot is worse.
+          failed.push(files[i].name || `#${i + 1}`)
+          continue
+        }
+        for (const c of list) {
+          // Scrolling screenshots overlap, so the same champ appears in several.
+          // Keep the first, but take a portrait from a later one if the first
+          // didn't get a usable crop.
+          const key = normChampName(c.name)
+          const at = seen.get(key)
+          if (at === undefined) { seen.set(key, merged.length); merged.push(c); continue }
+          if (!merged[at].imageUrl && c.imageUrl) merged[at] = { ...merged[at], imageKey: c.imageKey, imageUrl: c.imageUrl }
+        }
+      }
+
+      if (!merged.length) {
+        setScanMsg(failed.length
+          ? `✗ Couldn't read ${failed.length === files.length ? "any of those screenshots" : "those screenshots"} — try clearer ones, or add by hand below.`
+          : "No champions read — try a clearer screenshot, or add by hand below.")
+        return
+      }
+
+      setScanMsg([
+        files.length > 1 ? `Read ${files.length} screenshots.` : "",
+        failed.length ? `⚠ ${failed.length} couldn't be read (${failed.join(", ")}) — the rest are below.` : "",
+      ].filter(Boolean).join(" ") || null)
+
       // The Rank selector is the authority (a roster screenshot is one rank
       // tier). We DON'T trust the AI's per-champ rank read — it misreads the
       // small badges. Every champ defaults to the selected rank; the per-champ
       // dropdown is there only for the odd exception.
-      setScanned(list.map((c) => ({ ...c, include: true, rank: addRank })))
+      setScanned(merged.map((c) => ({ ...c, include: true, rank: addRank })))
     } catch (e: any) {
       setScanMsg("✗ " + (e?.message ?? "Scan failed."))
     } finally { setScanning(false) }
@@ -191,7 +229,10 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
       {/* Add / update champions */}
       <div className="border border-[#1f5c33] rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <p className="text-sm opacity-70">Scan a roster screenshot — it reads names, ranks &amp; portraits. Re-scan any time to update ranks.</p>
+          <p className="text-sm opacity-70">
+            Scan roster screenshots — pick as many as you like for the rank tier below; overlapping shots are merged, so scroll and grab
+            the lot. Reads names, classes &amp; portraits. Re-scan any time to update ranks.
+          </p>
           <ModelPicker />
         </div>
 
@@ -205,7 +246,7 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
           </select>
           <button onClick={() => scanInput.current?.click()} disabled={scanning}
             className="px-4 py-2 rounded-lg border border-[#33ff66] text-sm font-bold hover:bg-[#0a2214] disabled:opacity-40 transition-colors ml-auto">
-            {scanning ? "READING…" : "📷 Scan roster screenshot"}
+            {scanning ? "READING…" : "📷 Scan roster screenshots"}
           </button>
         </div>
         {scanMsg && <p className={`text-xs ${scanMsg.startsWith("✗") ? "text-red-400" : "opacity-70"}`}>{scanMsg}</p>}
@@ -499,8 +540,8 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
         </div>
       ))}
 
-      <input ref={scanInput} type="file" accept="image/*" className="hidden"
-        onChange={(e) => { scan(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
+      <input ref={scanInput} type="file" accept="image/*" multiple className="hidden"
+        onChange={(e) => { scan(Array.from(e.target.files ?? [])); e.currentTarget.value = "" }} />
       <input ref={bgsInput} type="file" accept="image/*" className="hidden"
         onChange={(e) => { scanBgs(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
     </div>
