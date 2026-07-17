@@ -7,7 +7,7 @@ import { addChampions, updateChampion, deleteChampion, applyBgsDeck } from "@/li
 import ModelPicker, { getJordanModel } from "../model-picker"
 
 type Champ = { id: string; name: string; class: string; stars: number; rank: number; bgsDeck: boolean; imageUrl: string | null }
-type ReadChamp = { name: string; class: string; rank: number | null; imageKey?: string; imageUrl?: string }
+type ReadChamp = { name: string; class: string; rank: number | null; inCatalog?: boolean; imageKey?: string; imageUrl?: string }
 type Scanned = ReadChamp & { include: boolean; rank: number | null }
 type BgsReview = { champs: Champ[]; selected: Set<string>; unmatched: string[] }
 type Gap = { tag: string; whyItMatters: string; fixes: string[] }
@@ -219,6 +219,11 @@ export default function RosterClient({ initial }: { initial: Champ[] }) {
                   <button onClick={() => setScanned((l) => l!.map((x, j) => j === i ? { ...x, include: !x.include } : x))} className="inline-flex items-center gap-1.5">
                     <Portrait url={s.imageUrl} cls={s.class} size={26} />
                     <span className={s.include ? "text-white" : "line-through"}>{s.name}</span>
+                    {/* Not in the Champion DB = it'll contribute no utility to the
+                        roster analysis. Better seen now than as a mystery gap later. */}
+                    {s.inCatalog === false && (
+                      <span title="Not in the Champion DB — its utility won't count in the roster analysis" className="text-amber-400 text-[10px]">⚠</span>
+                    )}
                   </button>
                   <select value={s.rank ?? addRank} onChange={(e) => setScanned((l) => l!.map((x, j) => j === i ? { ...x, rank: Number(e.target.value) } : x))}
                     className="bg-black border border-[#1f5c33] rounded px-1 text-[10px]" style={{ color: GREEN }}>

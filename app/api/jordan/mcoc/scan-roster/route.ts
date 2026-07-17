@@ -5,7 +5,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
 import { isJordan } from "@/lib/jordan-auth"
 import { withGeminiRetry, isTransientGeminiError } from "@/lib/gemini-retry"
-import { normaliseClass, cleanChampName } from "@/lib/mcoc"
+import { prisma } from "@/lib/prisma"
+import { normaliseClass, cleanChampName, normChampName } from "@/lib/mcoc"
 import { uploadBufferToR2, getSignedImageUrl } from "@/lib/r2"
 
 export const maxDuration = 120
@@ -14,11 +15,21 @@ export const maxDuration = 120
 // Returns each champion with its class, rank, and a PORTRAIT cropped from the
 // screenshot (stored in R2). Used for both adding and updating the roster.
 // FormData: image, model. Locked to jordan.orange.
+//
+// ⚠ Names are snapped to the Champion DB's names where possible. The grid prints
+// a SHORT name ("Spider-Man") while the catalog — written by a different prompt,
+// which is told to use each champion's common in-game name — holds the qualified
+// variant ("Spider-Man (Classic)"). Storing the short name meant the roster
+// analysis couldn't match it to a profile, so its utility went uncounted and was
+// reported as a false gap. Same idea as scan-bgs: recognition against a known
+// list beats free-form naming. Here the model has the PORTRAIT ART to choose
+// between variants, which is the signal a text-only matcher lacks — that's why
+// this can pick the variant while the analysis matcher must not guess.
 
 const PROMPT = `You are reading a screenshot from Marvel Contest of Champions (MCOC) — a roster / champion grid. List EVERY champion portrait visible, in reading order.
 
 For each champion give:
-- name: its common name (e.g. "Hercules", "Kitty Pryde", "Serpent").
+- name: its common name (e.g. "Hercules", "Kitty Pryde", "Serpent"). See the CANONICAL NAMES rule below.
 - class: Cosmic, Tech, Mutant, Skill, Science or Mystic if you can tell from the portrait border colour (Cosmic=blue, Tech=teal, Mutant=yellow, Skill=red, Science=green, Mystic=purple), else "".
 - rank: the rank number shown on the portrait (the small number, usually 1–5), or null if not visible.
 - box: the bounding box of JUST that champion's square portrait image, as [ymin, xmin, ymax, xmax] normalised to 0–1000 (integers). Be tight to the portrait art.
@@ -27,6 +38,17 @@ Return STRICT JSON only (no prose, no markdown fences):
 { "champions": [ { "name": string, "class": string, "rank": number|null, "box": [number,number,number,number] } ], "confident": boolean }
 
 Do not invent champions you can't see. If it isn't an MCOC roster, set confident false and champions [].`
+
+// Appended only when the Champion DB has names to snap to.
+function canonicalRule(names: string[]): string {
+  return `
+
+CANONICAL NAMES — the app already knows these champions:
+${names.join(" | ")}
+
+For each champion you read, set "name" to the EXACT name from that list. The grid usually prints a SHORT name (e.g. "Spider-Man", "Cyclops") where the list holds a qualified variant (e.g. "Spider-Man (Classic)", "Cyclops (Blue Team)"), and several variants share the same short name — use the PORTRAIT ART to work out which one it actually is, not just the printed text.
+If you cannot tell which variant it is from the art, or the champion is genuinely not in the list, return the name exactly as printed on the grid instead. Never pick a variant at random — a wrong variant is worse than the short name.`
+}
 
 function clampRank(n: unknown): number | null {
   const r = Number(n)
@@ -48,11 +70,20 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer())
     const imagePart = { inlineData: { data: buffer.toString("base64"), mimeType: file.type || "image/jpeg" } }
 
+    // Loaded here rather than posted by the client: the client has no reason to
+    // hold the catalog, and a stale tab couldn't send an out-of-date one.
+    const catalog = await prisma.mcocChampionProfile.findMany({
+      select: { name: true, nameNorm: true },
+      orderBy: { name: "asc" },
+    })
+    const catalogByNorm = new Map(catalog.map((c) => [c.nameNorm, c.name]))
+    const prompt = catalog.length ? PROMPT + canonicalRule(catalog.map((c) => c.name)) : PROMPT
+
     const modelId = await getToolModel("jordan_fun", form.get("model") as string | null)
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({ model: modelId, generationConfig: { responseMimeType: "application/json" } })
 
-    const result = await withGeminiRetry(() => model.generateContent([imagePart, { text: PROMPT }]))
+    const result = await withGeminiRetry(() => model.generateContent([imagePart, { text: prompt }]))
     const response = result.response
     const block = response.promptFeedback?.blockReason
     if (block) return NextResponse.json({ error: `Blocked by Gemini: ${block}` }, { status: 422 })
@@ -73,17 +104,29 @@ export async function POST(req: NextRequest) {
     const W = meta.width ?? 0, H = meta.height ?? 0
 
     const seen = new Set<string>()
-    const champions: { name: string; class: string; rank: number | null; imageKey?: string; imageUrl?: string }[] = []
+    type Scanned = { name: string; class: string; rank: number | null; inCatalog: boolean; imageKey?: string; imageUrl?: string }
+    const champions: Scanned[] = []
 
     for (const r of rows) {
-      const name = cleanChampName(r?.name ?? "")
+      let name = cleanChampName(r?.name ?? "")
       if (!name) continue
+      // Snap to the catalog's exact spelling. The model was asked for the exact
+      // name, but normalising here means near-misses of punctuation/case still
+      // land on the canonical row rather than minting a near-duplicate.
+      const canonical = catalogByNorm.get(normChampName(name))
+      if (canonical) name = canonical
       const key = name.toLowerCase()
       if (seen.has(key)) continue
       seen.add(key)
 
-      const champ: { name: string; class: string; rank: number | null; imageKey?: string; imageUrl?: string } = {
-        name, class: normaliseClass(r?.class ?? ""), rank: clampRank(r?.rank),
+      const champ: Scanned = {
+        name,
+        class: normaliseClass(r?.class ?? ""),
+        rank: clampRank(r?.rank),
+        // Surfaced in the confirm step: a champ the Champion DB doesn't know
+        // contributes no utility to the roster analysis, so it's worth seeing
+        // BEFORE it's saved rather than as a mystery gap weeks later.
+        inCatalog: !!canonical,
       }
 
       // Crop the portrait if we have a valid box and a readable image.
