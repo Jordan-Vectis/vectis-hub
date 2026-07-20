@@ -4,7 +4,7 @@ import sharp from "sharp"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
 import { isJordan } from "@/lib/jordan-auth"
-import { withGeminiRetry, isTransientGeminiError } from "@/lib/gemini-retry"
+import { withGeminiRetry, friendlyGeminiError } from "@/lib/gemini-retry"
 import { prisma } from "@/lib/prisma"
 import { normaliseClass, cleanChampName, normChampName } from "@/lib/mcoc"
 import { parseLooseJson } from "@/lib/mcoc-ai"
@@ -183,9 +183,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ champions, confident: parsed?.confident !== false && champions.length > 0 })
   } catch (e: any) {
     console.error("jordan/mcoc/scan-roster error:", e)
-    if (isTransientGeminiError(e)) {
-      return NextResponse.json({ error: "That model is overloaded right now — try again in a minute, or switch model." }, { status: 503 })
-    }
+    const friendly = friendlyGeminiError(e)
+    if (friendly) return NextResponse.json({ error: friendly.error }, { status: friendly.status })
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
   }
 }

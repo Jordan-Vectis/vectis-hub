@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
 import { isJordan } from "@/lib/jordan-auth"
-import { withGeminiRetry, isTransientGeminiError } from "@/lib/gemini-retry"
+import { withGeminiRetry, friendlyGeminiError } from "@/lib/gemini-retry"
 
 export const maxDuration = 120
 
@@ -119,9 +119,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ reply: response.text(), queries })
   } catch (e: any) {
     console.error("jordan/chat error:", e)
-    if (isTransientGeminiError(e)) {
-      return NextResponse.json({ error: "That model is overloaded right now — try again in a minute, or switch model below." }, { status: 503 })
-    }
+    const friendly = friendlyGeminiError(e)
+    if (friendly) return NextResponse.json({ error: friendly.error }, { status: friendly.status })
     const msg = String(e?.message ?? e)
     if (msg.includes("400") || msg.toLowerCase().includes("tool") || msg.toLowerCase().includes("grounding")) {
       return NextResponse.json({ error: "This model doesn't support web search — turn it off, or switch model below." }, { status: 400 })

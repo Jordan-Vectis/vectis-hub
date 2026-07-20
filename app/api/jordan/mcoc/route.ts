@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
 import { isJordan } from "@/lib/jordan-auth"
-import { withGeminiRetry, isTransientGeminiError } from "@/lib/gemini-retry"
+import { withGeminiRetry, friendlyGeminiError } from "@/lib/gemini-retry"
 import { parseLooseJson } from "@/lib/mcoc-ai"
 
 export const maxDuration = 120
@@ -150,9 +150,8 @@ export async function POST(req: NextRequest) {
     })
   } catch (e: any) {
     console.error("jordan/mcoc error:", e)
-    if (isTransientGeminiError(e)) {
-      return NextResponse.json({ error: "That model is overloaded right now — try again in a minute, or switch model." }, { status: 503 })
-    }
+    const friendly = friendlyGeminiError(e)
+    if (friendly) return NextResponse.json({ error: friendly.error }, { status: friendly.status })
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
   }
 }

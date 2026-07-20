@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { isJordan } from "@/lib/jordan-auth"
 import { groundedJson } from "@/lib/mcoc-ai"
 import { MCOC_CLASSES, cleanChampName, normChampName, normaliseClass } from "@/lib/mcoc"
-import { isTransientGeminiError } from "@/lib/gemini-retry"
+import { friendlyGeminiError } from "@/lib/gemini-retry"
 
 export const maxDuration = 120
 
@@ -46,7 +46,8 @@ Use each champion's common in-game name. Do not include champions of other class
     return NextResponse.json({ class: cls, found: rows.length, added, updated, total })
   } catch (e: any) {
     console.error("jordan/mcoc/catalog error:", e)
-    if (isTransientGeminiError(e)) return NextResponse.json({ error: "Model overloaded — try again shortly." }, { status: 503 })
+    const friendly = friendlyGeminiError(e)
+    if (friendly) return NextResponse.json({ error: friendly.error }, { status: friendly.status })
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
   }
 }

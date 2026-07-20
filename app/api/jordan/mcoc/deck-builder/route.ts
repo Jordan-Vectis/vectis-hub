@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { isJordan } from "@/lib/jordan-auth"
 import { groundedJson } from "@/lib/mcoc-ai"
-import { isTransientGeminiError } from "@/lib/gemini-retry"
+import { friendlyGeminiError } from "@/lib/gemini-retry"
 
 export const maxDuration = 300
 
@@ -68,7 +68,8 @@ Return STRICT JSON only (no prose, no markdown):
     })
   } catch (e: any) {
     console.error("jordan/mcoc/deck-builder error:", e)
-    if (isTransientGeminiError(e)) return NextResponse.json({ error: "Model overloaded — try again shortly." }, { status: 503 })
+    const friendly = friendlyGeminiError(e)
+    if (friendly) return NextResponse.json({ error: friendly.error }, { status: friendly.status })
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
   }
 }

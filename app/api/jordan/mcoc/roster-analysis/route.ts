@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { isJordan } from "@/lib/jordan-auth"
-import { isTransientGeminiError } from "@/lib/gemini-retry"
+import { friendlyGeminiError } from "@/lib/gemini-retry"
 import { groundedJson } from "@/lib/mcoc-ai"
 import { MCOC_TAGS, normChampName } from "@/lib/mcoc"
 
@@ -184,12 +184,8 @@ export async function POST(req: NextRequest) {
     })
   } catch (e: any) {
     console.error("jordan/mcoc/roster-analysis error:", e)
-    if (isTransientGeminiError(e)) {
-      return NextResponse.json(
-        { error: "That model is overloaded right now — try again in a minute, or switch model." },
-        { status: 503 }
-      )
-    }
+    const friendly = friendlyGeminiError(e)
+    if (friendly) return NextResponse.json({ error: friendly.error }, { status: friendly.status })
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
   }
 }

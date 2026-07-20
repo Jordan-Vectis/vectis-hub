@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { isJordan } from "@/lib/jordan-auth"
 import { groundedJson } from "@/lib/mcoc-ai"
 import { getObjectBuffer } from "@/lib/r2"
-import { isTransientGeminiError } from "@/lib/gemini-retry"
+import { friendlyGeminiError } from "@/lib/gemini-retry"
 
 export const maxDuration = 180
 
@@ -124,7 +124,8 @@ Rules: 2 or 3 teams, exactly 3 champions each, names copied from the roster. One
     })
   } catch (e: any) {
     console.error("jordan/mcoc/aw-path error:", e)
-    if (isTransientGeminiError(e)) return NextResponse.json({ error: "Model overloaded — try again shortly." }, { status: 503 })
+    const friendly = friendlyGeminiError(e)
+    if (friendly) return NextResponse.json({ error: friendly.error }, { status: friendly.status })
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
   }
 }

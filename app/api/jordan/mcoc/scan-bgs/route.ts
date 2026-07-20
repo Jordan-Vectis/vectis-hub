@@ -3,7 +3,7 @@ import sharp from "sharp"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
 import { isJordan } from "@/lib/jordan-auth"
-import { withGeminiRetry, isTransientGeminiError } from "@/lib/gemini-retry"
+import { withGeminiRetry, friendlyGeminiError } from "@/lib/gemini-retry"
 import { normChampName } from "@/lib/mcoc"
 
 export const maxDuration = 90
@@ -75,7 +75,8 @@ Rules: every name in "matched" MUST be copied exactly from the owned list above.
     return NextResponse.json({ matched })
   } catch (e: any) {
     console.error("jordan/mcoc/scan-bgs error:", e)
-    if (isTransientGeminiError(e)) return NextResponse.json({ error: "Model overloaded — try again shortly." }, { status: 503 })
+    const friendly = friendlyGeminiError(e)
+    if (friendly) return NextResponse.json({ error: friendly.error }, { status: friendly.status })
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })
   }
 }
