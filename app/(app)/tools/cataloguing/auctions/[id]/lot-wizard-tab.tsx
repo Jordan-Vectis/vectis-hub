@@ -1072,10 +1072,22 @@ export default function LotWizardTab({
     photoFiles.forEach(p => fd.append("photo", p.file))
 
     start(async () => {
+      let res: unknown
       try {
-        await createLot(auctionId, fd)
+        res = await createLot(auctionId, fd)
       } catch (e: any) {
         setSaveStatus(`⚠ ${e?.message ?? "Failed to save lot"}`)
+        return
+      }
+      // Server idle gate: this lot won't be created until the working-hours gap
+      // since the last save is accounted for. Reuse the existing popup — logging
+      // the reason re-runs performSave, which then passes (a covering log exists).
+      // Enforced server-side so it survives closing the app / signing out.
+      if (res && typeof res === "object" && (res as { needsIdle?: boolean }).needsIdle) {
+        const g = res as { idleMs: number; sinceMs: number }
+        pendingSaveRef.current   = true
+        idleWithinLotRef.current = false
+        raiseIdlePopup(g.sinceMs, g.idleMs)
         return
       }
       barcodeStartedAt.current = null

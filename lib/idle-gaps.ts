@@ -6,11 +6,48 @@
 // Pure functions (no DB) so they can be unit-tested; the admin page feeds them
 // rows it has loaded.
 
-import { workingMsBetween } from "@/lib/idle-timer-config"
-
 // 8 working hours — a gap this long is a day off / holiday, not idle-during-work,
 // so it's excluded (mirrors the client's own EIGHT_WORK_HOURS skip).
 export const FULL_DAY_WORK_MS = 8 * 60 * 60 * 1000
+
+// ── Europe/London working-hours (server-side) ────────────────────────────────
+// The client's workingMsBetween reads the browser's local clock, which for staff
+// IS London. On the server (Railway = UTC) that's wrong by the BST/GMT offset, so
+// server code (the gap report + the create-lot gate) uses these London-explicit
+// versions instead. Gaps are same-day (8h+ excluded), so a single offset sample
+// is safe — the only imprecision would be a gap straddling a clock change.
+
+function londonOffsetMs(utcMs: number): number {
+  // London wall-clock for this instant, parsed back as if local, minus UTC.
+  const s = new Date(utcMs).toLocaleString("en-CA", { timeZone: "Europe/London", hour12: false })
+  return new Date(s.replace(", ", "T")).getTime() - utcMs
+}
+
+// YYYY-MM-DD of a UTC instant in London — for "is this the first lot of the day?".
+export function londonDayKey(utcMs: number): string {
+  return new Date(utcMs).toLocaleDateString("en-CA", { timeZone: "Europe/London" })
+}
+
+// Working ms (Mon–Fri 09:00–17:00 Europe/London) between two UTC instants.
+export function workingMsLondon(startMs: number, endMs: number): number {
+  if (endMs <= startMs) return 0
+  const off = londonOffsetMs(startMs)
+  const s = startMs + off, e = endMs + off   // shift so UTC hours read as London wall clock
+  let total = 0
+  const cur = new Date(s); cur.setUTCHours(0, 0, 0, 0)
+  for (let i = 0; i < 60; i++) {
+    if (cur.getTime() > e) break
+    const wd = cur.getUTCDay()
+    if (wd >= 1 && wd <= 5) {
+      const ws = new Date(cur); ws.setUTCHours(9, 0, 0, 0)
+      const we = new Date(cur); we.setUTCHours(17, 0, 0, 0)
+      const overlap = Math.min(e, we.getTime()) - Math.max(s, ws.getTime())
+      if (overlap > 0) total += overlap
+    }
+    cur.setUTCDate(cur.getUTCDate() + 1)
+  }
+  return total
+}
 
 export type GapSave = { savedAt: Date; lotBarcode?: string | null }
 export type GapIdle = { idleStartedAt: Date; idleDurationMs: number; reason: string }
@@ -54,7 +91,7 @@ export function findUserGaps(
   const gaps: IdleGap[] = []
   for (let i = 1; i < sorted.length; i++) {
     const prev = sorted[i - 1], next = sorted[i]
-    const workingMs = workingMsBetween(prev.savedAt.getTime(), next.savedAt.getTime())
+    const workingMs = workingMsLondon(prev.savedAt.getTime(), next.savedAt.getTime())
     if (workingMs < thresholdMs || workingMs >= FULL_DAY_WORK_MS) continue
     const idle = matchIdle(prev.savedAt.getTime(), next.savedAt.getTime(), idles)
     gaps.push({

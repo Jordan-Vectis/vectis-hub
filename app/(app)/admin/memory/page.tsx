@@ -29,7 +29,10 @@ Built after a cataloguer had a ~4h working-hours gap between lot saves with zero
 
 - **lib/idle-gaps.ts** — pure detector: working-hours gaps between consecutive lot saves over the user's own threshold, each marked explained (a matching idle reason was logged) or not. Skips gaps of a full working day+ (days off).
 - **/admin/idle-gaps** — ADMIN-ONLY full-width report. Date range, groups by cataloguer, flags unexplained gaps, shows a scan-timer-OFF badge. Reads the save history directly, so it catches the gap however the in-app popup was avoided. Linked from Admin → Idle Timer + its own Admin card.
-- The popup itself has no dismiss button — it can't be closed without logging a reason. Jack's "catch gaps inside a lot" commit hardens the WITHIN-lot case (walk away mid-lot); the between-lots case that started this may still have a hole, but the detector catches it either way.`,
+- The popup itself has no dismiss button — it can't be closed without logging a reason.
+
+## Server-side gate (2026-07-20 — the real fix)
+The bypass was closing the app / signing out / reloading, which resets the client's idle baseline. Fix: enforce the gate SERVER-SIDE in createLot. First lot of the (London) day sets the baseline; if a cataloguer's next lot comes after a working-hours gap over their own threshold with no idle reason logged, the server refuses to create it and the app shows the popup — once they log the reason it saves. Because it reads the save history, closing/reopening/logout can't get around it. Working hours are computed in Europe/London server-side (Railway is UTC). The report and gate share the same calc.`,
   },
   {
     filename: "manage_lots_bulk_undo.md",

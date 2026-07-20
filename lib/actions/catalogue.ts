@@ -7,6 +7,7 @@ import {
   logLotCreated, logLotsCreated, logLotDeleted, logLotFieldChanges, logLotPhoto,
   buildLotEventRow, writeLotEvents, type LotLogCtx,
 } from "@/lib/lot-log"
+import { workingMsLondon, londonDayKey } from "@/lib/idle-gaps"
 
 // First 83 characters of the description — no sentence splitting, full stops do not break title
 function titleFromDescription(desc: string): string {
@@ -385,6 +386,41 @@ export async function toggleAuctionComplete(id: string, value: boolean) {
   revalidatePath("/tools/cataloguing/auctions")
 }
 
+// Result of the create-lot idle gate — returned to the client instead of
+// creating the lot when a working-hours gap since the cataloguer's last save
+// hasn't been accounted for.
+export type IdleGateBlock = { needsIdle: true; idleMs: number; sinceMs: number }
+
+// Server-enforced idle gate. A lot can't be created until an over-threshold
+// working-hours gap since this cataloguer's last save is accounted for with an
+// idle reason. Because it reads the save history, closing the app / signing out
+// / reloading can't reset it (unlike the client popup, which lost its baseline).
+// The client retry after logging the reason passes naturally — a covering IdleLog
+// then exists. First lot of a London day is the baseline and never gated.
+async function idleGateForCreate(userId: string): Promise<IdleGateBlock | null> {
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { showScanTimer: true, timerRedMins: true } })
+  if (u?.showScanTimer === false) return null   // timer off for this user — respect it
+  const thresholdMs = (u?.timerRedMins ?? 30) * 60_000
+
+  const lastSave = await prisma.catalogueTimingLog.findFirst({ where: { userId }, orderBy: { savedAt: "desc" }, select: { savedAt: true } })
+  if (!lastSave) return null                     // first ever lot — nothing to measure from
+  const sinceMs = lastSave.savedAt.getTime()
+  const now = Date.now()
+  if (londonDayKey(sinceMs) !== londonDayKey(now)) return null   // first lot of a new day
+
+  const idleMs = workingMsLondon(sinceMs, now)
+  if (idleMs < thresholdMs) return null
+
+  // Already accounted for? (their own within-lot popup, or a prior gate answer.)
+  const covering = await prisma.idleLog.findFirst({
+    where: { userId, idleStartedAt: { gte: new Date(sinceMs - 5 * 60_000), lte: new Date(now + 5 * 60_000) } },
+    select: { id: true },
+  })
+  if (covering) return null
+
+  return { needsIdle: true, idleMs, sinceMs }
+}
+
 export async function createLot(auctionId: string, formData: FormData) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
@@ -403,6 +439,12 @@ export async function createLot(auctionId: string, formData: FormData) {
     })
     if (dup) return
   }
+
+  // Idle gate — before any photo upload, so a blocked attempt leaves no orphan
+  // R2 objects. The client shows the idle popup and, once the reason is logged,
+  // re-saves (which then passes).
+  const gate = await idleGateForCreate(session.user.id)
+  if (gate) return gate
 
   const photoFiles = formData.getAll("photo") as File[]
   const imageUrls: string[] = []
