@@ -370,6 +370,10 @@ function CondBtn({ label, selected, onClick, tablet }: { label: string; selected
 // cataloguer for another's gap.
 const IDLE_HEARTBEAT_BASE = "vectis_idle_last_activity"
 
+// A gap of a full working day or more (09:00–17:00 = 8h) is a holiday or a long
+// absence, not a break — never asked about, in either idle check.
+const EIGHT_WORK_HOURS_MS = 8 * 60 * 60 * 1000
+
 // A lot that already holds the barcode being entered — the shape returned by
 // checkBarcodeAssigned.
 type DupeHit = {
@@ -443,6 +447,25 @@ export default function LotWizardTab({
   const [idleNotes,        setIdleNotes]      = useState("")
   const [idleSubmitting,   setIdleSubmitting] = useState(false)
   const [idleReasons,      setIdleReasons]    = useState<IdleReason[]>(DEFAULT_REASONS)
+  // The idle log failed to save — shown in the popup. We do NOT wave the user
+  // through on a failure: an unrecorded gap is the whole problem this exists to
+  // stop. Nothing is lost by blocking, because saving the lot needs the same
+  // server anyway.
+  const [idleError,        setIdleError]      = useState<string | null>(null)
+  // Set when the popup was raised BY A SAVE (the walk-away-mid-lot case) rather
+  // than by starting a lot. The save resumes once the reason is logged.
+  const pendingSaveRef     = useRef<boolean>(false)
+  // When the user last TOUCHED the lot in progress — typing, tapping, changing a
+  // field. Idle within a lot is measured from here, not from when the lot began,
+  // so working on it resets the clock and only genuine gaps are ever counted.
+  const lastInteractionRef = useRef<number>(0)
+  // True while the popup is reporting a gap that happened INSIDE a lot (either
+  // check), as opposed to a gap between lots.
+  const idleWithinLotRef   = useRef<boolean>(false)
+  // Idle logged so far within the lot in progress. The lot's own duration still
+  // counts the full wall-clock time (two hours of research means the lot took two
+  // hours) — this is the "of which, idle" figure that sits inside it.
+  const lotIdleAccumRef    = useRef<number>(0)
 
   // Live timer display
   const [timerActive, setTimerActive] = useState(false)
@@ -523,18 +546,12 @@ export default function LotWizardTab({
     }
 
     const idleMs = workingMsBetween(lastActivityRef.current, now)
-    const EIGHT_WORK_HOURS_MS = 8 * 60 * 60 * 1000
     if (idleMs >= EIGHT_WORK_HOURS_MS) {
       bumpActivity(now)
       return
     }
     if (idleMs >= timerRedSecs * 1000) {
-      idleStartedAtRef.current = lastActivityRef.current
-      setIdleSecs(Math.floor(idleMs / 1000))
-      setIdleReason(null)
-      setIdleTotes("")
-      setIdleNotes("")
-      setIdlePopup(true)
+      raiseIdlePopup(lastActivityRef.current, idleMs)
     } else {
       // Below the threshold: starting a lot IS activity — advance the baseline
       // so a mid-lot page reload doesn't over-count the next measured gap.
@@ -542,11 +559,83 @@ export default function LotWizardTab({
     }
   }
 
+  // Shared popup opener for both idle checks.
+  function raiseIdlePopup(startedAt: number, idleMs: number) {
+    idleStartedAtRef.current = startedAt
+    setIdleSecs(Math.floor(idleMs / 1000))
+    setIdleReason(null)
+    setIdleTotes("")
+    setIdleNotes("")
+    setIdleError(null)
+    setIdlePopup(true)
+  }
+
+  // Second idle check, added 2026-07-20 — runs when a lot is SAVED.
+  //
+  // checkIdleOnLotStart only fires on the first keystroke of a new barcode, and
+  // barcodeStartedAt stays set for the rest of that lot. So starting a lot and
+  // then walking away was never asked about: the gap was silently absorbed into
+  // that lot's durationMs, and the next lot measured from the save, which was
+  // recent. Scanning an item before going on a break is a natural thing to do,
+  // so this was firing by accident as much as deliberately.
+  //
+  // Measures the same way as the other check — working hours only, and a full
+  // working day or more is left alone.
+  //
+  // Returns true if the popup was raised, meaning the save must WAIT and will be
+  // resumed by submitIdleLog.
+  function maybePromptIdleBeforeSave(): boolean {
+    if (!showScanTimer || idlePopup) return false
+    if (!barcodeStartedAt.current) return false
+    const since = lastInteractionRef.current || barcodeStartedAt.current
+    const idleMs = workingMsBetween(since, Date.now())
+    if (idleMs < timerRedSecs * 1000) return false
+    if (idleMs >= EIGHT_WORK_HOURS_MS) return false
+    pendingSaveRef.current  = true
+    idleWithinLotRef.current = true
+    raiseIdlePopup(since, idleMs)
+    return true
+  }
+
+  // Any touch of the wizard while a lot is open — typing, tapping a step, picking
+  // a category. Resets the idle clock; the gap is only ever measured from here.
+  function noteInteraction() {
+    if (!barcodeStartedAt.current) return
+    lastInteractionRef.current = Date.now()
+  }
+
+  // "Have they come back to a lot they left?" Runs on typing and when the app is
+  // brought back to the foreground (the iPhone swipe-back case), so the popup is
+  // waiting for them rather than turning up later at Save.
+  //
+  // Deliberately NOT run on taps: a tap can be the Save button, and raising the
+  // popup from under a save would swallow it. The save path does its own check
+  // (maybePromptIdleBeforeSave), which pauses and resumes the save properly.
+  function checkWithinLotIdle() {
+    if (!showScanTimer || idlePopup) return
+    if (!barcodeStartedAt.current || !lastInteractionRef.current) return
+    const idleMs = workingMsBetween(lastInteractionRef.current, Date.now())
+    if (idleMs < timerRedSecs * 1000) return
+    if (idleMs >= EIGHT_WORK_HOURS_MS) { lastInteractionRef.current = Date.now(); return }
+    idleWithinLotRef.current = true
+    raiseIdlePopup(lastInteractionRef.current, idleMs)
+  }
+
+  // Coming back to the app after it was backgrounded / the screen was locked.
+  useEffect(() => {
+    if (!showScanTimer) return
+    const onVisible = () => { if (document.visibilityState === "visible") checkWithinLotIdle() }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => document.removeEventListener("visibilitychange", onVisible)
+  })
+
   // Single entry point for "a new lot has begun" — starts the scan timer and
   // runs the idle check (async; the popup may appear a moment after the first
   // keystroke). Both places that used to set barcodeStartedAt call this.
   function startLotTiming() {
-    barcodeStartedAt.current = Date.now()
+    barcodeStartedAt.current   = Date.now()
+    lastInteractionRef.current = Date.now()
+    lotIdleAccumRef.current    = 0
     if (showScanTimer) setTimerActive(true)
     void checkIdleOnLotStart()
   }
@@ -554,8 +643,13 @@ export default function LotWizardTab({
   async function submitIdleLog() {
     if (!idleReason) return
     setIdleSubmitting(true)
+    setIdleError(null)
+    // The reason MUST be recorded before we move on. A swallowed failure here is
+    // an unlogged gap, which is exactly what this popup exists to prevent — so a
+    // failure keeps the popup open rather than waving the user through. They lose
+    // nothing by waiting: saving the lot needs the same server.
     try {
-      await fetch("/api/catalogue/idle-log", {
+      const res = await fetch("/api/catalogue/idle-log", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           auctionId,
@@ -566,16 +660,46 @@ export default function LotWizardTab({
           notes: idleNotes || null,
         }),
       })
-    } catch { /* non-critical */ }
+      if (!res.ok) {
+        const j = await res.json().catch(() => null)
+        throw new Error(j?.error ?? `Couldn't save (${res.status})`)
+      }
+    } catch (e: any) {
+      setIdleError(e?.message ?? "Couldn't save that — check your connection and try again.")
+      setIdleSubmitting(false)
+      return
+    }
+
     bumpActivity(Date.now())
-    // The popup interrupted the start of a lot — re-baseline that lot's clock so
-    // the time spent answering it doesn't inflate the lot's recorded duration.
-    if (barcodeStartedAt.current) {
+    const wasPendingSave = pendingSaveRef.current
+    const wasWithinLot   = idleWithinLotRef.current
+    pendingSaveRef.current   = false
+    idleWithinLotRef.current = false
+    lastInteractionRef.current = Date.now()
+    setIdlePopup(false)
+    setIdleSubmitting(false)
+
+    if (wasWithinLot) {
+      // The gap happened INSIDE this lot. Deliberately NOT deducted from the
+      // lot's clock: a lot held up for two hours of research took two hours, and
+      // durationMs must keep saying so. The idle is a SUBSET of the lot's time
+      // (recorded separately in IdleLog), never an addition to it — so reporting
+      // the two together can't double-count.
+      lotIdleAccumRef.current += idleSecs * 1000
+    }
+
+    if (wasPendingSave) {
+      // Raised by a save: the lot is finished and waiting on this answer.
+      performSave()
+      return
+    }
+
+    if (!wasWithinLot && barcodeStartedAt.current) {
+      // Raised by starting a lot — the gap was before this lot began, so it isn't
+      // deducted. Re-baseline so answering the popup doesn't inflate the lot.
       barcodeStartedAt.current = Date.now()
       setTimerSecs(0)
     }
-    setIdlePopup(false)
-    setIdleSubmitting(false)
   }
 
   // (The popup shows a FIXED duration now — the working-hours gap between the
@@ -885,6 +1009,11 @@ export default function LotWizardTab({
       }).catch(() => {})
     } catch { /* diagnostic only — never block a save */ }
 
+    // Nothing gets written while an idle prompt is unanswered. The popup covers
+    // the screen, so a save arriving here is a stray/synthetic activation (see
+    // the X069 diagnostic above) — it must not sneak a lot past the prompt.
+    if (idlePopup) return
+
     // Validate the WHOLE wizard, not just the current step. Step 8's Save had no
     // validation, so any activation of it minted a lot from whatever was on
     // screen — this is what was auto-creating blank lots.
@@ -900,6 +1029,16 @@ export default function LotWizardTab({
     if (Date.now() - lastSavedAt.current < 3000) return
     setValidErr("")
 
+    // Did they start this lot and then walk away? Ask before the lot is written —
+    // performSave() runs from submitIdleLog once the reason is logged.
+    if (maybePromptIdleBeforeSave()) return
+
+    performSave()
+  }
+
+  // The actual write. Split out of saveLot so the idle popup can interrupt a save
+  // and resume it afterwards; every guard and validation lives in saveLot.
+  function performSave() {
     const condition = buildCondition()
     const autoTitle = [brand, mainCat, subCat].filter(Boolean).join(" – ") || barcode || "Lot"
     const title = aiExcluded
@@ -974,7 +1113,14 @@ export default function LotWizardTab({
   }
 
   return (
-    <div className="flex flex-col h-full">
+    // Capture-phase so every control inside counts as activity without having to
+    // wire each one. Taps only reset the clock (see checkWithinLotIdle for why);
+    // typing both resets it and checks whether they've just come back to a lot
+    // they left.
+    <div className="flex flex-col h-full"
+      onPointerDownCapture={noteInteraction}
+      onChangeCapture={noteInteraction}
+      onKeyDownCapture={() => { checkWithinLotIdle(); noteInteraction() }}>
 
       {/* ── Idle popup ──────────────────────────────────────────────────────── */}
       {idlePopup && (
@@ -983,7 +1129,11 @@ export default function LotWizardTab({
             <div className="text-center mb-5">
               <p className="text-xs font-bold uppercase tracking-widest text-gray-600 dark:text-gray-400 mb-1">Idle Reason</p>
               <p className="text-5xl font-mono font-bold text-gray-900">{fmtIdleDuration(idleSecs)}</p>
-              <p className="text-xs text-gray-500 mt-1.5">since your last saved lot — working hours (Mon–Fri, 9–5) only</p>
+              <p className="text-xs text-gray-500 mt-1.5">
+                {idleWithinLotRef.current
+                  ? "since you last touched this lot — working hours (Mon–Fri, 9–5) only"
+                  : "since your last saved lot — working hours (Mon–Fri, 9–5) only"}
+              </p>
             </div>
 
             {/* Reason buttons — loaded from admin config */}
@@ -1056,6 +1206,15 @@ export default function LotWizardTab({
               )
             })()}
 
+            {idleError && (
+              <div className="mb-3 rounded-xl border border-red-300 bg-red-50 p-3">
+                <p className="text-xs font-semibold text-red-700 mb-0.5">⚠️ {idleError}</p>
+                <p className="text-xs text-red-600">
+                  Nothing has been lost — your lot is still here. Check the connection and try again.
+                </p>
+              </div>
+            )}
+
             {(() => {
               const cfg       = idleReasons.find(r => r.key === idleReason)
               const needsNote = (cfg?.requiresNotes && !idleNotes.trim()) ||
@@ -1064,7 +1223,7 @@ export default function LotWizardTab({
                 <button onClick={submitIdleLog}
                   disabled={!idleReason || idleSubmitting || needsNote}
                   className="w-full py-3 bg-[#2AB4A6] hover:bg-[#22a090] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors">
-                  {idleSubmitting ? "Saving…" : "Log & Continue"}
+                  {idleSubmitting ? "Saving…" : idleError ? "Try Again" : pendingSaveRef.current ? "Log & Save Lot" : "Log & Continue"}
                 </button>
               )
             })()}
