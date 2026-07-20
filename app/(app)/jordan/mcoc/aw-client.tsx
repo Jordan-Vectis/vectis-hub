@@ -24,7 +24,7 @@ const DEF_KEY = "mcoc_aw_defence"
 type PathResult = {
   teams: { name: string; summary: string; champions: { champion: string; why: string }[] }[]
   fights: { defender: string; nodeBuff?: string; options: { attacker: string; how: string }[] }[]
-  risks: string; notes: string
+  risks: string; notes: string; groundedFallback?: boolean
 }
 type DefResult = { placements: { node: string; champion: string; why: string }[]; notes: string }
 // A saved war fight: defender (overtyped each war) + optional nodes photo URL.
@@ -307,6 +307,12 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
 
             {path && (
               <div className="space-y-3 border-t border-[#1f5c33] pt-3">
+                {path.groundedFallback && (
+                  <p className="text-[11px] text-amber-400">
+                    ⚠ Live search didn&apos;t work on this run, so this is from the model&apos;s own (older) knowledge — it may miss newer or
+                    recently-buffed champs. Try again, or switch model above for better picks.
+                  </p>
+                )}
                 {path.teams.length > 0 && (
                   <>
                     <p className="text-[10px] uppercase tracking-widest opacity-50">Team options — pick whichever suits you</p>
