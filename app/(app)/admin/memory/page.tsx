@@ -16,6 +16,22 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "idle_gaps_detector.md",
+    content: `---
+name: Idle-gap detector — tamper-proof backstop to the idle popup
+purpose: /admin/idle-gaps unexplained-gap report. Read before touching idle detection.
+last_updated: 2026-07-20
+---
+
+# Unexplained idle gaps — server-side detector (2026-07-20)
+
+Built after a cataloguer had a ~4h working-hours gap between lot saves with zero idle logs — the client idle popup was being circumvented. The exact client mechanism couldn't be pinned from the data, so the fix is a tamper-proof server-side backstop (Jordan's call: detector now, harden the client after).
+
+- **lib/idle-gaps.ts** — pure detector: working-hours gaps between consecutive lot saves over the user's own threshold, each marked explained (a matching idle reason was logged) or not. Skips gaps of a full working day+ (days off).
+- **/admin/idle-gaps** — ADMIN-ONLY full-width report. Date range, groups by cataloguer, flags unexplained gaps, shows a scan-timer-OFF badge. Reads the save history directly, so it catches the gap however the in-app popup was avoided. Linked from Admin → Idle Timer + its own Admin card.
+- The popup itself has no dismiss button — it can't be closed without logging a reason. Part 2 (hardening the client trigger so honest gaps always prompt in the moment) is a follow-up.`,
+  },
+  {
     filename: "manage_lots_bulk_undo.md",
     content: `---
 name: Manage Lots — filters persist, bulk conditions/clear, Undo

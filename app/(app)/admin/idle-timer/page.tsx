@@ -35,6 +35,14 @@ export default async function IdleTimerAdminPage() {
         </p>
       </div>
 
+      <Link href="/admin/idle-gaps" className="mb-6 flex items-start gap-3 rounded-xl border border-gray-200 dark:border-gray-800 p-4 hover:border-gray-300 dark:hover:border-gray-700 transition-colors">
+        <span className="text-2xl">🕵️</span>
+        <span>
+          <span className="block font-semibold text-gray-900 dark:text-white">Unexplained Gaps report →</span>
+          <span className="block text-sm text-gray-500 dark:text-gray-400 mt-0.5">Working-hours gaps between lot saves that were never accounted for with an idle reason — reads the save history directly, so it catches gaps however the popup was avoided.</span>
+        </span>
+      </Link>
+
       <IdleTimerSettingsClient initialReasons={reasons} />
     </div>
   )

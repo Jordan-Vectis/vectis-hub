@@ -24,6 +24,7 @@ const GROUPS: { label: string; cards: Card[] }[] = [
       { href: "/admin/condition-wording", label: "Condition Wording",      description: "Manage the box/packaging wording presets (e.g. \"Box is\", \"Carded Back is\") used in the separate condition.", icon: "📦" },
       { href: "/admin/lot-log",           label: "Lot Change Log",         description: "Full audit trail of every field changed on every lot — who changed what, when, and what it was before.", icon: "📋" },
       { href: "/admin/idle-timer",        label: "Idle Timer",             description: "Configure the idle popup — add or remove reasons, change wording, set timing thresholds.", icon: "⏱️" },
+      { href: "/admin/idle-gaps",         label: "Unexplained Gaps",       description: "Working-hours gaps between a cataloguer's lot saves that were never accounted for with an idle reason — the tamper-proof backstop to the popup.", icon: "🕵️" },
     ],
   },
   {
