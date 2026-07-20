@@ -20,10 +20,20 @@ const AW_TIERS = ["Bronze", "Silver", "Gold", "Platinum", "Challenger", "Master"
 // itself is saved server-side now, not here).
 const TIER_KEY = "mcoc_aw_tier"
 const DEF_KEY = "mcoc_aw_defence"
+const FORCED_KEY = "mcoc_aw_forced"
 
+const RATING_COL: Record<string, string> = {
+  best:  "border-[#33ff66] text-[#33ff66]",
+  good:  "border-emerald-500 text-emerald-400",
+  risky: "border-amber-500 text-amber-400",
+  avoid: "border-red-500 text-red-400",
+}
+
+type ForcedPlan = { attacker: string; fights: { fight: number; defender: string; rating: string; how: string }[] }
 type PathResult = {
   teams: { name: string; summary: string; champions: { champion: string; why: string }[] }[]
   fights: { defender: string; nodeBuff?: string; options: { attacker: string; how: string }[] }[]
+  forced?: ForcedPlan[]
   risks: string; notes: string; groundedFallback?: boolean
 }
 type DefResult = { placements: { node: string; champion: string; why: string }[]; notes: string }
@@ -47,6 +57,15 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
   const fightPhotoInput = useRef<HTMLInputElement>(null)
   const pickForFight = useRef<string | null>(null)                      // which fight the file picker is for
   const [addingFight, setAddingFight] = useState(false)
+  // Attackers the player wants to bring — the planner reports which fights each handles.
+  const [forced, setForced] = useState<string[]>([])
+  const [forcedInput, setForcedInput] = useState("")
+  function addForced(raw: string) {
+    const n = raw.replace(/\s+/g, " ").trim()
+    setForcedInput("")
+    if (!n || forced.some((f) => normChampName(f) === normChampName(n)) || forced.length >= 8) return
+    setForced((l) => [...l, n])
+  }
 
   async function loadWarPath() {
     try {
@@ -114,6 +133,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
       await Promise.all(warFights.map((f) => setWarFightDefender(f.id, f.defender).catch(() => {})))
       const fd = new FormData()
       if (tier) fd.append("tier", tier)
+      if (forced.length) fd.append("forced", JSON.stringify(forced))
       const model = getJordanModel(); if (model) fd.append("model", model)
       const res = await fetch("/api/jordan/mcoc/aw-path", { method: "POST", body: fd })
       const j = await res.json().catch(() => ({}))
@@ -165,12 +185,15 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
           if (typeof d.notes === "string") setDefNotes(d.notes)
           if (Number(d.count)) setDefCount(Number(d.count))
         }
+        const fl = JSON.parse(localStorage.getItem(FORCED_KEY) || "null")
+        if (Array.isArray(fl)) setForced(fl.filter((x) => typeof x === "string").slice(0, 8))
       } catch {}
       restored.current = true
     })
   }, [])
   useEffect(() => { if (restored.current) try { localStorage.setItem(TIER_KEY, tier) } catch {} }, [tier])
   useEffect(() => { if (restored.current) try { localStorage.setItem(DEF_KEY, JSON.stringify({ notes: defNotes, count: defCount })) } catch {} }, [defNotes, defCount])
+  useEffect(() => { if (restored.current) try { localStorage.setItem(FORCED_KEY, JSON.stringify(forced)) } catch {} }, [forced])
 
   function pickMap(f: File | null) {
     setMapFile(f)
@@ -298,6 +321,32 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
             <input ref={fightPhotoInput} type="file" accept="image/*" className="hidden"
               onChange={(e) => { uploadFightPhoto(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
 
+            {/* Must-use attackers — the plan reports which fights each one handles. */}
+            <div className="border-t border-[#1f5c33] pt-3 space-y-2">
+              <p className="text-[11px] opacity-60">
+                🎯 Must-use attackers <span className="opacity-70">(optional)</span> — champs you want to bring; the plan tells you which fights each one handles.
+              </p>
+              <div className="flex gap-2 items-center flex-wrap">
+                <input value={forcedInput} onChange={(e) => setForcedInput(e.target.value)} list="mcoc-all-champs"
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addForced(forcedInput) } }}
+                  placeholder="Add an attacker you want to use…"
+                  className={`${input} flex-1 min-w-[12rem]`} style={{ color: GREEN }} />
+                <button onClick={() => addForced(forcedInput)} disabled={!forcedInput.trim() || forced.length >= 8}
+                  className="px-3 py-2 rounded-lg border border-[#1f5c33] text-xs hover:border-[#33ff66] disabled:opacity-30 transition-colors">ADD</button>
+              </div>
+              {forced.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {forced.map((f) => (
+                    <span key={f} className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border border-[#33ff66]">
+                      {ownedByName.get(normChampName(f))?.imageUrl && <img src={ownedByName.get(normChampName(f))!.imageUrl!} alt="" width={18} height={18} className="rounded object-cover" />}
+                      <span className="text-white">{f}</span>
+                      <button onClick={() => setForced((l) => l.filter((x) => x !== f))} className="text-red-400" title="Remove">×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <button onClick={planPath} disabled={pathBusy || warLoading || !warFights.some((f) => f.defender.trim())}
               className="px-5 py-2.5 rounded-lg text-sm font-bold text-black disabled:opacity-40 transition-colors"
               style={{ background: GREEN }}>
@@ -313,6 +362,37 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                     recently-buffed champs. Try again, or switch model above for better picks.
                   </p>
                 )}
+                {/* Must-use attackers → which fights each handles. Shown first —
+                    it's what Jordan asked the plan for. */}
+                {path.forced && path.forced.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] uppercase tracking-widest opacity-50">🎯 Your must-use attackers — which fights they handle</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {path.forced.map((f, i) => (
+                        <div key={i} className="border border-[#33ff66] rounded-lg p-3 space-y-2">
+                          <ChampInline name={f.attacker} />
+                          {f.fights.length === 0 ? (
+                            <p className="text-[11px] text-red-400">No good fight for this one on this path.</p>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {f.fights.map((x, j) => (
+                                <div key={j} className="flex items-start gap-2 text-xs">
+                                  <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border shrink-0 mt-0.5 ${RATING_COL[x.rating] ?? RATING_COL.good}`}>{x.rating}</span>
+                                  <div className="min-w-0">
+                                    <span className="text-white">Fight {x.fight}</span>
+                                    {x.defender && <span className="opacity-60"> · {x.defender}</span>}
+                                    {x.how && <p className="opacity-70 mt-0.5">{x.how}</p>}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {path.teams.length > 0 && (
                   <>
                     <p className="text-[10px] uppercase tracking-widest opacity-50">Team options — pick whichever suits you</p>

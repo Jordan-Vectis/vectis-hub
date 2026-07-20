@@ -22,6 +22,9 @@ export async function POST(req: NextRequest) {
 
     const form = await req.formData()
     const tier = ((form.get("tier") as string) ?? "").trim().slice(0, 40)
+    // Attackers the player WANTS to bring — "tell me which fights these handle".
+    let forcedIn: string[] = []
+    try { const f = JSON.parse((form.get("forced") as string) ?? "[]"); if (Array.isArray(f)) forcedIn = f.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim().slice(0, 60)).slice(0, 8) } catch {}
 
     const [fights, rosterRows] = await Promise.all([
       prisma.mcocWarFight.findMany({ where: { ownerId: session.user.id }, orderBy: { order: "asc" } }),
@@ -75,8 +78,10 @@ HOW TO PICK — read carefully, this is where most tools get it wrong:
 - **Use CURRENT meta.** Judge each champion by how it performs in the game NOW — recently-released or recently-buffed champions are frequently among the very best attackers. Do not under-rate a champion because older data rated it low.
 - A champion that is BOTH max-rank AND a strong current-meta pick for a fight should almost always be the BEST option for that fight.
 
+${forcedIn.length ? `\nMUST-USE ATTACKERS: the player specifically wants to bring these champions and needs to know which fights each one handles: ${forcedIn.join(", ")}.
+For EACH must-use attacker, judge it against EVERY fight on the path and report which fights it is a viable attacker for, with a rating. Where a must-use attacker is a good pick for a fight, prefer it in that fight's normal options and in the teams too. Be honest — if a must-use attacker is a poor/dangerous choice for a fight, rate it "avoid" and say why; do not pretend it works everywhere. Also note in "notes" any fight that NONE of the must-use attackers can safely take.\n` : ""}
 Give the player OPTIONS:
-1. TWO or THREE different 3-champion attack teams from the roster that could each clear this whole path — each genuinely different, and each built around the player's max-rank champs where they fit. Short name + one-line game plan.
+1. TWO or THREE different 3-champion attack teams from the roster that could each clear this whole path — each genuinely different, and each built around the player's max-rank champs where they fit${forcedIn.length ? ", and using the must-use attackers wherever they fit" : ""}. Short name + one-line game plan.
 2. For EACH fight, the 2–3 BEST attackers from the roster for that specific defender + its nodes (best first), each with a short note on how. The BEST pick should be the strongest suitable champion the player actually has well-ranked.
 
 Return STRICT JSON only (no prose, no markdown):
@@ -86,7 +91,10 @@ Return STRICT JSON only (no prose, no markdown):
   ],
   "fights": [
     { "defender": string, "nodeBuff": string, "options": [ { "attacker": string, "how": string } ] }
-  ],
+  ],${forcedIn.length ? `
+  "forced": [
+    { "attacker": string, "fights": [ { "fight": number, "rating": "best" | "good" | "risky" | "avoid", "how": string } ] }
+  ],   // one entry per must-use attacker, EXACT name; "fight" = the fight number (1-based); include every fight you rate good enough to mention, best ratings first` : ""}
   "risks": string,
   "notes": string
 }
@@ -116,8 +124,21 @@ Rules: 2 or 3 teams, exactly 3 champions each, names copied from the roster. One
       })),
     }))
 
+    const RATINGS = ["best", "good", "risky", "avoid"]
+    const forcedOut = forcedIn.length
+      ? (Array.isArray(parsed?.forced) ? parsed.forced : []).slice(0, 8).map((f: any) => ({
+          attacker: typeof f?.attacker === "string" ? f.attacker.trim().slice(0, 60) : "?",
+          fights: (Array.isArray(f?.fights) ? f.fights : []).slice(0, withDef.length + 2).map((x: any) => ({
+            fight: Number(x?.fight) || 0,
+            defender: withDef[(Number(x?.fight) || 0) - 1]?.defender ?? "",
+            rating: RATINGS.includes(String(x?.rating).toLowerCase()) ? String(x?.rating).toLowerCase() : "good",
+            how: typeof x?.how === "string" ? x.how.slice(0, 300) : "",
+          })).filter((x: { fight: number }) => x.fight >= 1),
+        }))
+      : []
+
     return NextResponse.json({
-      teams, fights: fightsOut,
+      teams, fights: fightsOut, forced: forcedOut,
       risks: typeof parsed?.risks === "string" ? parsed.risks.slice(0, 600) : "",
       notes: typeof parsed?.notes === "string" ? parsed.notes.slice(0, 600) : "",
       groundedFallback,
