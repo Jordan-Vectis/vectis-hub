@@ -1222,3 +1222,181 @@ export function DailyLotsBarChart({ days }: { days: DayStats[] }) {
     </div>
   )
 }
+
+// ─── Cataloguing vs Idle, per lot ─────────────────────────────────────────────
+// Answers "how much of this lot was actually cataloguing?" — the question the
+// other tables can't, because a lot's Total Time is the full wall clock and says
+// nothing about whether anyone was working during it.
+//
+// This is also the only place a screen-tapper shows up. The idle popup can be
+// defeated by touching the screen every few minutes, but a lot kept alive that
+// way still records hours of Total Time with barely any idle logged against it —
+// which reads here as a very long lot that is almost entirely "cataloguing".
+// Sort by longest and those rows come straight to the top.
+
+export type SerialLotSplit = SerialLotLog & {
+  idleMs:   number     // of the lot's duration, time logged against an idle reason
+  activeMs: number     // of the lot's duration, the remainder
+}
+
+type SplitSort = "recent" | "longest" | "most-idle"
+
+export function CollapsibleActiveVsIdleTable({ logs }: { logs: SerialLotSplit[] }) {
+  const [open, setOpen]         = useState(false)
+  const [fromDate, setFromDate] = useState("")
+  const [toDate, setToDate]     = useState("")
+  const [sort, setSort]         = useState<SplitSort>("recent")
+  const [onlyIdle, setOnlyIdle] = useState(false)
+
+  const filtered = useMemo(() => {
+    const rows = logs
+      .filter(l => inDateRange(l.savedAt, fromDate, toDate))
+      .filter(l => (onlyIdle ? l.idleMs > 0 : true))
+    const sorted = [...rows]
+    if (sort === "longest")        sorted.sort((a, b) => b.durationMs - a.durationMs)
+    else if (sort === "most-idle") sorted.sort((a, b) => b.idleMs - a.idleMs)
+    else                           sorted.sort((a, b) => Date.parse(b.savedAt) - Date.parse(a.savedAt))
+    return sorted
+  }, [logs, fromDate, toDate, sort, onlyIdle])
+
+  const totalDuration = filtered.reduce((s, l) => s + l.durationMs, 0)
+  const totalIdle     = filtered.reduce((s, l) => s + l.idleMs, 0)
+  const totalActive   = filtered.reduce((s, l) => s + l.activeMs, 0)
+  const withIdle      = logs.filter(l => l.idleMs > 0).length
+
+  const sortBtn = (key: SplitSort, label: string) => (
+    <button
+      key={key}
+      onClick={() => setSort(key)}
+      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+        sort === key
+          ? "bg-[#2AB4A6] text-white"
+          : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+      }`}
+    >
+      {label}
+    </button>
+  )
+
+  return (
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+      >
+        <span className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+          Cataloguing vs Idle — per lot
+          <span className="ml-2 font-normal normal-case text-gray-400 dark:text-gray-500 text-xs">
+            ({logs.length} lots{withIdle > 0 ? `, ${withIdle} with idle inside` : ""})
+          </span>
+        </span>
+        <span className="text-gray-400 dark:text-gray-500 text-sm select-none">{open ? "▲ Collapse" : "▼ Expand"}</span>
+      </button>
+
+      {open && (
+        <>
+          <DateFilters
+            fromDate={fromDate} toDate={toDate}
+            setFromDate={setFromDate} setToDate={setToDate}
+            count={filtered.length} total={logs.length}
+          />
+
+          {/* Sort + filter */}
+          <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-800 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wider mr-1">Sort</span>
+            {sortBtn("recent", "Most recent")}
+            {sortBtn("longest", "Longest lot")}
+            {sortBtn("most-idle", "Most idle")}
+            <label className="ml-auto flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none">
+              <input type="checkbox" checked={onlyIdle} onChange={e => setOnlyIdle(e.target.checked)} className="accent-[#2AB4A6]" />
+              Only lots with idle
+            </label>
+          </div>
+
+          {/* Totals for whatever is on screen */}
+          <div className="px-5 py-3 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 flex flex-wrap gap-x-6 gap-y-1 text-xs">
+            <span className="text-gray-500 dark:text-gray-400">
+              Lots took <span className="font-mono font-bold text-gray-700 dark:text-gray-200">{fmtDuration(totalDuration)}</span>
+            </span>
+            <span className="text-green-600 dark:text-green-400">
+              Cataloguing <span className="font-mono font-bold">{fmtDuration(totalActive)}</span>
+            </span>
+            <span className="text-amber-600 dark:text-amber-400">
+              Idle inside lots <span className="font-mono font-bold">{fmtDuration(totalIdle)}</span>
+            </span>
+          </div>
+
+          <div className="overflow-y-auto max-h-[420px]">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 z-10">
+                <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                  <th className="text-left px-5 py-3">Date / Time</th>
+                  <th className="text-left px-5 py-3">Auction</th>
+                  <th className="text-left px-5 py-3">Lot / Barcode</th>
+                  <th className="text-right px-5 py-3">Lot Took</th>
+                  <th className="text-right px-5 py-3">Cataloguing</th>
+                  <th className="text-right px-5 py-3">Idle</th>
+                  <th className="text-left px-5 py-3 w-[140px]">Split</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-5 py-10 text-center text-gray-400 dark:text-gray-500 text-xs">
+                      {onlyIdle ? "No lots had idle logged inside them." : "No lots match the selected date range."}
+                    </td>
+                  </tr>
+                ) : filtered.map(log => {
+                  const idlePct = log.durationMs > 0 ? (log.idleMs / log.durationMs) * 100 : 0
+                  return (
+                    <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                      <td className="px-5 py-3 text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap font-mono">
+                        {format(new Date(log.savedAt), "dd/MM/yyyy HH:mm:ss")}
+                      </td>
+                      <td className="px-5 py-3 font-mono text-slate-600 dark:text-gray-300 text-xs">{log.auctionCode}</td>
+                      <td className="px-5 py-3 font-mono text-gray-500 dark:text-gray-400 text-xs whitespace-nowrap">
+                        {log.lotDeleted
+                          ? <span className="text-gray-400 dark:text-gray-600 italic">deleted</span>
+                          : (log.barcode ?? "—")}
+                        {log.movedToCode && (
+                          <span className="ml-1.5 text-amber-500" title={`Lot now lives in ${log.movedToCode}`}>→ {log.movedToCode}</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-right font-mono text-gray-700 dark:text-gray-200 whitespace-nowrap">
+                        {fmtDuration(log.durationMs)}
+                      </td>
+                      <td className="px-5 py-3 text-right font-mono text-green-600 dark:text-green-400 whitespace-nowrap">
+                        {fmtDuration(log.activeMs)}
+                      </td>
+                      <td className="px-5 py-3 text-right font-mono whitespace-nowrap">
+                        {log.idleMs > 0
+                          ? <span className="text-amber-600 dark:text-amber-400">{fmtDuration(log.idleMs)}</span>
+                          : <span className="text-gray-300 dark:text-gray-700">—</span>}
+                      </td>
+                      <td className="px-5 py-3">
+                        <div
+                          className="flex h-2 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800"
+                          title={`${Math.round(100 - idlePct)}% cataloguing · ${Math.round(idlePct)}% idle`}
+                        >
+                          <span className="bg-green-500" style={{ width: `${100 - idlePct}%` }} />
+                          <span className="bg-amber-500" style={{ width: `${idlePct}%` }} />
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="px-5 py-3 text-xs text-gray-400 dark:text-gray-500 border-t border-gray-100 dark:border-gray-800 leading-relaxed">
+            <span className="font-semibold">Lot Took</span> is the full time the lot was open — the same figure as the other tables.
+            <span className="font-semibold"> Idle</span> is the part of it logged against an idle reason, matched to the lot that was
+            open at the time. <span className="font-semibold">Cataloguing</span> is the remainder. A long lot showing little or no
+            idle means the screen was being touched throughout.
+          </p>
+        </>
+      )}
+    </div>
+  )
+}

@@ -55,6 +55,73 @@ export function ukDayStartUtc(ref: Date, minusDays = 0): Date {
   return new Date(guess.getTime() - offsetH * 3_600_000)
 }
 
+// ── Idle that happened INSIDE a lot ─────────────────────────────────────────
+//
+// A lot's durationMs is the full wall-clock time it was open — a lot held up for
+// two hours of research took two hours, and the lot row must keep saying so. But
+// an idle gap logged during that lot is therefore counted twice if you add
+// "cataloguing time" and "idle time" together: once inside the lot's duration,
+// once as its own IdleLog row.
+//
+// That never showed up as a bar over 100% — the daily breakdown derives
+// "unaccounted" as the remainder, so the double count quietly stole from
+// unaccounted instead, which is worse (nothing looks wrong).
+//
+// Rather than a schema flag (which would only fix data from the day it shipped),
+// this works it out from the timestamps we already store: a lot occupies
+// [savedAt − durationMs, savedAt], an idle occupies [idleStartedAt, +duration].
+// Whatever overlaps happened during the lot. This fixes historical data too.
+
+export type TimedLog = { id: string; savedAt: Date; durationMs: number }
+export type IdleSpan = { idleStartedAt: Date; idleDurationMs: number }
+
+/** Milliseconds two spans share. 0 when they don't touch. */
+export function overlapMs(aStart: number, aEnd: number, bStart: number, bEnd: number): number {
+  return Math.max(0, Math.min(aEnd, bEnd) - Math.max(aStart, bStart))
+}
+
+export type LotBreakdown = {
+  /** Full wall-clock time the lot was open — unchanged, still "how long it took". */
+  durationMs: number
+  /** Of that, time logged as idle. */
+  idleMs: number
+  /** Of that, time actually spent cataloguing. */
+  activeMs: number
+}
+
+/**
+ * Per-lot split of "how long it took" into active vs idle, keyed by timing-log id.
+ *
+ * Idle is apportioned to the lot it overlaps. An idle span touching two lots
+ * (rare — it would mean a lot was saved mid-gap) is split between them by
+ * overlap, so no millisecond is assigned twice.
+ */
+export function computeLotBreakdowns(logs: TimedLog[], idles: IdleSpan[]): Map<string, LotBreakdown> {
+  const spans = idles.map(i => {
+    const start = i.idleStartedAt.getTime()
+    return { start, end: start + i.idleDurationMs }
+  })
+  const out = new Map<string, LotBreakdown>()
+  for (const log of logs) {
+    const end   = log.savedAt.getTime()
+    const start = end - log.durationMs
+    let idleMs = 0
+    for (const s of spans) idleMs += overlapMs(start, end, s.start, s.end)
+    // Can't idle for longer than the lot was open — clamp against rounding and
+    // any clock skew between the device that logged the idle and the save.
+    idleMs = Math.min(idleMs, log.durationMs)
+    out.set(log.id, { durationMs: log.durationMs, idleMs, activeMs: Math.max(0, log.durationMs - idleMs) })
+  }
+  return out
+}
+
+/** Total idle that fell inside a lot — the amount double-counted by a naive sum. */
+export function totalWithinLotIdleMs(logs: TimedLog[], idles: IdleSpan[]): number {
+  let total = 0
+  for (const b of computeLotBreakdowns(logs, idles).values()) total += b.idleMs
+  return total
+}
+
 // ── Lot resolution ──────────────────────────────────────────────────────────
 
 export async function buildLotMap(logs: { lotId: string | null }[]): Promise<Map<string, LotInfo>> {

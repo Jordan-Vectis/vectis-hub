@@ -7,6 +7,7 @@ import Link from "next/link"
 import {
   CollapsibleLotsTable,
   CollapsibleIdleTable,
+  CollapsibleActiveVsIdleTable,
   TodayProductivityCard,
   TodayTimeline,
   DailyComparisonTable,
@@ -14,7 +15,7 @@ import {
   CustomRangePicker,
   type DayStats,
 } from "../../../admin/cataloguing-reports/[userId]/collapsible-sections"
-import { buildLotMap, lotRef, minOf, maxOf, ukDayKey, ukDayStartUtc } from "@/lib/cataloguing-reports"
+import { buildLotMap, lotRef, minOf, maxOf, ukDayKey, ukDayStartUtc, computeLotBreakdowns } from "@/lib/cataloguing-reports"
 
 export const dynamic = "force-dynamic"
 
@@ -215,12 +216,20 @@ export default async function ReportsUserPage({
   const MAX_IDLE_MS = 10 * 60 * 60 * 1000
   const dayMap = new Map<string, { date: string; lots: number; cataloguingMs: number; idleMs: number }>()
 
+  // Idle that happened INSIDE a lot is already part of that lot's durationMs, so
+  // counting the full duration as "cataloguing" AND the idle row separately
+  // double-counts it — which silently steals from "unaccounted" rather than
+  // pushing the bar past 100%. Count only the active part as cataloguing; the
+  // idle is still counted once, in the idle column.
+  const countedIdle = idleLogs.filter(l => l.idleDurationMs <= MAX_IDLE_MS)
+  const breakdowns  = computeLotBreakdowns(logs, countedIdle)
+
   for (const log of logs) {
     const day = ukDayKey(log.savedAt)
     if (!dayMap.has(day)) dayMap.set(day, { date: day, lots: 0, cataloguingMs: 0, idleMs: 0 })
     const e = dayMap.get(day)!
     e.lots++
-    e.cataloguingMs += log.durationMs
+    e.cataloguingMs += breakdowns.get(log.id)?.activeMs ?? log.durationMs
   }
   for (const log of idleLogs) {
     if (log.idleDurationMs > MAX_IDLE_MS) continue
@@ -233,8 +242,10 @@ export default async function ReportsUserPage({
     .map(([, v]) => v)
 
   // ── Total active vs idle for range ──
-  const totalCatMs  = logs.reduce((s, l) => s + l.durationMs, 0)
-  const totalIdleMs = idleLogs.filter(l => l.idleDurationMs <= MAX_IDLE_MS).reduce((s, l) => s + l.idleDurationMs, 0)
+  // Same rule as the daily breakdown above — cataloguing is the ACTIVE part of
+  // each lot, so this split and that bar can't disagree with each other.
+  const totalCatMs  = logs.reduce((s, l) => s + (breakdowns.get(l.id)?.activeMs ?? l.durationMs), 0)
+  const totalIdleMs = countedIdle.reduce((s, l) => s + l.idleDurationMs, 0)
   const totalTrackedMs  = totalCatMs + totalIdleMs
   const overallActivePct = totalTrackedMs > 0 ? Math.round((totalCatMs / totalTrackedMs) * 100) : null
   const overallIdlePct   = overallActivePct !== null ? 100 - overallActivePct : null
@@ -541,6 +552,21 @@ export default async function ReportsUserPage({
               notes:          l.notes,
               auctionCode:    l.auction.code,
               auctionName:    l.auction.name,
+            }))}
+          />
+
+          {/* Per-lot split of "how long it took" into cataloguing vs idle */}
+          <CollapsibleActiveVsIdleTable
+            logs={logs.map(l => ({
+              id:          l.id,
+              savedAt:     l.savedAt.toISOString(),
+              auctionCode: l.auction.code,
+              ...lotRef(lotMap, l),
+              method:      l.method,
+              keyPointsMs: l.keyPointsMs,
+              durationMs:  l.durationMs,
+              idleMs:      breakdowns.get(l.id)?.idleMs   ?? 0,
+              activeMs:    breakdowns.get(l.id)?.activeMs ?? l.durationMs,
             }))}
           />
         </>
