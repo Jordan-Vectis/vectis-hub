@@ -16,6 +16,30 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "manage_lots_bulk_undo.md",
+    content: `---
+name: Manage Lots — filters persist, bulk conditions/clear, Undo
+purpose: The 2026-07-17 Auction Manager changes. Read before touching Manage Lots bulk actions or filters.
+last_updated: 2026-07-17
+---
+
+# Auction Manager (Manage Lots) — 5 changes (2026-07-17) — NEEDS RUN MIGRATIONS
+
+All in auction-tabs.tsx (ManageLotsTab) + lib/actions/catalogue.ts.
+
+1. **Filters survive opening a lot.** Opening a lot pushes ?lot=, which swaps the tab for the editor and unmounts ManageLotsTab, losing all filter/sort state. Fixed with sessionStorage keyed catalogue_filters_<auctionId> (restore on mount, save on change). ⚠ Selection is deliberately NOT persisted — a stale tick could drive a bulk action at the wrong lots.
+
+2. **Add Conditions respects selection.** bulkAddConditionsToDescriptions was auction-wide always (the bug); now scoped to selected lots if any ticked, else all (same as Remove/Clear).
+
+3. **Remove Conditions** — strips the exact "Condition appears <condition>." sentence Add appends.
+
+4. **Clear Descriptions** — ALWAYS skips aiExcluded lots (hand-typed descriptions), regardless of selection. Clears description; title becomes "Untitled".
+
+5. **Multi-step, conflict-safe Undo.** New CatalogueBulkUndo table (NEEDS Run Migrations). Every field-editing bulk action records a per-lot before/after snapshot; the amber "↶ Undo: <label>" button (top of toolbar) reverses the most recent, press again to step back. Conflict-safe: a lot changed since the action is skipped, never clobbered. Scoped to the actor (you undo only your own mass actions). Covers add/remove conditions, clear descriptions, bulk AI-exclude, bulk added-to-BC — NOT delete/transfer/photos.
+
+⚠ Dedicated table, not the change log — the log stores display labels + best-effort rows, too lossy to reverse. Degrades gracefully pre-migration (undo just doesn't appear).`,
+  },
+  {
     filename: "local_boot_safety.md",
     content: `---
 name: Local boot safety — server.js only does its DB jobs in production

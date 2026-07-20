@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, fillLotsFromTotes, togglePublished, generateTitlesFromDescriptions, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, bulkSetLotsAiExcluded, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, transferLots, bulkClearLotPhotos } from "@/lib/actions/catalogue"
+import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, fillLotsFromTotes, togglePublished, generateTitlesFromDescriptions, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, bulkSetLotsAiExcluded, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, bulkRemoveConditionsFromDescriptions, bulkClearDescriptions, transferLots, bulkClearLotPhotos, listBulkUndos, undoBulk } from "@/lib/actions/catalogue"
 import LotWizardTab, { BRANDS_LIST } from "./lot-wizard-tab"
 import { useCategoryMap } from "@/lib/use-category-map"
 import { parseCondition, buildCondition, type BoxPrefixMode } from "@/lib/condition"
@@ -1021,22 +1021,46 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
   const [uniqueIdMsg, setUniqueIdMsg]     = useState<string | null>(null)
   const [uniqueIdPending, startUniqueId]  = useTransition()
 
-  // Bulk add conditions to descriptions
+  // Bulk conditions / descriptions. All three respect the selection: they act on
+  // the SELECTED lots when any are ticked, else the whole auction (the house
+  // pattern). selectedIds() → the array to pass; scopeWord() → wording for the
+  // confirm so it's always clear what will be hit.
   const [condMsg, setCondMsg]         = useState<string | null>(null)
   const [condPending, startCond]      = useTransition()
 
+  const selectedIds = () => (selected.size > 0 ? Array.from(selected) : [])
+  const scopeWord = () => (selected.size > 0 ? `the ${selected.size} selected lot${selected.size !== 1 ? "s" : ""}` : "every lot in this auction")
+
   function handleBulkAddConditions() {
-    const lotsWithCond = lots.filter(l => l.condition?.trim())
-    if (lotsWithCond.length === 0) {
-      setCondMsg("No lots have a condition set.")
-      setTimeout(() => setCondMsg(null), 3000)
-      return
-    }
-    if (!confirm(`This will append the condition to the description for up to ${lotsWithCond.length} lot${lotsWithCond.length !== 1 ? "s" : ""} (skips any that already have it). Continue?`)) return
+    const pool = selected.size > 0 ? lots.filter(l => selected.has(l.id)) : lots
+    const withCond = pool.filter(l => l.condition?.trim()).length
+    if (withCond === 0) { setCondMsg("No lots with a condition set in that scope."); setTimeout(() => setCondMsg(null), 3000); return }
+    if (!confirm(`Append the condition to the description for ${scopeWord()} that has one (${withCond} with a condition; skips any that already have it). Continue?`)) return
     startCond(async () => {
-      const { updated, skipped } = await bulkAddConditionsToDescriptions(auctionId)
-      setCondMsg(`✓ ${updated} lot${updated !== 1 ? "s" : ""} updated, ${skipped} skipped`)
+      const { updated, skipped } = await bulkAddConditionsToDescriptions(auctionId, selectedIds())
+      setCondMsg(`✓ ${updated} updated, ${skipped} skipped`)
       setTimeout(() => setCondMsg(null), 4000)
+      await refreshUndos()
+    })
+  }
+
+  function handleBulkRemoveConditions() {
+    if (!confirm(`Remove the "Condition appears…" sentence from the description on ${scopeWord()} that has it. Continue?`)) return
+    startCond(async () => {
+      const { updated, skipped } = await bulkRemoveConditionsFromDescriptions(auctionId, selectedIds())
+      setCondMsg(`✓ ${updated} updated, ${skipped} skipped`)
+      setTimeout(() => setCondMsg(null), 4000)
+      await refreshUndos()
+    })
+  }
+
+  function handleClearDescriptions() {
+    if (!confirm(`Clear the description on ${scopeWord()}. Lots excluded from AI keep their hand-typed descriptions and are left alone. This can be undone. Continue?`)) return
+    startCond(async () => {
+      const { updated, skippedExcluded } = await bulkClearDescriptions(auctionId, selectedIds())
+      setCondMsg(`✓ ${updated} cleared${skippedExcluded ? `, ${skippedExcluded} AI-excluded left alone` : ""}`)
+      setTimeout(() => setCondMsg(null), 5000)
+      await refreshUndos()
     })
   }
 
@@ -1104,6 +1128,67 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
     setFBarcode(""); setFUniqueId(""); setFTitle(""); setFVendor(""); setFReceipt("")
     setFTote(""); setFCategory(""); setFPhotos(""); setFAiUpgraded(""); setFAddedToBC("")
     setFAiExcluded(""); setFKeyPoints(""); setFStatus("")
+  }
+
+  // ── Filters + sort survive opening a lot ────────────────────────────────────
+  // Opening a lot swaps this whole tab out for the editor (the ?lot= route), so
+  // every filter/sort useState above is lost on the way back. Persist them in
+  // sessionStorage per auction and restore on mount. Selection is deliberately
+  // NOT persisted — a stale tick surviving a round-trip could drive a bulk action
+  // at the wrong lots.
+  const FILTER_KEY = `catalogue_filters_${auctionId}`
+  const filtersRestored = useRef(false)
+  useEffect(() => {
+    queueMicrotask(() => {
+      try {
+        const s = JSON.parse(sessionStorage.getItem(FILTER_KEY) || "null")
+        if (s) {
+          setFBarcode(s.fBarcode ?? ""); setFUniqueId(s.fUniqueId ?? ""); setFTitle(s.fTitle ?? "")
+          setFVendor(s.fVendor ?? ""); setFReceipt(s.fReceipt ?? ""); setFTote(s.fTote ?? "")
+          setFCategory(s.fCategory ?? ""); setFPhotos(s.fPhotos ?? ""); setFAiUpgraded(s.fAiUpgraded ?? "")
+          setFAddedToBC(s.fAddedToBC ?? ""); setFAiExcluded(s.fAiExcluded ?? ""); setFKeyPoints(s.fKeyPoints ?? "")
+          setFStatus(s.fStatus ?? "")
+          if (s.sortCol) setSortCol(s.sortCol); if (s.sortDir) setSortDir(s.sortDir)
+        }
+      } catch {}
+      filtersRestored.current = true
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    if (!filtersRestored.current) return
+    try {
+      sessionStorage.setItem(FILTER_KEY, JSON.stringify({
+        fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory,
+        fPhotos, fAiUpgraded, fAddedToBC, fAiExcluded, fKeyPoints, fStatus, sortCol, sortDir,
+      }))
+    } catch {}
+  }, [FILTER_KEY, fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAiUpgraded, fAddedToBC, fAiExcluded, fKeyPoints, fStatus, sortCol, sortDir])
+
+  // ── Undo stack (this user's recent mass actions on this auction) ────────────
+  const [undos, setUndos] = useState<{ id: string; label: string; at: string }[]>([])
+  const [undoBusy, setUndoBusy] = useState(false)
+  const [undoMsg, setUndoMsg] = useState<string | null>(null)
+  async function refreshUndos() {
+    try { setUndos(await listBulkUndos(auctionId)) } catch { /* leave as-is */ }
+  }
+  useEffect(() => { refreshUndos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  function handleUndo() {
+    const top = undos[0]
+    if (!top || undoBusy) return
+    if (!confirm(`Undo "${top.label}"? Any of those lots changed since will be left as they are.`)) return
+    setUndoBusy(true); setUndoMsg(null)
+    start(async () => {
+      const r = await undoBulk(top.id)
+      if (!r.ok) setUndoMsg(`✗ ${r.error}`)
+      else setUndoMsg(`✓ Undid "${r.label}" — ${r.restored} restored${r.skipped ? `, ${r.skipped} skipped (changed since)` : ""}`)
+      setTimeout(() => setUndoMsg(null), 6000)
+      await refreshUndos()
+      setUndoBusy(false)
+      onDelete()   // re-pull lots so the list reflects the rollback
+    })
   }
 
   function exportExcel() {
@@ -1287,6 +1372,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
       setBcMsg(`${newValue ? "✓ Marked" : "↺ Unmarked"} ${count} lot${count === 1 ? "" : "s"} ${newValue ? "as added to BC" : ""}`)
       setSelected(new Set())
       onDelete()
+      await refreshUndos()
       setTimeout(() => setBcMsg(null), 3500)
     })
   }
@@ -1301,6 +1387,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
       setExcludeMsg(`${newValue ? "🚫 Excluded" : "✓ Unexcluded"} ${count} lot${count === 1 ? "" : "s"} from AI`)
       setSelected(new Set())
       onDelete()
+      await refreshUndos()
       setTimeout(() => setExcludeMsg(null), 3500)
     })
   }
@@ -1419,6 +1506,18 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Undo the most recent mass action (newest first — press again to step
+              back). Only your own actions; a lot changed since is left alone. */}
+          {!bcLocked && undos.length > 0 && (
+            <button
+              onClick={handleUndo}
+              disabled={undoBusy || pending}
+              title={`Undo: ${undos[0].label}`}
+              className="px-4 py-1.5 text-sm font-medium rounded-lg border border-amber-500 text-amber-400 bg-amber-900/20 hover:bg-amber-900/40 transition-colors disabled:opacity-50">
+              {undoBusy ? "Undoing…" : `↶ Undo: ${undos[0].label}`}
+            </button>
+          )}
+          {undoMsg && <span className="text-xs text-amber-400">{undoMsg}</span>}
           <button
             onClick={() => {
               setFillMsg(null)
@@ -1451,12 +1550,28 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
             className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showUniqueIdMatcher ? "border-cyan-500 text-cyan-400 bg-cyan-900/20" : "border-gray-600 text-gray-600 dark:text-gray-400 hover:border-cyan-500 hover:text-cyan-400"}`}>
             🔗 Unique ID Matcher
           </button>
-          <button
-            onClick={handleBulkAddConditions}
-            disabled={condPending}
-            className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-600 dark:text-gray-400 hover:border-[#2AB4A6] hover:text-[#2AB4A6] transition-colors disabled:opacity-50">
-            {condPending ? "Updating…" : "✚ Add Conditions to Descriptions"}
-          </button>
+          {!bcLocked && (
+            <>
+              <button
+                onClick={handleBulkAddConditions}
+                disabled={condPending}
+                className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-600 dark:text-gray-400 hover:border-[#2AB4A6] hover:text-[#2AB4A6] transition-colors disabled:opacity-50">
+                {condPending ? "Updating…" : `✚ Add Conditions${selected.size > 0 ? ` (${selected.size})` : ""}`}
+              </button>
+              <button
+                onClick={handleBulkRemoveConditions}
+                disabled={condPending}
+                className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-600 dark:text-gray-400 hover:border-amber-500 hover:text-amber-400 transition-colors disabled:opacity-50">
+                {condPending ? "Updating…" : `✖ Remove Conditions${selected.size > 0 ? ` (${selected.size})` : ""}`}
+              </button>
+              <button
+                onClick={handleClearDescriptions}
+                disabled={condPending}
+                className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-600 dark:text-gray-400 hover:border-red-500 hover:text-red-400 transition-colors disabled:opacity-50">
+                {condPending ? "Working…" : `🧹 Clear Descriptions${selected.size > 0 ? ` (${selected.size})` : ""}`}
+              </button>
+            </>
+          )}
           {fillMsg  && <span className="text-xs text-[#2AB4A6]">{fillMsg}</span>}
           {bidsMsg  && <span className="text-xs text-green-400">{bidsMsg}</span>}
           {titlesMsg && <span className="text-xs text-[#2AB4A6]">{titlesMsg}</span>}

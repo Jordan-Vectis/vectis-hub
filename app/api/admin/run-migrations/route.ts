@@ -84,6 +84,18 @@ const MIGRATIONS = [
     CONSTRAINT "JordanSavedChat_pkey" PRIMARY KEY ("id")
   )`,
   `CREATE INDEX IF NOT EXISTS "JordanSavedChat_ownerId_mode_idx" ON "JordanSavedChat"("ownerId", "mode")`,
+  `CREATE TABLE IF NOT EXISTS "CatalogueBulkUndo" (
+    "id"        TEXT NOT NULL,
+    "auctionId" TEXT NOT NULL,
+    "actorId"   TEXT NOT NULL,
+    "actorName" TEXT NOT NULL DEFAULT '',
+    "label"     TEXT NOT NULL DEFAULT '',
+    "entries"   JSONB NOT NULL,
+    "undone"    BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "CatalogueBulkUndo_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "CatalogueBulkUndo_auctionId_actorId_undone_createdAt_idx" ON "CatalogueBulkUndo"("auctionId", "actorId", "undone", "createdAt")`,
   `CREATE TABLE IF NOT EXISTS "ConditionWording" (
     "id"        TEXT NOT NULL,
     "label"     TEXT NOT NULL,

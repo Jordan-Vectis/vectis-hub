@@ -1475,6 +1475,25 @@ model McocChampionProfile {
   updatedAt     DateTime  @updatedAt
 }
 
+// Snapshot backing the Manage Lots "Undo" button. One row per bulk action that
+// changed lot fields (add/remove conditions, clear descriptions, bulk flags),
+// storing each affected lot's before+after values so the action can be reversed.
+// Scoped to the actor so a cataloguer only undoes their own mass actions;
+// conflict-safe on replay (a lot changed since is skipped). Not FK'd to lots so
+// a later lot delete can't cascade it away.
+model CatalogueBulkUndo {
+  id        String   @id @default(cuid())
+  auctionId String
+  actorId   String                    // only this user sees/undoes it
+  actorName String   @default("")
+  label     String   @default("")     // human summary shown on the Undo button
+  entries   Json                       // [{ lotId, fields: { <col>: { before, after } } }]
+  undone    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([auctionId, actorId, undone, createdAt])
+}
+
 // A saved Alliance War attack path (secret /jordan MCOC). One row per fight,
 // ordered, per owner. The nodes photo is uploaded once and reused every war
 // (the path's nodes don't change); only the defender is overtyped each week.

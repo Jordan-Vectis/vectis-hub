@@ -70,6 +70,85 @@ async function updateLotLogged(lotId: string, data: Record<string, any>, ctx: Lo
   return old
 }
 
+// ── Bulk-action undo ─────────────────────────────────────────────────────────
+// Records a per-lot before/after snapshot for every mass action that edits lot
+// fields, so Manage Lots can offer a multi-step, conflict-safe Undo. Backed by
+// its own table (NOT the change log — that stores display labels + best-effort
+// rows, too lossy to reverse). Scoped to the actor.
+
+type UndoField = { before: unknown; after: unknown }
+type UndoEntry = { lotId: string; fields: Record<string, UndoField> }
+
+async function recordBulkUndo(
+  auctionId: string,
+  session: Awaited<ReturnType<typeof requireCataloguer>>,
+  label: string,
+  entries: UndoEntry[],
+) {
+  const real = entries.filter((e) => Object.keys(e.fields).length > 0)
+  if (real.length === 0) return
+  try {
+    await prisma.catalogueBulkUndo.create({
+      data: { auctionId, actorId: session.user.id, actorName: changedByOf(session), label, entries: real as any },
+    })
+  } catch { /* undo is a convenience — never fail the actual action if this write fails */ }
+}
+
+// Loose equality for the conflict check: a lot is only rolled back on a field
+// whose CURRENT value still equals what the action set it to. Compare on a
+// normalised string so null/""/boolean/number all line up.
+function sameValue(a: unknown, b: unknown): boolean {
+  return String(a ?? "") === String(b ?? "")
+}
+
+// The most recent undoable actions for THIS user on this auction (newest first).
+export async function listBulkUndos(auctionId: string) {
+  const session = await requireCataloguer()
+  const rows = await prisma.catalogueBulkUndo.findMany({
+    where: { auctionId, actorId: session.user.id, undone: false },
+    orderBy: { createdAt: "desc" },
+    take: 25,
+    select: { id: true, label: true, createdAt: true },
+  })
+  return rows.map((r) => ({ id: r.id, label: r.label, at: r.createdAt.toISOString() }))
+}
+
+// Reverse one recorded bulk action. Conflict-safe: a lot (or a single field) that
+// has changed since the action is skipped, never clobbered.
+export async function undoBulk(undoId: string): Promise<{ ok: boolean; restored?: number; skipped?: number; label?: string; error?: string }> {
+  try {
+    const session = await requireCataloguer()
+    const rec = await prisma.catalogueBulkUndo.findFirst({ where: { id: undoId, actorId: session.user.id, undone: false } })
+    if (!rec) return { ok: false, error: "That action has already been undone, or isn't yours to undo." }
+    await requireNotBCLocked(rec.auctionId, session)
+
+    const entries = (Array.isArray(rec.entries) ? rec.entries : []) as UndoEntry[]
+    const ctx: LotLogCtx = { changedBy: changedByOf(session), source: "undo", batchId: newBatchId() }
+    let restored = 0, skipped = 0
+
+    for (const e of entries) {
+      const lot = await prisma.catalogueLot.findFirst({ where: { id: e.lotId, auctionId: rec.auctionId }, select: LOGGABLE_SELECT }) as Record<string, any> | null
+      if (!lot) { skipped++; continue }
+      // Only restore fields still holding the value this action set.
+      const restore: Record<string, any> = {}
+      for (const [col, fv] of Object.entries(e.fields)) {
+        if (sameValue(lot[col], fv.after)) restore[col] = fv.before
+      }
+      if (Object.keys(restore).length === 0) { skipped++; continue }
+      // Title tracks the description — regenerate it if we're rolling one back.
+      if ("description" in restore) restore.title = titleFromDescription(String(restore.description ?? ""))
+      await updateLotLogged(e.lotId, restore, ctx)
+      restored++
+    }
+
+    await prisma.catalogueBulkUndo.update({ where: { id: rec.id }, data: { undone: true } })
+    revalidatePath(`/tools/cataloguing/auctions/${rec.auctionId}`)
+    return { ok: true, restored, skipped, label: rec.label }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Couldn't undo that." }
+  }
+}
+
 export async function createAuction(formData: FormData) {
   await requireCataloguer()
   const code = (formData.get("code") as string).toUpperCase().trim()
@@ -517,8 +596,11 @@ export async function bulkSetLotsAiExcluded(lotIds: string[], auctionId: string,
   const session = await requireCataloguer()
   if (lotIds.length === 0) return { count: 0 }
   const ctx = { changedBy: changedByOf(session), source: "bulk", batchId: newBatchId() }
+  const changing = await prisma.catalogueLot.findMany({ where: { id: { in: lotIds }, auctionId, aiExcluded: { not: value } }, select: { id: true } })
   await logBulkFlag(lotIds, auctionId, "aiExcluded", "AI Excluded", value, ctx)
   const r = await prisma.catalogueLot.updateMany({ where: { id: { in: lotIds }, auctionId }, data: { aiExcluded: value } })
+  await recordBulkUndo(auctionId, session, `${value ? "Exclude" : "Un-exclude"} from AI (${changing.length})`,
+    changing.map((l) => ({ lotId: l.id, fields: { aiExcluded: { before: !value, after: value } } })))
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
   return { count: r.count }
 }
@@ -529,8 +611,11 @@ export async function bulkSetLotsAddedToBC(lotIds: string[], auctionId: string, 
   await requireNotBCLocked(auctionId, session)
   if (lotIds.length === 0) return { count: 0 }
   const ctx = { changedBy: changedByOf(session), source: "bulk", batchId: newBatchId() }
+  const changing = await prisma.catalogueLot.findMany({ where: { id: { in: lotIds }, auctionId, addedToBC: { not: value } }, select: { id: true } })
   await logBulkFlag(lotIds, auctionId, "addedToBC", "Added to BC", value, ctx)
   const r = await prisma.catalogueLot.updateMany({ where: { id: { in: lotIds }, auctionId }, data: { addedToBC: value } })
+  await recordBulkUndo(auctionId, session, `${value ? "Mark" : "Unmark"} added to BC (${changing.length})`,
+    changing.map((l) => ({ lotId: l.id, fields: { addedToBC: { before: !value, after: value } } })))
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
   return { count: r.count }
 }
@@ -957,43 +1042,120 @@ export async function bulkAssignUniqueIds(
   return { updated, skipped }
 }
 
-// Appends "Condition appears [condition]." to every lot that has a condition set
-// but whose description doesn't already contain that phrase.
-// Returns { updated, skipped } counts.
+const conditionText = (condition: string) => `Condition appears ${condition}.`
+
+// Scope a bulk action to the selected lot ids, or the whole auction when none are
+// selected — the house pattern (setStartingBids does the same). An empty array
+// means "nothing selected → all"; a non-empty array constrains to those ids.
+const scopeWhere = (auctionId: string, lotIds?: string[]) =>
+  lotIds && lotIds.length ? { auctionId, id: { in: lotIds } } : { auctionId }
+
+// Appends "Condition appears [condition]." to lots that have a condition set but
+// whose description doesn't already contain it. Scoped to the selected lots when
+// any are selected (previously it always hit every lot — the reported bug).
 export async function bulkAddConditionsToDescriptions(
-  auctionId: string
+  auctionId: string,
+  lotIds?: string[],
 ): Promise<{ updated: number; skipped: number }> {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)
 
   const lots = await prisma.catalogueLot.findMany({
-    where:  { auctionId, condition: { not: null } },
+    where:  { ...scopeWhere(auctionId, lotIds), condition: { not: null } },
     select: { id: true, condition: true, description: true },
   })
 
   let updated = 0
   let skipped = 0
   const ctx: LotLogCtx = { changedBy: changedByOf(session), source: "bulk", batchId: newBatchId() }
+  const undo: UndoEntry[] = []
 
   for (const lot of lots) {
     const condition = lot.condition?.trim()
     if (!condition) { skipped++; continue }
+    const condText = conditionText(condition)
+    const oldDesc = lot.description ?? ""
+    if (oldDesc.includes(condText)) { skipped++; continue }   // already present
 
-    const condText = `Condition appears ${condition}.`
-
-    // Skip if the condition text is already present in the description
-    if ((lot.description ?? "").includes(condText)) { skipped++; continue }
-
-    const newDesc = lot.description?.trimEnd()
-      ? `${lot.description.trimEnd()} ${condText}`
-      : condText
-
-    await updateLotLogged(lot.id, { description: newDesc }, ctx)
+    const newDesc = oldDesc.trimEnd() ? `${oldDesc.trimEnd()} ${condText}` : condText
+    await updateLotLogged(lot.id, { description: newDesc, title: titleFromDescription(newDesc) }, ctx)
+    undo.push({ lotId: lot.id, fields: { description: { before: oldDesc, after: newDesc } } })
     updated++
   }
 
+  await recordBulkUndo(auctionId, session, `Add conditions to descriptions (${updated})`, undo)
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
   return { updated, skipped }
+}
+
+// The inverse: strip the "Condition appears [condition]." sentence this tool adds
+// back out of the description (with the space before it), leaving the rest intact.
+export async function bulkRemoveConditionsFromDescriptions(
+  auctionId: string,
+  lotIds?: string[],
+): Promise<{ updated: number; skipped: number }> {
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
+
+  const lots = await prisma.catalogueLot.findMany({
+    where:  { ...scopeWhere(auctionId, lotIds), condition: { not: null } },
+    select: { id: true, condition: true, description: true },
+  })
+
+  let updated = 0
+  let skipped = 0
+  const ctx: LotLogCtx = { changedBy: changedByOf(session), source: "bulk", batchId: newBatchId() }
+  const undo: UndoEntry[] = []
+
+  for (const lot of lots) {
+    const condition = lot.condition?.trim()
+    const oldDesc = lot.description ?? ""
+    if (!condition || !oldDesc.includes(conditionText(condition))) { skipped++; continue }
+
+    // Remove the sentence and the single space that joined it, then tidy edges.
+    const newDesc = oldDesc.split(` ${conditionText(condition)}`).join("").split(conditionText(condition)).join("").trim()
+    if (newDesc === oldDesc) { skipped++; continue }
+    await updateLotLogged(lot.id, { description: newDesc, title: titleFromDescription(newDesc) }, ctx)
+    undo.push({ lotId: lot.id, fields: { description: { before: oldDesc, after: newDesc } } })
+    updated++
+  }
+
+  await recordBulkUndo(auctionId, session, `Remove conditions from descriptions (${updated})`, undo)
+  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+  return { updated, skipped }
+}
+
+// Clear descriptions — but ONLY on lots going through AI. aiExcluded lots have a
+// hand-typed description that must be left alone, so they're never touched here.
+export async function bulkClearDescriptions(
+  auctionId: string,
+  lotIds?: string[],
+): Promise<{ updated: number; skippedExcluded: number }> {
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
+
+  const lots = await prisma.catalogueLot.findMany({
+    where:  { ...scopeWhere(auctionId, lotIds) },
+    select: { id: true, description: true, aiExcluded: true },
+  })
+
+  let updated = 0
+  let skippedExcluded = 0
+  const ctx: LotLogCtx = { changedBy: changedByOf(session), source: "bulk", batchId: newBatchId() }
+  const undo: UndoEntry[] = []
+
+  for (const lot of lots) {
+    if (lot.aiExcluded) { skippedExcluded++; continue }        // hand-typed — leave it
+    const oldDesc = lot.description ?? ""
+    if (!oldDesc.trim()) continue                              // already empty
+    await updateLotLogged(lot.id, { description: "", title: titleFromDescription("") }, ctx)
+    undo.push({ lotId: lot.id, fields: { description: { before: oldDesc, after: "" } } })
+    updated++
+  }
+
+  await recordBulkUndo(auctionId, session, `Clear descriptions (${updated})`, undo)
+  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+  return { updated, skippedExcluded }
 }
 
 // Highest existing line number for a receipt base, e.g. "R000123" → 4 when
