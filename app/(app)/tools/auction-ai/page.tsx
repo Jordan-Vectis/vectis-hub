@@ -4461,14 +4461,26 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
             <span className="text-xs font-medium">🔍 Google Search</span>
           </label>
 
-          {/* Auto-apply vs manual review toggle */}
-          <label className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-colors ${autoApply ? "bg-green-950/40 border-green-700/60 text-green-300" : "bg-amber-950/40 border-amber-700/60 text-amber-300"}`}
-            title={autoApply ? "Descriptions apply to the catalogue as each lot completes" : "All descriptions held for your review before anything is applied"}>
-            <input type="checkbox" checked={autoApply}
-              onChange={e => { setAutoApply(e.target.checked); try { localStorage.setItem("pipeline_auto_apply", String(e.target.checked)) } catch {} }}
-              className="w-3.5 h-3.5 accent-green-500" />
-            <span className="text-xs font-medium">{autoApply ? "⚡ Auto-apply" : "👁 Review all before applying"}</span>
-          </label>
+          {/* Auto-apply vs manual review — a segmented toggle so BOTH options are
+              always on screen and the highlight makes the active one obvious
+              (the old single checkbox only ever showed one label). */}
+          {(() => {
+            const setMode = (v: boolean) => { setAutoApply(v); try { localStorage.setItem("pipeline_auto_apply", String(v)) } catch {} }
+            return (
+              <div className="inline-flex rounded-lg border border-gray-300 dark:border-gray-700 overflow-hidden text-xs font-medium">
+                <button type="button" onClick={() => setMode(true)} aria-pressed={autoApply}
+                  title="Descriptions apply to the catalogue as each lot completes"
+                  className={`px-3 py-1.5 transition-colors ${autoApply ? "bg-green-600 text-white" : "bg-gray-100 dark:bg-[#2C2C2E] text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"}`}>
+                  ⚡ Auto-apply
+                </button>
+                <button type="button" onClick={() => setMode(false)} aria-pressed={!autoApply}
+                  title="All descriptions held for your review before anything is applied"
+                  className={`px-3 py-1.5 border-l border-gray-300 dark:border-gray-700 transition-colors ${!autoApply ? "bg-amber-500 text-black" : "bg-gray-100 dark:bg-[#2C2C2E] text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"}`}>
+                  👁 Review all before applying
+                </button>
+              </div>
+            )
+          })()}
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
