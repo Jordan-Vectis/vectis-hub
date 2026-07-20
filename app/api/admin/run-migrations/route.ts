@@ -73,6 +73,17 @@ const MIGRATIONS = [
     CONSTRAINT "McocWarFight_pkey" PRIMARY KEY ("id")
   )`,
   `CREATE INDEX IF NOT EXISTS "McocWarFight_ownerId_idx" ON "McocWarFight"("ownerId")`,
+  `CREATE TABLE IF NOT EXISTS "JordanSavedChat" (
+    "id"        TEXT NOT NULL,
+    "ownerId"   TEXT NOT NULL,
+    "mode"      TEXT NOT NULL DEFAULT 'chat',
+    "title"     TEXT NOT NULL DEFAULT '',
+    "messages"  JSONB NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "JordanSavedChat_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "JordanSavedChat_ownerId_mode_idx" ON "JordanSavedChat"("ownerId", "mode")`,
   `CREATE TABLE IF NOT EXISTS "ConditionWording" (
     "id"        TEXT NOT NULL,
     "label"     TEXT NOT NULL,

@@ -1490,6 +1490,21 @@ model McocWarFight {
   @@index([ownerId])
 }
 
+// A chat explicitly saved from the secret /jordan chat panel (Ask AI or the
+// Cooking chef). `mode` keeps the two lists separate. Image data URLs are
+// stripped before saving (only a count is kept) so rows stay small.
+model JordanSavedChat {
+  id        String   @id @default(cuid())
+  ownerId   String
+  mode      String   @default("chat")  // "chat" | "cooking"
+  title     String   @default("")
+  messages  Json                       // [{ role, text, queries?, imgs? }]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId, mode])
+}
+
 // Signed acceptance of the iPad Acceptable Use Policy (see lib/terms.ts + components/terms-gate.tsx).
 // One row per user per policy version; the drawn signature is stored as a PNG data URL.
 // Decoupled from User (plain userId, no FK) so it never affects the login select.

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import ModelPicker, { getJordanModel } from "./model-picker"
+import { saveChat, listSavedChats, getSavedChat, renameSavedChat, deleteSavedChat } from "@/lib/actions/jordan-chat"
 
 // Shared retro-terminal chat panel for the secret menu. History persists per
 // browser in localStorage (per storageKey) so a refresh doesn't wipe the chat.
@@ -76,6 +77,55 @@ export default function ChatPanel({
   const [attaching, setAttaching] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  // ── Saved chats (server-side, per mode) ──
+  type Saved = { id: string; title: string; updatedAt: string }
+  const [saved, setSaved] = useState<Saved[] | null>(null)   // null = not loaded yet
+  const [showSaved, setShowSaved] = useState(false)
+  const [savedBusy, setSavedBusy] = useState(false)
+  const [savedNote, setSavedNote] = useState<string | null>(null)
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const [renameText, setRenameText] = useState("")
+
+  async function refreshSaved() {
+    try { setSaved(await listSavedChats(mode)) } catch { setSaved([]) }
+  }
+  // Load the list once the drawer is first opened — no cost until it's wanted.
+  async function toggleSaved() {
+    const next = !showSaved
+    setShowSaved(next)
+    if (next && saved === null) await refreshSaved()
+  }
+  async function doSave() {
+    if (savedBusy || messages.length === 0) return
+    setSavedBusy(true); setSavedNote(null)
+    try {
+      const res = await saveChat(mode, messages)
+      if (!res.ok) { setSavedNote("✗ " + res.error); return }
+      setSavedNote(`✓ Saved as "${res.title}"`)
+      setTimeout(() => setSavedNote(null), 4000)
+      await refreshSaved()
+    } catch { setSavedNote("✗ Couldn't save that chat.") } finally { setSavedBusy(false) }
+  }
+  async function loadSaved(id: string) {
+    if (savedBusy) return
+    setSavedBusy(true)
+    try {
+      const res = await getSavedChat(id)
+      if (res.ok) { persist(res.messages as Msg[]); setShowSaved(false); setError(null) }
+    } catch { /* leave the current chat alone */ } finally { setSavedBusy(false) }
+  }
+  async function doRename(id: string) {
+    const t = renameText.trim()
+    setRenaming(null)
+    if (!t) return
+    setSaved((l) => (l ?? []).map((c) => (c.id === id ? { ...c, title: t } : c)))
+    try { await renameSavedChat(id, t) } catch { /* ignore */ }
+  }
+  async function doDelete(id: string) {
+    setSaved((l) => (l ?? []).filter((c) => c.id !== id))
+    try { await deleteSavedChat(id) } catch { /* ignore */ }
+  }
 
   async function addFiles(files: FileList | File[] | null) {
     if (!files || files.length === 0) return
@@ -206,6 +256,39 @@ export default function ChatPanel({
       </div>
 
       <div className="pt-3 mt-3 border-t" style={{ borderColor: DIM }}>
+        {/* Saved chats drawer — opens above the input so the conversation stays put. */}
+        {showSaved && (
+          <div className="mb-2 rounded-lg border p-2.5 space-y-1.5 max-h-56 overflow-y-auto" style={{ borderColor: ACC }}>
+            <p className="text-[10px] uppercase tracking-widest opacity-50">Saved chats</p>
+            {saved === null && <p className="text-xs opacity-50 animate-pulse">Loading…</p>}
+            {saved?.length === 0 && <p className="text-xs opacity-50">Nothing saved yet — press SAVE to keep this conversation.</p>}
+            {saved?.map((c) => (
+              <div key={c.id} className="flex items-center gap-2 text-xs">
+                {renaming === c.id ? (
+                  <>
+                    <input value={renameText} onChange={(e) => setRenameText(e.target.value)} autoFocus
+                      onKeyDown={(e) => { if (e.key === "Enter") doRename(c.id); if (e.key === "Escape") setRenaming(null) }}
+                      className="jsys-input flex-1 min-w-0 bg-black border rounded px-2 py-1 focus:outline-none" />
+                    <button onClick={() => doRename(c.id)} className="px-1.5 font-bold" style={{ color: ACC }}>✓</button>
+                    <button onClick={() => setRenaming(null)} className="px-1.5 opacity-60">×</button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={() => loadSaved(c.id)} disabled={savedBusy}
+                      className="flex-1 min-w-0 text-left truncate hover:underline disabled:opacity-40" title="Load this chat">
+                      <span className="text-white">{c.title}</span>
+                    </button>
+                    <span className="opacity-30 shrink-0 text-[10px]">{new Date(c.updatedAt).toLocaleDateString("en-GB")}</span>
+                    <button onClick={() => { setRenaming(c.id); setRenameText(c.title) }} className="px-1 opacity-40 hover:opacity-100 shrink-0" title="Rename">✎</button>
+                    <button onClick={() => doDelete(c.id)} className="px-1 text-red-400 opacity-50 hover:opacity-100 shrink-0" title="Delete">×</button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {savedNote && <p className="text-[11px] mb-1.5 opacity-80">{savedNote}</p>}
+
         {(attns.length > 0 || attaching) && (
           <div className="flex flex-wrap gap-2 mb-2">
             {attns.map((a, i) => (
@@ -267,6 +350,23 @@ export default function ChatPanel({
               title="Let the AI look things up on Google in real time (fixtures, prices, news)"
             >
               🔎 WEB SEARCH [ {search ? "ON" : "OFF"} ]
+            </button>
+            <button
+              onClick={doSave}
+              disabled={savedBusy || messages.length === 0}
+              className="text-[10px] uppercase tracking-widest px-2 py-1 rounded border transition-colors hover:opacity-100 disabled:opacity-25"
+              style={{ borderColor: DIM, opacity: 0.6 }}
+              title="Save this conversation so you can come back to it"
+            >
+              💾 SAVE
+            </button>
+            <button
+              onClick={toggleSaved}
+              className="text-[10px] uppercase tracking-widest px-2 py-1 rounded border transition-colors hover:opacity-100"
+              style={{ borderColor: showSaved ? ACC : DIM, background: showSaved ? GLOW : "transparent", opacity: showSaved ? 1 : 0.6 }}
+              title="Your saved chats"
+            >
+              📁 SAVED{saved?.length ? ` [ ${saved.length} ]` : ""}
             </button>
             <p className="text-[10px] opacity-40 hidden sm:block">ENTER to send · paste / drag to attach</p>
           </div>
