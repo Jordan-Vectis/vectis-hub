@@ -29,7 +29,7 @@ Built after a cataloguer had a ~4h working-hours gap between lot saves with zero
 
 - **lib/idle-gaps.ts** — pure detector: working-hours gaps between consecutive lot saves over the user's own threshold, each marked explained (a matching idle reason was logged) or not. Skips gaps of a full working day+ (days off).
 - **/admin/idle-gaps** — ADMIN-ONLY full-width report. Date range, groups by cataloguer, flags unexplained gaps, shows a scan-timer-OFF badge. Reads the save history directly, so it catches the gap however the in-app popup was avoided. Linked from Admin → Idle Timer + its own Admin card.
-- The popup itself has no dismiss button — it can't be closed without logging a reason. Part 2 (hardening the client trigger so honest gaps always prompt in the moment) is a follow-up.`,
+- The popup itself has no dismiss button — it can't be closed without logging a reason. Jack's "catch gaps inside a lot" commit hardens the WITHIN-lot case (walk away mid-lot); the between-lots case that started this may still have a hole, but the detector catches it either way.`,
   },
   {
     filename: "manage_lots_bulk_undo.md",
