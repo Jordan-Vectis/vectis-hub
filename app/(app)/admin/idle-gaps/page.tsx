@@ -144,7 +144,9 @@ export default async function IdleGapsPage({ searchParams }: { searchParams: Pro
                     {gaps.map((g, i) => (
                       <tr key={i} className="border-t border-gray-100 dark:border-gray-800/70">
                         <td className="px-4 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">{g.start.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" })}</td>
-                        <td className="px-4 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap tabular-nums">{hm(g.start)} → {hm(g.end)}</td>
+                        <td className="px-4 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap tabular-nums">
+                          {hm(g.start)} → {g.start.toDateString() !== g.end.toDateString() && <span className="text-amber-500">(next day) </span>}{hm(g.end)}
+                        </td>
                         <td className="px-4 py-2 font-semibold text-gray-900 dark:text-white tabular-nums">{fmtWorkingGap(g.workingMs)}</td>
                         <td className="px-4 py-2 text-gray-500 dark:text-gray-400 font-mono text-xs">{g.beforeBarcode ?? "?"} → {g.afterBarcode ?? "?"}</td>
                         <td className="px-4 py-2 whitespace-nowrap">

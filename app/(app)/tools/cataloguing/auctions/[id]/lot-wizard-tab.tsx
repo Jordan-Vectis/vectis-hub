@@ -1127,9 +1127,14 @@ export default function LotWizardTab({
     if (m > 0) return `${m}m ${s}s`
     return `${s}s`
   }
-  // Wall-clock HH:MM for the "from … to …" gap window (browser time = London).
-  function fmtClock(ms: number) {
-    return new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+  // The "from … to …" gap window. HH:MM each end, but when the gap crosses
+  // midnight (an early finish yesterday + a late start today) each side gets its
+  // weekday so it doesn't read as a same-day window.
+  function fmtGapWindow(startMs: number, endMs: number) {
+    const t = (ms: number) => new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+    const day = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { weekday: "short" })
+    const sameDay = new Date(startMs).toDateString() === new Date(endMs).toDateString()
+    return sameDay ? `${t(startMs)} – ${t(endMs)}` : `${day(startMs)} ${t(startMs)} – ${day(endMs)} ${t(endMs)}`
   }
 
   return (
@@ -1151,7 +1156,7 @@ export default function LotWizardTab({
               <p className="text-5xl font-mono font-bold text-gray-900">{fmtIdleDuration(idleSecs)}</p>
               {idleStartedAtRef.current > 0 && (
                 <p className="text-sm font-semibold text-gray-700 mt-1.5">
-                  {fmtClock(idleStartedAtRef.current)} – {fmtClock(idleEndedAtRef.current)}
+                  {fmtGapWindow(idleStartedAtRef.current, idleEndedAtRef.current)}
                 </p>
               )}
               <p className="text-xs text-gray-500 mt-1">

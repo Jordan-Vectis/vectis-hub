@@ -28,6 +28,37 @@ export function londonDayKey(utcMs: number): string {
   return new Date(utcMs).toLocaleDateString("en-CA", { timeZone: "Europe/London" })
 }
 
+// The UTC instant of London 09:00 (work start) on the London day of `utcMs`.
+export function londonWorkStartMs(utcMs: number): number {
+  const dayKey = londonDayKey(utcMs)
+  const off = londonOffsetMs(new Date(`${dayKey}T12:00:00Z`).getTime())   // sampled midday, clear of DST edges
+  return new Date(`${dayKey}T09:00:00Z`).getTime() - off
+}
+
+// Grace at the START of a working day: a first lot within this long of 09:00 is
+// a normal morning start and isn't gated. Past it, the gap is treated like any
+// other (and shown spanning back to the last save, so an early finish the day
+// before is visible too).
+export const START_GRACE_MS = 30 * 60 * 1000
+
+// Should a lot created at `nowMs`, following the cataloguer's last save at
+// `sinceMs`, be prompted for an idle reason? Returns the working idle across the
+// WHOLE window (including any prior-day tail, so leaving early yesterday shows)
+// and whether it trips the gate.
+//   - Day off / holiday (≥ 8 working hours) → never.
+//   - First lot of a new day → only if more than the start-of-day grace into the
+//     working day (a normal ~9:00–9:30 start is fine).
+//   - Otherwise → gap ≥ the user's threshold.
+export function assessGap(sinceMs: number, nowMs: number, thresholdMs: number): { gate: boolean; idleMs: number } {
+  const idleMs = workingMsLondon(sinceMs, nowMs)
+  if (idleMs >= FULL_DAY_WORK_MS) return { gate: false, idleMs }
+  if (londonDayKey(sinceMs) !== londonDayKey(nowMs)) {
+    const morningIdle = workingMsLondon(londonWorkStartMs(nowMs), nowMs)
+    return { gate: morningIdle > START_GRACE_MS, idleMs }
+  }
+  return { gate: idleMs >= thresholdMs, idleMs }
+}
+
 // Working ms (Mon–Fri 09:00–17:00 Europe/London) between two UTC instants.
 export function workingMsLondon(startMs: number, endMs: number): number {
   if (endMs <= startMs) return 0
@@ -91,8 +122,8 @@ export function findUserGaps(
   const gaps: IdleGap[] = []
   for (let i = 1; i < sorted.length; i++) {
     const prev = sorted[i - 1], next = sorted[i]
-    const workingMs = workingMsLondon(prev.savedAt.getTime(), next.savedAt.getTime())
-    if (workingMs < thresholdMs || workingMs >= FULL_DAY_WORK_MS) continue
+    const { gate, idleMs: workingMs } = assessGap(prev.savedAt.getTime(), next.savedAt.getTime(), thresholdMs)
+    if (!gate) continue
     const idle = matchIdle(prev.savedAt.getTime(), next.savedAt.getTime(), idles)
     gaps.push({
       userId, userName,

@@ -7,7 +7,7 @@ import {
   logLotCreated, logLotsCreated, logLotDeleted, logLotFieldChanges, logLotPhoto,
   buildLotEventRow, writeLotEvents, type LotLogCtx,
 } from "@/lib/lot-log"
-import { workingMsLondon, londonDayKey } from "@/lib/idle-gaps"
+import { assessGap } from "@/lib/idle-gaps"
 
 // First 83 characters of the description — no sentence splitting, full stops do not break title
 function titleFromDescription(desc: string): string {
@@ -406,10 +406,12 @@ async function idleGateForCreate(userId: string): Promise<IdleGateBlock | null> 
   if (!lastSave) return null                     // first ever lot — nothing to measure from
   const sinceMs = lastSave.savedAt.getTime()
   const now = Date.now()
-  if (londonDayKey(sinceMs) !== londonDayKey(now)) return null   // first lot of a new day
 
-  const idleMs = workingMsLondon(sinceMs, now)
-  if (idleMs < thresholdMs) return null
+  // First lot of the day gets a start-of-day grace; otherwise a gap ≥ threshold.
+  // idleMs is the full window (spans back to the last save, so a late finish
+  // yesterday shows alongside a late start today).
+  const { gate, idleMs } = assessGap(sinceMs, now, thresholdMs)
+  if (!gate) return null
 
   // Already accounted for? (their own within-lot popup, or a prior gate answer.)
   const covering = await prisma.idleLog.findFirst({
