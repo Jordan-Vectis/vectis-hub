@@ -27,7 +27,11 @@ export async function GET() {
     ])
 
     const lastMs = Math.max(lastSave?.savedAt.getTime() ?? 0, lastIdle?.createdAt.getTime() ?? 0)
-    return NextResponse.json({ lastMs })
+    // Return the SERVER's clock too, so the wizard measures the idle gap against
+    // server time rather than the device clock — a phone with its date/time
+    // changed then can't hide idle from the popup. (The create-lot gate already
+    // enforces on server time; this keeps the on-screen check consistent with it.)
+    return NextResponse.json({ lastMs, serverNow: Date.now() })
   } catch (e: any) {
     console.error("catalogue/last-activity error:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })

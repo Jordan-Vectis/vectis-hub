@@ -413,12 +413,19 @@ async function idleGateForCreate(userId: string): Promise<IdleGateBlock | null> 
   const { gate, idleMs } = assessGap(sinceMs, now, thresholdMs)
   if (!gate) return null
 
-  // Already accounted for? (their own within-lot popup, or a prior gate answer.)
-  const covering = await prisma.idleLog.findFirst({
+  // Already accounted for? A logged idle only clears the gate if it actually
+  // COVERS the gap — not merely starts near it. Sum the idle logged in the window
+  // and require it to cover at least half the unexplained working gap. The old
+  // check cleared on ANY idle log in the window regardless of length, so a
+  // 1-second throwaway reason could excuse hours. The genuine flow still clears on
+  // the retry: answering the popup logs the full gap as its duration (idleSecs is
+  // seeded from this same idleMs), so coveredMs ≈ idleMs.
+  const windowIdle = await prisma.idleLog.findMany({
     where: { userId, idleStartedAt: { gte: new Date(sinceMs - 5 * 60_000), lte: new Date(now + 5 * 60_000) } },
-    select: { id: true },
+    select: { idleDurationMs: true },
   })
-  if (covering) return null
+  const coveredMs = windowIdle.reduce((s, l) => s + l.idleDurationMs, 0)
+  if (coveredMs >= idleMs / 2) return null
 
   return { needsIdle: true, idleMs, sinceMs }
 }
@@ -489,22 +496,32 @@ export async function createLot(auctionId: string, formData: FormData) {
 
   await logLotCreated(lot, lot.auction?.code ?? "", { changedBy: createdByName, source: "lot_create" })
 
-  // Log timing if provided
+  // ALWAYS log the save — even when the client sends durationMs = 0.
+  //
+  // durationMs is 0 whenever the scan timer never started (barcodeStartedAt was
+  // null at save). On a phone the barcode can be filled without a keystroke
+  // (autofill / a scanner keyboard-app injecting the value / paste), which never
+  // fires the input's onChange, so the timer never starts. Previously this write
+  // was gated on `durationMs > 0`, so those saves left NO CatalogueTimingLog at
+  // all — which (a) starved the server idle gate of a baseline (it measures from
+  // the last timing log, so it could never fire for that user) and (b) hid the
+  // user entirely from /admin/idle-gaps and the cataloguing reports, which are
+  // built from these rows. Writing unconditionally, with the SERVER's savedAt,
+  // anchors the whole idle system to server time regardless of the device.
+  // durationMs = 0 marks an untimed save; report speed stats ignore those rows.
   const durationMs  = parseInt(formData.get("durationMs")  as string ?? "0") || 0
   const keyPointsMs = parseInt(formData.get("keyPointsMs") as string ?? "0") || 0
-  if (durationMs > 0) {
-    await prisma.catalogueTimingLog.create({
-      data: {
-        auctionId,
-        lotId:       lot.id,
-        userId:      session.user.id,
-        userName:    createdByName,
-        method:      "WIZARD",
-        durationMs,
-        keyPointsMs: keyPointsMs > 0 ? keyPointsMs : null,
-      },
-    })
-  }
+  await prisma.catalogueTimingLog.create({
+    data: {
+      auctionId,
+      lotId:       lot.id,
+      userId:      session.user.id,
+      userName:    createdByName,
+      method:      "WIZARD",
+      durationMs,
+      keyPointsMs: keyPointsMs > 0 ? keyPointsMs : null,
+    },
+  })
 
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
 }

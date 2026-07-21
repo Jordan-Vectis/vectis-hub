@@ -87,7 +87,7 @@ export default async function ReportsOverviewPage({
   type UserRow = {
     userId: string; userName: string
     total: number; wizard: number; photo: number
-    sumMs: number; minMs: number; maxMs: number
+    sumMs: number; minMs: number; maxMs: number; timed: number
     activeDays: number; completedLots: number; completedDays: number
     thisWeek: number; today: number
   }
@@ -112,9 +112,10 @@ export default async function ReportsOverviewPage({
              COUNT(*)::int                                                             AS "total",
              COUNT(*) FILTER (WHERE t.method = 'WIZARD')::int                          AS "wizard",
              COUNT(*) FILTER (WHERE t.method <> 'WIZARD')::int                         AS "photo",
-             COALESCE(SUM(t."durationMs"), 0)::float8                                  AS "sumMs",
-             COALESCE(MIN(t."durationMs"), 0)::int                                     AS "minMs",
-             COALESCE(MAX(t."durationMs"), 0)::int                                     AS "maxMs",
+             COALESCE(SUM(t."durationMs") FILTER (WHERE t."durationMs" > 0), 0)::float8 AS "sumMs",
+             COALESCE(MIN(t."durationMs") FILTER (WHERE t."durationMs" > 0), 0)::int    AS "minMs",
+             COALESCE(MAX(t."durationMs") FILTER (WHERE t."durationMs" > 0), 0)::int    AS "maxMs",
+             COUNT(*) FILTER (WHERE t."durationMs" > 0)::int                           AS "timed",
              COUNT(DISTINCT (t."savedAt" AT TIME ZONE 'Europe/London')::date)::int     AS "activeDays",
              COUNT(*) FILTER (WHERE (t."savedAt" AT TIME ZONE 'Europe/London')::date
                                   <> (now() AT TIME ZONE 'Europe/London')::date)::int  AS "completedLots",
@@ -178,7 +179,7 @@ export default async function ReportsOverviewPage({
         totalLots:        t?.total ?? 0,
         wizardLots:       t?.wizard ?? 0,
         photoOnlyLots:    t?.photo ?? 0,
-        avgMs:            t && t.total > 0 ? Math.round(t.sumMs / t.total) : 0,
+        avgMs:            t && t.timed > 0 ? Math.round(t.sumMs / t.timed) : 0,
         fastestMs:        t?.minMs ?? 0,
         slowestMs:        t?.maxMs ?? 0,
         dailyAvg,
@@ -193,9 +194,13 @@ export default async function ReportsOverviewPage({
 
   // ── Overall stats ──
   const totalLots  = userStats.reduce((s, u) => s + u.totalLots, 0)
+  // Avg time / fastest are over TIMED saves only — untimed rows (durationMs 0)
+  // still count as lots but carry no time, so they must not drag the average or
+  // read as a 0-second record.
   const sumAllMs   = timingRows.reduce((s, r) => s + r.sumMs, 0)
-  const overallAvg = totalLots > 0 ? Math.round(sumAllMs / totalLots) : 0
-  const overallMin = minOf(timingRows.filter(r => r.total > 0).map(r => r.minMs))
+  const totalTimed = timingRows.reduce((s, r) => s + r.timed, 0)
+  const overallAvg = totalTimed > 0 ? Math.round(sumAllMs / totalTimed) : 0
+  const overallMin = minOf(timingRows.filter(r => r.timed > 0).map(r => r.minMs))
   const lotsToday  = userStats.reduce((s, u) => s + u.lotsToday, 0)
   const hasData    = userStats.length > 0
 

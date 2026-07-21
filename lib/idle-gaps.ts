@@ -51,8 +51,14 @@ export const START_GRACE_MS = 30 * 60 * 1000
 //   - Otherwise → gap ≥ the user's threshold.
 export function assessGap(sinceMs: number, nowMs: number, thresholdMs: number): { gate: boolean; idleMs: number } {
   const idleMs = workingMsLondon(sinceMs, nowMs)
-  if (idleMs >= FULL_DAY_WORK_MS) return { gate: false, idleMs }
-  if (londonDayKey(sinceMs) !== londonDayKey(nowMs)) {
+  const differentDay = londonDayKey(sinceMs) !== londonDayKey(nowMs)
+  // A gap of a full working day or more is time off (holiday / long absence) ONLY
+  // when it actually spans into another day. A SAME-day gap that reaches ~8
+  // working hours means they were idle the whole working day — present but
+  // inactive — and must still be flagged. Requiring the day boundary also stops a
+  // stale baseline (e.g. no save written all day) from reading as "day off".
+  if (idleMs >= FULL_DAY_WORK_MS && differentDay) return { gate: false, idleMs }
+  if (differentDay) {
     const morningIdle = workingMsLondon(londonWorkStartMs(nowMs), nowMs)
     return { gate: morningIdle > START_GRACE_MS, idleMs }
   }
@@ -95,17 +101,20 @@ export type IdleGap = {
   reason: string | null
 }
 
-// A gap is EXPLAINED if the user logged an idle reason that STARTED around when
-// the gap started (idleStartedAt within the gap window, with a small margin) —
-// i.e. they accounted for that break. Anything else is unexplained.
+// A gap is EXPLAINED when the idle logged in its window COVERS at least half its
+// working length — the same coverage rule the create-lot gate uses, so the report
+// and the gate agree. (The old check marked a gap explained if ANY idle merely
+// STARTED in the window, so a 1-second throwaway reason wrongly excused hours.)
+// Returns the covering reason (first log in the window) for display.
 const MATCH_MARGIN_MS = 5 * 60 * 1000
 
-function matchIdle(startMs: number, endMs: number, idles: GapIdle[]): GapIdle | null {
-  for (const idle of idles) {
-    const s = idle.idleStartedAt.getTime()
-    if (s >= startMs - MATCH_MARGIN_MS && s <= endMs + MATCH_MARGIN_MS) return idle
-  }
-  return null
+function coveringIdle(startMs: number, endMs: number, workingMs: number, idles: GapIdle[]): { explained: boolean; reason: string | null } {
+  const inWindow = idles.filter(i => {
+    const s = i.idleStartedAt.getTime()
+    return s >= startMs - MATCH_MARGIN_MS && s <= endMs + MATCH_MARGIN_MS
+  })
+  const coveredMs = inWindow.reduce((sum, i) => sum + i.idleDurationMs, 0)
+  return { explained: coveredMs >= workingMs / 2, reason: inWindow[0]?.reason ?? null }
 }
 
 // Find every working-hours gap over `thresholdMs` in one user's save history.
@@ -124,14 +133,14 @@ export function findUserGaps(
     const prev = sorted[i - 1], next = sorted[i]
     const { gate, idleMs: workingMs } = assessGap(prev.savedAt.getTime(), next.savedAt.getTime(), thresholdMs)
     if (!gate) continue
-    const idle = matchIdle(prev.savedAt.getTime(), next.savedAt.getTime(), idles)
+    const match = coveringIdle(prev.savedAt.getTime(), next.savedAt.getTime(), workingMs, idles)
     gaps.push({
       userId, userName,
       start: prev.savedAt, end: next.savedAt, workingMs,
       beforeBarcode: prev.lotBarcode ?? null,
       afterBarcode: next.lotBarcode ?? null,
-      explained: !!idle,
-      reason: idle?.reason ?? null,
+      explained: match.explained,
+      reason: match.reason,
     })
   }
   return gaps

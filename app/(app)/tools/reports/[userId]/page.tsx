@@ -188,10 +188,13 @@ export default async function ReportsUserPage({
   const photoOnlyLogs = incLogs.filter(l => l.method === "PHOTO_ONLY")
 
   // ── Overall speed ──
-  const allDurations = incLogs.map(l => l.durationMs)
-  const overallAvg   = avg(allDurations)
-  const fastest      = minOf(allDurations)
-  const slowest      = maxOf(allDurations)
+  // Speed stats ignore untimed saves (durationMs 0 — e.g. a phone save where the
+  // scan timer never started). Those rows still COUNT as lots elsewhere; they
+  // simply carry no time, so including them would report a fastest lot of 0s.
+  const timedDurations = incLogs.filter(l => l.durationMs > 0).map(l => l.durationMs)
+  const overallAvg   = avg(timedDurations)
+  const fastest      = minOf(timedDurations)
+  const slowest      = maxOf(timedDurations)
 
   // ── Today stats (derived from range-filtered logs; shows correctly when range includes today) ──
   const todayLogs       = incLogs.filter(l => l.savedAt >= todayStart)
@@ -230,7 +233,10 @@ export default async function ReportsUserPage({
     e.count++; e.durations.push(log.durationMs)
   }
   const auctionStats = [...auctionMap.values()]
-    .map(a => ({ ...a, avgMs: avg(a.durations), fastestMs: minOf(a.durations), slowestMs: maxOf(a.durations) }))
+    .map(a => {
+      const timed = a.durations.filter(d => d > 0)   // untimed saves don't skew avg/fastest
+      return { ...a, avgMs: avg(timed), fastestMs: minOf(timed), slowestMs: maxOf(timed) }
+    })
     .sort((a, b) => b.count - a.count)
 
   // ── Daily breakdown: cataloguing vs idle per day ──
@@ -457,16 +463,16 @@ export default async function ReportsUserPage({
                         <span className="text-sm font-semibold text-blue-400">Wizard</span>
                         <span className="text-sm font-bold text-white">{wizardLogs.length} lots</span>
                       </div>
-                      <PctBar pct={logs.length ? (wizardLogs.length / logs.length) * 100 : 0} colour="#3b82f6" />
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Avg {fmtDuration(wizardLogs.length ? avg(wizardLogs.map(l => l.durationMs)) : 0)}</p>
+                      <PctBar pct={incLogs.length ? (wizardLogs.length / incLogs.length) * 100 : 0} colour="#3b82f6" />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Avg {fmtDuration(avg(wizardLogs.filter(l => l.durationMs > 0).map(l => l.durationMs)))}</p>
                     </div>
                     <div>
                       <div className="flex justify-between mb-1">
                         <span className="text-sm font-semibold text-purple-400">Photo Only</span>
                         <span className="text-sm font-bold text-white">{photoOnlyLogs.length} lots</span>
                       </div>
-                      <PctBar pct={logs.length ? (photoOnlyLogs.length / logs.length) * 100 : 0} colour="#a855f7" />
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Avg {fmtDuration(photoOnlyLogs.length ? avg(photoOnlyLogs.map(l => l.durationMs)) : 0)}</p>
+                      <PctBar pct={incLogs.length ? (photoOnlyLogs.length / incLogs.length) * 100 : 0} colour="#a855f7" />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Avg {fmtDuration(avg(photoOnlyLogs.filter(l => l.durationMs > 0).map(l => l.durationMs)))}</p>
                     </div>
                   </div>
                 </div>

@@ -531,15 +531,20 @@ export default function LotWizardTab({
   // silently, and someone with no history at all is never asked.
   async function checkIdleOnLotStart() {
     if (!showScanTimer || idlePopup) return
-    const now = Date.now()
+    let now = Date.now()   // device clock; replaced by the server's below
     try {
       const r = await fetch("/api/catalogue/last-activity")
       if (r.ok) {
         const j = await r.json()
         const serverMs = Number(j?.lastMs) || 0
         if (serverMs > lastActivityRef.current) lastActivityRef.current = serverMs
+        // Measure the gap against SERVER time so a tampered phone clock can't
+        // shrink it. Only falls back to the device clock when offline, where the
+        // server-side create-lot gate still backstops the save anyway.
+        const serverNow = Number(j?.serverNow) || 0
+        if (serverNow > 0) now = serverNow
       }
-    } catch { /* offline — fall back to the local heartbeat */ }
+    } catch { /* offline — fall back to the local heartbeat + device clock */ }
 
     if (!lastActivityRef.current) {
       // First-ever use on this browser with no server history — establish a
@@ -1478,7 +1483,17 @@ export default function LotWizardTab({
             )}
             <div>
               <label className={`${lbl} block mb-1`}>Internal Barcode <span className="text-red-500">*</span></label>
-              <input value={barcode} onChange={e => {
+              <input value={barcode}
+                // Start timing the moment the field is focused for a new lot, not
+                // only on a keystroke. The field auto-focuses when a new lot opens,
+                // so this fires however the barcode arrives — typed, keyboard-wedge
+                // scanned, pasted, autofilled, or injected by a mobile scanner app
+                // (a programmatic value set never fires onChange). Without this, a
+                // phone that fills the barcode without a keystroke left the timer
+                // un-started → durationMs 0 → no timing log → the idle gate had no
+                // baseline and never fired. Guarded so it never restarts mid-lot.
+                onFocus={() => { if (!barcodeStartedAt.current && !idlePopup) startLotTiming() }}
+                onChange={e => {
                 const v = e.target.value
                 if (v && !barcode && !barcodeStartedAt.current) startLotTiming()
                 setBarcode(v)
