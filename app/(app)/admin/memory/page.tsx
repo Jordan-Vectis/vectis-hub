@@ -34,7 +34,9 @@ Recurring errors:
 - Judgement (need AI/instruction): "x three" (→ "a trio of"); guessing/wrong animal type (a brown bear called a "panda"); thin openings; routine "designed by [name]"; broken grammar.
 
 Fixes (built 2026-07-21):
-1. Deterministic clean-up \`lib/description-cleanup.ts\` \`cleanBearsDescription()\` — strip **, LE→limited edition, remove "plumo means…" (keep "plumo"), de-dupe repeated name, close "CB 114790". Applied in /api/auction-ai/batch (scoped isBearsPreset) and /api/auction-ai/upgrade (dolls_bears_fix mode).
+1. Deterministic clean-up \`lib/description-cleanup.ts\` \`cleanBearsDescription()\` — strip **, LE→limited edition, remove "plumo means…" AND any plumo expansion ("plumo (plush with mohair and alpaca accents)" → "plumo", buyers know the term), de-dupe repeated name, close "CB 114790". Applied in /api/auction-ai/batch (scoped isBearsPreset) and /api/auction-ai/upgrade (dolls_bears_fix mode) — NOT the Chat route.
+
+⚠ Keep the instruction LEAN (Jordan): the prompt goes in on every lot, so verbosity raises cost AND makes the model follow fewer rules. Slimmed to ~40% (judgement/format/estimate only); mechanical rules live in the clean-up. Applies to AI prompts generally.
 2. Instruction tightening for the judgement calls.
 3. New "🧸 Dolls & Bears check" AI Upgrade mode (dolls_bears_fix) — an AI pass over EXISTING descriptions fixing both, plus the clean-up. In the AI Upgrade tab and the pipeline's upgrade step.`,
   },
