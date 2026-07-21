@@ -1025,6 +1025,21 @@ const MIGRATIONS = [
   // so this list is their only home — do not "tidy" them away.
   `CREATE INDEX IF NOT EXISTS "CatalogueLot_barcode_lower_idx"         ON "CatalogueLot" (LOWER("barcode"))`,
   `CREATE INDEX IF NOT EXISTS "CatalogueLot_receiptUniqueId_lower_idx" ON "CatalogueLot" (LOWER("receiptUniqueId"))`,
+
+  // Report-only day exclusions — an admin can hide a single day from a
+  // cataloguer's performance report (fixes averages skewed by odd/half days)
+  // without touching the underlying timing logs.
+  `CREATE TABLE IF NOT EXISTS "ReportExcludedDay" (
+    "id"             TEXT NOT NULL,
+    "userId"         TEXT NOT NULL,
+    "day"            TEXT NOT NULL,
+    "excludedById"   TEXT NOT NULL,
+    "excludedByName" TEXT NOT NULL,
+    "excludedAt"     TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "ReportExcludedDay_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "ReportExcludedDay_userId_day_key" ON "ReportExcludedDay"("userId","day")`,
+  `CREATE INDEX IF NOT EXISTS "ReportExcludedDay_userId_idx" ON "ReportExcludedDay"("userId")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

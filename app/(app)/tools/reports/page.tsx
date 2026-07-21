@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@/app/generated/prisma/client"
 import { getEffectiveSession } from "@/lib/impersonation"
 import { hasAppAccess } from "@/lib/apps"
 import { redirect } from "next/navigation"
@@ -90,6 +91,20 @@ export default async function ReportsOverviewPage({
     activeDays: number; completedLots: number; completedDays: number
     thisWeek: number; today: number
   }
+
+  // Report-only day exclusions. The table is created by the Run Migrations
+  // button, which runs AFTER deploy — so reference it only when it actually
+  // exists (a raw query naming a missing table fails to parse). `to_regclass`
+  // returns NULL for an absent table; when missing we fall back to no exclusions.
+  const [{ exists: hasExclTable }] = await prisma.$queryRaw<{ exists: boolean }[]>`
+    SELECT to_regclass('"ReportExcludedDay"') IS NOT NULL AS "exists"`
+  const notExcluded = hasExclTable
+    ? Prisma.sql`AND NOT EXISTS (
+        SELECT 1 FROM "ReportExcludedDay" e
+        WHERE e."userId" = t."userId"
+          AND e."day" = to_char((t."savedAt" AT TIME ZONE 'Europe/London')::date, 'YYYY-MM-DD'))`
+    : Prisma.empty
+
   const [timingRows, researchRows, monthRows] = await Promise.all([
     prisma.$queryRaw<UserRow[]>`
       SELECT t."userId"                                                                AS "userId",
@@ -111,6 +126,7 @@ export default async function ReportsOverviewPage({
       FROM "CatalogueTimingLog" t
       WHERE (t."lotId" IS NULL OR EXISTS (SELECT 1 FROM "CatalogueLot" l WHERE l."id" = t."lotId"))
         AND (${since}::timestamptz IS NULL OR t."savedAt" >= ${since})
+        ${notExcluded}
       GROUP BY t."userId"`,
     prisma.$queryRaw<{ userId: string; userName: string; totalMs: number; sessions: number }[]>`
       SELECT r."userId"                          AS "userId",
@@ -127,6 +143,7 @@ export default async function ReportsOverviewPage({
       FROM "CatalogueTimingLog" t
       WHERE t."savedAt" >= ${twelveMonthsAgo}
         AND (t."lotId" IS NULL OR EXISTS (SELECT 1 FROM "CatalogueLot" l WHERE l."id" = t."lotId"))
+        ${notExcluded}
       GROUP BY 1, 2`,
   ])
 

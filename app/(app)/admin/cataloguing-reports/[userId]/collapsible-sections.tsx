@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useTransition } from "react"
 import { format } from "date-fns"
 import { useRouter } from "next/navigation"
+import { toggleReportExcludedDay } from "@/lib/actions/reports"
 import {
   BarChart,
   Bar,
@@ -670,11 +671,37 @@ export type DayStats = {
   lots: number
   cataloguingMs: number
   idleMs: number
+  excluded?: boolean    // admin-hidden from the report (report-only, restorable)
 }
 
-export function DailyComparisonTable({ days }: { days: DayStats[] }) {
+export function DailyComparisonTable({
+  days,
+  userId,
+  canExclude = false,
+}: {
+  days: DayStats[]
+  userId?: string
+  canExclude?: boolean
+}) {
+  const router          = useRouter()
+  const [busyDay, setBusyDay] = useState<string | null>(null)
+  const [, startTransition]   = useTransition()
+  const [error, setError]     = useState<string | null>(null)
+
   const todayStr   = format(new Date(), "yyyy-MM-dd")
   const nowMs      = new Date().getTime()
+
+  function toggleDay(day: string) {
+    if (!userId) return
+    setError(null)
+    setBusyDay(day)
+    startTransition(async () => {
+      const res = await toggleReportExcludedDay(userId, day)
+      setBusyDay(null)
+      if (!res.ok) { setError(res.error ?? "Something went wrong"); return }
+      router.refresh()
+    })
+  }
 
   function getExpectedMs(dateStr: string): number {
     const d = new Date(dateStr + "T12:00:00")
@@ -686,14 +713,17 @@ export function DailyComparisonTable({ days }: { days: DayStats[] }) {
     return WORK_DAY_MS
   }
 
-  const totalCatMs   = days.reduce((s, d) => s + d.cataloguingMs, 0)
-  const totalIdleMs  = days.reduce((s, d) => s + d.idleMs, 0)
-  const totalUnaccMs = days.reduce((s, d) => {
+  // Totals + overall split ignore excluded days — they're out of the report.
+  const countedDays  = days.filter(d => !d.excluded)
+  const excludedCount = days.length - countedDays.length
+  const totalCatMs   = countedDays.reduce((s, d) => s + d.cataloguingMs, 0)
+  const totalIdleMs  = countedDays.reduce((s, d) => s + d.idleMs, 0)
+  const totalUnaccMs = countedDays.reduce((s, d) => {
     const exp = getExpectedMs(d.date)
     return s + Math.max(0, exp - d.cataloguingMs - d.idleMs)
   }, 0)
   const totalExpectedMs  = totalCatMs + totalIdleMs + totalUnaccMs
-  const totalLots        = days.reduce((s, d) => s + d.lots, 0)
+  const totalLots        = countedDays.reduce((s, d) => s + d.lots, 0)
 
   const overallActPct  = totalExpectedMs > 0 ? (totalCatMs   / totalExpectedMs) * 100 : 0
   const overallIdlePct = totalExpectedMs > 0 ? (totalIdleMs  / totalExpectedMs) * 100 : 0
@@ -706,7 +736,11 @@ export function DailyComparisonTable({ days }: { days: DayStats[] }) {
         <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
           Daily Breakdown
           <span className="ml-2 font-normal normal-case text-gray-400">— 9am–5pm weekday · cataloguing vs idle vs unaccounted</span>
+          {excludedCount > 0 && (
+            <span className="ml-2 font-normal normal-case text-amber-500">· {excludedCount} day{excludedCount === 1 ? "" : "s"} excluded from all report figures</span>
+          )}
         </h2>
+        {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
 
         {totalExpectedMs > 0 || totalCatMs > 0 ? (
           <div className="space-y-2">
@@ -768,6 +802,7 @@ export function DailyComparisonTable({ days }: { days: DayStats[] }) {
                 <th className="text-right px-5 py-3">Unaccounted</th>
                 <th className="px-5 py-3 min-w-[120px]">Split</th>
                 <th className="text-right px-5 py-3">Accounted</th>
+                {(canExclude || excludedCount > 0) && <th className="text-right px-5 py-3">Report</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 dark:divide-gray-800/60">
@@ -782,10 +817,11 @@ export function DailyComparisonTable({ days }: { days: DayStats[] }) {
                 const accountedPct = expectedMs > 0  ? Math.min(100, Math.round(((day.cataloguingMs + day.idleMs) / expectedMs) * 100)) : null
 
                 return (
-                  <tr key={day.date} className={`hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors ${isWeekend ? "opacity-60" : ""}`}>
-                    <td className="px-5 py-3 text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                  <tr key={day.date} className={`hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors ${day.excluded ? "opacity-40" : isWeekend ? "opacity-60" : ""}`}>
+                    <td className={`px-5 py-3 text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap ${day.excluded ? "line-through decoration-amber-500/60" : ""}`}>
                       {format(new Date(day.date + "T12:00:00"), "EEE dd MMM yyyy")}
-                      {isWeekend && <span className="ml-1.5 text-gray-400 font-sans not-italic">(weekend)</span>}
+                      {isWeekend && <span className="ml-1.5 text-gray-400 font-sans not-italic no-underline">(weekend)</span>}
+                      {day.excluded && <span className="ml-1.5 text-amber-500 font-sans not-italic no-underline">(excluded)</span>}
                     </td>
                     <td className="px-5 py-3 text-right font-bold text-gray-800 dark:text-white tabular-nums">
                       {day.lots || <span className="text-gray-300 dark:text-gray-700">—</span>}
@@ -819,6 +855,26 @@ export function DailyComparisonTable({ days }: { days: DayStats[] }) {
                         <span className="text-gray-300 dark:text-gray-700">—</span>
                       )}
                     </td>
+                    {(canExclude || excludedCount > 0) && (
+                      <td className="px-5 py-3 text-right whitespace-nowrap">
+                        {canExclude ? (
+                          <button
+                            onClick={() => toggleDay(day.date)}
+                            disabled={busyDay === day.date}
+                            title={day.excluded ? "Restore this day to the report" : "Exclude this day from the report (data is not deleted)"}
+                            className={`text-xs font-semibold rounded-md px-2 py-1 border transition-colors disabled:opacity-40 ${
+                              day.excluded
+                                ? "border-emerald-500 text-emerald-600 hover:bg-emerald-500/10"
+                                : "border-gray-300 dark:border-gray-600 text-gray-400 hover:text-red-500 hover:border-red-400"
+                            }`}
+                          >
+                            {busyDay === day.date ? "…" : day.excluded ? "↩ Restore" : "✕ Exclude"}
+                          </button>
+                        ) : day.excluded ? (
+                          <span className="text-xs font-semibold text-amber-500">excluded</span>
+                        ) : null}
+                      </td>
+                    )}
                   </tr>
                 )
               })}

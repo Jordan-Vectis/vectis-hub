@@ -16,6 +16,24 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "report_day_exclusion.md",
+    content: `---
+name: Exclude days from a cataloguer's report — report-only, admin
+purpose: How admins hide odd/half days from a report so they don't skew the average. Read before touching the reports tool.
+last_updated: 2026-07-21
+---
+
+# Exclude days from a cataloguer's report (2026-07-21) — NEEDS RUN MIGRATIONS
+
+Admins can hide a single working day from ONE cataloguer's performance report so an odd/half day (e.g. only 6 lots) doesn't wreck their Daily Average. Report-only — the underlying CatalogueTimingLog/IdleLog rows are never touched, and any day can be restored.
+
+- **Where:** the ✕ Exclude / ↩ Restore button on each row of the **Daily Breakdown** table (DailyComparisonTable in collapsible-sections.tsx, consumed by /tools/reports/[userId]). Admins only (role === "ADMIN"). Non-admins see excluded rows greyed with an "excluded" badge, no button.
+- **Storage:** ReportExcludedDay table — userId, day ("YYYY-MM-DD" London key), excludedBy…, unique (userId, day). NEEDS Run Migrations.
+- **Action:** lib/actions/reports.ts → toggleReportExcludedDay(userId, day). ADMIN-gated, returns {ok,error} (never throws).
+- **Effect — dropped from EVERY figure, in BOTH places:** the individual page filters logs to an "included" set for all stats/cards/splits/detail tables (the Daily Breakdown keeps the full set, tagging each day excluded, so the row stays visible with a Restore button; chart + header totals use included only); the overview list Daily-Avg column + charts add \`AND NOT EXISTS (ReportExcludedDay …)\` to their SQL. Deploy-skew-safe: the SQL clause is gated on to_regclass so it no-ops before Run Migrations, and the individual fetch is .catch(() => []).
+- **NOT changed:** the Excel export — still raw per-day data.`,
+  },
+  {
     filename: "idle_gaps_detector.md",
     content: `---
 name: Idle-gap detector — tamper-proof backstop to the idle popup

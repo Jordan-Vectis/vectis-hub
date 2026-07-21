@@ -91,6 +91,7 @@ export default async function ReportsUserPage({
     select: { role: true, allowedApps: true },
   })
   if (!hasAppAccess(dbUser?.role ?? "", dbUser?.allowedApps ?? [], "REPORTS")) redirect("/hub")
+  const isAdmin = dbUser?.role === "ADMIN"   // only admins can exclude/restore days
 
   const { userId }                       = await params
   const { range, from: fromParam, to: toParam } = await searchParams
@@ -127,7 +128,7 @@ export default async function ReportsUserPage({
   const now        = new Date()
   const todayStart = ukDayStartUtc(now, 0)
 
-  const [rawLogs, researchLogs, idleLogs] = await Promise.all([
+  const [rawLogs, researchLogs, idleLogs, excludedDayRows] = await Promise.all([
     prisma.catalogueTimingLog.findMany({
       where:   { userId, ...savedAtFilter },
       orderBy: { savedAt: "desc" },
@@ -142,7 +143,16 @@ export default async function ReportsUserPage({
       orderBy: { idleStartedAt: "desc" },
       include: { auction: { select: { name: true, code: true } } },
     }),
+    // Days an admin has hidden from THIS cataloguer's report (report-only — the
+    // logs above are untouched). Fetched unfiltered by range: a "YYYY-MM-DD" key
+    // is cheap and lets any range honour the exclusion. The `.catch` keeps the
+    // page alive in the window between deploy and Run Migrations, before the
+    // table exists — it simply behaves as "nothing excluded" until then.
+    prisma.reportExcludedDay
+      .findMany({ where: { userId }, select: { day: true } })
+      .catch((): { day: string }[] => []),
   ])
+  const excludedDays = new Set(excludedDayRows.map(r => r.day))
 
   // Need the user name even if no logs in range — fetch one unfiltered log
   const anyLog = await prisma.catalogueTimingLog.findFirst({ where: { userId } })
@@ -156,6 +166,15 @@ export default async function ReportsUserPage({
   const lotMap = await buildLotMap(rawLogs)
   const logs = rawLogs.filter(l => !l.lotId || lotMap.has(l.lotId))
 
+  // ── Report-only day exclusions ──
+  // `logs` / `idleLogs` remain the FULL set (used to build the Daily Breakdown
+  // table so an excluded day still shows there, greyed, with a Restore button).
+  // Every headline stat, chart and detail table below is built from the INCLUDED
+  // set instead, so an excluded day drops out of the average, totals and splits
+  // everywhere without deleting anything.
+  const incLogs = logs.filter(l => !excludedDays.has(ukDayKey(l.savedAt)))
+  const incIdle = idleLogs.filter(l => !excludedDays.has(ukDayKey(l.idleStartedAt)))
+
   // ── Research summary ──
   const totalResearchMs = researchLogs.reduce((s, r) => s + r.durationMs, 0)
 
@@ -165,27 +184,27 @@ export default async function ReportsUserPage({
     : RANGES.find(r => r.key === activeRange)?.label ?? "All time"
 
   // ── Split by method ──
-  const wizardLogs    = logs.filter(l => l.method === "WIZARD")
-  const photoOnlyLogs = logs.filter(l => l.method === "PHOTO_ONLY")
+  const wizardLogs    = incLogs.filter(l => l.method === "WIZARD")
+  const photoOnlyLogs = incLogs.filter(l => l.method === "PHOTO_ONLY")
 
   // ── Overall speed ──
-  const allDurations = logs.map(l => l.durationMs)
+  const allDurations = incLogs.map(l => l.durationMs)
   const overallAvg   = avg(allDurations)
   const fastest      = minOf(allDurations)
   const slowest      = maxOf(allDurations)
 
   // ── Today stats (derived from range-filtered logs; shows correctly when range includes today) ──
-  const todayLogs       = logs.filter(l => l.savedAt >= todayStart)
+  const todayLogs       = incLogs.filter(l => l.savedAt >= todayStart)
   const lotsToday       = todayLogs.length
   const activeTimeToday = todayLogs.reduce((s, l) => s + l.durationMs, 0)
-  const todayIdleLogs   = idleLogs.filter(l => l.idleStartedAt >= todayStart)
+  const todayIdleLogs   = incIdle.filter(l => l.idleStartedAt >= todayStart)
 
   const weekStart = ukDayStartUtc(now, 7)
-  const lotsThisWeek = logs.filter(l => l.savedAt >= weekStart).length
+  const lotsThisWeek = incLogs.filter(l => l.savedAt >= weekStart).length
 
   // ── Daily average (completed days only — today excluded as it's partial) ──
   const todayStr         = ukDayKey(now)
-  const completedDayLogs = logs.filter(l => ukDayKey(l.savedAt) !== todayStr)
+  const completedDayLogs = incLogs.filter(l => ukDayKey(l.savedAt) !== todayStr)
   const completedDays    = new Set(completedDayLogs.map(l => ukDayKey(l.savedAt)))
   const dailyAvg         = completedDays.size > 0
     ? Math.round(completedDayLogs.length / completedDays.size)
@@ -203,7 +222,7 @@ export default async function ReportsUserPage({
 
   // ── Per-auction ──
   const auctionMap = new Map<string, { name: string; code: string; count: number; durations: number[] }>()
-  for (const log of logs) {
+  for (const log of incLogs) {
     if (!auctionMap.has(log.auctionId)) {
       auctionMap.set(log.auctionId, { name: log.auction.name, code: log.auction.code, count: 0, durations: [] })
     }
@@ -241,13 +260,17 @@ export default async function ReportsUserPage({
   }
   const dayStats: DayStats[] = [...dayMap.entries()]
     .sort(([a], [b]) => b.localeCompare(a))
-    .map(([, v]) => v)
+    .map(([date, v]) => ({ ...v, excluded: excludedDays.has(date) }))
+  // Chart shows only the days that count toward the report.
+  const includedDayStats = dayStats.filter(d => !d.excluded)
 
   // ── Total active vs idle for range ──
   // Same rule as the daily breakdown above — cataloguing is the ACTIVE part of
-  // each lot, so this split and that bar can't disagree with each other.
-  const totalCatMs  = logs.reduce((s, l) => s + (breakdowns.get(l.id)?.activeMs ?? l.durationMs), 0)
-  const totalIdleMs = countedIdle.reduce((s, l) => s + l.idleDurationMs, 0)
+  // each lot, so this split and that bar can't disagree with each other. Built
+  // from the INCLUDED set so excluded days drop out of the split too.
+  const countedIncIdle = incIdle.filter(l => l.idleDurationMs <= MAX_IDLE_MS)
+  const totalCatMs  = incLogs.reduce((s, l) => s + (breakdowns.get(l.id)?.activeMs ?? l.durationMs), 0)
+  const totalIdleMs = countedIncIdle.reduce((s, l) => s + l.idleDurationMs, 0)
   const totalTrackedMs  = totalCatMs + totalIdleMs
   const overallActivePct = totalTrackedMs > 0 ? Math.round((totalCatMs / totalTrackedMs) * 100) : null
   const overallIdlePct   = overallActivePct !== null ? 100 - overallActivePct : null
@@ -417,12 +440,12 @@ export default async function ReportsUserPage({
           )}
 
           {/* Daily lots bar chart */}
-          <DailyLotsBarChart days={dayStats} />
+          <DailyLotsBarChart days={includedDayStats} />
 
           {/* Daily breakdown: cataloguing vs idle per day */}
-          <DailyComparisonTable days={dayStats} />
+          <DailyComparisonTable days={dayStats} userId={userId} canExclude={isAdmin} />
 
-          {logs.length > 0 && (
+          {incLogs.length > 0 && (
             <>
               {/* Method breakdown + speed stats */}
               <div className="grid sm:grid-cols-2 gap-4">
@@ -530,7 +553,7 @@ export default async function ReportsUserPage({
 
               {/* All lots log — collapsible + date-filterable */}
               <CollapsibleLotsTable
-                logs={logs.map(l => ({
+                logs={incLogs.map(l => ({
                   id:          l.id,
                   savedAt:     l.savedAt.toISOString(),
                   auctionCode: l.auction.code,
@@ -545,7 +568,7 @@ export default async function ReportsUserPage({
 
           {/* Idle time log — collapsible + date-filterable */}
           <CollapsibleIdleTable
-            logs={idleLogs.map(l => ({
+            logs={incIdle.map(l => ({
               id:             l.id,
               idleStartedAt:  l.idleStartedAt.toISOString(),
               idleDurationMs: l.idleDurationMs,
@@ -559,7 +582,7 @@ export default async function ReportsUserPage({
 
           {/* Per-lot split of "how long it took" into cataloguing vs idle */}
           <CollapsibleActiveVsIdleTable
-            logs={logs.map(l => ({
+            logs={incLogs.map(l => ({
               id:          l.id,
               savedAt:     l.savedAt.toISOString(),
               auctionCode: l.auction.code,

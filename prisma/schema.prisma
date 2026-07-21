@@ -555,6 +555,23 @@ model CatalogueTimingLog {
   savedAt      DateTime         @default(now())
 }
 
+// A single working day hidden from ONE cataloguer's performance report by an
+// admin (e.g. a half-day or odd day that unfairly drags the daily average down).
+// This is a REPORT-ONLY exclusion — the underlying CatalogueTimingLog / IdleLog
+// rows are never touched, so the day can be restored at any time by deleting the
+// row. `day` is the London calendar-day key "YYYY-MM-DD" (matches ukDayKey()).
+model ReportExcludedDay {
+  id             String   @id @default(cuid())
+  userId         String   // the cataloguer whose report the day is hidden from
+  day            String   // London day key "YYYY-MM-DD"
+  excludedById   String   // admin who excluded it
+  excludedByName String
+  excludedAt     DateTime @default(now())
+
+  @@unique([userId, day])
+  @@index([userId])
+}
+
 model CataloguePhotoSession {
   id              String           @id @default(cuid())
   auctionId       String
