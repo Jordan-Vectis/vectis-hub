@@ -3658,6 +3658,11 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   const [autoApply,    setAutoApply]   = useState(() => {
     try { return localStorage.getItem("pipeline_auto_apply") !== "false" } catch { return true }
   })
+  // Only load/run lots that actually have photos — no-photo lots always skip in
+  // Batch anyway, so this keeps the loaded count + progress to real work.
+  const [onlyWithPhotos, setOnlyWithPhotos] = useState(() => {
+    try { return localStorage.getItem("pipeline_only_photos") === "true" } catch { return false }
+  })
   const codeRef  = useRef<HTMLDivElement>(null)
   const logRef   = useRef<HTMLDivElement>(null)
   const cancelRef = useRef(false)
@@ -3761,13 +3766,18 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         }
       })
 
-      setLots(mapped)
+      // "Only lots with photos" — drop no-photo lots from the run entirely (they
+      // always skip in Batch), so counts + progress reflect real work.
+      const noPhotos = mapped.filter(l => l.imageUrls.length === 0).length
+      const shown = onlyWithPhotos ? mapped.filter(l => l.imageUrls.length > 0) : mapped
+      const hiddenNote = onlyWithPhotos && noPhotos > 0 ? ` (${noPhotos} without photos hidden)` : ""
+      setLots(shown)
       if (savedRun) {
-        const needApply = mapped.filter(l => l.kpRevised && (l.kpRevised ?? "").trim() !== (l.appliedDesc ?? "").trim()).length
-        addLog(`▶ Loaded saved pipeline — stage: ${savedRun.stage} · ${mapped.length} lots`)
+        const needApply = shown.filter(l => l.kpRevised && (l.kpRevised ?? "").trim() !== (l.appliedDesc ?? "").trim()).length
+        addLog(`▶ Loaded saved pipeline — stage: ${savedRun.stage} · ${shown.length} lots${hiddenNote}`)
         if (needApply > 0) addLog(`   ${needApply} lots have descriptions not yet on the catalogue — review below`)
       } else {
-        addLog(`▶ Loaded ${mapped.length} lots — ready to start`)
+        addLog(`▶ Loaded ${shown.length} lots — ready to start${hiddenNote}`)
       }
     } catch (e: any) {
       setError(e.message)
@@ -4459,6 +4469,21 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
             <input type="checkbox" checked={grounded} onChange={e => setGrounded(e.target.checked)}
               className="w-3.5 h-3.5 accent-blue-500" />
             <span className="text-xs font-medium">🔍 Google Search</span>
+          </label>
+
+          {/* Only lots with photos — no-photo lots never generate anything. Ticking
+              tightens the current view immediately (when idle) and applies on the
+              next Load Auction; untick + reload to bring the no-photo lots back. */}
+          <label className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-colors ${onlyWithPhotos ? "bg-emerald-950/50 border-emerald-600/60 text-emerald-300" : "bg-gray-100 dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
+            <input type="checkbox" checked={onlyWithPhotos}
+              onChange={e => {
+                const v = e.target.checked
+                setOnlyWithPhotos(v)
+                try { localStorage.setItem("pipeline_only_photos", String(v)) } catch {}
+                if (v && !running) setLots(cur => cur.filter(l => l.imageUrls.length > 0))
+              }}
+              className="w-3.5 h-3.5 accent-emerald-500" />
+            <span className="text-xs font-medium">📷 Only lots with photos</span>
           </label>
 
           {/* Auto-apply vs manual review — a segmented toggle so BOTH options are
