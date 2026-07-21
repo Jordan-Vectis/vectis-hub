@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
+import { cleanBearsDescription } from "@/lib/description-cleanup"
 
 const MODE_INSTRUCTIONS: Record<string, string> = {
   shorten:          "Shorten the description — remove unnecessary words and padding while keeping all factual detail.",
@@ -15,6 +16,7 @@ const MODE_INSTRUCTIONS: Record<string, string> = {
   auction_language: "Ensure auction-appropriate terminology throughout — use lot/catalogue language as appropriate.",
   seo:              "Improve search visibility (SEO) — naturally weave in the specific terms a buyer would search for (brand, maker, model/range name, character, theme, era, format). Do not keyword-stuff, repeat unnaturally, or change any facts.",
   brand_first:      "Move the brand or maker name to the very start of the description — the first word or phrase must be the brand/maker. If the brand is already first, leave it unchanged.",
+  dolls_bears_fix:  "Dolls & Bears check — fix the recurring cataloguing errors WITHOUT changing any facts: (a) never write a shorthand count like \"x three\" — use natural English (\"a trio of\", \"a pair of\"); (b) write editions in full as \"limited edition 6000\" or \"limited edition 1176 of 4000\", never the shorthand \"LE\"; (c) never print a \"plumo means…\" note — just say \"plumo\", and expand it once in the opening as \"plush with mohair and alpaca accents\"; (d) after each item's bold/lead name go straight to the type (e.g. \"panda bear\") — do NOT repeat the item's own name; (e) never call a bear or doll a \"figure\"; (f) do NOT state an animal type (panda, monkey, hare) unless it is already stated or unmistakable — a dark brown bear is not a panda; (g) drop a routine \"designed by [name]\" unless the designer is the genuine selling point of that specific piece; (h) the opening must name the individual bears/dolls (five or fewer) and say what they are — never just \"Charlie Bears pair.\"; (i) tidy broken phrasing like \"swing labels label is faded\" to \"swing label, faded\"; (j) remove any markdown ** and close a stray space in a product code (\"CB 114790\" → \"CB114790\").",
 }
 
 // POST /api/auction-ai/upgrade
@@ -67,7 +69,10 @@ Rules:
     }
 
     const revised = result.response.text().trim()
-    return NextResponse.json({ revised })
+    // Belt-and-braces: when the Dolls & Bears check ran, also apply the
+    // deterministic clean-up so the mechanical fixes are guaranteed.
+    const cleaned = modes.includes("dolls_bears_fix") ? cleanBearsDescription(revised) : revised
+    return NextResponse.json({ revised: cleaned })
   } catch (e: any) {
     const msg = e?.message ?? "Unknown error"
     if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {

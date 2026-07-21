@@ -4,6 +4,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { parseModelJson } from "@/lib/model-json"
 import { getToolModel } from "@/lib/ai-models"
 import { resolveInstruction } from "@/lib/ai-instructions"
+import { cleanBearsDescription, isBearsPreset } from "@/lib/description-cleanup"
 
 export const maxDuration = 300
 
@@ -160,9 +161,13 @@ After the description (and optional FLAG line), include the estimate on its own 
       const lines = rawText.split("\n")
       const estimateLine = lines.find((l) => l.toLowerCase().startsWith("estimate:")) ?? ""
       const flagLine     = lines.find((l) => l.toLowerCase().startsWith("flag:")) ?? ""
-      const description  = lines
+      const rawDescription = lines
         .filter((l) => !l.toLowerCase().startsWith("estimate:") && !l.toLowerCase().startsWith("flag:"))
         .join("\n").trim()
+      // Deterministic clean-up of the mechanical mistakes the model keeps making
+      // on Dolls/Bears lots (strip **, LE→limited edition, drop "plumo means…"
+      // notes, de-dupe the repeated name, close "CB 114790" → "CB114790").
+      const description = isBearsPreset(presetKey) ? cleanBearsDescription(rawDescription) : rawDescription
       const flag = flagLine.replace(/^flag:\s*/i, "").trim()
 
       results.push({ lot, description, estimate: estimateLine.replace(/^Estimate:\s*/i, "").trim(), status: "OK",

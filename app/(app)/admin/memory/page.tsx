@@ -16,6 +16,29 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "dolls_bears_descriptions.md",
+    content: `---
+name: Dolls & Bears descriptions — tuning
+purpose: The recurring model errors, the deterministic clean-up, the "Dolls & Bears check" upgrade mode, and why bold was dropped. Read before touching the Dolls/Bears instruction or batch/upgrade cleanup.
+last_updated: 2026-07-21
+---
+
+# Dolls & Bears descriptions — tuning (2026-07-21)
+
+The Dolls & Bears presets produce bulleted lot descriptions; the instruction TEXT is DB-managed (Auction AI → Instructions). Instruction-only iteration kept failing the same mechanical mistakes, so the fix is split three ways.
+
+⚠ **Bold was tried and DROPPED.** An earlier version used markdown \`**bold**\` for names, but nothing renders it (the Review tab's HighlightedDescription doesn't parse markdown; website + BC take raw text) so \`**\` showed literally on every lot. Descriptions are PLAIN TEXT — do not reintroduce \`**\`.
+
+Recurring errors:
+- Mechanical (fixed in code): literal \`**\`; "LE 6000" not "limited edition 6000"; the "plumo means…" reminder note printed in; the item name repeated after the dash; a stray space in the code ("CB 114790").
+- Judgement (need AI/instruction): "x three" (→ "a trio of"); guessing/wrong animal type (a brown bear called a "panda"); thin openings; routine "designed by [name]"; broken grammar.
+
+Fixes (built 2026-07-21):
+1. Deterministic clean-up \`lib/description-cleanup.ts\` \`cleanBearsDescription()\` — strip **, LE→limited edition, remove "plumo means…" (keep "plumo"), de-dupe repeated name, close "CB 114790". Applied in /api/auction-ai/batch (scoped isBearsPreset) and /api/auction-ai/upgrade (dolls_bears_fix mode).
+2. Instruction tightening for the judgement calls.
+3. New "🧸 Dolls & Bears check" AI Upgrade mode (dolls_bears_fix) — an AI pass over EXISTING descriptions fixing both, plus the clean-up. In the AI Upgrade tab and the pipeline's upgrade step.`,
+  },
+  {
     filename: "idle_report.md",
     content: `---
 name: Idle Report — /tools/reports/idle
