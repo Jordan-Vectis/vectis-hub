@@ -440,6 +440,9 @@ export default function LotWizardTab({
   // NOT treated as activity, so a fresh browser never accuses anyone.
   const lastActivityRef    = useRef<number>(0)
   const idleStartedAtRef   = useRef<number>(0)
+  // When the popup was raised (≈ the end of the gap) — shown as the "from … to …"
+  // window so the cataloguer can see exactly which period they're accounting for.
+  const idleEndedAtRef     = useRef<number>(0)
   const [idlePopup,        setIdlePopup]      = useState(false)
   const [idleSecs,         setIdleSecs]       = useState(0)
   const [idleReason,       setIdleReason]     = useState<string | null>(null)
@@ -562,6 +565,7 @@ export default function LotWizardTab({
   // Shared popup opener for both idle checks.
   function raiseIdlePopup(startedAt: number, idleMs: number) {
     idleStartedAtRef.current = startedAt
+    idleEndedAtRef.current   = Date.now()
     setIdleSecs(Math.floor(idleMs / 1000))
     setIdleReason(null)
     setIdleTotes("")
@@ -1123,6 +1127,10 @@ export default function LotWizardTab({
     if (m > 0) return `${m}m ${s}s`
     return `${s}s`
   }
+  // Wall-clock HH:MM for the "from … to …" gap window (browser time = London).
+  function fmtClock(ms: number) {
+    return new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+  }
 
   return (
     // Capture-phase so every control inside counts as activity without having to
@@ -1141,7 +1149,12 @@ export default function LotWizardTab({
             <div className="text-center mb-5">
               <p className="text-xs font-bold uppercase tracking-widest text-gray-600 dark:text-gray-400 mb-1">Idle Reason</p>
               <p className="text-5xl font-mono font-bold text-gray-900">{fmtIdleDuration(idleSecs)}</p>
-              <p className="text-xs text-gray-500 mt-1.5">
+              {idleStartedAtRef.current > 0 && (
+                <p className="text-sm font-semibold text-gray-700 mt-1.5">
+                  {fmtClock(idleStartedAtRef.current)} – {fmtClock(idleEndedAtRef.current)}
+                </p>
+              )}
+              <p className="text-xs text-gray-500 mt-1">
                 {idleWithinLotRef.current
                   ? "since you last touched this lot — working hours (Mon–Fri, 9–5) only"
                   : "since your last saved lot — working hours (Mon–Fri, 9–5) only"}
