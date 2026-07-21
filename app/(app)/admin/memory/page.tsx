@@ -19,21 +19,24 @@ const ENTRIES: Entry[] = [
     filename: "idle_report.md",
     content: `---
 name: Idle Report — /tools/reports/idle
-purpose: The team-wide idle report page. What it shows + data sources. Read before touching it or the reports section.
+purpose: The team-wide idle report page (for non-technical managers). What it shows + data sources. Read before touching it or the reports section.
 last_updated: 2026-07-21
 ---
 
 # Idle Report — /tools/reports/idle (2026-07-21)
 
-A dedicated team-wide idle report in the cataloguing reports section — a new page, linked from the /tools/reports overview via the amber "⏱ Idle Report" button. REPORTS app access (same as the section).
+Team-wide idle report in the cataloguing reports section — a new page, linked from the /tools/reports overview via the amber "⏱ Idle Report" button. REPORTS access.
+
+⚠ Written for non-technical MANAGERS — plain English, no dev jargon. Jordan rejected the first version's "Unexplained Gaps / Idle Sessions / Clock-Tamper Flags" cards as too technical and too empty. Keep language plain and keep it feature-rich.
 
 - Page: app/(app)/tools/reports/idle/page.tsx (server) + idle-report-charts.tsx (client, recharts). Time-range pills via ?range.
-- Summary cards: total idle logged, unexplained-gap time, idle sessions, clock-tamper flags.
-- Charts: idle by reason (bars, coloured by each reason's idleColour); idle per day.
-- Per-cataloguer table: idle logged, sessions, top-3 reasons, unexplained gap time+count, tamper count; name links to /tools/reports/[userId]; "timer OFF" badge.
-- Clock-tamper incidents table — ADMIN-ONLY within the page (server time vs what the phone said + its timezone).
+- Cards: Total Idle Time · Idle Share of Day (% of 9–5) · Idle per Person/Day · Most Common Reason.
+- Idle by reason: bar chart + numbers table (total, times, avg, share %). When idle happens: by day-of-week + by time-of-day charts. Idle-over-time trend.
+- Per-cataloguer table (ranked): idle, per-day, Share of Day (amber ≥15% / red ≥25%), breaks, usual reason, "No Reason Given" (= unexplained gaps, plain-worded), Busiest Idle Day; links to /tools/reports/[userId]; "timer off" badge.
+- Longest single breaks table.
+- ⚠ Flagged for review — ADMIN-ONLY clock-tamper table (server time vs what the device showed + tz).
 
-Data: IdleLog (reasons), CatalogueTimingLog (orphan-excluded) → findUserGaps for unexplained gaps, IdleGateDecision (tamper flags, tolerated absent pre-migration), reasons from idleTimerConfig (fallback defaults). Only Mon–Fri 9–5 counts.`,
+Data: IdleLog (reasons), CatalogueTimingLog (orphan-excluded) → findUserGaps, IdleGateDecision (tamper, tolerated absent pre-migration), reasons from idleTimerConfig. Days worked = distinct person+London-day with a save. Only Mon–Fri 9–5 counts.`,
   },
   {
     filename: "idle_timer_mobile_bypass.md",
