@@ -22,6 +22,12 @@ export function cleanBearsDescription(input: string): string {
   //    word "plumo". Handles "plumo means…", "plumo plumo means…", "plumo (plumo means…)".
   out = out.replace(/plumo(?:\s*\(?\s*plumo)?\s+means\s+plush\s+with\s+mohair\s*[/&]?\s*(?:and\s+|or\s+)?\/?\s*alpaca\s+accents\s*\)?/gi, "plumo")
 
+  // 2b. Drop any EXPANSION of "plumo" — the buyers are collectors who know the
+  //     term. "plush with mohair … alpaca accents" only ever appears as this
+  //     expansion, so remove it (with its leading comma/paren): "plumo (plush
+  //     with mohair and alpaca accents)" → "plumo".
+  out = out.replace(/\s*[(,]\s*(?:plumo\s+being\s+)?(?:a\s+)?(?:mix\s+of\s+)?plush\s+with\s+mohair\s*[/&]?\s*(?:and\s+|or\s+)?\/?\s*alpaca\s+accents\s*\)?/gi, "")
+
   // 3. "LE 6000" / "LE 1176 of 4000" → "limited edition …" (never the LE shorthand).
   out = out.replace(/\bLE\s+(\d)/g, "limited edition $1")
 
