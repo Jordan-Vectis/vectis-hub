@@ -47,7 +47,7 @@ model User {
   appPermissions Json?
   showScanTimer  Boolean     @default(true)
   timerYellowMins Int       @default(4)
-  timerRedMins    Int       @default(10)
+  timerRedMins    Int       @default(30)   // "warn after" mins — house default
   isITStaff      Boolean     @default(false)  // can be assigned IT Job Board jobs
   // Lot Wizard "remember last" fields — follow the user across devices (e.g. shared iPads)
   lastTote       String?
@@ -553,6 +553,32 @@ model CatalogueTimingLog {
   durationMs   Int              // Total ms from barcode entry to save
   keyPointsMs  Int?             // Ms spent on the Key Points step (wizard only)
   savedAt      DateTime         @default(now())
+}
+
+// Tamper-proof audit of the idle GATE's decision on every meaningful lot save.
+// Written server-side in createLot, so it records the SERVER's own view (real
+// clock + DB save times) alongside what the DEVICE claimed (clientNow / clientTz)
+// — which exposes a phone whose clock/timezone was changed to dodge the 9–5
+// working-hours check, even though the server gate itself never trusts the phone.
+// `reason` ∈ TIMER_OFF | NO_HISTORY | UNDER_THRESHOLD | NEW_DAY_GRACE | DAY_OFF |
+// CLEARED_BY_REASON | BLOCKED. Diagnostic only — safe to prune.
+model IdleGateDecision {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())   // server time of the save
+  userId      String
+  userName    String
+  auctionId   String?
+  reason      String
+  blocked     Boolean  @default(false)
+  idleMs      Int      @default(0)       // server-computed working-hours gap since last save
+  since       DateTime?                  // the last save the gap is measured from
+  thresholdMs Int      @default(0)
+  clientNow   DateTime?                  // what the device clock claimed at save
+  clientTz    String?                    // device timezone (e.g. America/New_York)
+  userAgent   String?
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
 }
 
 // A single working day hidden from ONE cataloguer's performance report by an

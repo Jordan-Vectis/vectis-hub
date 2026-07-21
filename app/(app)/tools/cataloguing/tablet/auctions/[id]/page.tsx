@@ -33,7 +33,7 @@ export default async function TabletAuctionDetailPage({
   return (
     <TabletTabs
       showScanTimer={currentUser?.showScanTimer ?? true}
-      timerRedMins={currentUser?.timerRedMins ?? 10}
+      timerRedMins={currentUser?.timerRedMins ?? 30}
       userRole={session.user.role}
       userId={session.user.id}
       userName={session.user.name ?? session.user.email ?? ""}

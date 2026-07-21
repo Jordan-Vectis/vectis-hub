@@ -18,26 +18,33 @@ const ENTRIES: Entry[] = [
   {
     filename: "idle_timer_mobile_bypass.md",
     content: `---
-name: Mobile idle-timer bypass — root cause + fix
-purpose: Why one phone user dodged the idle timer, and the fix. Read before touching idle detection / the scan timer.
+name: Mobile idle-timer dodge — investigation + fix
+purpose: How a phone user dodges the idle timer, what was ruled out, and the server-time + decision-log fix. Read before touching idle detection / the scan timer.
 last_updated: 2026-07-21
 ---
 
-# Mobile idle-timer bypass — root cause + fix (2026-07-21) — NO migration
+# Mobile idle-timer dodge — investigation + fix (2026-07-21) — NEEDS RUN MIGRATIONS
 
-A staff member on a mobile phone kept "getting around the idle timer" while desktop/iPad users were gated. His timer was on (30 min). Ruled out: Photo Only (unused), per-user config, iOS clock tampering alone (the server gate uses server time).
+A cataloguer on a mobile phone keeps dodging the idle timer. Cataloguers work on PRODUCTION; Jordan reviews on staging.
 
-## Root cause — one null ref blinds everything
-The scan timer only started on the barcode field's keystroke onChange. On a phone the barcode can be filled WITHOUT a keystroke (autofill / a scanner keyboard-app injecting the value / paste), which never fires onChange, so barcodeStartedAt stayed null. Then: durationMs = 0 → createLot SKIPPED the timing-log write (it was guarded on durationMs > 0) → no CatalogueTimingLog → the server idle gate (which measures from the last timing log) had no baseline and never fired → and /admin/idle-gaps + /tools/reports (both built from timing logs) never showed him. Desktop/iPad input fires real onChange, so it was only him, only on the phone.
+## Ruled OUT (don't re-propose)
+- Photo Only path — nobody uses it.
+- durationMs=0 / "no timing log" starved gate — WRONG: he HAS timing logs (counted in /tools/reports AND shows on /admin/idle-gaps).
+- Per-user config — his scan timer is ON, 30-min threshold.
+- "Everyone has unexplained gaps", not just him — the report alone can't single him out.
+- Production running an older gate — it is a bit behind staging, but Jordan says that's not the issue.
 
-## The fix (code only — NO Run Migrations)
-- Client: start the timer on the barcode field's onFocus (it auto-focuses each new lot), so it starts however the barcode arrives.
-- Server anchor: createLot now ALWAYS writes the timing log (server savedAt), so every save advances the gate baseline and shows on the reports.
-- Server time: /api/catalogue/last-activity returns serverNow; the lot-start idle check measures against server time (a tampered phone clock can't shrink the gap). Enforcement was already server-time.
-- Gate hardening: a covering idle log must actually COVER the gap (>= half), not just start near it (killed "1-second reason excuses hours"); the ">=8h day off" skip only applies across a real day boundary.
-- Reports: avg/fastest/slowest ignore durationMs = 0 (untimed) rows; they still COUNT as lots.
+## Confirmed vector
+The on-screen popup works out "is it 9–5" from the PHONE's clock. He's believed to set the phone to a US timezone / 2am so the popup thinks it's outside working hours and never nags him. The SERVER save-block already uses the server clock (immune), so the clock trick shouldn't let him actually create lots across a real gap — the exact remaining leak wasn't provable from code, so we added a log to catch it.
 
-⚠ Expect this user's lot counts to go UP (his phone lots were previously uncounted) and him to appear on /admin/idle-gaps. The new logs are non-orphaned real lots, so this is NOT phantom inflation.`,
+## Built (STAGING; Jordan merges to prod out of hours)
+- lib/idle-gate.ts evaluateIdleGate() — one server-authoritative decision (server clock + Europe/London working hours + DB save times) shared by the create-lot gate AND /api/catalogue/last-activity (the popup). So the phone clock/timezone can't silence the popup any more.
+- Client checkIdleOnLotStart uses the server's shouldPrompt when online; device time only as an offline fallback.
+- IdleGateDecision table (NEEDS Run Migrations): createLot logs each meaningful save's decision + what the DEVICE claimed (clientNow, clientTz) + userAgent. Admin viewer on /admin/idle-gaps ("Save-time gate decisions") flags any save whose clientTz ≠ Europe/London or clock >10 min off server — the smoking gun. Logging is best-effort (never breaks a save).
+- Gate hardening: a covering idle log must cover ≥ half the gap to clear; the ">=8h day off" skip only applies across a real day boundary.
+- (Earlier same-day pass, still valid: createLot always writes the timing log; timer starts on barcode onFocus; reports ignore durationMs=0 for speed.)
+
+The decision log is the point: once on production it will show exactly what his phone reports at each save.`,
   },
   {
     filename: "report_day_exclusion.md",

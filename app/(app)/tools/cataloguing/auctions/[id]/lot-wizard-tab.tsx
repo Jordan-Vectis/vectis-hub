@@ -396,7 +396,7 @@ export default function LotWizardTab({
   onCreated,
   tablet,
   showScanTimer = true,
-  timerRedMins = 10,
+  timerRedMins = 30,
 }: {
   auctionId: string
   auction: { code: string; name: string }
@@ -531,40 +531,33 @@ export default function LotWizardTab({
   // silently, and someone with no history at all is never asked.
   async function checkIdleOnLotStart() {
     if (!showScanTimer || idlePopup) return
-    let now = Date.now()   // device clock; replaced by the server's below
     try {
       const r = await fetch("/api/catalogue/last-activity")
       if (r.ok) {
         const j = await r.json()
         const serverMs = Number(j?.lastMs) || 0
         if (serverMs > lastActivityRef.current) lastActivityRef.current = serverMs
-        // Measure the gap against SERVER time so a tampered phone clock can't
-        // shrink it. Only falls back to the device clock when offline, where the
-        // server-side create-lot gate still backstops the save anyway.
-        const serverNow = Number(j?.serverNow) || 0
-        if (serverNow > 0) now = serverNow
+        // The SERVER decides whether it's an over-threshold working-hours gap,
+        // using the server clock + London working hours — so a changed phone
+        // clock/timezone can't shrink it. Prompt with the server's own figure.
+        if (j?.shouldPrompt && Number(j?.idleMs) > 0 && Number(j?.sinceMs) > 0) {
+          raiseIdlePopup(Number(j.sinceMs), Number(j.idleMs))
+          return
+        }
+        // Not idle per the server — advance the (server-anchored) baseline and stop.
+        bumpActivity(Number(j?.serverNow) || Date.now())
+        return
       }
-    } catch { /* offline — fall back to the local heartbeat + device clock */ }
+    } catch { /* offline — fall through to the device-clock fallback below */ }
 
-    if (!lastActivityRef.current) {
-      // First-ever use on this browser with no server history — establish a
-      // baseline quietly; there is no "last saved lot" to measure from.
-      bumpActivity(now)
-      return
-    }
-
+    // Offline fallback ONLY: measure with the device clock (best effort). The
+    // server-side create-lot gate still backstops the save once back online.
+    const now = Date.now()
+    if (!lastActivityRef.current) { bumpActivity(now); return }
     const idleMs = workingMsBetween(lastActivityRef.current, now)
-    if (idleMs >= EIGHT_WORK_HOURS_MS) {
-      bumpActivity(now)
-      return
-    }
-    if (idleMs >= timerRedSecs * 1000) {
-      raiseIdlePopup(lastActivityRef.current, idleMs)
-    } else {
-      // Below the threshold: starting a lot IS activity — advance the baseline
-      // so a mid-lot page reload doesn't over-count the next measured gap.
-      bumpActivity(now)
-    }
+    if (idleMs >= EIGHT_WORK_HOURS_MS) { bumpActivity(now); return }
+    if (idleMs >= timerRedSecs * 1000) raiseIdlePopup(lastActivityRef.current, idleMs)
+    else bumpActivity(now)
   }
 
   // Shared popup opener for both idle checks.
@@ -1078,6 +1071,11 @@ export default function LotWizardTab({
     }
     fd.append("durationMs",   String(barcodeStartedAt.current ? Date.now() - barcodeStartedAt.current : 0))
     fd.append("keyPointsMs",  String(keyPointsAccumMs.current))
+    // What the DEVICE clock/timezone claims at save — the server logs this next to
+    // its own real time, exposing a phone set to a US timezone / odd hour to dodge
+    // the 9–5 check. Purely for the audit; the gate itself ignores these.
+    fd.append("clientNow",    String(Date.now()))
+    try { fd.append("clientTz", Intl.DateTimeFormat().resolvedOptions().timeZone || "") } catch { /* older browser */ }
     photoFiles.forEach(p => fd.append("photo", p.file))
 
     start(async () => {

@@ -7,7 +7,8 @@ import {
   logLotCreated, logLotsCreated, logLotDeleted, logLotFieldChanges, logLotPhoto,
   buildLotEventRow, writeLotEvents, type LotLogCtx,
 } from "@/lib/lot-log"
-import { assessGap } from "@/lib/idle-gaps"
+import { headers } from "next/headers"
+import { evaluateIdleGate, logIdleDecision, clockLooksTampered } from "@/lib/idle-gate"
 
 // First 83 characters of the description — no sentence splitting, full stops do not break title
 function titleFromDescription(desc: string): string {
@@ -391,44 +392,10 @@ export async function toggleAuctionComplete(id: string, value: boolean) {
 // hasn't been accounted for.
 export type IdleGateBlock = { needsIdle: true; idleMs: number; sinceMs: number }
 
-// Server-enforced idle gate. A lot can't be created until an over-threshold
-// working-hours gap since this cataloguer's last save is accounted for with an
-// idle reason. Because it reads the save history, closing the app / signing out
-// / reloading can't reset it (unlike the client popup, which lost its baseline).
-// The client retry after logging the reason passes naturally — a covering IdleLog
-// then exists. First lot of a London day is the baseline and never gated.
-async function idleGateForCreate(userId: string): Promise<IdleGateBlock | null> {
-  const u = await prisma.user.findUnique({ where: { id: userId }, select: { showScanTimer: true, timerRedMins: true } })
-  if (u?.showScanTimer === false) return null   // timer off for this user — respect it
-  const thresholdMs = (u?.timerRedMins ?? 30) * 60_000
-
-  const lastSave = await prisma.catalogueTimingLog.findFirst({ where: { userId }, orderBy: { savedAt: "desc" }, select: { savedAt: true } })
-  if (!lastSave) return null                     // first ever lot — nothing to measure from
-  const sinceMs = lastSave.savedAt.getTime()
-  const now = Date.now()
-
-  // First lot of the day gets a start-of-day grace; otherwise a gap ≥ threshold.
-  // idleMs is the full window (spans back to the last save, so a late finish
-  // yesterday shows alongside a late start today).
-  const { gate, idleMs } = assessGap(sinceMs, now, thresholdMs)
-  if (!gate) return null
-
-  // Already accounted for? A logged idle only clears the gate if it actually
-  // COVERS the gap — not merely starts near it. Sum the idle logged in the window
-  // and require it to cover at least half the unexplained working gap. The old
-  // check cleared on ANY idle log in the window regardless of length, so a
-  // 1-second throwaway reason could excuse hours. The genuine flow still clears on
-  // the retry: answering the popup logs the full gap as its duration (idleSecs is
-  // seeded from this same idleMs), so coveredMs ≈ idleMs.
-  const windowIdle = await prisma.idleLog.findMany({
-    where: { userId, idleStartedAt: { gte: new Date(sinceMs - 5 * 60_000), lte: new Date(now + 5 * 60_000) } },
-    select: { idleDurationMs: true },
-  })
-  const coveredMs = windowIdle.reduce((s, l) => s + l.idleDurationMs, 0)
-  if (coveredMs >= idleMs / 2) return null
-
-  return { needsIdle: true, idleMs, sinceMs }
-}
+// The idle gate logic now lives in lib/idle-gate.ts (evaluateIdleGate), shared
+// with the last-activity endpoint so the on-screen popup and the save-block use
+// the same server-authoritative decision. createLot below evaluates it, records
+// the decision (with what the device clock claimed), and blocks if unaccounted.
 
 export async function createLot(auctionId: string, formData: FormData) {
   const session = await requireCataloguer()
@@ -450,10 +417,23 @@ export async function createLot(auctionId: string, formData: FormData) {
   }
 
   // Idle gate — before any photo upload, so a blocked attempt leaves no orphan
-  // R2 objects. The client shows the idle popup and, once the reason is logged,
-  // re-saves (which then passes).
-  const gate = await idleGateForCreate(session.user.id)
-  if (gate) return gate
+  // R2 objects. Evaluated server-side (server clock + DB save times, London
+  // working hours), so a fiddled phone clock can't shrink the gap. We ALSO record
+  // the decision plus what the device claimed (clientNow/clientTz), which exposes
+  // a phone set to a US timezone / odd time to dodge the 9–5 check. The client
+  // shows the popup and, once a reason is logged, re-saves (which then passes).
+  const idleGate  = await evaluateIdleGate(session.user.id)
+  const clientNow = parseInt(formData.get("clientNow") as string ?? "") || null
+  const clientTz  = ((formData.get("clientTz") as string) || "").trim() || null
+  const userAgent = (await headers()).get("user-agent")
+  const tampered  = clockLooksTampered(clientNow, clientTz, idleGate.nowMs)
+  // Log the interesting saves (any gate action) and ANY tampered-clock save; skip
+  // the ordinary rapid-save case so the table stays small.
+  const boring = idleGate.reason === "UNDER_THRESHOLD" || idleGate.reason === "TIMER_OFF" || idleGate.reason === "NO_HISTORY"
+  if (!boring || tampered) {
+    await logIdleDecision({ gate: idleGate, userId: session.user.id, userName: createdByName, auctionId, clientNow, clientTz, userAgent })
+  }
+  if (idleGate.blocked) return { needsIdle: true, idleMs: idleGate.idleMs, sinceMs: idleGate.since?.getTime() ?? Date.now() } satisfies IdleGateBlock
 
   const photoFiles = formData.getAll("photo") as File[]
   const imageUrls: string[] = []

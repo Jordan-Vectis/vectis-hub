@@ -283,6 +283,20 @@ const MIGRATIONS = [
   `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "showScanTimer" BOOLEAN NOT NULL DEFAULT true`,
   `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "timerYellowMins" INTEGER NOT NULL DEFAULT 4`,
   `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "timerRedMins" INTEGER NOT NULL DEFAULT 10`,
+  // House default for the idle "warn after" threshold raised 10 → 30 mins. This
+  // ALTER only changes the column default for NEW users.
+  `ALTER TABLE "User" ALTER COLUMN "timerRedMins" SET DEFAULT 30`,
+  // ONE-TIME backfill: move existing users still on the old 10-min default up to
+  // 30. Guarded by a marker so a later Run Migrations can't re-clobber anyone an
+  // admin deliberately sets back to 10. (Generic marker table for one-off fixes.)
+  `CREATE TABLE IF NOT EXISTS "OneTimeBackfill" ("key" TEXT PRIMARY KEY, "appliedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW())`,
+  `DO $$
+   BEGIN
+     IF NOT EXISTS (SELECT 1 FROM "OneTimeBackfill" WHERE "key" = 'timerRedMins_10_to_30_20260721') THEN
+       UPDATE "User" SET "timerRedMins" = 30 WHERE "timerRedMins" = 10;
+       INSERT INTO "OneTimeBackfill" ("key") VALUES ('timerRedMins_10_to_30_20260721');
+     END IF;
+   END $$`,
 
   // Document Storage — folders and files backed by Cloudflare R2
   `CREATE TABLE IF NOT EXISTS "DocumentFolder" (
@@ -1040,6 +1054,28 @@ const MIGRATIONS = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "ReportExcludedDay_userId_day_key" ON "ReportExcludedDay"("userId","day")`,
   `CREATE INDEX IF NOT EXISTS "ReportExcludedDay_userId_idx" ON "ReportExcludedDay"("userId")`,
+
+  // Tamper-proof idle-gate decision log — records the server's idle decision on
+  // every meaningful save plus what the device clock/timezone claimed, exposing a
+  // phone whose time was changed to dodge the 9–5 working-hours check.
+  `CREATE TABLE IF NOT EXISTS "IdleGateDecision" (
+    "id"          TEXT NOT NULL,
+    "createdAt"   TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "userId"      TEXT NOT NULL,
+    "userName"    TEXT NOT NULL,
+    "auctionId"   TEXT,
+    "reason"      TEXT NOT NULL,
+    "blocked"     BOOLEAN NOT NULL DEFAULT FALSE,
+    "idleMs"      INTEGER NOT NULL DEFAULT 0,
+    "since"       TIMESTAMP(3),
+    "thresholdMs" INTEGER NOT NULL DEFAULT 0,
+    "clientNow"   TIMESTAMP(3),
+    "clientTz"    TEXT,
+    "userAgent"   TEXT,
+    CONSTRAINT "IdleGateDecision_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "IdleGateDecision_userId_createdAt_idx" ON "IdleGateDecision"("userId","createdAt")`,
+  `CREATE INDEX IF NOT EXISTS "IdleGateDecision_createdAt_idx" ON "IdleGateDecision"("createdAt")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

@@ -49,7 +49,9 @@ export const START_GRACE_MS = 30 * 60 * 1000
 //   - First lot of a new day → only if more than the start-of-day grace into the
 //     working day (a normal ~9:00–9:30 start is fine).
 //   - Otherwise → gap ≥ the user's threshold.
-export function assessGap(sinceMs: number, nowMs: number, thresholdMs: number): { gate: boolean; idleMs: number } {
+export type AssessReason = "OVER_THRESHOLD" | "UNDER_THRESHOLD" | "NEW_DAY_GRACE" | "DAY_OFF"
+
+export function assessGap(sinceMs: number, nowMs: number, thresholdMs: number): { gate: boolean; idleMs: number; reason: AssessReason } {
   const idleMs = workingMsLondon(sinceMs, nowMs)
   const differentDay = londonDayKey(sinceMs) !== londonDayKey(nowMs)
   // A gap of a full working day or more is time off (holiday / long absence) ONLY
@@ -57,12 +59,14 @@ export function assessGap(sinceMs: number, nowMs: number, thresholdMs: number): 
   // working hours means they were idle the whole working day — present but
   // inactive — and must still be flagged. Requiring the day boundary also stops a
   // stale baseline (e.g. no save written all day) from reading as "day off".
-  if (idleMs >= FULL_DAY_WORK_MS && differentDay) return { gate: false, idleMs }
+  if (idleMs >= FULL_DAY_WORK_MS && differentDay) return { gate: false, idleMs, reason: "DAY_OFF" }
   if (differentDay) {
     const morningIdle = workingMsLondon(londonWorkStartMs(nowMs), nowMs)
-    return { gate: morningIdle > START_GRACE_MS, idleMs }
+    const gate = morningIdle > START_GRACE_MS
+    return { gate, idleMs, reason: gate ? "OVER_THRESHOLD" : "NEW_DAY_GRACE" }
   }
-  return { gate: idleMs >= thresholdMs, idleMs }
+  const gate = idleMs >= thresholdMs
+  return { gate, idleMs, reason: gate ? "OVER_THRESHOLD" : "UNDER_THRESHOLD" }
 }
 
 // Working ms (Mon–Fri 09:00–17:00 Europe/London) between two UTC instants.

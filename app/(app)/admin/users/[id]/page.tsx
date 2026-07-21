@@ -66,7 +66,7 @@ export default async function EditUserPage({
         allowedApps={user.allowedApps}
         appPermissions={user.appPermissions as Record<string, { role: string }> | null}
         showScanTimer={(user as any).showScanTimer ?? true}
-        timerRedMins={(user as any).timerRedMins ?? 10}
+        timerRedMins={(user as any).timerRedMins ?? 30}
         departments={departments}
         roles={roles}
         isSelf={session.user.id === user.id}

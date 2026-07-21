@@ -79,7 +79,7 @@ export default async function AuctionDetailPage({
         userName={session.user.name ?? session.user.email ?? "Unknown"}
         userRole={session.user.role}
         showScanTimer={currentUser?.showScanTimer ?? true}
-        timerRedMins={currentUser?.timerRedMins ?? 10}
+        timerRedMins={currentUser?.timerRedMins ?? 30}
         allAuctions={allAuctions.map(a => ({ id: a.id, code: a.code, name: a.name, auctionDate: a.auctionDate }))}
         auction={{
           id: auction.id,

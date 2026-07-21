@@ -17,6 +17,29 @@ function localDayEnd(dateStr: string): Date { const d = new Date(dateStr + "T23:
 function ymd(d: Date): string { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` }
 function hm(d: Date): string { return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) }
 
+// A save whose device claimed a non-UK timezone, or a clock more than an hour off
+// the server, is the fingerprint of the 9–5 dodge (phone set to US / odd time).
+// The skew tolerance is deliberately generous (1h, not minutes) so ordinary
+// photo-upload latency can't false-flag an honest save; a "2am"/US clock is many
+// hours off and still trips it.
+function clockChanged(clientNow: Date | null, clientTz: string | null, serverAt: Date): boolean {
+  if (clientTz && clientTz !== "Europe/London" && clientTz !== "Europe/Belfast") return true
+  if (clientNow && Math.abs(clientNow.getTime() - serverAt.getTime()) > 60 * 60 * 1000) return true
+  return false
+}
+// What the phone's screen actually showed at save (its own time, in its own tz).
+function phoneClock(clientNow: Date | null, clientTz: string | null): string {
+  if (!clientNow) return "—"
+  try {
+    return clientNow.toLocaleString("en-GB", { timeZone: clientTz || "Europe/London", weekday: "short", hour: "2-digit", minute: "2-digit" })
+  } catch { return clientNow.toLocaleString("en-GB") }
+}
+const REASON_LABEL: Record<string, string> = {
+  BLOCKED: "🚫 Blocked (asked for reason)", CLEARED_BY_REASON: "✓ Cleared by a logged reason",
+  NEW_DAY_GRACE: "Start-of-day grace", DAY_OFF: "Day off (skipped)",
+  UNDER_THRESHOLD: "Under threshold", TIMER_OFF: "Timer off", NO_HISTORY: "No prior save",
+}
+
 export default async function IdleGapsPage({ searchParams }: { searchParams: Promise<{ from?: string; to?: string; all?: string }> }) {
   const session = await auth()
   if (!session || session.user.role !== "ADMIN") redirect("/hub")
@@ -83,6 +106,21 @@ export default async function IdleGapsPage({ searchParams }: { searchParams: Pro
   }
   const groups = [...byUser.entries()].sort((a, b) => b[1].length - a[1].length)
   const unexplainedCount = allGaps.filter((g) => !g.explained).length
+
+  // Idle-gate decision log — the server's decision on each meaningful save plus
+  // what the device clock/timezone claimed. Table is created by Run Migrations, so
+  // tolerate its absence before then.
+  type Decision = { id: string; createdAt: Date; userName: string; reason: string; blocked: boolean; idleMs: number; thresholdMs: number; clientNow: Date | null; clientTz: string | null }
+  let decisions: Decision[] = []
+  try {
+    decisions = await prisma.idleGateDecision.findMany({
+      where: { createdAt: { gte: from, lte: to } },
+      orderBy: { createdAt: "desc" },
+      take: 300,
+      select: { id: true, createdAt: true, userName: true, reason: true, blocked: true, idleMs: true, thresholdMs: true, clientNow: true, clientTz: true },
+    })
+  } catch { /* IdleGateDecision not migrated yet */ }
+  const tamperedCount = decisions.filter((d) => clockChanged(d.clientNow, d.clientTz, d.createdAt)).length
 
   return (
     <div className="p-8">
@@ -163,6 +201,56 @@ export default async function IdleGapsPage({ searchParams }: { searchParams: Pro
           ))}
         </div>
       )}
+
+      {/* ── Save-time gate decisions (tamper-proof; shows what the phone claimed) ── */}
+      <div className="mt-10">
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white">Save-time gate decisions</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-3xl">
+          What the idle gate decided on each meaningful save, recorded server-side, next to the time and timezone the
+          cataloguer&apos;s device reported. A device set to a non-UK timezone, or a clock well off the server, is the
+          fingerprint of dodging the 9–5 check — and it can&apos;t be edited from the app.
+        </p>
+        {decisions.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-500 py-6">No decisions recorded in this range yet.</p>
+        ) : (
+          <>
+            {tamperedCount > 0 && (
+              <p className="text-sm mt-3 mb-1">
+                <span className="font-semibold text-red-600 dark:text-red-400">⚠ {tamperedCount}</span> save{tamperedCount === 1 ? "" : "s"} in this range were made with the device clock/timezone changed away from UK time.
+              </p>
+            )}
+            <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-x-auto mt-3">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider bg-gray-50 dark:bg-gray-900">
+                    <th className="px-4 py-2 font-medium">Server time</th>
+                    <th className="px-4 py-2 font-medium">Cataloguer</th>
+                    <th className="px-4 py-2 font-medium">Gate decision</th>
+                    <th className="px-4 py-2 font-medium">Idle</th>
+                    <th className="px-4 py-2 font-medium">Phone said</th>
+                    <th className="px-4 py-2 font-medium">Phone timezone</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {decisions.map((d) => {
+                    const bad = clockChanged(d.clientNow, d.clientTz, d.createdAt)
+                    return (
+                      <tr key={d.id} className={`border-t border-gray-100 dark:border-gray-800/70 ${bad ? "bg-red-50 dark:bg-red-950/30" : ""}`}>
+                        <td className="px-4 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap tabular-nums">{d.createdAt.toLocaleString("en-GB", { timeZone: "Europe/London", weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
+                        <td className="px-4 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">{d.userName}</td>
+                        <td className={`px-4 py-2 whitespace-nowrap ${d.blocked ? "text-red-600 dark:text-red-400 font-medium" : "text-gray-600 dark:text-gray-400"}`}>{REASON_LABEL[d.reason] ?? d.reason}</td>
+                        <td className="px-4 py-2 text-gray-600 dark:text-gray-400 tabular-nums whitespace-nowrap">{d.idleMs > 0 ? fmtWorkingGap(d.idleMs) : "—"}</td>
+                        <td className={`px-4 py-2 whitespace-nowrap tabular-nums ${bad ? "text-red-600 dark:text-red-400 font-semibold" : "text-gray-500 dark:text-gray-400"}`}>{phoneClock(d.clientNow, d.clientTz)}{bad ? " ⚠" : ""}</td>
+                        <td className={`px-4 py-2 whitespace-nowrap ${bad ? "text-red-600 dark:text-red-400 font-semibold" : "text-gray-500 dark:text-gray-400"}`}>{d.clientTz ?? "—"}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }
