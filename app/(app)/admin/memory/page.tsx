@@ -23,14 +23,16 @@ purpose: The team-wide idle report page (for non-technical managers). What it sh
 last_updated: 2026-07-21
 ---
 
-# Idle Report — /tools/reports/idle (2026-07-21)
+# Cataloguer Activity Report — /tools/reports/idle (2026-07-21)
 
-Team-wide idle report in the cataloguing reports section — a new page, linked from the /tools/reports overview via the amber "⏱ Idle Report" button. REPORTS access.
+Team-wide activity report in the cataloguing reports section — a new page, linked from the /tools/reports overview via the amber "⏱ Activity Report" button. REPORTS access.
 
-⚠ Written for non-technical MANAGERS — plain English, no dev jargon. Jordan rejected the first version's "Unexplained Gaps / Idle Sessions / Clock-Tamper Flags" cards as too technical and too empty. Keep language plain and keep it feature-rich.
+⚠ NAMING (renamed 2026-07-21): "idle" is banned in user-facing text (implies doing nothing). UI now says "Cataloguer Activity"; the time metric = "Away / time away". Renamed LABELS everywhere (this page, /admin/idle-timer = "Cataloguer Activity Timer", /admin/idle-gaps = "Unaccounted Time", popup heading = "What were you doing?"). Code identifiers, DB tables (IdleLog/IdleGateDecision), API routes and page paths (/tools/reports/idle etc.) STILL use "idle" — do NOT change those.
+
+⚠ Written for non-technical MANAGERS — plain English, no dev jargon. Jordan rejected the first version's technical/empty cards. Keep language plain and keep it feature-rich.
 
 - Page: app/(app)/tools/reports/idle/page.tsx (server) + idle-report-charts.tsx (client, recharts). Time-range pills via ?range.
-- Cards: Total Idle Time · Idle Share of Day (% of 9–5) · Idle per Person/Day · Most Common Reason.
+- Cards: Total Time Away · Away Share of Day (% of 9–5) · Away per Person/Day · Most Common Reason.
 - Idle by reason: bar chart + numbers table (total, times, avg, share %). When idle happens: by day-of-week + by time-of-day charts. Idle-over-time trend.
 - Per-cataloguer table (ranked): idle, per-day, Share of Day (amber ≥15% / red ≥25%), breaks, usual reason, "No Reason Given" (= unexplained gaps, plain-worded), Busiest Idle Day; links to /tools/reports/[userId]; "timer off" badge.
 - Longest single breaks table.

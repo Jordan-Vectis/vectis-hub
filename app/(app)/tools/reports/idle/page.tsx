@@ -11,7 +11,7 @@ import { DEFAULT_REASONS, type IdleReason } from "@/lib/idle-timer-config"
 import { ReasonBreakdownChart, IdleTrendChart, IdleByHourChart, IdleByWeekdayChart } from "./idle-report-charts"
 
 export const dynamic = "force-dynamic"
-export const metadata = { title: "Idle Report" }
+export const metadata = { title: "Cataloguer Activity" }
 
 const WORK_DAY_MS = 8 * 60 * 60 * 1000   // a standard 9–5 day
 
@@ -197,10 +197,10 @@ export default async function IdleReportPage({ searchParams }: { searchParams: P
   const hasData = totalIdleMs > 0 || totalUnexplained > 0
 
   const cards = [
-    { label: "Total Idle Time", value: fmtDuration(totalIdleMs), sub: activeLabel, accent: "border-l-orange-500" },
-    { label: "Idle Share of Day", value: idlePctOfDay != null ? `${idlePctOfDay}%` : "—", sub: "of the 9–5 working day", accent: "border-l-amber-500" },
-    { label: "Idle per Person / Day", value: fmtDuration(idlePerPersonDay), sub: `over ${personDays} day${personDays === 1 ? "" : "s"} worked`, accent: "border-l-blue-500" },
-    { label: "Most Common Reason", value: topReason ? `${topReason.icon} ${topReason.label}` : "—", sub: topReason ? `${fmtDuration(topReason.ms)} · ${Math.round(topReason.share)}% of idle` : "no reasons logged", accent: "border-l-purple-500" },
+    { label: "Total Time Away", value: fmtDuration(totalIdleMs), sub: activeLabel, accent: "border-l-orange-500" },
+    { label: "Away Share of Day", value: idlePctOfDay != null ? `${idlePctOfDay}%` : "—", sub: "of the 9–5 working day", accent: "border-l-amber-500" },
+    { label: "Away per Person / Day", value: fmtDuration(idlePerPersonDay), sub: `over ${personDays} day${personDays === 1 ? "" : "s"} worked`, accent: "border-l-blue-500" },
+    { label: "Most Common Reason", value: topReason ? `${topReason.icon} ${topReason.label}` : "—", sub: topReason ? `${fmtDuration(topReason.ms)} · ${Math.round(topReason.share)}% of time away` : "no reasons logged", accent: "border-l-purple-500" },
   ]
 
   const card = "bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl"
@@ -216,11 +216,11 @@ export default async function IdleReportPage({ searchParams }: { searchParams: P
             <span>/</span>
             <Link href="/tools/reports" className="hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Reports</Link>
             <span>/</span>
-            <span className="text-gray-700 dark:text-gray-300">Idle</span>
+            <span className="text-gray-700 dark:text-gray-300">Cataloguer Activity</span>
           </div>
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white">Idle Report</h1>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white">Cataloguer Activity Report</h1>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">How much time the team spends away from cataloguing, and what they&apos;re doing. Only counts Monday–Friday, 9am–5pm.</p>
             </div>
             <div className="flex items-center gap-1 bg-gray-100 dark:bg-[#141416] border border-gray-200 dark:border-gray-800 rounded-lg p-1">
@@ -240,7 +240,7 @@ export default async function IdleReportPage({ searchParams }: { searchParams: P
         <div className="max-w-7xl mx-auto space-y-8">
           {!hasData ? (
             <div className={`${card} p-16 text-center`}>
-              <p className="text-lg font-semibold text-gray-600 dark:text-gray-300 mb-1">No idle data for this period</p>
+              <p className="text-lg font-semibold text-gray-600 dark:text-gray-300 mb-1">No activity data for this period</p>
               <p className="text-sm text-gray-500">Try a wider time range.</p>
             </div>
           ) : (
@@ -259,11 +259,11 @@ export default async function IdleReportPage({ searchParams }: { searchParams: P
               {/* Idle by reason: chart + table */}
               <div className="grid lg:grid-cols-2 gap-6">
                 <div className={`${card} p-5`}>
-                  <h2 className={`${h2} mb-4`}>What they&apos;re doing when idle</h2>
+                  <h2 className={`${h2} mb-4`}>What they&apos;re doing when away from cataloguing</h2>
                   <ReasonBreakdownChart data={reasonChart} />
                 </div>
                 <div className={`${card} p-5`}>
-                  <h2 className={`${h2} mb-4`}>Idle reasons — the numbers</h2>
+                  <h2 className={`${h2} mb-4`}>Activity reasons — the numbers</h2>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-xs text-gray-400 uppercase tracking-wider text-left">
@@ -297,20 +297,20 @@ export default async function IdleReportPage({ searchParams }: { searchParams: P
               {/* When idle happens */}
               <div className="grid lg:grid-cols-3 gap-6">
                 <div className={`${card} p-5 lg:col-span-1`}>
-                  <h2 className={`${h2} mb-1`}>Idle by day of week</h2>
+                  <h2 className={`${h2} mb-1`}>Time away by day of week</h2>
                   <p className="text-xs text-gray-400 mb-3">Which days lose the most time.</p>
                   <IdleByWeekdayChart data={weekdayChart} />
                 </div>
                 <div className={`${card} p-5 lg:col-span-2`}>
-                  <h2 className={`${h2} mb-1`}>Idle by time of day</h2>
-                  <p className="text-xs text-gray-400 mb-3">When in the working day idle happens (start time of each break).</p>
+                  <h2 className={`${h2} mb-1`}>Time away by time of day</h2>
+                  <p className="text-xs text-gray-400 mb-3">When in the working day people step away (start time of each break).</p>
                   <IdleByHourChart data={hourChart} />
                 </div>
               </div>
 
               {/* Idle over time */}
               <div className={`${card} p-5`}>
-                <h2 className={`${h2} mb-4`}>Idle over time</h2>
+                <h2 className={`${h2} mb-4`}>Time away over time</h2>
                 <IdleTrendChart data={trendChart} />
               </div>
 
@@ -318,20 +318,20 @@ export default async function IdleReportPage({ searchParams }: { searchParams: P
               <div>
                 <div className="flex items-baseline justify-between mb-3">
                   <h2 className={h2}>Per cataloguer</h2>
-                  <span className="text-xs text-gray-400">most idle first · avg break = {fmtDuration(avgSessionMs)}</span>
+                  <span className="text-xs text-gray-400">most time away first · avg break = {fmtDuration(avgSessionMs)}</span>
                 </div>
                 <div className={`${card} overflow-x-auto`}>
                   <table className="w-full text-sm whitespace-nowrap">
                     <thead>
                       <tr className="border-b border-gray-200 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         <th className="text-left px-5 py-3">Cataloguer</th>
-                        <th className="text-right px-5 py-3">Idle</th>
+                        <th className="text-right px-5 py-3">Away</th>
                         <th className="text-right px-5 py-3">Per Day</th>
                         <th className="text-right px-5 py-3">Share of Day</th>
                         <th className="text-right px-5 py-3">Breaks</th>
                         <th className="text-left px-5 py-3">Usual Reason</th>
                         <th className="text-right px-5 py-3">No Reason Given</th>
-                        <th className="text-left px-5 py-3">Busiest Idle Day</th>
+                        <th className="text-left px-5 py-3">Most Time Away</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-800/60">

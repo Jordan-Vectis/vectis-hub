@@ -407,8 +407,8 @@ export default async function ReportsUserPage({
           {totalTrackedMs > 0 && overallActivePct !== null && overallIdlePct !== null && (
             <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl p-5">
               <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">
-                Cataloguing vs Idle — {rangeLabel}
-                <span className="block normal-case font-normal text-gray-400 dark:text-gray-500 mt-0.5">Share of tracked active + idle time (excludes unaccounted time — see the Daily Breakdown below for the full workday split)</span>
+                Cataloguing vs Away — {rangeLabel}
+                <span className="block normal-case font-normal text-gray-400 dark:text-gray-500 mt-0.5">Share of tracked cataloguing + time-away (excludes unaccounted time — see the Daily Breakdown below for the full workday split)</span>
               </h2>
               <div className="space-y-3">
                 <div className="flex rounded-full overflow-hidden h-6 bg-gray-100 dark:bg-gray-800">
@@ -432,12 +432,12 @@ export default async function ReportsUserPage({
                   <span className="flex items-center gap-2">
                     <span className="inline-block w-3 h-3 rounded-full bg-orange-400 shrink-0" />
                     <span className="font-mono font-bold text-orange-500">{fmtDuration(totalIdleMs)}</span>
-                    <span className="text-gray-400 text-xs">idle ({overallIdlePct}%)</span>
+                    <span className="text-gray-400 text-xs">away ({overallIdlePct}%)</span>
                   </span>
                   <span className="ml-auto text-xs font-semibold">
                     {overallActivePct >= overallIdlePct
-                      ? <span className="text-emerald-500">{overallActivePct - overallIdlePct}% more time cataloguing than idle</span>
-                      : <span className="text-orange-400">{overallIdlePct - overallActivePct}% more time idle than cataloguing</span>
+                      ? <span className="text-emerald-500">{overallActivePct - overallIdlePct}% more time cataloguing than away</span>
+                      : <span className="text-orange-400">{overallIdlePct - overallActivePct}% more time away than cataloguing</span>
                     }
                   </span>
                 </div>

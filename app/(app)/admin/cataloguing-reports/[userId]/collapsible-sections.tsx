@@ -161,7 +161,7 @@ export function TodayProductivityCard({
             </span>
             <span className="flex items-center gap-1.5">
               <span className="inline-block w-2.5 h-2.5 rounded-full bg-orange-400" />
-              Idle time
+              Time away
             </span>
             {(unaccountedMs > 0 || expectedMs > 0) && (
               <span className="flex items-center gap-1.5">
@@ -220,7 +220,7 @@ export function TodayProductivityCard({
               </div>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-bold text-orange-500 font-mono">{fmtDuration(totalIdleMs)}</span>
-                <span className="text-xs text-gray-400 dark:text-gray-500">idle ({idleSessions.length} session{idleSessions.length !== 1 ? "s" : ""})</span>
+                <span className="text-xs text-gray-400 dark:text-gray-500">away ({idleSessions.length} session{idleSessions.length !== 1 ? "s" : ""})</span>
               </div>
               {unaccountedMs > 0 && (
                 <div className="flex items-baseline gap-2">
@@ -244,7 +244,7 @@ export function TodayProductivityCard({
           {/* Idle breakdown */}
           {byReason.length > 0 && (
             <div className="border-t border-gray-100 dark:border-gray-700 pt-4 space-y-3">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Idle Breakdown</p>
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Time Away — Breakdown</p>
               {byReason.map(({ key, cfg, sessions, totalMs: reasonMs }) => (
                 <div key={key} className="space-y-1.5">
                   {/* Reason header */}
@@ -501,7 +501,7 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this idle time entry? This cannot be undone.")) return
+    if (!confirm("Delete this away-time entry? This cannot be undone.")) return
     setDeleting(id)
     try {
       const res = await fetch(`/api/catalogue/idle-log/${id}`, { method: "DELETE" })
@@ -526,7 +526,7 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
         className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
       >
         <span className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-          Idle Time
+          Time Away
           <span className="ml-2 font-normal normal-case text-gray-400 dark:text-gray-500 text-xs">
             ({logs.length} session{logs.length !== 1 ? "s" : ""})
           </span>
@@ -583,7 +583,7 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
           {counted.length > 0 && (
             <div className="px-5 py-2 bg-orange-50 border-t border-orange-100 flex flex-wrap gap-x-6 gap-y-1 text-xs">
               <span className="text-orange-700 font-semibold">
-                Total idle{reasonFilter.size > 0 ? " (filtered)" : ""}: <span className="font-bold">{fmtDuration(totalIdleMs)}</span>
+                Total time away{reasonFilter.size > 0 ? " (filtered)" : ""}: <span className="font-bold">{fmtDuration(totalIdleMs)}</span>
                 <span className="ml-1.5 font-normal text-orange-500">· {counted.length} session{counted.length === 1 ? "" : "s"}</span>
               </span>
               {skipped.length > 0 && (
@@ -611,7 +611,7 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
                 {filtered.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-5 py-10 text-center text-gray-400 dark:text-gray-500 text-xs">
-                      No idle sessions match the current filters.
+                      No away sessions match the current filters.
                     </td>
                   </tr>
                 ) : filtered.map(log => {
@@ -735,7 +735,7 @@ export function DailyComparisonTable({
       <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
         <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
           Daily Breakdown
-          <span className="ml-2 font-normal normal-case text-gray-400">— 9am–5pm weekday · cataloguing vs idle vs unaccounted</span>
+          <span className="ml-2 font-normal normal-case text-gray-400">— 9am–5pm weekday · cataloguing vs away vs unaccounted</span>
           {excludedCount > 0 && (
             <span className="ml-2 font-normal normal-case text-amber-500">· {excludedCount} day{excludedCount === 1 ? "" : "s"} excluded from all report figures</span>
           )}
@@ -772,7 +772,7 @@ export function DailyComparisonTable({
               <span className="flex items-center gap-1.5">
                 <span className="inline-block w-2.5 h-2.5 rounded-full bg-orange-400 shrink-0" />
                 <span className="font-bold text-orange-500 font-mono">{fmtDuration(totalIdleMs)}</span>
-                <span className="text-gray-400">idle · {Math.round(overallIdlePct)}%</span>
+                <span className="text-gray-400">away · {Math.round(overallIdlePct)}%</span>
               </span>
               {totalUnaccMs > 0 && (
                 <span className="flex items-center gap-1.5">
@@ -798,7 +798,7 @@ export function DailyComparisonTable({
                 <th className="text-left px-5 py-3">Date</th>
                 <th className="text-right px-5 py-3">Lots</th>
                 <th className="text-right px-5 py-3">Cataloguing</th>
-                <th className="text-right px-5 py-3">Idle</th>
+                <th className="text-right px-5 py-3">Away</th>
                 <th className="text-right px-5 py-3">Unaccounted</th>
                 <th className="px-5 py-3 min-w-[120px]">Split</th>
                 <th className="text-right px-5 py-3">Accounted</th>
@@ -1106,7 +1106,7 @@ export function TodayTimeline({
               {hasIdle && (
                 <span className="flex items-center gap-1.5">
                   <span className="inline-block w-4 h-3 rounded-sm bg-orange-400/75" />
-                  Idle
+                  Away
                 </span>
               )}
               <span className="flex items-center gap-1.5">
@@ -1122,7 +1122,7 @@ export function TodayTimeline({
             </div>
 
             {lots.length === 0 && idleSessions.length === 0 && (
-              <p className="text-xs text-gray-400 text-center pt-1">No lots or idle sessions recorded yet today.</p>
+              <p className="text-xs text-gray-400 text-center pt-1">No lots or away sessions recorded yet today.</p>
             )}
           </div>
         )}
@@ -1341,9 +1341,9 @@ export function CollapsibleActiveVsIdleTable({ logs }: { logs: SerialLotSplit[] 
         className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
       >
         <span className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-          Cataloguing vs Idle — per lot
+          Cataloguing vs Away — per lot
           <span className="ml-2 font-normal normal-case text-gray-400 dark:text-gray-500 text-xs">
-            ({logs.length} lots{withIdle > 0 ? `, ${withIdle} with idle inside` : ""})
+            ({logs.length} lots{withIdle > 0 ? `, ${withIdle} with time away inside` : ""})
           </span>
         </span>
         <span className="text-gray-400 dark:text-gray-500 text-sm select-none">{open ? "▲ Collapse" : "▼ Expand"}</span>
@@ -1362,10 +1362,10 @@ export function CollapsibleActiveVsIdleTable({ logs }: { logs: SerialLotSplit[] 
             <span className="text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wider mr-1">Sort</span>
             {sortBtn("recent", "Most recent")}
             {sortBtn("longest", "Longest lot")}
-            {sortBtn("most-idle", "Most idle")}
+            {sortBtn("most-idle", "Most time away")}
             <label className="ml-auto flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none">
               <input type="checkbox" checked={onlyIdle} onChange={e => setOnlyIdle(e.target.checked)} className="accent-[#2AB4A6]" />
-              Only lots with idle
+              Only lots with time away
             </label>
           </div>
 
@@ -1378,7 +1378,7 @@ export function CollapsibleActiveVsIdleTable({ logs }: { logs: SerialLotSplit[] 
               Cataloguing <span className="font-mono font-bold">{fmtDuration(totalActive)}</span>
             </span>
             <span className="text-amber-600 dark:text-amber-400">
-              Idle inside lots <span className="font-mono font-bold">{fmtDuration(totalIdle)}</span>
+              Time away inside lots <span className="font-mono font-bold">{fmtDuration(totalIdle)}</span>
             </span>
           </div>
 
@@ -1391,7 +1391,7 @@ export function CollapsibleActiveVsIdleTable({ logs }: { logs: SerialLotSplit[] 
                   <th className="text-left px-5 py-3">Lot / Barcode</th>
                   <th className="text-right px-5 py-3">Lot Took</th>
                   <th className="text-right px-5 py-3">Cataloguing</th>
-                  <th className="text-right px-5 py-3">Idle</th>
+                  <th className="text-right px-5 py-3">Away</th>
                   <th className="text-left px-5 py-3 w-[140px]">Split</th>
                 </tr>
               </thead>
@@ -1399,7 +1399,7 @@ export function CollapsibleActiveVsIdleTable({ logs }: { logs: SerialLotSplit[] 
                 {filtered.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-5 py-10 text-center text-gray-400 dark:text-gray-500 text-xs">
-                      {onlyIdle ? "No lots had idle logged inside them." : "No lots match the selected date range."}
+                      {onlyIdle ? "No lots had time away logged inside them." : "No lots match the selected date range."}
                     </td>
                   </tr>
                 ) : filtered.map(log => {
@@ -1432,7 +1432,7 @@ export function CollapsibleActiveVsIdleTable({ logs }: { logs: SerialLotSplit[] 
                       <td className="px-5 py-3">
                         <div
                           className="flex h-2 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800"
-                          title={`${Math.round(100 - idlePct)}% cataloguing · ${Math.round(idlePct)}% idle`}
+                          title={`${Math.round(100 - idlePct)}% cataloguing · ${Math.round(idlePct)}% away`}
                         >
                           <span className="bg-green-500" style={{ width: `${100 - idlePct}%` }} />
                           <span className="bg-amber-500" style={{ width: `${idlePct}%` }} />
@@ -1447,9 +1447,9 @@ export function CollapsibleActiveVsIdleTable({ logs }: { logs: SerialLotSplit[] 
 
           <p className="px-5 py-3 text-xs text-gray-400 dark:text-gray-500 border-t border-gray-100 dark:border-gray-800 leading-relaxed">
             <span className="font-semibold">Lot Took</span> is the full time the lot was open — the same figure as the other tables.
-            <span className="font-semibold"> Idle</span> is the part of it logged against an idle reason, matched to the lot that was
+            <span className="font-semibold"> Away</span> is the part of it logged against an activity reason, matched to the lot that was
             open at the time. <span className="font-semibold">Cataloguing</span> is the remainder. A long lot showing little or no
-            idle means the screen was being touched throughout.
+            time away means the screen was being touched throughout.
           </p>
         </>
       )}

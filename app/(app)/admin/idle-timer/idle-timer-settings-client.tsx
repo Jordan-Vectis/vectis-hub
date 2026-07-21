@@ -213,8 +213,8 @@ export default function IdleTimerSettingsClient({ initialReasons }: { initialRea
           <h2 className="text-sm font-bold text-sky-800 dark:text-sky-300 uppercase tracking-wider mb-1">Timing threshold</h2>
           <p className="text-xs text-sky-700 dark:text-sky-300 leading-relaxed">
             There is <b>one timer number per user</b>, set in <b>Admin → Users → (user) → Scan timer</b> — that is the only
-            place timing lives. The lot timer turns red after that many minutes, and the idle question appears when a
-            cataloguer <b>starts a new lot</b> after a longer gap than that since their last one. Idle time only counts
+            place timing lives. The lot timer turns red after that many minutes, and the activity question appears when a
+            cataloguer <b>starts a new lot</b> after a longer gap than that since their last one. This time only counts
             <b> working hours (Mon–Fri, 9:00–17:00)</b>; gaps of a full working day or more (holidays, days off) are
             skipped silently.
           </p>
@@ -223,14 +223,14 @@ export default function IdleTimerSettingsClient({ initialReasons }: { initialRea
         {/* ── Reasons ── */}
         <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-1">
-            <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Idle Reasons</h2>
+            <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Activity Reasons</h2>
             <button onClick={openAdd}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2AB4A6] hover:bg-[#22a090] text-white text-xs font-bold rounded-lg transition-colors">
               + Add Reason
             </button>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-5">
-            These appear in the idle popup. Drag the arrows to reorder. &ldquo;Requires note&rdquo; forces staff to explain before submitting.
+            These appear in the activity popup. Drag the arrows to reorder. &ldquo;Requires note&rdquo; forces staff to explain before submitting.
           </p>
 
           {reasons.length === 0 && (

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { findUserGaps, fmtWorkingGap, type GapSave, type GapIdle, type IdleGap } from "@/lib/idle-gaps"
 
 export const dynamic = "force-dynamic"
-export const metadata = { title: "Unexplained Gaps" }
+export const metadata = { title: "Unaccounted Time" }
 
 // Admin-only report: working-hours gaps between a cataloguer's consecutive lot
 // saves that were never accounted for with an idle reason. Tamper-proof — it
@@ -125,11 +125,11 @@ export default async function IdleGapsPage({ searchParams }: { searchParams: Pro
   return (
     <div className="p-8">
       <div className="mb-6 max-w-3xl">
-        <Link href="/admin/idle-timer" className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 mb-3 inline-flex items-center gap-1">← Idle Timer</Link>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Unexplained Idle Gaps</h1>
+        <Link href="/admin/idle-timer" className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 mb-3 inline-flex items-center gap-1">← Cataloguer Activity Timer</Link>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Unaccounted Time</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Working-hours gaps (Mon–Fri, 9–5) between a cataloguer&apos;s consecutive lot saves that were never accounted for with an idle
-          reason, and are longer than that person&apos;s own idle threshold. Read straight from the save history, so it catches the gap
+          Working-hours gaps (Mon–Fri, 9–5) between a cataloguer&apos;s consecutive lot saves that were never accounted for with an activity
+          reason, and are longer than that person&apos;s own timer threshold. Read straight from the save history, so it catches the gap
           however the in-app popup was avoided. Gaps of a full working day or more are treated as time off and excluded.
         </p>
       </div>
@@ -206,7 +206,7 @@ export default async function IdleGapsPage({ searchParams }: { searchParams: Pro
       <div className="mt-10">
         <h2 className="text-lg font-bold text-gray-900 dark:text-white">Save-time gate decisions</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-3xl">
-          What the idle gate decided on each meaningful save, recorded server-side, next to the time and timezone the
+          What the activity check decided on each meaningful save, recorded server-side, next to the time and timezone the
           cataloguer&apos;s device reported. A device set to a non-UK timezone, or a clock well off the server, is the
           fingerprint of dodging the 9–5 check — and it can&apos;t be edited from the app.
         </p>
@@ -226,7 +226,7 @@ export default async function IdleGapsPage({ searchParams }: { searchParams: Pro
                     <th className="px-4 py-2 font-medium">Server time</th>
                     <th className="px-4 py-2 font-medium">Cataloguer</th>
                     <th className="px-4 py-2 font-medium">Gate decision</th>
-                    <th className="px-4 py-2 font-medium">Idle</th>
+                    <th className="px-4 py-2 font-medium">Away</th>
                     <th className="px-4 py-2 font-medium">Phone said</th>
                     <th className="px-4 py-2 font-medium">Phone timezone</th>
                   </tr>

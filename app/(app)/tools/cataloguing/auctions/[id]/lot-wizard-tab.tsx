@@ -1155,7 +1155,7 @@ export default function LotWizardTab({
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
             <div className="text-center mb-5">
-              <p className="text-xs font-bold uppercase tracking-widest text-gray-600 dark:text-gray-400 mb-1">Idle Reason</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-gray-600 dark:text-gray-400 mb-1">What were you doing?</p>
               <p className="text-5xl font-mono font-bold text-gray-900">{fmtIdleDuration(idleSecs)}</p>
               {idleStartedAtRef.current > 0 && (
                 <p className="text-sm font-semibold text-gray-700 mt-1.5">

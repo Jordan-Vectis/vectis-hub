@@ -243,7 +243,7 @@ export default async function ReportsOverviewPage({
                 href="/tools/reports/idle"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-orange-400 text-orange-500 hover:bg-orange-500 hover:text-white transition-colors whitespace-nowrap"
               >
-                ⏱ Idle Report
+                ⏱ Activity Report
               </Link>
               {/* Export ALL cataloguers (one workbook, one sheet per person, grouped per day) */}
               <a
