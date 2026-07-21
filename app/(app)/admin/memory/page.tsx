@@ -32,7 +32,7 @@ Built after a cataloguer had a ~4h working-hours gap between lot saves with zero
 - The popup itself has no dismiss button — it can't be closed without logging a reason.
 
 ## Server-side gate (2026-07-20 — the real fix)
-The bypass was closing the app / signing out / reloading, which resets the client's idle baseline. Fix: enforce the gate SERVER-SIDE in createLot. First lot of the (London) day sets the baseline; if a cataloguer's next lot comes after a working-hours gap over their own threshold with no idle reason logged, the server refuses to create it and the app shows the popup — once they log the reason it saves. Because it reads the save history, closing/reopening/logout can't get around it. Working hours are computed in Europe/London server-side (Railway is UTC). The report and gate share the same calc.`,
+The bypass was closing the app / signing out / reloading, which resets the client's idle baseline. Fix: enforce the gate SERVER-SIDE in createLot. If a cataloguer's next lot comes after a working-hours gap over their own threshold with no idle reason logged, the server refuses to create it and the app shows the popup — once they log the reason it saves. Because it reads the save history, closing/reopening/logout can't get around it. The FIRST lot of the day gets a 30-minute start-of-day grace (a normal ~9–9:30 start is fine); go past it and it gates, showing the idle spanning from the last save so an early finish yesterday shows alongside a late start today. Any logged reason (Holiday included) counts as accounted-for. Working hours are computed in Europe/London server-side (Railway is UTC); the report and gate share one function (assessGap).`,
   },
   {
     filename: "manage_lots_bulk_undo.md",
