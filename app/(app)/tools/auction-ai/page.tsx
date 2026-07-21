@@ -3663,6 +3663,10 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   const [onlyWithPhotos, setOnlyWithPhotos] = useState(() => {
     try { return localStorage.getItem("pipeline_only_photos") === "true" } catch { return false }
   })
+  // Skip lots that already have a description, so a re-run leaves them untouched.
+  const [skipHasDesc, setSkipHasDesc] = useState(() => {
+    try { return localStorage.getItem("pipeline_skip_described") === "true" } catch { return false }
+  })
   const codeRef  = useRef<HTMLDivElement>(null)
   const logRef   = useRef<HTMLDivElement>(null)
   const cancelRef = useRef(false)
@@ -3766,11 +3770,19 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         }
       })
 
-      // "Only lots with photos" — drop no-photo lots from the run entirely (they
-      // always skip in Batch), so counts + progress reflect real work.
-      const noPhotos = mapped.filter(l => l.imageUrls.length === 0).length
-      const shown = onlyWithPhotos ? mapped.filter(l => l.imageUrls.length > 0) : mapped
-      const hiddenNote = onlyWithPhotos && noPhotos > 0 ? ` (${noPhotos} without photos hidden)` : ""
+      // "Only lots with photos" drops no-photo lots (they always skip in Batch).
+      // "Skip lots that already have a description" drops lots that already have
+      // one, so a re-run leaves those descriptions completely alone — out of
+      // Batch, Key Points AND Double Check. Both keep counts/progress to real work.
+      const noPhotos  = mapped.filter(l => l.imageUrls.length === 0).length
+      const described = mapped.filter(l => (l.currentDesc ?? "").trim().length > 0).length
+      let shown = mapped
+      if (onlyWithPhotos) shown = shown.filter(l => l.imageUrls.length > 0)
+      if (skipHasDesc)    shown = shown.filter(l => !(l.currentDesc ?? "").trim())
+      const notes: string[] = []
+      if (onlyWithPhotos && noPhotos > 0)  notes.push(`${noPhotos} without photos`)
+      if (skipHasDesc && described > 0)    notes.push(`${described} already described`)
+      const hiddenNote = notes.length ? ` (${notes.join(", ")} hidden)` : ""
       setLots(shown)
       if (savedRun) {
         const needApply = shown.filter(l => l.kpRevised && (l.kpRevised ?? "").trim() !== (l.appliedDesc ?? "").trim()).length
@@ -4484,6 +4496,22 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
               }}
               className="w-3.5 h-3.5 accent-emerald-500" />
             <span className="text-xs font-medium">📷 Only lots with photos</span>
+          </label>
+
+          {/* Skip lots that already have a description — leaves existing
+              descriptions completely alone (out of Batch / Key Points / Double
+              Check), even in Auto-apply mode. Applies on the next Load Auction;
+              ticking also tightens the current view immediately when idle. */}
+          <label className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-colors ${skipHasDesc ? "bg-emerald-950/50 border-emerald-600/60 text-emerald-300" : "bg-gray-100 dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}>
+            <input type="checkbox" checked={skipHasDesc}
+              onChange={e => {
+                const v = e.target.checked
+                setSkipHasDesc(v)
+                try { localStorage.setItem("pipeline_skip_described", String(v)) } catch {}
+                if (v && !running) setLots(cur => cur.filter(l => !(l.currentDesc ?? "").trim()))
+              }}
+              className="w-3.5 h-3.5 accent-emerald-500" />
+            <span className="text-xs font-medium">✍️ Skip lots that already have a description</span>
           </label>
 
           {/* Auto-apply vs manual review — a segmented toggle so BOTH options are
