@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import EnvSelector from "@/components/env-selector"
 import Logo from "@/components/logo"
 import ThemeToggle from "@/components/theme-toggle"
+import BcStatusButton from "@/components/bc-status-button"
 import { signOutAction } from "@/lib/actions/auth"
 
 interface TopBarProps {
@@ -40,6 +41,7 @@ export default function TopBar({ userName, isAdmin }: TopBarProps) {
       <div className="flex items-center gap-4">
         <EnvSelector />
         <ThemeToggle />
+        <BcStatusButton />
         {isAdmin && (
           <Link href="/admin" title="Admin settings" className="text-gray-400 hover:text-white transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

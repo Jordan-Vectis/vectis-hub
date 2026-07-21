@@ -388,7 +388,9 @@ The only "Sign in with Microsoft" prompt lived in BC Reports — which a user wi
 ## Pattern for other tools
 Any BC-dependent tool whose users may lack BC Reports access should offer its own connect link: /api/bc/auth?return=<its own path>.
 
-The **Manager Portal** does this (2026-07-21): manager-portal-table.tsx shows a "🔗 Connect to Business Central — Sign in with Microsoft" banner (→ /api/bc/auth?return=/tools/manager-portal) when /api/manager-portal/bc-counts returns {connected:false}, plus a green/red notice from ?bc_connected/?bc_error on return. Added because a manager who only uses the portal saw all-0 BC figures with no way to sign in.`,
+The **Manager Portal** does this (2026-07-21): manager-portal-table.tsx shows a "🔗 Connect to Business Central — Sign in with Microsoft" banner (→ /api/bc/auth?return=/tools/manager-portal) when /api/manager-portal/bc-counts returns {connected:false}, plus a green/red notice from ?bc_connected/?bc_error on return. Added because a manager who only uses the portal saw all-0 BC figures with no way to sign in.
+
+**Global BC button in the top bar** (2026-07-21): components/bc-status-button.tsx (in top-bar.tsx, shown to everyone) — a small "BC" badge + status dot (green/amber/grey) that checks /api/bc/status on mount; clicking opens a popover with a "Sign in with Microsoft" button → /api/bc/auth?return=<current path>. So anyone can connect BC from any page.`,
   },
   {
     filename: "bc_warehouse_guide.md",
