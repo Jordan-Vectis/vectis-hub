@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getEffectiveSession } from "@/lib/impersonation"
 import { hasAppAccess } from "@/lib/apps"
-import { buildLotMap, lotRef } from "@/lib/cataloguing-reports"
+import { buildLotMap, lotRef, ukDayStartUtc } from "@/lib/cataloguing-reports"
 import { buildReportsWorkbook, type PersonReport } from "@/lib/reports-export"
 import { DEFAULT_REASONS } from "@/lib/idle-timer-config"
 import { subDays, subMonths, startOfDay, format } from "date-fns"
@@ -18,6 +18,7 @@ export const dynamic = "force-dynamic"
 // sheet per cataloguer.
 
 const RANGE_LABELS: Record<string, string> = {
+  "today": "Today",
   "7d": "Last 7 days", "30d": "Last 30 days", "90d": "Last 90 days",
   "6m": "Last 6 months", "1y": "Last year", "all": "All time",
 }
@@ -25,6 +26,7 @@ const RANGE_LABELS: Record<string, string> = {
 function rangeStart(key: string): Date | null {
   const now = new Date()
   switch (key) {
+    case "today": return ukDayStartUtc(now, 0)   // London start of today
     case "7d":  return startOfDay(subDays(now, 7))
     case "30d": return startOfDay(subDays(now, 30))
     case "90d": return startOfDay(subDays(now, 90))

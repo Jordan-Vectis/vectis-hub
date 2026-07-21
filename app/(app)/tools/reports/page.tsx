@@ -28,6 +28,7 @@ function fmtDuration(ms: number): string {
 // ─── Range helpers ────────────────────────────────────────────────────────────
 
 const RANGES = [
+  { key: "today", label: "Today" },
   { key: "7d",  label: "7 days" },
   { key: "30d", label: "30 days" },
   { key: "90d", label: "90 days" },
@@ -41,6 +42,7 @@ type RangeKey = typeof RANGES[number]["key"]
 function rangeStart(key: RangeKey): Date | null {
   const now = new Date()
   switch (key) {
+    case "today": return ukDayStartUtc(now, 0)   // London start of today
     case "7d":  return startOfDay(subDays(now, 7))
     case "30d": return startOfDay(subDays(now, 30))
     case "90d": return startOfDay(subDays(now, 90))
