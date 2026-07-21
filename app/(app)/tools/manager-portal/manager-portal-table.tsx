@@ -386,6 +386,7 @@ function matches(row: SaleRow, search: string, type: string): boolean {
 
 export default function ManagerPortalTable({ rows, nowMs }: { rows: SaleRow[]; nowMs: number }) {
   const [bc, setBc] = useState<BcState>({ status: "loading" })
+  const [bcNotice, setBcNotice] = useState<{ kind: "ok" | "err"; text: string } | null>(null)
   const [search, setSearch] = useState("")
   const [type, setType] = useState("ALL")
   const [open, setOpen] = useState<Set<string>>(new Set())
@@ -414,6 +415,19 @@ export default function ManagerPortalTable({ rows, nowMs }: { rows: SaleRow[]; n
     return () => { cancelled = true }
   }, [])
 
+  // Confirmation after returning from the Microsoft/BC sign-in, then strip the
+  // query params so a refresh doesn't repeat the message.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("bc_connected") === "1") setBcNotice({ kind: "ok", text: "Connected to Business Central — the BC figures will load now." })
+    else if (params.get("bc_error")) setBcNotice({ kind: "err", text: `Couldn't connect to Business Central: ${params.get("bc_error")}` })
+    if (params.has("bc_connected") || params.has("bc_error")) {
+      params.delete("bc_connected"); params.delete("bc_error")
+      const qs = params.toString()
+      window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""))
+    }
+  }, [])
+
   const active    = useMemo(() => rows.filter(r => !r.complete), [rows])
   const completed = useMemo(() => rows.filter(r => r.complete), [rows])
   const filteredActive    = useMemo(() => active.filter(r => matches(r, search, type)),    [active, search, type])
@@ -426,9 +440,22 @@ export default function ManagerPortalTable({ rows, nowMs }: { rows: SaleRow[]; n
     <>
       <style>{STYLES}</style>
 
+      {bcNotice && (
+        <div className={`mb-4 flex items-center justify-between gap-3 rounded-lg border px-4 py-2.5 text-sm ${bcNotice.kind === "ok" ? "border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300" : "border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300"}`}>
+          <span>{bcNotice.kind === "ok" ? "✓" : "✗"} {bcNotice.text}</span>
+          <button onClick={() => setBcNotice(null)} className="shrink-0 opacity-70 hover:opacity-100 text-lg leading-none">×</button>
+        </div>
+      )}
+
       {bc.status === "disconnected" && (
-        <div className="mb-4 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-300">
-          Business Central isn&apos;t connected for your account, so only Hub counts are shown. Connect BC (Tools → BC Warehouse) to see live BC lot counts.
+        <div className="mb-4 flex items-center justify-between gap-3 flex-wrap rounded-lg border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/30 px-4 py-2.5 text-sm text-sky-800 dark:text-sky-200">
+          <span>
+            <span className="font-semibold">🔗 Connect to Business Central</span> — the BC figures show 0 until you sign in with your Microsoft account (just once).
+          </span>
+          <a href="/api/bc/auth?return=/tools/manager-portal"
+            className="shrink-0 text-sm font-semibold px-3.5 py-1.5 rounded-lg bg-[#0078D4] hover:bg-blue-500 text-white">
+            Sign in with Microsoft
+          </a>
         </div>
       )}
       {bc.status === "error" && (

@@ -386,7 +386,9 @@ The only "Sign in with Microsoft" prompt lived in BC Reports — which a user wi
 - The BC Warehouse guide entries (home, location-history, collections-due, unsold-items, data-sync) mention the banner — keep them in step.
 
 ## Pattern for other tools
-Any BC-dependent tool whose users may lack BC Reports access should offer its own connect link: /api/bc/auth?return=<its own path>.`,
+Any BC-dependent tool whose users may lack BC Reports access should offer its own connect link: /api/bc/auth?return=<its own path>.
+
+The **Manager Portal** does this (2026-07-21): manager-portal-table.tsx shows a "🔗 Connect to Business Central — Sign in with Microsoft" banner (→ /api/bc/auth?return=/tools/manager-portal) when /api/manager-portal/bc-counts returns {connected:false}, plus a green/red notice from ?bc_connected/?bc_error on return. Added because a manager who only uses the portal saw all-0 BC figures with no way to sign in.`,
   },
   {
     filename: "bc_warehouse_guide.md",
