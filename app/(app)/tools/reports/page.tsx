@@ -238,6 +238,13 @@ export default async function ReportsOverviewPage({
             </div>
             {/* Export + range pills */}
             <div className="flex items-center gap-3 flex-wrap">
+              {/* Dedicated team-wide idle report */}
+              <Link
+                href="/tools/reports/idle"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-orange-400 text-orange-500 hover:bg-orange-500 hover:text-white transition-colors whitespace-nowrap"
+              >
+                ⏱ Idle Report
+              </Link>
               {/* Export ALL cataloguers (one workbook, one sheet per person, grouped per day) */}
               <a
                 href={`/api/reports/export?range=${activeRange}`}

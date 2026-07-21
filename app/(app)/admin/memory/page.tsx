@@ -16,6 +16,26 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "idle_report.md",
+    content: `---
+name: Idle Report — /tools/reports/idle
+purpose: The team-wide idle report page. What it shows + data sources. Read before touching it or the reports section.
+last_updated: 2026-07-21
+---
+
+# Idle Report — /tools/reports/idle (2026-07-21)
+
+A dedicated team-wide idle report in the cataloguing reports section — a new page, linked from the /tools/reports overview via the amber "⏱ Idle Report" button. REPORTS app access (same as the section).
+
+- Page: app/(app)/tools/reports/idle/page.tsx (server) + idle-report-charts.tsx (client, recharts). Time-range pills via ?range.
+- Summary cards: total idle logged, unexplained-gap time, idle sessions, clock-tamper flags.
+- Charts: idle by reason (bars, coloured by each reason's idleColour); idle per day.
+- Per-cataloguer table: idle logged, sessions, top-3 reasons, unexplained gap time+count, tamper count; name links to /tools/reports/[userId]; "timer OFF" badge.
+- Clock-tamper incidents table — ADMIN-ONLY within the page (server time vs what the phone said + its timezone).
+
+Data: IdleLog (reasons), CatalogueTimingLog (orphan-excluded) → findUserGaps for unexplained gaps, IdleGateDecision (tamper flags, tolerated absent pre-migration), reasons from idleTimerConfig (fallback defaults). Only Mon–Fri 9–5 counts.`,
+  },
+  {
     filename: "idle_timer_mobile_bypass.md",
     content: `---
 name: Mobile idle-timer dodge — investigation + fix
