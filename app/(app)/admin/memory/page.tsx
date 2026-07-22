@@ -51,8 +51,8 @@ Fixes (built 2026-07-21):
     filename: "idle_report.md",
     content: `---
 name: Idle Report — /tools/reports/idle
-purpose: The team-wide idle report page (for non-technical managers). What it shows + data sources. Read before touching it or the reports section.
-last_updated: 2026-07-21
+purpose: The team-wide idle report page (for non-technical managers). What it shows + data sources + PDF export. Read before touching it or the reports section.
+last_updated: 2026-07-22
 ---
 
 # Cataloguer Activity Report — /tools/reports/idle (2026-07-21)
@@ -70,7 +70,11 @@ Team-wide activity report in the cataloguing reports section — a new page, lin
 - Longest single breaks table.
 - ⚠ Flagged for review — ADMIN-ONLY clock-tamper table (server time vs what the device showed + tz).
 
-Data: IdleLog (reasons), CatalogueTimingLog (orphan-excluded) → findUserGaps, IdleGateDecision (tamper, tolerated absent pre-migration), reasons from idleTimerConfig. Days worked = distinct person+London-day with a save. Only Mon–Fri 9–5 counts.`,
+Data: IdleLog (reasons), CatalogueTimingLog (orphan-excluded) → findUserGaps, IdleGateDecision (tamper, tolerated absent pre-migration), reasons from idleTimerConfig. Days worked = distinct person+London-day with a save. Only Mon–Fri 9–5 counts.
+
+## 2026-07-22 — shared aggregation + PDF export
+- All figures now computed by computeIdleReport(range, includeTamper) in lib/idle-report.ts (also RANGES/resolveRange/rangeStart/fmtDuration/WORK_DAY_MS). The page and the PDF both call it so numbers can't drift; the page is a thin renderer (userRows carry pre-derived perDay/pctDay/topReasonKey/busiest/timerOff). includeTamper gates the admin-only tamper rows server-side.
+- PDF export: red "⬇ Export PDF" button by the range pills (only when hasData) → GET /api/reports/idle/pdf?range=X (download). Builder = buildIdleReportPdf in lib/idle-report-pdf.ts (split from the route so it's testable). A4 landscape pdf-lib, logo header, 4 stat boxes, reason table (swatch + share bars), per-cataloguer table (auto page-break, header redrawn per page), longest-breaks, admin-only tamper table, footer page numbers. ⚠ Reason icons are EMOJI → can't embed in WinAnsi PDF font, so the PDF uses colour SWATCHES not icons; all text via safeAscii.`,
   },
   {
     filename: "idle_timer_mobile_bypass.md",
