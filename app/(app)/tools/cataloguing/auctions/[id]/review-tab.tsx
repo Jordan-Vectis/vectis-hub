@@ -44,7 +44,7 @@ function fmtEstimate(low: number | null, high: number | null): string | null {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ReviewTab({ auctionId }: { auctionId: string }) {
+export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId: string; kpMode?: "strict" | "relaxed" }) {
   const [lots, setLots]       = useState<ReviewLot[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
@@ -78,8 +78,8 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
   }, [auctionId])
 
   const analysed = useMemo(() =>
-    new Map(lots.map(l => [l.id, analyseKeyPoints(l.description ?? "", l.keyPoints ?? "")])),
-  [lots])
+    new Map(lots.map(l => [l.id, analyseKeyPoints(l.description ?? "", l.keyPoints ?? "", kpMode)])),
+  [lots, kpMode])
 
   const flaggedCount = lots.filter(l => l.reviewFlag).length
   const aiFlagCount  = lots.filter(l => l.aiFlagNote).length
@@ -195,10 +195,16 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
         <div className="flex items-center gap-3 flex-wrap">
           <p className="text-sm text-gray-700 dark:text-gray-300">
             <span className="font-bold text-gray-900 dark:text-white">{filtered.length}</span> of {lots.length} lots
+            {kpMode === "relaxed" && (
+              <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300"
+                title="Set in Auction Settings. Key points whose numbers, codes and sizes are all present but whose wording differs show as amber ‘reworded — check wording’ instead of red.">
+                ✍ Relaxed wording matching
+              </span>
+            )}
             {issueCount > 0 && (
               <button
                 onClick={() => setIssueFilter(f => (f === "issues" ? "all" : "issues"))}
-                title="Show only the lots with issues (missing/partial key points, no description or photos, or flagged)"
+                title="Show only the lots with issues (missing, partial or reworded key points, no description or photos, or flagged)"
                 className={`ml-2 font-semibold rounded px-1.5 py-0.5 transition-colors ${
                   issueFilter === "issues"
                     ? "bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/50"
@@ -277,8 +283,9 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
         const a = analysed.get(lot.id)!
         const est   = fmtEstimate(lot.estimateLow, lot.estimateHigh)
         const aiEst = fmtEstimate(lot.aiEstimateLow, lot.aiEstimateHigh)
-        const missing = a.matches.filter(m => m.status === "missing").length
-        const partial = a.matches.filter(m => m.status === "partial").length
+        const missing  = a.matches.filter(m => m.status === "missing").length
+        const partial  = a.matches.filter(m => m.status === "partial").length
+        const reworded = a.matches.filter(m => m.status === "reworded").length
         const isFlagOpen = flagOpenId === lot.id
 
         return (
@@ -307,6 +314,12 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
                 {partial > 0 && (
                   <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">
                     ≈ {partial} partial
+                  </span>
+                )}
+                {reworded > 0 && (
+                  <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium"
+                    title="All the numbers, codes and sizes in these key points are present, but the wording differs — read the description to check the facts survived.">
+                    ✍ {reworded} reworded — check wording
                   </span>
                 )}
                 <span className="text-xs px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">{lot.status}</span>
@@ -425,18 +438,19 @@ export default function ReviewTab({ auctionId }: { auctionId: string }) {
                     <ul className="space-y-1">
                       {a.matches.map((m, i) => (
                         <li key={i} className="flex items-start gap-2 text-sm">
-                          <span className={`shrink-0 ${m.status === "found" ? "text-green-500" : m.status === "partial" ? "text-amber-500" : "text-red-500"}`}>
-                            {m.status === "found" ? "✓" : m.status === "partial" ? "≈" : "⚠"}
+                          <span className={`shrink-0 ${m.status === "found" ? "text-green-500" : m.status === "missing" ? "text-red-500" : "text-amber-500"}`}>
+                            {m.status === "found" ? "✓" : m.status === "partial" ? "≈" : m.status === "reworded" ? "✍" : "⚠"}
                           </span>
                           {m.status !== "missing" && (
                             <span className={`shrink-0 w-2.5 h-2.5 rounded-full mt-1.5 ${kpColour(i).dot}`} title="Highlight colour in the description" />
                           )}
                           <span className={
                             m.status === "found"   ? "text-gray-700 dark:text-gray-300"
-                            : m.status === "partial" ? "text-amber-700 dark:text-amber-300 font-medium"
-                            : "text-red-700 dark:text-red-300 font-medium"
+                            : m.status === "missing" ? "text-red-700 dark:text-red-300 font-medium"
+                            : "text-amber-700 dark:text-amber-300 font-medium"
                           }>{m.line}</span>
                           {m.status === "partial" && <span className="text-xs text-amber-500/80 shrink-0 mt-0.5">partly worded — check</span>}
+                          {m.status === "reworded" && <span className="text-xs text-amber-500/80 shrink-0 mt-0.5" title="The numbers, codes and sizes are all present but the wording differs — read the description to check the facts survived.">reworded — check wording</span>}
                           {m.status === "missing" && <span className="text-xs text-red-500/80 shrink-0 mt-0.5">not found</span>}
                         </li>
                       ))}

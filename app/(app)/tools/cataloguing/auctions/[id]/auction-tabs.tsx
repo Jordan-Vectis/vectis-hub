@@ -28,6 +28,7 @@ interface Auction {
   auctionType: string; eventName: string | null; notes: string | null
   locked: boolean; finished: boolean; complete: boolean; published: boolean
   catalogued: boolean; addedToBC: boolean; photography: boolean; aiRan: boolean
+  reviewKpMode: string
 }
 
 interface Lot {
@@ -728,7 +729,7 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
         )}
 
         {tab === "stats" && <StatsTab lots={lots} auction={auction} />}
-        {tab === "review" && <ReviewTab auctionId={auction.id} />}
+        {tab === "review" && <ReviewTab auctionId={auction.id} kpMode={auction.reviewKpMode === "relaxed" ? "relaxed" : "strict"} />}
 
         {tab === "locking-check" && (
           <LockingCheckTab
@@ -883,6 +884,18 @@ function SettingsTab({ auction }: { auction: Auction }) {
             <select name="auctionType" defaultValue={auction.auctionType} className={input}>
               {AUCTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
+          </div>
+          <div>
+            <label className={lbl}>Review tab key point matching</label>
+            <select name="reviewKpMode" defaultValue={auction.reviewKpMode === "relaxed" ? "relaxed" : "strict"} className={input}>
+              <option value="strict">Exact wording (e.g. trains)</option>
+              <option value="relaxed">Relaxed wording (e.g. Dolls &amp; Bears)</option>
+            </select>
+            <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+              Relaxed: a key point whose numbers, codes and sizes are all present but whose wording
+              differs shows amber &ldquo;reworded — check wording&rdquo; instead of red. A missing
+              number or code is still red in both modes.
+            </p>
           </div>
         </div>
 

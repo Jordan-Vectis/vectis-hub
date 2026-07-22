@@ -97,6 +97,7 @@ export default async function AuctionDetailPage({
           addedToBC:   auction.addedToBC,
           photography: auction.photography,
           aiRan:       auction.aiRan,
+          reviewKpMode: auction.reviewKpMode ?? "strict",
         }}
         lots={auction.lots.map(l => ({
           id: l.id,

@@ -1076,6 +1076,11 @@ const MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS "IdleGateDecision_userId_createdAt_idx" ON "IdleGateDecision"("userId","createdAt")`,
   `CREATE INDEX IF NOT EXISTS "IdleGateDecision_createdAt_idx" ON "IdleGateDecision"("createdAt")`,
+
+  // Per-auction Review tab key point matching mode — "strict" (exact wording,
+  // e.g. trains) or "relaxed" (reworded facts allowed, e.g. Dolls & Bears).
+  // Chosen in Auction Settings.
+  `ALTER TABLE "CatalogueAuction" ADD COLUMN IF NOT EXISTS "reviewKpMode" TEXT NOT NULL DEFAULT 'strict'`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

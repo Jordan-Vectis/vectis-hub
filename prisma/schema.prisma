@@ -339,6 +339,9 @@ model CatalogueAuction {
   photography Boolean        @default(false)
   aiRan       Boolean        @default(false)
   published   Boolean        @default(false)
+  // Review tab key point matching: "strict" (exact wording) or "relaxed"
+  // (reworded facts allowed — hard tokens still exact). Set in Auction Settings.
+  reviewKpMode String        @default("strict")
   notes       String?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt

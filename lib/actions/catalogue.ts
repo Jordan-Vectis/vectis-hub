@@ -180,9 +180,11 @@ export async function updateAuction(id: string, formData: FormData) {
   const addedToBC   = formData.get("addedToBC")   === "true"
   const photography = formData.get("photography") === "true"
   const aiRan       = formData.get("aiRan")       === "true"
+  // Review tab matching mode — only ever "strict" or "relaxed"
+  const reviewKpMode = formData.get("reviewKpMode") === "relaxed" ? "relaxed" : "strict"
   await prisma.catalogueAuction.update({
     where: { id },
-    data: { code, name, auctionDate: auctionDate ? new Date(auctionDate) : null, auctionType: auctionType || "GENERAL", eventName: eventName || null, notes, locked, finished, complete, catalogued, addedToBC, photography, aiRan }
+    data: { code, name, auctionDate: auctionDate ? new Date(auctionDate) : null, auctionType: auctionType || "GENERAL", eventName: eventName || null, notes, locked, finished, complete, catalogued, addedToBC, photography, aiRan, reviewKpMode }
   })
   revalidatePath("/tools/cataloguing/auctions")
   revalidatePath(`/tools/cataloguing/auctions/${id}`)
