@@ -8,6 +8,7 @@ type Device = {
   serialNumber: string
   name: string
   deviceType: string
+  macAddress: string | null
   notes: string | null
   assignedToId: string | null
   assignedTo: User | null
@@ -19,7 +20,7 @@ interface Props {
   users: User[]
 }
 
-const EMPTY_FORM = { serialNumber: "", name: "", deviceType: "iPad", notes: "", assignedToId: "" }
+const EMPTY_FORM = { serialNumber: "", name: "", deviceType: "iPad", macAddress: "", notes: "", assignedToId: "" }
 
 export default function DevicesClient({ devices: initial, users }: Props) {
   const [devices, setDevices]   = useState<Device[]>(initial)
@@ -41,6 +42,7 @@ export default function DevicesClient({ devices: initial, users }: Props) {
       serialNumber: d.serialNumber,
       name:         d.name,
       deviceType:   d.deviceType,
+      macAddress:   d.macAddress ?? "",
       notes:        d.notes ?? "",
       assignedToId: d.assignedToId ?? "",
     })
@@ -63,6 +65,7 @@ export default function DevicesClient({ devices: initial, users }: Props) {
         serialNumber: form.serialNumber,
         name:         form.name,
         deviceType:   form.deviceType,
+        macAddress:   form.macAddress || null,
         notes:        form.notes || null,
         assignedToId: form.assignedToId || null,
       }
@@ -92,7 +95,7 @@ export default function DevicesClient({ devices: initial, users }: Props) {
   }
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-8 max-w-6xl">
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Devices</h1>
@@ -144,6 +147,15 @@ export default function DevicesClient({ devices: initial, users }: Props) {
                 <option>Laptop</option>
                 <option>Other</option>
               </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">MAC address</label>
+              <input
+                value={form.macAddress}
+                onChange={e => setForm(f => ({ ...f, macAddress: e.target.value }))}
+                placeholder="e.g. A4:83:E7:1B:2C:3D"
+                className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-400"
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Assigned to</label>
@@ -200,6 +212,7 @@ export default function DevicesClient({ devices: initial, users }: Props) {
                 <th className="text-left px-5 py-3">Name</th>
                 <th className="text-left px-5 py-3">Type</th>
                 <th className="text-left px-5 py-3">Serial number</th>
+                <th className="text-left px-5 py-3">MAC address</th>
                 <th className="text-left px-5 py-3">Assigned to</th>
                 <th className="text-left px-5 py-3">Notes</th>
                 <th className="px-5 py-3" />
@@ -211,6 +224,9 @@ export default function DevicesClient({ devices: initial, users }: Props) {
                   <td className="px-5 py-3 font-medium text-gray-900 dark:text-white">{d.name}</td>
                   <td className="px-5 py-3 text-gray-500 dark:text-gray-400">{d.deviceType}</td>
                   <td className="px-5 py-3 font-mono text-gray-600 dark:text-gray-400 text-xs">{d.serialNumber}</td>
+                  <td className="px-5 py-3 font-mono text-gray-600 dark:text-gray-400 text-xs">
+                    {d.macAddress ? d.macAddress : <span className="text-gray-400 dark:text-gray-500 font-sans">—</span>}
+                  </td>
                   <td className="px-5 py-3 text-gray-700 dark:text-gray-300">
                     {d.assignedTo
                       ? <span>{d.assignedTo.name}</span>

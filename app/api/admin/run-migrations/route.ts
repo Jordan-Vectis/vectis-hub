@@ -1081,6 +1081,9 @@ const MIGRATIONS = [
   // e.g. trains) or "relaxed" (reworded facts allowed, e.g. Dolls & Bears).
   // Chosen in Auction Settings.
   `ALTER TABLE "CatalogueAuction" ADD COLUMN IF NOT EXISTS "reviewKpMode" TEXT NOT NULL DEFAULT 'strict'`,
+
+  // Optional MAC address column on the Devices register.
+  `ALTER TABLE "Device" ADD COLUMN IF NOT EXISTS "macAddress" TEXT`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

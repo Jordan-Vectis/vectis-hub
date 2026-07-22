@@ -28,7 +28,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
     }
 
-    const { serialNumber, name, deviceType, notes, assignedToId } = await req.json()
+    const { serialNumber, name, deviceType, macAddress, notes, assignedToId } = await req.json()
     if (!serialNumber?.trim() || !name?.trim()) {
       return NextResponse.json({ error: "Serial number and name are required" }, { status: 400 })
     }
@@ -38,6 +38,7 @@ export async function POST(req: Request) {
         serialNumber: serialNumber.trim(),
         name: name.trim(),
         deviceType: deviceType?.trim() || "iPad",
+        macAddress: macAddress?.trim() || null,
         notes: notes?.trim() || null,
         assignedToId: assignedToId || null,
       },

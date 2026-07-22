@@ -10,7 +10,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     const { id } = await params
-    const { serialNumber, name, deviceType, notes, assignedToId } = await req.json()
+    const { serialNumber, name, deviceType, macAddress, notes, assignedToId } = await req.json()
 
     const device = await prisma.device.update({
       where: { id },
@@ -18,6 +18,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         ...(serialNumber !== undefined && { serialNumber: serialNumber.trim() }),
         ...(name !== undefined && { name: name.trim() }),
         ...(deviceType !== undefined && { deviceType: deviceType.trim() }),
+        ...(macAddress !== undefined && { macAddress: macAddress?.trim() || null }),
         ...(notes !== undefined && { notes: notes?.trim() || null }),
         ...(assignedToId !== undefined && { assignedToId: assignedToId || null }),
       },

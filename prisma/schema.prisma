@@ -916,6 +916,7 @@ model Device {
   serialNumber String   @unique
   name         String
   deviceType   String   @default("iPad")
+  macAddress   String?
   notes        String?
   assignedTo   User?    @relation(fields: [assignedToId], references: [id])
   assignedToId String?
