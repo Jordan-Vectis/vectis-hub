@@ -3917,7 +3917,13 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       if (result) {
         const desc = result.description ?? ""
         const { low, high } = parseEstimate(result.estimate ?? "")
-        updated[idx] = { ...updated[idx], batchStatus: "ok", currentDesc: desc, estimate: result.estimate ?? "", appliedDesc: desc, batchDesc: desc, kpRevised: desc,
+        updated[idx] = { ...updated[idx], batchStatus: "ok", currentDesc: desc, estimate: result.estimate ?? "", batchDesc: desc, kpRevised: desc,
+          // Only mark as on-the-catalogue when we're actually going to apply it below
+          // (see the autoApply-gated apply). In "Review all before applying" mode the
+          // catalogue is left untouched, so appliedDesc must stay as the original
+          // description — otherwise the lot looks already-applied and wrongly drops
+          // out of Review & Apply.
+          ...(autoApply && auctionId ? { appliedDesc: desc } : {}),
           cataloguerFlag: result.flag || undefined,
           debug: { ...updated[idx].debug, batch: result.debug } }
         setLots([...updated])
@@ -4088,15 +4094,27 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         const { revised, changed, missing, added, found } = result
         let newDesc = lot.currentDesc
         if (changed && revised) {
-          // KP now runs BEFORE Double Check — auto-apply so DC sees the inserted points
-          try {
-            await applyAiDescriptionOne(aid, { id: lot.id, description: revised })
-            newDesc = revised
-            addLog(`  ⚑ ${lot.label} — key points inserted & applied`)
-          } catch {
-            addLog(`  ⚑ ${lot.label} — key points inserted but auto-apply failed`)
+          newDesc = revised
+          // Double Check reads the in-memory currentDesc (not the catalogue), so it sees
+          // the inserted key points whether or not we apply here. Only write to the
+          // catalogue in auto-apply mode — in "Review all before applying" mode we must
+          // hold it for Review & Apply and leave appliedDesc (the on-catalogue text)
+          // untouched, so all reviewed lots surface below.
+          let applied = false
+          if (autoApply) {
+            try {
+              await applyAiDescriptionOne(aid, { id: lot.id, description: revised })
+              applied = true
+              addLog(`  ⚑ ${lot.label} — key points inserted & applied`)
+            } catch {
+              addLog(`  ⚑ ${lot.label} — key points inserted but auto-apply failed`)
+            }
+          } else {
+            addLog(`  ⚑ ${lot.label} — key points inserted (held for review)`)
           }
-          updated[idx] = { ...updated[idx], kpStatus: "fixed", kpMissing: missing, kpAdded: added, kpFound: found, currentDesc: newDesc, appliedDesc: newDesc, kpRevised: newDesc, kpDesc: newDesc, debug: { ...updated[idx].debug, kp: result.debug } }
+          updated[idx] = { ...updated[idx], kpStatus: "fixed", kpMissing: missing, kpAdded: added, kpFound: found, currentDesc: newDesc, kpRevised: newDesc, kpDesc: newDesc,
+            ...(applied ? { appliedDesc: newDesc } : {}),
+            debug: { ...updated[idx].debug, kp: result.debug } }
         } else {
           updated[idx] = { ...updated[idx], kpStatus: "ok", kpMissing: missing, kpFound: found, kpDesc: lot.currentDesc, debug: { ...updated[idx].debug, kp: result.debug } }
           addLog(`  ✓ ${lot.label} — all key points present`)
