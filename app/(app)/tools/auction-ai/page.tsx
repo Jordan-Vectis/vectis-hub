@@ -1901,10 +1901,13 @@ function KPRunsTab() {
 
 // ─── Instructions Tab ─────────────────────────────────────────────────────────
 
-type CustomPreset = { key: string; instruction: string; favourite: boolean }
+type CustomPreset = { key: string; instruction: string; favourite: boolean; category: string | null; sortOrder: number }
+
+const UNCATEGORISED = "Uncategorised"
 
 function InstructionsTab() {
   const [presets,  setPresets]  = useState<CustomPreset[]>([])
+  const [categories, setCategories] = useState<string[]>([])
   const [loading,  setLoading]  = useState(true)
   const [selected, setSelected] = useState<string | null>(null)
   const [mode,     setMode]     = useState<"view" | "edit" | "new">("view")
@@ -1914,24 +1917,148 @@ function InstructionsTab() {
   const [error,    setError]    = useState<string | null>(null)
   const [importRows, setImportRows] = useState<{ key: string; instruction: string; status: "new" | "overwrite" | "same"; favourite: boolean; selected: boolean }[] | null>(null)
   const [importHadFav, setImportHadFav] = useState(false)
+  const [importLayout, setImportLayout] = useState<any>(null)
   const [importing,  setImporting]  = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  // Drag-to-categorise state. dragKey = an instruction being dragged; dragCat = a
+  // category header being reordered; dropHint drives the drop-target highlight.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [dragKey, setDragKey] = useState<string | null>(null)
+  const [dragCat, setDragCat] = useState<string | null>(null)
+  const [dropHint, setDropHint] = useState<string | null>(null)
 
   async function load() {
     setLoading(true)
     try {
-      // ?full=1 returns the ordered list (favourites first) with favourite flags.
-      // The database is the single source of truth.
-      const data = await fetch("/api/auction-ai/presets?full=1").then(r => r.json())
-      const rows: CustomPreset[] = Array.isArray(data)
-        ? data.map((r: any) => ({ key: r.key, instruction: r.instruction, favourite: !!r.favourite }))
-        : Object.entries(data).map(([key, instruction]) => ({ key, instruction: instruction as string, favourite: false }))
+      // ?layout=1 returns { instructions, categories } — the database is the
+      // single source of truth for both the instructions and their grouping.
+      const data = await fetch("/api/auction-ai/presets?layout=1").then(r => r.json())
+      const list = Array.isArray(data?.instructions) ? data.instructions : Array.isArray(data) ? data : []
+      const cats: string[] = Array.isArray(data?.categories) ? data.categories.map((c: any) => c.name) : []
+      const rows: CustomPreset[] = list.map((r: any) => ({
+        key: r.key, instruction: r.instruction, favourite: !!r.favourite,
+        category: r.category ?? null, sortOrder: r.sortOrder ?? 0,
+      }))
+      // Flat array in category-grouped order (favourites are lifted out at render
+      // time, so keep the array purely category-ordered for clean reordering).
+      const rank = new Map(cats.map((n, i) => [n, i]))
+      rows.sort((a, b) =>
+        (a.category != null && rank.has(a.category) ? rank.get(a.category)! : Number.MAX_SAFE_INTEGER)
+        - (b.category != null && rank.has(b.category) ? rank.get(b.category)! : Number.MAX_SAFE_INTEGER)
+        || a.sortOrder - b.sortOrder || a.key.localeCompare(b.key))
       setPresets(rows)
+      setCategories(cats)
     } catch { setError("Failed to load") }
     setLoading(false)
   }
 
   useEffect(() => { load() }, [])
+
+  // Collapsed headers persist per device so the list opens how you left it.
+  useEffect(() => {
+    try { setCollapsed(new Set(JSON.parse(localStorage.getItem("ai_instr_collapsed") || "[]"))) } catch {}
+  }, [])
+  function toggleCollapsed(name: string) {
+    setCollapsed(prev => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name); else next.add(name)
+      try { localStorage.setItem("ai_instr_collapsed", JSON.stringify([...next])) } catch {}
+      return next
+    })
+  }
+
+  // ── Categories + drag layout ─────────────────────────────────────────────────
+  // The presets array is kept in visual order (category by category); normalise
+  // stable-sorts it by category rank and re-stamps per-category sortOrder, then
+  // the whole arrangement is persisted declaratively in one call.
+  function normalise(rows: CustomPreset[], cats: string[]): CustomPreset[] {
+    const rank = (c: string | null) => (c != null && cats.includes(c) ? cats.indexOf(c) : Number.MAX_SAFE_INTEGER)
+    const sorted = rows.map((r, i) => [r, i] as const)
+      .sort((a, b) => rank(a[0].category) - rank(b[0].category) || a[1] - b[1])
+      .map(([r]) => r)
+    const counters = new Map<string, number>()
+    return sorted.map(r => {
+      const k = r.category ?? ""
+      const n = counters.get(k) ?? 0
+      counters.set(k, n + 1)
+      return { ...r, sortOrder: n }
+    })
+  }
+
+  function persistLayout(rows: CustomPreset[], cats: string[]) {
+    const items = rows.map(r => ({ key: r.key, category: r.category, sortOrder: r.sortOrder }))
+    fetch("/api/auction-ai/preset-layout", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ categoryOrder: cats, items }),
+    }).then(res => { if (!res.ok) throw new Error() })
+      .catch(() => setError("Couldn't save the layout — has the database update run on this environment?"))
+  }
+
+  function applyLayout(rows: CustomPreset[], cats: string[]) {
+    const next = normalise(rows, cats)
+    setPresets(next)
+    setCategories(cats)
+    persistLayout(next, cats)
+  }
+
+  // Move an instruction into a category. beforeKey inserts above that row;
+  // null appends to the end of the category.
+  function moveInstruction(key: string, targetCategory: string | null, beforeKey: string | null) {
+    if (key === beforeKey) return
+    const rows = [...presets]
+    const from = rows.findIndex(r => r.key === key)
+    if (from < 0) return
+    const [item] = rows.splice(from, 1)
+    const moved = { ...item, category: targetCategory }
+    if (beforeKey) {
+      const at = rows.findIndex(r => r.key === beforeKey)
+      rows.splice(at < 0 ? rows.length : at, 0, moved)
+    } else {
+      rows.push(moved)   // normalise's stable sort lands it at the end of its category
+    }
+    applyLayout(rows, categories)
+  }
+
+  function moveCategory(name: string, beforeName: string | null) {
+    if (name === beforeName) return
+    const cats = categories.filter(c => c !== name)
+    const at = beforeName ? cats.indexOf(beforeName) : -1
+    if (at < 0) cats.push(name); else cats.splice(at, 0, name)
+    applyLayout(presets, cats)
+  }
+
+  function addCategory(name: string): boolean {
+    const clean = name.trim()
+    if (!clean) return false
+    if (clean.toLowerCase() === UNCATEGORISED.toLowerCase()) { setError(`"${UNCATEGORISED}" is reserved — instructions without a category land there automatically.`); return false }
+    if (categories.some(c => c.toLowerCase() === clean.toLowerCase())) { setError("That category already exists."); return false }
+    setError(null)
+    applyLayout(presets, [...categories, clean])
+    return true
+  }
+
+  function renameCategory(oldName: string) {
+    const next = prompt(`Rename category "${oldName}" to:`, oldName)?.trim()
+    if (!next || next === oldName) return
+    if (next.toLowerCase() === UNCATEGORISED.toLowerCase() || categories.some(c => c !== oldName && c.toLowerCase() === next.toLowerCase())) {
+      setError("That name is taken."); return
+    }
+    applyLayout(
+      presets.map(p => p.category === oldName ? { ...p, category: next } : p),
+      categories.map(c => c === oldName ? next : c),
+    )
+  }
+
+  function deleteCategory(name: string) {
+    if (!confirm(`Remove the "${name}" category? Its instructions move to ${UNCATEGORISED} — nothing is deleted.`)) return
+    applyLayout(
+      presets.map(p => p.category === name ? { ...p, category: null } : p),
+      categories.filter(c => c !== name),
+    )
+  }
+
+  const [addingCat, setAddingCat] = useState(false)
+  const [newCatName, setNewCatName] = useState("")
 
   function openNew() {
     setSelected(null); setNewName(""); setDraftText(""); setMode("new"); setError(null)
@@ -1953,7 +2080,7 @@ function InstructionsTab() {
         body: JSON.stringify({ key: name, instruction: draftText }),
       })
       if (!res.ok) throw new Error("Save failed")
-      setPresets(p => [...p, { key: name, instruction: draftText, favourite: false }])
+      setPresets(p => [...p, { key: name, instruction: draftText, favourite: false, category: null, sortOrder: 0 }])
       setSelected(name); setMode("view"); setNewName("")
     } catch (e: any) { setError(e.message) }
     setSaving(false)
@@ -2011,7 +2138,12 @@ function InstructionsTab() {
     const map: Record<string, string> = {}
     for (const p of presets) map[p.key] = p.instruction
     const favourites = presets.filter(p => p.favourite).map(p => p.key)
-    const payload = { type: "vectis-ai-instructions", version: 2, exportedAt: new Date().toISOString(), instructions: map, favourites }
+    // v3: carries the category layout so an import arranges the list the same way.
+    const layout = {
+      categoryOrder: categories,
+      items: Object.fromEntries(presets.map(p => [p.key, { category: p.category, sortOrder: p.sortOrder }])),
+    }
+    const payload = { type: "vectis-ai-instructions", version: 3, exportedAt: new Date().toISOString(), instructions: map, favourites, layout }
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
@@ -2032,6 +2164,8 @@ function InstructionsTab() {
       if (!map || typeof map !== "object" || Array.isArray(map)) throw new Error("not a Vectis instructions file")
       const favSet = new Set<string>(Array.isArray(parsed?.favourites) ? parsed.favourites : [])
       setImportHadFav(Array.isArray(parsed?.favourites))
+      // v3 files carry the category layout — hold it to send with the import.
+      setImportLayout(parsed?.layout && typeof parsed.layout === "object" ? parsed.layout : null)
       const current = new Map(presets.map(p => [p.key, p.instruction]))
       const rows = Object.entries(map)
         .filter(([k, v]) => typeof k === "string" && k.trim() && typeof v === "string")
@@ -2059,6 +2193,7 @@ function InstructionsTab() {
       // Only send favourites if the file carried them, so a plain import can't clear favourites.
       const body: any = { instructions }
       if (importHadFav) body.favourites = chosen.filter(r => r.favourite).map(r => r.key)
+      if (importLayout) body.layout = importLayout
       const res = await fetch("/api/auction-ai/presets", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -2096,15 +2231,48 @@ function InstructionsTab() {
           <input ref={fileRef} type="file" accept="application/json,.json" onChange={onImportFile} className="hidden" />
         </div>
 
+        {/* Add category */}
+        {addingCat ? (
+          <div className="flex gap-1">
+            <input value={newCatName} onChange={e => setNewCatName(e.target.value)} autoFocus
+              onKeyDown={e => {
+                if (e.key === "Enter" && addCategory(newCatName)) { setNewCatName(""); setAddingCat(false) }
+                if (e.key === "Escape") { setNewCatName(""); setAddingCat(false) }
+              }}
+              placeholder="Category name (e.g. Trains)"
+              className="flex-1 min-w-0 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-2 py-1.5 text-xs text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#C8A96E]" />
+            <button onClick={() => { if (addCategory(newCatName)) { setNewCatName(""); setAddingCat(false) } }}
+              className="px-2 py-1.5 text-xs bg-[#C8A96E] text-black font-bold rounded">✓</button>
+            <button onClick={() => { setNewCatName(""); setAddingCat(false) }}
+              className="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-700 text-gray-500 rounded">✕</button>
+          </div>
+        ) : (
+          <button onClick={() => { setAddingCat(true); setError(null) }}
+            className="w-full py-1.5 text-xs bg-gray-100 dark:bg-[#2C2C2E] border border-dashed border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded hover:border-[#C8A96E] hover:text-[#C8A96E] transition-colors">
+            📁 + Add category
+          </button>
+        )}
+
         {loading ? (
           <p className="text-gray-600 dark:text-gray-500 text-xs px-1 mt-2">Loading…</p>
         ) : (
           <div className="mt-1 overflow-y-auto">
             {(() => {
               const favs = presets.filter(p => p.favourite)
-              const rest = presets.filter(p => !p.favourite)
               const row = (p: CustomPreset) => (
-                <div key={p.key} className="flex items-center gap-0.5">
+                <div key={p.key}
+                  draggable
+                  onDragStart={() => { setDragKey(p.key); setDragCat(null) }}
+                  onDragEnd={() => { setDragKey(null); setDropHint(null) }}
+                  onDragOver={e => { if (dragKey && dragKey !== p.key) { e.preventDefault(); setDropHint(`row:${p.key}`) } }}
+                  onDragLeave={() => setDropHint(h => (h === `row:${p.key}` ? null : h))}
+                  onDrop={e => {
+                    e.preventDefault(); e.stopPropagation()
+                    if (dragKey && dragKey !== p.key) moveInstruction(dragKey, p.category ?? null, p.key)
+                    setDragKey(null); setDropHint(null)
+                  }}
+                  className={`flex items-center gap-0.5 rounded ${dropHint === `row:${p.key}` ? "outline outline-1 outline-[#C8A96E] bg-[#C8A96E]/10" : ""} ${dragKey === p.key ? "opacity-40" : ""}`}>
+                  <span className="cursor-grab text-gray-400 dark:text-gray-700 text-xs px-0.5 select-none" title="Drag to move">⠿</span>
                   <button onClick={() => toggleFavourite(p.key)}
                     title={p.favourite ? "Remove from favourites" : "Add to favourites"}
                     className={`px-1 text-sm leading-none flex-shrink-0 ${p.favourite ? "text-[#C8A96E]" : "text-gray-400 dark:text-gray-600 hover:text-[#C8A96E]"}`}>
@@ -2120,16 +2288,62 @@ function InstructionsTab() {
                   </button>
                 </div>
               )
+
+              const header = (name: string, real: boolean, count: number) => (
+                <div
+                  draggable={real}
+                  onDragStart={() => { if (real) { setDragCat(name); setDragKey(null) } }}
+                  onDragEnd={() => { setDragCat(null); setDropHint(null) }}
+                  onDragOver={e => {
+                    if ((dragKey && real) || (dragKey && !real) || (dragCat && real && dragCat !== name)) { e.preventDefault(); setDropHint(`cat:${name}`) }
+                  }}
+                  onDragLeave={() => setDropHint(h => (h === `cat:${name}` ? null : h))}
+                  onDrop={e => {
+                    e.preventDefault()
+                    if (dragKey) moveInstruction(dragKey, real ? name : null, null)
+                    else if (dragCat && real && dragCat !== name) moveCategory(dragCat, name)
+                    setDragKey(null); setDragCat(null); setDropHint(null)
+                  }}
+                  className={`group flex items-center gap-1 px-1 pt-2 pb-0.5 rounded ${dropHint === `cat:${name}` ? "outline outline-1 outline-[#C8A96E] bg-[#C8A96E]/10" : ""} ${dragCat === name ? "opacity-40" : ""}`}>
+                  <button onClick={() => toggleCollapsed(name)} className="flex items-center gap-1 flex-1 min-w-0 text-left" title={real ? "Drag to reorder · click to collapse" : "Click to collapse"}>
+                    <span className="text-[9px] text-gray-500">{collapsed.has(name) ? "▸" : "▾"}</span>
+                    <span className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 font-bold truncate">{name}</span>
+                    <span className="text-[9px] text-gray-400 dark:text-gray-600">({count})</span>
+                  </button>
+                  {real && (
+                    <span className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
+                      <button onClick={() => renameCategory(name)} title="Rename category" className="px-1 text-[10px] text-gray-400 hover:text-[#C8A96E]">✎</button>
+                      <button onClick={() => deleteCategory(name)} title="Remove category (instructions are kept)" className="px-1 text-[10px] text-gray-400 hover:text-red-400">✕</button>
+                    </span>
+                  )}
+                </div>
+              )
+
+              const groups: { name: string; real: boolean; items: CustomPreset[] }[] = [
+                ...categories.map(name => ({ name, real: true, items: presets.filter(p => !p.favourite && p.category === name) })),
+                { name: UNCATEGORISED, real: false, items: presets.filter(p => !p.favourite && (p.category == null || !categories.includes(p.category))) },
+              ]
+
               return (
                 <div className="space-y-0.5">
                   {favs.length > 0 && (
                     <>
                       <p className="text-[10px] uppercase tracking-wider text-[#C8A96E]/70 px-1 pb-0.5">★ Favourites</p>
                       {favs.map(row)}
-                      {rest.length > 0 && <div className="border-t border-gray-200 dark:border-gray-800 my-1.5" />}
+                      <div className="border-t border-gray-200 dark:border-gray-800 my-1.5" />
                     </>
                   )}
-                  {rest.map(row)}
+                  {groups.map(g => (
+                    (g.real || g.items.length > 0) && (
+                      <div key={g.name}>
+                        {header(g.name, g.real, g.items.length)}
+                        {!collapsed.has(g.name) && g.items.map(row)}
+                        {!collapsed.has(g.name) && g.real && g.items.length === 0 && (
+                          <p className="px-3 py-1 text-[10px] text-gray-400 dark:text-gray-600 italic">drag instructions here</p>
+                        )}
+                      </div>
+                    )
+                  ))}
                 </div>
               )
             })()}

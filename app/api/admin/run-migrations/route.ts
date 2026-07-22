@@ -1088,6 +1088,15 @@ const MIGRATIONS = [
   // The little blue count-up lot timer, split out from showScanTimer (the away
   // prompt) so it has its own per-user toggle. Off by default.
   `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "showLotTimer" BOOLEAN NOT NULL DEFAULT FALSE`,
+
+  // Categorised, drag-orderable Auction AI instructions list.
+  `ALTER TABLE "AiPreset" ADD COLUMN IF NOT EXISTS "category" TEXT`,
+  `ALTER TABLE "AiPreset" ADD COLUMN IF NOT EXISTS "sortOrder" INTEGER NOT NULL DEFAULT 0`,
+  `CREATE TABLE IF NOT EXISTS "AiPresetCategory" (
+    "name"      TEXT NOT NULL,
+    "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    CONSTRAINT "AiPresetCategory_pkey" PRIMARY KEY ("name")
+  )`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

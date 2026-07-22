@@ -258,7 +258,17 @@ model AiPreset {
   key         String   @id
   instruction String   @db.Text
   favourite   Boolean  @default(false)
+  category    String?                    // header the instruction sits under (null = Uncategorised)
+  sortOrder   Int      @default(0)       // order within its category (drag-to-reorder)
   updatedAt   DateTime @updatedAt
+}
+
+// Persisted category headers for the Auction AI instructions list, so an empty
+// header survives (you can create one and drag instructions into it) and header
+// order is remembered. Linked to AiPreset by name.
+model AiPresetCategory {
+  name      String @id
+  sortOrder Int    @default(0)
 }
 
 model PipelineRun {

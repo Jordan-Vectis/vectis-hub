@@ -1,18 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
-import { getAllInstructions } from "@/lib/ai-instructions"
+import { getAllInstructions, getPresetLayout } from "@/lib/ai-instructions"
 
 // GET — instructions from the single-source AiPreset table (favourites first).
 // Default: a { key: text } map (used by the run tabs — unchanged shape).
-// ?full=1: the full ordered list [{ key, instruction, favourite }] for the
-// Instructions management tab.
+// ?full=1: the full ordered list [{ key, instruction, favourite, category, sortOrder }].
+// ?layout=1: { instructions, categories } for the Instructions management tab.
 export async function GET(req: NextRequest) {
   try {
     const session = await auth()
     if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+    const params = new URL(req.url).searchParams
+    if (params.get("layout")) return NextResponse.json(await getPresetLayout())
     const rows = await getAllInstructions()
-    if (new URL(req.url).searchParams.get("full")) return NextResponse.json(rows)
+    if (params.get("full")) return NextResponse.json(rows)
     const map: Record<string, string> = {}
     for (const r of rows) map[r.key] = r.instruction
     return NextResponse.json(map)
@@ -87,15 +89,50 @@ export async function POST(req: NextRequest) {
     const hasFav = Array.isArray(body?.favourites)
     const favSet = new Set<string>(hasFav ? body.favourites.filter((k: any) => typeof k === "string") : [])
 
-    await prisma.$transaction(
-      entries.map(([key, instruction]) =>
-        prisma.aiPreset.upsert({
-          where: { key },
-          update: hasFav ? { instruction, favourite: favSet.has(key) } : { instruction },
-          create: { key, instruction, favourite: hasFav && favSet.has(key) },
-        })
-      )
-    )
+    // Category layout (v3+). Applied only to the keys being imported, and never
+    // deletes categories — new category names are appended after the existing
+    // ones so an import can't scramble a layout that's already arranged here.
+    const layout = body?.layout && typeof body.layout === "object" ? body.layout : null
+    const layoutItems: Record<string, { category?: unknown; sortOrder?: unknown }> =
+      layout?.items && typeof layout.items === "object" && !Array.isArray(layout.items) ? layout.items : {}
+    const layoutCats: string[] = Array.isArray(layout?.categoryOrder)
+      ? layout.categoryOrder.filter((c: any): c is string => typeof c === "string" && !!c.trim()).map((c: string) => c.trim())
+      : []
+    const placementOf = (key: string): { category: string | null; sortOrder: number } | null => {
+      const it = layoutItems[key]
+      if (!layout || !it || typeof it !== "object") return null
+      const category = typeof it.category === "string" && it.category.trim() ? it.category.trim() : null
+      const sortOrder = Number.isFinite(it.sortOrder) ? Math.trunc(it.sortOrder as number) : 0
+      return { category, sortOrder }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      if (layoutCats.length) {
+        try {
+          const existing = await tx.aiPresetCategory.findMany({ orderBy: { sortOrder: "asc" } })
+          const known = new Set(existing.map((c) => c.name))
+          const missing = layoutCats.filter((c) => !known.has(c))
+          if (missing.length) {
+            await tx.aiPresetCategory.createMany({ data: missing.map((name, i) => ({ name, sortOrder: existing.length + i })) })
+          }
+        } catch { /* category table not migrated yet — instructions still import */ }
+      }
+      for (const [key, instruction] of entries) {
+        const place = placementOf(key)
+        const update: { instruction: string; favourite?: boolean; category?: string | null; sortOrder?: number } = { instruction }
+        const create: { key: string; instruction: string; favourite?: boolean; category?: string | null; sortOrder?: number } = { key, instruction }
+        if (hasFav) { update.favourite = favSet.has(key); create.favourite = favSet.has(key) }
+        if (place) { update.category = place.category; update.sortOrder = place.sortOrder; create.category = place.category; create.sortOrder = place.sortOrder }
+        try {
+          await tx.aiPreset.upsert({ where: { key }, update, create })
+        } catch {
+          // Pre-migration environment (no category/sortOrder columns): retry
+          // without the placement so the instruction text still lands.
+          delete update.category; delete update.sortOrder; delete create.category; delete create.sortOrder
+          await tx.aiPreset.upsert({ where: { key }, update, create })
+        }
+      }
+    })
     return NextResponse.json({ imported: entries.length })
   } catch (e: any) {
     console.error("presets POST (import) error:", e)
