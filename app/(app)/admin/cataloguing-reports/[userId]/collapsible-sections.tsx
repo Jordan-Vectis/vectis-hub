@@ -598,7 +598,7 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10">
                 <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                  <th className="text-left px-5 py-3">Date / Time</th>
+                  <th className="text-left px-5 py-3">Date / Time (from – to)</th>
                   <th className="text-left px-5 py-3">Auction</th>
                   <th className="text-left px-5 py-3">Reason</th>
                   <th className="text-left px-5 py-3">Tote Numbers</th>
@@ -620,7 +620,12 @@ export function CollapsibleIdleTable({ logs: initialLogs }: { logs: SerialIdleLo
                   return (
                     <tr key={log.id} className={`transition-colors ${excluded ? "opacity-40 bg-gray-50 dark:bg-gray-800" : "hover:bg-gray-50 dark:hover:bg-gray-800/50"}`}>
                       <td className="px-5 py-3 text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap font-mono">
-                        {format(new Date(log.idleStartedAt), "dd/MM/yyyy HH:mm:ss")}
+                        <div>{format(new Date(log.idleStartedAt), "dd/MM/yyyy")}</div>
+                        <div className="text-gray-500 dark:text-gray-400">
+                          {format(new Date(log.idleStartedAt), "HH:mm")}
+                          {" – "}
+                          {format(new Date(new Date(log.idleStartedAt).getTime() + log.idleDurationMs), "HH:mm")}
+                        </div>
                       </td>
                       <td className="px-5 py-3 text-xs">
                         <span className="font-mono text-slate-600 dark:text-gray-300">{log.auctionCode}</span>
