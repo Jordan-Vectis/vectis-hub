@@ -68,15 +68,6 @@ const AUCTION_TYPES = [
 const CONDITIONS = ["Mint","Near Mint","Excellent","Good Plus","Good","Fair","Poor"]
 const STATUSES   = ["ENTERED","REVIEWED","PUBLISHED","SOLD","UNSOLD","WITHDRAWN"]
 
-const STATUS_STYLES: Record<string, string> = {
-  ENTERED:   "bg-gray-700 text-gray-300",
-  REVIEWED:  "bg-blue-900/50 text-blue-300",
-  PUBLISHED: "bg-green-900/50 text-green-300",
-  SOLD:      "bg-emerald-900/50 text-emerald-300",
-  UNSOLD:    "bg-red-900/50 text-red-300",
-  WITHDRAWN: "bg-orange-900/50 text-orange-300",
-}
-
 const input = "w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#2C2C2E] px-3 py-2 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]"
 const lbl   = "block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1"
 
@@ -960,6 +951,12 @@ function SettingsTab({ auction }: { auction: Auction }) {
 
 // ─── Manage lots tab ──────────────────────────────────────────────────────────
 
+// Manage Lots toolbar — one shared button look so the bar reads as a unit;
+// colour comes through on hover / active states only.
+const TB_LABEL   = "text-[9px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-600 px-0.5 select-none"
+const TB_BTN     = "px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50 whitespace-nowrap"
+const TB_NEUTRAL = `${TB_BTN} border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400`
+
 const COL_INPUT  = "w-full rounded border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#0d0d0f] px-2 py-1 text-xs text-gray-600 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-700 focus:outline-none focus:ring-1 focus:ring-[#2AB4A6]"
 const COL_SELECT = "w-full rounded border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#0d0d0f] px-1 py-1 text-xs text-gray-600 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-[#2AB4A6]"
 
@@ -988,7 +985,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
   const [photoMsg, setPhotoMsg]     = useState<string | null>(null)
 
   // Column sort
-  type SortCol = "barcode" | "receiptUniqueId" | "title" | "vendor" | "receipt" | "tote" | "category" | "photos" | "status" | "addedBy"
+  type SortCol = "barcode" | "receiptUniqueId" | "title" | "vendor" | "receipt" | "tote" | "category" | "photos" | "addedBy"
   const [sortCol, setSortCol] = useState<SortCol>("barcode")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
 
@@ -1086,13 +1083,10 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
   const [fTote,          setFTote]          = useState("")
   const [fCategory,      setFCategory]      = useState("")
   const [fPhotos,        setFPhotos]        = useState("")   // "any" | "none" | ""
-  const [fAiUpgraded,    setFAiUpgraded]    = useState("")   // "yes" | "no" | ""
+  // One AI filter covering both flags: "" | "upgraded" | "not_upgraded" | "excluded" | "not_excluded"
+  const [fAi,            setFAi]            = useState("")
   const [fAddedToBC,     setFAddedToBC]     = useState("")   // "yes" | "no" | ""
-  const [fAiExcluded,    setFAiExcluded]    = useState("")   // "yes" | "no" | ""
   const [fKeyPoints,     setFKeyPoints]     = useState("")   // "yes" | "no" | ""
-  const [fStatus,        setFStatus]        = useState("")
-
-  const uniqueStatuses = useMemo(() => Array.from(new Set(lots.map(l => l.status))).sort(), [lots])
 
   const filtered = useMemo(() => {
     const f = lots.filter(l =>
@@ -1104,11 +1098,12 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
       colMatch(l.tote, fTote) &&
       colMatch(l.category, fCategory) &&
       (fPhotos === "" || (fPhotos === "any" ? l.imageUrls.length > 0 : l.imageUrls.length === 0)) &&
-      (fAiUpgraded === "" || (fAiUpgraded === "yes" ? l.aiUpgraded : !l.aiUpgraded)) &&
+      (fAi === "" ||
+        (fAi === "upgraded"     ?  l.aiUpgraded :
+         fAi === "not_upgraded" ? !l.aiUpgraded :
+         fAi === "excluded"     ?  l.aiExcluded : !l.aiExcluded)) &&
       (fAddedToBC === ""  || (fAddedToBC  === "yes" ? l.addedToBC  : !l.addedToBC )) &&
-      (fAiExcluded === "" || (fAiExcluded === "yes" ? l.aiExcluded : !l.aiExcluded)) &&
-      (fKeyPoints === ""  || (fKeyPoints  === "yes" ? !!l.keyPoints?.trim() : !l.keyPoints?.trim())) &&
-      (fStatus === "" || l.status === fStatus)
+      (fKeyPoints === ""  || (fKeyPoints  === "yes" ? !!l.keyPoints?.trim() : !l.keyPoints?.trim()))
     )
     return f.sort((a, b) => {
       let cmp = 0
@@ -1123,7 +1118,6 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
           if (sortCol === "receipt")        return l.receipt
           if (sortCol === "tote")           return l.tote
           if (sortCol === "category")       return l.category
-          if (sortCol === "status")         return l.status
           if (sortCol === "addedBy")        return l.createdByName
           return l.barcode
         }
@@ -1133,14 +1127,14 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
       }
       return sortDir === "asc" ? cmp : -cmp
     })
-  }, [lots, fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAiUpgraded, fAddedToBC, fAiExcluded, fKeyPoints, fStatus, sortCol, sortDir])
+  }, [lots, fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAi, fAddedToBC, fKeyPoints, sortCol, sortDir])
 
-  const filtersActive = [fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAiUpgraded, fAddedToBC, fAiExcluded, fKeyPoints, fStatus].some(f => f !== "")
+  const filtersActive = [fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAi, fAddedToBC, fKeyPoints].some(f => f !== "")
 
   function clearFilters() {
     setFBarcode(""); setFUniqueId(""); setFTitle(""); setFVendor(""); setFReceipt("")
-    setFTote(""); setFCategory(""); setFPhotos(""); setFAiUpgraded(""); setFAddedToBC("")
-    setFAiExcluded(""); setFKeyPoints(""); setFStatus("")
+    setFTote(""); setFCategory(""); setFPhotos(""); setFAi(""); setFAddedToBC("")
+    setFKeyPoints("")
   }
 
   // ── Filters + sort survive opening a lot ────────────────────────────────────
@@ -1158,10 +1152,12 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
         if (s) {
           setFBarcode(s.fBarcode ?? ""); setFUniqueId(s.fUniqueId ?? ""); setFTitle(s.fTitle ?? "")
           setFVendor(s.fVendor ?? ""); setFReceipt(s.fReceipt ?? ""); setFTote(s.fTote ?? "")
-          setFCategory(s.fCategory ?? ""); setFPhotos(s.fPhotos ?? ""); setFAiUpgraded(s.fAiUpgraded ?? "")
-          setFAddedToBC(s.fAddedToBC ?? ""); setFAiExcluded(s.fAiExcluded ?? ""); setFKeyPoints(s.fKeyPoints ?? "")
-          setFStatus(s.fStatus ?? "")
-          if (s.sortCol) setSortCol(s.sortCol); if (s.sortDir) setSortDir(s.sortDir)
+          setFCategory(s.fCategory ?? ""); setFPhotos(s.fPhotos ?? "")
+          // fAi is the combined filter; older saved shapes carried fAiUpgraded/fAiExcluded.
+          setFAi(s.fAi ?? (s.fAiExcluded === "yes" ? "excluded" : s.fAiUpgraded === "yes" ? "upgraded" : ""))
+          setFAddedToBC(s.fAddedToBC ?? ""); setFKeyPoints(s.fKeyPoints ?? "")
+          // s.sortCol may be the removed "status" column from an older session
+          if (s.sortCol && s.sortCol !== "status") setSortCol(s.sortCol); if (s.sortDir) setSortDir(s.sortDir)
         }
       } catch {}
       filtersRestored.current = true
@@ -1173,10 +1169,10 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
     try {
       sessionStorage.setItem(FILTER_KEY, JSON.stringify({
         fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory,
-        fPhotos, fAiUpgraded, fAddedToBC, fAiExcluded, fKeyPoints, fStatus, sortCol, sortDir,
+        fPhotos, fAi, fAddedToBC, fKeyPoints, sortCol, sortDir,
       }))
     } catch {}
-  }, [FILTER_KEY, fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAiUpgraded, fAddedToBC, fAiExcluded, fKeyPoints, fStatus, sortCol, sortDir])
+  }, [FILTER_KEY, fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAi, fAddedToBC, fKeyPoints, sortCol, sortDir])
 
   // ── Undo stack (this user's recent mass actions on this auction) ────────────
   const [undos, setUndos] = useState<{ id: string; label: string; at: string }[]>([])
@@ -1516,159 +1512,181 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
 
   return (
     <div>
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2 flex-wrap">
+      {/* Toolbar — grouped so the bar reads at a glance: Tools / Descriptions /
+          Export always visible, plus a teal selection bar underneath when lots
+          are ticked (every button in it acts on the ticked lots). */}
+      <div className="mb-3 space-y-2">
+        <div className="flex flex-wrap items-end gap-x-5 gap-y-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1C1C1E] px-3 py-2">
           {/* Undo the most recent mass action (newest first — press again to step
               back). Only your own actions; a lot changed since is left alone. */}
           {!bcLocked && undos.length > 0 && (
-            <button
-              onClick={handleUndo}
-              disabled={undoBusy || pending}
-              title={`Undo: ${undos[0].label}`}
-              className="px-4 py-1.5 text-sm font-medium rounded-lg border border-amber-500 text-amber-400 bg-amber-900/20 hover:bg-amber-900/40 transition-colors disabled:opacity-50">
-              {undoBusy ? "Undoing…" : `↶ Undo: ${undos[0].label}`}
-            </button>
+            <div className="flex flex-col gap-1">
+              <span className={TB_LABEL}>Undo</span>
+              <button
+                onClick={handleUndo}
+                disabled={undoBusy || pending}
+                title={`Undo: ${undos[0].label}`}
+                className={`${TB_BTN} border-amber-500 text-amber-500 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 max-w-[16rem] truncate`}>
+                {undoBusy ? "Undoing…" : `↶ ${undos[0].label}`}
+              </button>
+            </div>
           )}
-          {undoMsg && <span className="text-xs text-amber-400">{undoMsg}</span>}
-          <button
-            onClick={() => {
-              setFillMsg(null)
-              startFill(async () => {
-                const result = await fillLotsFromTotes(auctionId)
-                setFillMsg(result.updated > 0 ? `✓ Updated ${result.updated} lot${result.updated !== 1 ? "s" : ""}` : "No lots needed updating")
-                setTimeout(() => setFillMsg(null), 3000)
-                onDelete()
-              })
-            }}
-            disabled={fillPending}
-            className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-600 dark:text-gray-400 hover:border-[#2AB4A6] hover:text-[#2AB4A6] transition-colors disabled:opacity-50"
-          >
-            {fillPending ? "Pulling…" : "⟳ Pull Vendor/Receipt from Totes"}
-          </button>
+
+          {/* Tools */}
+          <div className="flex flex-col gap-1">
+            <span className={TB_LABEL}>Tools</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                onClick={() => {
+                  setFillMsg(null)
+                  startFill(async () => {
+                    const result = await fillLotsFromTotes(auctionId)
+                    setFillMsg(result.updated > 0 ? `✓ Updated ${result.updated} lot${result.updated !== 1 ? "s" : ""}` : "No lots needed updating")
+                    setTimeout(() => setFillMsg(null), 3000)
+                    onDelete()
+                  })
+                }}
+                disabled={fillPending}
+                className={`${TB_NEUTRAL} hover:border-[#2AB4A6] hover:text-[#2AB4A6]`}>
+                {fillPending ? "Pulling…" : "⟳ Pull Vendor/Receipt from Totes"}
+              </button>
+              {!bcLocked && (
+                <button
+                  onClick={() => { setShowMassAdd(v => !v); setShowBids(false) }}
+                  className={showMassAdd ? `${TB_BTN} border-orange-500 text-orange-400 bg-orange-500/10` : `${TB_NEUTRAL} hover:border-orange-500 hover:text-orange-400`}>
+                  ➕ Mass Add Lots
+                </button>
+              )}
+              <button
+                onClick={() => { setShowBids(v => !v); setShowMassAdd(false); setShowUniqueIdMatcher(false) }}
+                className={showBids ? `${TB_BTN} border-green-500 text-green-400 bg-green-500/10` : `${TB_NEUTRAL} hover:border-green-500 hover:text-green-400`}>
+                💰 Set Starting Bids
+              </button>
+              <button
+                onClick={() => { setShowUniqueIdMatcher(v => !v); setUniqueIdPairs([]); setUniqueIdMsg(null); setShowBids(false); setShowMassAdd(false) }}
+                className={showUniqueIdMatcher ? `${TB_BTN} border-cyan-500 text-cyan-400 bg-cyan-500/10` : `${TB_NEUTRAL} hover:border-cyan-500 hover:text-cyan-400`}>
+                🔗 Unique ID Matcher
+              </button>
+            </div>
+          </div>
+
+          {/* Descriptions (bulk text actions — scoped to ticked lots when any are ticked) */}
           {!bcLocked && (
-            <button
-              onClick={() => { setShowMassAdd(v => !v); setShowBids(false) }}
-              className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showMassAdd ? "border-orange-500 text-orange-400 bg-orange-900/20" : "border-gray-600 text-gray-600 dark:text-gray-400 hover:border-orange-500 hover:text-orange-400"}`}>
-              ➕ Mass Add Lots
-            </button>
+            <div className="flex flex-col gap-1 border-l border-gray-200 dark:border-gray-800 pl-5">
+              <span className={TB_LABEL}>Descriptions{selected.size > 0 ? ` — ${selected.size} ticked` : " — all lots"}</span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button onClick={handleBulkAddConditions} disabled={condPending}
+                  className={`${TB_NEUTRAL} hover:border-[#2AB4A6] hover:text-[#2AB4A6]`}>
+                  {condPending ? "Updating…" : "✚ Add Conditions"}
+                </button>
+                <button onClick={handleBulkRemoveConditions} disabled={condPending}
+                  className={`${TB_NEUTRAL} hover:border-amber-500 hover:text-amber-400`}>
+                  {condPending ? "Updating…" : "✖ Remove Conditions"}
+                </button>
+                <button onClick={handleClearDescriptions} disabled={condPending}
+                  className={`${TB_NEUTRAL} hover:border-red-500 hover:text-red-400`}>
+                  {condPending ? "Working…" : "🧹 Clear Descriptions"}
+                </button>
+              </div>
+            </div>
           )}
-          <button
-            onClick={() => { setShowBids(v => !v); setShowMassAdd(false); setShowUniqueIdMatcher(false) }}
-            className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showBids ? "border-green-500 text-green-400 bg-green-900/20" : "border-gray-600 text-gray-600 dark:text-gray-400 hover:border-green-500 hover:text-green-400"}`}>
-            💰 Set Starting Bids
-          </button>
-          <button
-            onClick={() => { setShowUniqueIdMatcher(v => !v); setUniqueIdPairs([]); setUniqueIdMsg(null); setShowBids(false); setShowMassAdd(false) }}
-            className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${showUniqueIdMatcher ? "border-cyan-500 text-cyan-400 bg-cyan-900/20" : "border-gray-600 text-gray-600 dark:text-gray-400 hover:border-cyan-500 hover:text-cyan-400"}`}>
-            🔗 Unique ID Matcher
-          </button>
-          {!bcLocked && (
-            <>
-              <button
-                onClick={handleBulkAddConditions}
-                disabled={condPending}
-                className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-600 dark:text-gray-400 hover:border-[#2AB4A6] hover:text-[#2AB4A6] transition-colors disabled:opacity-50">
-                {condPending ? "Updating…" : `✚ Add Conditions${selected.size > 0 ? ` (${selected.size})` : ""}`}
+
+          {/* Export */}
+          <div className="flex flex-col gap-1 border-l border-gray-200 dark:border-gray-800 pl-5">
+            <span className={TB_LABEL}>Export</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button onClick={exportForAHK} className={`${TB_NEUTRAL} hover:border-purple-400 hover:text-purple-400`}>
+                ⬇ BC Macro (Tote)
               </button>
-              <button
-                onClick={handleBulkRemoveConditions}
-                disabled={condPending}
-                className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-600 dark:text-gray-400 hover:border-amber-500 hover:text-amber-400 transition-colors disabled:opacity-50">
-                {condPending ? "Updating…" : `✖ Remove Conditions${selected.size > 0 ? ` (${selected.size})` : ""}`}
+              <button onClick={exportForAHKReceipt} className={`${TB_NEUTRAL} hover:border-purple-400 hover:text-purple-400`}>
+                ⬇ BC Macro (Receipt)
               </button>
-              <button
-                onClick={handleClearDescriptions}
-                disabled={condPending}
-                className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-600 dark:text-gray-400 hover:border-red-500 hover:text-red-400 transition-colors disabled:opacity-50">
-                {condPending ? "Working…" : `🧹 Clear Descriptions${selected.size > 0 ? ` (${selected.size})` : ""}`}
+              <button onClick={exportPhotos} disabled={photoExporting}
+                className={`${TB_NEUTRAL} hover:border-[#2AB4A6] hover:text-[#2AB4A6]`}>
+                {photoExporting ? "⏳ Exporting…" : "📷 Photos (.zip)"}
               </button>
-            </>
-          )}
-          {fillMsg  && <span className="text-xs text-[#2AB4A6]">{fillMsg}</span>}
-          {bidsMsg  && <span className="text-xs text-green-400">{bidsMsg}</span>}
-          {titlesMsg && <span className="text-xs text-[#2AB4A6]">{titlesMsg}</span>}
-          {massMsg  && <span className="text-xs text-orange-400">{massMsg}</span>}
-          {uniqueIdMsg && <span className="text-xs text-cyan-400">{uniqueIdMsg}</span>}
-          {condMsg && <span className="text-xs text-[#2AB4A6]">{condMsg}</span>}
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {selected.size > 0 && !bcLocked && (
-            <>
-              {(() => {
-                const anyUnticked = lots.some(l => selected.has(l.id) && !l.addedToBC)
-                return (
-                  <button onClick={handleToggleAddedToBC} disabled={bcPending}
-                    className="px-4 py-1.5 text-sm font-medium rounded-lg border border-emerald-700 text-emerald-400 hover:bg-emerald-900/30 transition-colors disabled:opacity-50">
-                    {bcPending ? "Updating…" : anyUnticked
-                      ? `📦 Mark ${selected.size} added to BC`
-                      : `↺ Unmark ${selected.size} as added to BC`}
-                  </button>
-                )
-              })()}
-              {(() => {
-                const anyNotExcluded = lots.some(l => selected.has(l.id) && !l.aiExcluded)
-                return (
-                  <button onClick={handleBulkToggleAiExcluded} disabled={excludePending}
-                    className="px-4 py-1.5 text-sm font-medium rounded-lg border border-amber-700 text-amber-400 hover:bg-amber-900/30 transition-colors disabled:opacity-50">
-                    {excludePending ? "Updating…" : anyNotExcluded
-                      ? `🚫 Exclude ${selected.size} from AI`
-                      : `✓ Unexclude ${selected.size} from AI`}
-                  </button>
-                )
-              })()}
-              <button onClick={handleGenerateTitles} disabled={titlesPending}
-                className="px-4 py-1.5 text-sm font-medium rounded-lg border border-blue-700 text-blue-400 hover:bg-blue-900/30 transition-colors disabled:opacity-50">
-                {titlesPending ? "Generating…" : `✏️ Generate Titles (${selected.size})`}
+              <button onClick={exportExcel}
+                className={`${TB_BTN} border-[#2AB4A6] text-[#2AB4A6] hover:bg-[#2AB4A6] hover:text-black`}>
+                ⬇ Excel
               </button>
-              <button
-                onClick={() => onTransfer(Array.from(selected))}
-                className="px-4 py-1.5 text-sm font-medium rounded-lg border border-indigo-700 text-indigo-400 hover:bg-indigo-900/30 transition-colors">
-                ↗ Transfer {selected.size} to another auction
-              </button>
-              <button onClick={() => handleBulkClearPhotos(false)} disabled={photosClearing}
-                className="px-4 py-1.5 text-sm font-medium rounded-lg border border-orange-700 text-orange-400 hover:bg-orange-900/30 transition-colors disabled:opacity-50"
-                title="Removes photos from these lots but keeps files in storage">
-                {photosClearing ? "Removing…" : `📷🔗 Unlink photos (${selected.size})`}
-              </button>
-              <button onClick={() => handleBulkClearPhotos(true)} disabled={photosClearing}
-                className="px-4 py-1.5 text-sm font-medium rounded-lg border border-red-700 text-red-400 hover:bg-red-900/30 transition-colors disabled:opacity-50"
-                title="Permanently deletes photo files from storage">
-                {photosClearing ? "Removing…" : `📷🗑 Delete from storage (${selected.size})`}
-              </button>
-              <button onClick={handleBulkDelete} disabled={bulkDeleting}
-                className="px-4 py-1.5 text-sm font-medium rounded-lg border border-red-700 text-red-400 hover:bg-red-900/30 transition-colors disabled:opacity-50">
-                {bulkDeleting ? "Deleting…" : `🗑 Delete ${selected.size} selected`}
-              </button>
-            </>
-          )}
-          {bcMsg && <span className="text-xs text-emerald-400">{bcMsg}</span>}
-          {excludeMsg && <span className="text-xs text-amber-400">{excludeMsg}</span>}
+            </div>
+          </div>
+
+          {/* Filter summary */}
           {filtersActive && (
-            <span className="text-xs text-gray-600 dark:text-gray-500">
+            <span className="ml-auto self-center text-xs text-gray-600 dark:text-gray-500 whitespace-nowrap">
               {filtered.length} / {lots.length} lots
               <button onClick={clearFilters} className="ml-2 text-[#2AB4A6] hover:underline">clear</button>
             </span>
           )}
-          <button onClick={exportForAHK}
-            className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-600 dark:text-gray-400 hover:border-purple-400 hover:text-purple-400 transition-colors">
-            ⬇ Export for BC Macro (Tote)
-          </button>
-          <button onClick={exportForAHKReceipt}
-            className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-600 dark:text-gray-400 hover:border-purple-400 hover:text-purple-400 transition-colors">
-            ⬇ Export for BC Macro (Receipt)
-          </button>
-          <button onClick={exportPhotos} disabled={photoExporting}
-            className="px-4 py-1.5 text-sm font-medium rounded-lg border border-gray-600 text-gray-600 dark:text-gray-400 hover:border-[#2AB4A6] hover:text-[#2AB4A6] transition-colors disabled:opacity-50">
-            {photoExporting ? "⏳ Exporting…" : "📷 Export Photos (.zip)"}
-          </button>
-          <button onClick={exportExcel}
-            className="px-4 py-1.5 text-sm font-medium rounded-lg border border-[#2AB4A6] text-[#2AB4A6] hover:bg-[#2AB4A6] hover:text-black transition-colors">
-            ⬇ Export to Excel
-          </button>
         </div>
+
+        {/* Status messages from the last action, one tidy line */}
+        {(undoMsg || fillMsg || bidsMsg || titlesMsg || massMsg || uniqueIdMsg || condMsg || bcMsg || excludeMsg || photoMsg) && (
+          <div className="flex flex-wrap gap-x-4 gap-y-1 px-1">
+            {undoMsg && <span className="text-xs text-amber-400">{undoMsg}</span>}
+            {fillMsg  && <span className="text-xs text-[#2AB4A6]">{fillMsg}</span>}
+            {bidsMsg  && <span className="text-xs text-green-400">{bidsMsg}</span>}
+            {titlesMsg && <span className="text-xs text-[#2AB4A6]">{titlesMsg}</span>}
+            {massMsg  && <span className="text-xs text-orange-400">{massMsg}</span>}
+            {uniqueIdMsg && <span className="text-xs text-cyan-400">{uniqueIdMsg}</span>}
+            {condMsg && <span className="text-xs text-[#2AB4A6]">{condMsg}</span>}
+            {bcMsg && <span className="text-xs text-emerald-400">{bcMsg}</span>}
+            {excludeMsg && <span className="text-xs text-amber-400">{excludeMsg}</span>}
+            {photoMsg && <span className="text-xs text-[#2AB4A6]">{photoMsg}</span>}
+          </div>
+        )}
+
+        {/* Selection bar — appears when lots are ticked; everything here acts on them */}
+        {selected.size > 0 && !bcLocked && (
+          <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-[#2AB4A6]/50 bg-[#2AB4A6]/5 px-3 py-2">
+            <span className="text-xs font-bold text-[#2AB4A6] bg-[#2AB4A6]/15 rounded-lg px-2.5 py-1.5 whitespace-nowrap">
+              {selected.size} selected
+            </span>
+            {(() => {
+              const anyUnticked = lots.some(l => selected.has(l.id) && !l.addedToBC)
+              return (
+                <button onClick={handleToggleAddedToBC} disabled={bcPending}
+                  className={`${TB_BTN} border-emerald-700 text-emerald-500 dark:text-emerald-400 hover:bg-emerald-500/10`}>
+                  {bcPending ? "Updating…" : anyUnticked ? "📦 Mark added to BC" : "↺ Unmark added to BC"}
+                </button>
+              )
+            })()}
+            {(() => {
+              const anyNotExcluded = lots.some(l => selected.has(l.id) && !l.aiExcluded)
+              return (
+                <button onClick={handleBulkToggleAiExcluded} disabled={excludePending}
+                  className={`${TB_BTN} border-amber-700 text-amber-500 dark:text-amber-400 hover:bg-amber-500/10`}>
+                  {excludePending ? "Updating…" : anyNotExcluded ? "🚫 Exclude from AI" : "✓ Unexclude from AI"}
+                </button>
+              )
+            })()}
+            <button onClick={handleGenerateTitles} disabled={titlesPending}
+              className={`${TB_BTN} border-blue-700 text-blue-500 dark:text-blue-400 hover:bg-blue-500/10`}>
+              {titlesPending ? "Generating…" : "✏️ Generate Titles"}
+            </button>
+            <button onClick={() => onTransfer(Array.from(selected))}
+              className={`${TB_BTN} border-indigo-700 text-indigo-500 dark:text-indigo-400 hover:bg-indigo-500/10`}>
+              ↗ Transfer to another auction
+            </button>
+            <span className="mx-1 h-5 border-l border-[#2AB4A6]/30" />
+            <button onClick={() => handleBulkClearPhotos(false)} disabled={photosClearing}
+              className={`${TB_BTN} border-orange-700 text-orange-500 dark:text-orange-400 hover:bg-orange-500/10`}
+              title="Removes photos from these lots but keeps files in storage">
+              {photosClearing ? "Removing…" : "📷🔗 Unlink photos"}
+            </button>
+            <button onClick={() => handleBulkClearPhotos(true)} disabled={photosClearing}
+              className={`${TB_BTN} border-red-700 text-red-500 dark:text-red-400 hover:bg-red-500/10`}
+              title="Permanently deletes photo files from storage">
+              {photosClearing ? "Removing…" : "📷🗑 Delete photos from storage"}
+            </button>
+            <button onClick={handleBulkDelete} disabled={bulkDeleting}
+              className={`${TB_BTN} border-red-700 text-red-500 dark:text-red-400 hover:bg-red-500/10`}>
+              {bulkDeleting ? "Deleting…" : "🗑 Delete lots"}
+            </button>
+          </div>
+        )}
       </div>
-      {photoMsg && <p className="text-xs text-[#2AB4A6] mb-2">{photoMsg}</p>}
 
       {/* ── Mass Add Lots panel ── */}
       {showMassAdd && !bcLocked && (
@@ -1908,10 +1926,10 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                 <input type="checkbox" checked={filtered.length > 0 && selected.size === filtered.length}
                   onChange={toggleSelectAll} className="w-4 h-4 rounded border-gray-600 accent-[#2AB4A6]" />
               </th>
-              {(["barcode","receiptUniqueId","title","vendor","receipt","tote","category","photos","status","addedBy"] as SortCol[]).map((col, i) => (
+              {(["barcode","receiptUniqueId","title","vendor","receipt","tote","category","photos","addedBy"] as SortCol[]).map((col, i) => (
                 <th key={col} onClick={() => toggleSort(col)}
                   className="text-left px-4 py-3 text-xs font-medium text-gray-600 dark:text-gray-500 uppercase tracking-wide cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
-                  {["Barcode","Unique ID","Title","Vendor","Receipt","Tote","Category","Photos","Status","Added By"][i]}
+                  {["Barcode","Unique ID","Title","Vendor","Receipt","Tote","Category","Photos","Added By"][i]}
                   {sortCol === col ? (sortDir === "asc" ? " ▲" : " ▼") : <span className="text-gray-700"> ⇅</span>}
                 </th>
               ))}
@@ -1937,12 +1955,6 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                   <option value="none">No photos</option>
                 </select>
               </td>
-              <td className="px-2 py-1.5">
-                <select value={fStatus} onChange={e => setFStatus(e.target.value)} className={COL_SELECT}>
-                  <option value="">All</option>
-                  {uniqueStatuses.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </td>
               <td className="px-2 py-1.5" />
               <td className="px-2 py-1.5">
                 <select value={fKeyPoints} onChange={e => setFKeyPoints(e.target.value)} className={COL_SELECT}>
@@ -1952,10 +1964,12 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                 </select>
               </td>
               <td className="px-2 py-1.5">
-                <select value={fAiUpgraded} onChange={e => setFAiUpgraded(e.target.value)} className={COL_SELECT}>
+                <select value={fAi} onChange={e => setFAi(e.target.value)} className={COL_SELECT}>
                   <option value="">All</option>
-                  <option value="yes">✨ Upgraded</option>
-                  <option value="no">Not yet</option>
+                  <option value="excluded">🚫 Excluded from AI</option>
+                  <option value="not_excluded">Not excluded</option>
+                  <option value="upgraded">✨ Upgraded</option>
+                  <option value="not_upgraded">Not upgraded</option>
                 </select>
               </td>
               <td className="px-2 py-1.5">
@@ -2000,11 +2014,6 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                       {lot.imageUrls.length}
                     </span>
                   ) : <span className="text-gray-700 text-xs">—</span>}
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[lot.status] ?? "bg-gray-700 text-gray-300"}`}>
-                    {lot.status}
-                  </span>
                 </td>
                 <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-500 whitespace-nowrap">
                   {lot.createdByName ?? "—"}
@@ -2054,7 +2063,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={13} className="px-4 py-8 text-center text-gray-600 text-sm">No lots match your filters</td></tr>
+              <tr><td colSpan={14} className="px-4 py-8 text-center text-gray-600 text-sm">No lots match your filters</td></tr>
             )}
           </tbody>
         </table>

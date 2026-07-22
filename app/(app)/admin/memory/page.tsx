@@ -188,7 +188,12 @@ All in auction-tabs.tsx (ManageLotsTab) + lib/actions/catalogue.ts.
 
 5. **Multi-step, conflict-safe Undo.** New CatalogueBulkUndo table (NEEDS Run Migrations). Every field-editing bulk action records a per-lot before/after snapshot; the amber "↶ Undo: <label>" button (top of toolbar) reverses the most recent, press again to step back. Conflict-safe: a lot changed since the action is skipped, never clobbered. Scoped to the actor (you undo only your own mass actions). Covers add/remove conditions, clear descriptions, bulk AI-exclude, bulk added-to-BC — NOT delete/transfer/photos.
 
-⚠ Dedicated table, not the change log — the log stores display labels + best-effort rows, too lossy to reverse. Degrades gracefully pre-migration (undo just doesn't appear).`,
+⚠ Dedicated table, not the change log — the log stores display labels + best-effort rows, too lossy to reverse. Degrades gracefully pre-migration (undo just doesn't appear).
+
+## 2026-07-22 — toolbar tidy + Status column removed
+- Toolbar regrouped into one bordered bar with labelled groups: Undo (when present) · Tools (Pull Vendor/Receipt, Mass Add, Set Starting Bids, Unique ID Matcher) · Descriptions (Add/Remove Conditions, Clear Descriptions — group label shows "— N ticked" / "— all lots") · Export (BC Macro Tote/Receipt, Photos .zip, Excel, shortened labels). Status messages collect on one line under the bar. A separate teal SELECTION BAR appears when lots are ticked, led by an "N selected" chip: Mark added to BC, Exclude from AI, Generate Titles, Transfer, divider, then the destructive trio (Unlink photos / Delete photos from storage / Delete lots). All handlers and !bcLocked gating unchanged; shared styles TB_LABEL/TB_BTN/TB_NEUTRAL.
+- Status column REMOVED from the table ("doesn't mean anything") — header, filter, pill, sort option, STATUS_STYLES gone; a saved sortCol "status" in sessionStorage is ignored on restore. Lot status data untouched, just not shown here. STATUSES constant kept (lot editor uses it).
+- AI column filter is now ONE combined dropdown (fAi): All / 🚫 Excluded from AI / Not excluded / ✨ Upgraded / Not upgraded. The old fAiExcluded state filtered but had NO dropdown in the UI — this exposed it. sessionStorage restore maps old fAiUpgraded/fAiExcluded shapes into fAi.`,
   },
   {
     filename: "local_boot_safety.md",
