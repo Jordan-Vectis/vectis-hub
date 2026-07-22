@@ -77,6 +77,25 @@ Data: IdleLog (reasons), CatalogueTimingLog (orphan-excluded) → findUserGaps, 
 - PDF export: red "⬇ Export PDF" button by the range pills (only when hasData) → GET /api/reports/idle/pdf?range=X (download). Builder = buildIdleReportPdf in lib/idle-report-pdf.ts (split from the route so it's testable). A4 landscape pdf-lib, logo header, 4 stat boxes, reason table (swatch + share bars), per-cataloguer table (auto page-break, header redrawn per page), longest-breaks, admin-only tamper table, footer page numbers. ⚠ Reason icons are EMOJI → can't embed in WinAnsi PDF font, so the PDF uses colour SWATCHES not icons; all text via safeAscii.`,
   },
   {
+    filename: "scan_timer_split.md",
+    content: `---
+name: Scan timer split — blue lot timer vs away prompt
+purpose: The lot-wizard blue count-up timer is now a separate per-user toggle from the away/activity prompt. Read before touching the lot-wizard timer or idle gate.
+last_updated: 2026-07-22
+---
+
+# Scan timer split (2026-07-22) — NEEDS RUN MIGRATIONS
+
+The lot wizard (lot-wizard-tab.tsx, shared desktop + tablet) had ONE setting, User.showScanTimer, gating BOTH the little blue count-up timer AND the away/activity prompt ("what were you doing?" after a long gap). Jordan wanted them separate, the blue timer off by default, and it was "triggering before the barcode was entered".
+
+Split:
+- User.showScanTimer (default true) → now controls ONLY the away/activity prompt (checkIdleOnLotStart / maybePromptIdleBeforeSave / checkWithinLotIdle / visibilitychange). Admin label reworded to "Away / activity prompt".
+- User.showLotTimer (NEW, default FALSE, NEEDS Run Migrations) → controls ONLY the blue count-up timer. New admin tickbox "Lot make timer (blue)". New column ⇒ every existing user is off automatically, no backfill.
+- Both toggles are admin-only on the Users page (edit-user-form.tsx → PUT /api/admin/users/[id]/settings). No self-service settings page. timerRedMins still does double duty (blue timer red threshold + away-prompt gap) and shows when either toggle is on.
+
+Premature-trigger fix: the blue timer used to start in startLotTiming() which fires on the barcode field onFocus (auto-focused on step 2), so it counted before a barcode was entered. Now the blue timer counts from a SEPARATE ref lotTimerStartedAt, set by startLotTimerDisplay() on the first actual barcode character (onChange) + "Next Barcode Number" — never on bare focus; reset on save AND in changeVendor() (stops on step 1). ⚠ barcodeStartedAt (the activity + save durationMs baseline) is STILL set on focus — do NOT move it, scanner-injected barcodes with no keystroke depend on it. Prop flows: cataloguing + tablet page.tsx (select showLotTimer) → auction-tabs / tablet-tabs → LotWizardTab. auth.ts uses an explicit select so the new column can't lock login out pre-migration.`,
+  },
+  {
     filename: "idle_timer_mobile_bypass.md",
     content: `---
 name: Mobile idle-timer dodge — investigation + fix

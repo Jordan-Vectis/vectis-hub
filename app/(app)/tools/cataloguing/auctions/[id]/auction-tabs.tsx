@@ -526,7 +526,7 @@ function TransferLotsModal({ selectedIds, sourceAuctionId, allAuctions, onClose,
   )
 }
 
-export default function AuctionTabs({ auction, lots, userId, userName, userRole, showScanTimer, timerRedMins, allAuctions }: { auction: Auction; lots: Lot[]; userId: string; userName: string; userRole: string; showScanTimer?: boolean; timerRedMins?: number; allAuctions: AuctionSummary[] }) {
+export default function AuctionTabs({ auction, lots, userId, userName, userRole, showScanTimer, showLotTimer, timerRedMins, allAuctions }: { auction: Auction; lots: Lot[]; userId: string; userName: string; userRole: string; showScanTimer?: boolean; showLotTimer?: boolean; timerRedMins?: number; allAuctions: AuctionSummary[] }) {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const bcLocked     = auction.addedToBC && userRole !== "ADMIN"
@@ -695,7 +695,7 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
           ) : (
             <LotWizardTab auctionId={auction.id} auction={auction}
               userId={userId} userName={userName}
-              onCreated={() => router.refresh()} showScanTimer={showScanTimer} timerRedMins={timerRedMins} />
+              onCreated={() => router.refresh()} showScanTimer={showScanTimer} showLotTimer={showLotTimer} timerRedMins={timerRedMins} />
           )}
         </div>
 

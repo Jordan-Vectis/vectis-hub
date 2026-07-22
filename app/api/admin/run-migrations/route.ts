@@ -1084,6 +1084,10 @@ const MIGRATIONS = [
 
   // Optional MAC address column on the Devices register.
   `ALTER TABLE "Device" ADD COLUMN IF NOT EXISTS "macAddress" TEXT`,
+
+  // The little blue count-up lot timer, split out from showScanTimer (the away
+  // prompt) so it has its own per-user toggle. Off by default.
+  `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "showLotTimer" BOOLEAN NOT NULL DEFAULT FALSE`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

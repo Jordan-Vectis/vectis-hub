@@ -15,6 +15,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const data: Record<string, unknown> = {}
     if (typeof body.showScanTimer === "boolean") data.showScanTimer = body.showScanTimer
+    if (typeof body.showLotTimer  === "boolean") data.showLotTimer  = body.showLotTimer
     if (typeof body.timerYellowMins === "number") data.timerYellowMins = Math.max(1, body.timerYellowMins)
     if (typeof body.timerRedMins    === "number") data.timerRedMins    = Math.max(1, body.timerRedMins)
 

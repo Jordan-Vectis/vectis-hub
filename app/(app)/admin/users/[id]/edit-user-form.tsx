@@ -17,6 +17,7 @@ interface Props {
   allowedApps: string[]
   appPermissions: Record<string, any> | null
   showScanTimer: boolean
+  showLotTimer: boolean
   timerRedMins: number
   departments: { id: string; name: string }[]
   roles:       string[]
@@ -27,7 +28,7 @@ function roleLabel(key: string): string {
   return key.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 }
 
-export default function EditUserForm({ userId, name, email, username, role, departmentId, allowedApps, appPermissions, showScanTimer: initialShowScanTimer, timerRedMins: initialRed, departments, roles, isSelf }: Props) {
+export default function EditUserForm({ userId, name, email, username, role, departmentId, allowedApps, appPermissions, showScanTimer: initialShowScanTimer, showLotTimer: initialShowLotTimer, timerRedMins: initialRed, departments, roles, isSelf }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [selectedApps, setSelectedApps] = useState<string[]>(allowedApps)
@@ -75,6 +76,7 @@ export default function EditUserForm({ userId, name, email, username, role, depa
 
   // Cataloguing settings
   const [showScanTimer,    setShowScanTimer]    = useState(initialShowScanTimer)
+  const [showLotTimer,     setShowLotTimer]     = useState(initialShowLotTimer)
   const [timerRedMins,     setTimerRedMins]     = useState(initialRed)
   const [catPending, startCatTransition]        = useTransition()
   const [catMsg, setCatMsg]                     = useState<string | null>(null)
@@ -178,7 +180,7 @@ export default function EditUserForm({ userId, name, email, username, role, depa
       const res = await fetch(`/api/admin/users/${userId}/settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ showScanTimer, timerRedMins }),
+        body: JSON.stringify({ showScanTimer, showLotTimer, timerRedMins }),
       })
       setCatMsg(res.ok ? "Saved" : "Failed to save")
       if (res.ok) setTimeout(() => setCatMsg(null), 2000)
@@ -336,6 +338,7 @@ export default function EditUserForm({ userId, name, email, username, role, depa
         <h2 className="font-semibold text-gray-800 dark:text-gray-200 mb-1">Cataloguing Settings</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Controls for the lot wizard and cataloguing tools.</p>
         <div className="flex flex-col gap-4">
+          {/* Away / activity prompt — the "what were you doing?" popup after a long gap. */}
           <label className="flex items-center gap-3 cursor-pointer group">
             <div
               onClick={() => setShowScanTimer(v => !v)}
@@ -350,11 +353,32 @@ export default function EditUserForm({ userId, name, email, username, role, depa
               )}
             </div>
             <div>
-              <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">Lot wizard scan timer</span>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Times how long this user spends on the barcode step.</p>
+              <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">Away / activity prompt</span>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Asks this user what they were doing when they start a new lot after a long gap. Working hours only.</p>
             </div>
           </label>
-          {showScanTimer && (
+
+          {/* The little blue count-up timer shown while cataloguing a lot — separate toggle, off by default. */}
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <div
+              onClick={() => setShowLotTimer(v => !v)}
+              className={`w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
+                showLotTimer ? "bg-blue-600 border-blue-600" : "border-gray-300 dark:border-gray-600 group-hover:border-blue-400"
+              }`}
+            >
+              {showLotTimer && (
+                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 12 12">
+                  <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+            </div>
+            <div>
+              <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">Lot make timer (blue)</span>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Shows a little blue count-up timer while this user is cataloguing a lot, starting when the barcode is entered.</p>
+            </div>
+          </label>
+
+          {(showScanTimer || showLotTimer) && (
             <div className="ml-8 space-y-2 max-w-md">
               <div className="max-w-[10rem]">
                 <label className="block text-xs font-medium text-red-500 mb-1">⏱ Warn after (mins)</label>

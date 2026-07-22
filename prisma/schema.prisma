@@ -45,7 +45,8 @@ model User {
   role           String      @default("COLLECTIONS")  // "ADMIN" or any custom role name from RoleDefault
   allowedApps    String[]    @default([])
   appPermissions Json?
-  showScanTimer  Boolean     @default(true)
+  showScanTimer  Boolean     @default(true)   // the "away / activity" prompt (long-gap check)
+  showLotTimer   Boolean     @default(false)  // the little blue count-up timer shown while cataloguing a lot
   timerYellowMins Int       @default(4)
   timerRedMins    Int       @default(30)   // "warn after" mins — house default
   isITStaff      Boolean     @default(false)  // can be assigned IT Job Board jobs

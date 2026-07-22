@@ -66,6 +66,7 @@ export default async function EditUserPage({
         allowedApps={user.allowedApps}
         appPermissions={user.appPermissions as Record<string, { role: string }> | null}
         showScanTimer={(user as any).showScanTimer ?? true}
+        showLotTimer={(user as any).showLotTimer ?? false}
         timerRedMins={(user as any).timerRedMins ?? 30}
         departments={departments}
         roles={roles}

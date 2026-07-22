@@ -396,6 +396,7 @@ export default function LotWizardTab({
   onCreated,
   tablet,
   showScanTimer = true,
+  showLotTimer = false,
   timerRedMins = 30,
 }: {
   auctionId: string
@@ -405,6 +406,7 @@ export default function LotWizardTab({
   onCreated: () => void
   tablet?: boolean
   showScanTimer?: boolean
+  showLotTimer?: boolean
   timerRedMins?: number
 }) {
   const router = useRouter()
@@ -426,6 +428,11 @@ export default function LotWizardTab({
   const [estimateWarning, setEstimateWarning] = useState(false)
 
   const barcodeStartedAt   = useRef<number | null>(null)
+  // The little blue count-up timer (showLotTimer) counts from HERE — set when the
+  // barcode is actually entered, NOT on field focus. Kept separate from
+  // barcodeStartedAt (which is the activity/duration baseline set on focus) so the
+  // visible timer doesn't appear before the cataloguer has entered a barcode.
+  const lotTimerStartedAt  = useRef<number | null>(null)
   const keyPointsEnteredAt = useRef<number | null>(null)
   const keyPointsAccumMs   = useRef<number>(0)
   // Guard against runaway auto-creation (e.g. a barcode scanner left in
@@ -494,12 +501,12 @@ export default function LotWizardTab({
   }, [])
 
   useEffect(() => {
-    if (!timerActive || !showScanTimer) return
+    if (!timerActive || !showLotTimer) return
     const id = setInterval(() => {
-      setTimerSecs(barcodeStartedAt.current ? Math.floor((Date.now() - barcodeStartedAt.current) / 1000) : 0)
+      setTimerSecs(lotTimerStartedAt.current ? Math.floor((Date.now() - lotTimerStartedAt.current) / 1000) : 0)
     }, 1000)
     return () => clearInterval(id)
-  }, [timerActive, showScanTimer])
+  }, [timerActive, showLotTimer])
 
   // Idle detection — redesigned 2026-07-02. The popup NO LONGER fires on its own
   // while someone is away (the old 30-second watcher was intrusive and, when
@@ -631,15 +638,24 @@ export default function LotWizardTab({
     return () => document.removeEventListener("visibilitychange", onVisible)
   })
 
-  // Single entry point for "a new lot has begun" — starts the scan timer and
-  // runs the idle check (async; the popup may appear a moment after the first
-  // keystroke). Both places that used to set barcodeStartedAt call this.
+  // Single entry point for "a new lot has begun" — sets the activity/duration
+  // baseline and runs the away check (async; the popup may appear a moment after
+  // the field is focused). Called on barcode-field focus. Does NOT start the blue
+  // lot timer — that is started by startLotTimerDisplay() once a barcode is
+  // actually entered, so the timer never appears before the barcode does.
   function startLotTiming() {
     barcodeStartedAt.current   = Date.now()
     lastInteractionRef.current = Date.now()
     lotIdleAccumRef.current    = 0
-    if (showScanTimer) setTimerActive(true)
     void checkIdleOnLotStart()
+  }
+
+  // Starts the little blue count-up timer. Called when the barcode first gets a
+  // value (typed / wedge-scanned / Next Barcode Number), never on bare focus.
+  function startLotTimerDisplay() {
+    if (!showLotTimer) return
+    if (lotTimerStartedAt.current == null) lotTimerStartedAt.current = Date.now()
+    setTimerActive(true)
   }
 
   async function submitIdleLog() {
@@ -901,6 +917,11 @@ export default function LotWizardTab({
     setTote(""); setVendor(""); setReceipt("")
     setToteInfo(null); setToteResults([]); setToteOpen(false); setToteIgnored(false); setVendorHint(null)
     setStep1LengthWarning(false); setValidErr("")
+    // Stop the blue lot timer while back on the Vendor & Tote step — there's no
+    // barcode being catalogued here, so it shouldn't be counting.
+    lotTimerStartedAt.current = null
+    setTimerActive(false)
+    setTimerSecs(0)
     setStep(1)
   }
 
@@ -979,6 +1000,7 @@ export default function LotWizardTab({
     const m = src.match(/(\d+)$/)
     if (!m) return
     if (!barcodeStartedAt.current) startLotTiming()
+    startLotTimerDisplay()
     setBarcode(src.slice(0, m.index) + String(parseInt(m[1]) + 1).padStart(m[1].length, "0"))
   }
 
@@ -1098,6 +1120,7 @@ export default function LotWizardTab({
         return
       }
       barcodeStartedAt.current = null
+      lotTimerStartedAt.current = null
       keyPointsAccumMs.current = 0
       keyPointsEnteredAt.current = null
       bumpActivity(Date.now())
@@ -1294,7 +1317,7 @@ export default function LotWizardTab({
         <span className={`font-mono font-bold text-[#2AB4A6] ${tablet ? "text-base" : "text-sm"}`}>{auction.code}</span>
         <span className={`text-gray-600 dark:text-gray-300 ${tablet ? "text-base" : "text-sm"}`}>{auction.name}</span>
         <div className="ml-auto flex items-center gap-4">
-          {timerActive && showScanTimer && (
+          {timerActive && showLotTimer && (
             <span className={`flex items-center gap-1.5 font-mono font-bold tabular-nums ${tablet ? "text-base" : "text-sm"}`}
               style={{ color: timerSecs > timerRedSecs ? "#ef4444" : "#2AB4A6" }}>
               <svg className="w-3.5 h-3.5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1494,6 +1517,9 @@ export default function LotWizardTab({
                 onChange={e => {
                 const v = e.target.value
                 if (v && !barcode && !barcodeStartedAt.current) startLotTiming()
+                // Blue lot timer starts on the first actual barcode character, not
+                // on focus — so it only appears once cataloguing has really begun.
+                if (v) startLotTimerDisplay()
                 setBarcode(v)
                 if (barcodeWarning) setBarcodeWarning(false)
                 if (dupeWarning) setDupeWarning(null)
