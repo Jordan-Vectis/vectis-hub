@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
-import { KEY_POINTS_INSTRUCTION } from "@/lib/key-points-instruction"
+import { KEY_POINTS_INSTRUCTION, KEY_POINTS_INSTRUCTION_RELAXED } from "@/lib/key-points-instruction"
 import { parseModelJson, extractJsonField } from "@/lib/model-json"
 import { getToolModel } from "@/lib/ai-models"
 
 export const maxDuration = 60
 
-const SYSTEM_INSTRUCTION = KEY_POINTS_INSTRUCTION
-
 // POST /api/auction-ai/key-points-check
 // Checks a single lot — label, keyPoints, description.
+// mode: "strict" (default — cataloguer's exact wording is authoritative) or
+// "relaxed" (facts must appear but may be reworded to keep sentences flowing).
 // Returns { revised, changed, missing, added } or { error }.
 // Always returns HTTP 200 — inspect the body for errors.
 export async function POST(req: NextRequest) {
@@ -21,11 +21,12 @@ export async function POST(req: NextRequest) {
   if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
 
   try {
-    const { label, keyPoints, description, model } = await req.json() as {
+    const { label, keyPoints, description, model, mode } = await req.json() as {
       label:       string
       keyPoints:   string
       description: string
       model?:      string
+      mode?:       "strict" | "relaxed"
     }
     if (!label || !keyPoints || !description) {
       return NextResponse.json({ error: "Missing label, keyPoints or description" }, { status: 400 })
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
     const genAI = new GoogleGenerativeAI(apiKey)
     const ai = genAI.getGenerativeModel({
       model: await getToolModel("catalogue_kpcheck", model),
-      systemInstruction: SYSTEM_INSTRUCTION,
+      systemInstruction: mode === "relaxed" ? KEY_POINTS_INSTRUCTION_RELAXED : KEY_POINTS_INSTRUCTION,
     })
 
     const prompt =

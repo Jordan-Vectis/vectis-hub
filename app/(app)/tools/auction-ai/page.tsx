@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect, useTransition, Fragment } from "react"
 import * as XLSX from "xlsx"
 import { DOUBLE_CHECK_INSTRUCTION } from "@/lib/double-check-instruction"
-import { KEY_POINTS_INSTRUCTION } from "@/lib/key-points-instruction"
+import { KEY_POINTS_INSTRUCTION, KEY_POINTS_INSTRUCTION_RELAXED } from "@/lib/key-points-instruction"
 import { applyAiDescriptionOne, applyAiEstimateOne, saveAiFlagNote } from "@/lib/actions/catalogue"
 import { showError } from "@/lib/error-modal"
 import { MacroTab } from "./macro-tab"
@@ -2278,26 +2278,10 @@ function InstructionsTab() {
 
 // ─── Key Points Check Tab ────────────────────────────────────────────────────
 
-const KP_SYSTEM_PROMPT = `You are a strict quality checker for auction house lot descriptions.
+// The instruction shown here is the REAL one from lib/key-points-instruction.ts —
+// an earlier hardcoded display copy silently drifted from what the route sent.
 
-Your task — follow these steps exactly:
-1. Read every key point the cataloguer recorded one by one.
-2. For each key point, decide: is this specific fact clearly and directly stated as its own point in the existing description?
-3. If ALL key points are present: return the description word-for-word unchanged.
-4. If ANY key point is missing: insert that fact naturally into the existing description with the minimum change necessary — do NOT rewrite, restructure, condense or remove any existing content.
-
-Critical rules:
-- Every single key point MUST appear in the final description — missing even one is a failure.
-- NEVER remove or shorten any existing detail from the description.
-- NEVER rewrite from scratch — only insert what is missing.
-- NEVER invent facts beyond what appears in the key points or the original description.
-- The final description must be at least as long as the original.
-- Partial word matches do NOT count. A key point is satisfied only if its specific meaning is explicitly stated. When in doubt, insert the key point — over-inclusion is always preferred over under-inclusion.
-- Short key points (3 words or fewer) are always specific condition or completeness notes and must appear explicitly.
-
-Responds as JSON: { "description": "...", "missing": "key points that were absent", "added": "one sentence on what was inserted" }`
-
-function HowItWorksPanel() {
+function HowItWorksPanel({ instruction }: { instruction: string }) {
   const [open,        setOpen]        = useState(false)
   const [showPrompt,  setShowPrompt]  = useState(false)
 
@@ -2326,7 +2310,7 @@ function HowItWorksPanel() {
             </button>
             {showPrompt && (
               <pre className="mt-2 text-xs text-gray-600 dark:text-gray-400 bg-white dark:bg-[#1C1C1E] rounded-lg p-3 whitespace-pre-wrap leading-relaxed font-mono">
-                {KP_SYSTEM_PROMPT}
+                {instruction}
               </pre>
             )}
           </div>
@@ -2362,6 +2346,12 @@ function KeyPointsCheckTab({ model: globalModel, fallbackModel, onModelChange }:
   const [progress,     setProgress]     = useState<{ done: number; total: number; current?: string } | null>(null)
   const [expandedLot,  setExpandedLot]  = useState<string | null>(null)
   const [localModel,   setLocalModel]   = useState(globalModel)
+  // Relaxed wording mode — key point FACTS must all appear but may be reworded to keep
+  // the sentences flowing (built for the Dolls & Bears descriptive style). Off = strict
+  // (the original behaviour: the cataloguer's exact wording is authoritative).
+  const [relaxed,      setRelaxed]      = useState<boolean>(() => {
+    try { return localStorage.getItem("kp_check_relaxed") === "true" } catch { return false }
+  })
 
   // Keep localModel in sync with sidebar dropdown changes
   useEffect(() => { setLocalModel(globalModel) }, [globalModel])
@@ -2543,7 +2533,7 @@ function KeyPointsCheckTab({ model: globalModel, fallbackModel, onModelChange }:
     setChecking(true)
     setLog([])
     const resuming = !forceAll && lots.some(l => l.status === "ok" || l.status === "fixed")
-    addLog(`── ${resuming ? "Resuming" : "Starting"} check: ${toCheck.length} lot${toCheck.length !== 1 ? "s" : ""} · model: ${localModel}`)
+    addLog(`── ${resuming ? "Resuming" : "Starting"} check: ${toCheck.length} lot${toCheck.length !== 1 ? "s" : ""} · model: ${localModel} · key points: ${relaxed ? "relaxed wording" : "exact wording"}`)
 
     // Reset only the lots being checked
     const toCheckIds = new Set(toCheck.map(l => l.id))
@@ -2587,7 +2577,7 @@ function KeyPointsCheckTab({ model: globalModel, fallbackModel, onModelChange }:
             const res = await fetch("/api/auction-ai/key-points-check", {
               method:  "POST",
               headers: { "Content-Type": "application/json" },
-              body:    JSON.stringify({ label: lot.label, keyPoints: lot.keyPoints, description: lot.description, model: modelToUse }),
+              body:    JSON.stringify({ label: lot.label, keyPoints: lot.keyPoints, description: lot.description, model: modelToUse, mode: relaxed ? "relaxed" : "strict" }),
             })
             const json = await res.json()
             if (json.error) throw new Error(json.error)
@@ -2724,7 +2714,7 @@ function KeyPointsCheckTab({ model: globalModel, fallbackModel, onModelChange }:
       </div>
 
       {/* How it works */}
-      <HowItWorksPanel />
+      <HowItWorksPanel instruction={relaxed ? KEY_POINTS_INSTRUCTION_RELAXED : KEY_POINTS_INSTRUCTION} />
 
       {/* Model selector */}
       <div className="bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-xl p-4 space-y-2">
@@ -2801,6 +2791,18 @@ function KeyPointsCheckTab({ model: globalModel, fallbackModel, onModelChange }:
             {loading ? "Loading…" : "Load"}
           </button>
         </div>
+        {/* Strict vs relaxed key-point wording */}
+        <label className={`inline-flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-colors ${relaxed ? "bg-purple-950/50 border-purple-600/60 text-purple-300" : "bg-gray-100 dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}
+          title="Ticked: every key point fact must still appear, but the AI may reword it to keep the sentences flowing (codes, editions and sizes stay exact). Unticked: key points are placed exactly as the cataloguer wrote them.">
+          <input type="checkbox" checked={relaxed}
+            onChange={e => {
+              const v = e.target.checked
+              setRelaxed(v)
+              try { localStorage.setItem("kp_check_relaxed", String(v)) } catch {}
+            }}
+            className="w-3.5 h-3.5 accent-purple-500" />
+          <span className="text-xs font-medium">✍️ Relaxed wording — key points may be rephrased to fit the sentences</span>
+        </label>
         {error && <p className="text-red-400 text-sm">{error}</p>}
         {lots.length > 0 && (
           <p className="text-xs text-[#C8A96E]">
@@ -3668,6 +3670,11 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   const [skipHasDesc, setSkipHasDesc] = useState(() => {
     try { return localStorage.getItem("pipeline_skip_described") === "true" } catch { return false }
   })
+  // Key Points stage wording mode — relaxed lets the checker reword key point facts to
+  // keep the sentences flowing (Dolls & Bears style) instead of pasting them verbatim.
+  const [kpRelaxed, setKpRelaxed] = useState(() => {
+    try { return localStorage.getItem("pipeline_kp_relaxed") === "true" } catch { return false }
+  })
   const codeRef  = useRef<HTMLDivElement>(null)
   const logRef   = useRef<HTMLDivElement>(null)
   const cancelRef = useRef(false)
@@ -4043,7 +4050,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     const alreadyDone  = currentLots.filter(l => l.kpStatus).length
     const noDesc       = currentLots.filter(l => !l.kpStatus && !l.currentDesc?.trim()).length
     const noKpField    = currentLots.filter(l => !l.kpStatus && l.currentDesc?.trim() && !l.keyPoints?.trim()).length
-    addLog(`── Stage 2: Key Points Check — ${toRun.length} to process`)
+    addLog(`── Stage 2: Key Points Check — ${toRun.length} to process · key points: ${kpRelaxed ? "relaxed wording" : "exact wording"}`)
     if (alreadyDone > 0) addLog(`   (${alreadyDone} already done from previous run)`)
     if (noDesc > 0)      addLog(`   (${noDesc} skipped — no description generated)`)
     if (noKpField > 0)   addLog(`   (${noKpField} skipped — no key points recorded on lot)`)
@@ -4070,7 +4077,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         if (attempt > 1) addLog(`  ↳ ${lot.label} trying ${modelToUse}`)
         const res  = await fetch("/api/auction-ai/key-points-check", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ label: lot.label, keyPoints: lot.keyPoints, description: lot.currentDesc, model: modelToUse }),
+          body: JSON.stringify({ label: lot.label, keyPoints: lot.keyPoints, description: lot.currentDesc, model: modelToUse, mode: kpRelaxed ? "relaxed" : "strict" }),
         })
         const json = await res.json()
         if (json.error) throw new Error(json.error)
@@ -4436,7 +4443,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         </p>
         <div className="mt-2 space-y-1">
           <p className="text-[11px] text-gray-600 dark:text-gray-500">Stage 1 (Batch) uses the Batch Preset selected below.</p>
-          <ShowInstructionToggle instruction={KEY_POINTS_INSTRUCTION}   label="Stage 2 — Key Points instructions" />
+          <ShowInstructionToggle instruction={kpRelaxed ? KEY_POINTS_INSTRUCTION_RELAXED : KEY_POINTS_INSTRUCTION} label={`Stage 2 — Key Points instructions (${kpRelaxed ? "relaxed" : "exact"} wording)`} />
           <ShowInstructionToggle instruction={DOUBLE_CHECK_INSTRUCTION} label="Stage 3 — Double Check instructions" />
         </div>
       </div>
@@ -4513,6 +4520,19 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
               }}
               className="w-3.5 h-3.5 accent-emerald-500" />
             <span className="text-xs font-medium">✍️ Skip lots that already have a description</span>
+          </label>
+
+          {/* Key Points stage: strict (verbatim key points) vs relaxed (reworded to flow) */}
+          <label className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border transition-colors ${kpRelaxed ? "bg-purple-950/50 border-purple-600/60 text-purple-300" : "bg-gray-100 dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-500"}`}
+            title="Ticked: the Key Points stage may reword key point facts so the sentences keep flowing (codes, editions and sizes stay exact). Unticked: key points are placed exactly as the cataloguer wrote them.">
+            <input type="checkbox" checked={kpRelaxed}
+              onChange={e => {
+                const v = e.target.checked
+                setKpRelaxed(v)
+                try { localStorage.setItem("pipeline_kp_relaxed", String(v)) } catch {}
+              }}
+              className="w-3.5 h-3.5 accent-purple-500" />
+            <span className="text-xs font-medium">📝 Relaxed key point wording</span>
           </label>
 
           {/* Auto-apply vs manual review — a segmented toggle so BOTH options are

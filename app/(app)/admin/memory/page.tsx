@@ -20,7 +20,7 @@ const ENTRIES: Entry[] = [
     content: `---
 name: Dolls & Bears descriptions — tuning
 purpose: The recurring model errors, the deterministic clean-up, the "Dolls & Bears check" upgrade mode, and why bold was dropped. Read before touching the Dolls/Bears instruction or batch/upgrade cleanup.
-last_updated: 2026-07-21
+last_updated: 2026-07-22
 ---
 
 # Dolls & Bears descriptions — tuning (2026-07-21)
@@ -38,7 +38,13 @@ Fixes (built 2026-07-21):
 
 ⚠ Keep the instruction LEAN (Jordan): the prompt goes in on every lot, so verbosity raises cost AND makes the model follow fewer rules. Slimmed to ~40% (judgement/format/estimate only); mechanical rules live in the clean-up. Applies to AI prompts generally.
 2. Instruction tightening for the judgement calls.
-3. New "🧸 Dolls & Bears check" AI Upgrade mode (dolls_bears_fix) — an AI pass over EXISTING descriptions fixing both, plus the clean-up. In the AI Upgrade tab and the pipeline's upgrade step.`,
+3. New "🧸 Dolls & Bears check" AI Upgrade mode (dolls_bears_fix) — an AI pass over EXISTING descriptions fixing both, plus the clean-up. In the AI Upgrade tab and the pipeline's upgrade step.
+
+## 2026-07-22 — descriptive-sentence restyle + KP strict/relaxed mode
+
+1. Instruction restyled to flowing sentences (modelled on onemorebear.co.uk): bullets KEPT, but each "• Name – " is now one or two descriptive sentences (measured auction tone — no gushing, no invented backstory, no he/she unless in key points), ending "Product code X, 16"/41cm." Edition woven in as "a limited edition of 6,000". Jordan pastes it into Auction AI → Instructions; still in the test loop.
+2. Root cause the restyle exposed: the Key Points stage was UNDOING the flowing style — KEY_POINTS_INSTRUCTION (lib/key-points-instruction.ts) replaces approximate phrasing with the cataloguer's exact wording, crunching sentences back to telegraphic fragments.
+3. Built strict/relaxed KP mode: new KEY_POINTS_INSTRUCTION_RELAXED (same file, same JSON contract) lets the checker reword key-point FACTS to fit the sentences; names/codes/editions/sizes stay character-exact; layout/bullets preserved. /api/auction-ai/key-points-check takes mode "strict"|"relaxed" (absent = strict = old behaviour). Tickboxes on BOTH the KP Check tab (localStorage kp_check_relaxed) and the Auto Pipeline options row (pipeline_kp_relaxed). The instruction viewers (pipeline ShowInstructionToggle + KP tab HowItWorksPanel) show the ACTIVE variant — the stale hardcoded KP_SYSTEM_PROMPT display copy was deleted.`,
   },
   {
     filename: "idle_report.md",
