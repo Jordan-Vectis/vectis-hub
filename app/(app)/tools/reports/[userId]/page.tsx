@@ -154,10 +154,16 @@ export default async function ReportsUserPage({
   ])
   const excludedDays = new Set(excludedDayRows.map(r => r.day))
 
-  // Need the user name even if no logs in range — fetch one unfiltered log
-  const anyLog = await prisma.catalogueTimingLog.findFirst({ where: { userId } })
-  if (!anyLog) notFound()
-  const userName = anyLog.userName
+  // Resolve the display name even when this person has no timing logs. The
+  // overview list unions timing-log AND research-log users, so a research-only
+  // cataloguer appears there but has zero CatalogueTimingLog rows — keying the
+  // name (and the 404) off a timing log wrongly 404'd them when clicked. Take the
+  // name from the User record, falling back to any log's denormalised copy. Only
+  // 404 on a genuinely unknown user id (a stale/bad URL), never on "no lots in
+  // this range" — the page already has empty-state cards for that.
+  const userRow  = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } })
+  const userName = userRow?.name ?? rawLogs[0]?.userName ?? researchLogs[0]?.userName ?? idleLogs[0]?.userName
+  if (!userName) notFound()
 
   // Resolve each log's lotId to the real lot, then EXCLUDE orphaned logs (a lotId
   // that matches no lot — phantom "deleted lot" rows) so they never count or

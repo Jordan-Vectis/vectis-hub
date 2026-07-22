@@ -101,7 +101,7 @@ The decision log is the point: once on production it will show exactly what his 
     content: `---
 name: Exclude days from a cataloguer's report — report-only, admin
 purpose: How admins hide odd/half days from a report so they don't skew the average. Read before touching the reports tool.
-last_updated: 2026-07-21
+last_updated: 2026-07-22
 ---
 
 # Exclude days from a cataloguer's report (2026-07-21) — NEEDS RUN MIGRATIONS
@@ -112,7 +112,10 @@ Admins can hide a single working day from ONE cataloguer's performance report so
 - **Storage:** ReportExcludedDay table — userId, day ("YYYY-MM-DD" London key), excludedBy…, unique (userId, day). NEEDS Run Migrations.
 - **Action:** lib/actions/reports.ts → toggleReportExcludedDay(userId, day). ADMIN-gated, returns {ok,error} (never throws).
 - **Effect — dropped from EVERY figure, in BOTH places:** the individual page filters logs to an "included" set for all stats/cards/splits/detail tables (the Daily Breakdown keeps the full set, tagging each day excluded, so the row stays visible with a Restore button; chart + header totals use included only); the overview list Daily-Avg column + charts add \`AND NOT EXISTS (ReportExcludedDay …)\` to their SQL. Deploy-skew-safe: the SQL clause is gated on to_regclass so it no-ops before Run Migrations, and the individual fetch is .catch(() => []).
-- **NOT changed:** the Excel export — still raw per-day data.`,
+- **NOT changed:** the Excel export — still raw per-day data.
+
+## ⚠ Research-only cataloguers 404'd the detail page (fixed 2026-07-22)
+/tools/reports/[userId]/page.tsx keyed the display name AND its notFound() off a timing log (\`anyLog = catalogueTimingLog.findFirst({where:{userId}}); if (!anyLog) notFound()\`). But the overview list unions timing-log AND research-log users, so someone with ResearchLog rows but zero CatalogueTimingLog appeared in the list and 404'd when clicked. Fix: resolve userName from the User record (user.findUnique) with fallbacks to rawLogs/researchLogs/idleLogs[0].userName, and only notFound() when the name is genuinely unresolvable (bad URL) — never on "no lots in range". Don't reintroduce the timing-log-only gate. It surfaced right after a prod deploy so it looked like deploy skew, but was a real latent bug (a hard refresh did NOT clear it).`,
   },
   {
     filename: "idle_gaps_detector.md",
