@@ -54,8 +54,8 @@ type MiniNode = { id: string; label: string; defender: string; taking: boolean; 
 type MapSlot = { key: string; x: number; y: number; hint: string }
 const MAP_SLOTS: MapSlot[] = [
   { key: "boss_top", x: 50, y: 7,   hint: "BOSS" },
-  { key: "boss_ul",  x: 36, y: 15,  hint: "" },
-  { key: "boss_ur",  x: 64, y: 15,  hint: "" },
+  { key: "boss_ul",  x: 36, y: 15,  hint: "L↑" },
+  { key: "boss_ur",  x: 64, y: 15,  hint: "R↑" },
   { key: "boss_ll",  x: 36, y: 27,  hint: "L" },
   { key: "boss_lr",  x: 64, y: 27,  hint: "R" },
   { key: "pb_l",     x: 36, y: 66,  hint: "L" },
@@ -493,8 +493,10 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                 // Recommend mode: the AI's chosen slots (from the last plan) glow green.
                 const recommendedSlots = new Set((path?.miniRecs ?? []).map((r) => r.slot))
                 const isLive = (m: MiniNode) => miniMode === "pick" ? m.taking : !!(m.slot && recommendedSlots.has(m.slot))
-                // Placed candidate nodes (the selectable sections) for the recommend grid.
-                const CAND_SLOTS = ["pa_l", "pa_c", "pa_r", "pb_l", "pb_c", "pb_r", "pc_l", "pc_c", "pc_r", "boss_ll", "boss_lr"]
+                // Placed candidate nodes (defenders needed on all of them). The boss
+                // island lists all 5 — you go up one side, so the AI needs the
+                // defenders on both sides + the boss to recommend which way.
+                const CAND_SLOTS = ["pa_l", "pa_c", "pa_r", "pb_l", "pb_c", "pb_r", "pc_l", "pc_c", "pc_r", "boss_top", "boss_ul", "boss_ur", "boss_ll", "boss_lr"]
                 const candidates = CAND_SLOTS.map((sk) => bySlot.get(sk)).filter((m): m is MiniNode => !!m)
                 // The section a slot belongs to, and the node number parsed from its
                 // label — so the list below can read in walking/node order (you take
@@ -506,13 +508,18 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                 // by node number (fallback: fixed Path A→B→C→Boss / L→C→R order).
                 const clusterOrderFallback = ["Path A", "Path B", "Path C", "Boss"]
                 const sideOrder = (slot: string | null) => (slot?.endsWith("_l") || slot === "boss_ll" ? 0 : slot?.endsWith("_c") ? 1 : 2)
+                // Boss island reads Left (upper, lower), Right (upper, lower), Boss.
+                const bossOrder: Record<string, number> = { boss_ul: 0, boss_ll: 1, boss_ur: 2, boss_lr: 3, boss_top: 4 }
                 const groupClusters = (list: MiniNode[]) => {
                   const by = new Map<string, MiniNode[]>()
                   for (const m of list) { const sec = sectionOf(m.slot); if (!sec) continue; if (!by.has(sec)) by.set(sec, []); by.get(sec)!.push(m) }
                   const clusters = [...by.entries()].map(([section, nodes]) => ({
                     section,
-                    nodes: nodes.sort((a, b) => nodeNum(a.label) - nodeNum(b.label) || sideOrder(a.slot) - sideOrder(b.slot)),
-                    min: Math.min(...nodes.map((n) => nodeNum(n.label))),
+                    nodes: nodes.sort((a, b) => section === "Boss"
+                      ? (bossOrder[a.slot ?? ""] ?? 9) - (bossOrder[b.slot ?? ""] ?? 9)
+                      : (nodeNum(a.label) - nodeNum(b.label) || sideOrder(a.slot) - sideOrder(b.slot))),
+                    // Boss sorts LAST (it's the end of the run); paths by min node number.
+                    min: section === "Boss" ? Infinity : Math.min(...nodes.map((n) => nodeNum(n.label))),
                   }))
                   return clusters.sort((a, b) => a.min - b.min || clusterOrderFallback.indexOf(a.section) - clusterOrderFallback.indexOf(b.section))
                 }
@@ -712,7 +719,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                           <p className="text-[10px] uppercase tracking-widest opacity-50">Candidate defenders — who&apos;s on each this war (take one per cluster)</p>
                           {groupClusters(candidates).map((cluster) => (
                             <div key={cluster.section} className="space-y-1.5">
-                              <p className="text-[10px] uppercase tracking-widest text-[#38b6ff]/80">{cluster.section} <span className="opacity-50 text-white">· take one</span></p>
+                              <p className="text-[10px] uppercase tracking-widest text-[#38b6ff]/80">{cluster.section} <span className="opacity-50 text-white">· {cluster.section === "Boss" ? "go left or right" : "take one"}</span></p>
                               <div className="grid gap-2 sm:grid-cols-3">
                                 {cluster.nodes.map((m) => {
                                   const cls = defClass(m.defender)

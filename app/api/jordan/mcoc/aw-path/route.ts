@@ -50,24 +50,33 @@ export async function POST(req: NextRequest) {
     ]
 
     // ── Recommend mode: build the candidate minis grouped by section ──
-    // 1 must be taken from each of Path A / B / C, and one of the two Boss nodes.
-    const SECTION_OF = (slot: string | null): { section: string; side: string } | null => {
+    // One mini from each of Path A / B / C, plus a SIDE of the boss island (you go
+    // up left OR right: each side is an upper node + a lower node; node 50 is the
+    // boss, fought either way). bossRole tags which boss node is which.
+    const SECTION_OF = (slot: string | null): { section: string; side: string; bossRole: string } | null => {
       if (!slot) return null
-      const side = slot.endsWith("_l") ? "L" : slot.endsWith("_c") ? "C" : slot.endsWith("_r") ? "R" : slot === "boss_ll" ? "L" : slot === "boss_lr" ? "R" : ""
-      if (slot.startsWith("pa_")) return { section: "Path A", side }
-      if (slot.startsWith("pb_")) return { section: "Path B", side }
-      if (slot.startsWith("pc_")) return { section: "Path C", side }
-      if (slot === "boss_ll" || slot === "boss_lr") return { section: "Boss", side }
+      const side = slot.endsWith("_l") ? "L" : slot.endsWith("_c") ? "C" : slot.endsWith("_r") ? "R" : ""
+      if (slot.startsWith("pa_")) return { section: "Path A", side, bossRole: "" }
+      if (slot.startsWith("pb_")) return { section: "Path B", side, bossRole: "" }
+      if (slot.startsWith("pc_")) return { section: "Path C", side, bossRole: "" }
+      if (slot === "boss_ul") return { section: "Boss", side: "L", bossRole: "upper" }
+      if (slot === "boss_ll") return { section: "Boss", side: "L", bossRole: "lower" }
+      if (slot === "boss_ur") return { section: "Boss", side: "R", bossRole: "upper" }
+      if (slot === "boss_lr") return { section: "Boss", side: "R", bossRole: "lower" }
+      if (slot === "boss_top") return { section: "Boss", side: "", bossRole: "boss" }
       return null
     }
-    type Candidate = { id: string; slot: string; section: string; side: string; label: string; defender: string; nodesImageKey: string | null }
+    type Candidate = { id: string; slot: string; section: string; side: string; bossRole: string; label: string; defender: string; nodesImageKey: string | null }
     const candidates: Candidate[] = miniMode === "recommend"
       ? allMinis.flatMap((m) => {
           const sec = SECTION_OF(m.slot)
           if (!sec || !m.defender.trim() || !m.slot) return []
-          return [{ id: m.id, slot: m.slot, section: sec.section, side: sec.side, label: m.label, defender: m.defender, nodesImageKey: m.nodesImageKey }]
+          return [{ id: m.id, slot: m.slot, section: sec.section, side: sec.side, bossRole: sec.bossRole, label: m.label, defender: m.defender, nodesImageKey: m.nodesImageKey }]
         })
       : []
+    const pathCandidates = candidates.filter((c) => c.section !== "Boss")
+    const bossCandidates = candidates.filter((c) => c.section === "Boss")
+    const bossNode = (side: string, role: string) => bossCandidates.find((c) => c.bossRole === role && (role === "boss" || c.side === side))
 
     if (!withDef.length && !candidates.length) return NextResponse.json({ error: "Add at least one fight with a defender." }, { status: 400 })
     if (rosterRows.length < 3) return NextResponse.json({ error: "Your roster needs at least 3 champions." }, { status: 400 })
@@ -91,27 +100,42 @@ export async function POST(req: NextRequest) {
       fightLines.push(`${i + 1}. ${miniTag}${f.defender}${hasImage ? " — nodes in the image labelled FIGHT " + (i + 1) : ""}`)
     }
 
-    // Recommend mode: attach each candidate mini's photo and build a grouped block
-    // the AI reads to choose one node per section.
+    // Recommend mode: attach each candidate's photo (labelled by slot so the model
+    // can't confuse them) and build a grouped text block. Paths = take one; the
+    // boss island = go up one side.
     const miniCandidateBlock: string[] = []
     if (candidates.length) {
-      const order = ["Path A", "Path B", "Path C", "Boss"]
-      for (const section of order) {
-        const list = candidates.filter((c) => c.section === section)
+      const attach = async (c: Candidate): Promise<boolean> => {
+        if (!c.nodesImageKey) return false
+        try {
+          const buf = await getObjectBuffer(c.nodesImageKey)
+          parts.push({ text: `MINI CANDIDATE — ${c.slot} (${c.defender}):` })
+          parts.push({ inlineData: { data: buf.toString("base64"), mimeType: "image/jpeg" } })
+          return true
+        } catch { return false }
+      }
+      for (const section of ["Path A", "Path B", "Path C"]) {
+        const list = pathCandidates.filter((c) => c.section === section)
         if (!list.length) continue
-        miniCandidateBlock.push(`${section}:`)
+        miniCandidateBlock.push(`${section} (take ONE):`)
         for (const c of list) {
-          let hasImg = false
-          if (c.nodesImageKey) {
-            try {
-              const buf = await getObjectBuffer(c.nodesImageKey)
-              parts.push({ text: `MINI CANDIDATE — ${c.section} ${c.side} (${c.defender}):` })
-              parts.push({ inlineData: { data: buf.toString("base64"), mimeType: "image/jpeg" } })
-              hasImg = true
-            } catch { /* image missing/unreadable — defender + tier only */ }
-          }
-          miniCandidateBlock.push(`  - ${c.side}: ${c.defender}${c.label ? ` [${c.label}]` : ""}${hasImg ? ` — node buffs in the image labelled MINI CANDIDATE — ${c.section} ${c.side}` : ""}`)
+          const img = await attach(c)
+          miniCandidateBlock.push(`  - ${c.side}: ${c.defender}${c.label ? ` [${c.label}]` : ""}${img ? ` — buffs in image MINI CANDIDATE — ${c.slot}` : ""}`)
         }
+      }
+      if (bossCandidates.length) {
+        miniCandidateBlock.push(`Boss island (go up ONE side — left OR right, not both):`)
+        const describe = async (role: string, side: string, tag: string) => {
+          const c = bossNode(side, role)
+          if (!c) return
+          const img = await attach(c)
+          miniCandidateBlock.push(`  - ${tag}: ${c.defender}${c.label ? ` [${c.label}]` : ""}${img ? ` — buffs in image MINI CANDIDATE — ${c.slot}` : ""}`)
+        }
+        await describe("upper", "L", "LEFT side, upper node")
+        await describe("lower", "L", "LEFT side, lower node")
+        await describe("upper", "R", "RIGHT side, upper node")
+        await describe("lower", "R", "RIGHT side, lower node")
+        await describe("boss", "", "BOSS (fought whichever side you pick)")
       }
     }
 
@@ -145,9 +169,11 @@ Give the player OPTIONS:
 1. TWO or THREE different 3-champion attack teams from the roster that could each clear this whole path — each genuinely different, and each built around the player's max-rank champs where they fit${forcedIn.length ? ", and using the must-use attackers wherever they fit" : ""}. Short name + one-line game plan.
 2. For EACH fight, the 2–3 BEST attackers from the roster for that specific defender + its nodes (best first), each with a short note on how. The BEST pick should be the strongest suitable champion the player actually has well-ranked.
 ${candidates.length ? `
-MINI BOSS SELECTION — the player takes EXACTLY ONE mini from each of Path A, Path B, Path C, and ONE of the two Boss nodes (L or R): 4 minis total. Here are the candidates with the defender on each this war:
+MINI BOSS SELECTION — the player takes ONE mini from each of Path A, Path B, Path C, and goes up ONE SIDE of the boss island (left or right). Here are the candidates with the defender on each this war:
 ${miniCandidateBlock.join("\n")}
-Choose the single BEST node to take in EACH of Path A, Path B, Path C, and the better of Boss L / Boss R — the set that is EASIEST for this roster. PREFER nodes that the attackers/teams you recommended for the PATH above can ALSO clear, so the player needs no extra champions beyond their path team. For each chosen mini return its section, side (L/C/R for the paths, L/R for the boss), the defender, the single best attacker from the roster, and a short why. Read each candidate's node buffs from its image where one is attached.
+Choose the single BEST node in EACH of Path A, Path B, Path C — the set that is EASIEST for this roster. Then choose the better BOSS SIDE (left or right): compare the two nodes on the LEFT (upper + lower) against the two on the RIGHT, and pick the side that is easier for this roster overall. PREFER nodes/side that the attackers/teams you recommended for the PATH above can ALSO clear, so the player needs no extra champions. Read each candidate's node buffs from its image where one is attached.
+For the PATHS: return "miniRecs" (one per path) — section, side (L/C/R), the single best attacker, a short why.
+For the BOSS: return "bossRec" — which side, why, and the best attacker for that side's UPPER node, its LOWER node, and the BOSS itself.
 ` : ""}
 Return STRICT JSON only (no prose, no markdown):
 {
@@ -161,8 +187,9 @@ Return STRICT JSON only (no prose, no markdown):
     { "attacker": string, "fights": [ { "fight": number, "rating": "best" | "good" | "risky" | "avoid", "how": string } ] }
   ],   // one entry per must-use attacker, EXACT name; "fight" = the fight number (1-based); include every fight you rate good enough to mention, best ratings first` : ""}${candidates.length ? `
   "miniRecs": [
-    { "section": "Path A" | "Path B" | "Path C" | "Boss", "side": "L" | "C" | "R", "defender": string, "attacker": string, "why": string }
-  ],   // EXACTLY one per section (Path A, Path B, Path C, Boss = 4). "side" must be one of that section's listed candidates. Boss uses L or R only.` : ""}
+    { "section": "Path A" | "Path B" | "Path C", "side": "L" | "C" | "R", "attacker": string, "why": string }
+  ],   // EXACTLY one per path (3 total). "side" must be one of that path's listed candidates.
+  "bossRec": { "side": "Left" | "Right", "why": string, "upper": string, "lower": string, "boss": string },   // the side to go up + best attacker for that side's upper node, lower node, and the boss. Use "" for a node that has no defender listed.` : ""}
   "risks": string,
   "notes": string
 }
@@ -207,25 +234,34 @@ Rules: 2 or 3 teams, exactly 3 champions each, names copied from the roster. One
         }))
       : []
 
-    // Recommend mode: resolve the AI's section+side picks back to the real
-    // candidate nodes (for the slot/id to highlight on the map). One per section.
-    const SECTIONS = ["Path A", "Path B", "Path C", "Boss"]
-    const miniRecs = candidates.length
-      ? SECTIONS.map((section) => {
-          const raw = (Array.isArray(parsed?.miniRecs) ? parsed.miniRecs : []).find((r: any) => String(r?.section) === section)
-          if (!raw) return null
-          const side = String(raw?.side ?? "").toUpperCase()
-          const cand = candidates.find((c) => c.section === section && c.side === side)
-            ?? candidates.find((c) => c.section === section)   // fall back to any candidate in the section
-          if (!cand) return null
-          return {
-            section, side: cand.side, slot: cand.slot, nodeId: cand.id, label: cand.label,
-            defender: cand.defender,
-            attacker: typeof raw?.attacker === "string" ? raw.attacker.trim().slice(0, 60) : "?",
-            why: typeof raw?.why === "string" ? raw.why.slice(0, 300) : "",
-          }
-        }).filter(Boolean)
-      : []
+    // Recommend mode: resolve the AI's picks back to the real candidate nodes (for
+    // the slot/id to highlight on the map). One per path + the chosen boss side.
+    const mk = (section: string, cand: Candidate | undefined, attacker: any, why: any) =>
+      cand ? { section, side: cand.side, slot: cand.slot, nodeId: cand.id, label: cand.label, defender: cand.defender,
+               attacker: typeof attacker === "string" && attacker.trim() ? attacker.trim().slice(0, 60) : "?",
+               why: typeof why === "string" ? why.slice(0, 300) : "" } : null
+    let miniRecs: any[] = []
+    if (candidates.length) {
+      for (const section of ["Path A", "Path B", "Path C"]) {
+        const raw = (Array.isArray(parsed?.miniRecs) ? parsed.miniRecs : []).find((r: any) => String(r?.section) === section)
+        if (!raw) continue
+        const side = String(raw?.side ?? "").toUpperCase()
+        const cand = pathCandidates.find((c) => c.section === section && c.side === side) ?? pathCandidates.find((c) => c.section === section)
+        const entry = mk(section, cand, raw?.attacker, raw?.why)
+        if (entry) miniRecs.push(entry)
+      }
+      // Boss side — take the chosen side's upper + lower nodes + the boss.
+      const br = parsed?.bossRec
+      if (br && bossCandidates.length) {
+        const side = String(br?.side ?? "").toLowerCase().startsWith("r") ? "R" : "L"
+        const label = side === "R" ? "Right" : "Left"
+        // The side rationale (why) sits on the first boss node only, not repeated.
+        const upper = mk("Boss", bossNode(side, "upper"), br?.upper, br?.why)
+        const lower = mk("Boss", bossNode(side, "lower"), br?.lower, "")
+        const boss  = mk("Boss", bossNode("", "boss"), br?.boss, "")
+        for (const e of [upper, lower, boss]) if (e) miniRecs.push({ ...e, side: label })
+      }
+    }
 
     return NextResponse.json({
       teams, fights: fightsOut, forced: forcedOut, miniRecs,
