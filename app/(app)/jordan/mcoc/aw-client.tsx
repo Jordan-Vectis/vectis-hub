@@ -31,8 +31,15 @@ const RATING_COL: Record<string, string> = {
 }
 
 type ForcedPlan = { attacker: string; fights: { fight: number; defender: string; rating: string; how: string }[] }
-type MiniRec = { section: string; side: string; slot: string; label: string; defender: string; attacker: string; why: string }
-type TeamPathStep = { fight: number; defender: string; miniLabel?: string | null; attacker: string; how: string }
+type MiniRec = { section: string; side: string; slot: string; label: string; defender: string; attacker: string; confidence?: string; why: string }
+type TeamPathStep = { fight: number; defender: string; miniLabel?: string | null; attacker: string; confidence?: string; how: string }
+
+// How confident the pick is — "possible but unlikely" is a legitimate answer.
+const CONF_COL: Record<string, { label: string; cls: string }> = {
+  good:     { label: "solid",     cls: "border-emerald-500 text-emerald-400" },
+  risky:    { label: "risky",     cls: "border-amber-500 text-amber-400" },
+  unlikely: { label: "long shot", cls: "border-orange-500 text-orange-400" },
+}
 type PathResult = {
   teams: { name: string; summary: string; champions: { champion: string; why: string }[]; path?: TeamPathStep[] }[]
   fights: { defender: string; miniLabel?: string | null; nodeBuff?: string; options: { attacker: string; how: string }[] }[]
@@ -840,7 +847,12 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                                       <span className="text-white/80">{s.defender}</span>
                                       <span className="opacity-40">→</span>
                                       {s.attacker
-                                        ? <span className="text-[#33ff66] font-semibold">{s.attacker}</span>
+                                        ? <>
+                                            <span className={`font-semibold ${s.confidence === "unlikely" ? "text-orange-300" : s.confidence === "risky" ? "text-amber-300" : "text-[#33ff66]"}`}>{s.attacker}</span>
+                                            {s.confidence && CONF_COL[s.confidence] && s.confidence !== "good" && (
+                                              <span className={`text-[8px] font-bold uppercase tracking-wider px-1 py-0.5 rounded border shrink-0 ${CONF_COL[s.confidence].cls}`}>{CONF_COL[s.confidence].label}</span>
+                                            )}
+                                          </>
                                         : <span className="text-red-400 font-semibold">no safe pick</span>}
                                     </div>
                                     {s.how && <p className="opacity-55 mt-0.5 ml-1 leading-snug">{s.how}</p>}
@@ -870,7 +882,12 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                           <div className="flex items-start gap-2">
                             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded mt-0.5 shrink-0 text-black" style={{ background: GREEN }}>TAKE</span>
                             <div className="min-w-0">
-                              <ChampInline name={r.attacker} />
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <ChampInline name={r.attacker} />
+                                {r.confidence && CONF_COL[r.confidence] && r.confidence !== "good" && (
+                                  <span className={`text-[8px] font-bold uppercase tracking-wider px-1 py-0.5 rounded border shrink-0 ${CONF_COL[r.confidence].cls}`}>{CONF_COL[r.confidence].label}</span>
+                                )}
+                              </div>
                               {r.why && <p className="text-xs opacity-70 mt-0.5">{r.why}</p>}
                             </div>
                           </div>

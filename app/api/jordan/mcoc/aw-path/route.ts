@@ -200,10 +200,10 @@ ${parts.length ? `\nNODES (important): each fight above with an image has a scre
 THE PLAYER'S ROSTER (sorted STRONGEST FIRST; pick ONLY from this list, names copied exactly):
 ${rosterList}
 
-ACCURACY RULES — these OVERRIDE everything else. Wrong picks are worse than useless:
-- **CLASS.** The class wheel is: Cosmic > Tech > Mutant > Skill > Science > Mystic > Cosmic (each beats the next). Each champion's class is in [square brackets]; each defender's class is in its fact note. NEVER recommend an attacker that is at a class DISADVANTAGE into a defender (e.g. a Science attacker into a Skill defender) UNLESS that exact champion is a widely-known specialised counter for that specific defender — and if you do, say why in the "how". Prefer class ADVANTAGE, then class-neutral.
-- **VERIFIED COUNTERS.** Where a defender's fact note lists "VERIFIED counters you own: …", those are champions the player has PERSONALLY CONFIRMED beat that defender. Treat them as the correct answer — the BEST option for that fight must come from that list whenever one is in the roster/team. Do not override a verified counter with a guess.
-- **BE HONEST — never invent a pick.** If NO champion in the roster can safely take a fight (all class-disadvantaged and none is a known counter), say so plainly in that fight's note AND in "notes" ("no safe answer in your roster for <defender>"). Do NOT put a champion there just to fill the slot. A stated gap is far more useful than a wrong pick.
+ACCURACY RULES — these OVERRIDE everything else. Wrong picks dressed up as safe are worse than useless:
+- **CLASS.** The class wheel is: Cosmic > Tech > Mutant > Skill > Science > Mystic > Cosmic (each beats the next). Each champion's class is in [square brackets]; each defender's class is in its fact note. A class-DISADVANTAGED attacker (e.g. Science into a Skill defender) must NEVER be presented as a confident pick — do not mark it "good". If it is the only thing the roster has, you may still offer it but marked "risky" or "unlikely" with the class problem named in the "how". Prefer class ADVANTAGE, then class-neutral.
+- **VERIFIED COUNTERS.** Where a defender's fact note lists "VERIFIED counters you own: …", those are champions the player has PERSONALLY CONFIRMED beat that defender. Treat them as the correct answer — the pick for that fight should come from that list whenever one is in the roster/team, and it earns "good" confidence. Do not override a verified counter with a guess.
+- **RATE CONFIDENCE — be honest, but don't refuse too readily.** Every pick carries a "confidence": "good" (a solid, reliable answer — class-favoured or a verified counter), "risky" (doable but needs careful play or a marginal/awkward matchup), or "unlikely" (probably won't clear it, but it's the best the roster has — "possible but unlikely"). It is FINE and USEFUL to return a champion marked "risky" or "unlikely" — that is far more helpful than refusing. Only set "attacker": "" (no pick) when the roster genuinely has NOTHING that could even attempt it. A whole set of minis often can't be matched cleanly — say "unlikely" for the awkward ones rather than pretending they're easy.
 
 HOW TO PICK:
 - **Rank is a huge signal.** A champion marked ⭐ TOP is at MAX rank — the player's biggest investment, highest damage and best sustain. STRONGLY prefer these where they are a sensible pick. Do NOT recommend a rank-1/2 champion as "best" over a maxed champion that can do the same job.${topChamps.length ? ` The player's max-rank champs are: ${topChamps.join(", ")} — a good plan uses several of these.` : ""}
@@ -214,7 +214,7 @@ ${forcedIn.length ? `\nMUST-USE ATTACKERS: the player specifically wants to brin
 For EACH must-use attacker, judge it against EVERY fight on the path and report which fights it is a viable attacker for, with a rating. Where a must-use attacker is a good pick for a fight, prefer it in that fight's normal options and in the teams too. Be honest — if a must-use attacker is a poor/dangerous choice for a fight, rate it "avoid" and say why; do not pretend it works everywhere. Also note in "notes" any fight that NONE of the must-use attackers can safely take.\n` : ""}
 Give the player 2 or 3 TEAMS, each a complete plan:
 1. Each team = 3 champions from the roster, genuinely different from the other teams, built around the max-rank champs${forcedIn.length ? " and the must-use attackers" : ""}. Give it a short name + one-line game plan.
-2. For EACH team, ASSIGN which of its 3 champions takes EACH numbered fight above (its "path") — the attacker for a fight MUST be one of that team's 3 champions, class-legal (see ACCURACY RULES), with a short "how". Every fight must be covered; if that team has no safe answer for a fight, put "attacker": "" and say so in the "how".
+2. For EACH team, ASSIGN which of its 3 champions takes EACH numbered fight above (its "path") — the attacker MUST be one of that team's 3 champions, with a short "how" and a "confidence" ("good" / "risky" / "unlikely" — see ACCURACY RULES). Every fight must be covered; only put "attacker": "" if that team genuinely has nothing that could attempt it.
 3. ALSO give, for EACH fight, the 2–3 overall BEST attackers from the whole roster (the "fights" detail, best first) — same accuracy rules.
 ${candidates.length ? `
 MINI BOSS SELECTION — the player takes ONE mini from each of Path A, Path B, Path C, and goes up ONE SIDE of the boss island (left or right). Here are the candidates with the defender on each this war:
@@ -228,9 +228,9 @@ Return STRICT JSON only (no prose, no markdown):
   "teams": [
     { "name": string, "summary": string,
       "champions": [ { "champion": string, "why": string } ],
-      "path": [ { "fight": number, "attacker": string, "how": string } ]
+      "path": [ { "fight": number, "attacker": string, "confidence": "good" | "risky" | "unlikely", "how": string } ]
     }
-  ],   // 2-3 teams. "path" = one entry per numbered fight (1-based, EVERY fight); "attacker" is one of this team's 3 champions or "" if no safe answer.
+  ],   // 2-3 teams. "path" = one entry per numbered fight (1-based, EVERY fight); "attacker" is one of this team's 3 champions or "" only if nothing could attempt it.
   "fights": [
     { "defender": string, "nodeBuff": string, "options": [ { "attacker": string, "how": string } ] }
   ],${forcedIn.length ? `
@@ -238,9 +238,9 @@ Return STRICT JSON only (no prose, no markdown):
     { "attacker": string, "fights": [ { "fight": number, "rating": "best" | "good" | "risky" | "avoid", "how": string } ] }
   ],   // one entry per must-use attacker, EXACT name; "fight" = the fight number (1-based); include every fight you rate good enough to mention, best ratings first` : ""}${candidates.length ? `
   "miniRecs": [
-    { "section": "Path A" | "Path B" | "Path C", "side": "L" | "C" | "R", "attacker": string, "why": string }
-  ],   // EXACTLY one per path (3 total). "side" must be one of that path's listed candidates.
-  "bossRec": { "side": "Left" | "Right", "why": string, "upper": string, "lower": string, "boss": string },   // the side to go up + best attacker for that side's upper node, lower node, and the boss. Use "" for a node that has no defender listed.` : ""}
+    { "section": "Path A" | "Path B" | "Path C", "side": "L" | "C" | "R", "attacker": string, "confidence": "good" | "risky" | "unlikely", "why": string }
+  ],   // EXACTLY one per path (3 total). "side" = the EASIEST node in that path for the roster. confidence per ACCURACY RULES.
+  "bossRec": { "side": "Left" | "Right", "confidence": "good" | "risky" | "unlikely", "why": string, "upper": string, "lower": string, "boss": string },   // the side to go up + best attacker for that side's upper node, lower node, and the boss. "" for a node with no defender listed.` : ""}
   "risks": string,
   "notes": string
 }
@@ -252,6 +252,7 @@ Rules: 2 or 3 teams, exactly 3 champions each, names copied from the roster. One
     let groundedFallback = false
     const parsed = await groundedJson(parts.length ? [...parts, { text: prompt }] : prompt, form.get("model") as string | null, () => { groundedFallback = true })
 
+    const CONF = ["good", "risky", "unlikely"]
     const teams = (Array.isArray(parsed?.teams) ? parsed.teams : []).slice(0, 3).map((t: any) => ({
       name: typeof t?.name === "string" ? t.name.trim().slice(0, 60) : "",
       summary: typeof t?.summary === "string" ? t.summary.slice(0, 300) : "",
@@ -265,6 +266,7 @@ Rules: 2 or 3 teams, exactly 3 champions each, names copied from the roster. One
         defender: withDef[(Number(p?.fight) || 0) - 1]?.defender ?? "",
         miniLabel: withDef[(Number(p?.fight) || 0) - 1]?.miniLabel ?? null,
         attacker: typeof p?.attacker === "string" ? p.attacker.trim().slice(0, 60) : "",
+        confidence: CONF.includes(String(p?.confidence).toLowerCase()) ? String(p?.confidence).toLowerCase() : "good",
         how: typeof p?.how === "string" ? p.how.slice(0, 300) : "",
       })).filter((p: { fight: number }) => p.fight >= 1).sort((a: any, b: any) => a.fight - b.fight),
     })).filter((t: { champions: unknown[] }) => t.champions.length)
@@ -295,9 +297,11 @@ Rules: 2 or 3 teams, exactly 3 champions each, names copied from the roster. One
 
     // Recommend mode: resolve the AI's picks back to the real candidate nodes (for
     // the slot/id to highlight on the map). One per path + the chosen boss side.
-    const mk = (section: string, cand: Candidate | undefined, attacker: any, why: any) =>
+    const conf = (c: any) => CONF.includes(String(c).toLowerCase()) ? String(c).toLowerCase() : "good"
+    const mk = (section: string, cand: Candidate | undefined, attacker: any, why: any, confidence: any) =>
       cand ? { section, side: cand.side, slot: cand.slot, nodeId: cand.id, label: cand.label, defender: cand.defender,
                attacker: typeof attacker === "string" && attacker.trim() ? attacker.trim().slice(0, 60) : "?",
+               confidence: conf(confidence),
                why: typeof why === "string" ? why.slice(0, 300) : "" } : null
     let miniRecs: any[] = []
     if (candidates.length) {
@@ -306,7 +310,7 @@ Rules: 2 or 3 teams, exactly 3 champions each, names copied from the roster. One
         if (!raw) continue
         const side = String(raw?.side ?? "").toUpperCase()
         const cand = pathCandidates.find((c) => c.section === section && c.side === side) ?? pathCandidates.find((c) => c.section === section)
-        const entry = mk(section, cand, raw?.attacker, raw?.why)
+        const entry = mk(section, cand, raw?.attacker, raw?.why, raw?.confidence)
         if (entry) miniRecs.push(entry)
       }
       // Boss side — take the chosen side's upper + lower nodes + the boss.
@@ -314,10 +318,10 @@ Rules: 2 or 3 teams, exactly 3 champions each, names copied from the roster. One
       if (br && bossCandidates.length) {
         const side = String(br?.side ?? "").toLowerCase().startsWith("r") ? "R" : "L"
         const label = side === "R" ? "Right" : "Left"
-        // The side rationale (why) sits on the first boss node only, not repeated.
-        const upper = mk("Boss", bossNode(side, "upper"), br?.upper, br?.why)
-        const lower = mk("Boss", bossNode(side, "lower"), br?.lower, "")
-        const boss  = mk("Boss", bossNode("", "boss"), br?.boss, "")
+        // The side rationale (why) + confidence sit on the first boss node only.
+        const upper = mk("Boss", bossNode(side, "upper"), br?.upper, br?.why, br?.confidence)
+        const lower = mk("Boss", bossNode(side, "lower"), br?.lower, "", br?.confidence)
+        const boss  = mk("Boss", bossNode("", "boss"), br?.boss, "", br?.confidence)
         for (const e of [upper, lower, boss]) if (e) miniRecs.push({ ...e, side: label })
       }
     }
