@@ -5,6 +5,18 @@ import { isJordan } from "@/lib/jordan-auth"
 import { groundedJson } from "@/lib/mcoc-ai"
 import { getObjectBuffer } from "@/lib/r2"
 import { friendlyGeminiError } from "@/lib/gemini-retry"
+import { normChampName } from "@/lib/mcoc"
+
+// The MCOC class wheel: attacker class → the class it has ADVANTAGE over.
+// Used so the planner can be told which of the player's champs are class-favoured
+// against each defender (and which are at a disadvantage — never recommend those).
+const BEATS: Record<string, string> = { Cosmic: "Tech", Tech: "Mutant", Mutant: "Skill", Skill: "Science", Science: "Mystic", Mystic: "Cosmic" }
+function classMatchup(attacker: string, defender: string): "advantage" | "disadvantage" | "neutral" {
+  if (!attacker || !defender) return "neutral"
+  if (BEATS[attacker] === defender) return "advantage"
+  if (BEATS[defender] === attacker) return "disadvantage"
+  return "neutral"
+}
 
 export const maxDuration = 180
 
@@ -35,15 +47,16 @@ export async function POST(req: NextRequest) {
       prisma.mcocMiniNode.findMany({ where: { ownerId: session.user.id }, orderBy: { order: "asc" } })
         .catch(() => [] as { id: string; label: string; defender: string; taking: boolean; slot: string | null; nodesImageKey: string | null }[]),
       // Strongest first — primes the model and lets us flag the top-rank champs.
-      prisma.mcocChampion.findMany({ where: { ownerId: session.user.id }, select: { name: true, stars: true, rank: true }, orderBy: [{ rank: "desc" }, { stars: "desc" }] }),
+      prisma.mcocChampion.findMany({ where: { ownerId: session.user.id }, select: { name: true, class: true, stars: true, rank: true }, orderBy: [{ rank: "desc" }, { stars: "desc" }] }),
     ])
+    const rosterClass = new Map(rosterRows.map((c) => [normChampName(c.name), c.class]))
+    const rosterNorms = new Set(rosterRows.map((c) => normChampName(c.name)))
 
-    // Which minis feed the MAIN plan: in pick mode, the ticked ones (as before);
-    // in recommend mode, none — the AI chooses them separately (below).
+    // Which minis feed the MAIN plan: pick mode = the ticked ones; recommend mode
+    // = the AI chooses them separately (below).
     const takingMinis = miniMode === "pick" ? allMinis.filter((m) => m.taking && m.defender.trim()) : []
-
-    // Path fights first, then (pick mode) this war's selected mini bosses — one
-    // combined list so the plan (teams, per-fight options, must-use) covers both.
+    // The numbered fight list = path fights, then (pick mode) the ticked minis.
+    // Teams are assigned a champ per numbered fight ("path" in the output).
     const withDef = [
       ...pathFights.filter((f) => f.defender.trim()).map((f) => ({ defender: f.defender, nodesImageKey: f.nodesImageKey, miniLabel: null as string | null })),
       ...takingMinis.map((m) => ({ defender: m.defender, nodesImageKey: m.nodesImageKey, miniLabel: m.label || "Mini boss" })),
@@ -78,8 +91,37 @@ export async function POST(req: NextRequest) {
     const bossCandidates = candidates.filter((c) => c.section === "Boss")
     const bossNode = (side: string, role: string) => bossCandidates.find((c) => c.bossRole === role && (role === "boss" || c.side === side))
 
-    if (!withDef.length && !candidates.length) return NextResponse.json({ error: "Add at least one fight with a defender." }, { status: 400 })
+    if (!withDef.length && !candidates.length) return NextResponse.json({ error: "Add at least one fight or mini with a defender." }, { status: 400 })
     if (rosterRows.length < 3) return NextResponse.json({ error: "Your roster needs at least 3 champions." }, { status: 400 })
+
+    // ── Ground truth for accuracy: each defender's class + immunities + the
+    // player's OWN verified counters (myCounters). We feed these so the AI picks
+    // from confirmed answers and respects class, instead of guessing (which gave
+    // impossible picks like a class-disadvantaged Silk into Yelena).
+    const defenderNames = [...new Set([...withDef.map((f) => f.defender), ...candidates.map((c) => c.defender)].map((d) => d.trim()).filter(Boolean))]
+    const profiles = await prisma.mcocChampionProfile.findMany({
+      where: { nameNorm: { in: defenderNames.map(normChampName) } },
+      select: { nameNorm: true, class: true, immunities: true, myCounters: true, counters: true },
+    }).catch(() => [] as { nameNorm: string; class: string; immunities: string[]; myCounters: string[]; counters: string[] }[])
+    const profByNorm = new Map(profiles.map((p) => [p.nameNorm, p]))
+    // A compact fact line for a defender: class, immunities, and — the big one —
+    // the player's verified counters that are actually in their roster.
+    const defenderFacts = (defender: string): string => {
+      const p = profByNorm.get(normChampName(defender))
+      if (!p) return ""
+      const bits: string[] = []
+      if (p.class) bits.push(`${p.class} class`)
+      if (p.immunities?.length) bits.push(`immune to ${p.immunities.slice(0, 6).join("/")}`)
+      const mine = (p.myCounters ?? []).filter((c) => rosterNorms.has(normChampName(c)))
+      if (mine.length) bits.push(`VERIFIED counters you own: ${mine.join(", ")}`)
+      // Which roster champs hold a class ADVANTAGE here (helps steer + flag disadvantage).
+      if (p.class) {
+        const fav = rosterRows.filter((c) => classMatchup(c.class, p.class) === "advantage").map((c) => c.name)
+        if (fav.length) bits.push(`class-favoured in your roster: ${fav.slice(0, 10).join(", ")}`)
+      }
+      return bits.length ? `  [${bits.join(" · ")}]` : ""
+    }
+    const anyVerified = profiles.some((p) => (p.myCounters ?? []).some((c) => rosterNorms.has(normChampName(c))))
 
     // Each fight's nodes photo becomes a labelled image part the AI reads for the
     // node buffs. A fight with no photo just relies on the defender + tier.
@@ -97,7 +139,7 @@ export async function POST(req: NextRequest) {
         } catch { /* image missing/unreadable — fall back to defender + tier */ }
       }
       const miniTag = f.miniLabel ? `MINI BOSS (${f.miniLabel}) — ` : ""
-      fightLines.push(`${i + 1}. ${miniTag}${f.defender}${hasImage ? " — nodes in the image labelled FIGHT " + (i + 1) : ""}`)
+      fightLines.push(`${i + 1}. ${miniTag}${f.defender}${hasImage ? " — nodes in the image labelled FIGHT " + (i + 1) : ""}${defenderFacts(f.defender)}`)
     }
 
     // Recommend mode: attach each candidate's photo (labelled by slot so the model
@@ -120,7 +162,7 @@ export async function POST(req: NextRequest) {
         miniCandidateBlock.push(`${section} (take ONE):`)
         for (const c of list) {
           const img = await attach(c)
-          miniCandidateBlock.push(`  - ${c.side}: ${c.defender}${c.label ? ` [${c.label}]` : ""}${img ? ` — buffs in image MINI CANDIDATE — ${c.slot}` : ""}`)
+          miniCandidateBlock.push(`  - ${c.side}: ${c.defender}${c.label ? ` [${c.label}]` : ""}${img ? ` — buffs in image MINI CANDIDATE — ${c.slot}` : ""}${defenderFacts(c.defender)}`)
         }
       }
       if (bossCandidates.length) {
@@ -129,7 +171,7 @@ export async function POST(req: NextRequest) {
           const c = bossNode(side, role)
           if (!c) return
           const img = await attach(c)
-          miniCandidateBlock.push(`  - ${tag}: ${c.defender}${c.label ? ` [${c.label}]` : ""}${img ? ` — buffs in image MINI CANDIDATE — ${c.slot}` : ""}`)
+          miniCandidateBlock.push(`  - ${tag}: ${c.defender}${c.label ? ` [${c.label}]` : ""}${img ? ` — buffs in image MINI CANDIDATE — ${c.slot}` : ""}${defenderFacts(c.defender)}`)
         }
         await describe("upper", "L", "LEFT side, upper node")
         await describe("lower", "L", "LEFT side, lower node")
@@ -145,7 +187,7 @@ export async function POST(req: NextRequest) {
     const rosterList = rosterRows
       .map((c) => {
         const badge = c.rank >= 5 ? "  ⭐ TOP (max rank)" : c.rank === 4 ? "  ◆ high rank" : ""
-        return `- ${c.name}${c.stars ? ` (${c.stars}★ R${c.rank})` : ""}${badge}`
+        return `- ${c.name} [${c.class || "?"}]${c.stars ? ` (${c.stars}★ R${c.rank})` : ""}${badge}`
       })
       .join("\n")
     const topChamps = rosterRows.filter((c) => c.rank >= 5).map((c) => c.name)
@@ -158,16 +200,22 @@ ${parts.length ? `\nNODES (important): each fight above with an image has a scre
 THE PLAYER'S ROSTER (sorted STRONGEST FIRST; pick ONLY from this list, names copied exactly):
 ${rosterList}
 
-HOW TO PICK — read carefully, this is where most tools get it wrong:
-- **Rank is a huge signal.** A champion marked ⭐ TOP is at MAX rank — the player's biggest investment, highest damage and best sustain. STRONGLY prefer these as attackers wherever they are a sensible pick, and build your team options AROUND them. Do NOT bury a maxed champion under lower-rank picks, and do NOT recommend a rank-1/2 champion as "best" over a maxed champion that can do the same job.${topChamps.length ? ` The player's max-rank champs are: ${topChamps.join(", ")} — a good plan uses several of these.` : ""}
-- **Use CURRENT meta.** Judge each champion by how it performs in the game NOW — recently-released or recently-buffed champions are frequently among the very best attackers. Do not under-rate a champion because older data rated it low.
-- A champion that is BOTH max-rank AND a strong current-meta pick for a fight should almost always be the BEST option for that fight.
+ACCURACY RULES — these OVERRIDE everything else. Wrong picks are worse than useless:
+- **CLASS.** The class wheel is: Cosmic > Tech > Mutant > Skill > Science > Mystic > Cosmic (each beats the next). Each champion's class is in [square brackets]; each defender's class is in its fact note. NEVER recommend an attacker that is at a class DISADVANTAGE into a defender (e.g. a Science attacker into a Skill defender) UNLESS that exact champion is a widely-known specialised counter for that specific defender — and if you do, say why in the "how". Prefer class ADVANTAGE, then class-neutral.
+- **VERIFIED COUNTERS.** Where a defender's fact note lists "VERIFIED counters you own: …", those are champions the player has PERSONALLY CONFIRMED beat that defender. Treat them as the correct answer — the BEST option for that fight must come from that list whenever one is in the roster/team. Do not override a verified counter with a guess.
+- **BE HONEST — never invent a pick.** If NO champion in the roster can safely take a fight (all class-disadvantaged and none is a known counter), say so plainly in that fight's note AND in "notes" ("no safe answer in your roster for <defender>"). Do NOT put a champion there just to fill the slot. A stated gap is far more useful than a wrong pick.
+
+HOW TO PICK:
+- **Rank is a huge signal.** A champion marked ⭐ TOP is at MAX rank — the player's biggest investment, highest damage and best sustain. STRONGLY prefer these where they are a sensible pick. Do NOT recommend a rank-1/2 champion as "best" over a maxed champion that can do the same job.${topChamps.length ? ` The player's max-rank champs are: ${topChamps.join(", ")} — a good plan uses several of these.` : ""}
+- **Use CURRENT meta.** Judge each champion by how it performs NOW — recently-released or recently-buffed champions are frequently among the very best attackers.
+- A champion that is class-favoured (or a verified counter), max-rank AND a strong current-meta pick should be the BEST option for that fight.
 
 ${forcedIn.length ? `\nMUST-USE ATTACKERS: the player specifically wants to bring these champions and needs to know which fights each one handles: ${forcedIn.join(", ")}.
 For EACH must-use attacker, judge it against EVERY fight on the path and report which fights it is a viable attacker for, with a rating. Where a must-use attacker is a good pick for a fight, prefer it in that fight's normal options and in the teams too. Be honest — if a must-use attacker is a poor/dangerous choice for a fight, rate it "avoid" and say why; do not pretend it works everywhere. Also note in "notes" any fight that NONE of the must-use attackers can safely take.\n` : ""}
-Give the player OPTIONS:
-1. TWO or THREE different 3-champion attack teams from the roster that could each clear this whole path — each genuinely different, and each built around the player's max-rank champs where they fit${forcedIn.length ? ", and using the must-use attackers wherever they fit" : ""}. Short name + one-line game plan.
-2. For EACH fight, the 2–3 BEST attackers from the roster for that specific defender + its nodes (best first), each with a short note on how. The BEST pick should be the strongest suitable champion the player actually has well-ranked.
+Give the player 2 or 3 TEAMS, each a complete plan:
+1. Each team = 3 champions from the roster, genuinely different from the other teams, built around the max-rank champs${forcedIn.length ? " and the must-use attackers" : ""}. Give it a short name + one-line game plan.
+2. For EACH team, ASSIGN which of its 3 champions takes EACH numbered fight above (its "path") — the attacker for a fight MUST be one of that team's 3 champions, class-legal (see ACCURACY RULES), with a short "how". Every fight must be covered; if that team has no safe answer for a fight, put "attacker": "" and say so in the "how".
+3. ALSO give, for EACH fight, the 2–3 overall BEST attackers from the whole roster (the "fights" detail, best first) — same accuracy rules.
 ${candidates.length ? `
 MINI BOSS SELECTION — the player takes ONE mini from each of Path A, Path B, Path C, and goes up ONE SIDE of the boss island (left or right). Here are the candidates with the defender on each this war:
 ${miniCandidateBlock.join("\n")}
@@ -178,8 +226,11 @@ For the BOSS: return "bossRec" — which side, why, and the best attacker for th
 Return STRICT JSON only (no prose, no markdown):
 {
   "teams": [
-    { "name": string, "summary": string, "champions": [ { "champion": string, "why": string } ] }
-  ],
+    { "name": string, "summary": string,
+      "champions": [ { "champion": string, "why": string } ],
+      "path": [ { "fight": number, "attacker": string, "how": string } ]
+    }
+  ],   // 2-3 teams. "path" = one entry per numbered fight (1-based, EVERY fight); "attacker" is one of this team's 3 champions or "" if no safe answer.
   "fights": [
     { "defender": string, "nodeBuff": string, "options": [ { "attacker": string, "how": string } ] }
   ],${forcedIn.length ? `
@@ -208,6 +259,14 @@ Rules: 2 or 3 teams, exactly 3 champions each, names copied from the roster. One
         champion: typeof c?.champion === "string" ? c.champion.trim().slice(0, 60) : "?",
         why: typeof c?.why === "string" ? c.why.slice(0, 300) : "",
       })),
+      // Which of this team's champs takes each numbered fight (the assignment).
+      path: (Array.isArray(t?.path) ? t.path : []).slice(0, withDef.length).map((p: any) => ({
+        fight: Number(p?.fight) || 0,
+        defender: withDef[(Number(p?.fight) || 0) - 1]?.defender ?? "",
+        miniLabel: withDef[(Number(p?.fight) || 0) - 1]?.miniLabel ?? null,
+        attacker: typeof p?.attacker === "string" ? p.attacker.trim().slice(0, 60) : "",
+        how: typeof p?.how === "string" ? p.how.slice(0, 300) : "",
+      })).filter((p: { fight: number }) => p.fight >= 1).sort((a: any, b: any) => a.fight - b.fight),
     })).filter((t: { champions: unknown[] }) => t.champions.length)
 
     const fightsOut = (Array.isArray(parsed?.fights) ? parsed.fights : []).slice(0, withDef.length + 2).map((f: any, i: number) => ({

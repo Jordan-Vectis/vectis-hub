@@ -32,8 +32,9 @@ const RATING_COL: Record<string, string> = {
 
 type ForcedPlan = { attacker: string; fights: { fight: number; defender: string; rating: string; how: string }[] }
 type MiniRec = { section: string; side: string; slot: string; label: string; defender: string; attacker: string; why: string }
+type TeamPathStep = { fight: number; defender: string; miniLabel?: string | null; attacker: string; how: string }
 type PathResult = {
-  teams: { name: string; summary: string; champions: { champion: string; why: string }[] }[]
+  teams: { name: string; summary: string; champions: { champion: string; why: string }[]; path?: TeamPathStep[] }[]
   fights: { defender: string; miniLabel?: string | null; nodeBuff?: string; options: { attacker: string; how: string }[] }[]
   forced?: ForcedPlan[]
   miniRecs?: MiniRec[]
@@ -103,6 +104,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
   const [pathBusy, setPathBusy] = useState(false)
   const [pathErr, setPathErr] = useState<string | null>(null)
   const [path, setPath] = useState<PathResult | null>(null)
+  const [showPlanDetail, setShowPlanDetail] = useState(false)   // collapsible fight-by-fight + must-use
   const [uploadingId, setUploadingId] = useState<string | null>(null)   // fight whose photo is uploading
   const fightPhotoInput = useRef<HTMLInputElement>(null)
   const pickForFight = useRef<string | null>(null)                      // which fight the file picker is for
@@ -803,11 +805,61 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                     recently-buffed champs. Try again, or switch model above for better picks.
                   </p>
                 )}
-                {/* Recommended minis (recommend mode) — 1 per path + a boss side. */}
+                {/* ── TEAMS — the main view: 3 teams, each with how it takes the whole path ── */}
+                {path.teams.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] uppercase tracking-widest opacity-50">Your team options — each shows how it takes the whole path</p>
+                    <div className="grid gap-3 lg:grid-cols-3">
+                      {path.teams.map((t, i) => (
+                        <div key={i} className="border-2 border-[#33ff66] rounded-lg p-3 space-y-2.5">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-[#0a2214] border border-[#33ff66] shrink-0">TEAM {String.fromCharCode(65 + i)}</span>
+                            <p className="text-sm font-bold text-white truncate">{t.name || `Team ${i + 1}`}</p>
+                          </div>
+                          {/* The 3 champs as chips */}
+                          <div className="flex flex-wrap gap-1.5">
+                            {t.champions.map((c, j) => (
+                              <span key={j} className="inline-flex items-center gap-1 text-xs px-1.5 py-1 rounded border border-[#1f5c33]">
+                                {ownedByName.get(normChampName(c.champion))?.imageUrl && <img src={ownedByName.get(normChampName(c.champion))!.imageUrl!} alt="" width={18} height={18} className="rounded object-cover" />}
+                                <span className="text-white">{c.champion}</span>
+                              </span>
+                            ))}
+                          </div>
+                          {t.summary && <p className="text-[11px] opacity-60">{t.summary}</p>}
+                          {/* How this team takes the path — the assignment */}
+                          {t.path && t.path.length > 0 && (
+                            <div className="space-y-1 pt-1.5 border-t border-[#1f5c33]/70">
+                              <p className="text-[9px] uppercase tracking-widest opacity-40">The path</p>
+                              {t.path.map((s, j) => {
+                                const dcls = defClass(s.defender)
+                                return (
+                                  <div key={j} className="text-xs">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className={`text-[9px] font-bold px-1 py-0.5 rounded border shrink-0 ${s.miniLabel ? "border-amber-400 text-amber-300" : "border-[#1f5c33] opacity-60"}`}>{s.miniLabel ? `👑 ${s.miniLabel}` : `F${s.fight}`}</span>
+                                      {dcls && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: classColour(dcls) }} title={dcls} />}
+                                      <span className="text-white/80">{s.defender}</span>
+                                      <span className="opacity-40">→</span>
+                                      {s.attacker
+                                        ? <span className="text-[#33ff66] font-semibold">{s.attacker}</span>
+                                        : <span className="text-red-400 font-semibold">no safe pick</span>}
+                                    </div>
+                                    {s.how && <p className="opacity-55 mt-0.5 ml-1 leading-snug">{s.how}</p>}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recommended minis (recommend mode) — the global node picks + side. */}
                 {path.miniRecs && path.miniRecs.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-[10px] uppercase tracking-widest opacity-50">👑 Recommended minis — take these this war</p>
-                    <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                       {path.miniRecs.map((r, i) => (
                         <div key={i} className="border border-amber-400/60 rounded-lg px-3 py-2 text-sm">
                           <p className="flex items-center gap-1.5 flex-wrap mb-1">
@@ -828,90 +880,72 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                   </div>
                 )}
 
-                {/* Must-use attackers → which fights each handles. Shown first —
-                    it's what Jordan asked the plan for. */}
-                {path.forced && path.forced.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-[10px] uppercase tracking-widest opacity-50">🎯 Your must-use attackers — which fights they handle</p>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {path.forced.map((f, i) => (
-                        <div key={i} className="border border-[#33ff66] rounded-lg p-3 space-y-2">
-                          <ChampInline name={f.attacker} />
-                          {f.fights.length === 0 ? (
-                            <p className="text-[11px] text-red-400">No good fight for this one on this path.</p>
-                          ) : (
-                            <div className="space-y-1.5">
-                              {f.fights.map((x, j) => (
-                                <div key={j} className="flex items-start gap-2 text-xs">
-                                  <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border shrink-0 mt-0.5 ${RATING_COL[x.rating] ?? RATING_COL.good}`}>{x.rating}</span>
-                                  <div className="min-w-0">
-                                    <span className="text-white">Fight {x.fight}</span>
-                                    {x.defender && <span className="opacity-60"> · {x.defender}</span>}
-                                    {x.how && <p className="opacity-70 mt-0.5">{x.how}</p>}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {path.risks && <p className="text-xs text-amber-300">⚠ {path.risks}</p>}
+                {path.notes && <p className="text-xs opacity-60">💡 {path.notes}</p>}
 
-                {path.teams.length > 0 && (
-                  <>
-                    <p className="text-[10px] uppercase tracking-widest opacity-50">Team options — pick whichever suits you</p>
-                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                      {path.teams.map((t, i) => (
-                        <div key={i} className="border border-[#33ff66] rounded-lg p-3 space-y-2">
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#0a2214] border border-[#33ff66] shrink-0">{String.fromCharCode(65 + i)}</span>
-                            <p className="text-sm font-bold text-white">{t.name || `Team ${i + 1}`}</p>
-                          </div>
-                          {t.summary && <p className="text-xs opacity-70">{t.summary}</p>}
-                          <div className="space-y-1.5 pt-0.5">
-                            {t.champions.map((c, j) => (
-                              <div key={j}>
-                                <ChampInline name={c.champion} />
-                                {c.why && <p className="text-[11px] opacity-60 mt-0.5">{c.why}</p>}
+                {/* ── Collapsible detail: fight-by-fight best options + must-use ── */}
+                <button onClick={() => setShowPlanDetail((v) => !v)}
+                  className="text-[11px] uppercase tracking-widest opacity-60 hover:opacity-100 transition-opacity">
+                  {showPlanDetail ? "▾ Hide" : "▸ Show"} more detail — best options per fight{path.forced?.length ? " + your must-use attackers" : ""}
+                </button>
+                {showPlanDetail && (
+                  <div className="space-y-3 border-l border-[#1f5c33] pl-3">
+                    {path.forced && path.forced.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] uppercase tracking-widest opacity-50">🎯 Your must-use attackers — which fights they handle</p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {path.forced.map((f, i) => (
+                            <div key={i} className="border border-[#33ff66] rounded-lg p-3 space-y-2">
+                              <ChampInline name={f.attacker} />
+                              {f.fights.length === 0 ? (
+                                <p className="text-[11px] text-red-400">No good fight for this one on this path.</p>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  {f.fights.map((x, j) => (
+                                    <div key={j} className="flex items-start gap-2 text-xs">
+                                      <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border shrink-0 mt-0.5 ${RATING_COL[x.rating] ?? RATING_COL.good}`}>{x.rating}</span>
+                                      <div className="min-w-0">
+                                        <span className="text-white">Fight {x.fight}</span>
+                                        {x.defender && <span className="opacity-60"> · {x.defender}</span>}
+                                        {x.how && <p className="opacity-70 mt-0.5">{x.how}</p>}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-[10px] uppercase tracking-widest opacity-50">Fight by fight — best options for each</p>
+                    <div className="grid gap-2 lg:grid-cols-2">
+                      {path.fights.map((f, i) => (
+                        <div key={i} className="border border-[#1f5c33] rounded-lg px-3 py-2 text-sm">
+                          <p className="flex items-center gap-1.5 flex-wrap mb-1">
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${f.miniLabel ? "border-amber-400 text-amber-300" : "border-[#1f5c33] opacity-80"}`}>
+                              {f.miniLabel ? `👑 MINI — ${f.miniLabel}` : `FIGHT ${i + 1}`}
+                            </span>
+                            <span className="text-white font-bold">{f.defender}</span>
+                          </p>
+                          {f.nodeBuff && <p className="text-[11px] text-amber-300 mb-1.5">⚡ {f.nodeBuff}</p>}
+                          <div className="space-y-1.5">
+                            {f.options.map((o, j) => (
+                              <div key={j} className="flex items-start gap-2">
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded mt-0.5 shrink-0 ${j === 0 ? "text-black" : "border border-[#1f5c33] opacity-60"}`}
+                                  style={j === 0 ? { background: GREEN } : undefined}>{j === 0 ? "BEST" : `#${j + 1}`}</span>
+                                <div className="min-w-0">
+                                  <ChampInline name={o.attacker} />
+                                  {o.how && <p className="text-xs opacity-70 mt-0.5">{o.how}</p>}
+                                </div>
                               </div>
                             ))}
                           </div>
                         </div>
                       ))}
                     </div>
-                  </>
+                  </div>
                 )}
-
-                <p className="text-[10px] uppercase tracking-widest opacity-50">Fight by fight — best options for each</p>
-                <div className="grid gap-2 lg:grid-cols-2">
-                  {path.fights.map((f, i) => (
-                    <div key={i} className="border border-[#1f5c33] rounded-lg px-3 py-2 text-sm">
-                      <p className="flex items-center gap-1.5 flex-wrap mb-1">
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${f.miniLabel ? "border-amber-400 text-amber-300" : "border-[#1f5c33] opacity-80"}`}>
-                          {f.miniLabel ? `👑 MINI — ${f.miniLabel}` : `FIGHT ${i + 1}`}
-                        </span>
-                        <span className="text-white font-bold">{f.defender}</span>
-                      </p>
-                      {f.nodeBuff && <p className="text-[11px] text-amber-300 mb-1.5">⚡ {f.nodeBuff}</p>}
-                      <div className="space-y-1.5">
-                        {f.options.map((o, j) => (
-                          <div key={j} className="flex items-start gap-2">
-                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded mt-0.5 shrink-0 ${j === 0 ? "text-black" : "border border-[#1f5c33] opacity-60"}`}
-                              style={j === 0 ? { background: GREEN } : undefined}>{j === 0 ? "BEST" : `#${j + 1}`}</span>
-                            <div className="min-w-0">
-                              <ChampInline name={o.attacker} />
-                              {o.how && <p className="text-xs opacity-70 mt-0.5">{o.how}</p>}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {path.risks && <p className="text-xs text-amber-300">⚠ {path.risks}</p>}
-                {path.notes && <p className="text-xs opacity-60">💡 {path.notes}</p>}
               </div>
             )}
           </div>
