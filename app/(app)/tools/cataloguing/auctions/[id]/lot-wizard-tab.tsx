@@ -464,6 +464,9 @@ export default function LotWizardTab({
   const [idleTouchOrder,   setIdleTouchOrder] = useState<string[]>([])
   const [idleTotes,        setIdleTotes]      = useState("")
   const [idleNotesMap,     setIdleNotesMap]   = useState<Record<string, string>>({})
+  // Tapping "Other" first shows a reminder to use a listed option if one fits —
+  // Other is only selected once they confirm none of them do.
+  const [idleOtherWarn,    setIdleOtherWarn]  = useState(false)
   const [idleSubmitting,   setIdleSubmitting] = useState(false)
   const [idleReasons,      setIdleReasons]    = useState<IdleReason[]>(DEFAULT_REASONS)
   // The idle log failed to save — shown in the popup. We do NOT wave the user
@@ -586,6 +589,7 @@ export default function LotWizardTab({
     setIdleTouchOrder([])
     setIdleTotes("")
     setIdleNotesMap({})
+    setIdleOtherWarn(false)
     setIdleError(null)
     setIdlePopup(true)
   }
@@ -670,10 +674,11 @@ export default function LotWizardTab({
   }
 
   // Smallest time a selected reason can be given (they picked it, so it got SOME
-  // time) — 30s, or an equal share when the whole gap is tiny.
+  // time) — 1 minute (the popup works in whole minutes), or an equal share when
+  // the whole gap is tiny.
   function idleMinSegMs(): number {
     const totalMs = idleSecs * 1000
-    return Math.min(30_000, Math.max(1000, Math.floor(totalMs / Math.max(idleSelected.length, 1))))
+    return Math.min(60_000, Math.max(1000, Math.floor(totalMs / Math.max(idleSelected.length, 1))))
   }
 
   // Divide the gap between the selected reasons. Pinned values (slider the user
@@ -687,7 +692,11 @@ export default function LotWizardTab({
     const untouched = idleSelected.filter(k => idlePinned[k] == null)
     const pinnedSum = idleSelected.reduce((s, k) => s + (idlePinned[k] ?? 0), 0)
     const remaining = Math.max(0, totalMs - pinnedSum)
-    const evenMs    = untouched.length ? Math.floor(remaining / untouched.length / 1000) * 1000 : 0
+    // Untouched reasons share the remainder in whole minutes (falling back to
+    // seconds only when the gap is too small for that); the last one absorbs the
+    // odd seconds, which the rounded-up display then presents as whole minutes.
+    let evenMs = untouched.length ? Math.floor(remaining / untouched.length / 60_000) * 60_000 : 0
+    if (untouched.length && evenMs < 1000) evenMs = Math.floor(remaining / untouched.length / 1000) * 1000
     const lastTouched = [...idleTouchOrder].reverse().find(k => idleSelected.includes(k))
     return idleSelected.map(k => {
       if (idlePinned[k] == null) {
@@ -711,7 +720,7 @@ export default function LotWizardTab({
     const current = new Map(idleSegments().map(s => [s.reason, s.durationMs]))
     const othersPinned  = idleSelected.filter(k => k !== key && idlePinned[k] != null)
     const othersFlexing = idleSelected.filter(k => k !== key && idlePinned[k] == null)
-    let v = Math.max(MIN, Math.round(rawMs / 1000) * 1000)
+    let v = Math.max(MIN, Math.round(rawMs / 60_000) * 60_000)   // pins snap to whole minutes
     if (othersFlexing.length > 0) {
       const cap = totalMs - othersPinned.reduce((s, k) => s + idlePinned[k], 0) - othersFlexing.length * MIN
       v = Math.min(v, Math.max(MIN, cap))
@@ -1220,11 +1229,12 @@ export default function LotWizardTab({
     })
   }
 
+  // Whole minutes, ROUNDED UP — the popup deliberately shows no seconds
+  // (Jordan 2026-07-23: "remove the seconds and just round up").
   function fmtIdleDuration(secs: number) {
-    const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60
-    if (h > 0) return `${h}h ${m}m ${s}s`
-    if (m > 0) return `${m}m ${s}s`
-    return `${s}s`
+    const mins = Math.max(1, Math.ceil(secs / 60))
+    const h = Math.floor(mins / 60), m = mins % 60
+    return h > 0 ? `${h}h ${m}m` : `${m}m`
   }
   // The "from … to …" gap window. HH:MM each end, but when the gap crosses
   // midnight (an early finish yesterday + a late start today) each side gets its
@@ -1252,7 +1262,7 @@ export default function LotWizardTab({
         const segMs  = new Map(segs.map(s => [s.reason, s.durationMs]))
         const multi  = idleSelected.length > 1
         const totalGapMs = idleSecs * 1000
-        const sliderStep = totalGapMs <= 5 * 60_000 ? 15_000 : totalGapMs <= 60 * 60_000 ? 30_000 : 60_000
+        const sliderStep = 60_000   // whole minutes — the popup shows no seconds
         // A note is missing when a selected reason requires one (or lunch ran over
         // an hour of ITS OWN allocated time) and nothing has been typed for it.
         const missingNote = (k: string) => {
@@ -1286,7 +1296,11 @@ export default function LotWizardTab({
                 const on = idleSelected.includes(opt.key)
                 return (
                   <button key={opt.key}
-                    onClick={() => setIdleSelected(sel => on ? sel.filter(k => k !== opt.key) : [...sel, opt.key])}
+                    onClick={() => {
+                      // Selecting "Other" goes via the reminder first; deselecting is instant.
+                      if (!on && opt.key === "OTHER") { setIdleOtherWarn(true); return }
+                      setIdleSelected(sel => on ? sel.filter(k => k !== opt.key) : [...sel, opt.key])
+                    }}
                     className={`py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
                       on
                         ? "border-[#2AB4A6] bg-[#2AB4A6]/10 text-[#1a8a80]"
@@ -1394,6 +1408,30 @@ export default function LotWizardTab({
               {idleSubmitting ? "Saving…" : idleError ? "Try Again" : pendingSaveRef.current ? "Log & Save Lot" : "Log & Continue"}
             </button>
           </div>
+
+          {/* "Other" reminder — pick a listed option if one fits */}
+          {idleOtherWarn && (
+            <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5">
+                <p className="text-sm font-bold text-gray-900 mb-1.5">⚠️ Before you pick Other…</p>
+                <p className="text-sm text-gray-600 mb-4">
+                  Only use Other when none of the options above cover what you were doing.
+                  If there&apos;s an option for it, please pick that one instead.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <button type="button" onClick={() => setIdleOtherWarn(false)}
+                    className="w-full py-2.5 bg-[#2AB4A6] hover:bg-[#22a090] text-white text-sm font-bold rounded-xl transition-colors">
+                    ← I&apos;ll pick an option instead
+                  </button>
+                  <button type="button"
+                    onClick={() => { setIdleSelected(sel => sel.includes("OTHER") ? sel : [...sel, "OTHER"]); setIdleOtherWarn(false) }}
+                    className="w-full py-2.5 border-2 border-gray-200 hover:border-gray-300 text-gray-600 text-sm font-semibold rounded-xl transition-colors">
+                    None of them fit — use Other
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         )
       })()}

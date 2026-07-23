@@ -20,17 +20,18 @@ export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }
   const [touchOrder, setTouchOrder] = useState<string[]>([])
   const [notes, setNotes]           = useState<Record<string, string>>({})
   const [totes, setTotes]           = useState("")
+  const [otherWarn, setOtherWarn]   = useState(false)
 
   const SAMPLE_SECS = 12 * 60 + 30   // realistic sample gap (the popup fires past the red threshold)
 
-  function openPreview() { setSelected([]); setPinned({}); setTouchOrder([]); setNotes({}); setTotes(""); setOpen(true) }
+  function openPreview() { setSelected([]); setPinned({}); setTouchOrder([]); setNotes({}); setTotes(""); setOtherWarn(false); setOpen(true) }
 
   // Faithful copies of the wizard's formatters + split maths.
+  // Whole minutes, ROUNDED UP — the popup deliberately shows no seconds.
   const fmtIdleDuration = (secs: number) => {
-    const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60
-    if (h > 0) return `${h}h ${m}m ${s}s`
-    if (m > 0) return `${m}m ${s}s`
-    return `${s}s`
+    const mins = Math.max(1, Math.ceil(secs / 60))
+    const h = Math.floor(mins / 60), m = mins % 60
+    return h > 0 ? `${h}h ${m}m` : `${m}m`
   }
   const now   = Date.now()
   const start = now - SAMPLE_SECS * 1000
@@ -39,13 +40,14 @@ export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }
   // Faithful copy of the wizard's PINNED-minutes split: values the admin sets
   // stay exactly where they were set; untouched reasons flex to absorb the rest.
   const totalMs = SAMPLE_SECS * 1000
-  const MIN = Math.min(30_000, Math.max(1000, Math.floor(totalMs / Math.max(selected.length, 1))))
+  const MIN = Math.min(60_000, Math.max(1000, Math.floor(totalMs / Math.max(selected.length, 1))))
   const computeSegs = (): { reason: string; durationMs: number }[] => {
     if (selected.length <= 1) return selected.map(r => ({ reason: r, durationMs: totalMs }))
     const untouched = selected.filter(k => pinned[k] == null)
     const pinnedSum = selected.reduce((s, k) => s + (pinned[k] ?? 0), 0)
     const remaining = Math.max(0, totalMs - pinnedSum)
-    const evenMs    = untouched.length ? Math.floor(remaining / untouched.length / 1000) * 1000 : 0
+    let evenMs = untouched.length ? Math.floor(remaining / untouched.length / 60_000) * 60_000 : 0
+    if (untouched.length && evenMs < 1000) evenMs = Math.floor(remaining / untouched.length / 1000) * 1000
     const lastTouched = [...touchOrder].reverse().find(k => selected.includes(k))
     return selected.map(k => {
       if (pinned[k] == null) {
@@ -59,14 +61,14 @@ export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }
   const segs  = computeSegs()
   const segMs = new Map(segs.map(s => [s.reason, s.durationMs]))
   const multi = selected.length > 1
-  const sliderStep = totalMs <= 5 * 60_000 ? 15_000 : totalMs <= 60 * 60_000 ? 30_000 : 60_000
+  const sliderStep = 60_000   // whole minutes — the popup shows no seconds
 
   // A slider was dragged: pin it there; untouched reasons absorb (capped so each
   // keeps the minimum). All-pinned edge: trades with the pin set longest ago.
   function setSplit(key: string, rawMs: number) {
     const othersPinned  = selected.filter(k => k !== key && pinned[k] != null)
     const othersFlexing = selected.filter(k => k !== key && pinned[k] == null)
-    let v = Math.max(MIN, Math.round(rawMs / 1000) * 1000)
+    let v = Math.max(MIN, Math.round(rawMs / 60_000) * 60_000)   // pins snap to whole minutes
     if (othersFlexing.length > 0) {
       const cap = totalMs - othersPinned.reduce((s, k) => s + pinned[k], 0) - othersFlexing.length * MIN
       v = Math.min(v, Math.max(MIN, cap))
@@ -118,7 +120,11 @@ export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }
                 return (
                   <button
                     key={opt.key}
-                    onClick={() => setSelected(sel => on ? sel.filter(k => k !== opt.key) : [...sel, opt.key])}
+                    onClick={() => {
+                      // Selecting "Other" goes via the reminder first; deselecting is instant.
+                      if (!on && opt.key === "OTHER") { setOtherWarn(true); return }
+                      setSelected(sel => on ? sel.filter(k => k !== opt.key) : [...sel, opt.key])
+                    }}
                     className={`py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
                       on
                         ? "border-[#2AB4A6] bg-[#2AB4A6]/10 text-[#1a8a80]"
@@ -206,6 +212,30 @@ export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }
             </button>
             <p className="text-center text-xs text-gray-400 mt-2">Preview only — nothing is saved.</p>
           </div>
+
+          {/* "Other" reminder — pick a listed option if one fits */}
+          {otherWarn && (
+            <div className="fixed inset-0 z-[130] bg-black/50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5">
+                <p className="text-sm font-bold text-gray-900 mb-1.5">⚠️ Before you pick Other…</p>
+                <p className="text-sm text-gray-600 mb-4">
+                  Only use Other when none of the options above cover what you were doing.
+                  If there&apos;s an option for it, please pick that one instead.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <button type="button" onClick={() => setOtherWarn(false)}
+                    className="w-full py-2.5 bg-[#2AB4A6] hover:bg-[#22a090] text-white text-sm font-bold rounded-xl transition-colors">
+                    ← I&apos;ll pick an option instead
+                  </button>
+                  <button type="button"
+                    onClick={() => { setSelected(sel => sel.includes("OTHER") ? sel : [...sel, "OTHER"]); setOtherWarn(false) }}
+                    className="w-full py-2.5 border-2 border-gray-200 hover:border-gray-300 text-gray-600 text-sm font-semibold rounded-xl transition-colors">
+                    None of them fit — use Other
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </>
