@@ -496,6 +496,26 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                 // Placed candidate nodes (the selectable sections) for the recommend grid.
                 const CAND_SLOTS = ["pa_l", "pa_c", "pa_r", "pb_l", "pb_c", "pb_r", "pc_l", "pc_c", "pc_r", "boss_ll", "boss_lr"]
                 const candidates = CAND_SLOTS.map((sk) => bySlot.get(sk)).filter((m): m is MiniNode => !!m)
+                // The section a slot belongs to, and the node number parsed from its
+                // label — so the list below can read in walking/node order (you take
+                // ONE from each cluster, not all of one then the next).
+                const sectionOf = (slot: string | null) =>
+                  slot?.startsWith("pa_") ? "Path A" : slot?.startsWith("pb_") ? "Path B" : slot?.startsWith("pc_") ? "Path C" : slot?.startsWith("boss_") ? "Boss" : ""
+                const nodeNum = (label: string) => { const mm = label.match(/\d+/); return mm ? parseInt(mm[0], 10) : Infinity }
+                // Group placed minis into clusters, each cluster + its members sorted
+                // by node number (fallback: fixed Path A→B→C→Boss / L→C→R order).
+                const clusterOrderFallback = ["Path A", "Path B", "Path C", "Boss"]
+                const sideOrder = (slot: string | null) => (slot?.endsWith("_l") || slot === "boss_ll" ? 0 : slot?.endsWith("_c") ? 1 : 2)
+                const groupClusters = (list: MiniNode[]) => {
+                  const by = new Map<string, MiniNode[]>()
+                  for (const m of list) { const sec = sectionOf(m.slot); if (!sec) continue; if (!by.has(sec)) by.set(sec, []); by.get(sec)!.push(m) }
+                  const clusters = [...by.entries()].map(([section, nodes]) => ({
+                    section,
+                    nodes: nodes.sort((a, b) => nodeNum(a.label) - nodeNum(b.label) || sideOrder(a.slot) - sideOrder(b.slot)),
+                    min: Math.min(...nodes.map((n) => nodeNum(n.label))),
+                  }))
+                  return clusters.sort((a, b) => a.min - b.min || clusterOrderFallback.indexOf(a.section) - clusterOrderFallback.indexOf(b.section))
+                }
                 return (
                   <>
                     {/* The map — same shape as the in-game AW map. Tap an empty ring to
@@ -647,12 +667,15 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                       </div>
                     )}
 
-                    {/* Pick mode: defender per selected (taken) node */}
+                    {/* Pick mode: defender per selected (taken) node, in node order */}
                     {miniMode === "pick" && takenMinis.length > 0 && (
                       <div className="space-y-2">
-                        <p className="text-[10px] uppercase tracking-widest opacity-50">This war&apos;s minis</p>
+                        <p className="text-[10px] uppercase tracking-widest opacity-50">This war&apos;s minis — in node order</p>
                         <div className="grid gap-2 sm:grid-cols-2">
-                          {takenMinis.map((m) => {
+                          {[...takenMinis].sort((a, b) =>
+                            nodeNum(a.label) - nodeNum(b.label)
+                            || (clusterOrderFallback.indexOf(sectionOf(a.slot)) + 1 || 99) - (clusterOrderFallback.indexOf(sectionOf(b.slot)) + 1 || 99)
+                          ).map((m) => {
                             const cls = defClass(m.defender)
                             return (
                               <div key={m.id} className="border border-[#33ff66]/50 rounded-lg p-2 flex gap-2.5 items-center">
@@ -681,39 +704,44 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                       </div>
                     )}
 
-                    {/* Recommend mode: type the defender on every candidate node */}
+                    {/* Recommend mode: type the defender on every candidate node,
+                        grouped by cluster in node order — you take ONE per cluster. */}
                     {miniMode === "recommend" && (
                       candidates.length > 0 ? (
-                        <div className="space-y-2">
-                          <p className="text-[10px] uppercase tracking-widest opacity-50">Candidate defenders — who&apos;s on each this war</p>
-                          <div className="grid gap-2 sm:grid-cols-2">
-                            {candidates.map((m) => {
-                              const cls = defClass(m.defender)
-                              const won = (path?.miniRecs ?? []).some((r) => r.slot === m.slot)
-                              const slotHint = MAP_SLOTS.find((s) => s.key === m.slot)
-                              const section = m.slot?.startsWith("pa_") ? "Path A" : m.slot?.startsWith("pb_") ? "Path B" : m.slot?.startsWith("pc_") ? "Path C" : "Boss"
-                              return (
-                                <div key={m.id} className={`border rounded-lg p-2 flex gap-2.5 items-center ${won ? "border-[#33ff66]/70 bg-[#33ff66]/5" : "border-[#1f5c33]"}`}>
-                                  <div className="shrink-0 w-12 h-12 rounded-lg border border-[#1f5c33] overflow-hidden flex items-center justify-center text-[9px] opacity-80">
-                                    {m.nodesImageUrl ? <img src={m.nodesImageUrl} alt="" className="w-full h-full object-cover" /> : <span>📷</span>}
-                                  </div>
-                                  <div className="flex-1 min-w-0 space-y-1">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-[10px] uppercase tracking-widest opacity-60 truncate">{section} {slotHint?.hint}{m.label ? ` · ${m.label}` : ""}</span>
-                                      {cls && <span className="w-2 h-2 rounded-full shrink-0" style={{ background: classColour(cls) }} title={cls} />}
-                                      {won && <span className="ml-auto text-[9px] font-bold text-[#33ff66] shrink-0">✓ PICKED</span>}
+                        <div className="space-y-3">
+                          <p className="text-[10px] uppercase tracking-widest opacity-50">Candidate defenders — who&apos;s on each this war (take one per cluster)</p>
+                          {groupClusters(candidates).map((cluster) => (
+                            <div key={cluster.section} className="space-y-1.5">
+                              <p className="text-[10px] uppercase tracking-widest text-[#38b6ff]/80">{cluster.section} <span className="opacity-50 text-white">· take one</span></p>
+                              <div className="grid gap-2 sm:grid-cols-3">
+                                {cluster.nodes.map((m) => {
+                                  const cls = defClass(m.defender)
+                                  const won = (path?.miniRecs ?? []).some((r) => r.slot === m.slot)
+                                  const slotHint = MAP_SLOTS.find((s) => s.key === m.slot)
+                                  return (
+                                    <div key={m.id} className={`border rounded-lg p-2 flex gap-2.5 items-center ${won ? "border-[#33ff66]/70 bg-[#33ff66]/5" : "border-[#1f5c33]"}`}>
+                                      <div className="shrink-0 w-12 h-12 rounded-lg border border-[#1f5c33] overflow-hidden flex items-center justify-center text-[9px] opacity-80">
+                                        {m.nodesImageUrl ? <img src={m.nodesImageUrl} alt="" className="w-full h-full object-cover" /> : <span>📷</span>}
+                                      </div>
+                                      <div className="flex-1 min-w-0 space-y-1">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[10px] uppercase tracking-widest opacity-60 truncate">{slotHint?.hint}{m.label ? ` · ${m.label}` : ""}</span>
+                                          {cls && <span className="w-2 h-2 rounded-full shrink-0" style={{ background: classColour(cls) }} title={cls} />}
+                                          {won && <span className="ml-auto text-[9px] font-bold text-[#33ff66] shrink-0">✓ PICKED</span>}
+                                        </div>
+                                        <input value={m.defender}
+                                          onChange={(e) => editMini(m.id, { defender: e.target.value })}
+                                          onBlur={(e) => setMiniNodeDefender(m.id, e.target.value).catch(() => {})}
+                                          list="mcoc-all-champs"
+                                          placeholder="Defender…"
+                                          className={`${input} w-full py-1 text-sm`} style={{ color: GREEN }} />
+                                      </div>
                                     </div>
-                                    <input value={m.defender}
-                                      onChange={(e) => editMini(m.id, { defender: e.target.value })}
-                                      onBlur={(e) => setMiniNodeDefender(m.id, e.target.value).catch(() => {})}
-                                      list="mcoc-all-champs"
-                                      placeholder="Defender (leave blank if not an option)…"
-                                      className={`${input} w-full py-1 text-sm`} style={{ color: GREEN }} />
-                                  </div>
-                                </div>
-                              )
-                            })}
-                          </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       ) : (
                         <p className="text-[11px] opacity-50">Add mini nodes to the paths first (＋ on the map), then their defenders appear here to fill in.</p>
