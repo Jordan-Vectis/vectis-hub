@@ -55,7 +55,6 @@ const MAP_SLOTS: MapSlot[] = [
   { key: "boss_ur",  x: 64, y: 15,  hint: "" },
   { key: "boss_ll",  x: 36, y: 27,  hint: "L" },
   { key: "boss_lr",  x: 64, y: 27,  hint: "R" },
-  { key: "boss_bot", x: 50, y: 35,  hint: "" },
   { key: "pb_l",     x: 36, y: 66,  hint: "L" },
   { key: "pb_r",     x: 64, y: 66,  hint: "R" },
   { key: "pb_c",     x: 50, y: 76,  hint: "C" },
@@ -453,8 +452,11 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                 you&apos;re taking (they light up) and type the defenders. The photos stay, so no re-photographing.
               </p>
               {!warLoading && (() => {
-                const bySlot = new Map(minis.filter((m) => m.slot).map((m) => [m.slot as string, m]))
-                const unplaced = minis.filter((m) => !m.slot)
+                const slotKeys = new Set(MAP_SLOTS.map((s) => s.key))
+                const bySlot = new Map(minis.filter((m) => m.slot && slotKeys.has(m.slot)).map((m) => [m.slot as string, m]))
+                // A node on an unknown slot (e.g. one that was removed) falls back to
+                // the tray rather than disappearing off the map.
+                const unplaced = minis.filter((m) => !m.slot || !slotKeys.has(m.slot))
                 const editing = editingMiniId ? minis.find((m) => m.id === editingMiniId) ?? null : null
                 return (
                   <>
