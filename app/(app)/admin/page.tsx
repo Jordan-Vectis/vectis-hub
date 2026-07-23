@@ -40,6 +40,7 @@ const GROUPS: { label: string; cards: Card[] }[] = [
     label: "System & AI",
     cards: [
       { href: "/admin/about",      label: "About",            description: "How every section of the app works, what it depends on, and the rules that govern it.", icon: "📖" },
+      { href: "/admin/compliance", label: "Data & Compliance", description: "Plain-English note on what data the Hub holds, where it's stored, who it's shared with, and what to check with an adviser.", icon: "⚖️" },
       { href: "/admin/ai-models",  label: "AI Models",        description: "Choose which Gemini model each AI feature uses across the app. Fix a retired model in one place instead of in code.", icon: "🤖" },
       { href: "/admin/backup",     label: "Database Backup",  description: "View stored database backups, check when the last backup ran, and trigger a manual backup.", icon: "💾" },
       { href: "/admin/memory",     label: "Claude Memory",    description: "Browse what Claude remembers about you, this project, and how to work with you.", icon: "🧠" },

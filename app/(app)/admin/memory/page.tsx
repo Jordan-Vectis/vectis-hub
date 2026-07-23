@@ -16,6 +16,22 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "compliance_page.md",
+    content: `---
+name: Data & Compliance page — /admin/compliance
+purpose: The static internal UK data-protection note. Keep its lists in sync when integrations change.
+last_updated: 2026-07-23
+---
+
+# Admin → Data & Compliance (/admin/compliance) — added 2026-07-23
+
+A static, admin-only, plain-English internal note (app/(app)/admin/compliance/page.tsx) for handing to a solicitor / data-protection adviser — built after Jordan asked about "legal stuff for registering the software / giving it to staff". Framing is UK GDPR / ICO (Vectis is a UK auction house). Has a prominent "NOT legal advice — internal working note" disclaimer.
+
+It lists: what personal data the Hub holds (customers, bidders, staff accounts + monitoring, financial); the STAFF-MONITORING features (cataloguing activity, away popup, Unaccounted Time, device clock/timezone tamper detection, lot change log) flagged RED as the priority (DPIA + transparency likely needed); where data lives (Neon Postgres / Cloudflare R2 / Railway); third parties data is shared with (Google Gemini, Microsoft/Business Central, Royal Mail Click & Drop, D-ID, GA4, ntfy.sh); and points to raise (employee monitoring, ICO data-protection fee, privacy notice, retention + 72h breach notice, PCI/no full card numbers, third-party ToS + OSS licences).
+
+⚠ KEEP IT IN SYNC: when the Hub gains a NEW third-party integration, data store, or staff-monitoring feature, update the STORES / PROCESSORS / MONITORING arrays in that page. Linked from the Admin overview grid ("System & AI", ⚖️ icon).`,
+  },
+  {
     filename: "dolls_bears_descriptions.md",
     content: `---
 name: Dolls & Bears descriptions — tuning
