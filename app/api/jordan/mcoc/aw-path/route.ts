@@ -37,6 +37,9 @@ export async function POST(req: NextRequest) {
     // "pick" = the player has ticked which minis they're taking (default).
     // "recommend" = let the AI choose 1 mini per path (A/B/C) + one boss side.
     const miniMode = ((form.get("miniMode") as string) ?? "pick") === "recommend" ? "recommend" : "pick"
+    // When set, the recommend-mode minis are planned SEPARATELY (per team) by the
+    // /aw-minis call, so this call only plans the path + teams. The client sets it.
+    const splitMinis = ((form.get("splitMinis") as string) ?? "") === "1"
     // Attackers the player WANTS to bring — "tell me which fights these handle".
     let forcedIn: string[] = []
     try { const f = JSON.parse((form.get("forced") as string) ?? "[]"); if (Array.isArray(f)) forcedIn = f.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim().slice(0, 60)).slice(0, 8) } catch {}
@@ -80,7 +83,7 @@ export async function POST(req: NextRequest) {
       return null
     }
     type Candidate = { id: string; slot: string; section: string; side: string; bossRole: string; label: string; defender: string; nodesImageKey: string | null }
-    const candidates: Candidate[] = miniMode === "recommend"
+    const candidates: Candidate[] = (miniMode === "recommend" && !splitMinis)
       ? allMinis.flatMap((m) => {
           const sec = SECTION_OF(m.slot)
           if (!sec || !m.defender.trim() || !m.slot) return []

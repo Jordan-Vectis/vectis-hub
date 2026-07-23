@@ -33,6 +33,8 @@ const RATING_COL: Record<string, string> = {
 type ForcedPlan = { attacker: string; fights: { fight: number; defender: string; rating: string; how: string }[] }
 type MiniRec = { section: string; side: string; slot: string; label: string; defender: string; attacker: string; confidence?: string; why: string }
 type TeamPathStep = { fight: number; defender: string; miniLabel?: string | null; attacker: string; confidence?: string; how: string }
+type TeamMiniPick = { section: string; side: string; slot: string; label: string; defender: string; attacker: string; confidence?: string; how: string }
+type TeamMinis = { team: number; minis: TeamMiniPick[] }
 
 // How confident the pick is — "possible but unlikely" is a legitimate answer.
 const CONF_COL: Record<string, { label: string; cls: string }> = {
@@ -112,6 +114,11 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
   const [pathErr, setPathErr] = useState<string | null>(null)
   const [path, setPath] = useState<PathResult | null>(null)
   const [showPlanDetail, setShowPlanDetail] = useState(false)   // collapsible fight-by-fight + must-use
+  // Per-team mini picks (recommend mode) — planned by a SECOND call so each team's
+  // minis use that team's own champs. Keyed by team index.
+  const [teamMinis, setTeamMinis] = useState<TeamMinis[] | null>(null)
+  const [minisBusy, setMinisBusy] = useState(false)
+  const [focusTeam, setFocusTeam] = useState(0)   // which team's minis highlight on the map
   const [uploadingId, setUploadingId] = useState<string | null>(null)   // fight whose photo is uploading
   const fightPhotoInput = useRef<HTMLInputElement>(null)
   const pickForFight = useRef<string | null>(null)                      // which fight the file picker is for
@@ -270,25 +277,45 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
         ? "Add a path fight, or type a defender on the mini nodes you're choosing between."
         : "Add at least one fight or selected mini boss with a defender."); return
     }
-    setPathBusy(true); setPathErr(null); setPath(null)
+    setPathBusy(true); setPathErr(null); setPath(null); setTeamMinis(null); setFocusTeam(0)
     try {
       // Persist any defenders not yet blurred, so the server plans what's on screen.
       await Promise.all([
         ...warFights.map((f) => setWarFightDefender(f.id, f.defender).catch(() => {})),
         ...miniDefsToSave.map((m) => setMiniNodeDefender(m.id, m.defender).catch(() => {})),
       ])
+      const model = getJordanModel()
       const fd = new FormData()
       if (tier) fd.append("tier", tier)
       if (forced.length) fd.append("forced", JSON.stringify(forced))
       fd.append("miniMode", miniMode)
-      const model = getJordanModel(); if (model) fd.append("model", model)
+      // Recommend mode: minis are planned per-team by a SECOND call, so tell the
+      // path call to skip the (global) mini pick.
+      if (miniMode === "recommend") fd.append("splitMinis", "1")
+      if (model) fd.append("model", model)
       const res = await fetch("/api/jordan/mcoc/aw-path", { method: "POST", body: fd })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j.error || "Planning failed — try again.")
       setPath(j)
+      setPathBusy(false)
+
+      // Phase 2 (recommend mode): plan each team's minis from its own champs.
+      if (miniMode === "recommend" && Array.isArray(j?.teams) && j.teams.length && minis.some((m) => m.slot && m.defender.trim())) {
+        setMinisBusy(true)
+        try {
+          const mfd = new FormData()
+          mfd.append("teams", JSON.stringify(j.teams.map((t: any) => ({ name: t.name, champions: (t.champions ?? []).map((c: any) => c.champion) }))))
+          if (tier) mfd.append("tier", tier)
+          if (model) mfd.append("model", model)
+          const mres = await fetch("/api/jordan/mcoc/aw-minis", { method: "POST", body: mfd })
+          const mj = await mres.json().catch(() => ({}))
+          if (mres.ok && Array.isArray(mj?.teams)) setTeamMinis(mj.teams)
+        } catch { /* minis are best-effort — the path still stands */ } finally { setMinisBusy(false) }
+      }
     } catch (e: any) {
       setPathErr(e?.message ?? "Planning failed — try again.")
-    } finally { setPathBusy(false) }
+      setPathBusy(false)
+    }
   }
 
   // Every champion in the DB — powers the defender type-ahead + class-colour dots.
@@ -499,8 +526,10 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                 // the tray rather than disappearing off the map.
                 const unplaced = minis.filter((m) => !m.slot || !slotKeys.has(m.slot))
                 const editing = editingMiniId ? minis.find((m) => m.id === editingMiniId) ?? null : null
-                // Recommend mode: the AI's chosen slots (from the last plan) glow green.
-                const recommendedSlots = new Set((path?.miniRecs ?? []).map((r) => r.slot))
+                // Recommend mode: the FOCUSED team's chosen mini slots glow green
+                // (per-team now; falls back to the old global picks if present).
+                const focusedMinis = teamMinis?.[focusTeam]?.minis ?? path?.miniRecs ?? []
+                const recommendedSlots = new Set(focusedMinis.map((r) => r.slot))
                 const isLive = (m: MiniNode) => miniMode === "pick" ? m.taking : !!(m.slot && recommendedSlots.has(m.slot))
                 // Placed candidate nodes (defenders needed on all of them). The boss
                 // island lists all 5 — you go up one side, so the AI needs the
@@ -732,7 +761,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                               <div className="grid gap-2 sm:grid-cols-3">
                                 {cluster.nodes.map((m) => {
                                   const cls = defClass(m.defender)
-                                  const won = (path?.miniRecs ?? []).some((r) => r.slot === m.slot)
+                                  const won = focusedMinis.some((r) => r.slot === m.slot)
                                   const slotHint = MAP_SLOTS.find((s) => s.key === m.slot)
                                   return (
                                     <div key={m.id} className={`border rounded-lg p-2 flex gap-2.5 items-center ${won ? "border-[#33ff66]/70 bg-[#33ff66]/5" : "border-[#1f5c33]"}`}>
@@ -812,16 +841,22 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                     recently-buffed champs. Try again, or switch model above for better picks.
                   </p>
                 )}
-                {/* ── TEAMS — the main view: 3 teams, each with how it takes the whole path ── */}
+                {/* ── TEAMS — the main view: 3 teams, each with how it takes the whole path + its own minis ── */}
                 {path.teams.length > 0 && (
                   <div className="space-y-2">
-                    <p className="text-[10px] uppercase tracking-widest opacity-50">Your team options — each shows how it takes the whole path</p>
+                    <p className="text-[10px] uppercase tracking-widest opacity-50">Your team options — each shows how it takes the path {miniMode === "recommend" && <span className="normal-case tracking-normal">· tap a team to show its minis on the map</span>}</p>
                     <div className="grid gap-3 lg:grid-cols-3">
-                      {path.teams.map((t, i) => (
-                        <div key={i} className="border-2 border-[#33ff66] rounded-lg p-3 space-y-2.5">
+                      {path.teams.map((t, i) => {
+                        const focused = miniMode === "recommend" && focusTeam === i
+                        const myMinis = teamMinis?.[i]?.minis ?? []
+                        return (
+                        <div key={i}
+                          onClick={() => { if (miniMode === "recommend") setFocusTeam(i) }}
+                          className={`border-2 rounded-lg p-3 space-y-2.5 transition-colors ${miniMode === "recommend" ? "cursor-pointer" : ""} ${focused ? "border-[#33ff66] bg-[#33ff66]/[0.04]" : "border-[#33ff66]/60 hover:border-[#33ff66]"}`}>
                           <div className="flex items-baseline gap-2">
                             <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-[#0a2214] border border-[#33ff66] shrink-0">TEAM {String.fromCharCode(65 + i)}</span>
                             <p className="text-sm font-bold text-white truncate">{t.name || `Team ${i + 1}`}</p>
+                            {focused && <span className="ml-auto text-[8px] font-bold uppercase tracking-wider text-[#33ff66] shrink-0">📍 on map</span>}
                           </div>
                           {/* The 3 champs as chips */}
                           <div className="flex flex-wrap gap-1.5">
@@ -861,38 +896,39 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                               })}
                             </div>
                           )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Recommended minis (recommend mode) — the global node picks + side. */}
-                {path.miniRecs && path.miniRecs.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-[10px] uppercase tracking-widest opacity-50">👑 Recommended minis — take these this war</p>
-                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {path.miniRecs.map((r, i) => (
-                        <div key={i} className="border border-amber-400/60 rounded-lg px-3 py-2 text-sm">
-                          <p className="flex items-center gap-1.5 flex-wrap mb-1">
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-amber-400 text-amber-300 shrink-0">{r.section} · {r.side}</span>
-                            <span className="text-white font-bold">{r.defender}</span>
-                            {r.label && <span className="text-[10px] opacity-50">({r.label})</span>}
-                          </p>
-                          <div className="flex items-start gap-2">
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded mt-0.5 shrink-0 text-black" style={{ background: GREEN }}>TAKE</span>
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <ChampInline name={r.attacker} />
-                                {r.confidence && CONF_COL[r.confidence] && r.confidence !== "good" && (
-                                  <span className={`text-[8px] font-bold uppercase tracking-wider px-1 py-0.5 rounded border shrink-0 ${CONF_COL[r.confidence].cls}`}>{CONF_COL[r.confidence].label}</span>
-                                )}
-                              </div>
-                              {r.why && <p className="text-xs opacity-70 mt-0.5">{r.why}</p>}
+                          {/* This team's MINIS — picked from its own 3 champs (recommend mode). */}
+                          {miniMode === "recommend" && (
+                            <div className="space-y-1 pt-1.5 border-t border-[#1f5c33]/70">
+                              <p className="text-[9px] uppercase tracking-widest opacity-40">👑 Its minis</p>
+                              {myMinis.length > 0 ? myMinis.map((s, j) => {
+                                const dcls = defClass(s.defender)
+                                return (
+                                  <div key={j} className="text-xs">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-[9px] font-bold px-1 py-0.5 rounded border border-amber-400/70 text-amber-300 shrink-0">{s.section === "Boss" ? `Boss ${s.side}` : `${s.section} ${s.side}`}</span>
+                                      {dcls && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: classColour(dcls) }} title={dcls} />}
+                                      <span className="text-white/80">{s.defender}</span>
+                                      {s.label && <span className="opacity-40">({s.label})</span>}
+                                      <span className="opacity-40">→</span>
+                                      {s.attacker
+                                        ? <>
+                                            <span className={`font-semibold ${s.confidence === "unlikely" ? "text-orange-300" : s.confidence === "risky" ? "text-amber-300" : "text-[#33ff66]"}`}>{s.attacker}</span>
+                                            {s.confidence && CONF_COL[s.confidence] && s.confidence !== "good" && (
+                                              <span className={`text-[8px] font-bold uppercase tracking-wider px-1 py-0.5 rounded border shrink-0 ${CONF_COL[s.confidence].cls}`}>{CONF_COL[s.confidence].label}</span>
+                                            )}
+                                          </>
+                                        : <span className="text-red-400 font-semibold">no safe pick</span>}
+                                    </div>
+                                    {s.how && <p className="opacity-55 mt-0.5 ml-1 leading-snug">{s.how}</p>}
+                                  </div>
+                                )
+                              }) : minisBusy ? <p className="text-[11px] opacity-50 animate-pulse">Planning this team&apos;s minis…</p>
+                                 : <p className="text-[11px] opacity-40">No mini plan.</p>}
                             </div>
-                          </div>
+                          )}
                         </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 )}
