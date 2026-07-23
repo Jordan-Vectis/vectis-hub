@@ -16,6 +16,24 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "activity_popup_preview.md",
+    content: `---
+name: Activity popup preview — /admin/idle-timer
+purpose: The "Preview the popup" button + the caveat that the activity-popup markup lives in two places.
+last_updated: 2026-07-23
+---
+
+# Cataloguer Activity Timer — preview the popup (2026-07-23)
+
+Admin → Cataloguer Activity Timer (/admin/idle-timer) has a **"👁 Preview the popup"** button so admins can see the activity/away popup exactly as cataloguers get it, driven by the reasons they've configured on that page. Read-only — nothing is saved (✕ + amber "Preview" badge; the action button just closes). Component: **components/idle-prompt-preview.tsx** (\`<IdlePromptPreview reasons={reasons} />\`).
+
+⚠ **The activity popup markup now exists in TWO places — keep them in sync:**
+1. The REAL popup — inline in the lot wizard: app/(app)/tools/cataloguing/auctions/[id]/lot-wizard-tab.tsx (search "What were you doing?"). Wired to idle detection + the save flow.
+2. The preview REPLICA — components/idle-prompt-preview.tsx.
+
+If you restyle/restructure one, do the other. It wasn't extracted into a shared component because the real popup is tightly coupled to the wizard's idle refs / save flow — safer to replicate for a preview than to refactor the critical cataloguing path. (Same "preview the popup" idea as the terms gate, but that one was already a component so it's reused directly in a guarded preview mode.)`,
+  },
+  {
     filename: "terms_aup.md",
     content: `---
 name: iPad AUP terms popup — /admin/terms

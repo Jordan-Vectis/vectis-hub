@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { DEFAULT_CONFIG } from "@/lib/idle-timer-config"
 import IdleTimerSettingsClient from "./idle-timer-settings-client"
+import IdlePromptPreview from "@/components/idle-prompt-preview"
 import Link from "next/link"
 
 async function getReasons() {
@@ -33,6 +34,9 @@ export default async function IdleTimerAdminPage() {
           Manage the activity options that appear in the popup and whether each requires a note.
           Timing thresholds are set per user in Admin → Users. Changes take effect on the next page load.
         </p>
+        <div className="mt-4">
+          <IdlePromptPreview reasons={reasons} />
+        </div>
       </div>
 
       <Link href="/admin/idle-gaps" className="mb-6 flex items-start gap-3 rounded-xl border border-gray-200 dark:border-gray-800 p-4 hover:border-gray-300 dark:hover:border-gray-700 transition-colors">
