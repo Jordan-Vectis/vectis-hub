@@ -21,6 +21,7 @@ const AW_TIERS = ["Bronze", "Silver", "Gold", "Platinum", "Challenger", "Master"
 const TIER_KEY = "mcoc_aw_tier"
 const DEF_KEY = "mcoc_aw_defence"
 const FORCED_KEY = "mcoc_aw_forced"
+const MINI_MODE_KEY = "mcoc_aw_mini_mode"
 
 const RATING_COL: Record<string, string> = {
   best:  "border-[#33ff66] text-[#33ff66]",
@@ -30,10 +31,12 @@ const RATING_COL: Record<string, string> = {
 }
 
 type ForcedPlan = { attacker: string; fights: { fight: number; defender: string; rating: string; how: string }[] }
+type MiniRec = { section: string; side: string; slot: string; label: string; defender: string; attacker: string; why: string }
 type PathResult = {
   teams: { name: string; summary: string; champions: { champion: string; why: string }[] }[]
   fights: { defender: string; miniLabel?: string | null; nodeBuff?: string; options: { attacker: string; how: string }[] }[]
   forced?: ForcedPlan[]
+  miniRecs?: MiniRec[]
   risks: string; notes: string; groundedFallback?: boolean
 }
 type DefResult = { placements: { node: string; champion: string; why: string }[]; notes: string }
@@ -130,6 +133,9 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
   const [addingMini, setAddingMini] = useState(false)
   const miniPhotoInput = useRef<HTMLInputElement>(null)
   const pickForMini = useRef<string | null>(null)
+  // "pick" = tick which minis you're taking; "recommend" = let the plan choose
+  // 1 mini per path + a boss side from the candidate defenders you've typed in.
+  const [miniMode, setMiniMode] = useState<"pick" | "recommend">("pick")
 
   // Map interaction: editingMiniId opens the editor card under the map;
   // placingId = a tray node waiting for an empty slot to be tapped.
@@ -241,19 +247,27 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
 
   async function planPath() {
     if (pathBusy) return
-    if (!warFights.some((f) => f.defender.trim()) && !takenMinis.some((m) => m.defender.trim())) {
-      setPathErr("Add at least one fight or selected mini boss with a defender."); return
+    // Whose defenders matter this run: the ticked minis (pick mode) or every
+    // placed candidate with a defender (recommend mode).
+    const miniDefsToSave = miniMode === "recommend"
+      ? minis.filter((m) => m.slot && m.defender.trim())
+      : takenMinis.filter((m) => m.defender.trim())
+    if (!warFights.some((f) => f.defender.trim()) && !miniDefsToSave.length) {
+      setPathErr(miniMode === "recommend"
+        ? "Add a path fight, or type a defender on the mini nodes you're choosing between."
+        : "Add at least one fight or selected mini boss with a defender."); return
     }
     setPathBusy(true); setPathErr(null); setPath(null)
     try {
       // Persist any defenders not yet blurred, so the server plans what's on screen.
       await Promise.all([
         ...warFights.map((f) => setWarFightDefender(f.id, f.defender).catch(() => {})),
-        ...takenMinis.map((m) => setMiniNodeDefender(m.id, m.defender).catch(() => {})),
+        ...miniDefsToSave.map((m) => setMiniNodeDefender(m.id, m.defender).catch(() => {})),
       ])
       const fd = new FormData()
       if (tier) fd.append("tier", tier)
       if (forced.length) fd.append("forced", JSON.stringify(forced))
+      fd.append("miniMode", miniMode)
       const model = getJordanModel(); if (model) fd.append("model", model)
       const res = await fetch("/api/jordan/mcoc/aw-path", { method: "POST", body: fd })
       const j = await res.json().catch(() => ({}))
@@ -307,6 +321,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
         }
         const fl = JSON.parse(localStorage.getItem(FORCED_KEY) || "null")
         if (Array.isArray(fl)) setForced(fl.filter((x) => typeof x === "string").slice(0, 8))
+        const mm = localStorage.getItem(MINI_MODE_KEY); if (mm === "recommend") setMiniMode("recommend")
       } catch {}
       restored.current = true
     })
@@ -314,6 +329,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
   useEffect(() => { if (restored.current) try { localStorage.setItem(TIER_KEY, tier) } catch {} }, [tier])
   useEffect(() => { if (restored.current) try { localStorage.setItem(DEF_KEY, JSON.stringify({ notes: defNotes, count: defCount })) } catch {} }, [defNotes, defCount])
   useEffect(() => { if (restored.current) try { localStorage.setItem(FORCED_KEY, JSON.stringify(forced)) } catch {} }, [forced])
+  useEffect(() => { if (restored.current) try { localStorage.setItem(MINI_MODE_KEY, miniMode) } catch {} }, [miniMode])
 
   function pickMap(f: File | null) {
     setMapFile(f)
@@ -446,10 +462,22 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                 per node; each war you just tap the nodes you're taking and type the
                 defenders. Selected nodes join the plan after the path fights. ── */}
             <div className="border-t border-[#1f5c33] pt-3 space-y-2">
-              <p className="text-[10px] uppercase tracking-widest opacity-50">👑 Mini Bosses</p>
+              <div className="flex items-center gap-3 flex-wrap">
+                <p className="text-[10px] uppercase tracking-widest opacity-50">👑 Mini Bosses</p>
+                {/* Pick yourself, or let the plan choose 1 per path + a boss side. */}
+                <div className="inline-flex rounded-lg border border-[#1f5c33] overflow-hidden text-[10px]">
+                  <button onClick={() => setMiniMode("pick")}
+                    className={`px-2.5 py-1 font-bold uppercase tracking-widest transition-colors ${miniMode === "pick" ? "text-black" : "opacity-60 hover:opacity-100"}`}
+                    style={miniMode === "pick" ? { background: GREEN } : undefined}>✍ Pick myself</button>
+                  <button onClick={() => setMiniMode("recommend")}
+                    className={`px-2.5 py-1 font-bold uppercase tracking-widest border-l border-[#1f5c33] transition-colors ${miniMode === "recommend" ? "text-black" : "opacity-60 hover:opacity-100"}`}
+                    style={miniMode === "recommend" ? { background: GREEN } : undefined}>🤖 Recommend</button>
+                </div>
+              </div>
               <p className="text-[11px] opacity-60">
-                Your mini boss node map — add every mini node once with its photo. Each war, tap the nodes
-                you&apos;re taking (they light up) and type the defenders. The photos stay, so no re-photographing.
+                {miniMode === "pick"
+                  ? "Your mini boss node map — add every mini node once with its photo. Each war, tap the nodes you're taking (they light up) and type the defenders. The photos stay, so no re-photographing."
+                  : "Type the defender on the mini nodes that are live this war (all the L/C/R + both boss sides). When you plan, it picks the best one per path + boss side for your roster — favouring ones your path team already covers. The winners light up green."}
               </p>
               {!warLoading && (() => {
                 const slotKeys = new Set(MAP_SLOTS.map((s) => s.key))
@@ -458,6 +486,12 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                 // the tray rather than disappearing off the map.
                 const unplaced = minis.filter((m) => !m.slot || !slotKeys.has(m.slot))
                 const editing = editingMiniId ? minis.find((m) => m.id === editingMiniId) ?? null : null
+                // Recommend mode: the AI's chosen slots (from the last plan) glow green.
+                const recommendedSlots = new Set((path?.miniRecs ?? []).map((r) => r.slot))
+                const isLive = (m: MiniNode) => miniMode === "pick" ? m.taking : !!(m.slot && recommendedSlots.has(m.slot))
+                // Placed candidate nodes (the selectable sections) for the recommend grid.
+                const CAND_SLOTS = ["pa_l", "pa_c", "pa_r", "pb_l", "pb_c", "pb_r", "pc_l", "pc_c", "pc_r", "boss_ll", "boss_lr"]
+                const candidates = CAND_SLOTS.map((sk) => bySlot.get(sk)).filter((m): m is MiniNode => !!m)
                 return (
                   <>
                     {/* The map — same shape as the in-game AW map. Tap an empty ring to
@@ -490,21 +524,26 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                             </button>
                           )
                         }
+                        const live = isLive(m)
+                        // In recommend mode, a candidate with a defender typed reads as
+                        // "in the running"; the winner (live) glows green after a plan.
+                        const candidate = miniMode === "recommend" && !!m.defender.trim()
                         return (
                           <div key={s.key} className="absolute -translate-x-1/2 -translate-y-1/2 w-[14%]" style={pos}>
-                            <button onClick={() => !placingId && toggleTaking(m.id)}
-                              className={`relative w-full aspect-square rounded-full border-2 overflow-hidden flex items-center justify-center transition-all ${m.taking ? "border-[#33ff66] shadow-[0_0_12px_rgba(51,255,102,0.45)]" : "border-[#1f5c33] opacity-55 hover:opacity-90 grayscale"}`}
-                              title={`${m.label || s.hint || "Node"} — ${m.taking ? "taking this war (tap to drop)" : "tap to take this war"}`}>
+                            <button onClick={() => { if (placingId) return; if (miniMode === "pick") toggleTaking(m.id); else setEditingMiniId(m.id) }}
+                              className={`relative w-full aspect-square rounded-full border-2 overflow-hidden flex items-center justify-center transition-all ${live ? "border-[#33ff66] shadow-[0_0_12px_rgba(51,255,102,0.45)]" : candidate ? "border-[#1f5c33] opacity-90" : "border-[#1f5c33] opacity-55 hover:opacity-90 grayscale"}`}
+                              title={`${m.label || s.hint || "Node"}${miniMode === "pick" ? (m.taking ? " — taking this war (tap to drop)" : " — tap to take this war") : (live ? " — recommended this war" : " — tap to edit; type its defender below")}`}>
                               {m.nodesImageUrl
                                 ? <img src={m.nodesImageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
                                 : <span className="text-[9px] opacity-60">📷</span>}
-                              {m.taking && <span className="absolute inset-0 rounded-full ring-1 ring-[#33ff66]/60" />}
+                              {live && <span className="absolute inset-0 rounded-full ring-1 ring-[#33ff66]/60" />}
+                              {candidate && !live && <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#38b6ff] border border-black" title="Defender set — in the running" />}
                             </button>
                             <button onClick={() => setEditingMiniId(m.id)}
                               className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-black border border-[#1f5c33] text-[8px] flex items-center justify-center opacity-70 hover:opacity-100 hover:border-[#33ff66]"
                               title="Edit this node (label, photo, remove)">✎</button>
-                            <p className={`mt-0.5 text-center text-[9px] uppercase tracking-widest truncate ${m.taking ? "opacity-90" : "opacity-45"}`}
-                              style={{ color: m.taking ? GREEN : undefined }}>
+                            <p className={`mt-0.5 text-center text-[9px] uppercase tracking-widest truncate ${live ? "opacity-90" : "opacity-45"}`}
+                              style={{ color: live ? GREEN : undefined }}>
                               {m.label || s.hint || "—"}
                             </p>
                           </div>
@@ -515,9 +554,11 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                     <p className="text-[11px] opacity-50 text-center">
                       {placingId
                         ? "Tap an empty ring to place the node — or press Cancel below."
-                        : takenMinis.length
-                          ? `${takenMinis.length} node${takenMinis.length === 1 ? "" : "s"} selected this war — tap a node to toggle it.`
-                          : "Tap an empty ring to add that node (photo needed once). Tap a node to take it this war."}
+                        : miniMode === "recommend"
+                          ? (path?.miniRecs?.length ? "Green nodes are this war's recommendation. Re-plan after changing defenders." : "Fill in the defenders below, then Plan my path to get a recommendation.")
+                          : takenMinis.length
+                            ? `${takenMinis.length} node${takenMinis.length === 1 ? "" : "s"} selected this war — tap a node to toggle it.`
+                            : "Tap an empty ring to add that node (photo needed once). Tap a node to take it this war."}
                     </p>
 
                     {/* Node editor — label / photo / unplace / delete */}
@@ -570,8 +611,8 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                       </div>
                     )}
 
-                    {/* This war's minis — defender per selected node */}
-                    {takenMinis.length > 0 && (
+                    {/* Pick mode: defender per selected (taken) node */}
+                    {miniMode === "pick" && takenMinis.length > 0 && (
                       <div className="space-y-2">
                         <p className="text-[10px] uppercase tracking-widest opacity-50">This war&apos;s minis</p>
                         <div className="grid gap-2 sm:grid-cols-2">
@@ -602,6 +643,45 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                           })}
                         </div>
                       </div>
+                    )}
+
+                    {/* Recommend mode: type the defender on every candidate node */}
+                    {miniMode === "recommend" && (
+                      candidates.length > 0 ? (
+                        <div className="space-y-2">
+                          <p className="text-[10px] uppercase tracking-widest opacity-50">Candidate defenders — who&apos;s on each this war</p>
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {candidates.map((m) => {
+                              const cls = defClass(m.defender)
+                              const won = (path?.miniRecs ?? []).some((r) => r.slot === m.slot)
+                              const slotHint = MAP_SLOTS.find((s) => s.key === m.slot)
+                              const section = m.slot?.startsWith("pa_") ? "Path A" : m.slot?.startsWith("pb_") ? "Path B" : m.slot?.startsWith("pc_") ? "Path C" : "Boss"
+                              return (
+                                <div key={m.id} className={`border rounded-lg p-2 flex gap-2.5 items-center ${won ? "border-[#33ff66]/70 bg-[#33ff66]/5" : "border-[#1f5c33]"}`}>
+                                  <div className="shrink-0 w-12 h-12 rounded-lg border border-[#1f5c33] overflow-hidden flex items-center justify-center text-[9px] opacity-80">
+                                    {m.nodesImageUrl ? <img src={m.nodesImageUrl} alt="" className="w-full h-full object-cover" /> : <span>📷</span>}
+                                  </div>
+                                  <div className="flex-1 min-w-0 space-y-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] uppercase tracking-widest opacity-60 truncate">{section} {slotHint?.hint}{m.label ? ` · ${m.label}` : ""}</span>
+                                      {cls && <span className="w-2 h-2 rounded-full shrink-0" style={{ background: classColour(cls) }} title={cls} />}
+                                      {won && <span className="ml-auto text-[9px] font-bold text-[#33ff66] shrink-0">✓ PICKED</span>}
+                                    </div>
+                                    <input value={m.defender}
+                                      onChange={(e) => editMini(m.id, { defender: e.target.value })}
+                                      onBlur={(e) => setMiniNodeDefender(m.id, e.target.value).catch(() => {})}
+                                      list="mcoc-all-champs"
+                                      placeholder="Defender (leave blank if not an option)…"
+                                      className={`${input} w-full py-1 text-sm`} style={{ color: GREEN }} />
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-[11px] opacity-50">Add mini nodes to the paths first (＋ on the map), then their defenders appear here to fill in.</p>
+                      )
                     )}
 
                     <input ref={miniPhotoInput} type="file" accept="image/*" className="hidden"
@@ -637,7 +717,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
               )}
             </div>
 
-            <button onClick={planPath} disabled={pathBusy || warLoading || (!warFights.some((f) => f.defender.trim()) && !takenMinis.some((m) => m.defender.trim()))}
+            <button onClick={planPath} disabled={pathBusy || warLoading || (!warFights.some((f) => f.defender.trim()) && !(miniMode === "recommend" ? minis.some((m) => m.slot && m.defender.trim()) : takenMinis.some((m) => m.defender.trim())))}
               className="px-5 py-2.5 rounded-lg text-sm font-bold text-black disabled:opacity-40 transition-colors"
               style={{ background: GREEN }}>
               {pathBusy ? "PLANNING…" : "🗡 PLAN MY PATH"}
@@ -652,6 +732,31 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                     recently-buffed champs. Try again, or switch model above for better picks.
                   </p>
                 )}
+                {/* Recommended minis (recommend mode) — 1 per path + a boss side. */}
+                {path.miniRecs && path.miniRecs.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] uppercase tracking-widest opacity-50">👑 Recommended minis — take these this war</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {path.miniRecs.map((r, i) => (
+                        <div key={i} className="border border-amber-400/60 rounded-lg px-3 py-2 text-sm">
+                          <p className="flex items-center gap-1.5 flex-wrap mb-1">
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-amber-400 text-amber-300 shrink-0">{r.section} · {r.side}</span>
+                            <span className="text-white font-bold">{r.defender}</span>
+                            {r.label && <span className="text-[10px] opacity-50">({r.label})</span>}
+                          </p>
+                          <div className="flex items-start gap-2">
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded mt-0.5 shrink-0 text-black" style={{ background: GREEN }}>TAKE</span>
+                            <div className="min-w-0">
+                              <ChampInline name={r.attacker} />
+                              {r.why && <p className="text-xs opacity-70 mt-0.5">{r.why}</p>}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Must-use attackers → which fights each handles. Shown first —
                     it's what Jordan asked the plan for. */}
                 {path.forced && path.forced.length > 0 && (
