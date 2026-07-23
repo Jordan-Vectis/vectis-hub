@@ -1,18 +1,21 @@
 // PDF renderer for the Cataloguing Performance reports.
 //
 // Two layouts, both A4 landscape and deliberately clean for managers — but still
-// full of detail (no forensic per-lot line dump; every summary figure is kept):
+// data-rich, and every figure is scoped to the SELECTED PERIOD (no "today"/"this
+// week" columns that make no sense inside a 30-day report):
 //
-//   buildSummaryPdf      — ONE page: team headline stats + a ranked league table
-//                          of every cataloguer (the "Summary (PDF)" button).
-//   buildIndividualsPdf  — ONE clean page per cataloguer: headline stats,
+//   buildSummaryPdf      — the "Summary (PDF)" button: team headline stats, a
+//                          ranked league table of every cataloguer (share of
+//                          output, active days, speed, away %), then team-wide
+//                          breakdowns — by auction, time away by reason, and
+//                          daily output across the period.
+//   buildIndividualsPdf  — one clean page per cataloguer: headline stats,
 //                          cataloguing-vs-away split, speed & method, by-auction,
 //                          away-by-reason and a per-day breakdown. Used by both
 //                          "Export all" (everyone) and clicking a single name.
 //
 // The route does the DB work + aggregation (mirroring the on-screen pages so the
-// numbers can't drift) and hands finished objects in here. Server-side pdf-lib —
-// serverless-safe, same engine/house style as lib/idle-report-pdf.ts.
+// numbers can't drift) and hands finished objects in here. Server-side pdf-lib.
 import { PDFDocument, PDFPage, PDFImage, StandardFonts, PDFFont, rgb, RGB } from "pdf-lib"
 import { embedVectisLogo } from "@/lib/pdf-logo"
 
@@ -29,11 +32,9 @@ const MUTE    = rgb(0.50, 0.50, 0.50)
 const LINE    = rgb(0.80, 0.80, 0.80)
 const FAINT   = rgb(0.92, 0.92, 0.92)
 const ZEBRA   = rgb(0.972, 0.972, 0.972)
-const BAND    = rgb(0.95, 0.95, 0.95)
 const RED     = rgb(0.79, 0.16, 0.16)
 const GREEN   = rgb(0.13, 0.63, 0.42)
 const TEAL    = rgb(0.165, 0.706, 0.651)
-const TEALBG  = rgb(0.90, 0.968, 0.96)
 const BLUE    = rgb(0.23, 0.51, 0.96)
 const PURPLE  = rgb(0.66, 0.33, 0.97)
 const EMERALD = rgb(0.13, 0.70, 0.53)
@@ -44,21 +45,26 @@ const UK_TZ = "Europe/London"
 // ─── Public data shapes (pure — the route fills these) ──────────────────────
 export type PdfReasonMeta = { label: string; idleColour: string }
 
-/** One row of the team summary league table. */
+/** One row of the team summary league table (all figures within the period). */
 export type SummaryRow = {
   name: string
   lots: number
+  activeDays: number
   dailyAvg: number
-  lotsToday: number
-  lotsWeek: number
   avgMs: number
   fastestMs: number
   slowestMs: number
+  catMs: number
   awayMs: number
+  awayPct: number | null   // this person's away time as % of their tracked time
   researchMs: number
 }
 
-/** Team-wide figures for the summary header + totals row. */
+export type PdfAuctionStat = { code: string; name: string; count: number; avgMs: number; fastestMs: number; slowestMs: number }
+export type PdfAwayReason  = { reasonKey: string; count: number; totalMs: number }
+export type PdfDayRow      = { label: string; lots: number; catMs: number; awayMs: number }
+
+/** Team-wide figures + breakdowns for the summary page. */
 export type SummaryTeam = {
   rangeLabel: string
   totalLots: number
@@ -66,13 +72,14 @@ export type SummaryTeam = {
   fastestMs: number
   slowestMs: number
   cataloguers: number
-  lotsToday: number
+  activeDays: number       // distinct days anyone catalogued in the period
+  totalCatMs: number
   totalAwayMs: number
+  researchMs: number
+  byAuction: PdfAuctionStat[]
+  byReason: PdfAwayReason[]
+  byDay: PdfDayRow[]
 }
-
-export type PdfAuctionStat = { code: string; name: string; count: number; avgMs: number; fastestMs: number; slowestMs: number }
-export type PdfAwayReason  = { reasonKey: string; count: number; totalMs: number }
-export type PdfDayRow      = { label: string; lots: number; catMs: number; awayMs: number }
 
 export type PersonPdfReport = {
   userName: string
@@ -132,6 +139,8 @@ function fmtDur(ms: number | null | undefined): string {
   return `${s}s`
 }
 
+function pctStr(n: number | null): string { return n == null ? "-" : `${n}%` }
+
 type Col = { title: string; x: number; w: number; align: "left" | "right" }
 
 // ─── Shared document context ────────────────────────────────────────────────
@@ -185,7 +194,7 @@ function newPage(ctx: Ctx): void { ctx.page = ctx.doc.addPage([PAGE_W, PAGE_H]);
 function ensure(ctx: Ctx, space: number): void { if (ctx.y - space < MARGIN + 26) newPage(ctx) }
 
 function sectionTitle(ctx: Ctx, title: string): void {
-  ensure(ctx, 30)
+  ensure(ctx, 34)
   ctx.page.drawText(safeAscii(title).toUpperCase(), { x: MARGIN, y: ctx.y - 9, size: 9, font: ctx.helvB, color: GREY })
   ctx.y -= 18
 }
@@ -237,41 +246,109 @@ function footer(ctx: Ctx, label: string): void {
   })
 }
 
+// ─── Shared breakdown tables (used by both layouts) ─────────────────────────
+function auctionTable(ctx: Ctx, stats: PdfAuctionStat[], title: string): void {
+  if (!stats.length) return
+  sectionTitle(ctx, `${title}  (${stats.length})`)
+  const cols: Col[] = [
+    { title: "AUCTION",  x: MARGIN,        w: 340, align: "left"  },
+    { title: "LOTS",     x: MARGIN + 350,  w: 60,  align: "right" },
+    { title: "AVG TIME", x: MARGIN + 420,  w: 100, align: "right" },
+    { title: "FASTEST",  x: MARGIN + 530,  w: 100, align: "right" },
+    { title: "SLOWEST",  x: MARGIN + 640,  w: CONTENT_W - 640, align: "right" },
+  ]
+  table(ctx, cols, stats, 15, (a) => {
+    ctx.page.drawText(truncate(a.code, ctx.helvB, 9, 76), { x: cols[0].x, y: ctx.y - 8, size: 9, font: ctx.helvB, color: INK })
+    ctx.page.drawText(truncate(a.name, ctx.helv, 9, cols[0].w - 84), { x: cols[0].x + 82, y: ctx.y - 8, size: 9, font: ctx.helv, color: GREY })
+    drawRight(ctx, String(a.count),     cols[1].x + cols[1].w, ctx.y - 8, 9, ctx.helvB, INK)
+    drawRight(ctx, fmtDur(a.avgMs),     cols[2].x + cols[2].w, ctx.y - 8, 9, ctx.helv, GREY)
+    drawRight(ctx, fmtDur(a.fastestMs), cols[3].x + cols[3].w, ctx.y - 8, 9, ctx.helv, GREEN)
+    drawRight(ctx, fmtDur(a.slowestMs), cols[4].x + cols[4].w, ctx.y - 8, 9, ctx.helv, RED)
+  }, true)
+  ctx.y -= 16
+}
+
+function reasonTable(ctx: Ctx, rows: PdfAwayReason[], title: string, labelOf: (k: string) => string, colourOf: (k: string) => RGB): void {
+  if (!rows.length) return
+  sectionTitle(ctx, title)
+  const cols: Col[] = [
+    { title: "REASON",     x: MARGIN,        w: 300, align: "left"  },
+    { title: "SESSIONS",   x: MARGIN + 310,  w: 90,  align: "right" },
+    { title: "TOTAL TIME", x: MARGIN + 410,  w: 120, align: "right" },
+    { title: "SHARE",      x: MARGIN + 540,  w: CONTENT_W - 540, align: "right" },
+  ]
+  const totalAway = rows.reduce((s, r) => s + r.totalMs, 0) || 1
+  const sorted = [...rows].sort((a, b) => b.totalMs - a.totalMs)
+  table(ctx, cols, sorted, 15, (r) => {
+    ctx.page.drawRectangle({ x: cols[0].x, y: ctx.y - 9, width: 8, height: 8, color: colourOf(r.reasonKey) })
+    ctx.page.drawText(truncate(labelOf(r.reasonKey), ctx.helv, 9, cols[0].w - 14), { x: cols[0].x + 14, y: ctx.y - 8, size: 9, font: ctx.helv, color: INK })
+    drawRight(ctx, String(r.count),   cols[1].x + cols[1].w, ctx.y - 8, 9, ctx.helv, GREY)
+    drawRight(ctx, fmtDur(r.totalMs), cols[2].x + cols[2].w, ctx.y - 8, 9, ctx.helvB, ORANGEB)
+    drawRight(ctx, `${Math.round((r.totalMs / totalAway) * 100)}%`, cols[3].x + cols[3].w, ctx.y - 8, 9, ctx.helv, MUTE)
+  }, true)
+  ctx.y -= 16
+}
+
+function dayTable(ctx: Ctx, days: PdfDayRow[], title: string): void {
+  if (!days.length) return
+  sectionTitle(ctx, `${title}  (${days.length} day${days.length === 1 ? "" : "s"})`)
+  const cols: Col[] = [
+    { title: "DAY",         x: MARGIN,        w: 220, align: "left"  },
+    { title: "LOTS",        x: MARGIN + 230,  w: 70,  align: "right" },
+    { title: "CATALOGUING", x: MARGIN + 310,  w: 150, align: "right" },
+    { title: "TIME AWAY",   x: MARGIN + 470,  w: CONTENT_W - 470, align: "right" },
+  ]
+  table(ctx, cols, days, 15, (d) => {
+    ctx.page.drawText(truncate(d.label, ctx.helvB, 9, cols[0].w), { x: cols[0].x, y: ctx.y - 8, size: 9, font: ctx.helvB, color: INK })
+    drawRight(ctx, d.lots.toLocaleString(), cols[1].x + cols[1].w, ctx.y - 8, 9, ctx.helvB, INK)
+    drawRight(ctx, fmtDur(d.catMs),  cols[2].x + cols[2].w, ctx.y - 8, 9, ctx.helv, EMERALD)
+    drawRight(ctx, d.awayMs > 0 ? fmtDur(d.awayMs) : "-", cols[3].x + cols[3].w, ctx.y - 8, 9, ctx.helv, d.awayMs > 0 ? ORANGEB : MUTE)
+  }, true)
+  ctx.y -= 16
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
-//  Summary (team league table) — one page
+//  Summary (team) — league table + team-wide breakdowns
 // ═══════════════════════════════════════════════════════════════════════════
-export async function buildSummaryPdf(rows: SummaryRow[], team: SummaryTeam): Promise<Uint8Array> {
+export async function buildSummaryPdf(rows: SummaryRow[], team: SummaryTeam, reasonMeta: Map<string, PdfReasonMeta>): Promise<Uint8Array> {
   const ctx = await mkCtx("Cataloguing Performance", team.rangeLabel)
   ctx.heading = "Team Summary"
-  ctx.subnote = "Time away counts Mon-Fri, 9am-5pm only"
+  ctx.subnote = "All figures are for the selected period. Time away counts Mon-Fri, 9am-5pm."
   header(ctx)
 
+  const labelOf  = (k: string) => reasonMeta.get(k)?.label ?? k
+  const colourOf = (k: string) => hexToRgb(reasonMeta.get(k)?.idleColour ?? "#9ca3af")
+
+  const tracked   = team.totalCatMs + team.totalAwayMs
+  const activePct = tracked > 0 ? Math.round((team.totalCatMs / tracked) * 100) : null
+  const awayPct   = activePct != null ? 100 - activePct : null
+
   statBoxes(ctx, [
-    { label: "Total Lots",      value: team.totalLots.toLocaleString(), sub: `${team.cataloguers} cataloguer${team.cataloguers === 1 ? "" : "s"}` },
-    { label: "Avg Time / Lot",  value: fmtDur(team.avgMs),              sub: "across all cataloguers" },
-    { label: "Lots Today",      value: team.lotsToday.toLocaleString(), sub: "so far today" },
-    { label: "Total Time Away", value: fmtDur(team.totalAwayMs),        sub: "logged in this period" },
+    { label: "Total Lots",        value: team.totalLots.toLocaleString(), sub: `${team.cataloguers} cataloguer${team.cataloguers === 1 ? "" : "s"} · ${team.activeDays} active day${team.activeDays === 1 ? "" : "s"}` },
+    { label: "Avg Time / Lot",    value: fmtDur(team.avgMs),              sub: `${fmtDur(team.fastestMs)} fastest · ${fmtDur(team.slowestMs)} slowest` },
+    { label: "Cataloguing Time",  value: fmtDur(team.totalCatMs),         sub: activePct != null ? `${activePct}% of tracked time` : "active time logged" },
+    { label: "Total Time Away",   value: fmtDur(team.totalAwayMs),        sub: awayPct != null ? `${awayPct}% of tracked time` : "none logged" },
   ])
 
+  // ── Per-cataloguer league table (period-scoped columns only) ──
   sectionTitle(ctx, "Per cataloguer  (ranked by lots)")
-
-  // Column layout — right edge must stay within RIGHT (805.89).
   const cols: Col[] = [
-    { title: "#",          x: MARGIN,        w: 18,  align: "left"  },
-    { title: "CATALOGUER", x: MARGIN + 22,   w: 158, align: "left"  },
-    { title: "LOTS",       x: MARGIN + 182,  w: 46,  align: "right" },
-    { title: "DAILY AVG",  x: MARGIN + 232,  w: 56,  align: "right" },
-    { title: "TODAY",      x: MARGIN + 292,  w: 42,  align: "right" },
-    { title: "WEEK",       x: MARGIN + 338,  w: 46,  align: "right" },
-    { title: "AVG TIME",   x: MARGIN + 388,  w: 74,  align: "right" },
-    { title: "FASTEST",    x: MARGIN + 466,  w: 74,  align: "right" },
-    { title: "SLOWEST",    x: MARGIN + 544,  w: 74,  align: "right" },
-    { title: "AWAY",       x: MARGIN + 622,  w: 70,  align: "right" },
-    { title: "RESEARCH",   x: MARGIN + 696,  w: CONTENT_W - 696, align: "right" },
+    { title: "#",          x: MARGIN,        w: 16,  align: "left"  },
+    { title: "CATALOGUER", x: MARGIN + 26,   w: 118, align: "left"  },
+    { title: "LOTS",       x: MARGIN + 154,  w: 40,  align: "right" },
+    { title: "SHARE",      x: MARGIN + 204,  w: 42,  align: "right" },
+    { title: "DAYS",       x: MARGIN + 256,  w: 34,  align: "right" },
+    { title: "AVG/DAY",    x: MARGIN + 300,  w: 48,  align: "right" },
+    { title: "AVG TIME",   x: MARGIN + 358,  w: 64,  align: "right" },
+    { title: "FASTEST",    x: MARGIN + 432,  w: 58,  align: "right" },
+    { title: "SLOWEST",    x: MARGIN + 500,  w: 60,  align: "right" },
+    { title: "AWAY",       x: MARGIN + 570,  w: 66,  align: "right" },
+    { title: "AWAY %",     x: MARGIN + 646,  w: 44,  align: "right" },
+    { title: "RESEARCH",   x: MARGIN + 700,  w: CONTENT_W - 700, align: "right" },
   ]
-
   const maxLots = rows.reduce((m, r) => Math.max(m, r.lots), 0)
   const nameCol = cols[1]
+  const totalLots = team.totalLots || 1
 
   if (rows.length === 0) {
     ctx.page.drawText("No cataloguing activity in this period.", { x: MARGIN, y: ctx.y - 14, size: 11, font: ctx.helv, color: MUTE })
@@ -280,20 +357,20 @@ export async function buildSummaryPdf(rows: SummaryRow[], team: SummaryTeam): Pr
       const yb = ctx.y - 9
       drawRight(ctx, String(i + 1), cols[0].x + cols[0].w, yb, 8, ctx.helv, MUTE)
       ctx.page.drawText(truncate(r.name, ctx.helvB, 9, nameCol.w), { x: nameCol.x, y: yb, size: 9, font: ctx.helvB, color: INK })
-      // subtle output bar under the name (relative to the top performer)
       if (maxLots > 0 && r.lots > 0) {
         const bw = Math.max(2, (nameCol.w - 2) * (r.lots / maxLots))
         ctx.page.drawRectangle({ x: nameCol.x, y: ctx.y - 15.5, width: bw, height: 2, color: TEAL })
       }
-      drawRight(ctx, r.lots.toLocaleString(),  cols[2].x + cols[2].w, yb, 9, ctx.helvB, INK)
-      drawRight(ctx, r.dailyAvg.toLocaleString(), cols[3].x + cols[3].w, yb, 9, ctx.helv, GREY)
-      drawRight(ctx, r.lotsToday ? String(r.lotsToday) : "-", cols[4].x + cols[4].w, yb, 9, ctx.helv, GREY)
-      drawRight(ctx, r.lotsWeek ? String(r.lotsWeek) : "-",  cols[5].x + cols[5].w, yb, 9, ctx.helv, GREY)
+      drawRight(ctx, r.lots.toLocaleString(), cols[2].x + cols[2].w, yb, 9, ctx.helvB, INK)
+      drawRight(ctx, `${Math.round((r.lots / totalLots) * 100)}%`, cols[3].x + cols[3].w, yb, 9, ctx.helv, TEAL)
+      drawRight(ctx, r.activeDays ? String(r.activeDays) : "-", cols[4].x + cols[4].w, yb, 9, ctx.helv, GREY)
+      drawRight(ctx, r.dailyAvg.toLocaleString(), cols[5].x + cols[5].w, yb, 9, ctx.helv, GREY)
       drawRight(ctx, fmtDur(r.avgMs),     cols[6].x + cols[6].w, yb, 9, ctx.helv, GREY)
       drawRight(ctx, fmtDur(r.fastestMs), cols[7].x + cols[7].w, yb, 9, ctx.helv, GREEN)
       drawRight(ctx, fmtDur(r.slowestMs), cols[8].x + cols[8].w, yb, 9, ctx.helv, RED)
       drawRight(ctx, fmtDur(r.awayMs),    cols[9].x + cols[9].w, yb, 9, ctx.helv, ORANGEB)
-      drawRight(ctx, r.researchMs ? fmtDur(r.researchMs) : "-", cols[10].x + cols[10].w, yb, 9, ctx.helv, MUTE)
+      drawRight(ctx, pctStr(r.awayPct),   cols[10].x + cols[10].w, yb, 9, ctx.helv, MUTE)
+      drawRight(ctx, r.researchMs ? fmtDur(r.researchMs) : "-", cols[11].x + cols[11].w, yb, 9, ctx.helv, MUTE)
     }, true)
 
     // Team totals row
@@ -303,16 +380,22 @@ export async function buildSummaryPdf(rows: SummaryRow[], team: SummaryTeam): Pr
     const sum = (f: (r: SummaryRow) => number) => rows.reduce((s, r) => s + f(r), 0)
     ctx.page.drawText("TEAM TOTAL", { x: cols[1].x, y: yb, size: 8.5, font: ctx.helvB, color: INK })
     drawRight(ctx, team.totalLots.toLocaleString(), cols[2].x + cols[2].w, yb, 9, ctx.helvB, INK)
-    drawRight(ctx, "-", cols[3].x + cols[3].w, yb, 9, ctx.helv, MUTE)
-    drawRight(ctx, sum(r => r.lotsToday).toLocaleString(), cols[4].x + cols[4].w, yb, 9, ctx.helvB, GREY)
-    drawRight(ctx, sum(r => r.lotsWeek).toLocaleString(),  cols[5].x + cols[5].w, yb, 9, ctx.helvB, GREY)
+    drawRight(ctx, "100%", cols[3].x + cols[3].w, yb, 9, ctx.helvB, TEAL)
+    drawRight(ctx, team.activeDays ? String(team.activeDays) : "-", cols[4].x + cols[4].w, yb, 9, ctx.helvB, GREY)
+    drawRight(ctx, "-", cols[5].x + cols[5].w, yb, 9, ctx.helv, MUTE)
     drawRight(ctx, fmtDur(team.avgMs),     cols[6].x + cols[6].w, yb, 9, ctx.helvB, GREY)
     drawRight(ctx, fmtDur(team.fastestMs), cols[7].x + cols[7].w, yb, 9, ctx.helvB, GREEN)
     drawRight(ctx, fmtDur(team.slowestMs), cols[8].x + cols[8].w, yb, 9, ctx.helvB, RED)
     drawRight(ctx, fmtDur(team.totalAwayMs), cols[9].x + cols[9].w, yb, 9, ctx.helvB, ORANGEB)
-    drawRight(ctx, fmtDur(sum(r => r.researchMs)), cols[10].x + cols[10].w, yb, 9, ctx.helvB, MUTE)
-    ctx.y -= 22
+    drawRight(ctx, pctStr(awayPct), cols[10].x + cols[10].w, yb, 9, ctx.helvB, MUTE)
+    drawRight(ctx, fmtDur(sum(r => r.researchMs)), cols[11].x + cols[11].w, yb, 9, ctx.helvB, MUTE)
+    ctx.y -= 26
   }
+
+  // ── Team-wide breakdowns ──
+  auctionTable(ctx, team.byAuction, "Team - by auction")
+  reasonTable(ctx, team.byReason, "Team - time away by reason", labelOf, colourOf)
+  dayTable(ctx, team.byDay, "Team - daily output")
 
   footer(ctx, "Vectis Auctions - Cataloguing Performance Summary")
   return await ctx.doc.save()
@@ -344,7 +427,7 @@ export async function buildIndividualsPdf(
     // ── Headline stat boxes ──
     statBoxes(ctx, [
       { label: "Lots in Range",   value: p.lotsInRange.toLocaleString(), sub: rangeLabel },
-      { label: "Avg Time / Lot",  value: fmtDur(p.avgMs),                sub: "all methods" },
+      { label: "Avg Time / Lot",  value: fmtDur(p.avgMs),                sub: `${fmtDur(p.fastestMs)} fastest · ${fmtDur(p.slowestMs)} slowest` },
       { label: "Daily Average",   value: p.dailyAvg.toLocaleString(),    sub: p.completedDays > 0 ? `over ${p.completedDays} full day${p.completedDays === 1 ? "" : "s"}` : "today only" },
       { label: "Total Time Away", value: fmtDur(p.totalAwayMs),          sub: p.idlePct != null ? `${p.idlePct}% of tracked time` : "none logged" },
     ])
@@ -385,65 +468,9 @@ export async function buildIndividualsPdf(
     }
     ctx.y -= 6
 
-    // ── By auction ──
-    if (p.auctionStats.length) {
-      sectionTitle(ctx, `By auction  (${p.auctionStats.length})`)
-      const cols: Col[] = [
-        { title: "AUCTION",  x: MARGIN,        w: 340, align: "left"  },
-        { title: "LOTS",     x: MARGIN + 350,  w: 60,  align: "right" },
-        { title: "AVG TIME", x: MARGIN + 420,  w: 100, align: "right" },
-        { title: "FASTEST",  x: MARGIN + 530,  w: 100, align: "right" },
-        { title: "SLOWEST",  x: MARGIN + 640,  w: CONTENT_W - 640, align: "right" },
-      ]
-      table(ctx, cols, p.auctionStats, 15, (a) => {
-        ctx.page.drawText(truncate(a.code, ctx.helvB, 9, 76), { x: cols[0].x, y: ctx.y - 8, size: 9, font: ctx.helvB, color: INK })
-        ctx.page.drawText(truncate(a.name, ctx.helv, 9, cols[0].w - 84), { x: cols[0].x + 82, y: ctx.y - 8, size: 9, font: ctx.helv, color: GREY })
-        drawRight(ctx, String(a.count),   cols[1].x + cols[1].w, ctx.y - 8, 9, ctx.helvB, INK)
-        drawRight(ctx, fmtDur(a.avgMs),   cols[2].x + cols[2].w, ctx.y - 8, 9, ctx.helv, GREY)
-        drawRight(ctx, fmtDur(a.fastestMs), cols[3].x + cols[3].w, ctx.y - 8, 9, ctx.helv, GREEN)
-        drawRight(ctx, fmtDur(a.slowestMs), cols[4].x + cols[4].w, ctx.y - 8, 9, ctx.helv, RED)
-      }, true)
-      ctx.y -= 16
-    }
-
-    // ── Time away by reason ──
-    if (p.awayByReason.length) {
-      sectionTitle(ctx, "Time away by reason")
-      const cols: Col[] = [
-        { title: "REASON",     x: MARGIN,        w: 300, align: "left"  },
-        { title: "SESSIONS",   x: MARGIN + 310,  w: 90,  align: "right" },
-        { title: "TOTAL TIME", x: MARGIN + 410,  w: 120, align: "right" },
-        { title: "SHARE",      x: MARGIN + 540,  w: CONTENT_W - 540, align: "right" },
-      ]
-      const totalAway = p.awayByReason.reduce((s, r) => s + r.totalMs, 0) || 1
-      const sorted = [...p.awayByReason].sort((a, b) => b.totalMs - a.totalMs)
-      table(ctx, cols, sorted, 15, (r) => {
-        ctx.page.drawRectangle({ x: cols[0].x, y: ctx.y - 9, width: 8, height: 8, color: colourOf(r.reasonKey) })
-        ctx.page.drawText(truncate(labelOf(r.reasonKey), ctx.helv, 9, cols[0].w - 14), { x: cols[0].x + 14, y: ctx.y - 8, size: 9, font: ctx.helv, color: INK })
-        drawRight(ctx, String(r.count),   cols[1].x + cols[1].w, ctx.y - 8, 9, ctx.helv, GREY)
-        drawRight(ctx, fmtDur(r.totalMs), cols[2].x + cols[2].w, ctx.y - 8, 9, ctx.helvB, ORANGEB)
-        drawRight(ctx, `${Math.round((r.totalMs / totalAway) * 100)}%`, cols[3].x + cols[3].w, ctx.y - 8, 9, ctx.helv, MUTE)
-      }, true)
-      ctx.y -= 16
-    }
-
-    // ── Per-day breakdown (one row per working day, newest last) ──
-    if (p.days.length) {
-      sectionTitle(ctx, `Daily breakdown  (${p.days.length} day${p.days.length === 1 ? "" : "s"})`)
-      const cols: Col[] = [
-        { title: "DAY",         x: MARGIN,        w: 220, align: "left"  },
-        { title: "LOTS",        x: MARGIN + 230,  w: 70,  align: "right" },
-        { title: "CATALOGUING", x: MARGIN + 310,  w: 150, align: "right" },
-        { title: "TIME AWAY",   x: MARGIN + 470,  w: CONTENT_W - 470, align: "right" },
-      ]
-      table(ctx, cols, p.days, 15, (d) => {
-        ctx.page.drawText(truncate(d.label, ctx.helvB, 9, cols[0].w), { x: cols[0].x, y: ctx.y - 8, size: 9, font: ctx.helvB, color: INK })
-        drawRight(ctx, d.lots.toLocaleString(), cols[1].x + cols[1].w, ctx.y - 8, 9, ctx.helvB, INK)
-        drawRight(ctx, fmtDur(d.catMs),  cols[2].x + cols[2].w, ctx.y - 8, 9, ctx.helv, EMERALD)
-        drawRight(ctx, d.awayMs > 0 ? fmtDur(d.awayMs) : "-", cols[3].x + cols[3].w, ctx.y - 8, 9, ctx.helv, d.awayMs > 0 ? ORANGEB : MUTE)
-      }, true)
-      ctx.y -= 16
-    }
+    auctionTable(ctx, p.auctionStats, "By auction")
+    reasonTable(ctx, p.awayByReason, "Time away by reason", labelOf, colourOf)
+    dayTable(ctx, p.days, "Daily breakdown")
   })
 
   footer(ctx, "Vectis Auctions - Cataloguer Report")

@@ -6,7 +6,7 @@ import { buildLotMap, minOf, maxOf, ukDayKey, ukDayStartUtc, computeLotBreakdown
 import { DEFAULT_REASONS } from "@/lib/idle-timer-config"
 import {
   buildSummaryPdf, buildIndividualsPdf,
-  type PersonPdfReport, type PdfReasonMeta, type SummaryRow, type SummaryTeam, type PdfDayRow, type PdfAwayReason,
+  type PersonPdfReport, type PdfReasonMeta, type SummaryRow, type SummaryTeam, type PdfDayRow, type PdfAwayReason, type PdfAuctionStat,
 } from "@/lib/reports-pdf"
 import { subDays, subMonths, startOfDay, format } from "date-fns"
 
@@ -166,16 +166,20 @@ export async function GET(req: NextRequest) {
 
     const now       = new Date()
     const todayStr  = ukDayKey(now)
-    const weekStart = ukDayStartUtc(now, 7)   // rolling 7 days — matches the on-screen "This Week"
 
     const orderedIds = [...userIds].sort((a, b) =>
       (nameById.get(a) ?? "").localeCompare(nameById.get(b) ?? ""))
 
     const persons: PersonPdfReport[] = []
     const summaryRows: SummaryRow[]  = []
-    // Team accumulators for the summary header + totals row.
-    let teamLots = 0, teamToday = 0, teamAway = 0, teamTimedSum = 0, teamTimedCount = 0
+    // Team accumulators + maps for the summary header, totals row and breakdowns
+    // (only populated in summary mode).
+    let teamLots = 0, teamAway = 0, teamCat = 0, teamResearch = 0, teamTimedSum = 0, teamTimedCount = 0
     const teamFast: number[] = [], teamSlow: number[] = []
+    const teamDaysSet = new Set<string>()
+    const teamAuction = new Map<string, { code: string; name: string; count: number; sum: number; timed: number; min: number; max: number }>()
+    const teamReason  = new Map<string, { count: number; totalMs: number }>()
+    const teamDayMap  = new Map<string, { key: string; label: string; lots: number; catMs: number; awayMs: number }>()
 
     for (const uid of orderedIds) {
       const uLogs = logsByUser.get(uid) ?? []
@@ -199,8 +203,8 @@ export async function GET(req: NextRequest) {
       const completedDayLogs = incLogs.filter(l => ukDayKey(l.savedAt) !== todayStr)
       const completedDaysSet = new Set(completedDayLogs.map(l => ukDayKey(l.savedAt)))
       const lotsToday = incLogs.length - completedDayLogs.length
-      const lotsWeek  = incLogs.filter(l => l.savedAt >= weekStart).length
       const dailyAvg  = completedDaysSet.size > 0 ? Math.round(completedDayLogs.length / completedDaysSet.size) : lotsToday
+      const activeDaysSet = new Set(incLogs.map(l => ukDayKey(l.savedAt)))   // distinct days worked in period
 
       const wizardLogs = incLogs.filter(l => l.method === "WIZARD")
       const photoLogs  = incLogs.filter(l => l.method === "PHOTO_ONLY")
@@ -273,18 +277,42 @@ export async function GET(req: NextRequest) {
 
       summaryRows.push({
         name: uName,
-        lots: lotsInRange, dailyAvg, lotsToday, lotsWeek,
+        lots: lotsInRange, activeDays: activeDaysSet.size, dailyAvg,
         avgMs, fastestMs, slowestMs,
-        awayMs: totalAwayMs, researchMs: research.ms,
+        catMs: totalCatMs, awayMs: totalAwayMs, awayPct: idlePct,
+        researchMs: research.ms,
       })
 
-      teamLots += lotsInRange
-      teamToday += lotsToday
-      teamAway += totalAwayMs
-      teamTimedSum += timed.reduce((s, v) => s + v, 0)
-      teamTimedCount += timed.length
-      if (fastestMs > 0) teamFast.push(fastestMs)
-      if (slowestMs > 0) teamSlow.push(slowestMs)
+      // Team-wide accumulation (summary only) — header figures + breakdowns.
+      if (summaryMode) {
+        teamLots += lotsInRange
+        teamCat  += totalCatMs
+        teamAway += totalAwayMs
+        teamResearch += research.ms
+        teamTimedSum += timed.reduce((s, v) => s + v, 0)
+        teamTimedCount += timed.length
+        if (fastestMs > 0) teamFast.push(fastestMs)
+        if (slowestMs > 0) teamSlow.push(slowestMs)
+        for (const k of activeDaysSet) teamDaysSet.add(k)
+        for (const log of incLogs) {
+          let te = teamAuction.get(log.auctionId)
+          if (!te) { te = { code: log.auction.code, name: log.auction.name, count: 0, sum: 0, timed: 0, min: Infinity, max: 0 }; teamAuction.set(log.auctionId, te) }
+          te.count++
+          if (log.durationMs > 0) { te.sum += log.durationMs; te.timed++; if (log.durationMs < te.min) te.min = log.durationMs; if (log.durationMs > te.max) te.max = log.durationMs }
+          const key = ukDayKey(log.savedAt)
+          let td = teamDayMap.get(key)
+          if (!td) { td = { key, label: fDayLbl.format(log.savedAt).replace(",", ""), lots: 0, catMs: 0, awayMs: 0 }; teamDayMap.set(key, td) }
+          td.lots++; td.catMs += (breakdowns.get(log.id)?.activeMs ?? log.durationMs)
+        }
+        for (const l of countedIncIdle) {
+          const e = teamReason.get(l.reason) ?? { count: 0, totalMs: 0 }
+          e.count++; e.totalMs += l.idleDurationMs; teamReason.set(l.reason, e)
+          const key = ukDayKey(l.idleStartedAt)
+          let td = teamDayMap.get(key)
+          if (!td) { td = { key, label: fDayLbl.format(l.idleStartedAt).replace(",", ""), lots: 0, catMs: 0, awayMs: 0 }; teamDayMap.set(key, td) }
+          td.awayMs += l.idleDurationMs
+        }
+      }
     }
 
     const rangeLabel = isCustom
@@ -296,6 +324,13 @@ export async function GET(req: NextRequest) {
 
     if (summaryMode) {
       const rows = [...summaryRows].sort((a, b) => b.lots - a.lots || a.name.localeCompare(b.name))
+      const byAuction: PdfAuctionStat[] = [...teamAuction.values()]
+        .map(a => ({ code: a.code, name: a.name, count: a.count, avgMs: a.timed ? Math.round(a.sum / a.timed) : 0, fastestMs: a.timed ? a.min : 0, slowestMs: a.max }))
+        .sort((a, b) => b.count - a.count)
+      const byReason: PdfAwayReason[] = [...teamReason.entries()].map(([reasonKey, v]) => ({ reasonKey, count: v.count, totalMs: v.totalMs }))
+      const byDay: PdfDayRow[] = [...teamDayMap.values()]
+        .sort((a, b) => a.key.localeCompare(b.key))
+        .map(d => ({ label: d.label, lots: d.lots, catMs: d.catMs, awayMs: d.awayMs }))
       const team: SummaryTeam = {
         rangeLabel,
         totalLots:   teamLots,
@@ -303,10 +338,13 @@ export async function GET(req: NextRequest) {
         fastestMs:   minOf(teamFast),
         slowestMs:   maxOf(teamSlow),
         cataloguers: rows.length,
-        lotsToday:   teamToday,
+        activeDays:  teamDaysSet.size,
+        totalCatMs:  teamCat,
         totalAwayMs: teamAway,
+        researchMs:  teamResearch,
+        byAuction, byReason, byDay,
       }
-      pdfBytes = await buildSummaryPdf(rows, team)
+      pdfBytes = await buildSummaryPdf(rows, team, reasonMeta)
       niceName = `Cataloguing performance summary - ${rangeLabel}.pdf`
     } else {
       // Always render at least one section so the PDF is never a blank page.

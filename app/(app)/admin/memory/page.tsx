@@ -27,7 +27,7 @@ last_updated: 2026-07-23
 
 The main /tools/reports (Cataloguing Performance) page has clean, manager-friendly PDF exports, rebuilt 2026-07-23. Jordan wanted them "simple with a clean layout but still full of detail" — this replaced an earlier forensic per-lot dump. Two layouts, one route (app/api/reports/pdf/route.ts), one builder (lib/reports-pdf.ts — pdf-lib, A4 landscape, Vectis logo, same house style as the Activity/idle PDF):
 
-- **Summary (PDF)** button → \`?summary=1&range=\` → buildSummaryPdf: ONE page — team stat boxes + a ranked league table of every cataloguer (lots, daily avg, today, week, avg/fastest/slowest time, away, research) with per-name output bars + a Team Total row.
+- **Summary (PDF)** button → \`?summary=1&range=\` → buildSummaryPdf: **everything period-scoped** (Jordan rejected "today"/"week" columns inside a 30-day report). Team stat boxes (Total Lots · Avg Time/Lot · Cataloguing Time · Total Time Away) + a ranked league table (Lots · Share % · Active Days · Avg/Day · Avg/Fastest/Slowest · Away · Away % · Research) with output bars + Team Total row, then **team-wide breakdowns**: by auction, time away by reason, and daily output across the period.
 - **Export all (PDF)** button → \`?range=\` → buildIndividualsPdf: one clean page PER cataloguer.
 - Clicking a name / per-row PDF / the individual page's Export → \`?userId=&range=\` (or \`&from=&to=\`) → same buildIndividualsPdf, one person.
 
