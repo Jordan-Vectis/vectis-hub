@@ -133,6 +133,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
   const [addingMini, setAddingMini] = useState(false)
   const miniPhotoInput = useRef<HTMLInputElement>(null)
   const pickForMini = useRef<string | null>(null)
+  const miniEditorRef = useRef<HTMLDivElement>(null)
   // "pick" = tick which minis you're taking; "recommend" = let the plan choose
   // 1 mini per path + a boss side from the candidate defenders you've typed in.
   const [miniMode, setMiniMode] = useState<"pick" | "recommend">("pick")
@@ -141,6 +142,9 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
   // placingId = a tray node waiting for an empty slot to be tapped.
   const [editingMiniId, setEditingMiniId] = useState<string | null>(null)
   const [placingId, setPlacingId] = useState<string | null>(null)
+  // When a node's editor opens, bring it into view (it appears below the map, so
+  // on a phone it's off-screen otherwise).
+  useEffect(() => { if (editingMiniId) miniEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }) }, [editingMiniId])
 
   async function createInSlot(slot: string) {
     if (addingMini) return
@@ -428,9 +432,9 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                           <span className="text-[10px] uppercase tracking-widest opacity-40 shrink-0">Fight {i + 1}</span>
                           {cls && <span className="w-2 h-2 rounded-full shrink-0" style={{ background: classColour(cls) }} title={cls} />}
                           <div className="ml-auto flex items-center gap-0.5 shrink-0">
-                            <button onClick={() => move(f.id, -1)} disabled={i === 0} className="px-1 opacity-40 hover:opacity-100 disabled:opacity-15 disabled:cursor-default" title="Move up">▲</button>
-                            <button onClick={() => move(f.id, 1)} disabled={i === warFights.length - 1} className="px-1 opacity-40 hover:opacity-100 disabled:opacity-15 disabled:cursor-default" title="Move down">▼</button>
-                            <button onClick={() => removeFight(f.id)} className="px-1 text-red-400 opacity-60 hover:opacity-100" title="Remove fight">×</button>
+                            <button onClick={() => move(f.id, -1)} disabled={i === 0} className="w-8 h-8 flex items-center justify-center rounded opacity-50 hover:opacity-100 hover:bg-white/5 active:bg-white/10 disabled:opacity-15 disabled:cursor-default" title="Move up">▲</button>
+                            <button onClick={() => move(f.id, 1)} disabled={i === warFights.length - 1} className="w-8 h-8 flex items-center justify-center rounded opacity-50 hover:opacity-100 hover:bg-white/5 active:bg-white/10 disabled:opacity-15 disabled:cursor-default" title="Move down">▼</button>
+                            <button onClick={() => removeFight(f.id)} className="w-8 h-8 flex items-center justify-center rounded text-red-400 opacity-70 hover:opacity-100 hover:bg-red-500/10 active:bg-red-500/20" title="Remove fight">×</button>
                           </div>
                         </div>
                         <input
@@ -517,32 +521,33 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                             <button key={s.key}
                               onClick={() => (placingId ? placeMini(placingId, s.key) : createInSlot(s.key))}
                               disabled={addingMini}
-                              className={`absolute -translate-x-1/2 -translate-y-1/2 w-[13%] aspect-square rounded-full border border-dashed flex items-center justify-center text-[10px] transition-all ${placingId ? "border-[#33ff66] text-[#33ff66] animate-pulse bg-[#33ff66]/10" : "border-[#1f5c33] opacity-50 hover:opacity-100 hover:border-[#33ff66]"}`}
+                              className={`absolute -translate-x-1/2 -translate-y-1/2 w-[17%] sm:w-[15%] aspect-square rounded-full border-2 border-dashed flex items-center justify-center text-sm transition-all ${placingId ? "border-[#33ff66] text-[#33ff66] animate-pulse bg-[#33ff66]/10" : "border-[#1f5c33] opacity-50 hover:opacity-100 hover:border-[#33ff66] active:bg-[#33ff66]/10"}`}
                               style={pos}
                               title={placingId ? "Place the node here" : `Add the ${s.hint || "node"} here`}>
-                              {s.hint ? <span className="text-[8px] font-bold tracking-widest opacity-80">{s.hint}</span> : "＋"}
+                              {s.hint ? <span className="text-[9px] font-bold tracking-widest opacity-80">{s.hint}</span> : "＋"}
                             </button>
                           )
                         }
                         const live = isLive(m)
+                        const editingThis = editingMiniId === m.id
                         // In recommend mode, a candidate with a defender typed reads as
                         // "in the running"; the winner (live) glows green after a plan.
                         const candidate = miniMode === "recommend" && !!m.defender.trim()
                         return (
-                          <div key={s.key} className="absolute -translate-x-1/2 -translate-y-1/2 w-[14%]" style={pos}>
-                            <button onClick={() => { if (placingId) return; if (miniMode === "pick") toggleTaking(m.id); else setEditingMiniId(m.id) }}
-                              className={`relative w-full aspect-square rounded-full border-2 overflow-hidden flex items-center justify-center transition-all ${live ? "border-[#33ff66] shadow-[0_0_12px_rgba(51,255,102,0.45)]" : candidate ? "border-[#1f5c33] opacity-90" : "border-[#1f5c33] opacity-55 hover:opacity-90 grayscale"}`}
-                              title={`${m.label || s.hint || "Node"}${miniMode === "pick" ? (m.taking ? " — taking this war (tap to drop)" : " — tap to take this war") : (live ? " — recommended this war" : " — tap to edit; type its defender below")}`}>
+                          <div key={s.key} className="absolute -translate-x-1/2 -translate-y-1/2 w-[18%] sm:w-[15%]" style={pos}>
+                            {/* One consistent action: tap the node to open its editor
+                                (photo, take, defender). Big target for mobile. */}
+                            <button onClick={() => { if (!placingId) setEditingMiniId(editingThis ? null : m.id) }}
+                              className={`relative w-full aspect-square rounded-full border-2 overflow-hidden flex items-center justify-center transition-all active:scale-95 ${live ? "border-[#33ff66] shadow-[0_0_12px_rgba(51,255,102,0.45)]" : editingThis ? "border-[#33ff66]" : candidate ? "border-[#38b6ff]/70 opacity-90" : "border-[#1f5c33] opacity-60 hover:opacity-90"}`}
+                              title={`${m.label || s.hint || "Node"} — tap to edit / add photo`}>
                               {m.nodesImageUrl
-                                ? <img src={m.nodesImageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                                : <span className="text-[9px] opacity-60">📷</span>}
-                              {live && <span className="absolute inset-0 rounded-full ring-1 ring-[#33ff66]/60" />}
-                              {candidate && !live && <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#38b6ff] border border-black" title="Defender set — in the running" />}
+                                ? <img src={m.nodesImageUrl} alt="" className={`absolute inset-0 w-full h-full object-cover ${live ? "" : "grayscale-[40%]"}`} />
+                                : <span className="text-base opacity-70">📷</span>}
+                              {live && <span className="absolute inset-0 rounded-full ring-2 ring-[#33ff66]/60" />}
+                              {live && <span className="absolute bottom-0 inset-x-0 text-[7px] font-bold text-black bg-[#33ff66] text-center leading-tight py-px">TAKING</span>}
+                              {candidate && !live && <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#38b6ff] border border-black" title="Defender set — in the running" />}
                             </button>
-                            <button onClick={() => setEditingMiniId(m.id)}
-                              className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-black border border-[#1f5c33] text-[8px] flex items-center justify-center opacity-70 hover:opacity-100 hover:border-[#33ff66]"
-                              title="Edit this node (label, photo, remove)">✎</button>
-                            <p className={`mt-0.5 text-center text-[9px] uppercase tracking-widest truncate ${live ? "opacity-90" : "opacity-45"}`}
+                            <p className={`mt-0.5 text-center text-[9px] uppercase tracking-widest truncate ${live ? "opacity-90" : "opacity-50"}`}
                               style={{ color: live ? GREEN : undefined }}>
                               {m.label || s.hint || "—"}
                             </p>
@@ -555,44 +560,75 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                       {placingId
                         ? "Tap an empty ring to place the node — or press Cancel below."
                         : miniMode === "recommend"
-                          ? (path?.miniRecs?.length ? "Green nodes are this war's recommendation. Re-plan after changing defenders." : "Fill in the defenders below, then Plan my path to get a recommendation.")
-                          : takenMinis.length
-                            ? `${takenMinis.length} node${takenMinis.length === 1 ? "" : "s"} selected this war — tap a node to toggle it.`
-                            : "Tap an empty ring to add that node (photo needed once). Tap a node to take it this war."}
+                          ? (path?.miniRecs?.length ? "Green = this war's recommendation. Tap any node to add its photo or change its defender." : "Tap each node to add its photo + defender, then Plan my path for a recommendation.")
+                          : "Tap an empty ring to add a node. Tap a node to add its photo or take it this war."}
                     </p>
 
-                    {/* Node editor — label / photo / unplace / delete */}
-                    {editing && (
-                      <div className="border border-[#1f5c33] rounded-lg p-2.5 flex gap-3 items-start max-w-[540px] mx-auto w-full">
-                        <button onClick={() => pickMiniPhoto(editing.id)} disabled={miniUploadingId === editing.id}
-                          className="shrink-0 w-24 h-16 rounded-lg border border-[#1f5c33] hover:border-[#33ff66] overflow-hidden flex items-center justify-center text-[10px] opacity-70 disabled:opacity-40 transition-colors"
-                          title={editing.nodesImageUrl ? "Change node photo" : "Add this node's photo (only needed once)"}>
-                          {miniUploadingId === editing.id
-                            ? <span className="animate-pulse">Saving…</span>
-                            : editing.nodesImageUrl
-                              ? <img src={editing.nodesImageUrl} alt="Node" className="w-full h-full object-cover" />
-                              : <span className="text-center leading-tight px-1">📷 Node<br />photo</span>}
-                        </button>
-                        <div className="flex-1 min-w-0 space-y-1.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] uppercase tracking-widest opacity-40 shrink-0">Mini node</span>
-                            <div className="ml-auto flex items-center gap-2 shrink-0">
-                              {editing.slot && (
-                                <button onClick={() => unplaceMini(editing.id)} className="text-[10px] opacity-60 hover:opacity-100" title="Take it off the map (keeps the photo)">📍 Unplace</button>
-                              )}
-                              <button onClick={() => removeMini(editing.id)} className="text-[10px] text-red-400 opacity-60 hover:opacity-100" title="Delete this node entirely">🗑 Delete</button>
-                              <button onClick={() => setEditingMiniId(null)} className="px-2 py-0.5 rounded border border-[#1f5c33] text-[10px] hover:border-[#33ff66]">✓ Done</button>
-                            </div>
+                    {/* Node editor — one place for everything: photo, take, defender.
+                        Big controls so it's easy on a phone. */}
+                    {editing && (() => {
+                      const sec = editing.slot?.startsWith("pa_") ? "Path A" : editing.slot?.startsWith("pb_") ? "Path B" : editing.slot?.startsWith("pc_") ? "Path C" : editing.slot?.startsWith("boss_") ? "Boss" : ""
+                      const hint = MAP_SLOTS.find((s) => s.key === editing.slot)?.hint ?? ""
+                      const showDefender = miniMode === "recommend" || editing.taking
+                      return (
+                        <div ref={miniEditorRef} className="border-2 border-[#33ff66]/40 rounded-xl p-3 space-y-3 max-w-[540px] mx-auto w-full bg-[#33ff66]/[0.04]">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] uppercase tracking-widest opacity-70">Editing {sec ? `${sec}${hint ? ` · ${hint}` : ""}` : "node"}</span>
+                            <button onClick={() => setEditingMiniId(null)} className="px-4 py-2 rounded-lg border border-[#1f5c33] text-sm hover:border-[#33ff66] active:bg-[#33ff66]/10">✓ Done</button>
                           </div>
+
+                          {/* Photo — big, obvious */}
+                          <button onClick={() => pickMiniPhoto(editing.id)} disabled={miniUploadingId === editing.id}
+                            className="w-full h-40 rounded-lg border-2 border-dashed border-[#1f5c33] hover:border-[#33ff66] active:border-[#33ff66] overflow-hidden flex items-center justify-center text-sm opacity-80 disabled:opacity-40 transition-colors">
+                            {miniUploadingId === editing.id
+                              ? <span className="animate-pulse">Saving photo…</span>
+                              : editing.nodesImageUrl
+                                ? <img src={editing.nodesImageUrl} alt="Node" className="w-full h-full object-contain" />
+                                : <span className="text-center leading-relaxed">📷 Tap to add this node&apos;s photo<br /><span className="opacity-60 text-xs">(only needed once)</span></span>}
+                          </button>
+                          {editing.nodesImageUrl && (
+                            <button onClick={() => pickMiniPhoto(editing.id)} className="text-xs opacity-60 hover:opacity-100 underline">Change photo</button>
+                          )}
+
+                          {/* Label */}
                           <input
                             value={editing.label}
                             onChange={(e) => editMini(editing.id, { label: e.target.value })}
                             onBlur={(e) => setMiniNodeLabel(editing.id, e.target.value).catch(() => {})}
                             placeholder="Node label (e.g. Node 44)…"
-                            className={`${input} w-full py-1.5`} style={{ color: GREEN }} />
+                            className={`${input} w-full py-2.5`} style={{ color: GREEN }} />
+
+                          {/* Take this war (pick mode) */}
+                          {miniMode === "pick" && (
+                            <button onClick={() => toggleTaking(editing.id)}
+                              className={`w-full py-3 rounded-lg text-sm font-bold uppercase tracking-widest border-2 transition-colors ${editing.taking ? "text-black border-transparent" : "border-[#1f5c33] hover:border-[#33ff66] active:bg-[#33ff66]/10"}`}
+                              style={editing.taking ? { background: GREEN } : undefined}>
+                              {editing.taking ? "✓ Taking this war — tap to drop" : "＋ Take this war"}
+                            </button>
+                          )}
+
+                          {/* Defender (recommend: always; pick: once taking) */}
+                          {showDefender && (
+                            <div className="space-y-1">
+                              <p className="text-[10px] uppercase tracking-widest opacity-50">Defender on this node this war</p>
+                              <input value={editing.defender}
+                                onChange={(e) => editMini(editing.id, { defender: e.target.value })}
+                                onBlur={(e) => setMiniNodeDefender(editing.id, e.target.value).catch(() => {})}
+                                list="mcoc-all-champs"
+                                placeholder="Who's defending…"
+                                className={`${input} w-full py-2.5`} style={{ color: GREEN }} />
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-3 pt-1">
+                            {editing.slot && (
+                              <button onClick={() => unplaceMini(editing.id)} className="text-xs opacity-60 hover:opacity-100" title="Take it off the map (keeps the photo)">📍 Off the map</button>
+                            )}
+                            <button onClick={() => removeMini(editing.id)} className="text-xs text-red-400 opacity-70 hover:opacity-100 ml-auto" title="Delete this node entirely">🗑 Delete node</button>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )
+                    })()}
 
                     {/* Unplaced nodes (from before the map, or unplaced by hand) */}
                     {unplaced.length > 0 && (
