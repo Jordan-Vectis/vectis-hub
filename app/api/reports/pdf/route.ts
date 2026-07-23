@@ -2,22 +2,26 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getEffectiveSession } from "@/lib/impersonation"
 import { hasAppAccess } from "@/lib/apps"
-import { buildLotMap, lotRef, minOf, maxOf, ukDayKey, ukDayStartUtc, computeLotBreakdowns } from "@/lib/cataloguing-reports"
+import { buildLotMap, minOf, maxOf, ukDayKey, ukDayStartUtc, computeLotBreakdowns } from "@/lib/cataloguing-reports"
 import { DEFAULT_REASONS } from "@/lib/idle-timer-config"
-import { buildReportsPdf, type PersonPdfReport, type PdfLotEntry, type PdfIdleEntry, type PdfReasonMeta } from "@/lib/reports-pdf"
+import {
+  buildSummaryPdf, buildIndividualsPdf,
+  type PersonPdfReport, type PdfReasonMeta, type SummaryRow, type SummaryTeam, type PdfDayRow, type PdfAwayReason,
+} from "@/lib/reports-pdf"
 import { subDays, subMonths, startOfDay, format } from "date-fns"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 export const runtime = "nodejs"
 
-// GET /api/reports/pdf?userId=<id>&range=<key>   (single cataloguer)
-// GET /api/reports/pdf?range=<key>               (all cataloguers, one section each)
-// GET /api/reports/pdf?userId=<id>&from=&to=     (custom range)
+// GET /api/reports/pdf?summary=1&range=<key>     → team summary (one page, league table)
+// GET /api/reports/pdf?range=<key>               → every cataloguer, one clean page each
+// GET /api/reports/pdf?userId=<id>&range=<key>   → single cataloguer, one clean page
+// GET /api/reports/pdf?userId=<id>&from=&to=     → custom range
 //
-// The nicely-styled PDF replacement for the old .xlsx export. Mirrors the date
-// filtering, orphan-log exclusion and per-figure maths of the on-screen
-// individual report so the numbers can't drift. Server-side pdf-lib.
+// Clean, manager-friendly PDFs. The per-figure maths mirrors the on-screen
+// reports (orphan-log exclusion, day exclusions, timed-only averages, rolling
+// 7-day "this week") so the numbers can't drift. Server-side pdf-lib.
 
 const RANGE_LABELS: Record<string, string> = {
   "today": "Today",
@@ -45,6 +49,8 @@ function avg(nums: number[]): number {
 }
 
 const MAX_IDLE_MS = 10 * 60 * 60 * 1000 // 10 hours — longer is a device left open, not real time away
+const UK_TZ = "Europe/London"
+const fDayLbl = new Intl.DateTimeFormat("en-GB", { timeZone: UK_TZ, weekday: "short", day: "numeric", month: "short", year: "numeric" }) // Mon 6 Jul 2026
 
 export async function GET(req: NextRequest) {
   try {
@@ -59,6 +65,7 @@ export async function GET(req: NextRequest) {
     }
 
     const sp          = req.nextUrl.searchParams
+    const summaryMode = sp.get("summary") === "1"
     const userIdParam = sp.get("userId") || null
     const rangeKey    = sp.get("range") || "30d"
     const fromParam   = sp.get("from")
@@ -86,16 +93,18 @@ export async function GET(req: NextRequest) {
     const savedAtFilter = since || until ? { savedAt:       { ...(since ? { gte: since } : {}), ...(until ? { lte: until } : {}) } } : {}
     const idleAtFilter  = since || until ? { idleStartedAt: { ...(since ? { gte: since } : {}), ...(until ? { lte: until } : {}) } } : {}
 
-    // Which cataloguers? One if userId given, otherwise everyone with data in range.
+    // Which cataloguers? One if userId given, otherwise everyone with any data
+    // in range (timing, time-away, OR research — research-only people still count).
     let userIds: string[]
     if (userIdParam) {
       userIds = [userIdParam]
     } else {
-      const [t, i] = await Promise.all([
+      const [t, i, r] = await Promise.all([
         prisma.catalogueTimingLog.findMany({ where: savedAtFilter, select: { userId: true }, distinct: ["userId"] }),
         prisma.idleLog.findMany({ where: idleAtFilter, select: { userId: true }, distinct: ["userId"] }),
+        prisma.researchLog.findMany({ where: savedAtFilter, select: { userId: true }, distinct: ["userId"] }),
       ])
-      userIds = [...new Set([...t.map(x => x.userId), ...i.map(x => x.userId)])]
+      userIds = [...new Set([...t.map(x => x.userId), ...i.map(x => x.userId), ...r.map(x => x.userId)])]
     }
 
     const [rawLogs, idleLogs, researchLogs, users, config, excludedRows] = await Promise.all([
@@ -125,6 +134,7 @@ export async function GET(req: NextRequest) {
     ])
 
     // Reason code → friendly label + colour (live config, then defaults).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const reasons: { key: string; label: string; idleColour: string }[] = (config?.reasons as any[]) ?? DEFAULT_REASONS
     const reasonMeta = new Map<string, PdfReasonMeta>()
     for (const r of DEFAULT_REASONS) reasonMeta.set(r.key, { label: r.label, idleColour: r.idleColour })
@@ -154,13 +164,19 @@ export async function GET(req: NextRequest) {
       s.add(r.day); excludedByUser.set(r.userId, s)
     }
 
-    const now = new Date()
-    const todayStr = ukDayKey(now)
+    const now       = new Date()
+    const todayStr  = ukDayKey(now)
+    const weekStart = ukDayStartUtc(now, 7)   // rolling 7 days — matches the on-screen "This Week"
 
     const orderedIds = [...userIds].sort((a, b) =>
       (nameById.get(a) ?? "").localeCompare(nameById.get(b) ?? ""))
 
     const persons: PersonPdfReport[] = []
+    const summaryRows: SummaryRow[]  = []
+    // Team accumulators for the summary header + totals row.
+    let teamLots = 0, teamToday = 0, teamAway = 0, teamTimedSum = 0, teamTimedCount = 0
+    const teamFast: number[] = [], teamSlow: number[] = []
+
     for (const uid of orderedIds) {
       const uLogs = logsByUser.get(uid) ?? []
       const uIdle = idleByUser.get(uid) ?? []
@@ -183,6 +199,7 @@ export async function GET(req: NextRequest) {
       const completedDayLogs = incLogs.filter(l => ukDayKey(l.savedAt) !== todayStr)
       const completedDaysSet = new Set(completedDayLogs.map(l => ukDayKey(l.savedAt)))
       const lotsToday = incLogs.length - completedDayLogs.length
+      const lotsWeek  = incLogs.filter(l => l.savedAt >= weekStart).length
       const dailyAvg  = completedDaysSet.size > 0 ? Math.round(completedDayLogs.length / completedDaysSet.size) : lotsToday
 
       const wizardLogs = incLogs.filter(l => l.method === "WIZARD")
@@ -209,69 +226,108 @@ export async function GET(req: NextRequest) {
 
       const countedIncIdle = incIdle.filter(l => l.idleDurationMs <= MAX_IDLE_MS)
       const totalCatMs  = incLogs.reduce((s, l) => s + (breakdowns.get(l.id)?.activeMs ?? l.durationMs), 0)
-      const totalIdleMs = countedIncIdle.reduce((s, l) => s + l.idleDurationMs, 0)
-      const totalTracked = totalCatMs + totalIdleMs
+      const totalAwayMs = countedIncIdle.reduce((s, l) => s + l.idleDurationMs, 0)
+      const totalTracked = totalCatMs + totalAwayMs
       const activePct = totalTracked > 0 ? Math.round((totalCatMs / totalTracked) * 100) : null
       const idlePct   = activePct !== null ? 100 - activePct : null
 
-      const lots: PdfLotEntry[] = incLogs.map(l => ({
-        ts:          l.savedAt.toISOString(),
-        durationMs:  l.durationMs,
-        method:      l.method,
-        barcode:     lotRef(lotMap, l).barcode,
-        keyPointsMs: l.keyPointsMs ?? null,
-        auctionCode: l.auction.code,
-        auctionName: l.auction.name,
-      }))
-      const idle: PdfIdleEntry[] = incIdle.map(l => ({
-        ts:          l.idleStartedAt.toISOString(),
-        durationMs:  l.idleDurationMs,
-        reasonKey:   l.reason,
-        toteNumbers: l.toteNumbers,
-        notes:       l.notes,
-        auctionCode: l.auction.code,
-        auctionName: l.auction.name,
-        excluded:    l.idleDurationMs > MAX_IDLE_MS,
-      }))
+      // Time away grouped by reason.
+      const reasonMap = new Map<string, { count: number; totalMs: number }>()
+      for (const l of countedIncIdle) {
+        const e = reasonMap.get(l.reason) ?? { count: 0, totalMs: 0 }
+        e.count++; e.totalMs += l.idleDurationMs
+        reasonMap.set(l.reason, e)
+      }
+      const awayByReason: PdfAwayReason[] = [...reasonMap.entries()].map(([reasonKey, v]) => ({ reasonKey, count: v.count, totalMs: v.totalMs }))
+
+      // Per-day breakdown (one row per working day, earliest first).
+      const dayMap = new Map<string, { key: string; label: string; lots: number; catMs: number; awayMs: number }>()
+      const getDay = (ts: Date) => {
+        const key = ukDayKey(ts)
+        let d = dayMap.get(key)
+        if (!d) { d = { key, label: fDayLbl.format(ts).replace(",", ""), lots: 0, catMs: 0, awayMs: 0 }; dayMap.set(key, d) }
+        return d
+      }
+      for (const l of incLogs)        { const d = getDay(l.savedAt);       d.lots++; d.catMs += (breakdowns.get(l.id)?.activeMs ?? l.durationMs) }
+      for (const l of countedIncIdle) { const d = getDay(l.idleStartedAt); d.awayMs += l.idleDurationMs }
+      const days: PdfDayRow[] = [...dayMap.values()]
+        .sort((a, b) => a.key.localeCompare(b.key))
+        .map(d => ({ label: d.label, lots: d.lots, catMs: d.catMs, awayMs: d.awayMs }))
 
       const research = researchByUser.get(uid) ?? { ms: 0, sessions: 0 }
+      const hasData  = lotsInRange > 0 || countedIncIdle.length > 0 || research.ms > 0
 
       persons.push({
-        userName: uName,
+        userName: uName, hasData,
         lotsInRange, avgMs, fastestMs, slowestMs,
         dailyAvg, completedDays: completedDaysSet.size,
-        totalCatMs, totalIdleMs, activePct, idlePct,
+        totalCatMs, totalAwayMs, activePct, idlePct,
         wizardCount: wizardLogs.length, wizardAvgMs,
         photoCount: photoLogs.length, photoAvgMs,
         kpCount: kpLogs.length, wizardTracked: wizardLogs.length,
         kpAvgMs, kpFastMs, kpSlowMs, kpPct,
         researchMs: research.ms, researchSessions: research.sessions,
-        auctionStats, lots, idle,
+        awaySessions: countedIncIdle.length,
+        auctionStats, awayByReason, days,
       })
+
+      summaryRows.push({
+        name: uName,
+        lots: lotsInRange, dailyAvg, lotsToday, lotsWeek,
+        avgMs, fastestMs, slowestMs,
+        awayMs: totalAwayMs, researchMs: research.ms,
+      })
+
+      teamLots += lotsInRange
+      teamToday += lotsToday
+      teamAway += totalAwayMs
+      teamTimedSum += timed.reduce((s, v) => s + v, 0)
+      teamTimedCount += timed.length
+      if (fastestMs > 0) teamFast.push(fastestMs)
+      if (slowestMs > 0) teamSlow.push(slowestMs)
     }
 
     const rangeLabel = isCustom
       ? `${fromDate ? format(fromDate, "d MMM yyyy") : "All history"} - ${toDate ? format(toDate, "d MMM yyyy") : "today"}`
       : RANGE_LABELS[rangeKey] ?? "Last 30 days"
 
-    // Always render at least one section so the PDF is never a blank page.
-    if (persons.length === 0) {
-      persons.push({
-        userName: userIdParam ? (nameById.get(userIdParam) ?? "Cataloguer") : "All cataloguers",
-        lotsInRange: 0, avgMs: 0, fastestMs: 0, slowestMs: 0,
-        dailyAvg: 0, completedDays: 0,
-        totalCatMs: 0, totalIdleMs: 0, activePct: null, idlePct: null,
-        wizardCount: 0, wizardAvgMs: 0, photoCount: 0, photoAvgMs: 0,
-        kpCount: 0, wizardTracked: 0, kpAvgMs: 0, kpFastMs: 0, kpSlowMs: 0, kpPct: 0,
-        researchMs: 0, researchSessions: 0,
-        auctionStats: [], lots: [], idle: [],
-      })
+    let pdfBytes: Uint8Array
+    let niceName: string
+
+    if (summaryMode) {
+      const rows = [...summaryRows].sort((a, b) => b.lots - a.lots || a.name.localeCompare(b.name))
+      const team: SummaryTeam = {
+        rangeLabel,
+        totalLots:   teamLots,
+        avgMs:       teamTimedCount > 0 ? Math.round(teamTimedSum / teamTimedCount) : 0,
+        fastestMs:   minOf(teamFast),
+        slowestMs:   maxOf(teamSlow),
+        cataloguers: rows.length,
+        lotsToday:   teamToday,
+        totalAwayMs: teamAway,
+      }
+      pdfBytes = await buildSummaryPdf(rows, team)
+      niceName = `Cataloguing performance summary - ${rangeLabel}.pdf`
+    } else {
+      // Always render at least one section so the PDF is never a blank page.
+      if (persons.length === 0) {
+        persons.push({
+          userName: userIdParam ? (nameById.get(userIdParam) ?? "Cataloguer") : "All cataloguers",
+          hasData: false,
+          lotsInRange: 0, avgMs: 0, fastestMs: 0, slowestMs: 0,
+          dailyAvg: 0, completedDays: 0,
+          totalCatMs: 0, totalAwayMs: 0, activePct: null, idlePct: null,
+          wizardCount: 0, wizardAvgMs: 0, photoCount: 0, photoAvgMs: 0,
+          kpCount: 0, wizardTracked: 0, kpAvgMs: 0, kpFastMs: 0, kpSlowMs: 0, kpPct: 0,
+          researchMs: 0, researchSessions: 0, awaySessions: 0,
+          auctionStats: [], awayByReason: [], days: [],
+        })
+      }
+      pdfBytes = await buildIndividualsPdf(persons, rangeLabel, reasonMeta)
+      const who = userIdParam ? (persons[0]?.userName ?? "cataloguer") : "All cataloguers"
+      niceName = `Cataloguer report - ${who} - ${rangeLabel}.pdf`
     }
 
-    const pdfBytes = await buildReportsPdf(persons, rangeLabel, reasonMeta)
-
-    const who      = userIdParam ? (persons[0]?.userName ?? "cataloguer") : "All cataloguers"
-    const niceName = `Cataloguer report - ${who} - ${rangeLabel}.pdf`
     // Content-Disposition header values must be Latin-1 — strip to ASCII for the
     // plain `filename`, and add a UTF-8 `filename*` for modern browsers.
     const asciiName = niceName

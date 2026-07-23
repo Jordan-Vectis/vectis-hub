@@ -245,7 +245,14 @@ export default async function ReportsOverviewPage({
               >
                 ⏱ Activity Report
               </Link>
-              {/* Export ALL cataloguers as one PDF (a full report section per person) */}
+              {/* Team summary — one page, league table of every cataloguer */}
+              <a
+                href={`/api/reports/pdf?summary=1&range=${activeRange}`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[#2AB4A6] text-[#2AB4A6] hover:bg-[#2AB4A6] hover:text-white transition-colors whitespace-nowrap"
+              >
+                ⬇ Summary (PDF)
+              </a>
+              {/* Export ALL cataloguers — one clean page each */}
               <a
                 href={`/api/reports/pdf?range=${activeRange}`}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#2AB4A6] text-white hover:bg-[#249b8f] transition-colors whitespace-nowrap"

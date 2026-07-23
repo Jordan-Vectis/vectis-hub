@@ -16,6 +16,26 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "reports_pdf.md",
+    content: `---
+name: Cataloguing Performance PDF reports — /tools/reports
+purpose: The Summary + per-cataloguer PDF exports on the main reports page. Read before touching lib/reports-pdf.ts or /api/reports/pdf.
+last_updated: 2026-07-23
+---
+
+# Cataloguing Performance reports — PDF export (rebuilt 2026-07-23)
+
+The main /tools/reports (Cataloguing Performance) page has clean, manager-friendly PDF exports, rebuilt 2026-07-23. Jordan wanted them "simple with a clean layout but still full of detail" — this replaced an earlier forensic per-lot dump. Two layouts, one route (app/api/reports/pdf/route.ts), one builder (lib/reports-pdf.ts — pdf-lib, A4 landscape, Vectis logo, same house style as the Activity/idle PDF):
+
+- **Summary (PDF)** button → \`?summary=1&range=\` → buildSummaryPdf: ONE page — team stat boxes + a ranked league table of every cataloguer (lots, daily avg, today, week, avg/fastest/slowest time, away, research) with per-name output bars + a Team Total row.
+- **Export all (PDF)** button → \`?range=\` → buildIndividualsPdf: one clean page PER cataloguer.
+- Clicking a name / per-row PDF / the individual page's Export → \`?userId=&range=\` (or \`&from=&to=\`) → same buildIndividualsPdf, one person.
+
+Each individual page: stat boxes → cataloguing-vs-away bar → speed & method (incl. key points + research) → by-auction → away-by-reason → per-day breakdown. No per-lot line dump.
+
+⚠ Numbers mirror the on-screen page maths exactly (orphan-log exclusion via buildLotMap, ReportExcludedDay day-exclusions, timed-only averages, rolling-7-day "this week" via ukDayStartUtc(now,7), 10h away cap). Keep the route aggregation in step with app/(app)/tools/reports/page.tsx so figures don't drift. Research-only users are included (userIds unioned from timing + idle + research).`,
+  },
+  {
     filename: "compliance_page.md",
     content: `---
 name: Data & Compliance page — /admin/compliance

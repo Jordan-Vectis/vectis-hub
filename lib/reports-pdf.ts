@@ -1,12 +1,19 @@
-// PDF renderer for the individual Cataloguer Report (the "standard" reports page
-// export — one section per cataloguer). Kept separate from the route so it can be
-// unit-tested with synthetic data (no DB). Server-side pdf-lib — serverless-safe,
-// same engine and house style as lib/idle-report-pdf.ts (see feedback: always
-// pdf-lib, sharp logos, fixed layout).
+// PDF renderer for the Cataloguing Performance reports.
 //
-// The route does the DB work + aggregation (mirroring the on-screen page so the
-// numbers can't drift) and hands finished PersonPdfReport objects in here.
-import { PDFDocument, StandardFonts, PDFFont, rgb, RGB } from "pdf-lib"
+// Two layouts, both A4 landscape and deliberately clean for managers — but still
+// full of detail (no forensic per-lot line dump; every summary figure is kept):
+//
+//   buildSummaryPdf      — ONE page: team headline stats + a ranked league table
+//                          of every cataloguer (the "Summary (PDF)" button).
+//   buildIndividualsPdf  — ONE clean page per cataloguer: headline stats,
+//                          cataloguing-vs-away split, speed & method, by-auction,
+//                          away-by-reason and a per-day breakdown. Used by both
+//                          "Export all" (everyone) and clicking a single name.
+//
+// The route does the DB work + aggregation (mirroring the on-screen pages so the
+// numbers can't drift) and hands finished objects in here. Server-side pdf-lib —
+// serverless-safe, same engine/house style as lib/idle-report-pdf.ts.
+import { PDFDocument, PDFPage, PDFImage, StandardFonts, PDFFont, rgb, RGB } from "pdf-lib"
 import { embedVectisLogo } from "@/lib/pdf-logo"
 
 // ─── Layout (A4 landscape) ──────────────────────────────────────────────────
@@ -14,69 +21,76 @@ const PAGE_W = 841.89
 const PAGE_H = 595.28
 const MARGIN = 36
 const CONTENT_W = PAGE_W - MARGIN * 2
+const RIGHT = PAGE_W - MARGIN
 
 const INK     = rgb(0, 0, 0)
 const GREY    = rgb(0.30, 0.30, 0.30)
 const MUTE    = rgb(0.50, 0.50, 0.50)
 const LINE    = rgb(0.80, 0.80, 0.80)
 const FAINT   = rgb(0.92, 0.92, 0.92)
+const ZEBRA   = rgb(0.972, 0.972, 0.972)
 const BAND    = rgb(0.95, 0.95, 0.95)
 const RED     = rgb(0.79, 0.16, 0.16)
 const GREEN   = rgb(0.13, 0.63, 0.42)
-const TEAL    = rgb(0.16, 0.71, 0.65)
-const ORANGE  = rgb(0.90, 0.45, 0.13)
+const TEAL    = rgb(0.165, 0.706, 0.651)
+const TEALBG  = rgb(0.90, 0.968, 0.96)
 const BLUE    = rgb(0.23, 0.51, 0.96)
 const PURPLE  = rgb(0.66, 0.33, 0.97)
 const EMERALD = rgb(0.13, 0.70, 0.53)
 const ORANGEB = rgb(0.98, 0.57, 0.24)
 
 const UK_TZ = "Europe/London"
-const fTime   = new Intl.DateTimeFormat("en-GB", { timeZone: UK_TZ, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) // 09:41:12
-const fHM     = new Intl.DateTimeFormat("en-GB", { timeZone: UK_TZ, hour: "2-digit", minute: "2-digit", hour12: false })                    // 13:00
-const fDate   = new Intl.DateTimeFormat("en-GB", { timeZone: UK_TZ, day: "2-digit", month: "2-digit", year: "numeric" })                    // 06/07/2026
-const fDayLbl = new Intl.DateTimeFormat("en-GB", { timeZone: UK_TZ, weekday: "short", day: "numeric", month: "short", year: "numeric" })    // Mon 6 Jul 2026
-const fDayKey = new Intl.DateTimeFormat("en-CA", { timeZone: UK_TZ, year: "numeric", month: "2-digit", day: "2-digit" })                    // 2026-07-06
 
-// ─── Public data shapes (pure — route fills these) ──────────────────────────
+// ─── Public data shapes (pure — the route fills these) ──────────────────────
 export type PdfReasonMeta = { label: string; idleColour: string }
 
-export type PdfLotEntry = {
-  ts: string                 // ISO instant of the save
-  durationMs: number
-  method: string             // WIZARD | PHOTO_ONLY
-  barcode: string | null
-  keyPointsMs: number | null
-  auctionCode: string
-  auctionName: string
+/** One row of the team summary league table. */
+export type SummaryRow = {
+  name: string
+  lots: number
+  dailyAvg: number
+  lotsToday: number
+  lotsWeek: number
+  avgMs: number
+  fastestMs: number
+  slowestMs: number
+  awayMs: number
+  researchMs: number
 }
-export type PdfIdleEntry = {
-  ts: string                 // ISO instant the break started
-  durationMs: number
-  reasonKey: string
-  toteNumbers: string | null
-  notes: string | null
-  auctionCode: string
-  auctionName: string
-  excluded: boolean          // over 10h — shown but not counted (device left open)
+
+/** Team-wide figures for the summary header + totals row. */
+export type SummaryTeam = {
+  rangeLabel: string
+  totalLots: number
+  avgMs: number
+  fastestMs: number
+  slowestMs: number
+  cataloguers: number
+  lotsToday: number
+  totalAwayMs: number
 }
 
 export type PdfAuctionStat = { code: string; name: string; count: number; avgMs: number; fastestMs: number; slowestMs: number }
+export type PdfAwayReason  = { reasonKey: string; count: number; totalMs: number }
+export type PdfDayRow      = { label: string; lots: number; catMs: number; awayMs: number }
 
 export type PersonPdfReport = {
   userName: string
+  hasData: boolean
   lotsInRange: number
   avgMs: number; fastestMs: number; slowestMs: number
   dailyAvg: number; completedDays: number
-  totalCatMs: number; totalIdleMs: number
+  totalCatMs: number; totalAwayMs: number
   activePct: number | null; idlePct: number | null
   wizardCount: number; wizardAvgMs: number
   photoCount: number;  photoAvgMs: number
   kpCount: number; wizardTracked: number
   kpAvgMs: number; kpFastMs: number; kpSlowMs: number; kpPct: number
   researchMs: number; researchSessions: number
+  awaySessions: number
   auctionStats: PdfAuctionStat[]
-  lots: PdfLotEntry[]
-  idle: PdfIdleEntry[]
+  awayByReason: PdfAwayReason[]
+  days: PdfDayRow[]
 }
 
 // ─── Small helpers ──────────────────────────────────────────────────────────
@@ -94,7 +108,7 @@ function safeAscii(text: string): string {
     .replace(/[“”„‟]/g, '"')
     .replace(/[–—]/g, "-")
     .replace(/…/g, "...")
-    .replace(/ /g, " ")
+    .replace(/ /g, " ")
     .replace(/[^\x20-\x7E£€]/g, "")
     .trim()
 }
@@ -106,7 +120,7 @@ function truncate(text: string, font: PDFFont, size: number, maxW: number): stri
   return s + "..."
 }
 
-/** Human duration, e.g. "1h 22m 5s". Matches the on-screen report (keeps seconds). */
+/** Human duration, e.g. "1h 22m 5s". Matches the on-screen reports (keeps seconds). */
 function fmtDur(ms: number | null | undefined): string {
   if (!ms || ms <= 0) return "-"
   const t = Math.floor(ms / 1000)
@@ -118,288 +132,320 @@ function fmtDur(ms: number | null | undefined): string {
   return `${s}s`
 }
 
-function methodLabel(method: string): string {
-  if (method === "WIZARD") return "Wizard"
-  if (method === "PHOTO_ONLY") return "Photo only"
-  return method
-}
-
 type Col = { title: string; x: number; w: number; align: "left" | "right" }
 
-// ─── Builder ────────────────────────────────────────────────────────────────
-export async function buildReportsPdf(
+// ─── Shared document context ────────────────────────────────────────────────
+type Ctx = {
+  doc: PDFDocument
+  page: PDFPage
+  y: number
+  helv: PDFFont
+  helvB: PDFFont
+  logo: PDFImage
+  printed: string
+  eyebrow: string     // small caps line under the logo (report kind)
+  rangeLabel: string
+  heading: string     // big heading (person name, or "Team Summary")
+  subnote: string     // extra right-aligned note under "Generated …"
+}
+
+async function mkCtx(eyebrow: string, rangeLabel: string): Promise<Ctx> {
+  const doc = await PDFDocument.create()
+  doc.setTitle(eyebrow)
+  doc.setAuthor("Vectis Auctions")
+  const helv  = await doc.embedFont(StandardFonts.Helvetica)
+  const helvB = await doc.embedFont(StandardFonts.HelveticaBold)
+  const logo  = await embedVectisLogo(doc)
+  const printed = new Date().toLocaleString("en-GB", { timeZone: UK_TZ, weekday: "short", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })
+  const page  = doc.addPage([PAGE_W, PAGE_H])
+  return { doc, page, y: 0, helv, helvB, logo, printed, eyebrow, rangeLabel, heading: "", subnote: "" }
+}
+
+function drawRight(ctx: Ctx, text: string, rightX: number, yy: number, size: number, font: PDFFont, color: RGB): void {
+  const s = safeAscii(text)
+  ctx.page.drawText(s, { x: rightX - font.widthOfTextAtSize(s, size), y: yy, size, font, color })
+}
+
+function header(ctx: Ctx): void {
+  const { page, logo, helv, helvB } = ctx
+  const logoH = 30
+  const logoW = logoH * (logo.width / logo.height)
+  page.drawImage(logo, { x: MARGIN, y: PAGE_H - MARGIN - logoH, width: logoW, height: logoH })
+  page.drawText(ctx.eyebrow, { x: MARGIN, y: PAGE_H - MARGIN - logoH - 13, size: 11, font: helvB, color: MUTE })
+  if (ctx.heading) page.drawText(truncate(ctx.heading, helvB, 16, 460), { x: MARGIN, y: PAGE_H - MARGIN - logoH - 32, size: 16, font: helvB, color: INK })
+  drawRight(ctx, `Period: ${ctx.rangeLabel}`, RIGHT, PAGE_H - MARGIN - 6, 10, helvB, INK)
+  drawRight(ctx, `Generated ${ctx.printed}`, RIGHT, PAGE_H - MARGIN - 20, 8, helv, MUTE)
+  if (ctx.subnote) drawRight(ctx, ctx.subnote, RIGHT, PAGE_H - MARGIN - 32, 8, helv, MUTE)
+  ctx.y = PAGE_H - MARGIN - logoH - 42
+  page.drawLine({ start: { x: MARGIN, y: ctx.y }, end: { x: RIGHT, y: ctx.y }, thickness: 1.2, color: INK })
+  ctx.y -= 18
+}
+
+function newPage(ctx: Ctx): void { ctx.page = ctx.doc.addPage([PAGE_W, PAGE_H]); header(ctx) }
+function ensure(ctx: Ctx, space: number): void { if (ctx.y - space < MARGIN + 26) newPage(ctx) }
+
+function sectionTitle(ctx: Ctx, title: string): void {
+  ensure(ctx, 30)
+  ctx.page.drawText(safeAscii(title).toUpperCase(), { x: MARGIN, y: ctx.y - 9, size: 9, font: ctx.helvB, color: GREY })
+  ctx.y -= 18
+}
+
+function statBoxes(ctx: Ctx, stats: { label: string; value: string; sub: string }[]): void {
+  const gap = 12
+  const boxW = (CONTENT_W - gap * (stats.length - 1)) / stats.length
+  const boxH = 54
+  ensure(ctx, boxH + 8)
+  stats.forEach((s, i) => {
+    const x = MARGIN + i * (boxW + gap)
+    ctx.page.drawRectangle({ x, y: ctx.y - boxH, width: boxW, height: boxH, borderColor: LINE, borderWidth: 0.8, color: rgb(0.98, 0.98, 0.98) })
+    ctx.page.drawRectangle({ x, y: ctx.y - boxH, width: 3, height: boxH, color: TEAL })
+    ctx.page.drawText(safeAscii(s.label).toUpperCase(), { x: x + 10, y: ctx.y - 15, size: 7, font: ctx.helvB, color: MUTE })
+    ctx.page.drawText(truncate(s.value, ctx.helvB, 17, boxW - 20), { x: x + 10, y: ctx.y - 35, size: 17, font: ctx.helvB, color: INK })
+    ctx.page.drawText(truncate(s.sub, ctx.helv, 8, boxW - 20), { x: x + 10, y: ctx.y - 47, size: 8, font: ctx.helv, color: MUTE })
+  })
+  ctx.y -= boxH + 20
+}
+
+function drawHeaderRow(ctx: Ctx, cols: Col[]): void {
+  for (const c of cols) {
+    if (c.align === "right") drawRight(ctx, c.title, c.x + c.w, ctx.y - 8, 7, ctx.helvB, MUTE)
+    else ctx.page.drawText(c.title, { x: c.x, y: ctx.y - 8, size: 7, font: ctx.helvB, color: MUTE })
+  }
+  ctx.page.drawLine({ start: { x: MARGIN, y: ctx.y - 12 }, end: { x: RIGHT, y: ctx.y - 12 }, thickness: 0.8, color: LINE })
+  ctx.y -= 16
+}
+
+// Generic table with automatic page breaks; the column header redraws on each new
+// page. drawRow paints one row at baseline (ctx.y - <n>) and must NOT advance y.
+function table<T>(ctx: Ctx, cols: Col[], rows: T[], rowH: number, drawRow: (r: T, i: number) => void, zebra = false): void {
+  drawHeaderRow(ctx, cols)
+  rows.forEach((r, i) => {
+    if (ctx.y - rowH < MARGIN + 26) { newPage(ctx); drawHeaderRow(ctx, cols) }
+    if (zebra && i % 2 === 1) ctx.page.drawRectangle({ x: MARGIN, y: ctx.y - rowH, width: CONTENT_W, height: rowH, color: ZEBRA })
+    drawRow(r, i)
+    ctx.y -= rowH
+    ctx.page.drawLine({ start: { x: MARGIN, y: ctx.y }, end: { x: RIGHT, y: ctx.y }, thickness: 0.3, color: FAINT })
+  })
+}
+
+function footer(ctx: Ctx, label: string): void {
+  const pages = ctx.doc.getPages()
+  pages.forEach((pg, i) => {
+    pg.drawText(label, { x: MARGIN, y: MARGIN - 18, size: 7, font: ctx.helv, color: MUTE })
+    const n = `Page ${i + 1} of ${pages.length}`
+    pg.drawText(n, { x: RIGHT - ctx.helv.widthOfTextAtSize(n, 7), y: MARGIN - 18, size: 7, font: ctx.helv, color: MUTE })
+  })
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Summary (team league table) — one page
+// ═══════════════════════════════════════════════════════════════════════════
+export async function buildSummaryPdf(rows: SummaryRow[], team: SummaryTeam): Promise<Uint8Array> {
+  const ctx = await mkCtx("Cataloguing Performance", team.rangeLabel)
+  ctx.heading = "Team Summary"
+  ctx.subnote = "Time away counts Mon-Fri, 9am-5pm only"
+  header(ctx)
+
+  statBoxes(ctx, [
+    { label: "Total Lots",      value: team.totalLots.toLocaleString(), sub: `${team.cataloguers} cataloguer${team.cataloguers === 1 ? "" : "s"}` },
+    { label: "Avg Time / Lot",  value: fmtDur(team.avgMs),              sub: "across all cataloguers" },
+    { label: "Lots Today",      value: team.lotsToday.toLocaleString(), sub: "so far today" },
+    { label: "Total Time Away", value: fmtDur(team.totalAwayMs),        sub: "logged in this period" },
+  ])
+
+  sectionTitle(ctx, "Per cataloguer  (ranked by lots)")
+
+  // Column layout — right edge must stay within RIGHT (805.89).
+  const cols: Col[] = [
+    { title: "#",          x: MARGIN,        w: 18,  align: "left"  },
+    { title: "CATALOGUER", x: MARGIN + 22,   w: 158, align: "left"  },
+    { title: "LOTS",       x: MARGIN + 182,  w: 46,  align: "right" },
+    { title: "DAILY AVG",  x: MARGIN + 232,  w: 56,  align: "right" },
+    { title: "TODAY",      x: MARGIN + 292,  w: 42,  align: "right" },
+    { title: "WEEK",       x: MARGIN + 338,  w: 46,  align: "right" },
+    { title: "AVG TIME",   x: MARGIN + 388,  w: 74,  align: "right" },
+    { title: "FASTEST",    x: MARGIN + 466,  w: 74,  align: "right" },
+    { title: "SLOWEST",    x: MARGIN + 544,  w: 74,  align: "right" },
+    { title: "AWAY",       x: MARGIN + 622,  w: 70,  align: "right" },
+    { title: "RESEARCH",   x: MARGIN + 696,  w: CONTENT_W - 696, align: "right" },
+  ]
+
+  const maxLots = rows.reduce((m, r) => Math.max(m, r.lots), 0)
+  const nameCol = cols[1]
+
+  if (rows.length === 0) {
+    ctx.page.drawText("No cataloguing activity in this period.", { x: MARGIN, y: ctx.y - 14, size: 11, font: ctx.helv, color: MUTE })
+  } else {
+    table(ctx, cols, rows, 21, (r, i) => {
+      const yb = ctx.y - 9
+      drawRight(ctx, String(i + 1), cols[0].x + cols[0].w, yb, 8, ctx.helv, MUTE)
+      ctx.page.drawText(truncate(r.name, ctx.helvB, 9, nameCol.w), { x: nameCol.x, y: yb, size: 9, font: ctx.helvB, color: INK })
+      // subtle output bar under the name (relative to the top performer)
+      if (maxLots > 0 && r.lots > 0) {
+        const bw = Math.max(2, (nameCol.w - 2) * (r.lots / maxLots))
+        ctx.page.drawRectangle({ x: nameCol.x, y: ctx.y - 15.5, width: bw, height: 2, color: TEAL })
+      }
+      drawRight(ctx, r.lots.toLocaleString(),  cols[2].x + cols[2].w, yb, 9, ctx.helvB, INK)
+      drawRight(ctx, r.dailyAvg.toLocaleString(), cols[3].x + cols[3].w, yb, 9, ctx.helv, GREY)
+      drawRight(ctx, r.lotsToday ? String(r.lotsToday) : "-", cols[4].x + cols[4].w, yb, 9, ctx.helv, GREY)
+      drawRight(ctx, r.lotsWeek ? String(r.lotsWeek) : "-",  cols[5].x + cols[5].w, yb, 9, ctx.helv, GREY)
+      drawRight(ctx, fmtDur(r.avgMs),     cols[6].x + cols[6].w, yb, 9, ctx.helv, GREY)
+      drawRight(ctx, fmtDur(r.fastestMs), cols[7].x + cols[7].w, yb, 9, ctx.helv, GREEN)
+      drawRight(ctx, fmtDur(r.slowestMs), cols[8].x + cols[8].w, yb, 9, ctx.helv, RED)
+      drawRight(ctx, fmtDur(r.awayMs),    cols[9].x + cols[9].w, yb, 9, ctx.helv, ORANGEB)
+      drawRight(ctx, r.researchMs ? fmtDur(r.researchMs) : "-", cols[10].x + cols[10].w, yb, 9, ctx.helv, MUTE)
+    }, true)
+
+    // Team totals row
+    if (ctx.y - 22 < MARGIN + 26) newPage(ctx)
+    ctx.page.drawLine({ start: { x: MARGIN, y: ctx.y + 0.5 }, end: { x: RIGHT, y: ctx.y + 0.5 }, thickness: 1, color: INK })
+    const yb = ctx.y - 12
+    const sum = (f: (r: SummaryRow) => number) => rows.reduce((s, r) => s + f(r), 0)
+    ctx.page.drawText("TEAM TOTAL", { x: cols[1].x, y: yb, size: 8.5, font: ctx.helvB, color: INK })
+    drawRight(ctx, team.totalLots.toLocaleString(), cols[2].x + cols[2].w, yb, 9, ctx.helvB, INK)
+    drawRight(ctx, "-", cols[3].x + cols[3].w, yb, 9, ctx.helv, MUTE)
+    drawRight(ctx, sum(r => r.lotsToday).toLocaleString(), cols[4].x + cols[4].w, yb, 9, ctx.helvB, GREY)
+    drawRight(ctx, sum(r => r.lotsWeek).toLocaleString(),  cols[5].x + cols[5].w, yb, 9, ctx.helvB, GREY)
+    drawRight(ctx, fmtDur(team.avgMs),     cols[6].x + cols[6].w, yb, 9, ctx.helvB, GREY)
+    drawRight(ctx, fmtDur(team.fastestMs), cols[7].x + cols[7].w, yb, 9, ctx.helvB, GREEN)
+    drawRight(ctx, fmtDur(team.slowestMs), cols[8].x + cols[8].w, yb, 9, ctx.helvB, RED)
+    drawRight(ctx, fmtDur(team.totalAwayMs), cols[9].x + cols[9].w, yb, 9, ctx.helvB, ORANGEB)
+    drawRight(ctx, fmtDur(sum(r => r.researchMs)), cols[10].x + cols[10].w, yb, 9, ctx.helvB, MUTE)
+    ctx.y -= 22
+  }
+
+  footer(ctx, "Vectis Auctions - Cataloguing Performance Summary")
+  return await ctx.doc.save()
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Individuals — one clean, detailed page per cataloguer
+// ═══════════════════════════════════════════════════════════════════════════
+export async function buildIndividualsPdf(
   persons: PersonPdfReport[],
   rangeLabel: string,
   reasonMeta: Map<string, PdfReasonMeta>,
 ): Promise<Uint8Array> {
-  const doc = await PDFDocument.create()
-  doc.setTitle("Cataloguer Report")
-  doc.setAuthor("Vectis Auctions")
+  const ctx = await mkCtx("Cataloguer Report", rangeLabel)
+  ctx.subnote = "Time away counts Mon-Fri, 9am-5pm only"
 
-  const helv  = await doc.embedFont(StandardFonts.Helvetica)
-  const helvB = await doc.embedFont(StandardFonts.HelveticaBold)
-  const logo  = await embedVectisLogo(doc)
-
-  const printed  = new Date().toLocaleString("en-GB", { timeZone: UK_TZ, weekday: "short", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })
   const labelOf  = (k: string) => reasonMeta.get(k)?.label ?? k
   const colourOf = (k: string) => hexToRgb(reasonMeta.get(k)?.idleColour ?? "#9ca3af")
 
-  let page = doc.addPage([PAGE_W, PAGE_H])
-  let y = 0
-  let currentPerson = ""
-
-  const drawRight = (text: string, rightX: number, yy: number, size: number, font: PDFFont, color: RGB): void => {
-    const s = safeAscii(text)
-    page.drawText(s, { x: rightX - font.widthOfTextAtSize(s, size), y: yy, size, font, color })
-  }
-
-  const header = (): void => {
-    const logoH = 30
-    const logoW = logoH * (logo.width / logo.height)
-    page.drawImage(logo, { x: MARGIN, y: PAGE_H - MARGIN - logoH, width: logoW, height: logoH })
-    page.drawText("Cataloguer Report", { x: MARGIN, y: PAGE_H - MARGIN - logoH - 13, size: 11, font: helvB, color: MUTE })
-    if (currentPerson) page.drawText(truncate(currentPerson, helvB, 16, 400), { x: MARGIN, y: PAGE_H - MARGIN - logoH - 32, size: 16, font: helvB, color: INK })
-    drawRight(`Period: ${rangeLabel}`, PAGE_W - MARGIN, PAGE_H - MARGIN - 6, 10, helvB, INK)
-    drawRight(`Generated ${printed}`, PAGE_W - MARGIN, PAGE_H - MARGIN - 20, 8, helv, MUTE)
-    drawRight("Time away counts Mon-Fri, 9am-5pm only", PAGE_W - MARGIN, PAGE_H - MARGIN - 32, 8, helv, MUTE)
-    y = PAGE_H - MARGIN - logoH - 42
-    page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_W - MARGIN, y }, thickness: 1.2, color: INK })
-    y -= 18
-  }
-
-  const newPage = (): void => { page = doc.addPage([PAGE_W, PAGE_H]); header() }
-  const ensure  = (space: number): void => { if (y - space < MARGIN + 24) newPage() }
-
-  const sectionTitle = (title: string): void => {
-    ensure(30)
-    page.drawText(safeAscii(title).toUpperCase(), { x: MARGIN, y: y - 9, size: 9, font: helvB, color: GREY })
-    y -= 18
-  }
-
-  const drawHeaderRow = (cols: Col[]): void => {
-    for (const c of cols) {
-      if (c.align === "right") drawRight(c.title, c.x + c.w, y - 8, 7, helvB, MUTE)
-      else page.drawText(c.title, { x: c.x, y: y - 8, size: 7, font: helvB, color: MUTE })
-    }
-    page.drawLine({ start: { x: MARGIN, y: y - 12 }, end: { x: PAGE_W - MARGIN, y: y - 12 }, thickness: 0.8, color: LINE })
-    y -= 16
-  }
-
-  // Generic table with automatic page breaks; the column header redraws on each
-  // new page. drawRow paints one row at baseline (y - 8) and must NOT advance y.
-  const table = <T,>(cols: Col[], rows: T[], rowH: number, drawRow: (r: T, i: number) => void): void => {
-    drawHeaderRow(cols)
-    rows.forEach((r, i) => {
-      if (y - rowH < MARGIN + 24) { newPage(); drawHeaderRow(cols) }
-      drawRow(r, i)
-      y -= rowH
-      page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_W - MARGIN, y }, thickness: 0.3, color: FAINT })
-    })
-  }
-
-  const swatch = (x: number, key: string): void => {
-    page.drawRectangle({ x, y: y - 9, width: 8, height: 8, color: colourOf(key) })
-  }
-
-  // ─── Per-person section ───────────────────────────────────────────────────
   persons.forEach((p, personIdx) => {
-    currentPerson = p.userName
-    if (personIdx === 0) header()
-    else newPage()
+    ctx.heading = p.userName
+    if (personIdx === 0) header(ctx); else newPage(ctx)
 
-    const hasData = p.lotsInRange > 0 || p.idle.length > 0
-    if (!hasData) {
-      page.drawText("No lots or time away logged in this period.", { x: MARGIN, y: y - 20, size: 11, font: helv, color: MUTE })
+    if (!p.hasData) {
+      ctx.page.drawText("No lots or time away logged in this period.", { x: MARGIN, y: ctx.y - 20, size: 11, font: ctx.helv, color: MUTE })
       return
     }
 
     // ── Headline stat boxes ──
-    const stats: { label: string; value: string; sub: string }[] = [
-      { label: "Lots in Range",  value: p.lotsInRange.toLocaleString(),  sub: rangeLabel },
-      { label: "Avg Time / Lot", value: fmtDur(p.avgMs),                 sub: "all methods" },
-      { label: "Daily Average",  value: p.dailyAvg.toLocaleString(),     sub: p.completedDays > 0 ? `over ${p.completedDays} full day${p.completedDays === 1 ? "" : "s"}` : "today only" },
-      { label: "Total Time Away",value: fmtDur(p.totalIdleMs),           sub: p.idlePct != null ? `${p.idlePct}% of tracked time` : "none logged" },
-    ]
-    const gap = 12
-    const boxW = (CONTENT_W - gap * 3) / 4
-    const boxH = 54
-    stats.forEach((s, i) => {
-      const x = MARGIN + i * (boxW + gap)
-      page.drawRectangle({ x, y: y - boxH, width: boxW, height: boxH, borderColor: LINE, borderWidth: 0.8, color: rgb(0.98, 0.98, 0.98) })
-      page.drawRectangle({ x, y: y - boxH, width: 3, height: boxH, color: TEAL })
-      page.drawText(safeAscii(s.label).toUpperCase(), { x: x + 10, y: y - 15, size: 7, font: helvB, color: MUTE })
-      page.drawText(truncate(s.value, helvB, 17, boxW - 20), { x: x + 10, y: y - 35, size: 17, font: helvB, color: INK })
-      page.drawText(truncate(s.sub, helv, 8, boxW - 20), { x: x + 10, y: y - 47, size: 8, font: helv, color: MUTE })
-    })
-    y -= boxH + 22
+    statBoxes(ctx, [
+      { label: "Lots in Range",   value: p.lotsInRange.toLocaleString(), sub: rangeLabel },
+      { label: "Avg Time / Lot",  value: fmtDur(p.avgMs),                sub: "all methods" },
+      { label: "Daily Average",   value: p.dailyAvg.toLocaleString(),    sub: p.completedDays > 0 ? `over ${p.completedDays} full day${p.completedDays === 1 ? "" : "s"}` : "today only" },
+      { label: "Total Time Away", value: fmtDur(p.totalAwayMs),          sub: p.idlePct != null ? `${p.idlePct}% of tracked time` : "none logged" },
+    ])
 
-    // ── Cataloguing vs Away split ──
-    if (p.activePct != null && p.idlePct != null && (p.totalCatMs + p.totalIdleMs) > 0) {
-      sectionTitle("Cataloguing vs time away")
-      const barW = CONTENT_W
+    // ── Cataloguing vs away split ──
+    if (p.activePct != null && p.idlePct != null && (p.totalCatMs + p.totalAwayMs) > 0) {
+      sectionTitle(ctx, "Cataloguing vs time away")
       const barH = 14
-      const catW = barW * (p.activePct / 100)
-      page.drawRectangle({ x: MARGIN, y: y - barH, width: barW, height: barH, color: FAINT })
-      if (catW > 0)        page.drawRectangle({ x: MARGIN, y: y - barH, width: catW, height: barH, color: EMERALD })
-      if (barW - catW > 0) page.drawRectangle({ x: MARGIN + catW, y: y - barH, width: barW - catW, height: barH, color: ORANGEB })
-      y -= barH + 6
-      page.drawRectangle({ x: MARGIN, y: y - 8, width: 8, height: 8, color: EMERALD })
-      page.drawText(`${fmtDur(p.totalCatMs)} cataloguing (${p.activePct}%)`, { x: MARGIN + 12, y: y - 8, size: 8.5, font: helv, color: GREY })
-      const awayX = MARGIN + 230
-      page.drawRectangle({ x: awayX, y: y - 8, width: 8, height: 8, color: ORANGEB })
-      page.drawText(`${fmtDur(p.totalIdleMs)} away (${p.idlePct}%)`, { x: awayX + 12, y: y - 8, size: 8.5, font: helv, color: GREY })
-      y -= 20
+      const catW = CONTENT_W * (p.activePct / 100)
+      ctx.page.drawRectangle({ x: MARGIN, y: ctx.y - barH, width: CONTENT_W, height: barH, color: FAINT })
+      if (catW > 0)             ctx.page.drawRectangle({ x: MARGIN, y: ctx.y - barH, width: catW, height: barH, color: EMERALD })
+      if (CONTENT_W - catW > 0) ctx.page.drawRectangle({ x: MARGIN + catW, y: ctx.y - barH, width: CONTENT_W - catW, height: barH, color: ORANGEB })
+      ctx.y -= barH + 6
+      ctx.page.drawRectangle({ x: MARGIN, y: ctx.y - 8, width: 8, height: 8, color: EMERALD })
+      ctx.page.drawText(`${fmtDur(p.totalCatMs)} cataloguing (${p.activePct}%)`, { x: MARGIN + 12, y: ctx.y - 8, size: 8.5, font: ctx.helv, color: GREY })
+      const awayX = MARGIN + 240
+      ctx.page.drawRectangle({ x: awayX, y: ctx.y - 8, width: 8, height: 8, color: ORANGEB })
+      ctx.page.drawText(`${fmtDur(p.totalAwayMs)} away (${p.idlePct}%)`, { x: awayX + 12, y: ctx.y - 8, size: 8.5, font: ctx.helv, color: GREY })
+      ctx.y -= 20
     }
 
-    // ── Speed / method / key points summary ──
-    sectionTitle("Speed & method")
-    page.drawText(`Average ${fmtDur(p.avgMs)}`, { x: MARGIN, y: y - 8, size: 9, font: helvB, color: INK })
-    page.drawText(`Fastest ${fmtDur(p.fastestMs)}`, { x: MARGIN + 150, y: y - 8, size: 9, font: helv, color: GREEN })
-    page.drawText(`Slowest ${fmtDur(p.slowestMs)}`, { x: MARGIN + 300, y: y - 8, size: 9, font: helv, color: RED })
-    y -= 15
-    page.drawText(`Wizard  ${p.wizardCount} lot${p.wizardCount === 1 ? "" : "s"} (avg ${fmtDur(p.wizardAvgMs)})`, { x: MARGIN, y: y - 8, size: 9, font: helv, color: BLUE })
-    page.drawText(`Photo only  ${p.photoCount} lot${p.photoCount === 1 ? "" : "s"} (avg ${fmtDur(p.photoAvgMs)})`, { x: MARGIN + 250, y: y - 8, size: 9, font: helv, color: PURPLE })
-    y -= 15
+    // ── Speed & method ──
+    sectionTitle(ctx, "Speed & method")
+    ctx.page.drawText(`Average ${fmtDur(p.avgMs)}`,  { x: MARGIN,       y: ctx.y - 8, size: 9, font: ctx.helvB, color: INK })
+    ctx.page.drawText(`Fastest ${fmtDur(p.fastestMs)}`, { x: MARGIN + 150, y: ctx.y - 8, size: 9, font: ctx.helv, color: GREEN })
+    ctx.page.drawText(`Slowest ${fmtDur(p.slowestMs)}`, { x: MARGIN + 300, y: ctx.y - 8, size: 9, font: ctx.helv, color: RED })
+    ctx.y -= 15
+    ctx.page.drawText(`Wizard  ${p.wizardCount} lot${p.wizardCount === 1 ? "" : "s"} (avg ${fmtDur(p.wizardAvgMs)})`, { x: MARGIN, y: ctx.y - 8, size: 9, font: ctx.helv, color: BLUE })
+    ctx.page.drawText(`Photo only  ${p.photoCount} lot${p.photoCount === 1 ? "" : "s"} (avg ${fmtDur(p.photoAvgMs)})`, { x: MARGIN + 250, y: ctx.y - 8, size: 9, font: ctx.helv, color: PURPLE })
+    ctx.y -= 15
     if (p.kpCount > 0) {
-      page.drawText(`Key points  avg ${fmtDur(p.kpAvgMs)}${p.kpPct > 0 ? ` (${p.kpPct}% of wizard time)` : ""}  ·  fastest ${fmtDur(p.kpFastMs)}  ·  slowest ${fmtDur(p.kpSlowMs)}  ·  ${p.kpCount} of ${p.wizardTracked} wizard lots`, { x: MARGIN, y: y - 8, size: 8.5, font: helv, color: GREY })
-      y -= 15
+      ctx.page.drawText(`Key points  avg ${fmtDur(p.kpAvgMs)}${p.kpPct > 0 ? ` (${p.kpPct}% of wizard time)` : ""}  ·  fastest ${fmtDur(p.kpFastMs)}  ·  slowest ${fmtDur(p.kpSlowMs)}  ·  ${p.kpCount} of ${p.wizardTracked} wizard lots`, { x: MARGIN, y: ctx.y - 8, size: 8.5, font: ctx.helv, color: GREY })
+      ctx.y -= 15
     }
     if (p.researchMs > 0) {
-      page.drawText(`Research  ${fmtDur(p.researchMs)} over ${p.researchSessions} session${p.researchSessions === 1 ? "" : "s"}`, { x: MARGIN, y: y - 8, size: 8.5, font: helv, color: GREY })
-      y -= 15
+      ctx.page.drawText(`Research  ${fmtDur(p.researchMs)} over ${p.researchSessions} session${p.researchSessions === 1 ? "" : "s"}`, { x: MARGIN, y: ctx.y - 8, size: 8.5, font: ctx.helv, color: GREY })
+      ctx.y -= 15
     }
-    y -= 6
+    ctx.y -= 6
 
     // ── By auction ──
     if (p.auctionStats.length) {
-      sectionTitle("By auction")
+      sectionTitle(ctx, `By auction  (${p.auctionStats.length})`)
       const cols: Col[] = [
-        { title: "AUCTION",  x: MARGIN,        w: 320, align: "left"  },
-        { title: "LOTS",     x: MARGIN + 330,  w: 60,  align: "right" },
-        { title: "AVG TIME", x: MARGIN + 400,  w: 90,  align: "right" },
-        { title: "FASTEST",  x: MARGIN + 500,  w: 90,  align: "right" },
-        { title: "SLOWEST",  x: MARGIN + 600,  w: 90,  align: "right" },
+        { title: "AUCTION",  x: MARGIN,        w: 340, align: "left"  },
+        { title: "LOTS",     x: MARGIN + 350,  w: 60,  align: "right" },
+        { title: "AVG TIME", x: MARGIN + 420,  w: 100, align: "right" },
+        { title: "FASTEST",  x: MARGIN + 530,  w: 100, align: "right" },
+        { title: "SLOWEST",  x: MARGIN + 640,  w: CONTENT_W - 640, align: "right" },
       ]
-      table(cols, p.auctionStats, 15, (a) => {
-        page.drawText(truncate(a.code, helvB, 9, 70), { x: cols[0].x, y: y - 8, size: 9, font: helvB, color: INK })
-        page.drawText(truncate(a.name, helv, 9, cols[0].w - 80), { x: cols[0].x + 76, y: y - 8, size: 9, font: helv, color: GREY })
-        drawRight(String(a.count), cols[1].x + cols[1].w, y - 8, 9, helvB, INK)
-        drawRight(fmtDur(a.avgMs), cols[2].x + cols[2].w, y - 8, 9, helv, GREY)
-        drawRight(fmtDur(a.fastestMs), cols[3].x + cols[3].w, y - 8, 9, helv, GREEN)
-        drawRight(fmtDur(a.slowestMs), cols[4].x + cols[4].w, y - 8, 9, helv, RED)
-      })
-      y -= 16
+      table(ctx, cols, p.auctionStats, 15, (a) => {
+        ctx.page.drawText(truncate(a.code, ctx.helvB, 9, 76), { x: cols[0].x, y: ctx.y - 8, size: 9, font: ctx.helvB, color: INK })
+        ctx.page.drawText(truncate(a.name, ctx.helv, 9, cols[0].w - 84), { x: cols[0].x + 82, y: ctx.y - 8, size: 9, font: ctx.helv, color: GREY })
+        drawRight(ctx, String(a.count),   cols[1].x + cols[1].w, ctx.y - 8, 9, ctx.helvB, INK)
+        drawRight(ctx, fmtDur(a.avgMs),   cols[2].x + cols[2].w, ctx.y - 8, 9, ctx.helv, GREY)
+        drawRight(ctx, fmtDur(a.fastestMs), cols[3].x + cols[3].w, ctx.y - 8, 9, ctx.helv, GREEN)
+        drawRight(ctx, fmtDur(a.slowestMs), cols[4].x + cols[4].w, ctx.y - 8, 9, ctx.helv, RED)
+      }, true)
+      ctx.y -= 16
     }
 
-    // ── Time away sessions (newest first, from-to) ──
-    if (p.idle.length) {
-      sectionTitle(`Time away sessions  (${p.idle.length})`)
+    // ── Time away by reason ──
+    if (p.awayByReason.length) {
+      sectionTitle(ctx, "Time away by reason")
       const cols: Col[] = [
-        { title: "DATE",         x: MARGIN,        w: 74,  align: "left"  },
-        { title: "TIME (FROM-TO)",x: MARGIN + 82,  w: 108, align: "left"  },
-        { title: "REASON",       x: MARGIN + 198,  w: 150, align: "left"  },
-        { title: "TOTES",        x: MARGIN + 356,  w: 80,  align: "left"  },
-        { title: "NOTES",        x: MARGIN + 444,  w: 214, align: "left"  },
-        { title: "DURATION",     x: MARGIN + 668,  w: CONTENT_W - 668, align: "right" },
+        { title: "REASON",     x: MARGIN,        w: 300, align: "left"  },
+        { title: "SESSIONS",   x: MARGIN + 310,  w: 90,  align: "right" },
+        { title: "TOTAL TIME", x: MARGIN + 410,  w: 120, align: "right" },
+        { title: "SHARE",      x: MARGIN + 540,  w: CONTENT_W - 540, align: "right" },
       ]
-      const sortedIdle = [...p.idle].sort((a, b) => b.ts.localeCompare(a.ts))
-      table(cols, sortedIdle, 15, (l) => {
-        const c = l.excluded ? MUTE : GREY
-        const start = new Date(l.ts)
-        page.drawText(fDate.format(start), { x: cols[0].x, y: y - 8, size: 8, font: helv, color: c })
-        page.drawText(`${fHM.format(start)} - ${fHM.format(new Date(start.getTime() + l.durationMs))}`, { x: cols[1].x, y: y - 8, size: 8, font: helv, color: c })
-        if (!l.excluded) swatch(cols[2].x, l.reasonKey)
-        page.drawText(truncate(labelOf(l.reasonKey), helv, 9, cols[2].w - 14), { x: cols[2].x + 14, y: y - 8, size: 9, font: helv, color: l.excluded ? MUTE : INK })
-        page.drawText(truncate(l.toteNumbers || "-", helv, 8, cols[3].w), { x: cols[3].x, y: y - 8, size: 8, font: helv, color: c })
-        page.drawText(truncate(l.excluded ? "Excluded - over 10 hours" : (l.notes || "-"), helv, 8, cols[4].w), { x: cols[4].x, y: y - 8, size: 8, font: helv, color: c })
-        drawRight(fmtDur(l.durationMs), cols[5].x + cols[5].w, y - 8, 9, helvB, l.excluded ? MUTE : ORANGE)
-      })
-      y -= 16
+      const totalAway = p.awayByReason.reduce((s, r) => s + r.totalMs, 0) || 1
+      const sorted = [...p.awayByReason].sort((a, b) => b.totalMs - a.totalMs)
+      table(ctx, cols, sorted, 15, (r) => {
+        ctx.page.drawRectangle({ x: cols[0].x, y: ctx.y - 9, width: 8, height: 8, color: colourOf(r.reasonKey) })
+        ctx.page.drawText(truncate(labelOf(r.reasonKey), ctx.helv, 9, cols[0].w - 14), { x: cols[0].x + 14, y: ctx.y - 8, size: 9, font: ctx.helv, color: INK })
+        drawRight(ctx, String(r.count),   cols[1].x + cols[1].w, ctx.y - 8, 9, ctx.helv, GREY)
+        drawRight(ctx, fmtDur(r.totalMs), cols[2].x + cols[2].w, ctx.y - 8, 9, ctx.helvB, ORANGEB)
+        drawRight(ctx, `${Math.round((r.totalMs / totalAway) * 100)}%`, cols[3].x + cols[3].w, ctx.y - 8, 9, ctx.helv, MUTE)
+      }, true)
+      ctx.y -= 16
     }
 
-    // ── Daily activity log (lots + time away, grouped per day) ──
-    sectionTitle("Daily activity log")
-    const logCols: Col[] = [
-      { title: "TIME",              x: MARGIN,        w: 92,  align: "left"  },
-      { title: "TYPE",              x: MARGIN + 96,   w: 40,  align: "left"  },
-      { title: "DURATION",          x: MARGIN + 140,  w: 66,  align: "right" },
-      { title: "DETAIL",            x: MARGIN + 214,  w: 132, align: "left"  },
-      { title: "REF",               x: MARGIN + 352,  w: 116, align: "left"  },
-      { title: "NOTES / KEY POINTS",x: MARGIN + 474,  w: 188, align: "left"  },
-      { title: "AUCTION",           x: MARGIN + 668,  w: CONTENT_W - 668, align: "left" },
-    ]
-
-    // Group by London day, ascending (earliest first) — a natural chronological log.
-    type DayGroup = { key: string; label: string; lots: PdfLotEntry[]; idle: PdfIdleEntry[] }
-    const byDay = new Map<string, DayGroup>()
-    const dayOf = (ts: string): DayGroup => {
-      const k = fDayKey.format(new Date(ts))
-      let g = byDay.get(k)
-      if (!g) { g = { key: k, label: fDayLbl.format(new Date(ts)).replace(",", ""), lots: [], idle: [] }; byDay.set(k, g) }
-      return g
-    }
-    for (const l of p.lots) dayOf(l.ts).lots.push(l)
-    for (const i of p.idle) dayOf(i.ts).idle.push(i)
-    const days = [...byDay.values()].sort((a, b) => a.key.localeCompare(b.key))
-
-    drawHeaderRow(logCols)
-    for (const d of days) {
-      const dayLots  = [...d.lots].sort((a, b) => a.ts.localeCompare(b.ts))
-      const dayIdle  = [...d.idle].sort((a, b) => a.ts.localeCompare(b.ts))
-      const catMs    = dayLots.reduce((s, l) => s + l.durationMs, 0)
-      const awayMs   = dayIdle.filter(i => !i.excluded).reduce((s, i) => s + i.durationMs, 0)
-
-      // Day banner
-      if (y - 16 < MARGIN + 24) { newPage(); drawHeaderRow(logCols) }
-      page.drawRectangle({ x: MARGIN, y: y - 13, width: CONTENT_W, height: 14, color: BAND })
-      page.drawText(safeAscii(d.label), { x: MARGIN + 6, y: y - 10, size: 8.5, font: helvB, color: INK })
-      drawRight(`${dayLots.length} lot${dayLots.length === 1 ? "" : "s"}  ·  Cataloguing ${fmtDur(catMs)}  ·  Away ${fmtDur(awayMs)}`, PAGE_W - MARGIN - 6, y - 10, 8, helvB, GREY)
-      y -= 18
-
-      // Merge the day's rows in time order
-      const rows: ({ t: "lot"; e: PdfLotEntry } | { t: "idle"; e: PdfIdleEntry })[] = [
-        ...dayLots.map(e => ({ t: "lot" as const, e })),
-        ...dayIdle.map(e => ({ t: "idle" as const, e })),
-      ].sort((a, b) => a.e.ts.localeCompare(b.e.ts))
-
-      for (const row of rows) {
-        if (y - 13 < MARGIN + 24) { newPage(); drawHeaderRow(logCols) }
-        if (row.t === "lot") {
-          const e = row.e
-          page.drawText(fTime.format(new Date(e.ts)), { x: logCols[0].x, y: y - 8, size: 8, font: helv, color: GREY })
-          page.drawText("Lot", { x: logCols[1].x, y: y - 8, size: 8, font: helv, color: MUTE })
-          drawRight(fmtDur(e.durationMs), logCols[2].x + logCols[2].w, y - 8, 8.5, helvB, INK)
-          page.drawText(truncate(methodLabel(e.method), helv, 8, logCols[3].w), { x: logCols[3].x, y: y - 8, size: 8, font: helv, color: e.method === "WIZARD" ? BLUE : PURPLE })
-          page.drawText(truncate(e.barcode || "-", helv, 8, logCols[4].w), { x: logCols[4].x, y: y - 8, size: 8, font: helv, color: GREY })
-          page.drawText(truncate(e.keyPointsMs && e.keyPointsMs > 0 ? `Key points ${fmtDur(e.keyPointsMs)}` : "-", helv, 8, logCols[5].w), { x: logCols[5].x, y: y - 8, size: 8, font: helv, color: MUTE })
-          page.drawText(truncate(`${e.auctionCode} ${e.auctionName}`, helv, 8, logCols[6].w), { x: logCols[6].x, y: y - 8, size: 8, font: helv, color: GREY })
-        } else {
-          const e = row.e
-          const c = e.excluded ? MUTE : GREY
-          const start = new Date(e.ts)
-          page.drawText(`${fHM.format(start)} - ${fHM.format(new Date(start.getTime() + e.durationMs))}`, { x: logCols[0].x, y: y - 8, size: 8, font: helv, color: c })
-          page.drawText("Away", { x: logCols[1].x, y: y - 8, size: 8, font: helvB, color: e.excluded ? MUTE : ORANGE })
-          drawRight(fmtDur(e.durationMs), logCols[2].x + logCols[2].w, y - 8, 8.5, helvB, e.excluded ? MUTE : ORANGE)
-          if (!e.excluded) swatch(logCols[3].x, e.reasonKey)
-          page.drawText(truncate(labelOf(e.reasonKey), helv, 8, logCols[3].w - 14), { x: logCols[3].x + (e.excluded ? 0 : 14), y: y - 8, size: 8, font: helv, color: e.excluded ? MUTE : INK })
-          page.drawText(truncate(e.toteNumbers || "-", helv, 8, logCols[4].w), { x: logCols[4].x, y: y - 8, size: 8, font: helv, color: c })
-          page.drawText(truncate(e.excluded ? "Excluded - over 10 hours" : (e.notes || "-"), helv, 8, logCols[5].w), { x: logCols[5].x, y: y - 8, size: 8, font: helv, color: c })
-          page.drawText(truncate(`${e.auctionCode} ${e.auctionName}`, helv, 8, logCols[6].w), { x: logCols[6].x, y: y - 8, size: 8, font: helv, color: c })
-        }
-        y -= 13
-        page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_W - MARGIN, y }, thickness: 0.3, color: FAINT })
-      }
-      y -= 8
+    // ── Per-day breakdown (one row per working day, newest last) ──
+    if (p.days.length) {
+      sectionTitle(ctx, `Daily breakdown  (${p.days.length} day${p.days.length === 1 ? "" : "s"})`)
+      const cols: Col[] = [
+        { title: "DAY",         x: MARGIN,        w: 220, align: "left"  },
+        { title: "LOTS",        x: MARGIN + 230,  w: 70,  align: "right" },
+        { title: "CATALOGUING", x: MARGIN + 310,  w: 150, align: "right" },
+        { title: "TIME AWAY",   x: MARGIN + 470,  w: CONTENT_W - 470, align: "right" },
+      ]
+      table(ctx, cols, p.days, 15, (d) => {
+        ctx.page.drawText(truncate(d.label, ctx.helvB, 9, cols[0].w), { x: cols[0].x, y: ctx.y - 8, size: 9, font: ctx.helvB, color: INK })
+        drawRight(ctx, d.lots.toLocaleString(), cols[1].x + cols[1].w, ctx.y - 8, 9, ctx.helvB, INK)
+        drawRight(ctx, fmtDur(d.catMs),  cols[2].x + cols[2].w, ctx.y - 8, 9, ctx.helv, EMERALD)
+        drawRight(ctx, d.awayMs > 0 ? fmtDur(d.awayMs) : "-", cols[3].x + cols[3].w, ctx.y - 8, 9, ctx.helv, d.awayMs > 0 ? ORANGEB : MUTE)
+      }, true)
+      ctx.y -= 16
     }
   })
 
-  // ── Footer page numbers ──
-  const pages = doc.getPages()
-  pages.forEach((pg, i) => {
-    pg.drawText("Vectis Auctions - Cataloguer Report", { x: MARGIN, y: MARGIN - 18, size: 7, font: helv, color: MUTE })
-    const label = `Page ${i + 1} of ${pages.length}`
-    pg.drawText(label, { x: PAGE_W - MARGIN - helv.widthOfTextAtSize(label, 7), y: MARGIN - 18, size: 7, font: helv, color: MUTE })
-  })
-
-  return await doc.save()
+  footer(ctx, "Vectis Auctions - Cataloguer Report")
+  return await ctx.doc.save()
 }

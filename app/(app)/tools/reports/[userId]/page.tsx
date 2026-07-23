@@ -335,7 +335,7 @@ export default async function ReportsUserPage({
             </div>
             {/* Custom date range picker */}
             <CustomRangePicker userId={userId} currentFrom={fromParam ?? ""} currentTo={toParam ?? ""} />
-            {/* Export this cataloguer's full report (summary + per-day lots & time away) as a PDF */}
+            {/* Export this cataloguer's clean one-page report (stats, speed, by-auction, away, per-day) */}
             <a
               href={`/api/reports/pdf?userId=${encodeURIComponent(userId)}&${
                 isCustomRange
