@@ -453,15 +453,13 @@ export default function LotWizardTab({
   const [idlePopup,        setIdlePopup]      = useState(false)
   const [idleSecs,         setIdleSecs]       = useState(0)
   // Multi-select (2026-07-23): several reasons can be picked and the time divided
-  // between them with quick sliders — a rough split is fine. The sliders are
-  // ABSOLUTE minutes, not shares: a value the user sets is PINNED (idlePinned)
-  // and never moves when another slider is dragged — only reasons they haven't
-  // touched flex to absorb the remainder. idleTouchOrder tracks which pin was
-  // set longest ago, for the rare all-pinned case where something must give.
+  // between them with quick sliders — a rough split is fine. Sliders are FULLY
+  // MANUAL (Jordan: no auto-adjusting): each selected reason starts at 0m and
+  // only moves when dragged; a live "Not allocated" line shows what's left, and
+  // whatever remains on submit is logged under the UNALLOCATED pseudo-reason.
   // idleNotesMap holds a note per reason for reasons that need one.
   const [idleSelected,     setIdleSelected]   = useState<string[]>([])
-  const [idlePinned,       setIdlePinned]     = useState<Record<string, number>>({})
-  const [idleTouchOrder,   setIdleTouchOrder] = useState<string[]>([])
+  const [idleAlloc,        setIdleAlloc]      = useState<Record<string, number>>({})
   const [idleTotes,        setIdleTotes]      = useState("")
   const [idleNotesMap,     setIdleNotesMap]   = useState<Record<string, string>>({})
   // Tapping "Other" first shows a reminder to use a listed option if one fits —
@@ -585,8 +583,7 @@ export default function LotWizardTab({
     idleEndedAtRef.current   = Date.now()
     setIdleSecs(Math.floor(idleMs / 1000))
     setIdleSelected([])
-    setIdlePinned({})
-    setIdleTouchOrder([])
+    setIdleAlloc({})
     setIdleTotes("")
     setIdleNotesMap({})
     setIdleOtherWarn(false)
@@ -673,67 +670,26 @@ export default function LotWizardTab({
     setTimerActive(true)
   }
 
-  // Smallest time a selected reason can be given (they picked it, so it got SOME
-  // time) — 1 minute (the popup works in whole minutes), or an equal share when
-  // the whole gap is tiny.
-  function idleMinSegMs(): number {
-    const totalMs = idleSecs * 1000
-    return Math.min(60_000, Math.max(1000, Math.floor(totalMs / Math.max(idleSelected.length, 1))))
-  }
-
-  // Divide the gap between the selected reasons. Pinned values (slider the user
-  // has set) are kept EXACTLY as set; reasons they haven't touched split the
-  // remainder equally. Always sums to the exact gap: the last untouched reason
-  // absorbs rounding — or, if everything is pinned, any spare (e.g. after
-  // deselecting a pinned reason) goes to the most recently touched one.
+  // One selection = the whole gap. With several, each reason gets EXACTLY what
+  // its slider was dragged to (starting at 0m, nothing ever auto-adjusts) and
+  // whatever is left over becomes an UNALLOCATED segment — recorded as such.
   function idleSegments(): { reason: string; durationMs: number }[] {
     const totalMs = idleSecs * 1000
     if (idleSelected.length <= 1) return idleSelected.map(r => ({ reason: r, durationMs: totalMs }))
-    const untouched = idleSelected.filter(k => idlePinned[k] == null)
-    const pinnedSum = idleSelected.reduce((s, k) => s + (idlePinned[k] ?? 0), 0)
-    const remaining = Math.max(0, totalMs - pinnedSum)
-    // Untouched reasons share the remainder in whole minutes (falling back to
-    // seconds only when the gap is too small for that); the last one absorbs the
-    // odd seconds, which the rounded-up display then presents as whole minutes.
-    let evenMs = untouched.length ? Math.floor(remaining / untouched.length / 60_000) * 60_000 : 0
-    if (untouched.length && evenMs < 1000) evenMs = Math.floor(remaining / untouched.length / 1000) * 1000
-    const lastTouched = [...idleTouchOrder].reverse().find(k => idleSelected.includes(k))
-    return idleSelected.map(k => {
-      if (idlePinned[k] == null) {
-        // Untouched: equal share of the remainder; the LAST untouched absorbs rounding.
-        const isLastUntouched = k === untouched[untouched.length - 1]
-        return { reason: k, durationMs: isLastUntouched ? remaining - evenMs * (untouched.length - 1) : evenMs }
-      }
-      // Pinned: exactly what they set — plus any spare when nothing is left untouched.
-      const spare = untouched.length === 0 && k === lastTouched ? totalMs - pinnedSum : 0
-      return { reason: k, durationMs: idlePinned[k] + spare }
-    })
+    const segs = idleSelected.map(k => ({ reason: k, durationMs: idleAlloc[k] ?? 0 }))
+    const left = totalMs - segs.reduce((s, x) => s + x.durationMs, 0)
+    if (left >= 1000) segs.push({ reason: "UNALLOCATED", durationMs: left })
+    return segs
   }
 
-  // A slider was dragged: pin that reason at the chosen time. Untouched reasons
-  // absorb the change; the drag is capped so every other reason keeps at least
-  // the minimum. If EVERY other reason is already pinned, the extra time has to
-  // come from somewhere — it trades with the pin set longest ago.
+  // A slider was dragged: set that reason to the chosen time, snapped to whole
+  // minutes and hard-stopped at whatever is still unallocated (the final drag
+  // may take the exact sub-minute remainder). No other slider ever moves.
   function setIdleSplit(key: string, rawMs: number) {
     const totalMs = idleSecs * 1000
-    const MIN = idleMinSegMs()
-    const current = new Map(idleSegments().map(s => [s.reason, s.durationMs]))
-    const othersPinned  = idleSelected.filter(k => k !== key && idlePinned[k] != null)
-    const othersFlexing = idleSelected.filter(k => k !== key && idlePinned[k] == null)
-    let v = Math.max(MIN, Math.round(rawMs / 60_000) * 60_000)   // pins snap to whole minutes
-    if (othersFlexing.length > 0) {
-      const cap = totalMs - othersPinned.reduce((s, k) => s + idlePinned[k], 0) - othersFlexing.length * MIN
-      v = Math.min(v, Math.max(MIN, cap))
-      setIdlePinned(p => ({ ...p, [key]: v }))
-    } else {
-      const donor = idleTouchOrder.find(k => k !== key && idleSelected.includes(k))
-      if (!donor) return
-      const cur     = current.get(key) ?? MIN
-      const donorMs = current.get(donor) ?? MIN
-      v = Math.min(v, cur + Math.max(0, donorMs - MIN))
-      setIdlePinned(p => ({ ...p, [key]: v, [donor]: donorMs - (v - cur) }))
-    }
-    setIdleTouchOrder(o => [...o.filter(k => k !== key), key])
+    const others  = idleSelected.reduce((s, k) => (k === key ? s : s + (idleAlloc[k] ?? 0)), 0)
+    const v = Math.max(0, Math.min(Math.round(rawMs / 60_000) * 60_000, totalMs - others))
+    setIdleAlloc(a => ({ ...a, [key]: v }))
   }
 
   async function submitIdleLog() {
@@ -1232,6 +1188,7 @@ export default function LotWizardTab({
   // Whole minutes, ROUNDED UP — the popup deliberately shows no seconds
   // (Jordan 2026-07-23: "remove the seconds and just round up").
   function fmtIdleDuration(secs: number) {
+    if (secs <= 0) return "0m"
     const mins = Math.max(1, Math.ceil(secs / 60))
     const h = Math.floor(mins / 60), m = mins % 60
     return h > 0 ? `${h}h ${m}m` : `${m}m`
@@ -1263,6 +1220,9 @@ export default function LotWizardTab({
         const multi  = idleSelected.length > 1
         const totalGapMs = idleSecs * 1000
         const sliderStep = 60_000   // whole minutes — the popup shows no seconds
+        const unallocMs  = multi ? (segMs.get("UNALLOCATED") ?? 0) : 0
+        // Every selected reason needs SOME time on its slider before submitting.
+        const allocMissing = multi && idleSelected.some(k => (idleAlloc[k] ?? 0) < 1000)
         // A note is missing when a selected reason requires one (or lunch ran over
         // an hour of ITS OWN allocated time) and nothing has been typed for it.
         const missingNote = (k: string) => {
@@ -1325,16 +1285,27 @@ export default function LotWizardTab({
                       <div key={key}>
                         <div className="flex items-center justify-between text-xs mb-0.5">
                           <span className="font-semibold text-gray-700">{cfg?.icon} {cfg?.label ?? key}</span>
-                          <span className="font-mono font-bold text-[#1a8a80]">{fmtIdleDuration(Math.round((segMs.get(key) ?? 0) / 1000))}</span>
+                          <span className="font-mono font-bold text-[#1a8a80]">{fmtIdleDuration(Math.round((idleAlloc[key] ?? 0) / 1000))}</span>
                         </div>
                         <input type="range" min={0} max={totalGapMs} step={sliderStep}
-                          value={segMs.get(key) ?? 0}
+                          value={idleAlloc[key] ?? 0}
                           onChange={e => setIdleSplit(key, Number(e.target.value))}
                           className="w-full accent-[#2AB4A6]" />
                       </div>
                     )
                   })}
                 </div>
+                {/* Whatever isn't given to a reason is recorded as unallocated */}
+                <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-gray-200 text-xs">
+                  <span className="font-semibold text-gray-500">❔ Not allocated</span>
+                  <span className={`font-mono font-bold ${unallocMs >= 1000 ? "text-amber-600" : "text-gray-400"}`}>
+                    {fmtIdleDuration(Math.round(unallocMs / 1000))}
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-400 mt-1">Anything left over is recorded as unallocated time.</p>
+                {allocMissing && (
+                  <p className="text-[11px] text-red-500 mt-1">Give each selected activity some time using its slider.</p>
+                )}
               </div>
             )}
 
@@ -1403,7 +1374,7 @@ export default function LotWizardTab({
             )}
 
             <button onClick={submitIdleLog}
-              disabled={idleSelected.length === 0 || idleSubmitting || anyMissing}
+              disabled={idleSelected.length === 0 || idleSubmitting || anyMissing || allocMissing}
               className="w-full py-3 bg-[#2AB4A6] hover:bg-[#22a090] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors">
               {idleSubmitting ? "Saving…" : idleError ? "Try Again" : pendingSaveRef.current ? "Log & Save Lot" : "Log & Continue"}
             </button>

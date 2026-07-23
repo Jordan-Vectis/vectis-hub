@@ -16,19 +16,19 @@ import type { IdleReason } from "@/lib/idle-timer-config"
 export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }) {
   const [open, setOpen]             = useState(false)
   const [selected, setSelected]     = useState<string[]>([])
-  const [pinned, setPinned]         = useState<Record<string, number>>({})
-  const [touchOrder, setTouchOrder] = useState<string[]>([])
+  const [alloc, setAlloc]           = useState<Record<string, number>>({})
   const [notes, setNotes]           = useState<Record<string, string>>({})
   const [totes, setTotes]           = useState("")
   const [otherWarn, setOtherWarn]   = useState(false)
 
   const SAMPLE_SECS = 12 * 60 + 30   // realistic sample gap (the popup fires past the red threshold)
 
-  function openPreview() { setSelected([]); setPinned({}); setTouchOrder([]); setNotes({}); setTotes(""); setOtherWarn(false); setOpen(true) }
+  function openPreview() { setSelected([]); setAlloc({}); setNotes({}); setTotes(""); setOtherWarn(false); setOpen(true) }
 
   // Faithful copies of the wizard's formatters + split maths.
   // Whole minutes, ROUNDED UP — the popup deliberately shows no seconds.
   const fmtIdleDuration = (secs: number) => {
+    if (secs <= 0) return "0m"
     const mins = Math.max(1, Math.ceil(secs / 60))
     const h = Math.floor(mins / 60), m = mins % 60
     return h > 0 ? `${h}h ${m}m` : `${m}m`
@@ -37,51 +37,21 @@ export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }
   const start = now - SAMPLE_SECS * 1000
   const hhmm  = (ms: number) => new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
 
-  // Faithful copy of the wizard's PINNED-minutes split: values the admin sets
-  // stay exactly where they were set; untouched reasons flex to absorb the rest.
+  // Faithful copy of the wizard's MANUAL split: each selected reason starts at
+  // 0m and only moves when its own slider is dragged — nothing auto-adjusts.
+  // Whatever is left over shows as (and would be logged as) unallocated.
   const totalMs = SAMPLE_SECS * 1000
-  const MIN = Math.min(60_000, Math.max(1000, Math.floor(totalMs / Math.max(selected.length, 1))))
-  const computeSegs = (): { reason: string; durationMs: number }[] => {
-    if (selected.length <= 1) return selected.map(r => ({ reason: r, durationMs: totalMs }))
-    const untouched = selected.filter(k => pinned[k] == null)
-    const pinnedSum = selected.reduce((s, k) => s + (pinned[k] ?? 0), 0)
-    const remaining = Math.max(0, totalMs - pinnedSum)
-    let evenMs = untouched.length ? Math.floor(remaining / untouched.length / 60_000) * 60_000 : 0
-    if (untouched.length && evenMs < 1000) evenMs = Math.floor(remaining / untouched.length / 1000) * 1000
-    const lastTouched = [...touchOrder].reverse().find(k => selected.includes(k))
-    return selected.map(k => {
-      if (pinned[k] == null) {
-        const isLastUntouched = k === untouched[untouched.length - 1]
-        return { reason: k, durationMs: isLastUntouched ? remaining - evenMs * (untouched.length - 1) : evenMs }
-      }
-      const spare = untouched.length === 0 && k === lastTouched ? totalMs - pinnedSum : 0
-      return { reason: k, durationMs: pinned[k] + spare }
-    })
-  }
-  const segs  = computeSegs()
-  const segMs = new Map(segs.map(s => [s.reason, s.durationMs]))
+  const segMs = new Map<string, number>(selected.map(k => [k, selected.length <= 1 ? totalMs : (alloc[k] ?? 0)]))
   const multi = selected.length > 1
   const sliderStep = 60_000   // whole minutes — the popup shows no seconds
+  const unallocMs  = multi ? Math.max(0, totalMs - selected.reduce((s, k) => s + (alloc[k] ?? 0), 0)) : 0
 
-  // A slider was dragged: pin it there; untouched reasons absorb (capped so each
-  // keeps the minimum). All-pinned edge: trades with the pin set longest ago.
+  // A slider was dragged: snap to whole minutes, hard-stop at what's still
+  // unallocated (the final drag may take the exact sub-minute remainder).
   function setSplit(key: string, rawMs: number) {
-    const othersPinned  = selected.filter(k => k !== key && pinned[k] != null)
-    const othersFlexing = selected.filter(k => k !== key && pinned[k] == null)
-    let v = Math.max(MIN, Math.round(rawMs / 60_000) * 60_000)   // pins snap to whole minutes
-    if (othersFlexing.length > 0) {
-      const cap = totalMs - othersPinned.reduce((s, k) => s + pinned[k], 0) - othersFlexing.length * MIN
-      v = Math.min(v, Math.max(MIN, cap))
-      setPinned(p => ({ ...p, [key]: v }))
-    } else {
-      const donor = touchOrder.find(k => k !== key && selected.includes(k))
-      if (!donor) return
-      const cur     = segMs.get(key) ?? MIN
-      const donorMs = segMs.get(donor) ?? MIN
-      v = Math.min(v, cur + Math.max(0, donorMs - MIN))
-      setPinned(p => ({ ...p, [key]: v, [donor]: donorMs - (v - cur) }))
-    }
-    setTouchOrder(o => [...o.filter(k => k !== key), key])
+    const others = selected.reduce((s, k) => (k === key ? s : s + (alloc[k] ?? 0)), 0)
+    const v = Math.max(0, Math.min(Math.round(rawMs / 60_000) * 60_000, totalMs - others))
+    setAlloc(a => ({ ...a, [key]: v }))
   }
 
   return (
@@ -160,6 +130,14 @@ export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }
                     )
                   })}
                 </div>
+                {/* Whatever isn't given to a reason is recorded as unallocated */}
+                <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-gray-200 text-xs">
+                  <span className="font-semibold text-gray-500">❔ Not allocated</span>
+                  <span className={`font-mono font-bold ${unallocMs >= 1000 ? "text-amber-600" : "text-gray-400"}`}>
+                    {fmtIdleDuration(Math.round(unallocMs / 1000))}
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-400 mt-1">Anything left over is recorded as unallocated time.</p>
               </div>
             )}
 

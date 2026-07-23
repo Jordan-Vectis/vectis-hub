@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { getEffectiveSession } from "@/lib/impersonation"
 import { hasAppAccess } from "@/lib/apps"
 import { buildLotMap, minOf, maxOf, ukDayKey, ukDayStartUtc, computeLotBreakdowns } from "@/lib/cataloguing-reports"
-import { DEFAULT_REASONS } from "@/lib/idle-timer-config"
+import { DEFAULT_REASONS, UNALLOCATED_REASON } from "@/lib/idle-timer-config"
 import {
   buildSummaryPdf, buildIndividualsPdf,
   type PersonPdfReport, type PdfReasonMeta, type SummaryRow, type SummaryTeam, type PdfDayRow, type PdfAwayReason, type PdfAuctionStat,
@@ -139,6 +139,8 @@ export async function GET(req: NextRequest) {
     const reasonMeta = new Map<string, PdfReasonMeta>()
     for (const r of DEFAULT_REASONS) reasonMeta.set(r.key, { label: r.label, idleColour: r.idleColour })
     for (const r of reasons) reasonMeta.set(r.key, { label: r.label, idleColour: r.idleColour })
+    // Display-only pseudo-reason: popup time left unallocated by the split.
+    reasonMeta.set(UNALLOCATED_REASON.key, { label: UNALLOCATED_REASON.label, idleColour: UNALLOCATED_REASON.idleColour })
 
     // Exclude orphaned timing logs (lotId that matches no lot) — same as the pages.
     const lotMap = await buildLotMap(rawLogs)

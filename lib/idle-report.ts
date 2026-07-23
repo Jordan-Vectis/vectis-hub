@@ -11,7 +11,7 @@ import { subDays, subMonths, startOfDay } from "date-fns"
 import { buildLotMap, ukDayKey } from "@/lib/cataloguing-reports"
 import { findUserGaps, type GapSave, type GapIdle } from "@/lib/idle-gaps"
 import { clockLooksTampered } from "@/lib/idle-gate"
-import { DEFAULT_REASONS, type IdleReason } from "@/lib/idle-timer-config"
+import { DEFAULT_REASONS, UNALLOCATED_REASON, type IdleReason } from "@/lib/idle-timer-config"
 
 export const WORK_DAY_MS = 8 * 60 * 60 * 1000 // a standard 9–5 day
 
@@ -119,7 +119,9 @@ export async function computeIdleReport(activeRange: RangeKey, includeTamper: bo
   const saves = rawSaves.filter(s => !s.lotId || lotMap.has(s.lotId))
 
   const reasons: IdleReason[] = Array.isArray(cfg?.reasons) && cfg.reasons.length ? cfg.reasons : DEFAULT_REASONS
-  const reasonMeta = new Map(reasons.map(r => [r.key, r]))
+  // UNALLOCATED = display-only pseudo-reason (popup leftover time) — merged so
+  // its logs label/colour nicely without ever being a configurable reason.
+  const reasonMeta = new Map([...reasons, UNALLOCATED_REASON].map(r => [r.key, r]))
   const labelOf  = (key: string) => reasonMeta.get(key)?.label ?? key
   const colourOf = (key: string) => reasonMeta.get(key)?.idleColour ?? "#9ca3af"
   const iconOf   = (key: string) => reasonMeta.get(key)?.icon ?? "•"

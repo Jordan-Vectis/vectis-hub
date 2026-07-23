@@ -14,7 +14,7 @@ import {
   Cell,
   ReferenceLine,
 } from "recharts"
-import { DEFAULT_REASONS } from "@/lib/idle-timer-config"
+import { DEFAULT_REASONS, UNALLOCATED_REASON } from "@/lib/idle-timer-config"
 import type { IdleReason } from "@/lib/idle-timer-config"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -91,9 +91,11 @@ export type TodayIdleSession = {
   startedAt:   string
 }
 
-// Built at module load from defaults; refreshed per-component via useIdleReasons()
+// Built at module load from defaults; refreshed per-component via useIdleReasons().
+// UNALLOCATED is display-only (popup leftover time) — merged so its logs label
+// nicely, never a pickable/admin-editable reason.
 function buildReasonConfig(reasons: IdleReason[]): Record<string, IdleReason> {
-  return Object.fromEntries(reasons.map(r => [r.key, r]))
+  return Object.fromEntries([...reasons, UNALLOCATED_REASON].map(r => [r.key, r]))
 }
 
 function useIdleReasons() {

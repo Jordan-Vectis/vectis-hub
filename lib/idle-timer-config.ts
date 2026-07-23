@@ -62,6 +62,16 @@ export const DEFAULT_REASONS: IdleReason[] = [
   { key: "OTHER",                  label: "Other",             icon: "✏️", requiresNotes: true,  colour: "bg-gray-100 text-gray-600 border-gray-200",       idleColour: "#9ca3af" },
 ]
 
+// Pseudo-reason for time the multi-select popup split leaves unassigned — the
+// popup logs the leftover under this key ("it marks it down as unallocated").
+// Deliberately NOT in DEFAULT_REASONS: it must never be a tappable button in the
+// popup or an editable row in the admin list. Merge it into DISPLAY maps only,
+// so IdleLog rows with this key render with a friendly label and grey colour.
+export const UNALLOCATED_REASON: IdleReason = {
+  key: "UNALLOCATED", label: "Unallocated", icon: "❔", requiresNotes: false,
+  colour: "bg-gray-100 text-gray-500 border-gray-200", idleColour: "#9ca3af",
+}
+
 export const DEFAULT_CONFIG: IdleTimerConfig = {
   yellowMins: 4,
   redMins:    10,
