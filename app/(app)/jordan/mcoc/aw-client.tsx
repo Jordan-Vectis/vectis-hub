@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import ModelPicker, { getJordanModel } from "../model-picker"
 import { classColour, normChampName } from "@/lib/mcoc"
-import { addWarFight, removeWarFight, setWarFightDefender, reorderWarFights, addMiniNode, removeMiniNode, setMiniNodeLabel, setMiniNodeDefender, setMiniNodeTaking, reorderMiniNodes } from "@/lib/actions/mcoc"
+import { addWarFight, removeWarFight, setWarFightDefender, reorderWarFights, addMiniNode, removeMiniNode, setMiniNodeLabel, setMiniNodeDefender, setMiniNodeTaking, setMiniNodeSlot } from "@/lib/actions/mcoc"
 import type { Champ } from "./mcoc-hub"
 
 // 🏰 ALLIANCE WAR — two planners:
@@ -40,7 +40,53 @@ type DefResult = { placements: { node: string; champion: string; why: string }[]
 // A saved war fight: defender (overtyped each war) + optional nodes photo URL.
 type WarFight = { id: string; defender: string; nodesImageUrl: string | null }
 // A mini boss node in the library: photo uploaded once; taking + defender change per war.
-type MiniNode = { id: string; label: string; defender: string; taking: boolean; nodesImageUrl: string | null }
+// slot = its fixed position on the war map (null = not placed yet, sits in the tray).
+type MiniNode = { id: string; label: string; defender: string; taking: boolean; slot: string | null; nodesImageUrl: string | null }
+
+// ── The war map template (drawn from Jordan's map screenshot) ─────────────────
+// Boss Island hexagon up top, the Bottleneck diamond (Path B) in the middle,
+// Paths A and C diamonds at the bottom. Each diamond has L / R / C mini nodes.
+// Coordinates are viewBox units (0-100 wide, 0-130 tall). Node numbers are NOT
+// hardcoded — Jordan types each node's own label.
+type MapSlot = { key: string; x: number; y: number; hint: string }
+const MAP_SLOTS: MapSlot[] = [
+  { key: "boss_top", x: 50, y: 7,   hint: "BOSS" },
+  { key: "boss_ul",  x: 36, y: 15,  hint: "" },
+  { key: "boss_ur",  x: 64, y: 15,  hint: "" },
+  { key: "boss_ll",  x: 36, y: 27,  hint: "L" },
+  { key: "boss_lr",  x: 64, y: 27,  hint: "R" },
+  { key: "boss_bot", x: 50, y: 35,  hint: "" },
+  { key: "pb_l",     x: 36, y: 66,  hint: "L" },
+  { key: "pb_r",     x: 64, y: 66,  hint: "R" },
+  { key: "pb_c",     x: 50, y: 76,  hint: "C" },
+  { key: "pa_l",     x: 8,  y: 104, hint: "L" },
+  { key: "pa_r",     x: 36, y: 104, hint: "R" },
+  { key: "pa_c",     x: 22, y: 115, hint: "C" },
+  { key: "pc_l",     x: 64, y: 104, hint: "L" },
+  { key: "pc_r",     x: 92, y: 104, hint: "R" },
+  { key: "pc_c",     x: 78, y: 115, hint: "C" },
+]
+// Connecting lines + decorative path-entry dots, mirroring the in-game map.
+const MAP_EDGES: [number, number, number, number][] = [
+  // Boss Island hexagon
+  [50, 7, 64, 15], [64, 15, 64, 27], [64, 27, 50, 35], [50, 35, 36, 27], [36, 27, 36, 15], [36, 15, 50, 7],
+  // Boss Island ← Bottleneck stem
+  [50, 35, 50, 56],
+  // Path B (Bottleneck) diamond
+  [50, 56, 64, 66], [64, 66, 50, 76], [50, 76, 36, 66], [36, 66, 50, 56],
+  // Path A diamond
+  [22, 93, 36, 104], [36, 104, 22, 115], [22, 115, 8, 104], [8, 104, 22, 93],
+  // Path C diamond
+  [78, 93, 92, 104], [92, 104, 78, 115], [78, 115, 64, 104], [64, 104, 78, 93],
+]
+const MAP_DOTS: [number, number][] = [[50, 56], [22, 93], [78, 93]]
+const MAP_LABELS: { x: number; y: number; text: string }[] = [
+  { x: 80, y: 8,   text: "BOSS ISLAND" },
+  { x: 79, y: 60,  text: "BOTTLENECK" },
+  { x: 33, y: 57,  text: "PATH B" },
+  { x: 10, y: 91,  text: "PATH A" },
+  { x: 90, y: 91,  text: "PATH C" },
+]
 
 export default function AwClient({ roster }: { roster: Champ[] }) {
   const [mode, setMode] = useState<"path" | "defence">("path")
@@ -86,16 +132,33 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
   const miniPhotoInput = useRef<HTMLInputElement>(null)
   const pickForMini = useRef<string | null>(null)
 
-  async function addMini() {
+  // Map interaction: editingMiniId opens the editor card under the map;
+  // placingId = a tray node waiting for an empty slot to be tapped.
+  const [editingMiniId, setEditingMiniId] = useState<string | null>(null)
+  const [placingId, setPlacingId] = useState<string | null>(null)
+
+  async function createInSlot(slot: string) {
     if (addingMini) return
     setAddingMini(true)
     try {
-      const r = await addMiniNode()
-      setMinis((m) => [...m, { id: r.id, label: "", defender: "", taking: false, nodesImageUrl: null }])
+      const r = await addMiniNode(slot)
+      setMinis((m) => [...m, { id: r.id, label: "", defender: "", taking: false, slot, nodesImageUrl: null }])
+      setEditingMiniId(r.id)   // straight into naming + photo
     } catch { /* ignore — try again */ } finally { setAddingMini(false) }
+  }
+  async function placeMini(id: string, slot: string) {
+    editMini(id, { slot })
+    setPlacingId(null)
+    try { await setMiniNodeSlot(id, slot) } catch { editMini(id, { slot: null }) }
+  }
+  async function unplaceMini(id: string) {
+    editMini(id, { slot: null })
+    try { await setMiniNodeSlot(id, null) } catch { /* ignore */ }
   }
   async function removeMini(id: string) {
     setMinis((m) => m.filter((x) => x.id !== id))
+    if (editingMiniId === id) setEditingMiniId(null)
+    if (placingId === id) setPlacingId(null)
     try { await removeMiniNode(id) } catch { /* ignore */ }
   }
   function editMini(id: string, patch: Partial<MiniNode>) {
@@ -107,15 +170,6 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
     const next = !cur.taking
     editMini(id, { taking: next })   // optimistic
     try { await setMiniNodeTaking(id, next) } catch { editMini(id, { taking: !next }) }
-  }
-  async function moveMini(id: string, dir: -1 | 1) {
-    const i = minis.findIndex((x) => x.id === id)
-    const j = i + dir
-    if (i < 0 || j < 0 || j >= minis.length) return
-    const next = [...minis]
-    ;[next[i], next[j]] = [next[j], next[i]]
-    setMinis(next)
-    try { await reorderMiniNodes(next.map((x) => x.id)) } catch { /* ignore */ }
   }
   function pickMiniPhoto(id: string) {
     pickForMini.current = id
@@ -398,69 +452,161 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                 Your mini boss node map — add every mini node once with its photo. Each war, tap the nodes
                 you&apos;re taking (they light up) and type the defenders. The photos stay, so no re-photographing.
               </p>
-              {!warLoading && (
-                <>
-                  <div className="flex flex-wrap gap-2.5">
-                    {minis.map((m, i) => {
-                      const cls = defClass(m.defender)
-                      return (
-                        <div key={m.id}
-                          className={`w-44 rounded-lg border p-2 space-y-1.5 transition-all ${m.taking ? "border-[#33ff66] shadow-[0_0_10px_rgba(51,255,102,0.25)]" : "border-[#1f5c33] opacity-60 hover:opacity-90"}`}>
-                          <div className="flex items-center gap-1">
-                            <input value={m.label}
-                              onChange={(e) => editMini(m.id, { label: e.target.value })}
-                              onBlur={(e) => setMiniNodeLabel(m.id, e.target.value).catch(() => {})}
-                              placeholder="Node…"
-                              className="bg-transparent border-0 outline-none text-[11px] uppercase tracking-widest w-full min-w-0 opacity-80 focus:opacity-100"
-                              style={{ color: GREEN }} />
-                            <div className="ml-auto flex items-center gap-0.5 shrink-0">
-                              <button onClick={() => moveMini(m.id, -1)} disabled={i === 0} className="px-0.5 opacity-40 hover:opacity-100 disabled:opacity-15 disabled:cursor-default" title="Move left">◀</button>
-                              <button onClick={() => moveMini(m.id, 1)} disabled={i === minis.length - 1} className="px-0.5 opacity-40 hover:opacity-100 disabled:opacity-15 disabled:cursor-default" title="Move right">▶</button>
-                              <button onClick={() => removeMini(m.id)} className="px-0.5 text-red-400 opacity-60 hover:opacity-100" title="Remove node">×</button>
+              {!warLoading && (() => {
+                const bySlot = new Map(minis.filter((m) => m.slot).map((m) => [m.slot as string, m]))
+                const unplaced = minis.filter((m) => !m.slot)
+                const editing = editingMiniId ? minis.find((m) => m.id === editingMiniId) ?? null : null
+                return (
+                  <>
+                    {/* The map — same shape as the in-game AW map. Tap an empty ring to
+                        add that node; tap a filled node to toggle taking it this war. */}
+                    <div className="relative w-full max-w-[540px] mx-auto select-none" style={{ aspectRatio: "100/130" }}>
+                      <svg viewBox="0 0 100 130" preserveAspectRatio="none" className="absolute inset-0 w-full h-full pointer-events-none">
+                        {MAP_EDGES.map(([x1, y1, x2, y2], i) => (
+                          <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#1f5c33" strokeWidth="0.6" />
+                        ))}
+                        {MAP_DOTS.map(([x, y], i) => (
+                          <circle key={i} cx={x} cy={y} r="1.3" fill="#38b6ff" opacity="0.9" />
+                        ))}
+                        {MAP_LABELS.map((l, i) => (
+                          <text key={i} x={l.x} y={l.y} textAnchor="middle" fontSize="3.2" fill={GREEN} opacity="0.45"
+                            style={{ letterSpacing: "0.6px" }}>{l.text}</text>
+                        ))}
+                      </svg>
+                      {MAP_SLOTS.map((s) => {
+                        const m = bySlot.get(s.key)
+                        const pos = { left: `${s.x}%`, top: `${(s.y / 1.3).toFixed(3)}%` }
+                        if (!m) {
+                          return (
+                            <button key={s.key}
+                              onClick={() => (placingId ? placeMini(placingId, s.key) : createInSlot(s.key))}
+                              disabled={addingMini}
+                              className={`absolute -translate-x-1/2 -translate-y-1/2 w-[13%] aspect-square rounded-full border border-dashed flex items-center justify-center text-[10px] transition-all ${placingId ? "border-[#33ff66] text-[#33ff66] animate-pulse bg-[#33ff66]/10" : "border-[#1f5c33] opacity-50 hover:opacity-100 hover:border-[#33ff66]"}`}
+                              style={pos}
+                              title={placingId ? "Place the node here" : `Add the ${s.hint || "node"} here`}>
+                              {s.hint ? <span className="text-[8px] font-bold tracking-widest opacity-80">{s.hint}</span> : "＋"}
+                            </button>
+                          )
+                        }
+                        return (
+                          <div key={s.key} className="absolute -translate-x-1/2 -translate-y-1/2 w-[14%]" style={pos}>
+                            <button onClick={() => !placingId && toggleTaking(m.id)}
+                              className={`relative w-full aspect-square rounded-full border-2 overflow-hidden flex items-center justify-center transition-all ${m.taking ? "border-[#33ff66] shadow-[0_0_12px_rgba(51,255,102,0.45)]" : "border-[#1f5c33] opacity-55 hover:opacity-90 grayscale"}`}
+                              title={`${m.label || s.hint || "Node"} — ${m.taking ? "taking this war (tap to drop)" : "tap to take this war"}`}>
+                              {m.nodesImageUrl
+                                ? <img src={m.nodesImageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                                : <span className="text-[9px] opacity-60">📷</span>}
+                              {m.taking && <span className="absolute inset-0 rounded-full ring-1 ring-[#33ff66]/60" />}
+                            </button>
+                            <button onClick={() => setEditingMiniId(m.id)}
+                              className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-black border border-[#1f5c33] text-[8px] flex items-center justify-center opacity-70 hover:opacity-100 hover:border-[#33ff66]"
+                              title="Edit this node (label, photo, remove)">✎</button>
+                            <p className={`mt-0.5 text-center text-[9px] uppercase tracking-widest truncate ${m.taking ? "opacity-90" : "opacity-45"}`}
+                              style={{ color: m.taking ? GREEN : undefined }}>
+                              {m.label || s.hint || "—"}
+                            </p>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    <p className="text-[11px] opacity-50 text-center">
+                      {placingId
+                        ? "Tap an empty ring to place the node — or press Cancel below."
+                        : takenMinis.length
+                          ? `${takenMinis.length} node${takenMinis.length === 1 ? "" : "s"} selected this war — tap a node to toggle it.`
+                          : "Tap an empty ring to add that node (photo needed once). Tap a node to take it this war."}
+                    </p>
+
+                    {/* Node editor — label / photo / unplace / delete */}
+                    {editing && (
+                      <div className="border border-[#1f5c33] rounded-lg p-2.5 flex gap-3 items-start max-w-[540px] mx-auto w-full">
+                        <button onClick={() => pickMiniPhoto(editing.id)} disabled={miniUploadingId === editing.id}
+                          className="shrink-0 w-24 h-16 rounded-lg border border-[#1f5c33] hover:border-[#33ff66] overflow-hidden flex items-center justify-center text-[10px] opacity-70 disabled:opacity-40 transition-colors"
+                          title={editing.nodesImageUrl ? "Change node photo" : "Add this node's photo (only needed once)"}>
+                          {miniUploadingId === editing.id
+                            ? <span className="animate-pulse">Saving…</span>
+                            : editing.nodesImageUrl
+                              ? <img src={editing.nodesImageUrl} alt="Node" className="w-full h-full object-cover" />
+                              : <span className="text-center leading-tight px-1">📷 Node<br />photo</span>}
+                        </button>
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] uppercase tracking-widest opacity-40 shrink-0">Mini node</span>
+                            <div className="ml-auto flex items-center gap-2 shrink-0">
+                              {editing.slot && (
+                                <button onClick={() => unplaceMini(editing.id)} className="text-[10px] opacity-60 hover:opacity-100" title="Take it off the map (keeps the photo)">📍 Unplace</button>
+                              )}
+                              <button onClick={() => removeMini(editing.id)} className="text-[10px] text-red-400 opacity-60 hover:opacity-100" title="Delete this node entirely">🗑 Delete</button>
+                              <button onClick={() => setEditingMiniId(null)} className="px-2 py-0.5 rounded border border-[#1f5c33] text-[10px] hover:border-[#33ff66]">✓ Done</button>
                             </div>
                           </div>
-                          <button onClick={() => pickMiniPhoto(m.id)} disabled={miniUploadingId === m.id}
-                            className="w-full h-24 rounded border border-[#1f5c33] hover:border-[#33ff66] overflow-hidden flex items-center justify-center text-[10px] opacity-80 disabled:opacity-40 transition-colors"
-                            title={m.nodesImageUrl ? "Change node photo" : "Add this node's photo (only needed once)"}>
-                            {miniUploadingId === m.id
-                              ? <span className="animate-pulse">Saving…</span>
-                              : m.nodesImageUrl
-                                ? <img src={m.nodesImageUrl} alt="Node" className="w-full h-full object-cover" />
-                                : <span className="text-center leading-tight px-1">📷 Node<br />photo</span>}
-                          </button>
-                          <button onClick={() => toggleTaking(m.id)}
-                            className={`w-full py-1 rounded text-[10px] font-bold uppercase tracking-widest border transition-colors ${m.taking ? "text-black border-transparent" : "border-[#1f5c33] opacity-70 hover:border-[#33ff66] hover:opacity-100"}`}
-                            style={m.taking ? { background: GREEN } : undefined}>
-                            {m.taking ? "✓ Taking this war" : "Not taking"}
-                          </button>
-                          {m.taking && (
-                            <div className="flex items-center gap-1.5">
-                              {cls && <span className="w-2 h-2 rounded-full shrink-0" style={{ background: classColour(cls) }} title={cls} />}
-                              <input value={m.defender}
-                                onChange={(e) => editMini(m.id, { defender: e.target.value })}
-                                onBlur={(e) => setMiniNodeDefender(m.id, e.target.value).catch(() => {})}
-                                list="mcoc-all-champs"
-                                placeholder="Defender…"
-                                className={`${input} w-full py-1 text-sm`} style={{ color: GREEN }} />
-                            </div>
-                          )}
+                          <input
+                            value={editing.label}
+                            onChange={(e) => editMini(editing.id, { label: e.target.value })}
+                            onBlur={(e) => setMiniNodeLabel(editing.id, e.target.value).catch(() => {})}
+                            placeholder="Node label (e.g. Node 44)…"
+                            className={`${input} w-full py-1.5`} style={{ color: GREEN }} />
                         </div>
-                      )
-                    })}
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <button onClick={addMini} disabled={addingMini}
-                      className="px-4 py-2 rounded-lg border border-[#1f5c33] text-sm hover:border-[#33ff66] disabled:opacity-40 transition-colors">
-                      ＋ Add mini node
-                    </button>
-                    {minis.length === 0
-                      ? <span className="text-[11px] opacity-50">Add each mini boss node once — the photos stay for every war.</span>
-                      : <span className="text-[11px] opacity-50">{takenMinis.length ? `${takenMinis.length} node${takenMinis.length === 1 ? "" : "s"} selected this war` : "Tap a node's Taking button to include it this war."}</span>}
-                  </div>
-                  <input ref={miniPhotoInput} type="file" accept="image/*" className="hidden"
-                    onChange={(e) => { uploadMiniPhoto(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
-                </>
-              )}
+                      </div>
+                    )}
+
+                    {/* Unplaced nodes (from before the map, or unplaced by hand) */}
+                    {unplaced.length > 0 && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] uppercase tracking-widest opacity-40">Not on the map:</span>
+                        {unplaced.map((m) => (
+                          <span key={m.id} className="inline-flex items-center gap-1.5 border border-[#1f5c33] rounded-lg pl-1 pr-1.5 py-1">
+                            {m.nodesImageUrl && <img src={m.nodesImageUrl} alt="" className="w-6 h-6 rounded object-cover" />}
+                            <span className="text-[11px] opacity-80">{m.label || "Unnamed"}</span>
+                            {placingId === m.id
+                              ? <button onClick={() => setPlacingId(null)} className="text-[10px] text-amber-300 hover:opacity-80">Cancel</button>
+                              : <button onClick={() => { setPlacingId(m.id); setEditingMiniId(null) }} className="text-[10px] opacity-60 hover:opacity-100" title="Then tap an empty ring on the map">📍 Place</button>}
+                            <button onClick={() => setEditingMiniId(m.id)} className="text-[10px] opacity-60 hover:opacity-100" title="Edit">✎</button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* This war's minis — defender per selected node */}
+                    {takenMinis.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] uppercase tracking-widest opacity-50">This war&apos;s minis</p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {takenMinis.map((m) => {
+                            const cls = defClass(m.defender)
+                            return (
+                              <div key={m.id} className="border border-[#33ff66]/50 rounded-lg p-2 flex gap-2.5 items-center">
+                                <div className="shrink-0 w-12 h-12 rounded-lg border border-[#1f5c33] overflow-hidden flex items-center justify-center text-[9px] opacity-80">
+                                  {m.nodesImageUrl
+                                    ? <img src={m.nodesImageUrl} alt="" className="w-full h-full object-cover" />
+                                    : <span>📷</span>}
+                                </div>
+                                <div className="flex-1 min-w-0 space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] uppercase tracking-widest opacity-60 truncate">{m.label || "Node"}</span>
+                                    {cls && <span className="w-2 h-2 rounded-full shrink-0" style={{ background: classColour(cls) }} title={cls} />}
+                                    <button onClick={() => toggleTaking(m.id)} className="ml-auto text-[10px] opacity-50 hover:opacity-100 shrink-0" title="Not taking this one after all">✕ drop</button>
+                                  </div>
+                                  <input value={m.defender}
+                                    onChange={(e) => editMini(m.id, { defender: e.target.value })}
+                                    onBlur={(e) => setMiniNodeDefender(m.id, e.target.value).catch(() => {})}
+                                    list="mcoc-all-champs"
+                                    placeholder="Defender on this node…"
+                                    className={`${input} w-full py-1 text-sm`} style={{ color: GREEN }} />
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <input ref={miniPhotoInput} type="file" accept="image/*" className="hidden"
+                      onChange={(e) => { uploadMiniPhoto(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
+                  </>
+                )
+              })()}
             </div>
 
             {/* Must-use attackers — the plan reports which fights each one handles. */}

@@ -1573,7 +1573,8 @@ model McocWarFight {
 model McocMiniNode {
   id            String   @id @default(cuid())
   ownerId       String
-  order         Int      @default(0)   // position in the mini map grid
+  order         Int      @default(0)   // legacy list order (map position lives in slot)
+  slot          String?                // fixed map position key (boss_top, pb_l, pa_c…) — null = unplaced
   label         String   @default("")  // e.g. "Node 33"
   defender      String   @default("")  // who's on it this war (overtyped each week)
   taking        Boolean  @default(false) // selected for this war

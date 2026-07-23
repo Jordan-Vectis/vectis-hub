@@ -34,6 +34,7 @@ export async function GET() {
       label: m.label,
       defender: m.defender,
       taking: m.taking,
+      slot: (m as { slot?: string | null }).slot ?? null,
       nodesImageUrl: m.nodesImageKey ? await getSignedImageUrl(m.nodesImageKey) : null,
     })))
     return NextResponse.json({ fights, minis })

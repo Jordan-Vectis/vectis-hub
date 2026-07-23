@@ -216,11 +216,25 @@ export async function reorderWarFights(ids: string[]) {
 // Node photos are uploaded once and kept; each war the player toggles which
 // nodes they're taking and overtypes the defenders. See aw-client.tsx.
 
-export async function addMiniNode() {
+export async function addMiniNode(slot?: string) {
   const owner = await ownerId()
   const last = await prisma.mcocMiniNode.findFirst({ where: { ownerId: owner }, orderBy: { order: "desc" }, select: { order: true } })
-  const row = await prisma.mcocMiniNode.create({ data: { ownerId: owner, order: (last?.order ?? -1) + 1 } })
+  const row = await prisma.mcocMiniNode.create({
+    data: { ownerId: owner, order: (last?.order ?? -1) + 1, slot: typeof slot === "string" && slot.trim() ? slot.trim().slice(0, 20) : null },
+  })
   return { id: row.id }
+}
+
+// Move a node onto a map slot (or off the map with null). One node per slot —
+// any other node already on that slot is unplaced first.
+export async function setMiniNodeSlot(id: string, slot: string | null) {
+  const owner = await ownerId()
+  const clean = typeof slot === "string" && slot.trim() ? slot.trim().slice(0, 20) : null
+  if (clean) {
+    await prisma.mcocMiniNode.updateMany({ where: { ownerId: owner, slot: clean, NOT: { id } }, data: { slot: null } })
+  }
+  await prisma.mcocMiniNode.updateMany({ where: { id, ownerId: owner }, data: { slot: clean } })
+  return { ok: true }
 }
 
 export async function removeMiniNode(id: string) {

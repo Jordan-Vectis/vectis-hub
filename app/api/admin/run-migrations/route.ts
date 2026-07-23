@@ -1112,6 +1112,7 @@ const MIGRATIONS = [
     CONSTRAINT "McocMiniNode_pkey" PRIMARY KEY ("id")
   )`,
   `CREATE INDEX IF NOT EXISTS "McocMiniNode_ownerId_idx" ON "McocMiniNode"("ownerId")`,
+  `ALTER TABLE "McocMiniNode" ADD COLUMN IF NOT EXISTS "slot" TEXT`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,
