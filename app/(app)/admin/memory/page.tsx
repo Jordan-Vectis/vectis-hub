@@ -18,20 +18,24 @@ const ENTRIES: Entry[] = [
   {
     filename: "activity_popup_preview.md",
     content: `---
-name: Activity popup preview — /admin/idle-timer
-purpose: The "Preview the popup" button + the caveat that the activity-popup markup lives in two places.
+name: Activity popup (multi-select + split) + admin preview
+purpose: The reworked activity/away popup and its admin preview. Read before touching either.
 last_updated: 2026-07-23
 ---
 
-# Cataloguer Activity Timer — preview the popup (2026-07-23)
+# The activity/away popup — reworked 2026-07-23 (multi-select + time split)
 
-Admin → Cataloguer Activity Timer (/admin/idle-timer) has a **"👁 Preview the popup"** button so admins can see the activity/away popup exactly as cataloguers get it, driven by the reasons they've configured on that page. Read-only — nothing is saved (✕ + amber "Preview" badge; the action button just closes). Component: **components/idle-prompt-preview.tsx** (\`<IdlePromptPreview reasons={reasons} />\`).
+At Jordan's request: heading softened from "What were you doing?" to **"How was this time spent?"**; cataloguers can now **tap ALL reasons that apply** (hint: "Doing more than one thing? Tap all that apply."); with 2+ selected a **"Split the time between them"** panel appears — one slider per reason (share units 5–95, default equal), live per-reason time, and the message **"A rough estimate is absolutely fine — it doesn't need to be exact."** Segments sum exactly to the gap (last takes the remainder). Per-reason note fields (requiresNotes / notePrompt each get their own, prefixed with the reason name when several are picked); the Lunch-Break >65-min mandatory note keys off **lunch's allocated share**, not the whole gap; totes field shows when Lotting Up is among the picks.
 
-⚠ **The activity popup markup now exists in TWO places — keep them in sync:**
-1. The REAL popup — inline in the lot wizard: app/(app)/tools/cataloguing/auctions/[id]/lot-wizard-tab.tsx (search "What were you doing?"). Wired to idle detection + the save flow.
+**API:** POST /api/catalogue/idle-log now accepts \`segments: [{reason, durationMs, toteNumbers?, notes?}]\` and writes ONE IdleLog row per segment, sequentially offset from idleStartedAt (rows tile the gap, no overlap). ⚠ The **legacy single-reason body is still accepted** — shared iPads run cached old bundles for days. Gap-matching (coveringIdle in lib/idle-gaps.ts) SUMS logs starting in the window, so split gaps stay "explained" for both the Unaccounted Time report and the create-lot gate. Away "sessions" counts tick up slightly when a gap is split — accepted.
+
+**Admin preview:** Admin → Cataloguer Activity Timer (**/admin/activity-timer**) has a "👁 Preview the popup" button — read-only replica driven by the configured reasons (✕ + amber "Preview" badge; nothing saved). Component: components/idle-prompt-preview.tsx.
+
+⚠ **The popup markup exists in TWO places — keep them in sync:**
+1. The REAL popup — inline in app/(app)/tools/cataloguing/auctions/[id]/lot-wizard-tab.tsx (search "How was this time spent?"). Wired to idle detection + the save flow. ⚠ Jack owns/actively works in this file's idle logic — coordinate before touching it.
 2. The preview REPLICA — components/idle-prompt-preview.tsx.
 
-If you restyle/restructure one, do the other. It wasn't extracted into a shared component because the real popup is tightly coupled to the wizard's idle refs / save flow — safer to replicate for a preview than to refactor the critical cataloguing path. (Same "preview the popup" idea as the terms gate, but that one was already a component so it's reused directly in a guarded preview mode.)`,
+Not extracted into a shared component because the real popup is tightly coupled to the wizard's idle refs / save flow — safer to replicate than refactor the critical cataloguing path.`,
   },
   {
     filename: "terms_aup.md",
@@ -122,20 +126,20 @@ Fixes (built 2026-07-21):
   {
     filename: "idle_report.md",
     content: `---
-name: Idle Report — /tools/reports/idle
+name: Idle Report — /tools/reports/activity
 purpose: The team-wide idle report page (for non-technical managers). What it shows + data sources + PDF export. Read before touching it or the reports section.
 last_updated: 2026-07-22
 ---
 
-# Cataloguer Activity Report — /tools/reports/idle (2026-07-21)
+# Cataloguer Activity Report — /tools/reports/activity (2026-07-21)
 
 Team-wide activity report in the cataloguing reports section — a new page, linked from the /tools/reports overview via the amber "⏱ Activity Report" button. REPORTS access.
 
-⚠ NAMING (renamed 2026-07-21): "idle" is banned in user-facing text (implies doing nothing). UI now says "Cataloguer Activity"; the time metric = "Away / time away". Renamed LABELS everywhere (this page, /admin/idle-timer = "Cataloguer Activity Timer", /admin/idle-gaps = "Unaccounted Time", popup heading = "What were you doing?"). Code identifiers, DB tables (IdleLog/IdleGateDecision), API routes and page paths (/tools/reports/idle etc.) STILL use "idle" — do NOT change those.
+⚠ NAMING: "idle" is banned in user-facing text (implies doing nothing). UI says "Cataloguer Activity"; the time metric = "Away / time away" (labels renamed 2026-07-21; popup heading softened to "How was this time spent?" 2026-07-23). **Page URLs de-idled 2026-07-23**: /tools/reports/activity, /admin/activity-timer, /admin/unaccounted-time — old idle URLs kept as redirect stubs. Code identifiers, DB tables (IdleLog/IdleGateDecision) and API routes (/api/reports/idle/pdf etc.) STILL use "idle" — do NOT change those.
 
 ⚠ Written for non-technical MANAGERS — plain English, no dev jargon. Jordan rejected the first version's technical/empty cards. Keep language plain and keep it feature-rich.
 
-- Page: app/(app)/tools/reports/idle/page.tsx (server) + idle-report-charts.tsx (client, recharts). Time-range pills via ?range.
+- Page: app/(app)/tools/reports/activity/page.tsx (server) + idle-report-charts.tsx (client, recharts). Time-range pills via ?range.
 - Cards: Total Time Away · Away Share of Day (% of 9–5) · Away per Person/Day · Most Common Reason.
 - Idle by reason: bar chart + numbers table (total, times, avg, share %). When idle happens: by day-of-week + by time-of-day charts. Idle-over-time trend.
 - Per-cataloguer table (ranked): idle, per-day, Share of Day (amber ≥15% / red ≥25%), breaks, usual reason, "No Reason Given" (= unexplained gaps, plain-worded), Busiest Idle Day; links to /tools/reports/[userId]; "timer off" badge.
@@ -181,7 +185,7 @@ A cataloguer on a mobile phone keeps dodging the idle timer. Cataloguers work on
 
 ## Ruled OUT (don't re-propose)
 - Photo Only path — nobody uses it.
-- durationMs=0 / "no timing log" starved gate — WRONG: he HAS timing logs (counted in /tools/reports AND shows on /admin/idle-gaps).
+- durationMs=0 / "no timing log" starved gate — WRONG: he HAS timing logs (counted in /tools/reports AND shows on /admin/unaccounted-time).
 - Per-user config — his scan timer is ON, 30-min threshold.
 - "Everyone has unexplained gaps", not just him — the report alone can't single him out.
 - Production running an older gate — it is a bit behind staging, but Jordan says that's not the issue.
@@ -192,7 +196,7 @@ The on-screen popup works out "is it 9–5" from the PHONE's clock. He's believe
 ## Built (STAGING; Jordan merges to prod out of hours)
 - lib/idle-gate.ts evaluateIdleGate() — one server-authoritative decision (server clock + Europe/London working hours + DB save times) shared by the create-lot gate AND /api/catalogue/last-activity (the popup). So the phone clock/timezone can't silence the popup any more.
 - Client checkIdleOnLotStart uses the server's shouldPrompt when online; device time only as an offline fallback.
-- IdleGateDecision table (NEEDS Run Migrations): createLot logs each meaningful save's decision + what the DEVICE claimed (clientNow, clientTz) + userAgent. Admin viewer on /admin/idle-gaps ("Save-time gate decisions") flags any save whose clientTz ≠ Europe/London or clock >10 min off server — the smoking gun. Logging is best-effort (never breaks a save).
+- IdleGateDecision table (NEEDS Run Migrations): createLot logs each meaningful save's decision + what the DEVICE claimed (clientNow, clientTz) + userAgent. Admin viewer on /admin/unaccounted-time ("Save-time gate decisions") flags any save whose clientTz ≠ Europe/London or clock >10 min off server — the smoking gun. Logging is best-effort (never breaks a save).
 - Gate hardening: a covering idle log must cover ≥ half the gap to clear; the ">=8h day off" skip only applies across a real day boundary.
 - (Earlier same-day pass, still valid: createLot always writes the timing log; timer starts on barcode onFocus; reports ignore durationMs=0 for speed.)
 
@@ -223,7 +227,7 @@ Admins can hide a single working day from ONE cataloguer's performance report so
     filename: "idle_gaps_detector.md",
     content: `---
 name: Idle-gap detector — tamper-proof backstop to the idle popup
-purpose: /admin/idle-gaps unexplained-gap report. Read before touching idle detection.
+purpose: /admin/unaccounted-time (was /admin/idle-gaps, renamed 2026-07-23) unexplained-gap report. Read before touching idle detection.
 last_updated: 2026-07-20
 ---
 
@@ -232,7 +236,7 @@ last_updated: 2026-07-20
 Built after a cataloguer had a ~4h working-hours gap between lot saves with zero idle logs — the client idle popup was being circumvented. The exact client mechanism couldn't be pinned from the data, so the fix is a tamper-proof server-side backstop (Jordan's call: detector now, harden the client after).
 
 - **lib/idle-gaps.ts** — pure detector: working-hours gaps between consecutive lot saves over the user's own threshold, each marked explained (a matching idle reason was logged) or not. Skips gaps of a full working day+ (days off).
-- **/admin/idle-gaps** — ADMIN-ONLY full-width report. Date range, groups by cataloguer, flags unexplained gaps, shows a scan-timer-OFF badge. Reads the save history directly, so it catches the gap however the in-app popup was avoided. Linked from Admin → Idle Timer + its own Admin card.
+- **/admin/unaccounted-time** (URL renamed 2026-07-23; /admin/idle-gaps redirects) — ADMIN-ONLY full-width report. Date range, groups by cataloguer, flags unexplained gaps, shows a scan-timer-OFF badge. Reads the save history directly, so it catches the gap however the in-app popup was avoided. Linked from Admin → Cataloguer Activity Timer (/admin/activity-timer) + its own Admin card. Multi-select popup answers write several sequential IdleLog rows per gap — fine: coveringIdle SUMS logs in the window.
 - The popup itself has no dismiss button — it can't be closed without logging a reason.
 
 ## Server-side gate (2026-07-20 — the real fix)

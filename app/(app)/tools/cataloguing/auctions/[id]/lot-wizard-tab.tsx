@@ -452,9 +452,14 @@ export default function LotWizardTab({
   const idleEndedAtRef     = useRef<number>(0)
   const [idlePopup,        setIdlePopup]      = useState(false)
   const [idleSecs,         setIdleSecs]       = useState(0)
-  const [idleReason,       setIdleReason]     = useState<string | null>(null)
+  // Multi-select (2026-07-23): several reasons can be picked and the time divided
+  // between them with quick sliders — a rough split is fine. idleShares holds each
+  // selected reason's slider position (share units, default 50 = equal split);
+  // idleNotesMap holds a note per reason for reasons that need one.
+  const [idleSelected,     setIdleSelected]   = useState<string[]>([])
+  const [idleShares,       setIdleShares]     = useState<Record<string, number>>({})
   const [idleTotes,        setIdleTotes]      = useState("")
-  const [idleNotes,        setIdleNotes]      = useState("")
+  const [idleNotesMap,     setIdleNotesMap]   = useState<Record<string, string>>({})
   const [idleSubmitting,   setIdleSubmitting] = useState(false)
   const [idleReasons,      setIdleReasons]    = useState<IdleReason[]>(DEFAULT_REASONS)
   // The idle log failed to save — shown in the popup. We do NOT wave the user
@@ -572,9 +577,10 @@ export default function LotWizardTab({
     idleStartedAtRef.current = startedAt
     idleEndedAtRef.current   = Date.now()
     setIdleSecs(Math.floor(idleMs / 1000))
-    setIdleReason(null)
+    setIdleSelected([])
+    setIdleShares({})
     setIdleTotes("")
-    setIdleNotes("")
+    setIdleNotesMap({})
     setIdleError(null)
     setIdlePopup(true)
   }
@@ -658,8 +664,24 @@ export default function LotWizardTab({
     setTimerActive(true)
   }
 
+  // Divide the gap between the selected reasons by their slider shares (in tap
+  // order). Whole seconds; the last segment takes the remainder so the segments
+  // always sum to the exact gap. One selection = the whole gap, no maths.
+  function idleSegments(): { reason: string; durationMs: number }[] {
+    const totalMs = idleSecs * 1000
+    if (idleSelected.length <= 1) return idleSelected.map(r => ({ reason: r, durationMs: totalMs }))
+    const sum = idleSelected.reduce((s, r) => s + (idleShares[r] ?? 50), 0) || idleSelected.length
+    let used = 0
+    return idleSelected.map((r, i) => {
+      if (i === idleSelected.length - 1) return { reason: r, durationMs: Math.max(1000, totalMs - used) }
+      const ms = Math.max(1000, Math.round((totalMs * ((idleShares[r] ?? 50) / sum)) / 1000) * 1000)
+      used += ms
+      return { reason: r, durationMs: ms }
+    })
+  }
+
   async function submitIdleLog() {
-    if (!idleReason) return
+    if (idleSelected.length === 0) return
     setIdleSubmitting(true)
     setIdleError(null)
     // The reason MUST be recorded before we move on. A swallowed failure here is
@@ -673,9 +695,13 @@ export default function LotWizardTab({
           auctionId,
           idleStartedAt: new Date(idleStartedAtRef.current).toISOString(),
           idleDurationMs: idleSecs * 1000,
-          reason: idleReason,
-          toteNumbers: idleTotes || null,
-          notes: idleNotes || null,
+          // One entry per selected reason, splitting the gap by the sliders.
+          segments: idleSegments().map(s => ({
+            reason:      s.reason,
+            durationMs:  s.durationMs,
+            toteNumbers: s.reason === "LOTTING_UP" ? (idleTotes || null) : null,
+            notes:       idleNotesMap[s.reason]?.trim() || null,
+          })),
         }),
       })
       if (!res.ok) {
@@ -1174,11 +1200,24 @@ export default function LotWizardTab({
       onKeyDownCapture={() => { checkWithinLotIdle(); noteInteraction() }}>
 
       {/* ── Idle popup ──────────────────────────────────────────────────────── */}
-      {idlePopup && (
+      {idlePopup && (() => {
+        const segs   = idleSegments()
+        const segMs  = new Map(segs.map(s => [s.reason, s.durationMs]))
+        const multi  = idleSelected.length > 1
+        // A note is missing when a selected reason requires one (or lunch ran over
+        // an hour of ITS OWN allocated time) and nothing has been typed for it.
+        const missingNote = (k: string) => {
+          if (k === "LUNCH_BREAK") return (segMs.get(k) ?? 0) > 65 * 60 * 1000 && !idleNotesMap[k]?.trim()
+          const cfg = idleReasons.find(r => r.key === k)
+          return !!cfg?.requiresNotes && !idleNotesMap[k]?.trim()
+        }
+        const anyMissing = idleSelected.some(missingNote)
+        const setNote = (k: string, v: string) => setIdleNotesMap(m => ({ ...m, [k]: v }))
+        return (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[92vh] overflow-y-auto">
             <div className="text-center mb-5">
-              <p className="text-xs font-bold uppercase tracking-widest text-gray-600 dark:text-gray-400 mb-1">What were you doing?</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-gray-600 mb-1">How was this time spent?</p>
               <p className="text-5xl font-mono font-bold text-gray-900">{fmtIdleDuration(idleSecs)}</p>
               {idleStartedAtRef.current > 0 && (
                 <p className="text-sm font-semibold text-gray-700 mt-1.5">
@@ -1192,23 +1231,52 @@ export default function LotWizardTab({
               </p>
             </div>
 
-            {/* Reason buttons — loaded from admin config */}
-            <div className="grid grid-cols-3 gap-2 mb-4">
-              {idleReasons.map(opt => (
-                <button key={opt.key}
-                  onClick={() => { setIdleReason(opt.key); setIdleNotes(""); setIdleTotes("") }}
-                  className={`py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
-                    idleReason === opt.key
-                      ? "border-[#2AB4A6] bg-[#2AB4A6]/10 text-[#1a8a80]"
-                      : "border-gray-200 text-gray-600 hover:border-gray-300"
-                  }`}>
-                  {opt.icon} {opt.label}
-                </button>
-              ))}
+            {/* Reason buttons — loaded from admin config. Tap all that apply. */}
+            <div className="grid grid-cols-3 gap-2 mb-1.5">
+              {idleReasons.map(opt => {
+                const on = idleSelected.includes(opt.key)
+                return (
+                  <button key={opt.key}
+                    onClick={() => setIdleSelected(sel => on ? sel.filter(k => k !== opt.key) : [...sel, opt.key])}
+                    className={`py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                      on
+                        ? "border-[#2AB4A6] bg-[#2AB4A6]/10 text-[#1a8a80]"
+                        : "border-gray-200 text-gray-600 hover:border-gray-300"
+                    }`}>
+                    {opt.icon} {opt.label}
+                  </button>
+                )
+              })}
             </div>
+            <p className="text-[11px] text-gray-400 text-center mb-3">Doing more than one thing? Tap all that apply.</p>
+
+            {/* Split sliders — only when more than one reason is picked */}
+            {multi && (
+              <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50 p-3">
+                <p className="text-xs font-semibold text-gray-700">Split the time between them</p>
+                <p className="text-[11px] text-gray-500 mb-2.5">A rough estimate is absolutely fine — it doesn&apos;t need to be exact.</p>
+                <div className="space-y-2.5">
+                  {idleSelected.map(key => {
+                    const cfg = idleReasons.find(r => r.key === key)
+                    return (
+                      <div key={key}>
+                        <div className="flex items-center justify-between text-xs mb-0.5">
+                          <span className="font-semibold text-gray-700">{cfg?.icon} {cfg?.label ?? key}</span>
+                          <span className="font-mono font-bold text-[#1a8a80]">{fmtIdleDuration(Math.round((segMs.get(key) ?? 0) / 1000))}</span>
+                        </div>
+                        <input type="range" min={5} max={95} step={5}
+                          value={idleShares[key] ?? 50}
+                          onChange={e => { const v = Number(e.target.value); setIdleShares(s => ({ ...s, [key]: v })) }}
+                          className="w-full accent-[#2AB4A6]" />
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Lotting Up — tote numbers field (always shown for this reason) */}
-            {idleReason === "LOTTING_UP" && (
+            {idleSelected.includes("LOTTING_UP") && (
               <div className="space-y-2 mb-4">
                 <input value={idleTotes} onChange={e => setIdleTotes(e.target.value)}
                   placeholder="Tote numbers (e.g. F001, F002)"
@@ -1216,51 +1284,51 @@ export default function LotWizardTab({
               </div>
             )}
 
-            {/* Lunch Break — mandatory note if over 65 minutes */}
-            {idleReason === "LUNCH_BREAK" && idleSecs > 65 * 60 && (
+            {/* Lunch Break — mandatory note if ITS share is over 65 minutes */}
+            {idleSelected.includes("LUNCH_BREAK") && (segMs.get("LUNCH_BREAK") ?? 0) > 65 * 60 * 1000 && (
               <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3">
                 <p className="text-xs font-semibold text-amber-700 mb-1.5">
                   ⚠️ Lunch break over 1 hour — reason for exceeding time
                 </p>
-                <textarea value={idleNotes} onChange={e => setIdleNotes(e.target.value)}
+                <textarea value={idleNotesMap["LUNCH_BREAK"] ?? ""} onChange={e => setNote("LUNCH_BREAK", e.target.value)}
                   placeholder="Reason for exceeding 1 hour…"
                   className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none resize-none transition-colors ${
-                    idleNotes.trim() ? "border-amber-200 bg-white focus:border-[#2AB4A6]" : "border-red-300 bg-white focus:border-red-400"
+                    idleNotesMap["LUNCH_BREAK"]?.trim() ? "border-amber-200 bg-white focus:border-[#2AB4A6]" : "border-red-300 bg-white focus:border-red-400"
                   }`}
                   rows={2} />
-                {!idleNotes.trim() && (
+                {!idleNotesMap["LUNCH_BREAK"]?.trim() && (
                   <p className="text-xs text-red-500 mt-1">A reason is required before you can continue.</p>
                 )}
               </div>
             )}
 
-            {/* Note / follow-up question — shown for reasons that require a note OR
-                carry a custom follow-up question (notePrompt, e.g. "Who for?"). */}
-            {(() => {
-              const cfg = idleReasons.find(r => r.key === idleReason)
-              if (idleReason === "LUNCH_BREAK") return null
+            {/* Note / follow-up question — one per selected reason that requires a
+                note OR carries a custom follow-up question (notePrompt). */}
+            {idleSelected.map(key => {
+              if (key === "LUNCH_BREAK") return null
+              const cfg = idleReasons.find(r => r.key === key)
               const prompt   = cfg?.notePrompt?.trim()
               const required = !!cfg?.requiresNotes
               if (!required && !prompt) return null
-              const missing = required && !idleNotes.trim()
+              const missing = required && !idleNotesMap[key]?.trim()
               return (
-                <div className="mb-4">
+                <div key={key} className="mb-4">
                   <label className="block text-xs font-semibold text-gray-600 mb-1">
-                    {prompt || "Note"}
+                    {multi ? `${cfg?.icon} ${cfg?.label} — ` : ""}{prompt || "Note"}
                     {required && <> <span className="text-red-500">*</span><span className="font-normal text-gray-400 ml-1">required</span></>}
                   </label>
-                  <textarea value={idleNotes} onChange={e => setIdleNotes(e.target.value)}
+                  <textarea value={idleNotesMap[key] ?? ""} onChange={e => setNote(key, e.target.value)}
                     placeholder={prompt ? `${prompt}…` : "Please explain what you were doing…"}
                     className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none resize-none transition-colors ${
                       missing ? "border-red-300 bg-red-50 focus:border-red-400" : "border-gray-200 focus:border-[#2AB4A6]"
                     }`}
-                    rows={3} />
+                    rows={multi ? 2 : 3} />
                   {missing && (
                     <p className="text-xs text-red-500 mt-1">An answer is required before you can continue.</p>
                   )}
                 </div>
               )
-            })()}
+            })}
 
             {idleError && (
               <div className="mb-3 rounded-xl border border-red-300 bg-red-50 p-3">
@@ -1271,21 +1339,15 @@ export default function LotWizardTab({
               </div>
             )}
 
-            {(() => {
-              const cfg       = idleReasons.find(r => r.key === idleReason)
-              const needsNote = (cfg?.requiresNotes && !idleNotes.trim()) ||
-                                (idleReason === "LUNCH_BREAK" && idleSecs > 65 * 60 && !idleNotes.trim())
-              return (
-                <button onClick={submitIdleLog}
-                  disabled={!idleReason || idleSubmitting || needsNote}
-                  className="w-full py-3 bg-[#2AB4A6] hover:bg-[#22a090] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors">
-                  {idleSubmitting ? "Saving…" : idleError ? "Try Again" : pendingSaveRef.current ? "Log & Save Lot" : "Log & Continue"}
-                </button>
-              )
-            })()}
+            <button onClick={submitIdleLog}
+              disabled={idleSelected.length === 0 || idleSubmitting || anyMissing}
+              className="w-full py-3 bg-[#2AB4A6] hover:bg-[#22a090] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors">
+              {idleSubmitting ? "Saving…" : idleError ? "Try Again" : pendingSaveRef.current ? "Log & Save Lot" : "Log & Continue"}
+            </button>
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {/* Change vendor/tote confirmation */}
       {changeConfirm && (
