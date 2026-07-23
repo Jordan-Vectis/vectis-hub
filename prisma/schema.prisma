@@ -1567,6 +1567,23 @@ model McocWarFight {
   @@index([ownerId])
 }
 
+// Mini boss node library for the AW planner. The node photos are stable (uploaded
+// once per node); each war the player just toggles which nodes they're taking and
+// overtypes the defenders — no re-photographing.
+model McocMiniNode {
+  id            String   @id @default(cuid())
+  ownerId       String
+  order         Int      @default(0)   // position in the mini map grid
+  label         String   @default("")  // e.g. "Node 33"
+  defender      String   @default("")  // who's on it this war (overtyped each week)
+  taking        Boolean  @default(false) // selected for this war
+  nodesImageKey String?                // R2 key of the node photo (uploaded once)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([ownerId])
+}
+
 // A chat explicitly saved from the secret /jordan chat panel (Ask AI or the
 // Cooking chef). `mode` keeps the two lists separate. Image data URLs are
 // stripped before saving (only a count is kept) so rows stay small.

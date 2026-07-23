@@ -1097,6 +1097,21 @@ const MIGRATIONS = [
     "sortOrder" INTEGER NOT NULL DEFAULT 0,
     CONSTRAINT "AiPresetCategory_pkey" PRIMARY KEY ("name")
   )`,
+
+  // AW mini boss node library (photos uploaded once; per-war taking + defender).
+  `CREATE TABLE IF NOT EXISTS "McocMiniNode" (
+    "id"            TEXT NOT NULL,
+    "ownerId"       TEXT NOT NULL,
+    "order"         INTEGER NOT NULL DEFAULT 0,
+    "label"         TEXT NOT NULL DEFAULT '',
+    "defender"      TEXT NOT NULL DEFAULT '',
+    "taking"        BOOLEAN NOT NULL DEFAULT FALSE,
+    "nodesImageKey" TEXT,
+    "createdAt"     TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt"     TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "McocMiniNode_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "McocMiniNode_ownerId_idx" ON "McocMiniNode"("ownerId")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

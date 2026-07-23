@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import ModelPicker, { getJordanModel } from "../model-picker"
 import { classColour, normChampName } from "@/lib/mcoc"
-import { addWarFight, removeWarFight, setWarFightDefender, reorderWarFights } from "@/lib/actions/mcoc"
+import { addWarFight, removeWarFight, setWarFightDefender, reorderWarFights, addMiniNode, removeMiniNode, setMiniNodeLabel, setMiniNodeDefender, setMiniNodeTaking, reorderMiniNodes } from "@/lib/actions/mcoc"
 import type { Champ } from "./mcoc-hub"
 
 // 🏰 ALLIANCE WAR — two planners:
@@ -32,13 +32,15 @@ const RATING_COL: Record<string, string> = {
 type ForcedPlan = { attacker: string; fights: { fight: number; defender: string; rating: string; how: string }[] }
 type PathResult = {
   teams: { name: string; summary: string; champions: { champion: string; why: string }[] }[]
-  fights: { defender: string; nodeBuff?: string; options: { attacker: string; how: string }[] }[]
+  fights: { defender: string; miniLabel?: string | null; nodeBuff?: string; options: { attacker: string; how: string }[] }[]
   forced?: ForcedPlan[]
   risks: string; notes: string; groundedFallback?: boolean
 }
 type DefResult = { placements: { node: string; champion: string; why: string }[]; notes: string }
 // A saved war fight: defender (overtyped each war) + optional nodes photo URL.
 type WarFight = { id: string; defender: string; nodesImageUrl: string | null }
+// A mini boss node in the library: photo uploaded once; taking + defender change per war.
+type MiniNode = { id: string; label: string; defender: string; taking: boolean; nodesImageUrl: string | null }
 
 export default function AwClient({ roster }: { roster: Champ[] }) {
   const [mode, setMode] = useState<"path" | "defence">("path")
@@ -72,9 +74,69 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
       const r = await fetch("/api/jordan/mcoc/war-path")
       const d = await r.json()
       if (Array.isArray(d?.fights)) setWarFights(d.fights)
+      if (Array.isArray(d?.minis)) setMinis(d.minis)
     } catch { /* leave empty */ } finally { setWarLoading(false) }
   }
   useEffect(() => { loadWarPath() }, [])
+
+  // ── Mini boss node library — photos stay, taking + defender change per war ──
+  const [minis, setMinis] = useState<MiniNode[]>([])
+  const [miniUploadingId, setMiniUploadingId] = useState<string | null>(null)
+  const [addingMini, setAddingMini] = useState(false)
+  const miniPhotoInput = useRef<HTMLInputElement>(null)
+  const pickForMini = useRef<string | null>(null)
+
+  async function addMini() {
+    if (addingMini) return
+    setAddingMini(true)
+    try {
+      const r = await addMiniNode()
+      setMinis((m) => [...m, { id: r.id, label: "", defender: "", taking: false, nodesImageUrl: null }])
+    } catch { /* ignore — try again */ } finally { setAddingMini(false) }
+  }
+  async function removeMini(id: string) {
+    setMinis((m) => m.filter((x) => x.id !== id))
+    try { await removeMiniNode(id) } catch { /* ignore */ }
+  }
+  function editMini(id: string, patch: Partial<MiniNode>) {
+    setMinis((m) => m.map((x) => (x.id === id ? { ...x, ...patch } : x)))
+  }
+  async function toggleTaking(id: string) {
+    const cur = minis.find((x) => x.id === id)
+    if (!cur) return
+    const next = !cur.taking
+    editMini(id, { taking: next })   // optimistic
+    try { await setMiniNodeTaking(id, next) } catch { editMini(id, { taking: !next }) }
+  }
+  async function moveMini(id: string, dir: -1 | 1) {
+    const i = minis.findIndex((x) => x.id === id)
+    const j = i + dir
+    if (i < 0 || j < 0 || j >= minis.length) return
+    const next = [...minis]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    setMinis(next)
+    try { await reorderMiniNodes(next.map((x) => x.id)) } catch { /* ignore */ }
+  }
+  function pickMiniPhoto(id: string) {
+    pickForMini.current = id
+    miniPhotoInput.current?.click()
+  }
+  async function uploadMiniPhoto(file: File | null) {
+    const id = pickForMini.current
+    pickForMini.current = null
+    if (!id || !file) return
+    setMiniUploadingId(id)
+    try {
+      const fd = new FormData()
+      fd.append("nodeId", id)
+      fd.append("image", file)
+      const res = await fetch("/api/jordan/mcoc/mini-node-photo", { method: "POST", body: fd })
+      const d = await res.json().catch(() => ({}))
+      if (res.ok && d.imageUrl) editMini(id, { nodesImageUrl: d.imageUrl })
+      else setPathErr(d.error || "Couldn't save that photo.")
+    } catch { setPathErr("Couldn't save that photo.") } finally { setMiniUploadingId(null) }
+  }
+  const takenMinis = minis.filter((m) => m.taking)
 
   async function addFight() {
     if (addingFight) return
@@ -126,11 +188,16 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
 
   async function planPath() {
     if (pathBusy) return
-    if (!warFights.some((f) => f.defender.trim())) { setPathErr("Add at least one fight with a defender."); return }
+    if (!warFights.some((f) => f.defender.trim()) && !takenMinis.some((m) => m.defender.trim())) {
+      setPathErr("Add at least one fight or selected mini boss with a defender."); return
+    }
     setPathBusy(true); setPathErr(null); setPath(null)
     try {
       // Persist any defenders not yet blurred, so the server plans what's on screen.
-      await Promise.all(warFights.map((f) => setWarFightDefender(f.id, f.defender).catch(() => {})))
+      await Promise.all([
+        ...warFights.map((f) => setWarFightDefender(f.id, f.defender).catch(() => {})),
+        ...takenMinis.map((m) => setMiniNodeDefender(m.id, m.defender).catch(() => {})),
+      ])
       const fd = new FormData()
       if (tier) fd.append("tier", tier)
       if (forced.length) fd.append("forced", JSON.stringify(forced))
@@ -257,6 +324,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
 
         {mode === "path" && (
           <div className="space-y-3">
+            <p className="text-[10px] uppercase tracking-widest opacity-50">⚔ War Path</p>
             <p className="text-sm opacity-70">
               Your saved war path — one row per fight. Add a photo of each fight&apos;s nodes and type the defender. It all saves, so next
               war you just overtype the defenders. Add or remove fights to match the path you took.
@@ -321,6 +389,80 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
             <input ref={fightPhotoInput} type="file" accept="image/*" className="hidden"
               onChange={(e) => { uploadFightPhoto(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
 
+            {/* ── Mini bosses — a node map like the war map. Photos are uploaded ONCE
+                per node; each war you just tap the nodes you're taking and type the
+                defenders. Selected nodes join the plan after the path fights. ── */}
+            <div className="border-t border-[#1f5c33] pt-3 space-y-2">
+              <p className="text-[10px] uppercase tracking-widest opacity-50">👑 Mini Bosses</p>
+              <p className="text-[11px] opacity-60">
+                Your mini boss node map — add every mini node once with its photo. Each war, tap the nodes
+                you&apos;re taking (they light up) and type the defenders. The photos stay, so no re-photographing.
+              </p>
+              {!warLoading && (
+                <>
+                  <div className="flex flex-wrap gap-2.5">
+                    {minis.map((m, i) => {
+                      const cls = defClass(m.defender)
+                      return (
+                        <div key={m.id}
+                          className={`w-44 rounded-lg border p-2 space-y-1.5 transition-all ${m.taking ? "border-[#33ff66] shadow-[0_0_10px_rgba(51,255,102,0.25)]" : "border-[#1f5c33] opacity-60 hover:opacity-90"}`}>
+                          <div className="flex items-center gap-1">
+                            <input value={m.label}
+                              onChange={(e) => editMini(m.id, { label: e.target.value })}
+                              onBlur={(e) => setMiniNodeLabel(m.id, e.target.value).catch(() => {})}
+                              placeholder="Node…"
+                              className="bg-transparent border-0 outline-none text-[11px] uppercase tracking-widest w-full min-w-0 opacity-80 focus:opacity-100"
+                              style={{ color: GREEN }} />
+                            <div className="ml-auto flex items-center gap-0.5 shrink-0">
+                              <button onClick={() => moveMini(m.id, -1)} disabled={i === 0} className="px-0.5 opacity-40 hover:opacity-100 disabled:opacity-15 disabled:cursor-default" title="Move left">◀</button>
+                              <button onClick={() => moveMini(m.id, 1)} disabled={i === minis.length - 1} className="px-0.5 opacity-40 hover:opacity-100 disabled:opacity-15 disabled:cursor-default" title="Move right">▶</button>
+                              <button onClick={() => removeMini(m.id)} className="px-0.5 text-red-400 opacity-60 hover:opacity-100" title="Remove node">×</button>
+                            </div>
+                          </div>
+                          <button onClick={() => pickMiniPhoto(m.id)} disabled={miniUploadingId === m.id}
+                            className="w-full h-24 rounded border border-[#1f5c33] hover:border-[#33ff66] overflow-hidden flex items-center justify-center text-[10px] opacity-80 disabled:opacity-40 transition-colors"
+                            title={m.nodesImageUrl ? "Change node photo" : "Add this node's photo (only needed once)"}>
+                            {miniUploadingId === m.id
+                              ? <span className="animate-pulse">Saving…</span>
+                              : m.nodesImageUrl
+                                ? <img src={m.nodesImageUrl} alt="Node" className="w-full h-full object-cover" />
+                                : <span className="text-center leading-tight px-1">📷 Node<br />photo</span>}
+                          </button>
+                          <button onClick={() => toggleTaking(m.id)}
+                            className={`w-full py-1 rounded text-[10px] font-bold uppercase tracking-widest border transition-colors ${m.taking ? "text-black border-transparent" : "border-[#1f5c33] opacity-70 hover:border-[#33ff66] hover:opacity-100"}`}
+                            style={m.taking ? { background: GREEN } : undefined}>
+                            {m.taking ? "✓ Taking this war" : "Not taking"}
+                          </button>
+                          {m.taking && (
+                            <div className="flex items-center gap-1.5">
+                              {cls && <span className="w-2 h-2 rounded-full shrink-0" style={{ background: classColour(cls) }} title={cls} />}
+                              <input value={m.defender}
+                                onChange={(e) => editMini(m.id, { defender: e.target.value })}
+                                onBlur={(e) => setMiniNodeDefender(m.id, e.target.value).catch(() => {})}
+                                list="mcoc-all-champs"
+                                placeholder="Defender…"
+                                className={`${input} w-full py-1 text-sm`} style={{ color: GREEN }} />
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button onClick={addMini} disabled={addingMini}
+                      className="px-4 py-2 rounded-lg border border-[#1f5c33] text-sm hover:border-[#33ff66] disabled:opacity-40 transition-colors">
+                      ＋ Add mini node
+                    </button>
+                    {minis.length === 0
+                      ? <span className="text-[11px] opacity-50">Add each mini boss node once — the photos stay for every war.</span>
+                      : <span className="text-[11px] opacity-50">{takenMinis.length ? `${takenMinis.length} node${takenMinis.length === 1 ? "" : "s"} selected this war` : "Tap a node's Taking button to include it this war."}</span>}
+                  </div>
+                  <input ref={miniPhotoInput} type="file" accept="image/*" className="hidden"
+                    onChange={(e) => { uploadMiniPhoto(e.target.files?.[0] ?? null); e.currentTarget.value = "" }} />
+                </>
+              )}
+            </div>
+
             {/* Must-use attackers — the plan reports which fights each one handles. */}
             <div className="border-t border-[#1f5c33] pt-3 space-y-2">
               <p className="text-[11px] opacity-60">
@@ -347,7 +489,7 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
               )}
             </div>
 
-            <button onClick={planPath} disabled={pathBusy || warLoading || !warFights.some((f) => f.defender.trim())}
+            <button onClick={planPath} disabled={pathBusy || warLoading || (!warFights.some((f) => f.defender.trim()) && !takenMinis.some((m) => m.defender.trim()))}
               className="px-5 py-2.5 rounded-lg text-sm font-bold text-black disabled:opacity-40 transition-colors"
               style={{ background: GREEN }}>
               {pathBusy ? "PLANNING…" : "🗡 PLAN MY PATH"}
@@ -423,7 +565,9 @@ export default function AwClient({ roster }: { roster: Champ[] }) {
                   {path.fights.map((f, i) => (
                     <div key={i} className="border border-[#1f5c33] rounded-lg px-3 py-2 text-sm">
                       <p className="flex items-center gap-1.5 flex-wrap mb-1">
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#1f5c33] opacity-80 shrink-0">FIGHT {i + 1}</span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${f.miniLabel ? "border-amber-400 text-amber-300" : "border-[#1f5c33] opacity-80"}`}>
+                          {f.miniLabel ? `👑 MINI — ${f.miniLabel}` : `FIGHT ${i + 1}`}
+                        </span>
                         <span className="text-white font-bold">{f.defender}</span>
                       </p>
                       {f.nodeBuff && <p className="text-[11px] text-amber-300 mb-1.5">⚡ {f.nodeBuff}</p>}

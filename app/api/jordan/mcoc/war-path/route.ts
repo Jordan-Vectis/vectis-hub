@@ -12,16 +12,31 @@ export async function GET() {
     const session = await auth()
     if (!session || !(await isJordan())) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
-    const rows = await prisma.mcocWarFight.findMany({
-      where: { ownerId: session.user.id },
-      orderBy: { order: "asc" },
-    })
+    const [rows, miniRows] = await Promise.all([
+      prisma.mcocWarFight.findMany({
+        where: { ownerId: session.user.id },
+        orderBy: { order: "asc" },
+      }),
+      // Mini boss node library — tolerated absent pre-migration so the tab
+      // still loads before Run Migrations is clicked.
+      prisma.mcocMiniNode.findMany({
+        where: { ownerId: session.user.id },
+        orderBy: { order: "asc" },
+      }).catch(() => [] as { id: string; label: string; defender: string; taking: boolean; nodesImageKey: string | null }[]),
+    ])
     const fights = await Promise.all(rows.map(async (r) => ({
       id: r.id,
       defender: r.defender,
       nodesImageUrl: r.nodesImageKey ? await getSignedImageUrl(r.nodesImageKey) : null,
     })))
-    return NextResponse.json({ fights })
+    const minis = await Promise.all(miniRows.map(async (m) => ({
+      id: m.id,
+      label: m.label,
+      defender: m.defender,
+      taking: m.taking,
+      nodesImageUrl: m.nodesImageKey ? await getSignedImageUrl(m.nodesImageKey) : null,
+    })))
+    return NextResponse.json({ fights, minis })
   } catch (e: any) {
     console.error("jordan/mcoc/war-path error:", e)
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 })

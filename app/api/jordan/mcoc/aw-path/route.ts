@@ -26,13 +26,21 @@ export async function POST(req: NextRequest) {
     let forcedIn: string[] = []
     try { const f = JSON.parse((form.get("forced") as string) ?? "[]"); if (Array.isArray(f)) forcedIn = f.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim().slice(0, 60)).slice(0, 8) } catch {}
 
-    const [fights, rosterRows] = await Promise.all([
+    const [pathFights, miniRows, rosterRows] = await Promise.all([
       prisma.mcocWarFight.findMany({ where: { ownerId: session.user.id }, orderBy: { order: "asc" } }),
+      // Mini boss nodes selected for THIS war. Tolerated absent pre-migration.
+      prisma.mcocMiniNode.findMany({ where: { ownerId: session.user.id, taking: true }, orderBy: { order: "asc" } })
+        .catch(() => [] as { label: string; defender: string; nodesImageKey: string | null }[]),
       // Strongest first — primes the model and lets us flag the top-rank champs.
       prisma.mcocChampion.findMany({ where: { ownerId: session.user.id }, select: { name: true, stars: true, rank: true }, orderBy: [{ rank: "desc" }, { stars: "desc" }] }),
     ])
 
-    const withDef = fights.filter((f) => f.defender.trim())
+    // Path fights first, then this war's selected mini bosses — one combined list
+    // so the whole plan (teams, per-fight options, must-use report) covers both.
+    const withDef = [
+      ...pathFights.filter((f) => f.defender.trim()).map((f) => ({ defender: f.defender, nodesImageKey: f.nodesImageKey, miniLabel: null as string | null })),
+      ...miniRows.filter((m) => m.defender.trim()).map((m) => ({ defender: m.defender, nodesImageKey: m.nodesImageKey, miniLabel: m.label || "Mini boss" })),
+    ]
     if (!withDef.length) return NextResponse.json({ error: "Add at least one fight with a defender." }, { status: 400 })
     if (rosterRows.length < 3) return NextResponse.json({ error: "Your roster needs at least 3 champions." }, { status: 400 })
 
@@ -51,7 +59,8 @@ export async function POST(req: NextRequest) {
           hasImage = true
         } catch { /* image missing/unreadable — fall back to defender + tier */ }
       }
-      fightLines.push(`${i + 1}. ${f.defender}${hasImage ? " — nodes in the image labelled FIGHT " + (i + 1) : ""}`)
+      const miniTag = f.miniLabel ? `MINI BOSS (${f.miniLabel}) — ` : ""
+      fightLines.push(`${i + 1}. ${miniTag}${f.defender}${hasImage ? " — nodes in the image labelled FIGHT " + (i + 1) : ""}`)
     }
 
     // Mark the player's best champs (rank 5, then rank 4) so the model weights
@@ -117,6 +126,8 @@ Rules: 2 or 3 teams, exactly 3 champions each, names copied from the roster. One
 
     const fightsOut = (Array.isArray(parsed?.fights) ? parsed.fights : []).slice(0, withDef.length + 2).map((f: any, i: number) => ({
       defender: typeof f?.defender === "string" ? f.defender.trim().slice(0, 60) : (withDef[i]?.defender ?? "?"),
+      // Which entries are this war's mini bosses — the client badges them.
+      miniLabel: withDef[i]?.miniLabel ?? null,
       nodeBuff: typeof f?.nodeBuff === "string" ? f.nodeBuff.slice(0, 200) : "",
       options: (Array.isArray(f?.options) ? f.options : []).slice(0, 3).map((o: any) => ({
         attacker: typeof o?.attacker === "string" ? o.attacker.trim().slice(0, 60) : "?",

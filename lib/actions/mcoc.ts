@@ -211,3 +211,54 @@ export async function reorderWarFights(ids: string[]) {
   )
   return { ok: true }
 }
+
+// ── Mini boss node library ────────────────────────────────────────────────────
+// Node photos are uploaded once and kept; each war the player toggles which
+// nodes they're taking and overtypes the defenders. See aw-client.tsx.
+
+export async function addMiniNode() {
+  const owner = await ownerId()
+  const last = await prisma.mcocMiniNode.findFirst({ where: { ownerId: owner }, orderBy: { order: "desc" }, select: { order: true } })
+  const row = await prisma.mcocMiniNode.create({ data: { ownerId: owner, order: (last?.order ?? -1) + 1 } })
+  return { id: row.id }
+}
+
+export async function removeMiniNode(id: string) {
+  const owner = await ownerId()
+  await prisma.mcocMiniNode.deleteMany({ where: { id, ownerId: owner } })
+  return { ok: true }
+}
+
+export async function setMiniNodeLabel(id: string, label: string) {
+  const owner = await ownerId()
+  await prisma.mcocMiniNode.updateMany({
+    where: { id, ownerId: owner },
+    data: { label: (label ?? "").replace(/\s+/g, " ").trim().slice(0, 40) },
+  })
+  return { ok: true }
+}
+
+export async function setMiniNodeDefender(id: string, defender: string) {
+  const owner = await ownerId()
+  await prisma.mcocMiniNode.updateMany({
+    where: { id, ownerId: owner },
+    data: { defender: cleanChampName(defender) },
+  })
+  return { ok: true }
+}
+
+export async function setMiniNodeTaking(id: string, taking: boolean) {
+  const owner = await ownerId()
+  await prisma.mcocMiniNode.updateMany({ where: { id, ownerId: owner }, data: { taking: !!taking } })
+  return { ok: true }
+}
+
+// Persist a new order from a full list of this owner's mini node ids.
+export async function reorderMiniNodes(ids: string[]) {
+  const owner = await ownerId()
+  const clean = (Array.isArray(ids) ? ids : []).filter((x) => typeof x === "string")
+  await prisma.$transaction(
+    clean.map((id, i) => prisma.mcocMiniNode.updateMany({ where: { id, ownerId: owner }, data: { order: i } })),
+  )
+  return { ok: true }
+}
