@@ -7,7 +7,12 @@ import { TERMS, TERMS_TITLE } from "@/lib/terms"
 // App-wide blocking modal: a signed-in user who hasn't accepted the current policy
 // version must read it, accept, and draw a signature before using the app. Rendered
 // by app/(app)/layout.tsx only when needed.
-export default function TermsGate({ userName }: { userName: string }) {
+//
+// `preview` mode (used by Admin → Terms & Signatures) shows the identical popup so
+// admins can see exactly what staff get — but it never saves: submitting just closes
+// via `onClose`, and a ✕ + "Preview" badge make clear nothing is recorded. Every
+// preview-only branch is guarded on `preview`, so the real gate is unchanged.
+export default function TermsGate({ userName, preview = false, onClose }: { userName: string; preview?: boolean; onClose?: () => void }) {
   const router = useRouter()
   const [accepted, setAccepted] = useState(false)     // phase 1 done → show signature pad
   const [hasSig, setHasSig]     = useState(false)
@@ -60,6 +65,7 @@ export default function TermsGate({ userName }: { userName: string }) {
   }
 
   async function submit() {
+    if (preview) { onClose?.(); return }   // preview never saves — just close
     const c = canvasRef.current
     if (!c || !hasSig || submitting) return
     setSubmitting(true); setError(null)
@@ -87,13 +93,24 @@ export default function TermsGate({ userName }: { userName: string }) {
   return (
     <div className="fixed inset-0 z-[200] bg-black/70 flex items-center justify-center p-3 sm:p-6">
       <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl">
-        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800 relative">
+          {preview && (
+            <button type="button" onClick={() => onClose?.()} aria-label="Close preview"
+              className="absolute top-3 right-3 h-8 w-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 text-lg leading-none">✕</button>
+          )}
           {/* Vectis letterhead — on a white oval so it stands out in dark mode too */}
           <span className="inline-flex items-center bg-white rounded-full px-4 py-1.5 mb-3 shadow-sm">
             <img src="/vectis-logo.svg" alt="Vectis Auctions" className="h-8 w-auto" />
           </span>
+          {preview && (
+            <span className="ml-2 inline-flex items-center align-middle text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300">Preview</span>
+          )}
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">{TERMS_TITLE}</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Please read this policy carefully. You need to accept and sign it once before using the app.</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {preview
+              ? "This is exactly what staff see and must sign before using the app — nothing you do here is saved."
+              : "Please read this policy carefully. You need to accept and sign it once before using the app."}
+          </p>
         </div>
 
         {/* Terms */}
@@ -148,9 +165,9 @@ export default function TermsGate({ userName }: { userName: string }) {
               <div className="flex items-center justify-end gap-2">
                 <button type="button" onClick={() => { setAccepted(false); clear() }}
                   className="px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm font-semibold">Back</button>
-                <button type="button" onClick={submit} disabled={!hasSig || submitting}
+                <button type="button" onClick={submit} disabled={preview ? false : (!hasSig || submitting)}
                   className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold disabled:opacity-50">
-                  {submitting ? "Saving…" : "Submit signature ✓"}
+                  {preview ? "Close preview" : (submitting ? "Saving…" : "Submit signature ✓")}
                 </button>
               </div>
             </>

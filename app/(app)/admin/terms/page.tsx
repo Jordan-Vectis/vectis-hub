@@ -4,6 +4,7 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { TERMS_TITLE, TERMS_VERSION } from "@/lib/terms"
 import MarkSignedButton from "@/components/mark-signed-button"
+import TermsPreviewButton from "@/components/terms-preview-button"
 
 export const dynamic = "force-dynamic"
 export const metadata = { title: "Terms & Signatures" }
@@ -40,7 +41,10 @@ export default async function TermsSignaturesPage() {
     <div className="p-6 max-w-5xl mx-auto">
       <Link href="/admin" className="text-sm text-gray-400 hover:text-emerald-500">← Admin</Link>
       <h1 className="text-3xl font-bold text-gray-900 dark:text-white mt-1">Terms &amp; Signatures</h1>
-      <p className="text-sm text-gray-500 mt-1 mb-6">Signed acceptances of the <span className="font-medium">{TERMS_TITLE}</span>. {signedCurrent.length} of {users.length} staff have signed.</p>
+      <p className="text-sm text-gray-500 mt-1 mb-4">Signed acceptances of the <span className="font-medium">{TERMS_TITLE}</span>. {signedCurrent.length} of {users.length} staff have signed.</p>
+      <div className="mb-6">
+        <TermsPreviewButton userName={session.user.name ?? ""} />
+      </div>
 
       {!migrated && (
         <div className={`${card} p-4 mb-6 border-amber-400/60`}>

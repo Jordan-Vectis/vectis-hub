@@ -16,6 +16,24 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "terms_aup.md",
+    content: `---
+name: iPad AUP terms popup — /admin/terms
+purpose: The Acceptable Use Policy sign-gate + its admin viewer/preview. Read before touching terms/signing.
+last_updated: 2026-07-23
+---
+
+# iPad Acceptable Use Policy — terms & signatures
+
+One small system: **lib/terms.ts** is the single source of the policy — \`TERMS\` (sectioned blocks), \`TERMS_TITLE\`, \`TERMS_VERSION\` (\`ipad-aup-2026-07\`). ⚠ Bumping \`TERMS_VERSION\` re-prompts EVERYONE to sign again (acceptances are per version). Edit wording here, not in the popup.
+
+**components/terms-gate.tsx** = the app-wide blocking modal (rendered by app/(app)/layout.tsx only for a signed-in user who hasn't accepted the current version): read → "I accept — sign below" → draw signature → POST /api/terms/accept (stored as a white-composited PNG). Login-adjacent/critical — don't break the non-preview path.
+
+**Admin → Terms & Signatures** (app/(app)/admin/terms/page.tsx, admin-only) shows who signed the current version (name, email, signature image, date) + who's outstanding; "mark signed" records an admin accepting on someone's behalf (\`admin:\` prefix).
+
+**2026-07-23 — Preview the popup:** TermsGate gained a guarded \`preview\` mode (+ \`onClose\`) — shows the identical popup but never saves (submit just closes; ✕ + amber "Preview" badge; subtext says nothing is saved). Opened via components/terms-preview-button.tsx ("👁 Preview the popup"). ⚠ Every preview-only branch is guarded on \`preview\` (default false) so the real sign-gate is unchanged — keep it that way.`,
+  },
+  {
     filename: "reports_pdf.md",
     content: `---
 name: Cataloguing Performance PDF reports — /tools/reports
