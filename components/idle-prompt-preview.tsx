@@ -14,15 +14,16 @@ import type { IdleReason } from "@/lib/idle-timer-config"
 // "How was this time spent?"). If you restyle one, restyle the other. The popup
 // card is always white (even in dark mode), so this uses light text throughout.
 export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }) {
-  const [open, setOpen]         = useState(false)
-  const [selected, setSelected] = useState<string[]>([])
-  const [shares, setShares]     = useState<Record<string, number>>({})
-  const [notes, setNotes]       = useState<Record<string, string>>({})
-  const [totes, setTotes]       = useState("")
+  const [open, setOpen]             = useState(false)
+  const [selected, setSelected]     = useState<string[]>([])
+  const [pinned, setPinned]         = useState<Record<string, number>>({})
+  const [touchOrder, setTouchOrder] = useState<string[]>([])
+  const [notes, setNotes]           = useState<Record<string, string>>({})
+  const [totes, setTotes]           = useState("")
 
   const SAMPLE_SECS = 12 * 60 + 30   // realistic sample gap (the popup fires past the red threshold)
 
-  function openPreview() { setSelected([]); setShares({}); setNotes({}); setTotes(""); setOpen(true) }
+  function openPreview() { setSelected([]); setPinned({}); setTouchOrder([]); setNotes({}); setTotes(""); setOpen(true) }
 
   // Faithful copies of the wizard's formatters + split maths.
   const fmtIdleDuration = (secs: number) => {
@@ -35,20 +36,51 @@ export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }
   const start = now - SAMPLE_SECS * 1000
   const hhmm  = (ms: number) => new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
 
+  // Faithful copy of the wizard's PINNED-minutes split: values the admin sets
+  // stay exactly where they were set; untouched reasons flex to absorb the rest.
   const totalMs = SAMPLE_SECS * 1000
-  const segs: { reason: string; durationMs: number }[] = (() => {
+  const MIN = Math.min(30_000, Math.max(1000, Math.floor(totalMs / Math.max(selected.length, 1))))
+  const computeSegs = (): { reason: string; durationMs: number }[] => {
     if (selected.length <= 1) return selected.map(r => ({ reason: r, durationMs: totalMs }))
-    const sum = selected.reduce((s, r) => s + (shares[r] ?? 50), 0) || selected.length
-    let used = 0
-    return selected.map((r, i) => {
-      if (i === selected.length - 1) return { reason: r, durationMs: Math.max(1000, totalMs - used) }
-      const ms = Math.max(1000, Math.round((totalMs * ((shares[r] ?? 50) / sum)) / 1000) * 1000)
-      used += ms
-      return { reason: r, durationMs: ms }
+    const untouched = selected.filter(k => pinned[k] == null)
+    const pinnedSum = selected.reduce((s, k) => s + (pinned[k] ?? 0), 0)
+    const remaining = Math.max(0, totalMs - pinnedSum)
+    const evenMs    = untouched.length ? Math.floor(remaining / untouched.length / 1000) * 1000 : 0
+    const lastTouched = [...touchOrder].reverse().find(k => selected.includes(k))
+    return selected.map(k => {
+      if (pinned[k] == null) {
+        const isLastUntouched = k === untouched[untouched.length - 1]
+        return { reason: k, durationMs: isLastUntouched ? remaining - evenMs * (untouched.length - 1) : evenMs }
+      }
+      const spare = untouched.length === 0 && k === lastTouched ? totalMs - pinnedSum : 0
+      return { reason: k, durationMs: pinned[k] + spare }
     })
-  })()
+  }
+  const segs  = computeSegs()
   const segMs = new Map(segs.map(s => [s.reason, s.durationMs]))
   const multi = selected.length > 1
+  const sliderStep = totalMs <= 5 * 60_000 ? 15_000 : totalMs <= 60 * 60_000 ? 30_000 : 60_000
+
+  // A slider was dragged: pin it there; untouched reasons absorb (capped so each
+  // keeps the minimum). All-pinned edge: trades with the pin set longest ago.
+  function setSplit(key: string, rawMs: number) {
+    const othersPinned  = selected.filter(k => k !== key && pinned[k] != null)
+    const othersFlexing = selected.filter(k => k !== key && pinned[k] == null)
+    let v = Math.max(MIN, Math.round(rawMs / 1000) * 1000)
+    if (othersFlexing.length > 0) {
+      const cap = totalMs - othersPinned.reduce((s, k) => s + pinned[k], 0) - othersFlexing.length * MIN
+      v = Math.min(v, Math.max(MIN, cap))
+      setPinned(p => ({ ...p, [key]: v }))
+    } else {
+      const donor = touchOrder.find(k => k !== key && selected.includes(k))
+      if (!donor) return
+      const cur     = segMs.get(key) ?? MIN
+      const donorMs = segMs.get(donor) ?? MIN
+      v = Math.min(v, cur + Math.max(0, donorMs - MIN))
+      setPinned(p => ({ ...p, [key]: v, [donor]: donorMs - (v - cur) }))
+    }
+    setTouchOrder(o => [...o.filter(k => k !== key), key])
+  }
 
   return (
     <>
@@ -114,9 +146,9 @@ export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }
                           <span className="font-semibold text-gray-700">{cfg?.icon} {cfg?.label ?? key}</span>
                           <span className="font-mono font-bold text-[#1a8a80]">{fmtIdleDuration(Math.round((segMs.get(key) ?? 0) / 1000))}</span>
                         </div>
-                        <input type="range" min={5} max={95} step={5}
-                          value={shares[key] ?? 50}
-                          onChange={e => { const v = Number(e.target.value); setShares(s => ({ ...s, [key]: v })) }}
+                        <input type="range" min={0} max={totalMs} step={sliderStep}
+                          value={segMs.get(key) ?? 0}
+                          onChange={e => setSplit(key, Number(e.target.value))}
                           className="w-full accent-[#2AB4A6]" />
                       </div>
                     )

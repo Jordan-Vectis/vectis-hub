@@ -453,11 +453,15 @@ export default function LotWizardTab({
   const [idlePopup,        setIdlePopup]      = useState(false)
   const [idleSecs,         setIdleSecs]       = useState(0)
   // Multi-select (2026-07-23): several reasons can be picked and the time divided
-  // between them with quick sliders — a rough split is fine. idleShares holds each
-  // selected reason's slider position (share units, default 50 = equal split);
+  // between them with quick sliders — a rough split is fine. The sliders are
+  // ABSOLUTE minutes, not shares: a value the user sets is PINNED (idlePinned)
+  // and never moves when another slider is dragged — only reasons they haven't
+  // touched flex to absorb the remainder. idleTouchOrder tracks which pin was
+  // set longest ago, for the rare all-pinned case where something must give.
   // idleNotesMap holds a note per reason for reasons that need one.
   const [idleSelected,     setIdleSelected]   = useState<string[]>([])
-  const [idleShares,       setIdleShares]     = useState<Record<string, number>>({})
+  const [idlePinned,       setIdlePinned]     = useState<Record<string, number>>({})
+  const [idleTouchOrder,   setIdleTouchOrder] = useState<string[]>([])
   const [idleTotes,        setIdleTotes]      = useState("")
   const [idleNotesMap,     setIdleNotesMap]   = useState<Record<string, string>>({})
   const [idleSubmitting,   setIdleSubmitting] = useState(false)
@@ -578,7 +582,8 @@ export default function LotWizardTab({
     idleEndedAtRef.current   = Date.now()
     setIdleSecs(Math.floor(idleMs / 1000))
     setIdleSelected([])
-    setIdleShares({})
+    setIdlePinned({})
+    setIdleTouchOrder([])
     setIdleTotes("")
     setIdleNotesMap({})
     setIdleError(null)
@@ -664,20 +669,62 @@ export default function LotWizardTab({
     setTimerActive(true)
   }
 
-  // Divide the gap between the selected reasons by their slider shares (in tap
-  // order). Whole seconds; the last segment takes the remainder so the segments
-  // always sum to the exact gap. One selection = the whole gap, no maths.
+  // Smallest time a selected reason can be given (they picked it, so it got SOME
+  // time) — 30s, or an equal share when the whole gap is tiny.
+  function idleMinSegMs(): number {
+    const totalMs = idleSecs * 1000
+    return Math.min(30_000, Math.max(1000, Math.floor(totalMs / Math.max(idleSelected.length, 1))))
+  }
+
+  // Divide the gap between the selected reasons. Pinned values (slider the user
+  // has set) are kept EXACTLY as set; reasons they haven't touched split the
+  // remainder equally. Always sums to the exact gap: the last untouched reason
+  // absorbs rounding — or, if everything is pinned, any spare (e.g. after
+  // deselecting a pinned reason) goes to the most recently touched one.
   function idleSegments(): { reason: string; durationMs: number }[] {
     const totalMs = idleSecs * 1000
     if (idleSelected.length <= 1) return idleSelected.map(r => ({ reason: r, durationMs: totalMs }))
-    const sum = idleSelected.reduce((s, r) => s + (idleShares[r] ?? 50), 0) || idleSelected.length
-    let used = 0
-    return idleSelected.map((r, i) => {
-      if (i === idleSelected.length - 1) return { reason: r, durationMs: Math.max(1000, totalMs - used) }
-      const ms = Math.max(1000, Math.round((totalMs * ((idleShares[r] ?? 50) / sum)) / 1000) * 1000)
-      used += ms
-      return { reason: r, durationMs: ms }
+    const untouched = idleSelected.filter(k => idlePinned[k] == null)
+    const pinnedSum = idleSelected.reduce((s, k) => s + (idlePinned[k] ?? 0), 0)
+    const remaining = Math.max(0, totalMs - pinnedSum)
+    const evenMs    = untouched.length ? Math.floor(remaining / untouched.length / 1000) * 1000 : 0
+    const lastTouched = [...idleTouchOrder].reverse().find(k => idleSelected.includes(k))
+    return idleSelected.map(k => {
+      if (idlePinned[k] == null) {
+        // Untouched: equal share of the remainder; the LAST untouched absorbs rounding.
+        const isLastUntouched = k === untouched[untouched.length - 1]
+        return { reason: k, durationMs: isLastUntouched ? remaining - evenMs * (untouched.length - 1) : evenMs }
+      }
+      // Pinned: exactly what they set — plus any spare when nothing is left untouched.
+      const spare = untouched.length === 0 && k === lastTouched ? totalMs - pinnedSum : 0
+      return { reason: k, durationMs: idlePinned[k] + spare }
     })
+  }
+
+  // A slider was dragged: pin that reason at the chosen time. Untouched reasons
+  // absorb the change; the drag is capped so every other reason keeps at least
+  // the minimum. If EVERY other reason is already pinned, the extra time has to
+  // come from somewhere — it trades with the pin set longest ago.
+  function setIdleSplit(key: string, rawMs: number) {
+    const totalMs = idleSecs * 1000
+    const MIN = idleMinSegMs()
+    const current = new Map(idleSegments().map(s => [s.reason, s.durationMs]))
+    const othersPinned  = idleSelected.filter(k => k !== key && idlePinned[k] != null)
+    const othersFlexing = idleSelected.filter(k => k !== key && idlePinned[k] == null)
+    let v = Math.max(MIN, Math.round(rawMs / 1000) * 1000)
+    if (othersFlexing.length > 0) {
+      const cap = totalMs - othersPinned.reduce((s, k) => s + idlePinned[k], 0) - othersFlexing.length * MIN
+      v = Math.min(v, Math.max(MIN, cap))
+      setIdlePinned(p => ({ ...p, [key]: v }))
+    } else {
+      const donor = idleTouchOrder.find(k => k !== key && idleSelected.includes(k))
+      if (!donor) return
+      const cur     = current.get(key) ?? MIN
+      const donorMs = current.get(donor) ?? MIN
+      v = Math.min(v, cur + Math.max(0, donorMs - MIN))
+      setIdlePinned(p => ({ ...p, [key]: v, [donor]: donorMs - (v - cur) }))
+    }
+    setIdleTouchOrder(o => [...o.filter(k => k !== key), key])
   }
 
   async function submitIdleLog() {
@@ -1204,6 +1251,8 @@ export default function LotWizardTab({
         const segs   = idleSegments()
         const segMs  = new Map(segs.map(s => [s.reason, s.durationMs]))
         const multi  = idleSelected.length > 1
+        const totalGapMs = idleSecs * 1000
+        const sliderStep = totalGapMs <= 5 * 60_000 ? 15_000 : totalGapMs <= 60 * 60_000 ? 30_000 : 60_000
         // A note is missing when a selected reason requires one (or lunch ran over
         // an hour of ITS OWN allocated time) and nothing has been typed for it.
         const missingNote = (k: string) => {
@@ -1264,9 +1313,9 @@ export default function LotWizardTab({
                           <span className="font-semibold text-gray-700">{cfg?.icon} {cfg?.label ?? key}</span>
                           <span className="font-mono font-bold text-[#1a8a80]">{fmtIdleDuration(Math.round((segMs.get(key) ?? 0) / 1000))}</span>
                         </div>
-                        <input type="range" min={5} max={95} step={5}
-                          value={idleShares[key] ?? 50}
-                          onChange={e => { const v = Number(e.target.value); setIdleShares(s => ({ ...s, [key]: v })) }}
+                        <input type="range" min={0} max={totalGapMs} step={sliderStep}
+                          value={segMs.get(key) ?? 0}
+                          onChange={e => setIdleSplit(key, Number(e.target.value))}
                           className="w-full accent-[#2AB4A6]" />
                       </div>
                     )
