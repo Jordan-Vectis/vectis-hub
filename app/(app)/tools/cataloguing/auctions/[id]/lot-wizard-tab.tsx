@@ -591,7 +591,14 @@ export default function LotWizardTab({
   function raiseIdlePopup(startedAt: number, idleMs: number) {
     idleStartedAtRef.current = startedAt
     idleEndedAtRef.current   = Date.now()
-    setIdleSecs(Math.floor(idleMs / 1000))
+    // The popup deals in WHOLE MINUTES (rounded up) — the header total, every
+    // per-reason label and the split sliders must all use ONE consistent
+    // whole-minute total. Storing the raw sub-minute seconds here made the slider
+    // domain (e.g. a real 130s gap) disagree with the ceil'd "3m" label, so a
+    // 2m-of-"3m" slice sat at ~92% of the bar instead of two-thirds, and the
+    // leftover clamped to a ~10s remainder that still labelled as "1m". Rounding
+    // up to the whole minute the labels already show makes value/total exact.
+    setIdleSecs(Math.ceil(idleMs / 1000 / 60) * 60)
     setIdleSelected([])
     setIdleAlloc({})
     setIdleTotes("")

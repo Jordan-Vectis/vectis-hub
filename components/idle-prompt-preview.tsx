@@ -40,7 +40,10 @@ export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }
   // Faithful copy of the wizard's MANUAL split: each selected reason starts at
   // 0m and only moves when its own slider is dragged — nothing auto-adjusts.
   // Whatever is left over shows as (and would be logged as) unallocated.
-  const totalMs = SAMPLE_SECS * 1000
+  // Whole-minute total so the header, per-reason labels and the split sliders all
+  // agree — the real popup rounds the gap UP to whole minutes, so mirror that here
+  // (otherwise a 2m-of-"3m" slice would sit at the wrong fraction of the bar).
+  const totalMs = Math.ceil(SAMPLE_SECS / 60) * 60 * 1000
   const segMs = new Map<string, number>(selected.map(k => [k, selected.length <= 1 ? totalMs : (alloc[k] ?? 0)]))
   const multi = selected.length > 1
   const sliderStep = 60_000   // whole minutes — the popup shows no seconds
