@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import NewAuctionButton from "./new-auction-button"
 import ExportImportButtons from "./export-import-buttons"
+import AuctionsOverviewPdfButton from "./auctions-overview-pdf-button"
 import AuctionsTables, { type AuctionRow } from "./auctions-tables"
 import { getCataloguingSidebarItems } from "@/lib/apps"
 
@@ -50,6 +51,7 @@ export default async function AuctionsPage() {
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">Manage catalogue auctions and lots</p>
         </div>
         <div className="flex items-center gap-2">
+          <AuctionsOverviewPdfButton />
           <ExportImportButtons auctions={auctions.map(a => ({ id: a.id, code: a.code, name: a.name }))} />
           <NewAuctionButton />
         </div>
