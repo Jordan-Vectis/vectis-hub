@@ -245,12 +245,19 @@ export default async function ReportsOverviewPage({
               >
                 ⏱ Activity Report
               </Link>
-              {/* Export ALL cataloguers (one workbook, one sheet per person, grouped per day) */}
+              {/* Team summary — one page, league table of every cataloguer */}
               <a
-                href={`/api/reports/export?range=${activeRange}`}
+                href={`/api/reports/pdf?summary=1&range=${activeRange}`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[#2AB4A6] text-[#2AB4A6] hover:bg-[#2AB4A6] hover:text-white transition-colors whitespace-nowrap"
+              >
+                ⬇ Summary (PDF)
+              </a>
+              {/* Export ALL cataloguers — one clean page each */}
+              <a
+                href={`/api/reports/pdf?range=${activeRange}`}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#2AB4A6] text-white hover:bg-[#249b8f] transition-colors whitespace-nowrap"
               >
-                ⬇ Export all (Excel)
+                ⬇ Export all (PDF)
               </a>
               <div className="flex items-center gap-1 bg-gray-100 dark:bg-[#141416] border border-gray-200 dark:border-gray-800 rounded-lg p-1">
                 {RANGES.map(r => (
@@ -377,10 +384,10 @@ export default async function ReportsOverviewPage({
                             </td>
                             <td className="px-5 py-3.5 text-right">
                               <a
-                                href={`/api/reports/export?userId=${encodeURIComponent(u.userId)}&range=${activeRange}`}
+                                href={`/api/reports/pdf?userId=${encodeURIComponent(u.userId)}&range=${activeRange}`}
                                 className="inline-flex items-center gap-1 text-xs font-semibold text-[#2AB4A6] hover:underline whitespace-nowrap"
                               >
-                                ⬇ Excel
+                                ⬇ PDF
                               </a>
                             </td>
                           </tr>

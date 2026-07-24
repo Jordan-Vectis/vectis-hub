@@ -335,16 +335,16 @@ export default async function ReportsUserPage({
             </div>
             {/* Custom date range picker */}
             <CustomRangePicker userId={userId} currentFrom={fromParam ?? ""} currentTo={toParam ?? ""} />
-            {/* Export this cataloguer's idle timers + lots (grouped per day) */}
+            {/* Export this cataloguer's clean one-page report (stats, speed, by-auction, away, per-day) */}
             <a
-              href={`/api/reports/export?userId=${encodeURIComponent(userId)}&${
+              href={`/api/reports/pdf?userId=${encodeURIComponent(userId)}&${
                 isCustomRange
                   ? `from=${encodeURIComponent(fromParam ?? "")}&to=${encodeURIComponent(toParam ?? "")}`
                   : `range=${activeRange}`
               }`}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[#2AB4A6] text-[#2AB4A6] hover:bg-[#2AB4A6] hover:text-white transition-colors"
             >
-              ⬇ Export to Excel
+              ⬇ Export PDF
             </a>
           </div>
         </div>
