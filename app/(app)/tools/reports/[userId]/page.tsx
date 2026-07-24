@@ -16,6 +16,7 @@ import {
   type DayStats,
 } from "../../../admin/cataloguing-reports/[userId]/collapsible-sections"
 import { buildLotMap, lotRef, minOf, maxOf, ukDayKey, ukDayStartUtc, computeLotBreakdowns } from "@/lib/cataloguing-reports"
+import { splitIdleByWorkingDay } from "@/lib/idle-gaps"
 
 export const dynamic = "force-dynamic"
 
@@ -181,6 +182,28 @@ export default async function ReportsUserPage({
   const incLogs = logs.filter(l => !excludedDays.has(ukDayKey(l.savedAt)))
   const incIdle = idleLogs.filter(l => !excludedDays.has(ukDayKey(l.idleStartedAt)))
 
+  // An idle session is stored as a wall-clock start + a WORKING-hours duration, so
+  // a gap that ran past 17:00 and resumed the next morning would otherwise dump its
+  // whole duration on the start day with an impossible "17:34" end. Split each one
+  // into its per-working-day pieces (8m on the day it ended, 34m the next morning)
+  // so every day gets its real slice and the from–to times make sense. Same-day
+  // gaps yield a single, unchanged segment; segment ms always sum to the original.
+  type IdleSeg = {
+    key: string; startedAt: Date; durationMs: number; dayKey: string
+    reason: string; toteNumbers: string | null; notes: string | null
+    auction: { code: string; name: string }
+  }
+  const splitIdle = (l: {
+    id: string; idleStartedAt: Date; idleDurationMs: number; reason: string
+    toteNumbers: string | null; notes: string | null; auction: { code: string; name: string }
+  }): IdleSeg[] =>
+    splitIdleByWorkingDay(l.idleStartedAt.getTime(), l.idleDurationMs).map((seg, i) => ({
+      key: `${l.id}-${i}`, startedAt: new Date(seg.startMs), durationMs: seg.ms,
+      dayKey: ukDayKey(new Date(seg.startMs)),
+      reason: l.reason, toteNumbers: l.toteNumbers, notes: l.notes, auction: l.auction,
+    }))
+  const incIdleSegs = idleLogs.flatMap(splitIdle).filter(s => !excludedDays.has(s.dayKey))
+
   // ── Research summary ──
   const totalResearchMs = researchLogs.reduce((s, r) => s + r.durationMs, 0)
 
@@ -206,7 +229,7 @@ export default async function ReportsUserPage({
   const todayLogs       = incLogs.filter(l => l.savedAt >= todayStart)
   const lotsToday       = todayLogs.length
   const activeTimeToday = todayLogs.reduce((s, l) => s + l.durationMs, 0)
-  const todayIdleLogs   = incIdle.filter(l => l.idleStartedAt >= todayStart)
+  const todayIdleSegs   = incIdleSegs.filter(s => s.startedAt >= todayStart)
 
   const weekStart = ukDayStartUtc(now, 7)
   const lotsThisWeek = incLogs.filter(l => l.savedAt >= weekStart).length
@@ -266,9 +289,11 @@ export default async function ReportsUserPage({
   }
   for (const log of idleLogs) {
     if (log.idleDurationMs > MAX_IDLE_MS) continue
-    const day = ukDayKey(log.idleStartedAt)
-    if (!dayMap.has(day)) dayMap.set(day, { date: day, lots: 0, cataloguingMs: 0, idleMs: 0 })
-    dayMap.get(day)!.idleMs += log.idleDurationMs
+    // Bucket each working-day slice on the day it actually fell (see splitIdle).
+    for (const seg of splitIdle(log)) {
+      if (!dayMap.has(seg.dayKey)) dayMap.set(seg.dayKey, { date: seg.dayKey, lots: 0, cataloguingMs: 0, idleMs: 0 })
+      dayMap.get(seg.dayKey)!.idleMs += seg.durationMs
+    }
   }
   const dayStats: DayStats[] = [...dayMap.entries()]
     .sort(([a], [b]) => b.localeCompare(a))
@@ -354,12 +379,12 @@ export default async function ReportsUserPage({
       <TodayProductivityCard
         activeMs={activeTimeToday}
         lotsCount={lotsToday}
-        idleSessions={todayIdleLogs.map(l => ({
-          reason:      l.reason,
-          durationMs:  l.idleDurationMs,
-          toteNumbers: l.toteNumbers,
-          notes:       l.notes,
-          startedAt:   l.idleStartedAt.toISOString(),
+        idleSessions={todayIdleSegs.map(s => ({
+          reason:      s.reason,
+          durationMs:  s.durationMs,
+          toteNumbers: s.toteNumbers,
+          notes:       s.notes,
+          startedAt:   s.startedAt.toISOString(),
         }))}
       />
 
@@ -371,12 +396,12 @@ export default async function ReportsUserPage({
           method:     l.method,
           lotId:      l.lotId ?? null,
         }))}
-        idleSessions={todayIdleLogs.map(l => ({
-          startedAt:   l.idleStartedAt.toISOString(),
-          durationMs:  l.idleDurationMs,
-          reason:      l.reason,
-          toteNumbers: l.toteNumbers,
-          notes:       l.notes,
+        idleSessions={todayIdleSegs.map(s => ({
+          startedAt:   s.startedAt.toISOString(),
+          durationMs:  s.durationMs,
+          reason:      s.reason,
+          toteNumbers: s.toteNumbers,
+          notes:       s.notes,
         }))}
       />
 
@@ -580,15 +605,15 @@ export default async function ReportsUserPage({
 
           {/* Idle time log — collapsible + date-filterable */}
           <CollapsibleIdleTable
-            logs={incIdle.map(l => ({
-              id:             l.id,
-              idleStartedAt:  l.idleStartedAt.toISOString(),
-              idleDurationMs: l.idleDurationMs,
-              reason:         l.reason,
-              toteNumbers:    l.toteNumbers,
-              notes:          l.notes,
-              auctionCode:    l.auction.code,
-              auctionName:    l.auction.name,
+            logs={incIdleSegs.map(s => ({
+              id:             s.key,
+              idleStartedAt:  s.startedAt.toISOString(),
+              idleDurationMs: s.durationMs,
+              reason:         s.reason,
+              toteNumbers:    s.toteNumbers,
+              notes:          s.notes,
+              auctionCode:    s.auction.code,
+              auctionName:    s.auction.name,
             }))}
           />
 

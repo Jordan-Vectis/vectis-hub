@@ -90,6 +90,48 @@ export function workingMsLondon(startMs: number, endMs: number): number {
   return total
 }
 
+// The UTC instant of London 17:00 (work end) on the London day of `utcMs`.
+export function londonWorkEndMs(utcMs: number): number {
+  const dayKey = londonDayKey(utcMs)
+  const off = londonOffsetMs(new Date(`${dayKey}T12:00:00Z`).getTime())   // sampled midday, clear of DST edges
+  return new Date(`${dayKey}T17:00:00Z`).getTime() - off
+}
+
+export type IdleDaySegment = { dayKey: string; startMs: number; endMs: number; ms: number }
+
+// Split one idle session — stored as a wall-clock START plus a WORKING-hours
+// duration — into its per-working-day pieces. A gap that ran past 17:00 and only
+// resumed the next working morning is recorded as ONE row (start = last save,
+// duration = working ms only), so naively adding the duration to the start lands
+// past 5pm (e.g. 16:52 + 42m = "17:34") and pins the whole gap to the first day.
+// This hands each 09:00–17:00 Mon–Fri window only the minutes that actually fell
+// in it, walking forward until the duration is used up — so 16:52 + 42 working
+// minutes becomes 8m on that day (16:52–17:00) + 34m the next morning
+// (09:00–09:34). A same-day gap comes back as a single, unchanged segment, and the
+// segment ms always sum to the input.
+export function splitIdleByWorkingDay(startMs: number, workingMs: number): IdleDaySegment[] {
+  const segs: IdleDaySegment[] = []
+  let remaining = Math.max(0, Math.round(workingMs))
+  if (remaining <= 0) return segs
+  let anchor = startMs
+  for (let i = 0; i < 400 && remaining > 0; i++) {
+    const wStart = londonWorkStartMs(anchor)
+    const wEnd   = londonWorkEndMs(anchor)
+    const wd = new Date(anchor).toLocaleDateString("en-GB", { timeZone: "Europe/London", weekday: "short" })
+    if (wd !== "Sat" && wd !== "Sun") {
+      const segStart = Math.max(anchor, wStart)   // first day starts at the real time; later days at 09:00
+      const avail = wEnd - segStart
+      if (avail > 0) {
+        const take = Math.min(remaining, avail)
+        segs.push({ dayKey: londonDayKey(segStart), startMs: segStart, endMs: segStart + take, ms: take })
+        remaining -= take
+      }
+    }
+    anchor = wEnd + 8 * 60 * 60 * 1000   // 17:00 + 8h → ~01:00 next day, safe across a DST change
+  }
+  return segs
+}
+
 export type GapSave = { savedAt: Date; lotBarcode?: string | null }
 export type GapIdle = { idleStartedAt: Date; idleDurationMs: number; reason: string }
 
