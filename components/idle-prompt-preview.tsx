@@ -21,9 +21,19 @@ export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }
   const [totes, setTotes]           = useState("")
   const [otherWarn, setOtherWarn]   = useState(false)
 
-  const SAMPLE_SECS = 12 * 60 + 30   // realistic sample gap (the popup fires past the red threshold)
+  // Admin chooses the gap duration to simulate, then fires the popup on themselves.
+  // Nothing is saved — this only drives how the read-only replica renders, so it is
+  // handy for checking the whole-minute split sliders at any duration (including a
+  // sub-minute gap, to see the rounding). Defaults to a realistic 3-minute gap.
+  const [durMin, setDurMin]         = useState(3)
+  const [durSec, setDurSec]         = useState(0)
+  const [gapSecs, setGapSecs]       = useState(3 * 60)   // the duration the OPEN popup shows
 
-  function openPreview() { setSelected([]); setAlloc({}); setNotes({}); setTotes(""); setOtherWarn(false); setOpen(true) }
+  function openPreview() {
+    setSelected([]); setAlloc({}); setNotes({}); setTotes(""); setOtherWarn(false)
+    setGapSecs(Math.max(1, Math.round(durMin) * 60 + Math.round(durSec)))   // freeze at open
+    setOpen(true)
+  }
 
   // Faithful copies of the wizard's formatters + split maths.
   // Whole minutes, ROUNDED UP — the popup deliberately shows no seconds.
@@ -34,7 +44,7 @@ export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }
     return h > 0 ? `${h}h ${m}m` : `${m}m`
   }
   const now   = Date.now()
-  const start = now - SAMPLE_SECS * 1000
+  const start = now - gapSecs * 1000
   const hhmm  = (ms: number) => new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
 
   // Faithful copy of the wizard's MANUAL split: each selected reason starts at
@@ -43,7 +53,7 @@ export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }
   // Whole-minute total so the header, per-reason labels and the split sliders all
   // agree — the real popup rounds the gap UP to whole minutes, so mirror that here
   // (otherwise a 2m-of-"3m" slice would sit at the wrong fraction of the bar).
-  const totalMs = Math.ceil(SAMPLE_SECS / 60) * 60 * 1000
+  const totalMs = Math.ceil(gapSecs / 60) * 60 * 1000
   const segMs = new Map<string, number>(selected.map(k => [k, selected.length <= 1 ? totalMs : (alloc[k] ?? 0)]))
   const multi = selected.length > 1
   const sliderStep = 60_000   // whole minutes — the popup shows no seconds
@@ -59,13 +69,35 @@ export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }
 
   return (
     <>
-      <button
-        type="button"
-        onClick={openPreview}
-        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold border border-[#2AB4A6] text-[#1a8a80] dark:text-[#2AB4A6] hover:bg-[#2AB4A6] hover:text-white transition-colors"
-      >
-        👁 Preview the popup
-      </button>
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Simulate a gap of</label>
+          <div className="flex items-center gap-1.5">
+            <input
+              type="number" min={0} value={durMin}
+              onChange={e => setDurMin(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+              aria-label="Minutes"
+              className="w-16 border border-gray-300 dark:border-gray-700 rounded-lg px-2 py-1.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-[#2AB4A6]"
+            />
+            <span className="text-xs text-gray-500 dark:text-gray-400">min</span>
+            <input
+              type="number" min={0} max={59} value={durSec}
+              onChange={e => setDurSec(Math.min(59, Math.max(0, Math.floor(Number(e.target.value) || 0))))}
+              aria-label="Seconds"
+              className="w-16 border border-gray-300 dark:border-gray-700 rounded-lg px-2 py-1.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-[#2AB4A6]"
+            />
+            <span className="text-xs text-gray-500 dark:text-gray-400">sec</span>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={openPreview}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold border border-[#2AB4A6] text-[#1a8a80] dark:text-[#2AB4A6] hover:bg-[#2AB4A6] hover:text-white transition-colors"
+        >
+          ▶ Test the popup on me
+        </button>
+      </div>
+      <p className="text-[11px] text-gray-400 mt-1.5">Fires the activity popup on you at the chosen duration — read-only, nothing is saved.</p>
 
       {open && (
         <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -81,7 +113,7 @@ export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }
 
             <div className="text-center mb-5 mt-2">
               <p className="text-xs font-bold uppercase tracking-widest text-gray-600 mb-1">How was this time spent?</p>
-              <p className="text-5xl font-mono font-bold text-gray-900">{fmtIdleDuration(SAMPLE_SECS)}</p>
+              <p className="text-5xl font-mono font-bold text-gray-900">{fmtIdleDuration(gapSecs)}</p>
               <p className="text-sm font-semibold text-gray-700 mt-1.5">{hhmm(start)} – {hhmm(now)}</p>
               <p className="text-xs text-gray-500 mt-1">since your last saved lot — working hours (Mon–Fri, 9–5) only</p>
             </div>
