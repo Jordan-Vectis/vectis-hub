@@ -9,6 +9,7 @@ import {
 } from "@/lib/lot-log"
 import { headers } from "next/headers"
 import { evaluateIdleGate, logIdleDecision, clockLooksTampered } from "@/lib/idle-gate"
+import { ukDayStartUtc } from "@/lib/cataloguing-reports"
 
 // First 83 characters of the description — no sentence splitting, full stops do not break title
 function titleFromDescription(desc: string): string {
@@ -398,6 +399,24 @@ export type IdleGateBlock = { needsIdle: true; idleMs: number; sinceMs: number }
 // with the last-activity endpoint so the on-screen popup and the save-block use
 // the same server-authoritative decision. createLot below evaluates it, records
 // the decision (with what the device clock claimed), and blocks if unaccounted.
+
+// How many lots THIS cataloguer has saved via the Add Lot wizard so far today
+// (UK working day). Read from CatalogueTimingLog, whose savedAt is stamped with
+// the SERVER's clock — so the count survives the app being closed/reopened and
+// resets itself at UK midnight (a new day simply has no rows yet). The wizard's
+// "X lots today" badge seeds from this instead of an in-memory tally that was
+// lost on every reload. WIZARD saves only (the Add Lot flow), across all auctions.
+export async function getMyLotsToday(): Promise<number> {
+  const session = await auth()
+  if (!session) return 0
+  return prisma.catalogueTimingLog.count({
+    where: {
+      userId:  session.user.id,
+      method:  "WIZARD",
+      savedAt: { gte: ukDayStartUtc(new Date()) },
+    },
+  })
+}
 
 export async function createLot(auctionId: string, formData: FormData) {
   const session = await requireCataloguer()

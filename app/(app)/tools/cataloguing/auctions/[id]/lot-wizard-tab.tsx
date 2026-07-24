@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { createLot, getLastLotFields, saveLastLotFields, checkBarcodeAssigned } from "@/lib/actions/catalogue"
+import { createLot, getLastLotFields, saveLastLotFields, checkBarcodeAssigned, getMyLotsToday } from "@/lib/actions/catalogue"
 import { loadSpellDict, findMisspellings } from "@/lib/spellcheck"
 import { DEFAULT_REASONS, workingMsBetween } from "@/lib/idle-timer-config"
 import type { IdleReason } from "@/lib/idle-timer-config"
@@ -498,6 +498,16 @@ export default function LotWizardTab({
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.reasons?.length) setIdleReasons(d.reasons) })
       .catch(() => { /* stay on defaults */ })
+  }, [])
+
+  // Seed the "lots today" badge from the DB so it shows the cataloguer's real
+  // total for the UK working day — this survives coming off the app / reloading
+  // (the old counter was in-memory and reset to 0 every time) and clears itself
+  // at UK midnight. After seeding, each save bumps it locally as before.
+  useEffect(() => {
+    getMyLotsToday()
+      .then(n => setLotCount(n))
+      .catch(() => { /* leave at 0 if it can't load */ })
   }, [])
 
   useEffect(() => {
@@ -1328,7 +1338,7 @@ export default function LotWizardTab({
             </span>
           )}
           {lotCount > 0 && (
-            <span className={`text-green-400 font-bold ${tablet ? "text-base" : "text-sm"}`}>{lotCount} lot{lotCount !== 1 ? "s" : ""} added</span>
+            <span className={`text-green-400 font-bold ${tablet ? "text-base" : "text-sm"}`}>{lotCount} lot{lotCount !== 1 ? "s" : ""} today</span>
           )}
         </div>
       </div>
