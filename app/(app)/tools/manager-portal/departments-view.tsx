@@ -230,8 +230,16 @@ export default async function DepartmentsView() {
   // totes but none resolve to a date, it still returns them with a null median —
   // so the column can say which of the two happened and the expanded panel can
   // show the actual tote values rather than a bare dash that explains nothing.
-  function stockFor(auctionId: string) {
-    const totes = totesBySale.get(auctionId) ?? []
+  // Takes a set of sales so the same maths serves one sale and a whole
+  // department (the summary strip pools every active sale's totes).
+  function stockFor(auctionIds: string[]) {
+    const merged = new Map<string, number>()   // tote → lots, deduped across sales
+    for (const id of auctionIds) {
+      for (const t of totesBySale.get(id) ?? []) {
+        merged.set(t.tote, (merged.get(t.tote) ?? 0) + t.lotCount)
+      }
+    }
+    const totes = [...merged.entries()].map(([tote, lotCount]) => ({ tote, lotCount }))
     if (totes.length === 0) return null
 
     // One date per tote — each tote is a single data point in the median,
@@ -291,7 +299,7 @@ export default async function DepartmentsView() {
     complete:    !!a.complete,
     catalogued:  !!a.catalogued,
     addedToBC:   !!a.addedToBC,
-    stock:       a.complete ? null : stockFor(a.id),
+    stock:       a.complete ? null : stockFor([a.id]),
   })
 
   const peopleFor = (saleIds: Set<string>) => {
@@ -312,13 +320,17 @@ export default async function DepartmentsView() {
   const buildGroup = (
     id: string, name: string, types: string[], members: string[], sales: typeof auctions, real: boolean,
   ): DeptGroup => {
-    const active = sales.filter(s => !s.complete).map(toRow)
-    const done   = sales.filter(s => s.complete).map(toRow)
+    const activeSales = sales.filter(s => !s.complete)
+    const done        = sales.filter(s => s.complete)
     return {
       id, name, types, members, real,
-      active,
-      completed: done,
-      people: peopleFor(new Set(sales.map(s => s.id))),
+      active:    activeSales.map(toRow),
+      completed: done.map(toRow),
+      people:    peopleFor(new Set(sales.map(s => s.id))),
+      // Pooled across every active sale in the department — the summary strip's
+      // "using totes from" is a median over the department's whole tote sample,
+      // not a median of per-sale medians.
+      stock:     stockFor(activeSales.map(s => s.id)),
     }
   }
 

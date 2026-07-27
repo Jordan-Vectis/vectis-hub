@@ -69,9 +69,15 @@ Per active sale: sale date + days to go, lot total, pace, and **projected dates 
 
 Sales whose type no department covers land in a **"Not in a department"** group so the totals still add up.
 
-## "Stock from" — how far behind cataloguing is running (2026-07-27)
+## Layout — rebuilt 2026-07-27 (Jordan: "I hate the layout, it looks awful and disjointed")
 
-A **Stock from** column on the active-sales table: the **median** date the stock came in across the **last 10 DISTINCT totes worked** on that sale, plus the lag ("14w behind", amber from 6 weeks, red from 3 months). Click it to expand the list of those totes, each with its date and ×N lots, plus oldest/newest.
+Redesign options were mocked up and **Option B chosen**: **ONE table for every sale**, with each department as a tinted **group row** (click to expand cataloguers / assigned staff / completed-in-3-months), and sale rows indented under it. The old per-department card boxes are gone — the faults were stats floating far right detached from the table, and three stacked blocks underneath each department. Above the table sits a **summary section, "Using totes from"**: one line per department, **furthest behind first**, with a lag bar. ⚠ Don't reintroduce per-department cards.
+
+⚠ **Wording: "Using totes from", never "Stock from"** (Jordan's rename).
+
+## Using totes from — how far behind cataloguing is running (2026-07-27)
+
+A **Using totes from** column on the sale rows, and the pooled figure per department in the summary: the **median** date the stock came in across the **last 10 DISTINCT totes worked** on that sale, plus the lag ("14w behind", amber from 6 weeks, red from 3 months). Click it to expand the list of those totes, each with its date and ×N lots, plus oldest/newest.
 
 ⚠ **Median, and last 10 DISTINCT TOTES — not the last 10 lots.** Both were Jordan's explicit corrections. Sampling lots is wrong because a run of 10 lots can easily all come from one tote, which tells you nothing; each tote counts once however many lots came out of it. Median rather than average so one stray old tote can't drag the figure back and misreport the lag.
 
