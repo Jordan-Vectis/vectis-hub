@@ -856,9 +856,10 @@ export default function LotWizardTab({
   // asks for confirmation). Replaces the old per-field Pin buttons.
   const [locked,        setLocked]        = useState<null | { tote: string; vendor: string; receipt: string; vendorName: string }>(null)
   const [changeConfirm, setChangeConfirm] = useState<null | { tote: string; vendor: string; receipt: string; vendorName: string }>(null)
-  // Category pins (separate feature — unchanged): keep a category sticky across lots.
+  // Category/brand pins (separate feature — unchanged): keep a value sticky across lots.
   const [pinnedMain,    setPinnedMain]    = useState("")
   const [pinnedSub,     setPinnedSub]     = useState("")
+  const [pinnedBrand,   setPinnedBrand]   = useState("")
   const [saveStatus,  setSaveStatus]  = useState("")
   const [lotCount,    setLotCount]    = useState(0)
   const [validErr,    setValidErr]    = useState("")
@@ -1196,7 +1197,7 @@ export default function LotWizardTab({
       // Tote / Vendor / Receipt stay locked for the whole batch — leave them (and the
       // vendor name hint) as-is so the next lot keeps the same identity.
       setBarcode(""); setKeyPoints(""); setAiExcluded(false); setManualDesc("")
-      setMainCat(pinnedMain); setSubCat(pinnedSub); setBrand("")
+      setMainCat(pinnedMain); setSubCat(pinnedSub); setBrand(pinnedBrand)
       setEstLow(""); setEstHigh(""); setCond1(""); setCond2(""); setParcel("")
       setBoxOn(false); setBoxPrefixMode("Box is"); setBoxCustomPrefix(""); setBoxCond1(""); setBoxCond2("")
       photoFiles.forEach(p => URL.revokeObjectURL(p.preview))
@@ -1842,7 +1843,14 @@ export default function LotWizardTab({
                 placeholder={mainCat ? "Select sub-category…" : "Select main category first…"} tablet={tablet} />
             </div>
             <div>
-              <label className={`${lbl} block mb-1`}>Brand</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className={lbl}>Brand</label>
+                <button type="button" onClick={() => setPinnedBrand(brand)}
+                  className={`rounded transition-colors ${tablet ? "text-sm px-3 py-1.5" : "text-xs px-2 py-0.5"}`}
+                  style={{ color: pinnedBrand === brand && brand ? CAT_ACCENT : "#6b7280", border: `1px solid ${pinnedBrand === brand && brand ? CAT_ACCENT + "66" : "#374151"}` }}>
+                  {pinnedBrand === brand && brand ? "📌 Pinned" : "Pin"}
+                </button>
+              </div>
               <Autocomplete value={brand} onChange={setBrand} options={BRANDS_LIST} placeholder="Search brand…" tablet={tablet} />
             </div>
 
