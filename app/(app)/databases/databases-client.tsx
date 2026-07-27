@@ -12,13 +12,11 @@ type ContactRow = {
 type ReceiptRow = {
   id: string; contactId: string; contactName: string
   commissionRate: number; notes: string | null; status: string; containerCount: number
-  createdAt: string
 }
 type ContainerRow = {
   id: string; type: string; description: string
   category: string | null; subcategory: string | null
   receiptId: string; contactId: string; contactName: string; lastLocation: string | null
-  createdAt: string
 }
 type LotRow = {
   id: string; barcode: string | null; receiptUniqueId: string | null; title: string; description: string
@@ -103,14 +101,6 @@ function Badge({ children, color = "gray" }: { children: React.ReactNode; color?
     violet: "bg-violet-900/40 text-violet-400",
   }
   return <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${s[color]}`}>{children}</span>
-}
-
-// Matches the Commission Bids column format — "12 Apr 26".
-function fmtCreated(iso: string | null | undefined): string {
-  if (!iso) return "—"
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return "—"
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" })
 }
 
 function statusBadge(status: string) {
@@ -487,7 +477,6 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
     { key: "totes",      label: "Totes"      },
     { key: "notes",      label: "Notes"      },
     { key: "status",     label: "Status"     },
-    { key: "created",    label: "Created"    },
   ]
   const TOTE_COLS = [
     { key: "id",         label: "ID"          },
@@ -496,7 +485,6 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
     { key: "contact",    label: "Contact"     },
     { key: "category",   label: "Category"    },
     { key: "location",   label: "Location"    },
-    { key: "created",    label: "Created"     },
   ]
   const LOT_COLS = [
     { key: "barcode",    label: "Barcode"     },
@@ -513,8 +501,8 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
   ]
 
   const [visCust,  setVisCust]  = useState<Set<string>>(new Set(["name","email","phone","buyer","seller"]))
-  const [visRcpt,  setVisRcpt]  = useState<Set<string>>(new Set(["id","contact","commission","totes","status","created"]))
-  const [visTote,  setVisTote]  = useState<Set<string>>(new Set(["id","type","description","contact","category","location","created"]))
+  const [visRcpt,  setVisRcpt]  = useState<Set<string>>(new Set(["id","contact","commission","totes","status"]))
+  const [visTote,  setVisTote]  = useState<Set<string>>(new Set(["id","type","description","contact","category","location"]))
   const [visLot,   setVisLot]   = useState<Set<string>>(new Set(["barcode","title","auction","vendor","tote","photos","status"]))
 
   function toggleCol(setter: React.Dispatch<React.SetStateAction<Set<string>>>, key: string) {
@@ -707,7 +695,6 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                   {visRcpt.has("totes")      && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Totes</th>}
                   {visRcpt.has("notes")      && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Notes</th>}
                   {visRcpt.has("status")     && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>}
-                  {visRcpt.has("created")    && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Created</th>}
                 </tr>
                 <tr className="border-b border-gray-900 bg-gray-100 dark:bg-[#111113]">
                   {visRcpt.has("id")         && <td className="px-2 py-1.5"><input value={rId}      onChange={e => setRId(e.target.value)}      placeholder="Filter…" className={COL_INPUT} /></td>}
@@ -716,7 +703,6 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                   {visRcpt.has("totes")      && <td className="px-2 py-1.5"></td>}
                   {visRcpt.has("notes")      && <td className="px-2 py-1.5"></td>}
                   {visRcpt.has("status")     && <td className="px-2 py-1.5"><select value={rStatus} onChange={e => setRStatus(e.target.value)} className={COL_SELECT}><option value="">All</option>{receiptStatuses.map(s => <option key={s} value={s}>{s}</option>)}</select></td>}
-                  {visRcpt.has("created")    && <td className="px-2 py-1.5"></td>}
                 </tr>
               </thead>
               <tbody>
@@ -728,7 +714,6 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                     {visRcpt.has("totes")      && <td className="px-3 py-2.5 text-gray-400">{r.containerCount}</td>}
                     {visRcpt.has("notes")      && <td className="px-3 py-2.5 text-gray-600 max-w-[180px] truncate text-xs">{r.notes ?? "—"}</td>}
                     {visRcpt.has("status")     && <td className="px-3 py-2.5">{statusBadge(r.status)}</td>}
-                    {visRcpt.has("created")    && <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap text-xs">{fmtCreated(r.createdAt)}</td>}
                   </tr>
                 ))}
                 {filteredReceipts.length === 0 && <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-600 text-sm">No receipts match your filters</td></tr>}
@@ -749,7 +734,6 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                   {visTote.has("contact")     && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Contact</th>}
                   {visTote.has("category")    && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Category</th>}
                   {visTote.has("location")    && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Location</th>}
-                  {visTote.has("created")     && <th className="text-left px-3 py-2.5 text-xs font-medium text-gray-500 uppercase tracking-wide">Created</th>}
                 </tr>
                 <tr className="border-b border-gray-900 bg-gray-100 dark:bg-[#111113]">
                   {visTote.has("id")          && <td className="px-2 py-1.5"><input value={tId}      onChange={e => setTId(e.target.value)}      placeholder="Filter…" className={COL_INPUT} /></td>}
@@ -758,7 +742,6 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                   {visTote.has("contact")     && <td className="px-2 py-1.5"><input value={tContact} onChange={e => setTContact(e.target.value)} placeholder="Filter…" className={COL_INPUT} /></td>}
                   {visTote.has("category")    && <td className="px-2 py-1.5"><input value={tCategory} onChange={e => setTCategory(e.target.value)} placeholder="Filter…" className={COL_INPUT} /></td>}
                   {visTote.has("location")    && <td className="px-2 py-1.5"><input value={tLocation} onChange={e => setTLocation(e.target.value)} placeholder="Filter…" className={COL_INPUT} /></td>}
-                  {visTote.has("created")     && <td className="px-2 py-1.5"></td>}
                 </tr>
               </thead>
               <tbody>
@@ -770,7 +753,6 @@ export default function DatabasesClient({ contacts: initialContacts, receipts: i
                     {visTote.has("contact")     && <td className="px-3 py-2.5 text-gray-400">{c.contactName}</td>}
                     {visTote.has("category")    && <td className="px-3 py-2.5 text-gray-400">{c.category ? `${c.category}${c.subcategory ? ` / ${c.subcategory}` : ""}` : <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
                     {visTote.has("location")    && <td className="px-3 py-2.5">{c.lastLocation ? <Badge color="violet">{c.lastLocation}</Badge> : <span className="text-gray-700 dark:text-gray-300">—</span>}</td>}
-                    {visTote.has("created")     && <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap text-xs">{fmtCreated(c.createdAt)}</td>}
                   </tr>
                 ))}
                 {filteredContainers.length === 0 && <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-600 text-sm">No totes match your filters</td></tr>}

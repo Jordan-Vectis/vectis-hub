@@ -68,7 +68,6 @@ export default async function DatabasesPage() {
         id: r.id, contactId: r.contactId, contactName: r.contact.name,
         commissionRate: r.commissionRate, notes: r.notes ?? null,
         status: r.status, containerCount: r.containers.length,
-        createdAt: r.createdAt.toISOString(),
       }))}
       containers={containers.map(c => ({
         id: c.id, type: c.type, description: c.description,
@@ -76,7 +75,6 @@ export default async function DatabasesPage() {
         receiptId: c.receiptId, contactId: c.receipt.contactId,
         contactName: c.receipt.contact.name,
         lastLocation: c.movements[0]?.locationCode ?? null,
-        createdAt: c.createdAt.toISOString(),
       }))}
       lots={lots.map(l => ({
         id: l.id, barcode: l.barcode ?? null, receiptUniqueId: l.receiptUniqueId ?? null, title: l.title,
