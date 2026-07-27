@@ -566,7 +566,8 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
           Straight from Business Central and nothing else — grouped by BC&apos;s own main category,
           showing every category it holds whether or not we have a sale or department for it.
-          Furthest behind first.
+          &ldquo;Using totes from&rdquo; is the newest tote BC has marked catalogued — where
+          cataloguing has reached. Furthest behind first.
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -576,7 +577,7 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
               <th className={TH}>BC category</th>
               <th className={TH}>Using totes from</th>
               <th className={`${TH} w-48`}>How far behind</th>
-              <th className={TH}>Last catalogued</th>
+              <th className={TH}>Last worked</th>
               <th className={`${TH} text-right`}>Catalogued</th>
               <th className={`${TH} text-right`}>Still to do</th>
             </tr>
@@ -585,14 +586,11 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
             {rows.map(r => {
               const median = r.stock?.medianMs ?? null
               const tone   = median != null ? lagTone(median, nowMs) : null
-              const total  = r.catalogued + r.outstanding
-              const pct    = total > 0 ? Math.round((r.catalogued / total) * 100) : 0
               return (
                 <Fragment key={r.category}>
                   <tr className="border-b border-gray-50 dark:border-gray-800/50 last:border-0">
                     <td className="py-2.5 px-3">
                       <span className="font-mono font-semibold text-gray-900 dark:text-white">{r.category}</span>
-                      <span className="text-xs text-gray-400 dark:text-gray-500 ml-2">{pct}% done</span>
                     </td>
                     <td className="py-2.5 px-3 whitespace-nowrap">
                       {median != null ? (
@@ -634,15 +632,14 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                     <tr className="border-b border-gray-50 dark:border-gray-800/50">
                       <td colSpan={6} className="px-3 py-3 bg-gray-50/60 dark:bg-gray-800/25">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                          Last {r.stock.totesSampled} receipt{r.stock.totesSampled === 1 ? "" : "s"} Business Central
-                          recorded as catalogued in {r.category}, most recent first — dated by when the stock came in.
-                          {r.stock.oldestMs != null && ` Oldest ${fmtToteDate(r.stock.oldestMs)}, newest ${fmtToteDate(r.stock.newestMs!)}.`}
+                          Newest {r.stock.totesSampled} tote{r.stock.totesSampled === 1 ? "" : "s"} Business Central has
+                          marked catalogued in {r.category}, newest first — the first is where cataloguing has reached.
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           {r.stock.totes.map(t => (
                             <span
                               key={t.tote}
-                              title={`${t.lots} item${t.lots === 1 ? "" : "s"} catalogued from this receipt${t.reason ? ` — ${t.reason}` : ""}`}
+                              title={`Tote ${t.tote}${t.reason ? ` — ${t.reason}` : " — created in Business Central"}`}
                               className={`text-xs px-2 py-1 rounded-lg border whitespace-nowrap ${
                                 t.dateMs == null
                                   ? "border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500"

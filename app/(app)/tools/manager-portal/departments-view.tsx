@@ -106,35 +106,41 @@ export default async function DepartmentsView() {
   // OWN main category (EVA_ArticleCategoryCode), covering every category BC
   // holds — including ones we have no sale or department for.
   //
-  // ⚠ Keyed by RECEIPT, not tote. When BC catalogues an item it CLEARS the
-  // item's toteNo (the item has left the tote), so a catalogued item can't be
-  // linked back to its tote directly — that's why an earlier tote-keyed version
-  // showed "nothing catalogued" for categories with thousands done. The receipt
-  // number survives cataloguing, and the tote record itself persists in
-  // WarehouseTote with its receipt + BC created date, so receipt is the bridge.
-  // The last 10 distinct receipts catalogued in each category, by cataloguedAt.
-  let bcReceiptRows: { category: string; receipt: string; itemCount: number }[] = []
+  // ⚠ "Using totes from" is the FRONTIER — the created date of the newest tote
+  // that BC has marked catalogued in that category. That's literally what you
+  // read off BC's Receipt Totes screen: sort by Created At, and the top ticked
+  // row is where cataloguing has reached. An earlier version took a MEDIAN of
+  // the last-10 catalogued receipts, which dragged the date weeks too far back.
+  //
+  // Built from WarehouseTote (= Receipt_Totes_Excel, which keeps the per-tote
+  // Catalogued flag + SystemCreatedAt as bcCreatedAt), joined to a per-receipt
+  // category taken from the items on that receipt (the tote table has no
+  // category of its own). We keep the newest 10 catalogued totes per category
+  // for the expandable list; row 1 is the frontier.
+  let bcFrontierRows: { category: string; tote: string; d: Date | null }[] = []
   let bcCatTotals: { category: string; catalogued: number; outstanding: number; lastAt: Date | null }[] = []
   try {
-    [bcReceiptRows, bcCatTotals] = await Promise.all([
-      prisma.$queryRaw<{ category: string; receipt: string; itemCount: number }[]>`
-        SELECT "category", "receipt", "itemCount" FROM (
-          SELECT btrim(w."category")         AS "category",
-                 upper(btrim(w."receiptNo")) AS "receipt",
-                 COUNT(*)::int               AS "itemCount",
-                 ROW_NUMBER() OVER (
-                   PARTITION BY btrim(w."category")
-                   ORDER BY MAX(w."cataloguedAt") DESC
-                 )::int AS rn
-          FROM "WarehouseItem" w
-          WHERE w."category" IS NOT NULL AND btrim(w."category") <> ''
-            AND w."catalogued" = true
+    [bcFrontierRows, bcCatTotals] = await Promise.all([
+      prisma.$queryRaw<{ category: string; tote: string; d: Date | null }[]>`
+        WITH receipt_cat AS (
+          SELECT upper(btrim("receiptNo")) AS receipt, MAX(btrim("category")) AS category
+          FROM "WarehouseItem"
+          WHERE "receiptNo" IS NOT NULL AND btrim("receiptNo") <> ''
+            AND "category" IS NOT NULL AND btrim("category") <> ''
+          GROUP BY 1
+        )
+        SELECT category, tote, d FROM (
+          SELECT rc.category           AS category,
+                 upper(btrim(t."toteNo")) AS tote,
+                 t."bcCreatedAt"       AS d,
+                 ROW_NUMBER() OVER (PARTITION BY rc.category ORDER BY t."bcCreatedAt" DESC)::int AS rn
+          FROM "WarehouseTote" t
+          JOIN receipt_cat rc ON rc.receipt = upper(btrim(t."receiptNo"))
+          WHERE t."catalogued" = true
             -- ⚠ BC sends an empty date as 0001-01-01, which is a VALID date
-            AND w."cataloguedAt" IS NOT NULL AND w."cataloguedAt" >= DATE '1990-01-01'
-            AND w."receiptNo" IS NOT NULL AND btrim(w."receiptNo") <> ''
-          GROUP BY 1, 2
-        ) t WHERE rn <= 10
-        ORDER BY "category", rn`,
+            AND t."bcCreatedAt" IS NOT NULL AND t."bcCreatedAt" >= DATE '1990-01-01'
+        ) x WHERE rn <= 10
+        ORDER BY category, rn`,
       prisma.$queryRaw<{ category: string; catalogued: number; outstanding: number; lastAt: Date | null }[]>`
         SELECT btrim(w."category")                                          AS "category",
                COUNT(*) FILTER (WHERE w."catalogued" = true)::int            AS "catalogued",
@@ -145,38 +151,10 @@ export default async function DepartmentsView() {
         GROUP BY 1`,
     ])
   } catch {
-    bcReceiptRows = []
-    bcCatTotals   = []
-  }
-
-  // Date each BC receipt = when that receipt's stock came into BC. The tote it
-  // belongs to carries the real created date (bcCreatedAt = SystemCreatedAt);
-  // fall back to the receipt's goods-received date where a tote date is missing.
-  const bcReceiptDate = new Map<string, number>()
-  const bcReceiptKeys = [...new Set(bcReceiptRows.map(r => r.receipt))]
-  if (bcReceiptKeys.length > 0) {
-    try {
-      const fromTotes = await prisma.$queryRaw<{ r: string; d: Date | null }[]>`
-        SELECT upper(btrim("receiptNo")) AS r, MAX("bcCreatedAt") AS d
-        FROM "WarehouseTote"
-        WHERE upper(btrim("receiptNo")) = ANY(${bcReceiptKeys})
-          AND "bcCreatedAt" IS NOT NULL AND "bcCreatedAt" >= DATE '1990-01-01'
-        GROUP BY 1`
-      for (const x of fromTotes) if (x.d) bcReceiptDate.set(x.r, new Date(x.d).getTime())
-    } catch { /* bcCreatedAt column arrives with Run Migrations */ }
-
-    const missing = bcReceiptKeys.filter(k => !bcReceiptDate.has(k))
-    if (missing.length > 0) {
-      try {
-        const fromItems = await prisma.$queryRaw<{ r: string; d: Date | null }[]>`
-          SELECT upper(btrim("receiptNo")) AS r, MIN("goodsReceivedDate") AS d
-          FROM "WarehouseItem"
-          WHERE upper(btrim("receiptNo")) = ANY(${missing})
-            AND "goodsReceivedDate" IS NOT NULL AND "goodsReceivedDate" >= DATE '1990-01-01'
-          GROUP BY 1`
-        for (const x of fromItems) if (x.d) bcReceiptDate.set(x.r, new Date(x.d).getTime())
-      } catch { /* leave unresolved */ }
-    }
+    // bcCreatedAt column / catalogued flag arrive with Run Migrations + a totes
+    // sync; until then the BC table simply shows no dates.
+    bcFrontierRows = []
+    bcCatTotals    = []
   }
 
   // Resolve each tote to a date. A tote reference can be either an internal
@@ -300,10 +278,11 @@ export default async function DepartmentsView() {
     totesBySale.set(r.auctionId, [...(totesBySale.get(r.auctionId) ?? []), { tote: r.tote, lotCount: r.lotCount }])
   }
 
-  // BC receipts, keyed by BC's own main category.
-  const bcReceiptsByCategory = new Map<string, { receipt: string; itemCount: number }[]>()
-  for (const r of bcReceiptRows) {
-    bcReceiptsByCategory.set(r.category, [...(bcReceiptsByCategory.get(r.category) ?? []), { receipt: r.receipt, itemCount: r.itemCount }])
+  // Newest catalogued totes per BC category, rn order (row 1 = the frontier).
+  const bcTotesByCategory = new Map<string, { tote: string; dateMs: number | null }[]>()
+  for (const r of bcFrontierRows) {
+    const dateMs = r.d ? new Date(r.d).getTime() : null
+    bcTotesByCategory.set(r.category, [...(bcTotesByCategory.get(r.category) ?? []), { tote: r.tote, dateMs }])
   }
 
   const median = (xs: number[]): number => {
@@ -363,23 +342,25 @@ export default async function DepartmentsView() {
   const stockFor = (auctionIds: string[]) => stockFrom(auctionIds.map(id => totesBySale.get(id) ?? []))
 
   // ── The BC-only table: one row per BC category, our system not involved ──
-  // Median of the last-10-catalogued receipts' created dates. Each receipt is
-  // one data point; unresolved receipts stay listed but drop out of the median.
-  function bcStockFor(receipts: { receipt: string; itemCount: number }[]): BcCategoryRow["stock"] {
-    if (receipts.length === 0) return null
-    const dated = receipts.map(r => bcReceiptDate.get(r.receipt)).filter((d): d is number => d != null)
+  // "Using totes from" = the FRONTIER: the created date of the newest catalogued
+  // tote (the totes come newest-first, so it's the first entry). medianMs holds
+  // that frontier so the shared StockAge shape + lag colours work unchanged.
+  function bcStockFor(totes: { tote: string; dateMs: number | null }[]): BcCategoryRow["stock"] {
+    if (totes.length === 0) return null
+    const dated = totes.map(t => t.dateMs).filter((d): d is number => d != null)
+    const frontier = dated.length > 0 ? Math.max(...dated) : null
     return {
-      medianMs:     dated.length > 0 ? median(dated) : null,
+      medianMs:     frontier,
       oldestMs:     dated.length > 0 ? Math.min(...dated) : null,
-      newestMs:     dated.length > 0 ? Math.max(...dated) : null,
-      totesSampled: receipts.length,
+      newestMs:     frontier,
+      totesSampled: totes.length,
       dated:        dated.length,
-      totes: receipts.map(r => ({
-        tote:   r.receipt,        // a receipt number here, shown as such in the panel
-        dateMs: bcReceiptDate.get(r.receipt) ?? null,
-        lots:   r.itemCount,
-        reason: bcReceiptDate.get(r.receipt) != null ? null : "no created date yet — run the totes sync",
-        source: bcReceiptDate.get(r.receipt) != null ? "receipt" : null,
+      totes: totes.map(t => ({
+        tote:   t.tote,
+        dateMs: t.dateMs,
+        lots:   1,
+        reason: t.dateMs != null ? null : "no created date yet — run the totes sync",
+        source: t.dateMs != null ? "tote" : null,
       })),
     }
   }
@@ -387,12 +368,12 @@ export default async function DepartmentsView() {
   const bcCategories: BcCategoryRow[] = bcCatTotals
     .map(c => ({
       category:    c.category,
-      stock:       bcStockFor(bcReceiptsByCategory.get(c.category) ?? []),
+      stock:       bcStockFor(bcTotesByCategory.get(c.category) ?? []),
       catalogued:  Number(c.catalogued),
       outstanding: Number(c.outstanding),
       lastCataloguedMs: c.lastAt ? new Date(c.lastAt).getTime() : null,
     }))
-    // Furthest behind first; categories with no dated receipts sink to the bottom.
+    // Furthest behind first; categories with no dated totes sink to the bottom.
     .sort((a, b) => {
       const am = a.stock?.medianMs, bm = b.stock?.medianMs
       if (am == null && bm == null) return a.category.localeCompare(b.category)
