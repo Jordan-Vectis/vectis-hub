@@ -465,6 +465,9 @@ export default function LotWizardTab({
   // Tapping "Other" first shows a reminder to use a listed option if one fits —
   // Other is only selected once they confirm none of them do.
   const [idleOtherWarn,    setIdleOtherWarn]  = useState(false)
+  // Submitting with time left unassigned asks for confirmation first — they can
+  // go back and allocate it, or continue and have it recorded as unallocated.
+  const [idleUnallocWarn,  setIdleUnallocWarn] = useState(false)
   const [idleSubmitting,   setIdleSubmitting] = useState(false)
   const [idleReasons,      setIdleReasons]    = useState<IdleReason[]>(DEFAULT_REASONS)
   // The idle log failed to save — shown in the popup. We do NOT wave the user
@@ -604,6 +607,7 @@ export default function LotWizardTab({
     setIdleTotes("")
     setIdleNotesMap({})
     setIdleOtherWarn(false)
+    setIdleUnallocWarn(false)
     setIdleError(null)
     setIdlePopup(true)
   }
@@ -1390,7 +1394,7 @@ export default function LotWizardTab({
               </div>
             )}
 
-            <button onClick={submitIdleLog}
+            <button onClick={() => { if (unallocMs >= 60_000) setIdleUnallocWarn(true); else void submitIdleLog() }}
               disabled={idleSelected.length === 0 || idleSubmitting || anyMissing || allocMissing}
               className="w-full py-3 bg-[#2AB4A6] hover:bg-[#22a090] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors">
               {idleSubmitting ? "Saving…" : idleError ? "Try Again" : pendingSaveRef.current ? "Log & Save Lot" : "Log & Continue"}
@@ -1415,6 +1419,31 @@ export default function LotWizardTab({
                     onClick={() => { setIdleSelected(sel => sel.includes("OTHER") ? sel : [...sel, "OTHER"]); setIdleOtherWarn(false) }}
                     className="w-full py-2.5 border-2 border-gray-200 hover:border-gray-300 text-gray-600 text-sm font-semibold rounded-xl transition-colors">
                     None of them fit — use Other
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Unallocated-time warning — shown when they submit with time left over */}
+          {idleUnallocWarn && (
+            <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5">
+                <p className="text-sm font-bold text-gray-900 mb-1.5">⚠️ You have unallocated time</p>
+                <p className="text-sm text-gray-600 mb-4">
+                  <span className="font-bold text-amber-600">{fmtIdleDuration(Math.round(unallocMs / 1000))}</span> of
+                  this time hasn&apos;t been given to an activity. You can go back and share it out using the sliders,
+                  or continue and it will be recorded as unallocated time.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <button type="button" onClick={() => setIdleUnallocWarn(false)}
+                    className="w-full py-2.5 bg-[#2AB4A6] hover:bg-[#22a090] text-white text-sm font-bold rounded-xl transition-colors">
+                    ← Go back and allocate it
+                  </button>
+                  <button type="button"
+                    onClick={() => { setIdleUnallocWarn(false); void submitIdleLog() }}
+                    className="w-full py-2.5 border-2 border-gray-200 hover:border-gray-300 text-gray-600 text-sm font-semibold rounded-xl transition-colors">
+                    Continue anyway
                   </button>
                 </div>
               </div>

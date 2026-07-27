@@ -20,6 +20,7 @@ export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }
   const [notes, setNotes]           = useState<Record<string, string>>({})
   const [totes, setTotes]           = useState("")
   const [otherWarn, setOtherWarn]   = useState(false)
+  const [unallocWarn, setUnallocWarn] = useState(false)
 
   // Admin chooses the gap duration to simulate, then fires the popup on themselves.
   // Nothing is saved — this only drives how the read-only replica renders, so it is
@@ -30,7 +31,7 @@ export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }
   const [gapSecs, setGapSecs]       = useState(3 * 60)   // the duration the OPEN popup shows
 
   function openPreview() {
-    setSelected([]); setAlloc({}); setNotes({}); setTotes(""); setOtherWarn(false)
+    setSelected([]); setAlloc({}); setNotes({}); setTotes(""); setOtherWarn(false); setUnallocWarn(false)
     setGapSecs(Math.max(1, Math.round(durMin) * 60 + Math.round(durSec)))   // freeze at open
     setOpen(true)
   }
@@ -218,7 +219,7 @@ export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }
 
             <button
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={() => { if (unallocMs >= 60_000) setUnallocWarn(true); else setOpen(false) }}
               className="w-full py-3 bg-[#2AB4A6] hover:bg-[#22a090] text-white font-bold rounded-xl transition-colors"
             >
               Close preview
@@ -244,6 +245,30 @@ export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }
                     onClick={() => { setSelected(sel => sel.includes("OTHER") ? sel : [...sel, "OTHER"]); setOtherWarn(false) }}
                     className="w-full py-2.5 border-2 border-gray-200 hover:border-gray-300 text-gray-600 text-sm font-semibold rounded-xl transition-colors">
                     None of them fit — use Other
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Unallocated-time warning — shown when they submit with time left over */}
+          {unallocWarn && (
+            <div className="fixed inset-0 z-[130] bg-black/50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5">
+                <p className="text-sm font-bold text-gray-900 mb-1.5">⚠️ You have unallocated time</p>
+                <p className="text-sm text-gray-600 mb-4">
+                  <span className="font-bold text-amber-600">{fmtIdleDuration(Math.round(unallocMs / 1000))}</span> of
+                  this time hasn&apos;t been given to an activity. You can go back and share it out using the sliders,
+                  or continue and it will be recorded as unallocated time.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <button type="button" onClick={() => setUnallocWarn(false)}
+                    className="w-full py-2.5 bg-[#2AB4A6] hover:bg-[#22a090] text-white text-sm font-bold rounded-xl transition-colors">
+                    ← Go back and allocate it
+                  </button>
+                  <button type="button" onClick={() => { setUnallocWarn(false); setOpen(false) }}
+                    className="w-full py-2.5 border-2 border-gray-200 hover:border-gray-300 text-gray-600 text-sm font-semibold rounded-xl transition-colors">
+                    Continue anyway
                   </button>
                 </div>
               </div>
