@@ -226,7 +226,8 @@ async function buildPdf(
   ]
   statBoxes.forEach((box, i) => {
     const bx = MARGIN + i * (boxW + 5)
-    page.drawRectangle({ x: bx, y: y - boxH, width: boxW, height: boxH, color: box.bg, borderRadius: 6 })
+    // (pdf-lib's drawRectangle has no borderRadius option — corners are square.)
+    page.drawRectangle({ x: bx, y: y - boxH, width: boxW, height: boxH, color: box.bg })
     const valStr = safeAscii(box.value)
     const valW   = helvB.widthOfTextAtSize(valStr, 22)
     page.drawText(valStr, { x: bx + boxW / 2 - valW / 2, y: y - 30, size: 22, font: helvB, color: box.val })
@@ -335,7 +336,7 @@ function drawSectionHeading(
   count: number,
 ): { page: PDFPage; y: number } {
   ;({ page, y } = ensureSpace(doc, page, y, 36))
-  page.drawRectangle({ x: MARGIN, y: y - 20, width: CONTENT_W, height: 20, color: C.headBg, borderRadius: 4 })
+  page.drawRectangle({ x: MARGIN, y: y - 20, width: CONTENT_W, height: 20, color: C.headBg })
   page.drawText(safeAscii(title), { x: MARGIN + 8, y: y - 14, size: 9, font: fonts.helvB, color: C.headTxt })
   const countStr = safeAscii(`${count} sale${count === 1 ? "" : "s"}`)
   drawRight(page, countStr, RIGHT - 8, y - 14, 8, fonts.helv, rgb(0.7, 0.75, 0.85))
@@ -441,9 +442,9 @@ function drawActiveRow(
   const fillPct = Math.min(a.lotCount / target, 1)
   const fillW   = Math.max(2, Math.round(fillPct * barW))
   const barY    = y - ROW_H + 5
-  page.drawRectangle({ x: AC.lots.x, y: barY, width: barW, height: 4, color: C.barBg, borderRadius: 2 })
+  page.drawRectangle({ x: AC.lots.x, y: barY, width: barW, height: 4, color: C.barBg })
   if (fillW > 0) {
-    page.drawRectangle({ x: AC.lots.x, y: barY, width: fillW, height: 4, color: C.blueFill, borderRadius: 2 })
+    page.drawRectangle({ x: AC.lots.x, y: barY, width: fillW, height: 4, color: C.blueFill })
   }
 
   // ── Sale date ─────────────────────────────────────────────────────────────

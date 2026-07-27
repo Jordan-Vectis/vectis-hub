@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { getEffectiveSession } from "@/lib/impersonation"
 import { hasAppAccess } from "@/lib/apps"
 import { buildLotMap, minOf, maxOf, ukDayKey, ukDayStartUtc, computeLotBreakdowns } from "@/lib/cataloguing-reports"
-import { DEFAULT_REASONS, UNALLOCATED_REASON } from "@/lib/idle-timer-config"
+import { DEFAULT_REASONS, UNALLOCATED_REASON, groupIdleOccasions } from "@/lib/idle-timer-config"
 import {
   buildSummaryPdf, buildIndividualsPdf,
   type PersonPdfReport, type PdfReasonMeta, type SummaryRow, type SummaryTeam, type PdfDayRow, type PdfAwayReason, type PdfAuctionStat,
@@ -273,7 +273,9 @@ export async function GET(req: NextRequest) {
         kpCount: kpLogs.length, wizardTracked: wizardLogs.length,
         kpAvgMs, kpFastMs, kpSlowMs, kpPct,
         researchMs: research.ms, researchSessions: research.sessions,
-        awaySessions: countedIncIdle.length,
+        // Breaks counted as occasions — a break split between activities writes
+        // several rows but is still ONE break.
+        awaySessions: groupIdleOccasions(countedIncIdle.map(l => ({ idleStartedAt: l.idleStartedAt, idleDurationMs: l.idleDurationMs }))).length,
         auctionStats, awayByReason, days,
       })
 

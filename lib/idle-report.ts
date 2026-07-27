@@ -11,7 +11,7 @@ import { subDays, subMonths, startOfDay } from "date-fns"
 import { buildLotMap, ukDayKey } from "@/lib/cataloguing-reports"
 import { findUserGaps, type GapSave, type GapIdle } from "@/lib/idle-gaps"
 import { clockLooksTampered } from "@/lib/idle-gate"
-import { DEFAULT_REASONS, UNALLOCATED_REASON, type IdleReason } from "@/lib/idle-timer-config"
+import { DEFAULT_REASONS, UNALLOCATED_REASON, groupIdleOccasions, type IdleReason } from "@/lib/idle-timer-config"
 
 export const WORK_DAY_MS = 8 * 60 * 60 * 1000 // a standard 9–5 day
 
@@ -76,6 +76,7 @@ export type IdleReportData = {
   reasons: IdleReason[]
   reasonMeta: Map<string, IdleReason>
   totalIdleMs: number; totalSessions: number; totalUnexplained: number
+  unallocatedMs: number                        // time left unassigned when splitting a break
   personDays: number; idlePerPersonDay: number; idlePctOfDay: number | null; avgSessionMs: number
   reasonRows: ReasonRow[]; topReason: ReasonRow | null
   byHour: { hour: number; ms: number }[]     // 9..16
@@ -162,10 +163,16 @@ export async function computeIdleReport(activeRange: RangeKey, includeTamper: bo
   const byWeekdayMap = new Map<string, number>()
   const idlesByUser = new Map<string, GapIdle[]>()
 
+  // Raw rows per user, kept so breaks can be counted as OCCASIONS rather than
+  // rows (one break split between reasons writes several rows — see
+  // groupIdleOccasions).
+  const logsByUser = new Map<string, typeof idleLogs>()
+
   for (const l of idleLogs) {
     const r = ensure(l.userId, l.userName)
     r.totalMs += l.idleDurationMs
-    r.sessions++
+    const bucket = logsByUser.get(l.userId)
+    if (bucket) bucket.push(l); else logsByUser.set(l.userId, [l])
     r.byReason.set(l.reason, (r.byReason.get(l.reason) ?? 0) + l.idleDurationMs)
     const day = ukDayKey(l.idleStartedAt)
     r.dailyIdle.set(day, (r.dailyIdle.get(day) ?? 0) + l.idleDurationMs)
@@ -202,8 +209,18 @@ export async function computeIdleReport(activeRange: RangeKey, includeTamper: bo
   const tamperIncidentsAll = decisionRows.filter(d => clockLooksTampered(d.clientNow?.getTime() ?? null, d.clientTz, d.createdAt.getTime()))
   for (const d of tamperIncidentsAll) ensure(d.userId, d.userName).tamperCount++
 
+  // Breaks are counted per OCCASION, not per row: one break split across several
+  // reasons (plus any unallocated leftover) is ONE break, not three or four.
+  const occasionsByUser = new Map<string, ReturnType<typeof groupIdleOccasions<(typeof idleLogs)[number]>>>()
+  for (const [uid, logs] of logsByUser) occasionsByUser.set(uid, groupIdleOccasions(logs))
+  for (const [uid, occ] of occasionsByUser) { const r = rows.get(uid); if (r) r.sessions = occ.length }
+
   const totalIdleMs = idleLogs.reduce((s, l) => s + l.idleDurationMs, 0)
-  const totalSessions = idleLogs.length
+  const totalSessions = [...occasionsByUser.values()].reduce((s, o) => s + o.length, 0)
+  // Time the cataloguer left unassigned when splitting a break — reported on its
+  // own (it is deliberately NOT eligible to be the "most common reason", and it
+  // never excuses a gap — see coveringIdle in lib/idle-gaps.ts).
+  const unallocatedMs = teamByReason.get(UNALLOCATED_REASON.key)?.ms ?? 0
   const totalUnexplained = [...rows.values()].reduce((s, r) => s + r.unexplainedCount, 0)
   const idlePerPersonDay = personDays > 0 ? Math.round(totalIdleMs / personDays) : 0
   const idlePctOfDay = personDays > 0 ? Math.round((totalIdleMs / (personDays * WORK_DAY_MS)) * 100) : null
@@ -212,7 +229,9 @@ export async function computeIdleReport(activeRange: RangeKey, includeTamper: bo
   const reasonRows: ReasonRow[] = [...teamByReason.entries()]
     .map(([key, v]) => ({ key, label: labelOf(key), colour: colourOf(key), icon: iconOf(key), ms: v.ms, count: v.count, avg: v.count ? Math.round(v.ms / v.count) : 0, share: totalIdleMs ? (v.ms / totalIdleMs) * 100 : 0 }))
     .sort((a, b) => b.ms - a.ms)
-  const topReason = reasonRows[0] ?? null
+  // "Most common reason" means a real activity — unallocated time is reported
+  // separately rather than being allowed to top the list.
+  const topReason = reasonRows.find(r => r.key !== UNALLOCATED_REASON.key) ?? null
 
   const userRows: UserRow[] = [...rows.values()]
     .sort((a, b) => b.totalMs - a.totalMs)
@@ -220,7 +239,8 @@ export async function computeIdleReport(activeRange: RangeKey, includeTamper: bo
       const days = userDays.get(r.userId)?.size ?? 0
       const perDayMs = days > 0 ? Math.round(r.totalMs / days) : 0
       const pctDay = days > 0 ? Math.round((r.totalMs / (days * WORK_DAY_MS)) * 100) : null
-      const top = [...r.byReason.entries()].sort((a, b) => b[1] - a[1])[0]
+      // "Usual reason" = biggest REAL activity; unallocated never takes the chip.
+      const top = [...r.byReason.entries()].filter(([k]) => k !== UNALLOCATED_REASON.key).sort((a, b) => b[1] - a[1])[0]
       const busiest = [...r.dailyIdle.entries()].sort((a, b) => b[1] - a[1])[0]
       return {
         userId: r.userId, userName: r.userName,
@@ -238,10 +258,24 @@ export async function computeIdleReport(activeRange: RangeKey, includeTamper: bo
   const byWeekday = ["Mon", "Tue", "Wed", "Thu", "Fri"].map(d => ({ day: d, ms: byWeekdayMap.get(d) ?? 0 }))
   const trend = [...trendMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([day, ms]) => ({ day, ms }))
 
-  const longest: LongestBreak[] = [...idleLogs]
-    .sort((a, b) => b.idleDurationMs - a.idleDurationMs)
+  // Longest breaks are measured per OCCASION, so a long break split between
+  // reasons still shows at its true length instead of as separate fragments.
+  // The label shown is the biggest slice of that break.
+  const longest: LongestBreak[] = [...occasionsByUser.values()]
+    .flat()
+    .sort((a, b) => b.totalMs - a.totalMs)
     .slice(0, 10)
-    .map(l => ({ userName: l.userName, idleDurationMs: l.idleDurationMs, reason: l.reason, idleStartedAt: l.idleStartedAt }))
+    .map(o => {
+      const byReason = new Map<string, number>()
+      for (const row of o.rows) byReason.set(row.reason, (byReason.get(row.reason) ?? 0) + row.idleDurationMs)
+      const dominant = [...byReason.entries()].sort((a, b) => b[1] - a[1])[0]
+      return {
+        userName: o.rows[0].userName,
+        idleDurationMs: o.totalMs,
+        reason: dominant ? dominant[0] : o.rows[0].reason,
+        idleStartedAt: o.startedAt,
+      }
+    })
 
   const tamperIncidents: TamperRow[] = includeTamper
     ? tamperIncidentsAll.map(d => ({ id: d.id, createdAt: d.createdAt, userName: d.userName, clientNow: d.clientNow, clientTz: d.clientTz }))
@@ -249,7 +283,7 @@ export async function computeIdleReport(activeRange: RangeKey, includeTamper: bo
 
   return {
     reasons, reasonMeta,
-    totalIdleMs, totalSessions, totalUnexplained,
+    totalIdleMs, totalSessions, totalUnexplained, unallocatedMs,
     personDays, idlePerPersonDay, idlePctOfDay, avgSessionMs,
     reasonRows, topReason,
     byHour, byWeekday, trend,

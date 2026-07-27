@@ -5,6 +5,7 @@
 //
 // Pure functions (no DB) so they can be unit-tested; the admin page feeds them
 // rows it has loaded.
+import { UNALLOCATED_REASON } from "@/lib/idle-timer-config"
 
 // 8 working hours — a gap this long is a day off / holiday, not idle-during-work,
 // so it's excluded (mirrors the client's own EIGHT_WORK_HOURS skip).
@@ -154,13 +155,20 @@ export type IdleGap = {
 // Returns the covering reason (first log in the window) for display.
 const MATCH_MARGIN_MS = 5 * 60 * 1000
 
+// ⚠ UNALLOCATED time does NOT count towards covering a gap. The popup lets a
+// cataloguer leave part of a break unassigned, and that leftover is logged under
+// the UNALLOCATED pseudo-reason — but unallocated time is by definition NOT
+// accounted for, so letting it excuse a gap would reopen the very hole this
+// detector exists to close (tick two reasons, give each a minute, leave hours
+// "unallocated", and the gap would read as explained).
 function coveringIdle(startMs: number, endMs: number, workingMs: number, idles: GapIdle[]): { explained: boolean; reason: string | null } {
   const inWindow = idles.filter(i => {
     const s = i.idleStartedAt.getTime()
     return s >= startMs - MATCH_MARGIN_MS && s <= endMs + MATCH_MARGIN_MS
   })
-  const coveredMs = inWindow.reduce((sum, i) => sum + i.idleDurationMs, 0)
-  return { explained: coveredMs >= workingMs / 2, reason: inWindow[0]?.reason ?? null }
+  const accounted = inWindow.filter(i => i.reason !== UNALLOCATED_REASON.key)
+  const coveredMs = accounted.reduce((sum, i) => sum + i.idleDurationMs, 0)
+  return { explained: coveredMs >= workingMs / 2, reason: accounted[0]?.reason ?? null }
 }
 
 // Find every working-hours gap over `thresholdMs` in one user's save history.

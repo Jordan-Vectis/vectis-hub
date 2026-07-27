@@ -72,6 +72,37 @@ export const UNALLOCATED_REASON: IdleReason = {
   colour: "bg-gray-100 text-gray-500 border-gray-200", idleColour: "#9ca3af",
 }
 
+// The activity popup writes ONE IdleLog row per selected reason, laid out
+// sequentially from the gap's start — so the rows for a single answer are
+// contiguous. Group them back into "occasions" (one real break) so that
+// splitting a break between reasons doesn't inflate break/session counts.
+// A row that starts where the previous one ended (within a couple of seconds)
+// belongs to the same occasion; genuinely separate breaks are divided by a lot
+// save, so they can never be contiguous.
+const OCCASION_TOLERANCE_MS = 2000
+
+export function groupIdleOccasions<T extends { idleStartedAt: Date; idleDurationMs: number }>(
+  logs: T[],
+): { startedAt: Date; totalMs: number; rows: T[] }[] {
+  const sorted = [...logs].sort((a, b) => a.idleStartedAt.getTime() - b.idleStartedAt.getTime())
+  const out: { startedAt: Date; totalMs: number; rows: T[] }[] = []
+  let cur: { startedAt: Date; totalMs: number; rows: T[] } | null = null
+  let curEnd = 0
+  for (const l of sorted) {
+    const start = l.idleStartedAt.getTime()
+    if (cur && start <= curEnd + OCCASION_TOLERANCE_MS) {
+      cur.totalMs += l.idleDurationMs
+      cur.rows.push(l)
+      curEnd = Math.max(curEnd, start + l.idleDurationMs)
+    } else {
+      cur = { startedAt: l.idleStartedAt, totalMs: l.idleDurationMs, rows: [l] }
+      out.push(cur)
+      curEnd = start + l.idleDurationMs
+    }
+  }
+  return out
+}
+
 export const DEFAULT_CONFIG: IdleTimerConfig = {
   yellowMins: 4,
   redMins:    10,

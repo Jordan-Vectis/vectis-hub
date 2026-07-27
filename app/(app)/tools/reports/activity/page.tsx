@@ -44,6 +44,17 @@ export default async function IdleReportPage({ searchParams }: { searchParams: P
     { label: "Away per Person / Day", value: fmtDuration(idlePerPersonDay), sub: `over ${personDays} day${personDays === 1 ? "" : "s"} worked`, accent: "border-l-blue-500" },
     { label: "Most Common Reason", value: topReason ? `${topReason.icon} ${topReason.label}` : "—", sub: topReason ? `${fmtDuration(topReason.ms)} · ${Math.round(topReason.share)}% of time away` : "no reasons logged", accent: "border-l-purple-500" },
   ]
+  // Time left unassigned when a break was split between activities. Only shown
+  // when there is some — it can't be the "most common reason", so it gets its
+  // own figure, and it never counts as accounting for a gap.
+  if (data.unallocatedMs > 0) {
+    cards.push({
+      label: "Unallocated",
+      value: fmtDuration(data.unallocatedMs),
+      sub: `${Math.round((data.unallocatedMs / totalIdleMs) * 100)}% of time away — not assigned to an activity`,
+      accent: "border-l-gray-400",
+    })
+  }
 
   const card = "bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl"
   const h2 = "text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider"
@@ -97,7 +108,7 @@ export default async function IdleReportPage({ searchParams }: { searchParams: P
           ) : (
             <>
               {/* Headline cards */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className={`grid grid-cols-2 gap-4 ${cards.length === 5 ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
                 {cards.map(c => (
                   <div key={c.label} className={`${card} border-l-2 ${c.accent} px-5 py-4`}>
                     <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{c.label}</p>

@@ -123,8 +123,17 @@ export async function buildIdleReportPdf(data: IdleReportData, rangeLabel: strin
     { label: "Away per Person / Day", value: fmtDuration(data.idlePerPersonDay), sub: `over ${data.personDays} day${data.personDays === 1 ? "" : "s"}` },
     { label: "Most Common Reason", value: data.topReason ? labelOf(data.topReason.key) : "-", sub: data.topReason ? `${fmtDuration(data.topReason.ms)} - ${Math.round(data.topReason.share)}%` : "none logged" },
   ]
+  // Time left unassigned when a break was split — shown separately (it can't be
+  // the "most common reason" and never counts as accounting for a gap).
+  if (data.unallocatedMs > 0) {
+    stats.push({
+      label: "Unallocated",
+      value: fmtDuration(data.unallocatedMs),
+      sub: `${Math.round((data.unallocatedMs / data.totalIdleMs) * 100)}% - not assigned`,
+    })
+  }
   const gap = 12
-  const boxW = (CONTENT_W - gap * 3) / 4
+  const boxW = (CONTENT_W - gap * (stats.length - 1)) / stats.length
   const boxH = 54
   stats.forEach((s, i) => {
     const x = MARGIN + i * (boxW + gap)

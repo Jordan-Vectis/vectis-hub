@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { assessGap } from "@/lib/idle-gaps"
+import { UNALLOCATED_REASON } from "@/lib/idle-timer-config"
 
 // Server-authoritative idle evaluation. Everything here is computed from the
 // SERVER's clock (Date.now() on Railway) and the DATABASE's own save timestamps,
@@ -42,8 +43,16 @@ export async function evaluateIdleGate(userId: string): Promise<IdleGateEval> {
   // Over-threshold — already accounted for? A logged idle only clears the gate if
   // it actually COVERS at least half the gap (same rule as the idle-gaps report),
   // so a 1-second throwaway reason can't excuse hours.
+  // ⚠ UNALLOCATED rows are excluded: the popup lets a cataloguer leave part of a
+  // break unassigned, and unallocated time must never clear the gate (otherwise
+  // ticking two reasons for a minute each and leaving hours unallocated would
+  // pass). Same rule as coveringIdle in lib/idle-gaps.ts — keep them in step.
   const windowIdle = await prisma.idleLog.findMany({
-    where: { userId, idleStartedAt: { gte: new Date(sinceMs - 5 * 60_000), lte: new Date(nowMs + 5 * 60_000) } },
+    where: {
+      userId,
+      reason: { not: UNALLOCATED_REASON.key },
+      idleStartedAt: { gte: new Date(sinceMs - 5 * 60_000), lte: new Date(nowMs + 5 * 60_000) },
+    },
     select: { idleDurationMs: true },
   })
   const coveredMs = windowIdle.reduce((s, l) => s + l.idleDurationMs, 0)

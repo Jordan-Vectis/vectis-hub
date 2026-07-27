@@ -33,6 +33,16 @@ At Jordan's request: heading softened from "What were you doing?" to **"How was 
 
 **API:** POST /api/catalogue/idle-log now accepts \`segments: [{reason, durationMs, toteNumbers?, notes?}]\` and writes ONE IdleLog row per segment, sequentially offset from idleStartedAt (rows tile the gap, no overlap). ⚠ The **legacy single-reason body is still accepted** — shared iPads run cached old bundles for days. Gap-matching (coveringIdle in lib/idle-gaps.ts) SUMS logs starting in the window, so split gaps stay "explained" for both the Unaccounted Time report and the create-lot gate. Away "sessions" counts tick up slightly when a gap is split — accepted.
 
+## ⚠ Reporting knock-ons of the split — fixed 2026-07-24
+
+Three things the multi-row split broke. **Keep these in mind for any change to how the popup writes rows:**
+
+1. **Unallocated must NEVER excuse a gap** (serious — it reopened the hole the detector exists to close: tick 2 reasons for a minute each, dump hours in unallocated, and the gap read as explained + the save gate cleared). Both covering checks now EXCLUDE UNALLOCATED: \`coveringIdle\` in **lib/idle-gaps.ts** and \`evaluateIdleGate\` in **lib/idle-gate.ts** (\`reason: { not: UNALLOCATED_REASON.key }\`). ⚠ Same rule in two places — keep them in step.
+2. **Breaks counted per OCCASION, not per row** — \`groupIdleOccasions()\` (lib/idle-timer-config.ts) regroups the contiguous rows one answer writes (2s tolerance) into one break. Used for sessions / totalSessions / avgSessionMs and the **Longest breaks** table (a split break now shows at its TRUE length, labelled with its biggest slice) in lib/idle-report.ts, plus awaySessions in /api/reports/pdf. Per-REASON counts stay per-row (correct).
+3. **"Most Common Reason" + per-cataloguer "usual reason" exclude Unallocated**; it gets **its own figure** instead (\`unallocatedMs\` → a 5th headline card on /tools/reports/activity and a 5th stat box in the Activity PDF, shown only when > 0).
+
+Verified with a temp tsx suite (10 cases incl. token-reasons+huge-unallocated = UNEXPLAINED, honest split = explained, legacy single reason = explained). All passed.
+
 **Admin preview:** Admin → Cataloguer Activity Timer (**/admin/activity-timer**) has a "👁 Preview the popup" button — read-only replica driven by the configured reasons (✕ + amber "Preview" badge; nothing saved). Component: components/idle-prompt-preview.tsx.
 
 ⚠ **The popup markup exists in TWO places — keep them in sync:**
