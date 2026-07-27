@@ -104,17 +104,24 @@ export default async function DepartmentsView() {
   // ── Business Central on its own terms ──────────────────────────────────────
   // Nothing to do with our departments, our sales or our lots. Grouped by BC's
   // OWN main category (EVA_ArticleCategoryCode), covering every category BC
-  // holds — including ones we have no sale or department for. The last 10
-  // distinct totes catalogued in each category, by BC's own cataloguedAt.
-  let bcToteRows: { category: string; tote: string; lotCount: number }[] = []
+  // holds — including ones we have no sale or department for.
+  //
+  // ⚠ Keyed by RECEIPT, not tote. When BC catalogues an item it CLEARS the
+  // item's toteNo (the item has left the tote), so a catalogued item can't be
+  // linked back to its tote directly — that's why an earlier tote-keyed version
+  // showed "nothing catalogued" for categories with thousands done. The receipt
+  // number survives cataloguing, and the tote record itself persists in
+  // WarehouseTote with its receipt + BC created date, so receipt is the bridge.
+  // The last 10 distinct receipts catalogued in each category, by cataloguedAt.
+  let bcReceiptRows: { category: string; receipt: string; itemCount: number }[] = []
   let bcCatTotals: { category: string; catalogued: number; outstanding: number; lastAt: Date | null }[] = []
   try {
-    [bcToteRows, bcCatTotals] = await Promise.all([
-      prisma.$queryRaw<{ category: string; tote: string; lotCount: number }[]>`
-        SELECT "category", "tote", "lotCount" FROM (
-          SELECT btrim(w."category")       AS "category",
-                 upper(btrim(w."toteNo"))  AS "tote",
-                 COUNT(*)::int             AS "lotCount",
+    [bcReceiptRows, bcCatTotals] = await Promise.all([
+      prisma.$queryRaw<{ category: string; receipt: string; itemCount: number }[]>`
+        SELECT "category", "receipt", "itemCount" FROM (
+          SELECT btrim(w."category")         AS "category",
+                 upper(btrim(w."receiptNo")) AS "receipt",
+                 COUNT(*)::int               AS "itemCount",
                  ROW_NUMBER() OVER (
                    PARTITION BY btrim(w."category")
                    ORDER BY MAX(w."cataloguedAt") DESC
@@ -124,7 +131,7 @@ export default async function DepartmentsView() {
             AND w."catalogued" = true
             -- ⚠ BC sends an empty date as 0001-01-01, which is a VALID date
             AND w."cataloguedAt" IS NOT NULL AND w."cataloguedAt" >= DATE '1990-01-01'
-            AND w."toteNo" IS NOT NULL AND btrim(w."toteNo") <> ''
+            AND w."receiptNo" IS NOT NULL AND btrim(w."receiptNo") <> ''
           GROUP BY 1, 2
         ) t WHERE rn <= 10
         ORDER BY "category", rn`,
@@ -138,8 +145,38 @@ export default async function DepartmentsView() {
         GROUP BY 1`,
     ])
   } catch {
-    bcToteRows   = []
-    bcCatTotals  = []
+    bcReceiptRows = []
+    bcCatTotals   = []
+  }
+
+  // Date each BC receipt = when that receipt's stock came into BC. The tote it
+  // belongs to carries the real created date (bcCreatedAt = SystemCreatedAt);
+  // fall back to the receipt's goods-received date where a tote date is missing.
+  const bcReceiptDate = new Map<string, number>()
+  const bcReceiptKeys = [...new Set(bcReceiptRows.map(r => r.receipt))]
+  if (bcReceiptKeys.length > 0) {
+    try {
+      const fromTotes = await prisma.$queryRaw<{ r: string; d: Date | null }[]>`
+        SELECT upper(btrim("receiptNo")) AS r, MAX("bcCreatedAt") AS d
+        FROM "WarehouseTote"
+        WHERE upper(btrim("receiptNo")) = ANY(${bcReceiptKeys})
+          AND "bcCreatedAt" IS NOT NULL AND "bcCreatedAt" >= DATE '1990-01-01'
+        GROUP BY 1`
+      for (const x of fromTotes) if (x.d) bcReceiptDate.set(x.r, new Date(x.d).getTime())
+    } catch { /* bcCreatedAt column arrives with Run Migrations */ }
+
+    const missing = bcReceiptKeys.filter(k => !bcReceiptDate.has(k))
+    if (missing.length > 0) {
+      try {
+        const fromItems = await prisma.$queryRaw<{ r: string; d: Date | null }[]>`
+          SELECT upper(btrim("receiptNo")) AS r, MIN("goodsReceivedDate") AS d
+          FROM "WarehouseItem"
+          WHERE upper(btrim("receiptNo")) = ANY(${missing})
+            AND "goodsReceivedDate" IS NOT NULL AND "goodsReceivedDate" >= DATE '1990-01-01'
+          GROUP BY 1`
+        for (const x of fromItems) if (x.d) bcReceiptDate.set(x.r, new Date(x.d).getTime())
+      } catch { /* leave unresolved */ }
+    }
   }
 
   // Resolve each tote to a date. A tote reference can be either an internal
@@ -159,11 +196,9 @@ export default async function DepartmentsView() {
     found: boolean            // the tote exists somewhere in the warehouse data
   }
   const toteInfo = new Map<string, ToteLookup>()
-  // Both sets resolve together — one pass of lookups serves both tables.
-  const toteKeys = [...new Set([
-    ...toteRows.map(r => norm(r.tote)),
-    ...bcToteRows.map(r => norm(r.tote)),
-  ])]
+  // Only the Hub table resolves tote → date here; the BC table works by receipt
+  // (see bcReceiptDate above), because catalogued items have no tote number.
+  const toteKeys = [...new Set(toteRows.map(r => norm(r.tote)))]
 
   if (toteKeys.length > 0) {
     const put = (k: string, patch: Partial<ToteLookup>) => {
@@ -265,10 +300,10 @@ export default async function DepartmentsView() {
     totesBySale.set(r.auctionId, [...(totesBySale.get(r.auctionId) ?? []), { tote: r.tote, lotCount: r.lotCount }])
   }
 
-  // Same, keyed by BC's own main category.
-  const bcTotesByCategory = new Map<string, { tote: string; lotCount: number }[]>()
-  for (const r of bcToteRows) {
-    bcTotesByCategory.set(r.category, [...(bcTotesByCategory.get(r.category) ?? []), { tote: r.tote, lotCount: r.lotCount }])
+  // BC receipts, keyed by BC's own main category.
+  const bcReceiptsByCategory = new Map<string, { receipt: string; itemCount: number }[]>()
+  for (const r of bcReceiptRows) {
+    bcReceiptsByCategory.set(r.category, [...(bcReceiptsByCategory.get(r.category) ?? []), { receipt: r.receipt, itemCount: r.itemCount }])
   }
 
   const median = (xs: number[]): number => {
@@ -328,15 +363,36 @@ export default async function DepartmentsView() {
   const stockFor = (auctionIds: string[]) => stockFrom(auctionIds.map(id => totesBySale.get(id) ?? []))
 
   // ── The BC-only table: one row per BC category, our system not involved ──
+  // Median of the last-10-catalogued receipts' created dates. Each receipt is
+  // one data point; unresolved receipts stay listed but drop out of the median.
+  function bcStockFor(receipts: { receipt: string; itemCount: number }[]): BcCategoryRow["stock"] {
+    if (receipts.length === 0) return null
+    const dated = receipts.map(r => bcReceiptDate.get(r.receipt)).filter((d): d is number => d != null)
+    return {
+      medianMs:     dated.length > 0 ? median(dated) : null,
+      oldestMs:     dated.length > 0 ? Math.min(...dated) : null,
+      newestMs:     dated.length > 0 ? Math.max(...dated) : null,
+      totesSampled: receipts.length,
+      dated:        dated.length,
+      totes: receipts.map(r => ({
+        tote:   r.receipt,        // a receipt number here, shown as such in the panel
+        dateMs: bcReceiptDate.get(r.receipt) ?? null,
+        lots:   r.itemCount,
+        reason: bcReceiptDate.get(r.receipt) != null ? null : "no created date yet — run the totes sync",
+        source: bcReceiptDate.get(r.receipt) != null ? "receipt" : null,
+      })),
+    }
+  }
+
   const bcCategories: BcCategoryRow[] = bcCatTotals
     .map(c => ({
       category:    c.category,
-      stock:       stockFrom([bcTotesByCategory.get(c.category) ?? []]),
+      stock:       bcStockFor(bcReceiptsByCategory.get(c.category) ?? []),
       catalogued:  Number(c.catalogued),
       outstanding: Number(c.outstanding),
       lastCataloguedMs: c.lastAt ? new Date(c.lastAt).getTime() : null,
     }))
-    // Furthest behind first; categories with no dated totes sink to the bottom.
+    // Furthest behind first; categories with no dated receipts sink to the bottom.
     .sort((a, b) => {
       const am = a.stock?.medianMs, bm = b.stock?.medianMs
       if (am == null && bm == null) return a.category.localeCompare(b.category)

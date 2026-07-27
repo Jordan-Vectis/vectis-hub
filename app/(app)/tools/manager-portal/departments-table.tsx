@@ -602,7 +602,7 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                         </button>
                       ) : (
                         <span className="text-xs text-gray-400 dark:text-gray-500">
-                          {r.stock ? "no dates on those totes" : "nothing catalogued"}
+                          {r.stock ? "no dates yet — run totes sync" : "nothing catalogued"}
                         </span>
                       )}
                     </td>
@@ -634,15 +634,15 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                     <tr className="border-b border-gray-50 dark:border-gray-800/50">
                       <td colSpan={6} className="px-3 py-3 bg-gray-50/60 dark:bg-gray-800/25">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                          Last {r.stock.totesSampled} tote{r.stock.totesSampled === 1 ? "" : "s"} Business Central
-                          recorded as catalogued in {r.category}, most recent first.
+                          Last {r.stock.totesSampled} receipt{r.stock.totesSampled === 1 ? "" : "s"} Business Central
+                          recorded as catalogued in {r.category}, most recent first — dated by when the stock came in.
                           {r.stock.oldestMs != null && ` Oldest ${fmtToteDate(r.stock.oldestMs)}, newest ${fmtToteDate(r.stock.newestMs!)}.`}
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           {r.stock.totes.map(t => (
                             <span
                               key={t.tote}
-                              title={`${t.lots} item${t.lots === 1 ? "" : "s"} catalogued out of this tote${t.reason ? ` — ${t.reason}` : ""}`}
+                              title={`${t.lots} item${t.lots === 1 ? "" : "s"} catalogued from this receipt${t.reason ? ` — ${t.reason}` : ""}`}
                               className={`text-xs px-2 py-1 rounded-lg border whitespace-nowrap ${
                                 t.dateMs == null
                                   ? "border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500"
