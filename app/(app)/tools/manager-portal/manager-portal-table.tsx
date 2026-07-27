@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { AUCTION_TYPES, auctionTypeEmoji, auctionTypeLabel } from "@/lib/auction-types"
+import { DAY, clamp, startOfDay, fmtPace, daysToSale, milestonesFor, type Milestone } from "@/lib/sale-projection"
 
 export type SaleRow = {
   id: string
@@ -26,12 +27,10 @@ type BcState =
   | { status: "error"; message: string }
   | { status: "ready"; sales: Record<string, SaleBc | null> }
 
-const DAY = 86_400_000
 const AV_COLORS = ["#3E7BFA", "#2AB4A6", "#C77DFF", "#E0A458", "#4FB477"]
 
 // ─── Formatting ──────────────────────────────────────────────────────────────
 
-const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x))
 const fmtDate = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
 const fmtFullDate = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
 
@@ -43,36 +42,11 @@ function fmtDuration(ms: number | null): string {
   return m > 0 ? `${m}m ${s % 60}s` : `${s}s`
 }
 
-const startOfDay = (ms: number) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime() }
-const fmtPace = (p: number) => (p >= 10 ? Math.round(p).toString() : p.toFixed(1))
 
 function initials(name: string): string {
   const parts = (name || "").trim().split(/\s+/).filter(Boolean)
   const ini = (parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? parts[0]?.[1] ?? "")
   return ini.toUpperCase() || "?"
-}
-
-function daysToSale(auctionDate: string | null, nowMs: number): number | null {
-  if (!auctionDate) return null
-  return Math.ceil((Date.parse(auctionDate) - nowMs) / DAY)
-}
-
-type Milestone = { target: number; days: number; date: number; fill: number; late: boolean }
-
-// `current` is the sale's combined (deduped) total — milestones project off the
-// number the manager actually watches, so a 627-lot sale reads 700/800/900, not
-// 500/600. Projected at the (Hub) cataloguing pace.
-function milestonesFor(current: number, pace: number, nowMs: number, saleTs: number, count = 3): Milestone[] {
-  if (pace <= 0) return []
-  const out: Milestone[] = []
-  let m = Math.floor(current / 100) * 100 + 100
-  for (let i = 0; i < count; i++) {
-    const days = Math.ceil((m - current) / pace)
-    const date = nowMs + days * DAY
-    out.push({ target: m, days, date, fill: clamp((current - (m - 100)) / 100, 0, 1) * 100, late: startOfDay(date) > startOfDay(saleTs) })
-    m += 100
-  }
-  return out
 }
 
 function bcFor(code: string, bc: BcState): { loading: boolean; data: SaleBc | null } {

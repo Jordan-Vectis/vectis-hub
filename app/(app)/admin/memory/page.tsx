@@ -59,9 +59,15 @@ Users pages: the single Department dropdown is now **tickboxes for several**, on
 
 \`/tools/manager-portal\` is now **tabbed**: Sales (the original table, lifted unchanged into \`sales-view.tsx\`) and Departments (\`departments-view.tsx\`). Both registered in \`APP_SECTIONS.MANAGER_PORTAL\` in \`lib/apps.ts\`, so the per-section tickboxes on the user permissions page work automatically — that is how the Departments tab gets its separate permission. Nobody had stored Manager Portal section settings before this, so existing users keep seeing both tabs until deliberately restricted.
 
-The report shows, per department: lots in range + total, sales count, avg time per lot, a sales table with progress chips, and the cataloguers who worked on those sales. Range 7/30/90/all via \`?range=\`. Sales whose type no department covers land in a **"Not in a department"** group so the totals still add up. ⚠ It keeps the **orphaned-timing-log exclusion** (\`lotId IS NULL OR EXISTS…\`) so figures match the Sales tab and the Reports pages.
+**Not date-range based** (Jordan, 2026-07-27 — the original 7/30/90/all range selector was scrapped as confusing). It shows **active sales** per department, with a **"Completed in the last 3 months"** strip underneath. There is no "completed at" timestamp — \`complete\` is just a flag — so recency uses \`auctionDate\`, falling back to \`updatedAt\`.
 
-More planned here — notably using BC to work out the dates of the totes being catalogued.
+Per active sale: sale date + days to go, lot total, pace, and **projected dates for the next three hundred-lot marks** (e.g. \`400 → 12 Aug\`), red when the mark lands after the sale date. Plus the cataloguers who worked on the department's sales and the assigned staff.
+
+⚠ **The projection maths lives in \`lib/sale-projection.ts\` and is shared with the Sales tab** (\`milestonesFor\` / \`paceFor\` / \`daysToSale\` were lifted out of manager-portal-table.tsx, which now imports them). Do NOT copy it into a third place — two copies will drift and the tabs will disagree about the same sale. Pace = lots ÷ distinct days that actually had lots saved, and needs **2+ active days** before it reports anything.
+
+⚠ Lot totals come from the **same \`/api/manager-portal/bc-counts\` fetch the Sales tab uses** (Hub ∪ BC, deduped by barcode), so a sale reads the same on both tabs; without a BC connection both fall back to Hub-only and the footnote says so. It also keeps the **orphaned-timing-log exclusion** (\`lotId IS NULL OR EXISTS…\`) so figures match the Reports pages.
+
+Sales whose type no department covers land in a **"Not in a department"** group so the totals still add up. More planned here — notably using BC to work out the dates of the totes being catalogued.
 
 ## Removed at the same time
 

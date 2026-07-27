@@ -15,7 +15,7 @@ const TABS = APP_SECTIONS.MANAGER_PORTAL!
 export default async function ManagerPortalPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; range?: string }>
+  searchParams: Promise<{ tab?: string }>
 }) {
   const session = await auth()
   if (!session) redirect("/login")
@@ -32,10 +32,8 @@ export default async function ManagerPortalPage({
   const visibleTabs = allowed ? TABS.filter(t => allowed.includes(t.key)) : TABS
   if (visibleTabs.length === 0) redirect("/hub")
 
-  const { tab: tabParam, range } = await searchParams
+  const { tab: tabParam } = await searchParams
   const tab = visibleTabs.some(t => t.key === tabParam) ? tabParam! : visibleTabs[0].key
-
-  const rangeDays = range === "all" ? null : range ? (Number(range) || 30) : 30
 
   return (
     <div className="p-6">
@@ -43,7 +41,7 @@ export default async function ManagerPortalPage({
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Manager Portal</h1>
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
           {tab === "departments"
-            ? "Cataloguing rolled up by department — lots, sales and who worked on them."
+            ? "Active sales by department, with projected dates at the current pace, plus who worked on them."
             : "Lots in every sale across both systems, cataloguing pace and projected milestone dates. Click a sale for the full breakdown."}
         </p>
       </div>
@@ -69,7 +67,7 @@ export default async function ManagerPortalPage({
         </div>
       )}
 
-      {tab === "departments" ? <DepartmentsView rangeDays={rangeDays} /> : <SalesView />}
+      {tab === "departments" ? <DepartmentsView /> : <SalesView />}
     </div>
   )
 }

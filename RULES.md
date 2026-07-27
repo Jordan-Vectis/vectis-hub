@@ -111,6 +111,12 @@ The Manager Portal is tabbed (Sales / Departments), registered in `APP_SECTIONS.
 the existing per-section permission tickboxes gate the Departments tab. Its figures keep the
 orphaned-timing-log exclusion so they agree with the Sales tab and the Reports pages.
 
+⚠ **Sale pace/projection maths lives ONLY in `lib/sale-projection.ts`** (`paceFor`, `milestonesFor`,
+`daysToSale`). Both Manager Portal tabs import it. Do not reimplement it anywhere else — a second
+copy will drift and the two tabs will start reporting different dates for the same sale. Both tabs
+also take their lot totals from `/api/manager-portal/bc-counts` (Hub ∪ BC, deduped by barcode) so a
+sale reads the same on each.
+
 ## Database — Neon (PostgreSQL)
 
 The database is hosted on **Neon** (console.neon.tech), not Railway. Never suggest looking for a Postgres service inside Railway — it isn't there.
