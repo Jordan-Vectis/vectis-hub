@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { auctionTypeEmoji, auctionTypeLabel } from "@/lib/auction-types"
-import { fmtPace, daysToSale, paceFor, milestonesFor } from "@/lib/sale-projection"
+import { fmtPace, daysToSale, paceFor, targetsFor, SALE_TARGETS } from "@/lib/sale-projection"
 
 export type SaleRow = {
   id: string
@@ -95,8 +95,9 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
       )}
 
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-        Projected dates are at each sale&apos;s current pace (lots ÷ days actually worked), for the
-        next three hundred-lot marks. Red means the mark lands after the sale date.
+        Projected dates are when each sale reaches {SALE_TARGETS.join(", ")} lots at its current pace
+        (lots ÷ days actually worked). Red means the target lands after the sale date; green means
+        it&apos;s already passed.
         {bc.status === "loading"     && " Checking Business Central for lots already pushed…"}
         {bc.status === "disconnected" && " Lot totals are Hub-only — connect Business Central to include lots already pushed."}
         {bc.status === "error"        && " Business Central couldn't be reached, so lot totals are Hub-only."}
@@ -159,7 +160,7 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
                           const { total, combined } = totalFor(s)
                           const pace   = paceFor(s.lots, s.activeDays)
                           const saleTs = s.auctionDate ? Date.parse(s.auctionDate) : Infinity
-                          const stones = milestonesFor(total, pace, nowMs, saleTs)
+                          const stones = targetsFor(total, pace, nowMs, saleTs)
                           const left   = daysToSale(s.auctionDate, nowMs)
 
                           return (
@@ -190,29 +191,29 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
                                 {pace > 0 ? `${fmtPace(pace)}/day` : "—"}
                               </td>
                               <td className="py-2.5 pl-3">
-                                {stones.length === 0 ? (
-                                  <span className="text-xs text-gray-400 dark:text-gray-500">
-                                    Needs two days of cataloguing before a pace can be worked out
-                                  </span>
-                                ) : (
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {stones.map(m => (
-                                      <span
-                                        key={m.target}
-                                        title={`${m.target} lots in about ${m.days} day${m.days === 1 ? "" : "s"}${m.late ? " — after the sale date" : ""}`}
-                                        className={`text-xs px-2 py-1 rounded-lg border whitespace-nowrap ${
-                                          m.late
-                                            ? "border-red-300 dark:border-red-800/60 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300"
-                                            : "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300"
-                                        }`}
-                                      >
+                                <div className="flex flex-wrap gap-1.5">
+                                  {stones.map(m => {
+                                    const cls = m.reached
+                                      ? "border-green-300 dark:border-green-800/60 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300"
+                                      : m.days == null
+                                        ? "border-gray-200 dark:border-gray-700 bg-transparent text-gray-400 dark:text-gray-500"
+                                        : m.late
+                                          ? "border-red-300 dark:border-red-800/60 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300"
+                                          : "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300"
+                                    const title = m.reached
+                                      ? `Already past ${m.target} lots`
+                                      : m.days == null
+                                        ? "Needs two days of cataloguing before a pace can be worked out"
+                                        : `${m.target} lots in about ${m.days} day${m.days === 1 ? "" : "s"}${m.late ? " — after the sale date" : ""}`
+                                    return (
+                                      <span key={m.target} title={title} className={`text-xs px-2 py-1 rounded-lg border whitespace-nowrap ${cls}`}>
                                         <b className="font-semibold">{m.target}</b>
                                         <span className="opacity-60 mx-1">→</span>
-                                        {fmtDate(m.date)}
+                                        {m.reached ? "reached" : m.days == null ? "no pace yet" : fmtDate(m.date!)}
                                       </span>
-                                    ))}
-                                  </div>
-                                )}
+                                    )
+                                  })}
+                                </div>
                               </td>
                             </tr>
                           )

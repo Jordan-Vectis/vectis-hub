@@ -24,6 +24,38 @@ export function paceFor(lots: number, activeDays: number): number {
   return activeDays >= 2 ? lots / activeDays : 0
 }
 
+// ─── Fixed sale targets (Manager Portal → Departments) ───────────────────────
+// Jordan wants the department view answering one question: when does this sale
+// reach 400, 500 and 600 lots? These are FIXED targets, not the rolling
+// next-hundred marks the Sales tab shows — a 250-lot sale still projects to
+// 400/500/600, not 300/400/500.
+
+export const SALE_TARGETS = [400, 500, 600] as const
+
+export type TargetProjection = {
+  target: number
+  reached: boolean       // already at or past this target
+  days: number | null    // null when there is no usable pace
+  date: number | null
+  late: boolean          // projected to land after the sale date
+}
+
+export function targetsFor(
+  current: number,
+  pace: number,
+  nowMs: number,
+  saleTs: number,
+  targets: readonly number[] = SALE_TARGETS,
+): TargetProjection[] {
+  return targets.map(target => {
+    if (current >= target) return { target, reached: true, days: 0, date: null, late: false }
+    if (pace <= 0)         return { target, reached: false, days: null, date: null, late: false }
+    const days = Math.ceil((target - current) / pace)
+    const date = nowMs + days * DAY
+    return { target, reached: false, days, date, late: startOfDay(date) > startOfDay(saleTs) }
+  })
+}
+
 export type Milestone = { target: number; days: number; date: number; fill: number; late: boolean }
 
 // `current` is the sale's combined (deduped) total — milestones project off the
