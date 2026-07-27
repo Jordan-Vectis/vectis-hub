@@ -66,6 +66,10 @@ export const APP_SECTIONS: Partial<Record<AppKey, { key: string; label: string }
     { key: "copier",       label: "Description Copier" },
     { key: "instructions", label: "Instructions" },
   ],
+  MANAGER_PORTAL: [
+    { key: "sales",       label: "Sales" },
+    { key: "departments", label: "Departments" },
+  ],
   BC_REPORTS: [
     { key: "cataloguing", label: "Cataloguing" },
     { key: "packing",     label: "Packing" },

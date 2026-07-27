@@ -34,53 +34,49 @@ export default async function SubmissionsPage({
     status?: string
     search?: string
     channel?: string
-    department?: string
     view?: string
   }>
 }) {
   const session = await auth()
-  const { status, search, channel, department, view: viewParam } = await searchParams
+  const { status, search, channel, view: viewParam } = await searchParams
   const view = viewParam === "board" ? "board" : "list"
 
-  const [submissions, departments] = await Promise.all([
-    prisma.submission.findMany({
-      where: {
-        // Status filter only applies in list view — the board IS the status breakdown
-        ...(status && view === "list" ? { status: status as SubmissionStatus } : {}),
-        ...(channel ? { channel: channel as "EMAIL" | "WEB_FORM" | "PHONE" | "WALK_IN" } : {}),
-        ...(department ? { department: { name: department } } : {}),
-        ...(search
-          ? {
-              OR: [
-                { contact: { name: { contains: search, mode: "insensitive" } } },
-                { reference: { contains: search, mode: "insensitive" } },
-              ],
-            }
-          : {}),
-      },
-      include: {
-        contact: true,
-        department: true,
-        cataloguer: true,
-        _count: { select: { items: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.department.findMany({ orderBy: { name: "asc" } }),
-  ])
+  // Departments were dropped from the CRM on 2026-07-27: nothing ever set
+  // Submission.departmentId, so the filter and the label were always empty.
+  // Departments now mean staff departments — see Admin → Departments.
+  const submissions = await prisma.submission.findMany({
+    where: {
+      // Status filter only applies in list view — the board IS the status breakdown
+      ...(status && view === "list" ? { status: status as SubmissionStatus } : {}),
+      ...(channel ? { channel: channel as "EMAIL" | "WEB_FORM" | "PHONE" | "WALK_IN" } : {}),
+      ...(search
+        ? {
+            OR: [
+              { contact: { name: { contains: search, mode: "insensitive" } } },
+              { reference: { contains: search, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    },
+    include: {
+      contact: true,
+      cataloguer: true,
+      _count: { select: { items: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  })
 
   // "Can manage the CRM" — anyone granted the CRM app (admins always) plus the
   // legacy COLLECTIONS role, so no existing user loses access.
   const crmUser = session ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { role: true, allowedApps: true } }) : null
   const isCollectionsOrAdmin = !!crmUser && (crmUser.role === "COLLECTIONS" || hasAppAccess(crmUser.role, crmUser.allowedApps, "CRM"))
-  const hasFilters = status || search || channel || department
+  const hasFilters = status || search || channel
 
   // Build a toggle href that preserves the active filters
   const toggleHref = (v: string) => {
     const p = new URLSearchParams()
     if (search) p.set("search", search)
     if (channel) p.set("channel", channel)
-    if (department) p.set("department", department)
     if (v === "list" && status) p.set("status", status)
     p.set("view", v)
     return `/submissions?${p.toString()}`
@@ -152,16 +148,6 @@ export default async function SubmissionsPage({
           <option value="">All channels</option>
           {Object.entries(channelLabels).map(([value, label]) => (
             <option key={value} value={value}>{label}</option>
-          ))}
-        </select>
-        <select
-          name="department"
-          defaultValue={department || ""}
-          className="rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">All departments</option>
-          {departments.map((d) => (
-            <option key={d.id} value={d.name}>{d.name}</option>
           ))}
         </select>
         <button
@@ -239,12 +225,6 @@ export default async function SubmissionsPage({
                         <span>{channelLabels[sub.channel]}</span>
                         <span>·</span>
                         <span>{sub._count.items} item{sub._count.items !== 1 ? "s" : ""}</span>
-                        {sub.department && (
-                          <>
-                            <span>·</span>
-                            <span>{sub.department.name}</span>
-                          </>
-                        )}
                         <span>·</span>
                         <span>{new Date(sub.createdAt).toLocaleDateString("en-GB")}</span>
                       </div>

@@ -16,6 +16,58 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "departments.md",
+    content: `---
+name: Departments — sale access + reports
+purpose: Departments link auction types to staff; drives who sees which sales + the Manager Portal Departments tab. Read before touching department, sale-list or Manager Portal code.
+last_updated: 2026-07-27
+---
+
+# Departments (built 2026-07-27) — the link between sale types and staff
+
+A \`Department\` now carries **\`auctionTypes String[]\`** — the \`CatalogueAuction.auctionType\` values it covers. That is the whole mechanism: a sale belongs to the department covering its type, and people are linked to departments, so a cataloguer sees their own departments' sales.
+
+**Schema (NEEDS Run Migrations):**
+- \`Department.auctionTypes String[]\`
+- \`UserDepartment\` join table — **many-to-many**, a cataloguer can cover several departments (holiday cover, someone who does both Diecast and Matchbox)
+- \`CatalogueAuctionAccess\` (auctionId + userId + grantedBy) — the one-off "she's covering this one sale" override
+- \`User.departmentId\` is **legacy** — kept only so pre-migration data survived (the migration backfills it into \`UserDepartment\`), and roughly kept in step by \`setUserDepartments\`. **Nothing reads it for access decisions.**
+
+## ⚠ Two deliberate "sees everything" cases — don't "fix" them
+
+\`lib/departments.ts\` → \`getDepartmentAccess(userId, role)\` returns unrestricted when:
+1. the person is in **no department** (Jordan's call — nobody gets locked out the day this ships), or
+2. their departments **cover no auction types yet** (departments created but types not mapped).
+
+Plus every read is wrapped in try/catch falling back to unrestricted, because **code reaches Railway before Run Migrations is clicked** — a missing table must never empty the sale lists or 500 the page. Admins are always unrestricted.
+
+Helpers: \`auctionWhere(access)\` (spread into a Prisma \`where\`), \`canSeeAuction(access, auction)\`, \`getDepartmentAccessForSession(userId)\`.
+
+## Where the filter is applied
+
+Auction Manager (\`/tools/cataloguing/auctions\`), Tablet (\`/tools/cataloguing/tablet/auctions\`), Photography, the Auction AI auction dropdown (\`/api/auction-ai/auctions\`), and the transfer-lots target list. **The sale page itself (\`auctions/[id]\`) re-checks and redirects** — hiding from a list is not a restriction, a pasted URL would still open it. Denials log to the existing Access Log with \`source: "auction_department"\`.
+
+⚠ **Any NEW page that lists or opens sales must apply \`auctionWhere\` / \`canSeeAuction\` too**, or it becomes the way round the restriction.
+
+## Admin → Departments (/admin/departments)
+
+Rebuilt as cards: rename inline, tick the sale types it covers (a type belongs to **one** department — ticking it elsewhere **moves** it, and the button says which department currently holds it), staff + sales counts, member chips, plus an "unassigned sale types" panel. Server actions in \`lib/actions/admin.ts\` **return \`{ok, error}\` rather than throwing** (production redacts thrown server-action messages, and "that name is taken" needs reading).
+
+Users pages: the single Department dropdown is now **tickboxes for several**, on both the create and edit forms, saved by \`setUserDepartments\`. The users list shows a comma-separated list.
+
+## Manager Portal → Departments tab
+
+\`/tools/manager-portal\` is now **tabbed**: Sales (the original table, lifted unchanged into \`sales-view.tsx\`) and Departments (\`departments-view.tsx\`). Both registered in \`APP_SECTIONS.MANAGER_PORTAL\` in \`lib/apps.ts\`, so the per-section tickboxes on the user permissions page work automatically — that is how the Departments tab gets its separate permission. Nobody had stored Manager Portal section settings before this, so existing users keep seeing both tabs until deliberately restricted.
+
+The report shows, per department: lots in range + total, sales count, avg time per lot, a sales table with progress chips, and the cataloguers who worked on those sales. Range 7/30/90/all via \`?range=\`. Sales whose type no department covers land in a **"Not in a department"** group so the totals still add up. ⚠ It keeps the **orphaned-timing-log exclusion** (\`lotId IS NULL OR EXISTS…\`) so figures match the Sales tab and the Reports pages.
+
+More planned here — notably using BC to work out the dates of the totes being catalogued.
+
+## Removed at the same time
+
+\`/crm-settings\` (a near-duplicate departments page from an early build) and its CRM sidebar "Settings" link are **gone**, along with the dead department filter/label on the Submissions list — nothing ever set \`Submission.departmentId\`, so that filter never returned anything. The \`Submission.departmentId\` column itself was left alone.`,
+  },
+  {
     filename: "activity_popup_preview.md",
     content: `---
 name: Activity popup (multi-select + split) + admin preview

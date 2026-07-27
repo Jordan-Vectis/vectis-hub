@@ -15,13 +15,23 @@ export default async function EditUserPage({
 
   const { id } = await params
   const [user, departments, roleDefaults, allUsers] = await Promise.all([
-    prisma.user.findUnique({ where: { id }, include: { department: true } }),
-    prisma.department.findMany({ orderBy: { name: "asc" } }),
+    prisma.user.findUnique({ where: { id } }),
+    prisma.department.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.roleDefault.findMany({ select: { role: true }, orderBy: { role: "asc" } }),
     prisma.user.findMany({ select: { role: true } }),
   ])
 
   if (!user) notFound()
+
+  // Department links live in their own table, which only exists after Run
+  // Migrations — fall back to the legacy single field so the page still loads.
+  let departmentIds: string[] = []
+  try {
+    const links = await prisma.userDepartment.findMany({ where: { userId: id }, select: { departmentId: true } })
+    departmentIds = links.map(l => l.departmentId)
+  } catch {
+    departmentIds = user.departmentId ? [user.departmentId] : []
+  }
 
   // Always include ADMIN + this user's current role + every other role known
   const roles = [...new Set([
@@ -62,7 +72,7 @@ export default async function EditUserPage({
         email={user.email}
         username={user.username ?? null}
         role={user.role}
-        departmentId={user.departmentId}
+        departmentIds={departmentIds}
         allowedApps={user.allowedApps}
         appPermissions={user.appPermissions as Record<string, { role: string }> | null}
         showScanTimer={(user as any).showScanTimer ?? true}

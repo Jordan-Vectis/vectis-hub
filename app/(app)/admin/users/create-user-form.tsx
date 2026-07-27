@@ -22,6 +22,7 @@ export default function CreateUserForm({ departments, roles }: Props) {
   const [isPending, startTransition] = useTransition()
   const [role, setRole] = useState("COLLECTIONS")
   const [username, setUsername] = useState("")
+  const [depts, setDepts] = useState<string[]>([])
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -31,6 +32,7 @@ export default function CreateUserForm({ departments, roles }: Props) {
       ;(e.target as HTMLFormElement).reset()
       setRole("COLLECTIONS")
       setUsername("")
+      setDepts([])
     })
   }
 
@@ -87,18 +89,34 @@ export default function CreateUserForm({ departments, roles }: Props) {
           ))}
         </select>
       </div>
-      {role === "CATALOGUER" && (
+      {departments.length > 0 && (
         <div>
-          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Department</label>
-          <select
-            name="departmentId"
-            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">No department</option>
-            {departments.map((d) => (
-              <option key={d.id} value={d.id}>{d.name}</option>
-            ))}
-          </select>
+          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Departments</label>
+          <div className="flex flex-wrap gap-1.5">
+            {departments.map(d => {
+              const checked = depts.includes(d.id)
+              return (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => setDepts(prev => prev.includes(d.id) ? prev.filter(x => x !== d.id) : [...prev, d.id])}
+                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                    checked
+                      ? "bg-blue-50 dark:bg-blue-900/30 border-blue-400 dark:border-blue-600 text-blue-700 dark:text-blue-300 font-medium"
+                      : "bg-transparent border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-400"
+                  }`}
+                >
+                  {checked ? "✓ " : ""}{d.name}
+                </button>
+              )
+            })}
+          </div>
+          {depts.map(id => <input key={id} type="hidden" name="departmentIds" value={id} />)}
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+            {depts.length === 0
+              ? "None ticked — this person will see every sale."
+              : "They'll only see sales in these departments."}
+          </p>
         </div>
       )}
       <button

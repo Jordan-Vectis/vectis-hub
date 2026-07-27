@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { getCataloguingSidebarItems } from "@/lib/apps"
+import { getDepartmentAccess, auctionWhere } from "@/lib/departments"
 import PhotographyAuctionList, { type PhotographyAuctionRow } from "./auction-list"
 
 export const dynamic = "force-dynamic"
@@ -21,7 +22,10 @@ export default async function PhotographyPage() {
   const allowed = getCataloguingSidebarItems(dbUser?.role ?? "", dbUser?.appPermissions as any)
   if (!allowed.includes("PHOTOGRAPHY")) redirect("/tools/cataloguing/auctions")
 
+  const access = await getDepartmentAccess(session.user.id, dbUser?.role ?? "")
+
   const auctions = await prisma.catalogueAuction.findMany({
+    where:   auctionWhere(access),
     orderBy: { auctionDate: "desc" },
     select: {
       id: true, code: true, name: true, auctionDate: true, auctionType: true,

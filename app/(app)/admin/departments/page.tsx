@@ -1,60 +1,66 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
-import DepartmentForm from "./department-form"
-import DeleteDepartmentButton from "./delete-button"
+import DepartmentsManager, { type DepartmentRow } from "./departments-manager"
+
+export const dynamic = "force-dynamic"
+
+export const metadata = { title: "Departments" }
 
 export default async function DepartmentsPage() {
   const session = await auth()
   if (!session || session.user.role !== "ADMIN") redirect("/submissions")
 
-  const departments = await prisma.department.findMany({
-    include: { _count: { select: { users: true, submissions: true } } },
-    orderBy: { name: "asc" },
+  // The auctionTypes column and the UserDepartment table only exist once Run
+  // Migrations has been clicked, but the code is live the moment it deploys.
+  // Fall back to the plain department list rather than showing an error page.
+  let departments: DepartmentRow[] = []
+  let migrated = true
+
+  try {
+    const rows = await prisma.department.findMany({
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        auctionTypes: true,
+        userLinks: { select: { user: { select: { id: true, name: true, role: true } } } },
+      },
+    })
+    departments = rows.map(d => ({
+      id:           d.id,
+      name:         d.name,
+      auctionTypes: d.auctionTypes ?? [],
+      members:      d.userLinks.map(l => ({ id: l.user.id, name: l.user.name, role: l.user.role })),
+    }))
+  } catch {
+    migrated = false
+    const rows = await prisma.department.findMany({
+      orderBy: { name: "asc" },
+      select:  { id: true, name: true },
+    })
+    departments = rows.map(d => ({ id: d.id, name: d.name, auctionTypes: [], members: [] }))
+  }
+
+  // Sales per auction type, so each department can show how many sales it owns.
+  const typeCounts: Record<string, number> = {}
+  const grouped = await prisma.catalogueAuction.groupBy({
+    by:     ["auctionType"],
+    _count: { _all: true },
   })
+  for (const g of grouped) typeCounts[g.auctionType] = g._count._all
 
   return (
-    <div className="p-6 max-w-3xl">
+    <div className="p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Departments</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Manage cataloguer departments</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+          Set which sale types each department covers, and who works in it. Cataloguers see the sales
+          their departments cover — anyone in no department still sees everything.
+        </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
-        <div>
-          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-            {departments.length === 0 ? (
-              <p className="text-sm text-gray-400 dark:text-gray-500 p-6 text-center">No departments yet.</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800">
-                    <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Name</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Staff</th>
-                    <th className="px-4 py-3" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {departments.map((dept) => (
-                    <tr key={dept.id} className="border-b border-gray-50 last:border-0">
-                      <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">{dept.name}</td>
-                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{dept._count.users}</td>
-                      <td className="px-4 py-3 text-right">
-                        <DeleteDepartmentButton id={dept.id} name={dept.name} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-          <h2 className="font-semibold text-gray-800 dark:text-gray-200 mb-4">Add Department</h2>
-          <DepartmentForm />
-        </div>
-      </div>
+      <DepartmentsManager departments={departments} typeCounts={typeCounts} migrated={migrated} />
     </div>
   )
 }

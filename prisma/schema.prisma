@@ -65,6 +65,8 @@ model User {
   contactLogs         ContactLog[]
   bcToken             BCToken?
   devices             Device[]
+  departmentLinks     UserDepartment[]
+  auctionAccess       CatalogueAuctionAccess[]
 }
 
 model BCToken {
@@ -81,11 +83,32 @@ model BCToken {
 model Department {
   id        String   @id @default(cuid())
   name      String   @unique
+  // Which CatalogueAuction.auctionType values this department covers — this is
+  // the link between a sale and the people allowed to work on it. A department
+  // can cover several types (a Dolls & Bears department holds DOLLS + BEARS);
+  // a type should only be claimed by one department.
+  auctionTypes String[] @default([])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   users       User[]
   submissions Submission[]
+  userLinks   UserDepartment[]
+}
+
+// Which people belong to which departments. Many-to-many, because a cataloguer
+// can cover more than one (holiday cover, or someone who does both Diecast and
+// Matchbox). Supersedes the older single User.departmentId, which is kept only
+// so the pre-migration data survives — nothing reads it for access decisions.
+model UserDepartment {
+  userId       String
+  departmentId String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@id([userId, departmentId])
+  @@index([departmentId])
 }
 
 model Contact {
@@ -364,6 +387,24 @@ model CatalogueAuction {
   bidderRegistrations BidderRegistration[]
   webDescriptions WebDescription[]
   conditionReports ConditionReport[]
+  extraAccess CatalogueAuctionAccess[]
+}
+
+// One-off access to a single sale for someone outside its department — the
+// "she's covering this one sale" case. Granted by an admin on the auction's
+// Auction Settings tab. Checked alongside the department match in
+// lib/departments.ts; it never takes access away, only adds it.
+model CatalogueAuctionAccess {
+  id        String           @id @default(cuid())
+  auctionId String
+  userId    String
+  auction   CatalogueAuction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy String?
+  createdAt DateTime         @default(now())
+
+  @@unique([auctionId, userId])
+  @@index([userId])
 }
 
 // Managed cataloguing categories (was a hardcoded CATEGORY_MAP) — editable at /admin/categories.

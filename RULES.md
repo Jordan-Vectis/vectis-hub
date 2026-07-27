@@ -85,6 +85,32 @@ Rules for the refresh:
   after building, edit only the specific entry for what you built, **pull before pushing**, and never
   regenerate the whole array from local memory (that would drop entries other devs added).
 
+## Departments gate which sales a cataloguer sees (2026-07-27)
+
+A `Department` carries **`auctionTypes String[]`** — the `CatalogueAuction.auctionType` values it
+covers. People link to departments many-to-many via **`UserDepartment`**. A cataloguer sees the sales
+their departments cover, plus any single sale an admin added them to (**`CatalogueAuctionAccess`**,
+granted on the Auction Settings tab, admins only). `User.departmentId` is **legacy** — backfilled
+into `UserDepartment` and kept roughly in step, but **never read for access**.
+
+All of it goes through **`lib/departments.ts`**: `getDepartmentAccess`, `auctionWhere` (spread into a
+Prisma `where`), `canSeeAuction`.
+
+- ⚠ **Any new page that lists or opens sales MUST apply it.** It is already on Auction Manager,
+  Tablet, Photography, the Auction AI auction dropdown, the transfer-lots target list, and the sale
+  page itself. Miss one and that page becomes the way round the restriction.
+- ⚠ **Hiding a sale from a list is not a restriction** — the sale page re-checks and redirects,
+  logging to the Access Log with `source: "auction_department"`. Keep both halves.
+- ⚠ **Three deliberate "sees everything" fallbacks — do NOT tighten them without asking.** Someone in
+  no department; someone whose departments cover no auction types yet; and any failure reading the
+  new tables (they only exist after Run Migrations, while code deploys instantly). All return
+  unrestricted. The point is that turning this on cannot silently empty the whole team's sale list.
+- A sale type belongs to **one** department. Ticking it on another department **moves** it.
+
+The Manager Portal is tabbed (Sales / Departments), registered in `APP_SECTIONS.MANAGER_PORTAL` so
+the existing per-section permission tickboxes gate the Departments tab. Its figures keep the
+orphaned-timing-log exclusion so they agree with the Sales tab and the Reports pages.
+
 ## Database — Neon (PostgreSQL)
 
 The database is hosted on **Neon** (console.neon.tech), not Railway. Never suggest looking for a Postgres service inside Railway — it isn't there.
@@ -145,18 +171,32 @@ Before every git push, ask yourself: "Did the user explicitly name `main`?" If n
 
 ## Lot Identifiers — Critical Field Rules
 
-Three separate identifier fields exist. They are not interchangeable.
+**Two** identifier fields exist on `CatalogueLot`. They are not interchangeable.
 
 | Field | Format | Example | Rule |
 |---|---|---|---|
 | `receiptUniqueId` | `[A-Za-z]\d{4,7}-\d{1,6}` | `R000016-413` | AI runs, receipt matching |
 | `barcode` | `[A-Za-z]\d{6,7}` OR unique ID format | `F066001` | Physical label on item |
-| `lotNumber` | Integer string | `"42"` | Catalogue sequence number |
 
 **CRITICAL**: Unique IDs (`R000016-413` format) must always be stored in `receiptUniqueId`,
-**never in `lotNumber`**. Lots created via "Apply to Auction" from AI runs will have an empty
-`lotNumber` — this is correct and expected. A lot with `receiptUniqueId` is fully identified
-even if `lotNumber` is empty.
+never in `barcode`. A lot with `receiptUniqueId` is fully identified even with no `barcode`.
+
+⚠ **`lotNumber` no longer exists on `CatalogueLot`.** It was dropped in migration
+`20260528000001_remove_lot_number` (also removed from `CatalogueTimingLog`). Do **not** add it back,
+and do not write code that reads or writes it on a lot. The `lotNumber` names still in the codebase
+are **unrelated** and must be left alone:
+- `ConditionReport.lotNumber` — the lot number a customer quoted in a condition-report request
+  (`lib/condition-parse.ts`, `lib/condition-ingest.ts`, `lib/condition-bc.ts`).
+- `lotNumber` in the live-auction Socket.IO payloads (`lib/auction-socket.js`) — a **wire-protocol
+  field name only**, populated from `barcode || receiptUniqueId || id`. It is not a DB column.
+- `lot_number` from the Bidpath WebSocket feed in Auction Monitor / Auto Clerk — third-party data.
+
+`receiptUniqueId` assignment (`{receipt}-N`) is **never count-based**: `createLot` allocates it
+inside a `prisma.$transaction` holding a per-receipt advisory lock (`pg_advisory_xact_lock`) and uses
+`MAX(existing suffix) + 1` via the shared `maxReceiptSuffix` helper (also used by `importLots` /
+`massCreateLots` / `fillLotsFromTotes`). The earlier count-based, non-atomic scheme caused recurring
+skipped/duplicate/blank IDs from concurrent tablet saves. There is no DB unique constraint (existing
+duplicates would block it), so the fix is forward-only — backfill blanks via `fillLotsFromTotes`.
 
 Detection regex:
 ```
@@ -346,10 +386,10 @@ Examples:
 - `F066001_2.jpg` → `F066001`
 - `R000016-413_1.jpg` → `R000016-413`
 
-Lot lookup map uses three-way matching — **all three** identifier fields are checked:
+Lot lookup map uses two-way matching — **both** identifier fields are checked
+(`photo-upload-tab.tsx`, used by both the filename grouping and the smart scan's `buildGroups`):
 ```typescript
 new Map([
-  ...lots.map(l => [l.lotNumber.toLowerCase().trim(), l.id]),
   ...lots.filter(l => l.barcode).map(l => [l.barcode!.toLowerCase().trim(), l.id]),
   ...lots.filter(l => l.receiptUniqueId).map(l => [l.receiptUniqueId!.toLowerCase().trim(), l.id]),
 ])
@@ -361,30 +401,29 @@ new Map([
 
 ### Data sent from cataloguing page
 
-`Folder` must always be `receiptUniqueId || lotNumber` — never just `lotNumber`.
-Lots created via Apply to Auction have empty `lotNumber`; using only `lotNumber` leaves
-`Folder` blank and breaks the jump list and ID display (this has been broken before).
+`Folder` must always be `receiptUniqueId || barcode` — never just one of them.
+A lot can legitimately have only one of the two, and using a single field leaves `Folder` blank,
+which breaks the jump list and ID display (this has been broken before).
 
-Always include all three ID fields:
+Always include both ID fields alongside `Folder`:
 ```javascript
 {
-  Folder:               l.receiptUniqueId || l.lotNumber || "",
+  Folder:               l.receiptUniqueId || l.barcode || "",
   "Receipt Unique ID":  l.receiptUniqueId || "",
   Barcode:              l.barcode || "",
-  "Lot Number":         l.lotNumber || "",
   Description:          l.description,
-  Estimate:             "£low–£high" or "",
+  Estimate:             "Estimate: £low–£high" or "",
+  ImageUrls:            l.imageUrls || [],
 }
 ```
 
 ### Sort order
 
-Default: **Unique ID**. Options: Unique ID / Barcode / Lot Number (user-selectable).
+Default: **Unique ID**. Options: Unique ID / Barcode (`SortBy = "uniqueId" | "barcode"`).
 
-Sort uses the **actual field** for the active mode, not the generic `folder` field:
+Sort uses the **actual field** for the active mode, falling back to the generic `folder` field:
 - Unique ID: parse `R000016-413` → sort by receipt number then line number
-- Barcode: alphanumeric
-- Lot Number: integer sort with alphanumeric fallback
+- Barcode: alphanumeric (`localeCompare` with `numeric: true`)
 
 `rowLabel()` helper drives the jump list, search filter, and card ID display — they must all use
 the same function so they stay in sync.
@@ -406,7 +445,6 @@ title:       +2 pts
 keyPoints:   +1 pt
 estimateLow: +1 pt
 estimateHigh:+1 pt
-lotNumber:   +1 pt
 barcode:     +1 pt
 vendor:      +1 pt
 each image:  +2 pts
@@ -416,11 +454,21 @@ each image:  +2 pts
 
 ## Apply to Auction Route (`/api/auction-ai/runs/[id]/apply`)
 
-Detects unique ID format with: `/^[A-Za-z]\d{4,7}-\d{1,6}$/`
-- If unique ID format → `receiptUniqueId = lot`, `lotNumber = ""`
-- If not → `lotNumber = lot`, `receiptUniqueId = null`
+Detects unique ID format with: `/^[A-Za-z]\d{4,7}-\d{1,6}$/`, then matches the run's `lot` string
+against the auction's existing lots:
+- Unique ID format → looked up in the `receiptUniqueId → id` map
+- Otherwise → looked up in the `barcode → id` map
 
-Deduplication checks both `existingLotNumbers` and `existingUniqueIds` sets before creating.
+**Match found** → update only `title`, `description`, `aiEstimateLow/High`, `aiUpgraded`. Never
+touch the human `estimateLow/High` on an existing lot.
+**No match** → create a new lot with both the human and AI estimate fields set from the AI estimate,
+and `receiptUniqueId = lot` **only when it is unique-ID format** (`isUniqueId ? l.lot : null`).
+
+⚠ A run lot in **barcode** format that matches nothing is therefore created with **no identifier at
+all** — the route does not set `barcode` on create. If that ever needs fixing, it's a deliberate
+change to discuss, not a silent edit.
+
+Run lots are deduplicated by trimmed `lot` string before applying (last saved record wins).
 
 ---
 
@@ -566,7 +614,7 @@ everywhere else (`updateLot`/wizard/Manage Lots, `deleteLot`, bulk actions, `tra
 
 | Key | Shape | Purpose |
 |---|---|---|
-| `copier_preload` | `Array<{ Folder, "Receipt Unique ID", Barcode, "Lot Number", Description, Estimate }>` | Cataloguing page → Description Copier |
+| `copier_preload` | `Array<{ Folder, "Receipt Unique ID", Barcode, Description, Estimate, ImageUrls }>` | Cataloguing page → Description Copier |
 | `batch_preload` | `{ auctionCode: string }` | Cataloguing page → Batch Run pre-fill |
 
 ---

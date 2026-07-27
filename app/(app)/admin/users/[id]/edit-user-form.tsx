@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { updateUser, changePassword } from "@/lib/actions/admin"
+import { updateUser, changePassword, setUserDepartments } from "@/lib/actions/admin"
 import { ALL_APPS, WAREHOUSE_ROLES, APP_SECTIONS } from "@/lib/apps"
 import type { AppKey, WarehouseRole } from "@/lib/apps"
 import { APP_CARD_DEFS, SECTION_DEFS } from "@/lib/app-cards"
@@ -13,7 +13,7 @@ interface Props {
   email: string
   username: string | null
   role: string
-  departmentId: string | null
+  departmentIds: string[]
   allowedApps: string[]
   appPermissions: Record<string, any> | null
   showScanTimer: boolean
@@ -28,9 +28,23 @@ function roleLabel(key: string): string {
   return key.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 }
 
-export default function EditUserForm({ userId, name, email, username, role, departmentId, allowedApps, appPermissions, showScanTimer: initialShowScanTimer, showLotTimer: initialShowLotTimer, timerRedMins: initialRed, departments, roles, isSelf }: Props) {
+export default function EditUserForm({ userId, name, email, username, role, departmentIds, allowedApps, appPermissions, showScanTimer: initialShowScanTimer, showLotTimer: initialShowLotTimer, timerRedMins: initialRed, departments, roles, isSelf }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  // Departments are saved on their own — a person can be in more than one, and
+  // the details form above doesn't carry them.
+  const [depts, setDepts] = useState<string[]>(departmentIds)
+  const [deptPending, startDeptTransition] = useTransition()
+  const [deptMsg, setDeptMsg] = useState<string | null>(null)
+
+  function saveDepartments() {
+    setDeptMsg(null)
+    startDeptTransition(async () => {
+      const res = await setUserDepartments(userId, depts)
+      setDeptMsg(res.ok ? "Saved" : (res.error ?? "Could not save departments."))
+      if (res.ok) router.refresh()
+    })
+  }
   const [selectedApps, setSelectedApps] = useState<string[]>(allowedApps)
   const [warehouseRole, setWarehouseRole] = useState<WarehouseRole>(
     (appPermissions?.WAREHOUSE?.role as WarehouseRole) || "warehouse"
@@ -220,19 +234,66 @@ export default function EditUserForm({ userId, name, email, username, role, depa
             </select>
             {isSelf && <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">You cannot change your own role.</p>}
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Department</label>
-            <select name="departmentId" defaultValue={departmentId ?? ""}
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="">None</option>
-              {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </div>
           <button type="submit" disabled={isPending}
             className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50">
             {isPending ? "Saving…" : "Save Details"}
           </button>
         </form>
+      </section>
+
+      {/* ── Departments ── */}
+      <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+        <h2 className="font-semibold text-gray-800 dark:text-gray-200 mb-1">Departments</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          Which departments this person works in — tick more than one if they cover several.
+          They&apos;ll only see sales belonging to these departments. Ticking none means they see every sale.
+        </p>
+
+        {departments.length === 0 ? (
+          <p className="text-sm text-gray-400 dark:text-gray-500 italic">
+            No departments set up yet — create them under Admin → Departments.
+          </p>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {departments.map(d => {
+                const checked = depts.includes(d.id)
+                return (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => setDepts(prev => prev.includes(d.id) ? prev.filter(x => x !== d.id) : [...prev, d.id])}
+                    className={`text-sm px-3 py-1.5 rounded-full border transition-colors ${
+                      checked
+                        ? "bg-blue-50 dark:bg-blue-900/30 border-blue-400 dark:border-blue-600 text-blue-700 dark:text-blue-300 font-medium"
+                        : "bg-transparent border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-blue-400"
+                    }`}
+                  >
+                    {checked ? "✓ " : ""}{d.name}
+                  </button>
+                )
+              })}
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={saveDepartments}
+                disabled={deptPending}
+                className="py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
+              >
+                {deptPending ? "Saving…" : "Save Departments"}
+              </button>
+              {depts.length === 0 && (
+                <span className="text-xs text-amber-600 dark:text-amber-400">No departments — this person sees every sale.</span>
+              )}
+              {deptMsg && (
+                <span className={`text-xs ${deptMsg === "Saved" ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                  {deptMsg}
+                </span>
+              )}
+            </div>
+          </>
+        )}
       </section>
 
       {/* ── App access ── */}

@@ -15,13 +15,28 @@ export default async function UsersPage() {
   if (!session || session.user.role !== "ADMIN") redirect("/submissions")
 
   const [users, departments, roleDefaults] = await Promise.all([
-    prisma.user.findMany({
-      include: { department: true },
-      orderBy: { name: "asc" },
-    }),
-    prisma.department.findMany({ orderBy: { name: "asc" } }),
+    prisma.user.findMany({ orderBy: { name: "asc" } }),
+    prisma.department.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.roleDefault.findMany({ select: { role: true }, orderBy: { role: "asc" } }),
   ])
+
+  // userId → department names. Own table, so guard it until Run Migrations has
+  // been clicked; fall back to the legacy single field.
+  const deptNames = new Map<string, string[]>()
+  const deptById  = new Map(departments.map(d => [d.id, d.name]))
+  try {
+    const links = await prisma.userDepartment.findMany({ select: { userId: true, departmentId: true } })
+    for (const l of links) {
+      const name = deptById.get(l.departmentId)
+      if (!name) continue
+      deptNames.set(l.userId, [...(deptNames.get(l.userId) ?? []), name])
+    }
+  } catch {
+    for (const u of users) {
+      const name = u.departmentId ? deptById.get(u.departmentId) : undefined
+      if (name) deptNames.set(u.id, [name])
+    }
+  }
 
   // Always include ADMIN; add every custom role from RoleDefault; and pick up
   // any roles already in use on users but not yet in RoleDefault so they
@@ -70,7 +85,9 @@ export default async function UsersPage() {
                       <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">{user.name}</td>
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{user.username ?? <span className="text-gray-300 dark:text-gray-600">—</span>}</td>
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{user.email}</td>
-                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{user.department?.name ?? "—"}</td>
+                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
+                        {(deptNames.get(user.id) ?? []).sort().join(", ") || <span className="text-gray-300 dark:text-gray-600">—</span>}
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <Link href={`/admin/users/${user.id}`} className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium">
                           Edit →

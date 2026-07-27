@@ -6,6 +6,7 @@ import ExportImportButtons from "./export-import-buttons"
 import AuctionsOverviewPdfButton from "./auctions-overview-pdf-button"
 import AuctionsTables, { type AuctionRow } from "./auctions-tables"
 import { getCataloguingSidebarItems } from "@/lib/apps"
+import { getDepartmentAccess, auctionWhere } from "@/lib/departments"
 
 export default async function AuctionsPage() {
   const session = await auth()
@@ -19,7 +20,12 @@ export default async function AuctionsPage() {
   const allowed = getCataloguingSidebarItems(dbUser?.role ?? "", dbUser?.appPermissions as any)
   if (!allowed.includes("AUCTION_MANAGER")) redirect("/tools/cataloguing/tablet/auctions")
 
+  // Only the sales this person's departments cover (plus any they've been
+  // added to individually). Unassigned people still see everything.
+  const access = await getDepartmentAccess(session.user.id, dbUser?.role ?? "")
+
   const auctions = await prisma.catalogueAuction.findMany({
+    where:   auctionWhere(access),
     orderBy: { auctionDate: "desc" },
     include: { _count: { select: { lots: true } } },
   })

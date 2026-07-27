@@ -3,12 +3,14 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
-const CRM_ROUTES = ["/submissions", "/follow-ups", "/crm-settings"]
+const CRM_ROUTES = ["/submissions", "/follow-ups"]
 
+// The old "Settings" link went to /crm-settings, which only ever managed
+// Departments — an early build, superseded by Admin → Departments. Removed
+// 2026-07-27 along with that page.
 const links = [
   { href: "/submissions",  label: "Submissions", icon: "📋" },
   { href: "/follow-ups",   label: "Follow-ups",  icon: "🔔" },
-  { href: "/crm-settings", label: "Settings",    icon: "⚙️" },
 ]
 
 export default function CrmSidebar() {

@@ -21,6 +21,45 @@ const MIGRATIONS = [
   `ALTER TABLE "CatalogueLotEvent" ADD COLUMN IF NOT EXISTS "source" TEXT`,
   `ALTER TABLE "CatalogueLotEvent" ADD COLUMN IF NOT EXISTS "batchId" TEXT`,
   `CREATE INDEX IF NOT EXISTS "CatalogueLotEvent_batchId_idx" ON "CatalogueLotEvent"("batchId")`,
+  // ── Departments: auction-type links, many-to-many staff, per-sale overrides ──
+  `ALTER TABLE "Department" ADD COLUMN IF NOT EXISTS "auctionTypes" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
+  `CREATE TABLE IF NOT EXISTS "UserDepartment" (
+    "userId"       TEXT NOT NULL,
+    "departmentId" TEXT NOT NULL,
+    "createdAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "UserDepartment_pkey" PRIMARY KEY ("userId", "departmentId")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "UserDepartment_departmentId_idx" ON "UserDepartment"("departmentId")`,
+  `DO $$ BEGIN
+    ALTER TABLE "UserDepartment" ADD CONSTRAINT "UserDepartment_userId_fkey"
+      FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  `DO $$ BEGIN
+    ALTER TABLE "UserDepartment" ADD CONSTRAINT "UserDepartment_departmentId_fkey"
+      FOREIGN KEY ("departmentId") REFERENCES "Department"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  // Carry the old single User.departmentId across so nobody loses their department.
+  `INSERT INTO "UserDepartment" ("userId", "departmentId")
+   SELECT "id", "departmentId" FROM "User" WHERE "departmentId" IS NOT NULL
+   ON CONFLICT DO NOTHING`,
+  `CREATE TABLE IF NOT EXISTS "CatalogueAuctionAccess" (
+    "id"        TEXT NOT NULL,
+    "auctionId" TEXT NOT NULL,
+    "userId"    TEXT NOT NULL,
+    "grantedBy" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "CatalogueAuctionAccess_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "CatalogueAuctionAccess_auctionId_userId_key" ON "CatalogueAuctionAccess"("auctionId", "userId")`,
+  `CREATE INDEX IF NOT EXISTS "CatalogueAuctionAccess_userId_idx" ON "CatalogueAuctionAccess"("userId")`,
+  `DO $$ BEGIN
+    ALTER TABLE "CatalogueAuctionAccess" ADD CONSTRAINT "CatalogueAuctionAccess_auctionId_fkey"
+      FOREIGN KEY ("auctionId") REFERENCES "CatalogueAuction"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  `DO $$ BEGIN
+    ALTER TABLE "CatalogueAuctionAccess" ADD CONSTRAINT "CatalogueAuctionAccess_userId_fkey"
+      FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
   `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastTote"    TEXT`,
   `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastVendor"  TEXT`,
   `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastReceipt" TEXT`,

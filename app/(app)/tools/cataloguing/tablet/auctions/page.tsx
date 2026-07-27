@@ -3,13 +3,18 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { auctionTypeEmoji } from "@/lib/auction-types"
+import { getDepartmentAccessForSession, auctionWhere } from "@/lib/departments"
 
 export default async function TabletAuctionsPage() {
   const session = await auth()
   if (!session) redirect("/login")
   // Access is enforced by the cataloguing layout (hasAppAccess "CATALOGUING") — no hard-coded role gate here (it was bouncing managers/other granted roles to /submissions).
 
+  // Same department filter as the desktop list — the tablet must not be a way round it.
+  const access = await getDepartmentAccessForSession(session.user.id)
+
   const auctions = await prisma.catalogueAuction.findMany({
+    where:   auctionWhere(access),
     orderBy: { auctionDate: "desc" },
     include: { _count: { select: { lots: true } } },
   })

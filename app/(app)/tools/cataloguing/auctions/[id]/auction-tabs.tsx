@@ -3,6 +3,7 @@
 import { useState, useTransition, useRef, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, fillLotsFromTotes, togglePublished, generateTitlesFromDescriptions, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, bulkSetLotsAiExcluded, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, bulkRemoveConditionsFromDescriptions, bulkClearDescriptions, transferLots, bulkClearLotPhotos, listBulkUndos, undoBulk } from "@/lib/actions/catalogue"
+import { grantAuctionAccess, revokeAuctionAccess } from "@/lib/actions/admin"
 import LotWizardTab, { BRANDS_LIST } from "./lot-wizard-tab"
 import { useCategoryMap } from "@/lib/use-category-map"
 import { parseCondition, buildCondition, type BoxPrefixMode } from "@/lib/condition"
@@ -517,7 +518,10 @@ function TransferLotsModal({ selectedIds, sourceAuctionId, allAuctions, onClose,
   )
 }
 
-export default function AuctionTabs({ auction, lots, userId, userName, userRole, showScanTimer, showLotTimer, timerRedMins, allAuctions }: { auction: Auction; lots: Lot[]; userId: string; userName: string; userRole: string; showScanTimer?: boolean; showLotTimer?: boolean; timerRedMins?: number; allAuctions: AuctionSummary[] }) {
+export type SaleAccessUser = { id: string; name: string }
+export type SaleAccessEntry = { userId: string; name: string; grantedBy: string | null }
+
+export default function AuctionTabs({ auction, lots, userId, userName, userRole, showScanTimer, showLotTimer, timerRedMins, allAuctions, extraAccess = [], assignableUsers = [] }: { auction: Auction; lots: Lot[]; userId: string; userName: string; userRole: string; showScanTimer?: boolean; showLotTimer?: boolean; timerRedMins?: number; allAuctions: AuctionSummary[]; extraAccess?: SaleAccessEntry[]; assignableUsers?: SaleAccessUser[] }) {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const bcLocked     = auction.addedToBC && userRole !== "ADMIN"
@@ -675,7 +679,14 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
 
       {/* Tab panels — scrollable content area */}
       <div className="flex-1 overflow-y-auto min-h-0 pr-3" style={{ scrollbarWidth: "thin", scrollbarColor: "#4b5563 transparent" }}>
-        {tab === "settings" && <SettingsTab auction={auction} />}
+        {tab === "settings" && (
+          <SettingsTab
+            auction={auction}
+            isAdmin={userRole === "ADMIN"}
+            extraAccess={extraAccess}
+            assignableUsers={assignableUsers}
+          />
+        )}
 
         <div className={tab === "add-lot" ? "" : "hidden"}>
           {bcLocked ? (
@@ -821,7 +832,87 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
 
 // ─── Settings tab ─────────────────────────────────────────────────────────────
 
-function SettingsTab({ auction }: { auction: Auction }) {
+// Extra people on this sale — for someone working outside their department as a
+// one-off. Never removes access, only adds it. Admins only (the parent decides).
+function SaleAccessPanel({ auctionId, entries, users }: {
+  auctionId: string
+  entries: SaleAccessEntry[]
+  users: SaleAccessUser[]
+}) {
+  const router = useRouter()
+  const [pending, start] = useTransition()
+  const [pick, setPick] = useState("")
+  const [error, setError] = useState<string | null>(null)
+
+  const already  = new Set(entries.map(e => e.userId))
+  const available = users.filter(u => !already.has(u.id))
+
+  function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
+    setError(null)
+    start(async () => {
+      const res = await fn()
+      if (!res.ok) { setError(res.error ?? "Something went wrong."); return }
+      setPick("")
+      router.refresh()
+    })
+  }
+
+  return (
+    <div className="mt-10 border border-gray-300 dark:border-gray-700 rounded-xl p-5">
+      <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">Extra people on this sale</h3>
+      <p className="text-xs text-gray-600 dark:text-gray-500 mb-3">
+        Anyone in a department that covers this sale type already has access. Add someone here when
+        they&apos;re working outside their own department on this sale as a one-off.
+      </p>
+
+      {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
+
+      {entries.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {entries.map(e => (
+            <span key={e.userId} className="inline-flex items-center gap-2 text-xs px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+              {e.name}
+              {e.grantedBy && <span className="opacity-60">· added by {e.grantedBy}</span>}
+              <button
+                onClick={() => run(() => revokeAuctionAccess(auctionId, e.userId))}
+                disabled={pending}
+                title="Remove from this sale"
+                className="text-red-400 hover:text-red-600 disabled:opacity-50"
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <select
+          value={pick}
+          onChange={e => setPick(e.target.value)}
+          className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2AB4A6]"
+        >
+          <option value="">Choose a person…</option>
+          {available.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+        </select>
+        <button
+          onClick={() => pick && run(() => grantAuctionAccess(auctionId, pick))}
+          disabled={!pick || pending}
+          className="text-sm px-4 py-2 bg-[#2AB4A6] hover:bg-[#24a090] text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
+        >
+          {pending ? "Adding…" : "Add to sale"}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function SettingsTab({ auction, isAdmin, extraAccess, assignableUsers }: {
+  auction: Auction
+  isAdmin: boolean
+  extraAccess: SaleAccessEntry[]
+  assignableUsers: SaleAccessUser[]
+}) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [saved, setSaved] = useState(false)
@@ -921,6 +1012,8 @@ function SettingsTab({ auction }: { auction: Auction }) {
           {saved && <span className="text-sm text-[#2AB4A6]">✓ Saved</span>}
         </div>
       </form>
+
+      {isAdmin && <SaleAccessPanel auctionId={auction.id} entries={extraAccess} users={assignableUsers} />}
 
       {/* Danger zone */}
       <div className="mt-10 border border-red-900/50 rounded-xl p-5">
