@@ -5,6 +5,17 @@ import { isAuthedOrCron } from "@/lib/auth-or-cron"
 
 export const maxDuration = 300
 
+// ⚠ Business Central sends an EMPTY date as "0001-01-01T00:00:00Z", which parses
+// into a perfectly valid Date in year 1 — stored as-is it reads as real data
+// (the Manager Portal showed a tote as "2,025 years behind"). Anything before
+// 1990 is BC's way of saying "no date".
+function bcDate(v: unknown): Date | null {
+  if (!v) return null
+  const d = new Date(String(v))
+  if (isNaN(d.getTime())) return null
+  return d.getUTCFullYear() < 1990 ? null : d
+}
+
 // POST /api/warehouse/sync/totes-active
 // Syncs Receipt_Totes_Excel — active (uncatalogued) totes only, with richer data:
 // precise location, vendor info, reserve status, catalogued flag.
@@ -68,6 +79,7 @@ export async function POST(req: NextRequest) {
             vendorName: r.EVA_TOT_VendorName ?? null,
             status:     r.EVA_TOT_ReserveStatus ?? null,
             catalogued: r.EVA_TOT_Catalogued === true || r.EVA_TOT_Catalogued === 1,
+            bcCreatedAt: bcDate(r.SystemCreatedAt),
             syncedAt:   new Date(),
           },
           create: {
@@ -78,6 +90,7 @@ export async function POST(req: NextRequest) {
             vendorName: r.EVA_TOT_VendorName ?? null,
             status:     r.EVA_TOT_ReserveStatus ?? null,
             catalogued: r.EVA_TOT_Catalogued === true || r.EVA_TOT_Catalogued === 1,
+            bcCreatedAt: bcDate(r.SystemCreatedAt),
           },
         }))
       }

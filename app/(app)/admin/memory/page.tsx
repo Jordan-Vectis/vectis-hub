@@ -81,7 +81,15 @@ A **Stock from** column on the active-sales table: the **median** date the stock
 
 \`CatalogueLot.tote\` holds values like **\`T025326\`** and **\`P000865\`**, and they live in **\`WarehouseTote.toteNo\`** — NOT in \`WarehouseContainer.id\` and NOT reliably in \`WarehouseItem.toteNo\`. \`WarehouseTote\` carries **no date of its own** (\`syncedAt\` is just the sync stamp), but it does carry **\`receiptNo\`**, and that receipt's items carry \`goodsReceivedDate\`. **The working chain is tote → receiptNo → \`WarehouseItem.goodsReceivedDate\`.**
 
-Resolution order: (1) \`WarehouseTote.toteNo\` → \`receiptNo\`; (2) \`WarehouseItem.toteNo\` direct → \`MIN(goodsReceivedDate)\`; (3) the receipt chain — \`WarehouseItem.receiptNo\` → \`MIN(goodsReceivedDate)\`; (4) last resort \`WarehouseContainer.id\` → \`createdAt\`.
+**The real date is \`Receipt_Totes_Excel.SystemCreatedAt\`** — when the tote was created in BC. The \`totes-active\` sync already reads that endpoint into \`WarehouseTote\` but never mapped the field; it now stores it as **\`WarehouseTote.bcCreatedAt\`** (NEEDS Run Migrations, and fills in on the next totes-active sync). ⚠ Not \`syncedAt\` — that's just our sync stamp.
+
+Resolution order: (1) **\`WarehouseTote.bcCreatedAt\`**; (2) \`WarehouseItem.toteNo\` direct → \`MIN(goodsReceivedDate)\`; (3) the receipt chain — \`WarehouseTote.receiptNo\` → \`WarehouseItem.receiptNo\` → \`MIN(goodsReceivedDate)\`; (4) last resort \`WarehouseContainer.id\` → \`createdAt\`. Step 1 has a second query without \`bcCreatedAt\` so the receipt fallback still works pre-migration.
+
+## ⚠⚠ BC sends an empty date as \`0001-01-01\`, NOT null
+
+This is a codebase-wide trap, not just a report bug. \`new Date("0001-01-01")\` is a **valid** Date, so \`parseDate\` stored it as real data and the portal read a tote as "24304.3m behind" (~2,025 years). Both \`parseDate\` in **\`app/api/warehouse/sync/receipt-lines\`** and \`bcDate\` in **\`sync/totes-active\`** now null anything before **1990**, and the report's SQL also filters \`goodsReceivedDate >= DATE '1990-01-01'\` so rows synced before the fix don't leak through. **Any new BC date field must go through the same guard** — \`EVA_TOT_CataloguedAt\` is a confirmed example that arrives as \`0001-01-01\`.
+
+Stock dates render with the **year** (\`fmtStockDate\`) precisely because a bare "31 Dec" hid this for a whole round.
 
 ⚠ **Match on \`upper(btrim(...))\` on BOTH sides** — tote values are upper-cased on some write paths (\`importLots\`) and stored as typed on others, so exact matching silently found nothing and every tote read "no matching record". This cost several rounds.
 

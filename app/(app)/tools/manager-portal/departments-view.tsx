@@ -113,7 +113,7 @@ export default async function DepartmentsView() {
 
   type ToteLookup = {
     dateMs: number | null
-    source: "item" | "receipt" | "container" | null
+    source: "tote" | "item" | "receipt" | "container" | null
     receiptNo: string | null
     found: boolean            // the tote exists somewhere in the warehouse data
   }
@@ -127,23 +127,48 @@ export default async function DepartmentsView() {
     }
 
     // 1 ─ WarehouseTote is where the cataloguers' tote numbers actually live
-    //     (T025326, P000865…). It carries no date of its own, but it does carry
-    //     the receipt the tote belongs to, which is the route to a real date.
+    //     (T025326, P000865…). bcCreatedAt is BC's SystemCreatedAt for the tote
+    //     — when it was created — which is exactly the date wanted here. Its
+    //     receiptNo is kept as the fallback route to a goods-received date.
     try {
-      const totes = await prisma.$queryRaw<{ k: string; receiptNo: string | null }[]>`
-        SELECT upper(btrim("toteNo")) AS k, MAX("receiptNo") AS "receiptNo"
+      const totes = await prisma.$queryRaw<{ k: string; receiptNo: string | null; d: Date | null }[]>`
+        SELECT upper(btrim("toteNo")) AS k, MAX("receiptNo") AS "receiptNo", MAX("bcCreatedAt") AS d
         FROM "WarehouseTote"
         WHERE upper(btrim("toteNo")) = ANY(${toteKeys})
         GROUP BY 1`
-      for (const t of totes) put(t.k, { found: true, receiptNo: t.receiptNo })
-    } catch { /* leave unresolved */ }
+      for (const t of totes) {
+        put(t.k, {
+          found: true,
+          receiptNo: t.receiptNo,
+          ...(t.d && new Date(t.d).getUTCFullYear() >= 1990
+            ? { dateMs: new Date(t.d).getTime(), source: "tote" as const }
+            : {}),
+        })
+      }
+    } catch {
+      // bcCreatedAt arrives with Run Migrations. Until then still read the
+      // receipt, or the fallback chain below would have nothing to work with.
+      try {
+        const totes = await prisma.$queryRaw<{ k: string; receiptNo: string | null }[]>`
+          SELECT upper(btrim("toteNo")) AS k, MAX("receiptNo") AS "receiptNo"
+          FROM "WarehouseTote"
+          WHERE upper(btrim("toteNo")) = ANY(${toteKeys})
+          GROUP BY 1`
+        for (const t of totes) put(t.k, { found: true, receiptNo: t.receiptNo })
+      } catch { /* leave unresolved */ }
+    }
 
     // 2 ─ Items tagged with the tote directly, if BC has them that way.
+    //     ⚠ The year floor matters: BC sends an empty date as "0001-01-01",
+    //     which is a valid date, so MIN() would happily return year 1 and the
+    //     report would read "2,025 years behind". The sync now nulls these on
+    //     write, but rows synced before that fix still hold them.
     try {
       const byTote = await prisma.$queryRaw<{ k: string; d: Date | null }[]>`
         SELECT upper(btrim("toteNo")) AS k, MIN("goodsReceivedDate") AS d
         FROM "WarehouseItem"
         WHERE upper(btrim("toteNo")) = ANY(${toteKeys})
+          AND "goodsReceivedDate" >= DATE '1990-01-01'
         GROUP BY 1`
       for (const r of byTote) {
         put(r.k, { found: true, ...(r.d ? { dateMs: new Date(r.d).getTime(), source: "item" as const } : {}) })
@@ -160,7 +185,8 @@ export default async function DepartmentsView() {
         const byReceipt = await prisma.$queryRaw<{ r: string; d: Date | null }[]>`
           SELECT upper(btrim("receiptNo")) AS r, MIN("goodsReceivedDate") AS d
           FROM "WarehouseItem"
-          WHERE upper(btrim("receiptNo")) = ANY(${receipts}) AND "goodsReceivedDate" IS NOT NULL
+          WHERE upper(btrim("receiptNo")) = ANY(${receipts})
+            AND "goodsReceivedDate" >= DATE '1990-01-01'
           GROUP BY 1`
         const dateByReceipt = new Map(byReceipt.filter(x => x.d).map(x => [x.r, new Date(x.d!).getTime()]))
         for (const [k, v] of toteInfo) {
@@ -233,8 +259,8 @@ export default async function DepartmentsView() {
             : !info?.found
               ? "not found in the warehouse"
               : info.receiptNo
-                ? `receipt ${info.receiptNo} has no goods-received date`
-                : "no receipt on this tote",
+                ? `no created date yet — receipt ${info.receiptNo} has no goods-received date either`
+                : "no created date yet, and no receipt on this tote",
           source:  info?.source ?? null,
         }
       }),

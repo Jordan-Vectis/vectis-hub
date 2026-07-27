@@ -1119,6 +1119,10 @@ model WarehouseTote {
   vendorName   String?
   status       String?
   catalogued   Boolean?
+  // SystemCreatedAt from Receipt_Totes_Excel — when the tote was created in BC.
+  // This is the date the Manager Portal's "Stock from" reads to work out how far
+  // behind cataloguing is running. NOT syncedAt, which is just our sync stamp.
+  bcCreatedAt  DateTime?
   syncedAt     DateTime @default(now())
 
   @@index([location])

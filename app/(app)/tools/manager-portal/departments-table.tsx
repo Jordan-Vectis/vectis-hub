@@ -47,6 +47,9 @@ type BcState =
   | { status: "ready"; sales: Record<string, SaleBc | null> }
 
 const fmtDate = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+// Stock dates carry the year — they can be months or years old, and a bare
+// "31 Dec" hid a year-1 date from Business Central for a whole round.
+const fmtStockDate = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" })
 const fmtSaleDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"
 
@@ -238,7 +241,7 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
                                     }
                                   >
                                     <span className={`group-hover:underline ${s.stock.medianMs == null ? "text-amber-500 text-xs" : "text-gray-800 dark:text-gray-200"}`}>
-                                      {s.stock.medianMs == null ? "no dates" : fmtDate(s.stock.medianMs)}
+                                      {s.stock.medianMs == null ? "no dates" : fmtStockDate(s.stock.medianMs)}
                                     </span>
                                     <span className="text-gray-400 dark:text-gray-500 ml-1 text-xs">
                                       {openStock === s.id ? "▾" : "▸"}
@@ -297,7 +300,7 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
                                     <>
                                       {s.stock.dated < s.stock.totesSampled &&
                                         `${s.stock.totesSampled - s.stock.dated} had no matching warehouse record and are left out of the median. `}
-                                      Oldest {fmtDate(s.stock.oldestMs!)}, newest {fmtDate(s.stock.newestMs!)}.
+                                      Oldest {fmtStockDate(s.stock.oldestMs!)}, newest {fmtStockDate(s.stock.newestMs!)}.
                                     </>
                                   )}
                                 </p>
@@ -309,11 +312,13 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
                                         `${t.lots} lot${t.lots === 1 ? "" : "s"} on this sale came out of this tote` +
                                         (t.reason
                                           ? ` — ${t.reason}`
-                                          : t.source === "receipt"
-                                            ? " — dated from its receipt's goods-received date"
-                                            : t.source === "item"
-                                              ? " — dated from the item's goods-received date"
-                                              : " — dated from the warehouse container")
+                                          : t.source === "tote"
+                                            ? " — when the tote was created in Business Central"
+                                            : t.source === "receipt"
+                                              ? " — from its receipt's goods-received date"
+                                              : t.source === "item"
+                                                ? " — from the item's goods-received date"
+                                                : " — from the warehouse container")
                                       }
                                       className={`text-xs px-2 py-1 rounded-lg border whitespace-nowrap ${
                                         t.dateMs == null
@@ -323,7 +328,7 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
                                     >
                                       <b className="font-mono font-semibold">{t.tote}</b>
                                       <span className="opacity-60 mx-1">·</span>
-                                      {t.dateMs == null ? (t.reason ?? "no date") : fmtDate(t.dateMs)}
+                                      {t.dateMs == null ? (t.reason ?? "no date") : fmtStockDate(t.dateMs)}
                                       {t.lots > 1 && <span className="opacity-60 ml-1.5">×{t.lots}</span>}
                                     </span>
                                   ))}

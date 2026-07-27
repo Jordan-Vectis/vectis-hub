@@ -5,10 +5,15 @@ import { isAuthedOrCron } from "@/lib/auth-or-cron"
 
 export const maxDuration = 300
 
+// ⚠ Business Central sends an EMPTY date as "0001-01-01", not null. That parses
+// into a perfectly valid Date in year 1, so it used to be stored as a real date
+// and every consumer treated it as one — the Manager Portal read a tote as
+// "2,025 years behind". Anything before 1990 is BC's way of saying "no date".
 function parseDate(v: any): Date | null {
   if (!v) return null
   const d = new Date(v)
-  return isNaN(d.getTime()) ? null : d
+  if (isNaN(d.getTime())) return null
+  return d.getUTCFullYear() < 1990 ? null : d
 }
 
 function parseBool(v: any): boolean | null {

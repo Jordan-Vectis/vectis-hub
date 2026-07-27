@@ -21,6 +21,9 @@ const MIGRATIONS = [
   `ALTER TABLE "CatalogueLotEvent" ADD COLUMN IF NOT EXISTS "source" TEXT`,
   `ALTER TABLE "CatalogueLotEvent" ADD COLUMN IF NOT EXISTS "batchId" TEXT`,
   `CREATE INDEX IF NOT EXISTS "CatalogueLotEvent_batchId_idx" ON "CatalogueLotEvent"("batchId")`,
+  // When the tote was created in BC (Receipt_Totes_Excel.SystemCreatedAt) —
+  // drives the Manager Portal "Stock from" figure.
+  `ALTER TABLE "WarehouseTote" ADD COLUMN IF NOT EXISTS "bcCreatedAt" TIMESTAMP(3)`,
   // ── Departments: auction-type links, many-to-many staff, per-sale overrides ──
   `ALTER TABLE "Department" ADD COLUMN IF NOT EXISTS "auctionTypes" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
   `CREATE TABLE IF NOT EXISTS "UserDepartment" (
