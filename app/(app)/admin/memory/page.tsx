@@ -71,9 +71,11 @@ Sales whose type no department covers land in a **"Not in a department"** group 
 
 ## "Stock from" — how far behind cataloguing is running (2026-07-27)
 
-A **Stock from** column on the active-sales table: the **median** date the stock came in behind the **last 10 lots catalogued** on that sale, plus the lag ("14w behind", amber from 6 weeks, red from 3 months). Click it to expand a list of the totes behind those lots, each with its date and ×N when several lots came from it, plus oldest/newest.
+A **Stock from** column on the active-sales table: the **median** date the stock came in across the **last 10 DISTINCT totes worked** on that sale, plus the lag ("14w behind", amber from 6 weeks, red from 3 months). Click it to expand the list of those totes, each with its date and ×N lots, plus oldest/newest.
 
-⚠ **Median, not average, and last 10 LOTS not last 10 distinct totes** — both were Jordan's explicit corrections. One stray old tote in the batch would drag an average back and misreport the lag; and the same tote legitimately repeats across the 10 lots because that reflects the work actually done.
+⚠ **Median, and last 10 DISTINCT TOTES — not the last 10 lots.** Both were Jordan's explicit corrections. Sampling lots is wrong because a run of 10 lots can easily all come from one tote, which tells you nothing; each tote counts once however many lots came out of it. Median rather than average so one stray old tote can't drag the figure back and misreport the lag.
+
+⚠ Empty states are **deliberately distinct and diagnostic** — "no totes" (the sale's lots carry no tote at all) vs amber "no dates" (totes found but none resolved), the latter still expandable to show the raw tote values. A bare dash hid which had happened.
 
 Tote → date resolution tries, in order: \`WarehouseContainer.id\` = the lot's \`tote\` → its **\`createdAt\`** (internal warehouse booking-in date), then \`WarehouseItem.toteNo\` → \`MIN(goodsReceivedDate)\` (BC receipt lines, auto-synced every 12h). Both paths exist because \`CatalogueLot.tote\` is ambiguous in this codebase — the lot wizard fills it from \`WarehouseTote.toteNo\` (BC, e.g. "T025") via \`/api/warehouse/tote-search\`, but \`fillLotsFromTotes\` looks it up as a \`WarehouseContainer.id\`. Totes that resolve to neither show "no date" and are **excluded from the median** (the expanded panel says how many). ⚠ If everything reads "no date", the wrong source is being matched — check which of the two a real \`CatalogueLot.tote\` value actually is before changing the resolver.
 

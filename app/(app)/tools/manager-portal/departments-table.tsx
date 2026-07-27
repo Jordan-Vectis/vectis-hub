@@ -6,11 +6,11 @@ import { auctionTypeEmoji, auctionTypeLabel } from "@/lib/auction-types"
 import { fmtPace, daysToSale, paceFor, targetsFor, SALE_TARGETS } from "@/lib/sale-projection"
 
 export type StockAge = {
-  medianMs: number   // median date the stock being worked came in
-  oldestMs: number
-  newestMs: number
-  lots: number       // lots sampled (the last 10 catalogued)
-  dated: number      // how many of those resolved to a tote date
+  medianMs: number | null   // null = totes found, but none resolved to a date
+  oldestMs: number | null
+  newestMs: number | null
+  totesSampled: number      // distinct totes sampled (the last 10 worked)
+  dated: number             // how many of those resolved to a date
   totes: { tote: string; dateMs: number | null; lots: number }[]
 }
 
@@ -125,7 +125,7 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
         Projected dates are when each sale reaches {SALE_TARGETS.join(", ")} lots at its current pace
         (lots ÷ days actually worked). Red means the target lands after the sale date; green means
         it&apos;s already passed. <b className="font-medium">Stock from</b> is the median date the
-        stock came in behind the last 10 lots catalogued — click it to list the totes.
+        stock came in across the last 10 distinct totes worked — click it to list them.
         {bc.status === "loading"     && " Checking Business Central for lots already pushed…"}
         {bc.status === "disconnected" && " Lot totals are Hub-only — connect Business Central to include lots already pushed."}
         {bc.status === "error"        && " Business Central couldn't be reached, so lot totals are Hub-only."}
@@ -221,22 +221,33 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
                               </td>
                               <td className="py-2.5 px-3 whitespace-nowrap">
                                 {!s.stock ? (
-                                  <span className="text-xs text-gray-400 dark:text-gray-500" title="No tote on the last lots, or those totes don't match a warehouse record">—</span>
+                                  <span
+                                    className="text-xs text-gray-400 dark:text-gray-500"
+                                    title="None of the last lots catalogued on this sale have a tote recorded"
+                                  >
+                                    no totes
+                                  </span>
                                 ) : (
                                   <button
                                     onClick={() => setOpenStock(openStock === s.id ? null : s.id)}
                                     className="text-left group"
-                                    title={`Median of the last ${s.stock.lots} lots catalogued — click to list the totes`}
+                                    title={
+                                      s.stock.medianMs == null
+                                        ? "Totes found, but none match a warehouse record — click to see them"
+                                        : `Median across the last ${s.stock.totesSampled} totes worked — click to list them`
+                                    }
                                   >
-                                    <span className="text-gray-800 dark:text-gray-200 group-hover:underline">
-                                      {fmtDate(s.stock.medianMs)}
+                                    <span className={`group-hover:underline ${s.stock.medianMs == null ? "text-amber-500 text-xs" : "text-gray-800 dark:text-gray-200"}`}>
+                                      {s.stock.medianMs == null ? "no dates" : fmtDate(s.stock.medianMs)}
                                     </span>
                                     <span className="text-gray-400 dark:text-gray-500 ml-1 text-xs">
                                       {openStock === s.id ? "▾" : "▸"}
                                     </span>
-                                    <div className={`text-xs mt-0.5 ${lagColour(s.stock.medianMs, nowMs)}`}>
-                                      {fmtLag(s.stock.medianMs, nowMs)}
-                                    </div>
+                                    {s.stock.medianMs != null && (
+                                      <div className={`text-xs mt-0.5 ${lagColour(s.stock.medianMs, nowMs)}`}>
+                                        {fmtLag(s.stock.medianMs, nowMs)}
+                                      </div>
+                                    )}
                                   </button>
                                 )}
                               </td>
@@ -274,15 +285,25 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
                             <tr key={`${s.id}-totes`} className="border-b border-gray-50 dark:border-gray-800/50">
                               <td colSpan={6} className="py-3 px-3 bg-gray-50 dark:bg-gray-800/40">
                                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                                  Totes behind the last {s.stock.lots} lots catalogued on {s.code}
-                                  {s.stock.dated < s.stock.lots && ` — ${s.stock.lots - s.stock.dated} had no matching warehouse record and are left out of the median`}
-                                  . Oldest {fmtDate(s.stock.oldestMs)}, newest {fmtDate(s.stock.newestMs)}.
+                                  Last {s.stock.totesSampled} tote{s.stock.totesSampled === 1 ? "" : "s"} worked on {s.code}, most recent first.{" "}
+                                  {s.stock.dated === 0 ? (
+                                    <span className="text-amber-500">
+                                      None of these match a warehouse container id or a Business Central tote
+                                      number, so no dates could be worked out.
+                                    </span>
+                                  ) : (
+                                    <>
+                                      {s.stock.dated < s.stock.totesSampled &&
+                                        `${s.stock.totesSampled - s.stock.dated} had no matching warehouse record and are left out of the median. `}
+                                      Oldest {fmtDate(s.stock.oldestMs!)}, newest {fmtDate(s.stock.newestMs!)}.
+                                    </>
+                                  )}
                                 </p>
                                 <div className="flex flex-wrap gap-1.5">
                                   {s.stock.totes.map(t => (
                                     <span
                                       key={t.tote}
-                                      title={`${t.lots} of the last ${s.stock!.lots} lots came out of this tote`}
+                                      title={`${t.lots} lot${t.lots === 1 ? "" : "s"} on this sale came out of this tote`}
                                       className={`text-xs px-2 py-1 rounded-lg border whitespace-nowrap ${
                                         t.dateMs == null
                                           ? "border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500"

@@ -74,22 +74,26 @@ export default async function DepartmentsView() {
   const activeDaysById = new Map(dailyRows.map(r => [r.auctionId, r.days]))
 
   // ── How far behind: what dates are the totes being catalogued from? ────────
-  // The tote off each of the LAST 10 LOTS catalogued on an active sale, resolved
-  // to the date that tote came in, then taken as a MEDIAN — a median because one
-  // stray old tote in the batch would drag an average back and misreport how far
-  // behind the sale really is. Comparing that date against today is the lag.
+  // The last 10 DISTINCT totes worked on each active sale (most recently
+  // catalogued first), resolved to the date that tote came in, then taken as a
+  // MEDIAN. ⚠ Distinct totes, not the last 10 lots — a run of 10 lots can easily
+  // all come out of one tote, which would tell you nothing. Each tote counts
+  // once however many lots came from it. Median rather than average so one stray
+  // old tote can't drag the figure back and misreport the lag.
   const activeIds = auctions.filter(a => !a.complete).map(a => a.id)
 
-  let toteRows: { auctionId: string; tote: string; rn: number }[] = []
+  let toteRows: { auctionId: string; tote: string; lotCount: number }[] = []
   if (activeIds.length > 0) {
     try {
-      toteRows = await prisma.$queryRaw<{ auctionId: string; tote: string; rn: number }[]>`
-        SELECT "auctionId", "tote", rn FROM (
+      toteRows = await prisma.$queryRaw<{ auctionId: string; tote: string; lotCount: number }[]>`
+        SELECT "auctionId", "tote", "lotCount" FROM (
           SELECT l."auctionId", l."tote",
-                 ROW_NUMBER() OVER (PARTITION BY l."auctionId" ORDER BY l."createdAt" DESC)::int AS rn
+                 COUNT(*)::int AS "lotCount",
+                 ROW_NUMBER() OVER (PARTITION BY l."auctionId" ORDER BY MAX(l."createdAt") DESC)::int AS rn
           FROM "CatalogueLot" l
           WHERE l."auctionId" = ANY(${activeIds})
             AND l."tote" IS NOT NULL AND btrim(l."tote") <> ''
+          GROUP BY l."auctionId", l."tote"
         ) t WHERE rn <= 10
         ORDER BY "auctionId", rn`
     } catch {
@@ -125,10 +129,11 @@ export default async function DepartmentsView() {
     }
   }
 
-  // One entry per lot, newest first — the same tote appears as many times as it
-  // was used, which is right: the median should reflect the actual work done.
-  const totesBySale = new Map<string, string[]>()
-  for (const r of toteRows) totesBySale.set(r.auctionId, [...(totesBySale.get(r.auctionId) ?? []), r.tote])
+  // One entry per DISTINCT tote, most recently worked first.
+  const totesBySale = new Map<string, { tote: string; lotCount: number }[]>()
+  for (const r of toteRows) {
+    totesBySale.set(r.auctionId, [...(totesBySale.get(r.auctionId) ?? []), { tote: r.tote, lotCount: r.lotCount }])
+  }
 
   const median = (xs: number[]): number => {
     const s = [...xs].sort((a, b) => a - b)
@@ -136,28 +141,25 @@ export default async function DepartmentsView() {
     return s.length % 2 === 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid]
   }
 
+  // Returns null ONLY when the last lots carry no tote at all. When there are
+  // totes but none resolve to a date, it still returns them with a null median —
+  // so the column can say which of the two happened and the expanded panel can
+  // show the actual tote values rather than a bare dash that explains nothing.
   function stockFor(auctionId: string) {
     const totes = totesBySale.get(auctionId) ?? []
     if (totes.length === 0) return null
-    const dated = totes.map(t => toteDate.get(t)).filter((d): d is number => d != null)
-    if (dated.length === 0) return null
 
-    // Listed out for the manager: each distinct tote from those lots, with its
-    // date and how many of the sampled lots came out of it.
-    const seen = new Map<string, { tote: string; dateMs: number | null; lots: number }>()
-    for (const t of totes) {
-      const cur = seen.get(t) ?? { tote: t, dateMs: toteDate.get(t) ?? null, lots: 0 }
-      cur.lots++
-      seen.set(t, cur)
-    }
+    // One date per tote — each tote is a single data point in the median,
+    // regardless of how many lots came out of it.
+    const dated = totes.map(t => toteDate.get(t.tote)).filter((d): d is number => d != null)
 
     return {
-      medianMs: median(dated),
-      oldestMs: Math.min(...dated),
-      newestMs: Math.max(...dated),
-      lots:     totes.length,
-      dated:    dated.length,
-      totes:    [...seen.values()],
+      medianMs:     dated.length > 0 ? median(dated) : null,
+      oldestMs:     dated.length > 0 ? Math.min(...dated) : null,
+      newestMs:     dated.length > 0 ? Math.max(...dated) : null,
+      totesSampled: totes.length,
+      dated:        dated.length,
+      totes: totes.map(t => ({ tote: t.tote, dateMs: toteDate.get(t.tote) ?? null, lots: t.lotCount })),
     }
   }
 
