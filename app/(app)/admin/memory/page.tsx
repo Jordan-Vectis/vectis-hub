@@ -77,7 +77,17 @@ A **Stock from** column on the active-sales table: the **median** date the stock
 
 ⚠ Empty states are **deliberately distinct and diagnostic** — "no totes" (the sale's lots carry no tote at all) vs amber "no dates" (totes found but none resolved), the latter still expandable to show the raw tote values. A bare dash hid which had happened.
 
-Tote → date resolution tries, in order: \`WarehouseContainer.id\` = the lot's \`tote\` → its **\`createdAt\`** (internal warehouse booking-in date), then \`WarehouseItem.toteNo\` → \`MIN(goodsReceivedDate)\` (BC receipt lines, auto-synced every 12h). Both paths exist because \`CatalogueLot.tote\` is ambiguous in this codebase — the lot wizard fills it from \`WarehouseTote.toteNo\` (BC, e.g. "T025") via \`/api/warehouse/tote-search\`, but \`fillLotsFromTotes\` looks it up as a \`WarehouseContainer.id\`. Totes that resolve to neither show "no date" and are **excluded from the median** (the expanded panel says how many). ⚠ If everything reads "no date", the wrong source is being matched — check which of the two a real \`CatalogueLot.tote\` value actually is before changing the resolver.
+### ⚠ Where a tote's date actually comes from (settled 2026-07-27 the hard way)
+
+\`CatalogueLot.tote\` holds values like **\`T025326\`** and **\`P000865\`**, and they live in **\`WarehouseTote.toteNo\`** — NOT in \`WarehouseContainer.id\` and NOT reliably in \`WarehouseItem.toteNo\`. \`WarehouseTote\` carries **no date of its own** (\`syncedAt\` is just the sync stamp), but it does carry **\`receiptNo\`**, and that receipt's items carry \`goodsReceivedDate\`. **The working chain is tote → receiptNo → \`WarehouseItem.goodsReceivedDate\`.**
+
+Resolution order: (1) \`WarehouseTote.toteNo\` → \`receiptNo\`; (2) \`WarehouseItem.toteNo\` direct → \`MIN(goodsReceivedDate)\`; (3) the receipt chain — \`WarehouseItem.receiptNo\` → \`MIN(goodsReceivedDate)\`; (4) last resort \`WarehouseContainer.id\` → \`createdAt\`.
+
+⚠ **Match on \`upper(btrim(...))\` on BOTH sides** — tote values are upper-cased on some write paths (\`importLots\`) and stored as typed on others, so exact matching silently found nothing and every tote read "no matching record". This cost several rounds.
+
+⚠ Two dead ends already ruled out, don't retry them: \`WarehouseContainer.id\` (that's the *internal* Vectis warehouse, a different system from the BC-synced totes — \`fillLotsFromTotes\` reads \`tote\` as a container id, which is why the codebase looks ambiguous) and \`WarehouseTote\` having any usable date column.
+
+Totes that still resolve to nothing are **excluded from the median**, and each chip says which step failed. Use **BC Warehouse → DB Explorer** (Warehouse Items / Warehouse Totes, searchable by Tote No) to check a real value before changing any of this.
 
 ## Removed at the same time
 

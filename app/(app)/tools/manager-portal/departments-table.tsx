@@ -291,8 +291,7 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
                                   Last {s.stock.totesSampled} tote{s.stock.totesSampled === 1 ? "" : "s"} worked on {s.code}, most recent first.{" "}
                                   {s.stock.dated === 0 ? (
                                     <span className="text-amber-500">
-                                      None of these match a warehouse container id or a Business Central tote
-                                      number, so no dates could be worked out.
+                                      No dates could be worked out — each tote below says which step failed.
                                     </span>
                                   ) : (
                                     <>
@@ -308,7 +307,13 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
                                       key={t.tote}
                                       title={
                                         `${t.lots} lot${t.lots === 1 ? "" : "s"} on this sale came out of this tote` +
-                                        (t.reason ? ` — ${t.reason}` : t.source === "bc" ? " — dated from Business Central" : " — dated from the warehouse container")
+                                        (t.reason
+                                          ? ` — ${t.reason}`
+                                          : t.source === "receipt"
+                                            ? " — dated from its receipt's goods-received date"
+                                            : t.source === "item"
+                                              ? " — dated from the item's goods-received date"
+                                              : " — dated from the warehouse container")
                                       }
                                       className={`text-xs px-2 py-1 rounded-lg border whitespace-nowrap ${
                                         t.dateMs == null

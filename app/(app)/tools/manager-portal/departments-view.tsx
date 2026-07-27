@@ -111,41 +111,78 @@ export default async function DepartmentsView() {
   // silently found nothing.
   const norm = (s: string) => s.trim().toUpperCase()
 
-  type ToteLookup = { dateMs: number | null; source: "container" | "bc" | null; bcItems: number }
+  type ToteLookup = {
+    dateMs: number | null
+    source: "item" | "receipt" | "container" | null
+    receiptNo: string | null
+    found: boolean            // the tote exists somewhere in the warehouse data
+  }
   const toteInfo = new Map<string, ToteLookup>()
   const toteKeys = [...new Set(toteRows.map(r => norm(r.tote)))]
 
   if (toteKeys.length > 0) {
+    const put = (k: string, patch: Partial<ToteLookup>) => {
+      const prev = toteInfo.get(k) ?? { dateMs: null, source: null, receiptNo: null, found: false }
+      toteInfo.set(k, { ...prev, ...patch })
+    }
+
+    // 1 ─ WarehouseTote is where the cataloguers' tote numbers actually live
+    //     (T025326, P000865…). It carries no date of its own, but it does carry
+    //     the receipt the tote belongs to, which is the route to a real date.
     try {
-      const containers = await prisma.$queryRaw<{ k: string; d: Date | null }[]>`
-        SELECT upper(btrim("id")) AS k, MIN("createdAt") AS d
-        FROM "WarehouseContainer"
-        WHERE upper(btrim("id")) = ANY(${toteKeys})
+      const totes = await prisma.$queryRaw<{ k: string; receiptNo: string | null }[]>`
+        SELECT upper(btrim("toteNo")) AS k, MAX("receiptNo") AS "receiptNo"
+        FROM "WarehouseTote"
+        WHERE upper(btrim("toteNo")) = ANY(${toteKeys})
         GROUP BY 1`
-      for (const c of containers) {
-        toteInfo.set(c.k, { dateMs: c.d ? new Date(c.d).getTime() : null, source: "container", bcItems: 0 })
+      for (const t of totes) put(t.k, { found: true, receiptNo: t.receiptNo })
+    } catch { /* leave unresolved */ }
+
+    // 2 ─ Items tagged with the tote directly, if BC has them that way.
+    try {
+      const byTote = await prisma.$queryRaw<{ k: string; d: Date | null }[]>`
+        SELECT upper(btrim("toteNo")) AS k, MIN("goodsReceivedDate") AS d
+        FROM "WarehouseItem"
+        WHERE upper(btrim("toteNo")) = ANY(${toteKeys})
+        GROUP BY 1`
+      for (const r of byTote) {
+        put(r.k, { found: true, ...(r.d ? { dateMs: new Date(r.d).getTime(), source: "item" as const } : {}) })
       }
     } catch { /* leave unresolved */ }
 
-    // Ask BC for everything the containers didn't date. Deliberately NOT
-    // filtered on goodsReceivedDate being present — we want to know the
-    // difference between "this tote isn't in BC" and "it is, but BC has no
-    // goods-received date on it", which are very different problems.
-    const missing = toteKeys.filter(k => !toteInfo.get(k)?.dateMs)
-    if (missing.length > 0) {
+    // 3 ─ Otherwise date the tote by its RECEIPT — when that receipt's goods
+    //     were booked in. This is the path that works for the real data.
+    const receipts = [...new Set(
+      [...toteInfo.values()].filter(v => v.dateMs == null && v.receiptNo).map(v => norm(v.receiptNo!)),
+    )]
+    if (receipts.length > 0) {
       try {
-        const bc = await prisma.$queryRaw<{ k: string; n: number; d: Date | null }[]>`
-          SELECT upper(btrim("toteNo")) AS k, COUNT(*)::int AS n, MIN("goodsReceivedDate") AS d
+        const byReceipt = await prisma.$queryRaw<{ r: string; d: Date | null }[]>`
+          SELECT upper(btrim("receiptNo")) AS r, MIN("goodsReceivedDate") AS d
           FROM "WarehouseItem"
-          WHERE upper(btrim("toteNo")) = ANY(${missing})
+          WHERE upper(btrim("receiptNo")) = ANY(${receipts}) AND "goodsReceivedDate" IS NOT NULL
           GROUP BY 1`
-        for (const r of bc) {
-          const prev = toteInfo.get(r.k)
-          toteInfo.set(r.k, {
-            dateMs:  r.d ? new Date(r.d).getTime() : (prev?.dateMs ?? null),
-            source:  r.d ? "bc" : (prev?.source ?? null),
-            bcItems: r.n,
-          })
+        const dateByReceipt = new Map(byReceipt.filter(x => x.d).map(x => [x.r, new Date(x.d!).getTime()]))
+        for (const [k, v] of toteInfo) {
+          if (v.dateMs != null || !v.receiptNo) continue
+          const d = dateByReceipt.get(norm(v.receiptNo))
+          if (d != null) put(k, { dateMs: d, source: "receipt" })
+        }
+      } catch { /* leave unresolved */ }
+    }
+
+    // 4 ─ Last resort: an internal warehouse container whose id IS the tote
+    //     number — its created date is when it was booked in.
+    const stillMissing = toteKeys.filter(k => toteInfo.get(k)?.dateMs == null)
+    if (stillMissing.length > 0) {
+      try {
+        const containers = await prisma.$queryRaw<{ k: string; d: Date | null }[]>`
+          SELECT upper(btrim("id")) AS k, MIN("createdAt") AS d
+          FROM "WarehouseContainer"
+          WHERE upper(btrim("id")) = ANY(${stillMissing})
+          GROUP BY 1`
+        for (const c of containers) {
+          put(c.k, { found: true, ...(c.d ? { dateMs: new Date(c.d).getTime(), source: "container" as const } : {}) })
         }
       } catch { /* leave unresolved */ }
     }
@@ -189,15 +226,15 @@ export default async function DepartmentsView() {
           tote:    t.tote,
           dateMs:  info?.dateMs ?? null,
           lots:    t.lotCount,
-          // Why it has no date, so the panel can say something useful rather
-          // than just showing a blank.
+          // Why it has no date, so the panel says which step failed rather than
+          // just showing a blank.
           reason:  info?.dateMs != null
             ? null
-            : info?.bcItems
-              ? "in BC, but no goods-received date"
-              : info?.source === "container"
-                ? "warehouse container has no date"
-                : "no matching warehouse or BC record",
+            : !info?.found
+              ? "not found in the warehouse"
+              : info.receiptNo
+                ? `receipt ${info.receiptNo} has no goods-received date`
+                : "no receipt on this tote",
           source:  info?.source ?? null,
         }
       }),
