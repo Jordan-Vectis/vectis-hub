@@ -73,6 +73,94 @@ export default async function DepartmentsView() {
 
   const activeDaysById = new Map(dailyRows.map(r => [r.auctionId, r.days]))
 
+  // ── How far behind: what dates are the totes being catalogued from? ────────
+  // The tote off each of the LAST 10 LOTS catalogued on an active sale, resolved
+  // to the date that tote came in, then taken as a MEDIAN — a median because one
+  // stray old tote in the batch would drag an average back and misreport how far
+  // behind the sale really is. Comparing that date against today is the lag.
+  const activeIds = auctions.filter(a => !a.complete).map(a => a.id)
+
+  let toteRows: { auctionId: string; tote: string; rn: number }[] = []
+  if (activeIds.length > 0) {
+    try {
+      toteRows = await prisma.$queryRaw<{ auctionId: string; tote: string; rn: number }[]>`
+        SELECT "auctionId", "tote", rn FROM (
+          SELECT l."auctionId", l."tote",
+                 ROW_NUMBER() OVER (PARTITION BY l."auctionId" ORDER BY l."createdAt" DESC)::int AS rn
+          FROM "CatalogueLot" l
+          WHERE l."auctionId" = ANY(${activeIds})
+            AND l."tote" IS NOT NULL AND btrim(l."tote") <> ''
+        ) t WHERE rn <= 10
+        ORDER BY "auctionId", rn`
+    } catch {
+      toteRows = []
+    }
+  }
+
+  // Resolve each tote to a date. A tote reference can be either an internal
+  // warehouse container (its created date = when it was booked in) or a BC tote
+  // number (its items' goods-received date). Try the container first, fall back
+  // to BC, so it works whichever the cataloguers entered.
+  const toteDate = new Map<string, number>()
+  const toteIds = [...new Set(toteRows.map(r => r.tote))]
+  if (toteIds.length > 0) {
+    try {
+      const containers = await prisma.warehouseContainer.findMany({
+        where:  { id: { in: toteIds } },
+        select: { id: true, createdAt: true },
+      })
+      for (const c of containers) toteDate.set(c.id, c.createdAt.getTime())
+    } catch { /* leave unresolved */ }
+
+    const stillMissing = toteIds.filter(t => !toteDate.has(t))
+    if (stillMissing.length > 0) {
+      try {
+        const bc = await prisma.$queryRaw<{ toteNo: string; d: Date }[]>`
+          SELECT "toteNo", MIN("goodsReceivedDate") AS d
+          FROM "WarehouseItem"
+          WHERE "toteNo" = ANY(${stillMissing}) AND "goodsReceivedDate" IS NOT NULL
+          GROUP BY "toteNo"`
+        for (const r of bc) if (r.d) toteDate.set(r.toteNo, new Date(r.d).getTime())
+      } catch { /* leave unresolved */ }
+    }
+  }
+
+  // One entry per lot, newest first — the same tote appears as many times as it
+  // was used, which is right: the median should reflect the actual work done.
+  const totesBySale = new Map<string, string[]>()
+  for (const r of toteRows) totesBySale.set(r.auctionId, [...(totesBySale.get(r.auctionId) ?? []), r.tote])
+
+  const median = (xs: number[]): number => {
+    const s = [...xs].sort((a, b) => a - b)
+    const mid = Math.floor(s.length / 2)
+    return s.length % 2 === 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid]
+  }
+
+  function stockFor(auctionId: string) {
+    const totes = totesBySale.get(auctionId) ?? []
+    if (totes.length === 0) return null
+    const dated = totes.map(t => toteDate.get(t)).filter((d): d is number => d != null)
+    if (dated.length === 0) return null
+
+    // Listed out for the manager: each distinct tote from those lots, with its
+    // date and how many of the sampled lots came out of it.
+    const seen = new Map<string, { tote: string; dateMs: number | null; lots: number }>()
+    for (const t of totes) {
+      const cur = seen.get(t) ?? { tote: t, dateMs: toteDate.get(t) ?? null, lots: 0 }
+      cur.lots++
+      seen.set(t, cur)
+    }
+
+    return {
+      medianMs: median(dated),
+      oldestMs: Math.min(...dated),
+      newestMs: Math.max(...dated),
+      lots:     totes.length,
+      dated:    dated.length,
+      totes:    [...seen.values()],
+    }
+  }
+
   // Active sales, plus sales finished in the last three months. There is no
   // "completed at" timestamp — `complete` is just a flag — so recency uses the
   // sale date, falling back to when the record was last touched.
@@ -97,6 +185,7 @@ export default async function DepartmentsView() {
     complete:    !!a.complete,
     catalogued:  !!a.catalogued,
     addedToBC:   !!a.addedToBC,
+    stock:       a.complete ? null : stockFor(a.id),
   })
 
   const peopleFor = (saleIds: Set<string>) => {
