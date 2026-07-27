@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 import Link from "next/link"
 import { auctionTypeEmoji, auctionTypeLabel } from "@/lib/auction-types"
 import { fmtPace, daysToSale, paceFor, targetsFor, SALE_TARGETS } from "@/lib/sale-projection"
@@ -38,7 +38,20 @@ export type DeptGroup = {
   completed: SaleRow[]
   people: { name: string; lots: number; avgMs: number | null; days: number }[]
   stock: StockAge | null    // pooled across the department's active sales (Hub lots)
-  bcStock: StockAge | null  // the same figure from BC's own catalogued record
+}
+
+/**
+ * A row of the Business Central table. Deliberately has NOTHING to do with our
+ * departments, sales or lots — it is grouped by BC's own main category
+ * (EVA_ArticleCategoryCode) and covers every category BC holds, including ones
+ * we have no sale or department for.
+ */
+export type BcCategoryRow = {
+  category: string
+  stock: StockAge | null
+  catalogued: number
+  outstanding: number
+  lastCataloguedMs: number | null
 }
 
 type SaleBc = { bc: number; overlap: number; combined: number }
@@ -80,8 +93,9 @@ function lagTone(fromMs: number, nowMs: number) {
   return { text: "text-gray-500 dark:text-gray-400", bar: "bg-gray-400 dark:bg-gray-500", pct: Math.max(6, (days / LAG_RED) * 100) }
 }
 
-export default function DepartmentsTable({ groups, migrated, anyDepartments, nowMs }: {
+export default function DepartmentsTable({ groups, bcCategories, migrated, anyDepartments, nowMs }: {
   groups: DeptGroup[]
+  bcCategories: BcCategoryRow[]
   migrated: boolean
   anyDepartments: boolean
   nowMs: number
@@ -125,9 +139,7 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
     if (bm == null) return -1
     return am - bm
   }
-  const summary   = [...groups].sort(byOldest(g => g.stock))
-  const bcSummary = [...groups].sort(byOldest(g => g.bcStock))
-  const anyBc     = groups.some(g => g.bcStock)
+  const summary = [...groups].sort(byOldest(g => g.stock))
 
   const TH = "text-left font-medium py-2 px-3 text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400"
 
@@ -160,23 +172,8 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
         />
       )}
 
-      {/* ── The same question from BC's own record ── */}
-      {groups.length > 0 && anyBc && (
-        <ToteSummary
-          title="Using totes from — Business Central"
-          subtitle="The same figure taken from what BC records as catalogued, rather than from our Hub lots. Where the two disagree it's usually work done outside the wizard, or lots imported without a tote."
-          rows={bcSummary.map(g => ({
-            id: g.id, name: g.name, types: g.types, real: g.real,
-            stock: g.bcStock, active: g.active.length, lots: deptLots(g), pace: deptPace(g),
-            /** How BC's date compares with the Hub's, when both exist. */
-            deltaDays: g.stock?.medianMs != null && g.bcStock?.medianMs != null
-              ? Math.round((g.bcStock.medianMs - g.stock.medianMs) / 86_400_000)
-              : null,
-          }))}
-          nowMs={nowMs}
-          showDelta
-        />
-      )}
+      {/* ── Business Central on its own terms — nothing from our system ── */}
+      {bcCategories.length > 0 && <BcCategoryTable rows={bcCategories} nowMs={nowMs} />}
 
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
         Projected dates are when each sale reaches {SALE_TARGETS.join(", ")} lots at its current pace
@@ -470,17 +467,15 @@ type SummaryRow = {
   active: number
   lots: number
   pace: number
-  deltaDays?: number | null
 }
 
 // Shared by both summary tables — the Hub one and the BC one. Identical shape on
 // purpose: the whole point is that the two are directly comparable.
-function ToteSummary({ title, subtitle, rows, nowMs, showDelta = false }: {
+function ToteSummary({ title, subtitle, rows, nowMs }: {
   title: string
   subtitle: string
   rows: SummaryRow[]
   nowMs: number
-  showDelta?: boolean
 }) {
   const TH = "text-left font-medium py-2 px-3 text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400"
 
@@ -497,7 +492,6 @@ function ToteSummary({ title, subtitle, rows, nowMs, showDelta = false }: {
               <th className={TH}>Department</th>
               <th className={TH}>Using totes from</th>
               <th className={`${TH} w-48`}>How far behind</th>
-              {showDelta && <th className={TH}>vs Hub</th>}
               <th className={`${TH} text-right`}>Active</th>
               <th className={`${TH} text-right`}>Lots</th>
               <th className={`${TH} text-right`}>Pace</th>
@@ -538,30 +532,134 @@ function ToteSummary({ title, subtitle, rows, nowMs, showDelta = false }: {
                       </div>
                     ) : <span className="text-xs text-gray-400 dark:text-gray-500">—</span>}
                   </td>
-                  {showDelta && (
-                    <td className="py-2.5 px-3 whitespace-nowrap text-xs">
-                      {r.deltaDays == null ? (
-                        <span className="text-gray-400 dark:text-gray-500">—</span>
-                      ) : Math.abs(r.deltaDays) < 7 ? (
-                        <span className="text-gray-500 dark:text-gray-400">about the same</span>
-                      ) : (
-                        <span
-                          className={r.deltaDays > 0 ? "text-green-600 dark:text-green-400" : "text-amber-500"}
-                          title={r.deltaDays > 0
-                            ? "BC's catalogued record is on newer stock than our Hub lots suggest"
-                            : "BC's catalogued record is on older stock than our Hub lots suggest"}
-                        >
-                          {r.deltaDays > 0 ? "▲" : "▼"} {Math.abs(Math.round(r.deltaDays / 7))}w {r.deltaDays > 0 ? "newer" : "older"}
-                        </span>
-                      )}
-                    </td>
-                  )}
                   <td className="py-2.5 px-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{r.active}</td>
                   <td className="py-2.5 px-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{r.lots.toLocaleString("en-GB")}</td>
                   <td className="py-2.5 px-3 text-right tabular-nums text-gray-700 dark:text-gray-300">
                     {r.pace > 0 ? `${fmtPace(r.pace)}/day` : "—"}
                   </td>
                 </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+/**
+ * Business Central on its own terms. NOTHING in here comes from our system — no
+ * departments, no CatalogueAuction, no CatalogueLot. Rows are BC's own main
+ * categories (EVA_ArticleCategoryCode) and every category BC holds appears,
+ * whether or not we have a sale or department for it.
+ */
+function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number }) {
+  const [open, setOpen] = useState<string | null>(null)
+  const TH = "text-left font-medium py-2 px-3 text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400"
+
+  return (
+    <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden mb-5">
+      <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-800">
+        <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+          Using totes from — Business Central categories
+        </h2>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+          Straight from Business Central and nothing else — grouped by BC&apos;s own main category,
+          showing every category it holds whether or not we have a sale or department for it.
+          Furthest behind first.
+        </p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-100 dark:border-gray-800">
+              <th className={TH}>BC category</th>
+              <th className={TH}>Using totes from</th>
+              <th className={`${TH} w-48`}>How far behind</th>
+              <th className={TH}>Last catalogued</th>
+              <th className={`${TH} text-right`}>Catalogued</th>
+              <th className={`${TH} text-right`}>Still to do</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => {
+              const median = r.stock?.medianMs ?? null
+              const tone   = median != null ? lagTone(median, nowMs) : null
+              const total  = r.catalogued + r.outstanding
+              const pct    = total > 0 ? Math.round((r.catalogued / total) * 100) : 0
+              return (
+                <Fragment key={r.category}>
+                  <tr className="border-b border-gray-50 dark:border-gray-800/50 last:border-0">
+                    <td className="py-2.5 px-3">
+                      <span className="font-mono font-semibold text-gray-900 dark:text-white">{r.category}</span>
+                      <span className="text-xs text-gray-400 dark:text-gray-500 ml-2">{pct}% done</span>
+                    </td>
+                    <td className="py-2.5 px-3 whitespace-nowrap">
+                      {median != null ? (
+                        <button onClick={() => setOpen(open === r.category ? null : r.category)} className="group text-left">
+                          <span className="font-semibold text-gray-900 dark:text-white group-hover:underline">{fmtToteDate(median)}</span>
+                          <span className="text-gray-400 dark:text-gray-500 ml-1 text-xs">{open === r.category ? "▾" : "▸"}</span>
+                        </button>
+                      ) : (
+                        <span className="text-xs text-gray-400 dark:text-gray-500">
+                          {r.stock ? "no dates on those totes" : "nothing catalogued"}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      {median != null && tone ? (
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 flex-1 min-w-[70px] rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                            <div className={`h-full rounded-full ${tone.bar}`} style={{ width: `${tone.pct}%` }} />
+                          </div>
+                          <span className={`text-xs tabular-nums ${tone.text}`}>{fmtLag(median, nowMs)} behind</span>
+                        </div>
+                      ) : <span className="text-xs text-gray-400 dark:text-gray-500">—</span>}
+                    </td>
+                    <td className="py-2.5 px-3 whitespace-nowrap text-gray-700 dark:text-gray-300">
+                      {r.lastCataloguedMs != null
+                        ? fmtToteDate(r.lastCataloguedMs)
+                        : <span className="text-gray-400 dark:text-gray-500">—</span>}
+                    </td>
+                    <td className="py-2.5 px-3 text-right tabular-nums text-gray-700 dark:text-gray-300">
+                      {r.catalogued.toLocaleString("en-GB")}
+                    </td>
+                    <td className="py-2.5 px-3 text-right tabular-nums">
+                      <span className={r.outstanding > 0 ? "text-gray-900 dark:text-white font-semibold" : "text-gray-400 dark:text-gray-500"}>
+                        {r.outstanding.toLocaleString("en-GB")}
+                      </span>
+                    </td>
+                  </tr>
+                  {open === r.category && r.stock && (
+                    <tr className="border-b border-gray-50 dark:border-gray-800/50">
+                      <td colSpan={6} className="px-3 py-3 bg-gray-50/60 dark:bg-gray-800/25">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                          Last {r.stock.totesSampled} tote{r.stock.totesSampled === 1 ? "" : "s"} Business Central
+                          recorded as catalogued in {r.category}, most recent first.
+                          {r.stock.oldestMs != null && ` Oldest ${fmtToteDate(r.stock.oldestMs)}, newest ${fmtToteDate(r.stock.newestMs!)}.`}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {r.stock.totes.map(t => (
+                            <span
+                              key={t.tote}
+                              title={`${t.lots} item${t.lots === 1 ? "" : "s"} catalogued out of this tote${t.reason ? ` — ${t.reason}` : ""}`}
+                              className={`text-xs px-2 py-1 rounded-lg border whitespace-nowrap ${
+                                t.dateMs == null
+                                  ? "border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500"
+                                  : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300"
+                              }`}
+                            >
+                              <b className="font-mono font-semibold">{t.tote}</b>
+                              <span className="opacity-60 mx-1">·</span>
+                              {t.dateMs == null ? (t.reason ?? "no date") : fmtToteDate(t.dateMs)}
+                              {t.lots > 1 && <span className="opacity-60 ml-1.5">×{t.lots}</span>}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               )
             })}
           </tbody>

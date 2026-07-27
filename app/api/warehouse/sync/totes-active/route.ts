@@ -44,6 +44,20 @@ export async function POST(req: NextRequest) {
   let itemsProcessed = 0
   const startMs = Date.now()
 
+  // bcCreatedAt arrives with Run Migrations, but code deploys to Railway before
+  // that happens. Writing a column that doesn't exist yet fails EVERY upsert and
+  // takes the whole tote sync down with it — so check once and omit the field
+  // until the column is there.
+  let hasBcCreatedAt = false
+  try {
+    const [row] = await prisma.$queryRaw<{ exists: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'WarehouseTote' AND column_name = 'bcCreatedAt'
+      ) AS "exists"`
+    hasBcCreatedAt = !!row?.exists
+  } catch { hasBcCreatedAt = false }
+
   try {
     const urlOrEndpoint = nextLink ?? "Receipt_Totes_Excel"
     // No $orderby — Receipt_Totes_Excel has no sortable timestamp field
@@ -79,7 +93,7 @@ export async function POST(req: NextRequest) {
             vendorName: r.EVA_TOT_VendorName ?? null,
             status:     r.EVA_TOT_ReserveStatus ?? null,
             catalogued: r.EVA_TOT_Catalogued === true || r.EVA_TOT_Catalogued === 1,
-            bcCreatedAt: bcDate(r.SystemCreatedAt),
+            ...(hasBcCreatedAt ? { bcCreatedAt: bcDate(r.SystemCreatedAt) } : {}),
             syncedAt:   new Date(),
           },
           create: {
@@ -90,7 +104,7 @@ export async function POST(req: NextRequest) {
             vendorName: r.EVA_TOT_VendorName ?? null,
             status:     r.EVA_TOT_ReserveStatus ?? null,
             catalogued: r.EVA_TOT_Catalogued === true || r.EVA_TOT_Catalogued === 1,
-            bcCreatedAt: bcDate(r.SystemCreatedAt),
+            ...(hasBcCreatedAt ? { bcCreatedAt: bcDate(r.SystemCreatedAt) } : {}),
           },
         }))
       }

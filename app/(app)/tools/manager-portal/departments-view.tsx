@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import DepartmentsTable, { type DeptGroup } from "./departments-table"
+import DepartmentsTable, { type DeptGroup, type BcCategoryRow } from "./departments-table"
 
 // Manager Portal → Departments.
 // Rolls cataloguing up per department. A department owns a set of auction types,
@@ -101,37 +101,45 @@ export default async function DepartmentsView() {
     }
   }
 
-  // ── The same question, answered from Business Central's own record ─────────
-  // The Hub table above starts from CatalogueLot.tote — what our cataloguers
-  // recorded. This starts from WarehouseItem.cataloguedAt — what BC has actually
-  // seen catalogued. Where the two disagree is itself the useful bit: work done
-  // outside the wizard, or lots imported without a tote, appear in one only.
-  const activeCodes = auctions.filter(a => !a.complete).map(a => a.code.trim().toUpperCase())
-
-  let bcToteRows: { auctionCode: string; tote: string; lotCount: number }[] = []
-  if (activeCodes.length > 0) {
-    try {
-      bcToteRows = await prisma.$queryRaw<{ auctionCode: string; tote: string; lotCount: number }[]>`
-        SELECT "auctionCode", "tote", "lotCount" FROM (
-          SELECT upper(btrim(w."auctionCode")) AS "auctionCode",
-                 upper(btrim(w."toteNo"))      AS "tote",
-                 COUNT(*)::int                 AS "lotCount",
+  // ── Business Central on its own terms ──────────────────────────────────────
+  // Nothing to do with our departments, our sales or our lots. Grouped by BC's
+  // OWN main category (EVA_ArticleCategoryCode), covering every category BC
+  // holds — including ones we have no sale or department for. The last 10
+  // distinct totes catalogued in each category, by BC's own cataloguedAt.
+  let bcToteRows: { category: string; tote: string; lotCount: number }[] = []
+  let bcCatTotals: { category: string; catalogued: number; outstanding: number; lastAt: Date | null }[] = []
+  try {
+    [bcToteRows, bcCatTotals] = await Promise.all([
+      prisma.$queryRaw<{ category: string; tote: string; lotCount: number }[]>`
+        SELECT "category", "tote", "lotCount" FROM (
+          SELECT btrim(w."category")       AS "category",
+                 upper(btrim(w."toteNo"))  AS "tote",
+                 COUNT(*)::int             AS "lotCount",
                  ROW_NUMBER() OVER (
-                   PARTITION BY upper(btrim(w."auctionCode"))
+                   PARTITION BY btrim(w."category")
                    ORDER BY MAX(w."cataloguedAt") DESC
                  )::int AS rn
           FROM "WarehouseItem" w
-          WHERE upper(btrim(w."auctionCode")) = ANY(${activeCodes})
+          WHERE w."category" IS NOT NULL AND btrim(w."category") <> ''
             AND w."catalogued" = true
             -- ⚠ BC sends an empty date as 0001-01-01, which is a VALID date
             AND w."cataloguedAt" IS NOT NULL AND w."cataloguedAt" >= DATE '1990-01-01'
             AND w."toteNo" IS NOT NULL AND btrim(w."toteNo") <> ''
           GROUP BY 1, 2
         ) t WHERE rn <= 10
-        ORDER BY "auctionCode", rn`
-    } catch {
-      bcToteRows = []
-    }
+        ORDER BY "category", rn`,
+      prisma.$queryRaw<{ category: string; catalogued: number; outstanding: number; lastAt: Date | null }[]>`
+        SELECT btrim(w."category")                                          AS "category",
+               COUNT(*) FILTER (WHERE w."catalogued" = true)::int            AS "catalogued",
+               COUNT(*) FILTER (WHERE w."catalogued" IS DISTINCT FROM true)::int AS "outstanding",
+               MAX(w."cataloguedAt") FILTER (WHERE w."cataloguedAt" >= DATE '1990-01-01') AS "lastAt"
+        FROM "WarehouseItem" w
+        WHERE w."category" IS NOT NULL AND btrim(w."category") <> ''
+        GROUP BY 1`,
+    ])
+  } catch {
+    bcToteRows   = []
+    bcCatTotals  = []
   }
 
   // Resolve each tote to a date. A tote reference can be either an internal
@@ -257,11 +265,10 @@ export default async function DepartmentsView() {
     totesBySale.set(r.auctionId, [...(totesBySale.get(r.auctionId) ?? []), { tote: r.tote, lotCount: r.lotCount }])
   }
 
-  // Same, keyed by sale CODE — BC identifies a sale by its allocation code
-  // (EVA_SalesAllocation), not by our internal auction id.
-  const bcTotesByCode = new Map<string, { tote: string; lotCount: number }[]>()
+  // Same, keyed by BC's own main category.
+  const bcTotesByCategory = new Map<string, { tote: string; lotCount: number }[]>()
   for (const r of bcToteRows) {
-    bcTotesByCode.set(r.auctionCode, [...(bcTotesByCode.get(r.auctionCode) ?? []), { tote: r.tote, lotCount: r.lotCount }])
+    bcTotesByCategory.set(r.category, [...(bcTotesByCategory.get(r.category) ?? []), { tote: r.tote, lotCount: r.lotCount }])
   }
 
   const median = (xs: number[]): number => {
@@ -318,9 +325,25 @@ export default async function DepartmentsView() {
   }
 
   /** From our Hub lots — what the cataloguers recorded. */
-  const stockFor   = (auctionIds: string[]) => stockFrom(auctionIds.map(id => totesBySale.get(id) ?? []))
-  /** From BC's own catalogued record, keyed by sale allocation code. */
-  const bcStockFor = (codes: string[]) => stockFrom(codes.map(c => bcTotesByCode.get(c.trim().toUpperCase()) ?? []))
+  const stockFor = (auctionIds: string[]) => stockFrom(auctionIds.map(id => totesBySale.get(id) ?? []))
+
+  // ── The BC-only table: one row per BC category, our system not involved ──
+  const bcCategories: BcCategoryRow[] = bcCatTotals
+    .map(c => ({
+      category:    c.category,
+      stock:       stockFrom([bcTotesByCategory.get(c.category) ?? []]),
+      catalogued:  Number(c.catalogued),
+      outstanding: Number(c.outstanding),
+      lastCataloguedMs: c.lastAt ? new Date(c.lastAt).getTime() : null,
+    }))
+    // Furthest behind first; categories with no dated totes sink to the bottom.
+    .sort((a, b) => {
+      const am = a.stock?.medianMs, bm = b.stock?.medianMs
+      if (am == null && bm == null) return a.category.localeCompare(b.category)
+      if (am == null) return 1
+      if (bm == null) return -1
+      return am - bm
+    })
 
   // Active sales, plus sales finished in the last three months. There is no
   // "completed at" timestamp — `complete` is just a flag — so recency uses the
@@ -378,8 +401,6 @@ export default async function DepartmentsView() {
       // "using totes from" is a median over the department's whole tote sample,
       // not a median of per-sale medians.
       stock:     stockFor(activeSales.map(s => s.id)),
-      // The same figure from BC's own catalogued record, for the second table.
-      bcStock:   bcStockFor(activeSales.map(s => s.code)),
     }
   }
 
@@ -398,6 +419,7 @@ export default async function DepartmentsView() {
   return (
     <DepartmentsTable
       groups={groups}
+      bcCategories={bcCategories}
       migrated={migrated}
       anyDepartments={departments.length > 0}
       nowMs={Date.now()}

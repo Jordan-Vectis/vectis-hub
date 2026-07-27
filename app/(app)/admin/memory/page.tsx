@@ -97,15 +97,21 @@ This is a codebase-wide trap, not just a report bug. \`new Date("0001-01-01")\` 
 
 Tote dates render with the **year** (\`fmtToteDate\`) precisely because a bare "31 Dec" hid this for a whole round.
 
-## Second summary table — the same figure from BC's own record (2026-07-27)
+## ⚠ bcCreatedAt is EMPTY until the totes-active sync is re-run
 
-Under the Hub summary sits **"Using totes from — Business Central"**, identical columns on purpose so the two are directly comparable, plus a **vs Hub** column (▲ newer / ▼ older in weeks, "about the same" under 7 days).
+Jordan: "you are still getting the dates wrong and it's not finding them". The lookup was correct — \`WarehouseTote.bcCreatedAt\` simply had no data, because the column was added the same day and the **totes-active sync only runs every 12h**. BC's own Receipt Totes page showed \`T024358 · Created At 04/03/2026 11:31\`, so the data exists; ours hadn't been pulled.
 
-The difference is the *starting point*, and it's the whole value of having both:
-- **Hub table** starts from \`CatalogueLot.tote\` — what our cataloguers recorded in the wizard.
-- **BC table** starts from \`WarehouseItem\` where \`catalogued = true\`, ordered by \`cataloguedAt\` (\`EVA_CataloguedDateTime\`) — what BC has actually seen catalogued. Keyed by \`auctionCode\` (\`EVA_SalesAllocation\`) → sale code → auctionType → department.
+**Fix is a sync, not a code change:** BC Warehouse → **Data Sync** → run totes-active (the UI button paginates to completion via nextLink, unlike the cron which does one pass). A newly-added column needs that one-time run to backfill.
 
-Where they disagree it's normally work done outside the wizard, or lots imported without a tote. Both resolve their dates through the **same one pass** of \`toteInfo\` lookups (\`toteKeys\` merges both sets) and share \`stockFrom()\` — \`stockFor(ids)\` for Hub, \`bcStockFor(codes)\` for BC. Both summary tables render through the shared \`ToteSummary\` component. ⚠ The BC query needs the same \`>= DATE '1990-01-01'\` guard on \`cataloguedAt\`, for the 0001-01-01 reason above.
+⚠ The sync now checks \`information_schema\` once for the column and omits the field if it isn't there — writing a not-yet-migrated column made **every** upsert fail and took the whole tote sync down, not just that field.
+
+## The BC-only table — grouped by BC's OWN category (2026-07-27)
+
+⚠ **First attempt was wrong** — I keyed it by our departments (auctionCode → sale → auctionType → department). Jordan: "it has nothing to do with our system". The BC table must involve **no** CatalogueAuction, CatalogueLot or Department at all.
+
+Correct shape: one row per **BC main category** (\`WarehouseItem.category\` = \`EVA_ArticleCategoryCode\`), covering **every category BC holds** whether or not we have a sale or department for it. Columns: category, using totes from, how far behind, last catalogued, catalogued count, still-to-do count, plus an expandable tote list. Component \`BcCategoryTable\`; row type \`BcCategoryRow\`.
+
+Sampling matches the Hub table: last 10 distinct totes per category ordered by BC's own \`cataloguedAt\`, median of their created dates. Both sets of totes resolve through the **same one pass** of \`toteInfo\` lookups (\`toteKeys\` merges both) and share \`stockFrom()\`. ⚠ The BC query needs the same \`>= DATE '1990-01-01'\` guard on \`cataloguedAt\`, for the 0001-01-01 reason above.
 
 ⚠ **Match on \`upper(btrim(...))\` on BOTH sides** — tote values are upper-cased on some write paths (\`importLots\`) and stored as typed on others, so exact matching silently found nothing and every tote read "no matching record". This cost several rounds.
 
