@@ -101,6 +101,39 @@ export default async function DepartmentsView() {
     }
   }
 
+  // ── The same question, answered from Business Central's own record ─────────
+  // The Hub table above starts from CatalogueLot.tote — what our cataloguers
+  // recorded. This starts from WarehouseItem.cataloguedAt — what BC has actually
+  // seen catalogued. Where the two disagree is itself the useful bit: work done
+  // outside the wizard, or lots imported without a tote, appear in one only.
+  const activeCodes = auctions.filter(a => !a.complete).map(a => a.code.trim().toUpperCase())
+
+  let bcToteRows: { auctionCode: string; tote: string; lotCount: number }[] = []
+  if (activeCodes.length > 0) {
+    try {
+      bcToteRows = await prisma.$queryRaw<{ auctionCode: string; tote: string; lotCount: number }[]>`
+        SELECT "auctionCode", "tote", "lotCount" FROM (
+          SELECT upper(btrim(w."auctionCode")) AS "auctionCode",
+                 upper(btrim(w."toteNo"))      AS "tote",
+                 COUNT(*)::int                 AS "lotCount",
+                 ROW_NUMBER() OVER (
+                   PARTITION BY upper(btrim(w."auctionCode"))
+                   ORDER BY MAX(w."cataloguedAt") DESC
+                 )::int AS rn
+          FROM "WarehouseItem" w
+          WHERE upper(btrim(w."auctionCode")) = ANY(${activeCodes})
+            AND w."catalogued" = true
+            -- ⚠ BC sends an empty date as 0001-01-01, which is a VALID date
+            AND w."cataloguedAt" IS NOT NULL AND w."cataloguedAt" >= DATE '1990-01-01'
+            AND w."toteNo" IS NOT NULL AND btrim(w."toteNo") <> ''
+          GROUP BY 1, 2
+        ) t WHERE rn <= 10
+        ORDER BY "auctionCode", rn`
+    } catch {
+      bcToteRows = []
+    }
+  }
+
   // Resolve each tote to a date. A tote reference can be either an internal
   // warehouse container (its id IS the tote number, and createdAt = when it was
   // booked in) or a BC tote number (its items' goods-received date). Try the
@@ -118,7 +151,11 @@ export default async function DepartmentsView() {
     found: boolean            // the tote exists somewhere in the warehouse data
   }
   const toteInfo = new Map<string, ToteLookup>()
-  const toteKeys = [...new Set(toteRows.map(r => norm(r.tote)))]
+  // Both sets resolve together — one pass of lookups serves both tables.
+  const toteKeys = [...new Set([
+    ...toteRows.map(r => norm(r.tote)),
+    ...bcToteRows.map(r => norm(r.tote)),
+  ])]
 
   if (toteKeys.length > 0) {
     const put = (k: string, patch: Partial<ToteLookup>) => {
@@ -220,6 +257,13 @@ export default async function DepartmentsView() {
     totesBySale.set(r.auctionId, [...(totesBySale.get(r.auctionId) ?? []), { tote: r.tote, lotCount: r.lotCount }])
   }
 
+  // Same, keyed by sale CODE — BC identifies a sale by its allocation code
+  // (EVA_SalesAllocation), not by our internal auction id.
+  const bcTotesByCode = new Map<string, { tote: string; lotCount: number }[]>()
+  for (const r of bcToteRows) {
+    bcTotesByCode.set(r.auctionCode, [...(bcTotesByCode.get(r.auctionCode) ?? []), { tote: r.tote, lotCount: r.lotCount }])
+  }
+
   const median = (xs: number[]): number => {
     const s = [...xs].sort((a, b) => a - b)
     const mid = Math.floor(s.length / 2)
@@ -230,14 +274,12 @@ export default async function DepartmentsView() {
   // totes but none resolve to a date, it still returns them with a null median —
   // so the column can say which of the two happened and the expanded panel can
   // show the actual tote values rather than a bare dash that explains nothing.
-  // Takes a set of sales so the same maths serves one sale and a whole
-  // department (the summary strip pools every active sale's totes).
-  function stockFor(auctionIds: string[]) {
+  // Takes lists of totes so the same maths serves one sale, a whole department,
+  // and either source (our Hub lots or BC's catalogued record).
+  function stockFrom(lists: { tote: string; lotCount: number }[][]) {
     const merged = new Map<string, number>()   // tote → lots, deduped across sales
-    for (const id of auctionIds) {
-      for (const t of totesBySale.get(id) ?? []) {
-        merged.set(t.tote, (merged.get(t.tote) ?? 0) + t.lotCount)
-      }
+    for (const list of lists) {
+      for (const t of list) merged.set(t.tote, (merged.get(t.tote) ?? 0) + t.lotCount)
     }
     const totes = [...merged.entries()].map(([tote, lotCount]) => ({ tote, lotCount }))
     if (totes.length === 0) return null
@@ -274,6 +316,11 @@ export default async function DepartmentsView() {
       }),
     }
   }
+
+  /** From our Hub lots — what the cataloguers recorded. */
+  const stockFor   = (auctionIds: string[]) => stockFrom(auctionIds.map(id => totesBySale.get(id) ?? []))
+  /** From BC's own catalogued record, keyed by sale allocation code. */
+  const bcStockFor = (codes: string[]) => stockFrom(codes.map(c => bcTotesByCode.get(c.trim().toUpperCase()) ?? []))
 
   // Active sales, plus sales finished in the last three months. There is no
   // "completed at" timestamp — `complete` is just a flag — so recency uses the
@@ -331,6 +378,8 @@ export default async function DepartmentsView() {
       // "using totes from" is a median over the department's whole tote sample,
       // not a median of per-sale medians.
       stock:     stockFor(activeSales.map(s => s.id)),
+      // The same figure from BC's own catalogued record, for the second table.
+      bcStock:   bcStockFor(activeSales.map(s => s.code)),
     }
   }
 

@@ -37,7 +37,8 @@ export type DeptGroup = {
   active: SaleRow[]
   completed: SaleRow[]
   people: { name: string; lots: number; avgMs: number | null; days: number }[]
-  stock: StockAge | null    // pooled across the department's active sales
+  stock: StockAge | null    // pooled across the department's active sales (Hub lots)
+  bcStock: StockAge | null  // the same figure from BC's own catalogued record
 }
 
 type SaleBc = { bc: number; overlap: number; combined: number }
@@ -117,13 +118,16 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
   const deptPace = (g: DeptGroup) => g.active.reduce((n, s) => n + paceFor(s.lots, s.activeDays), 0)
 
   // Furthest behind first; departments with no tote dates sink to the bottom.
-  const summary = [...groups].sort((a, b) => {
-    const am = a.stock?.medianMs, bm = b.stock?.medianMs
+  const byOldest = (pick: (g: DeptGroup) => StockAge | null) => (a: DeptGroup, b: DeptGroup) => {
+    const am = pick(a)?.medianMs, bm = pick(b)?.medianMs
     if (am == null && bm == null) return a.name.localeCompare(b.name)
     if (am == null) return 1
     if (bm == null) return -1
     return am - bm
-  })
+  }
+  const summary   = [...groups].sort(byOldest(g => g.stock))
+  const bcSummary = [...groups].sort(byOldest(g => g.bcStock))
+  const anyBc     = groups.some(g => g.bcStock)
 
   const TH = "text-left font-medium py-2 px-3 text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400"
 
@@ -145,73 +149,33 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
 
       {/* ── Summary: which department is working the oldest stock ── */}
       {groups.length > 0 && (
-        <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden mb-5">
-          <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-800">
-            <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Using totes from</h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Furthest behind first — the median date the totes each department is working came into stock.
-            </p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 dark:border-gray-800">
-                  <th className={TH}>Department</th>
-                  <th className={TH}>Using totes from</th>
-                  <th className={`${TH} w-48`}>How far behind</th>
-                  <th className={`${TH} text-right`}>Active</th>
-                  <th className={`${TH} text-right`}>Lots</th>
-                  <th className={`${TH} text-right`}>Pace</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.map(g => {
-                  const median = g.stock?.medianMs ?? null
-                  const tone   = median != null ? lagTone(median, nowMs) : null
-                  const pace   = deptPace(g)
-                  return (
-                    <tr key={g.id} className="border-b border-gray-50 dark:border-gray-800/50 last:border-0">
-                      <td className="py-2.5 px-3">
-                        <span className={g.real ? "font-semibold text-gray-900 dark:text-white" : "font-semibold text-gray-500 dark:text-gray-400"}>
-                          {g.name}
-                        </span>
-                        <span className="ml-2 inline-flex flex-wrap gap-1 align-middle">
-                          {g.types.map(t => (
-                            <span key={t} className="text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
-                              {auctionTypeEmoji(t)} {auctionTypeLabel(t)}
-                            </span>
-                          ))}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        {median != null
-                          ? <span className="font-semibold text-gray-900 dark:text-white">{fmtToteDate(median)}</span>
-                          : <span className="text-xs text-gray-400 dark:text-gray-500">
-                              {g.stock ? "no dates on those totes" : "no totes recorded"}
-                            </span>}
-                      </td>
-                      <td className="py-2.5 px-3">
-                        {median != null && tone ? (
-                          <div className="flex items-center gap-2">
-                            <div className="h-1.5 flex-1 min-w-[70px] rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
-                              <div className={`h-full rounded-full ${tone.bar}`} style={{ width: `${tone.pct}%` }} />
-                            </div>
-                            <span className={`text-xs tabular-nums ${tone.text}`}>{fmtLag(median, nowMs)} behind</span>
-                          </div>
-                        ) : <span className="text-xs text-gray-400 dark:text-gray-500">—</span>}
-                      </td>
-                      <td className="py-2.5 px-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{g.active.length}</td>
-                      <td className="py-2.5 px-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{deptLots(g).toLocaleString("en-GB")}</td>
-                      <td className="py-2.5 px-3 text-right tabular-nums text-gray-700 dark:text-gray-300">
-                        {pace > 0 ? `${fmtPace(pace)}/day` : "—"}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <ToteSummary
+          title="Using totes from"
+          subtitle="Furthest behind first — the median date the totes each department is working came into stock. From the totes our cataloguers recorded against Hub lots."
+          rows={summary.map(g => ({
+            id: g.id, name: g.name, types: g.types, real: g.real,
+            stock: g.stock, active: g.active.length, lots: deptLots(g), pace: deptPace(g),
+          }))}
+          nowMs={nowMs}
+        />
+      )}
+
+      {/* ── The same question from BC's own record ── */}
+      {groups.length > 0 && anyBc && (
+        <ToteSummary
+          title="Using totes from — Business Central"
+          subtitle="The same figure taken from what BC records as catalogued, rather than from our Hub lots. Where the two disagree it's usually work done outside the wizard, or lots imported without a tote."
+          rows={bcSummary.map(g => ({
+            id: g.id, name: g.name, types: g.types, real: g.real,
+            stock: g.bcStock, active: g.active.length, lots: deptLots(g), pace: deptPace(g),
+            /** How BC's date compares with the Hub's, when both exist. */
+            deltaDays: g.stock?.medianMs != null && g.bcStock?.medianMs != null
+              ? Math.round((g.bcStock.medianMs - g.stock.medianMs) / 86_400_000)
+              : null,
+          }))}
+          nowMs={nowMs}
+          showDelta
+        />
       )}
 
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
@@ -494,5 +458,115 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
         </div>
       </section>
     </div>
+  )
+}
+
+type SummaryRow = {
+  id: string
+  name: string
+  types: string[]
+  real: boolean
+  stock: StockAge | null
+  active: number
+  lots: number
+  pace: number
+  deltaDays?: number | null
+}
+
+// Shared by both summary tables — the Hub one and the BC one. Identical shape on
+// purpose: the whole point is that the two are directly comparable.
+function ToteSummary({ title, subtitle, rows, nowMs, showDelta = false }: {
+  title: string
+  subtitle: string
+  rows: SummaryRow[]
+  nowMs: number
+  showDelta?: boolean
+}) {
+  const TH = "text-left font-medium py-2 px-3 text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400"
+
+  return (
+    <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden mb-5">
+      <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-800">
+        <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200">{title}</h2>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{subtitle}</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-100 dark:border-gray-800">
+              <th className={TH}>Department</th>
+              <th className={TH}>Using totes from</th>
+              <th className={`${TH} w-48`}>How far behind</th>
+              {showDelta && <th className={TH}>vs Hub</th>}
+              <th className={`${TH} text-right`}>Active</th>
+              <th className={`${TH} text-right`}>Lots</th>
+              <th className={`${TH} text-right`}>Pace</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => {
+              const median = r.stock?.medianMs ?? null
+              const tone   = median != null ? lagTone(median, nowMs) : null
+              return (
+                <tr key={r.id} className="border-b border-gray-50 dark:border-gray-800/50 last:border-0">
+                  <td className="py-2.5 px-3">
+                    <span className={r.real ? "font-semibold text-gray-900 dark:text-white" : "font-semibold text-gray-500 dark:text-gray-400"}>
+                      {r.name}
+                    </span>
+                    <span className="ml-2 inline-flex flex-wrap gap-1 align-middle">
+                      {r.types.map(t => (
+                        <span key={t} className="text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+                          {auctionTypeEmoji(t)} {auctionTypeLabel(t)}
+                        </span>
+                      ))}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-3 whitespace-nowrap">
+                    {median != null
+                      ? <span className="font-semibold text-gray-900 dark:text-white">{fmtToteDate(median)}</span>
+                      : <span className="text-xs text-gray-400 dark:text-gray-500">
+                          {r.stock ? "no dates on those totes" : "no totes recorded"}
+                        </span>}
+                  </td>
+                  <td className="py-2.5 px-3">
+                    {median != null && tone ? (
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 flex-1 min-w-[70px] rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                          <div className={`h-full rounded-full ${tone.bar}`} style={{ width: `${tone.pct}%` }} />
+                        </div>
+                        <span className={`text-xs tabular-nums ${tone.text}`}>{fmtLag(median, nowMs)} behind</span>
+                      </div>
+                    ) : <span className="text-xs text-gray-400 dark:text-gray-500">—</span>}
+                  </td>
+                  {showDelta && (
+                    <td className="py-2.5 px-3 whitespace-nowrap text-xs">
+                      {r.deltaDays == null ? (
+                        <span className="text-gray-400 dark:text-gray-500">—</span>
+                      ) : Math.abs(r.deltaDays) < 7 ? (
+                        <span className="text-gray-500 dark:text-gray-400">about the same</span>
+                      ) : (
+                        <span
+                          className={r.deltaDays > 0 ? "text-green-600 dark:text-green-400" : "text-amber-500"}
+                          title={r.deltaDays > 0
+                            ? "BC's catalogued record is on newer stock than our Hub lots suggest"
+                            : "BC's catalogued record is on older stock than our Hub lots suggest"}
+                        >
+                          {r.deltaDays > 0 ? "▲" : "▼"} {Math.abs(Math.round(r.deltaDays / 7))}w {r.deltaDays > 0 ? "newer" : "older"}
+                        </span>
+                      )}
+                    </td>
+                  )}
+                  <td className="py-2.5 px-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{r.active}</td>
+                  <td className="py-2.5 px-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{r.lots.toLocaleString("en-GB")}</td>
+                  <td className="py-2.5 px-3 text-right tabular-nums text-gray-700 dark:text-gray-300">
+                    {r.pace > 0 ? `${fmtPace(r.pace)}/day` : "—"}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }

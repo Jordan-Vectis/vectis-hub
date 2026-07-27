@@ -95,7 +95,17 @@ Resolution order: (1) **\`WarehouseTote.bcCreatedAt\`**; (2) \`WarehouseItem.tot
 
 This is a codebase-wide trap, not just a report bug. \`new Date("0001-01-01")\` is a **valid** Date, so \`parseDate\` stored it as real data and the portal read a tote as "24304.3m behind" (~2,025 years). Both \`parseDate\` in **\`app/api/warehouse/sync/receipt-lines\`** and \`bcDate\` in **\`sync/totes-active\`** now null anything before **1990**, and the report's SQL also filters \`goodsReceivedDate >= DATE '1990-01-01'\` so rows synced before the fix don't leak through. **Any new BC date field must go through the same guard** — \`EVA_TOT_CataloguedAt\` is a confirmed example that arrives as \`0001-01-01\`.
 
-Stock dates render with the **year** (\`fmtStockDate\`) precisely because a bare "31 Dec" hid this for a whole round.
+Tote dates render with the **year** (\`fmtToteDate\`) precisely because a bare "31 Dec" hid this for a whole round.
+
+## Second summary table — the same figure from BC's own record (2026-07-27)
+
+Under the Hub summary sits **"Using totes from — Business Central"**, identical columns on purpose so the two are directly comparable, plus a **vs Hub** column (▲ newer / ▼ older in weeks, "about the same" under 7 days).
+
+The difference is the *starting point*, and it's the whole value of having both:
+- **Hub table** starts from \`CatalogueLot.tote\` — what our cataloguers recorded in the wizard.
+- **BC table** starts from \`WarehouseItem\` where \`catalogued = true\`, ordered by \`cataloguedAt\` (\`EVA_CataloguedDateTime\`) — what BC has actually seen catalogued. Keyed by \`auctionCode\` (\`EVA_SalesAllocation\`) → sale code → auctionType → department.
+
+Where they disagree it's normally work done outside the wizard, or lots imported without a tote. Both resolve their dates through the **same one pass** of \`toteInfo\` lookups (\`toteKeys\` merges both sets) and share \`stockFrom()\` — \`stockFor(ids)\` for Hub, \`bcStockFor(codes)\` for BC. Both summary tables render through the shared \`ToteSummary\` component. ⚠ The BC query needs the same \`>= DATE '1990-01-01'\` guard on \`cataloguedAt\`, for the 0001-01-01 reason above.
 
 ⚠ **Match on \`upper(btrim(...))\` on BOTH sides** — tote values are upper-cased on some write paths (\`importLots\`) and stored as typed on others, so exact matching silently found nothing and every tote read "no matching record". This cost several rounds.
 
