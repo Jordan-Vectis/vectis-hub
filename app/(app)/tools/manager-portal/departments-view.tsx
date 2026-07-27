@@ -102,29 +102,51 @@ export default async function DepartmentsView() {
   }
 
   // Resolve each tote to a date. A tote reference can be either an internal
-  // warehouse container (its created date = when it was booked in) or a BC tote
-  // number (its items' goods-received date). Try the container first, fall back
-  // to BC, so it works whichever the cataloguers entered.
-  const toteDate = new Map<string, number>()
-  const toteIds = [...new Set(toteRows.map(r => r.tote))]
-  if (toteIds.length > 0) {
+  // warehouse container (its id IS the tote number, and createdAt = when it was
+  // booked in) or a BC tote number (its items' goods-received date). Try the
+  // container first, fall back to BC, so it works whichever was entered.
+  //
+  // ⚠ Matched on upper(btrim(...)) both sides: tote values are upper-cased on
+  // some write paths (importLots) and stored raw on others, so exact matching
+  // silently found nothing.
+  const norm = (s: string) => s.trim().toUpperCase()
+
+  type ToteLookup = { dateMs: number | null; source: "container" | "bc" | null; bcItems: number }
+  const toteInfo = new Map<string, ToteLookup>()
+  const toteKeys = [...new Set(toteRows.map(r => norm(r.tote)))]
+
+  if (toteKeys.length > 0) {
     try {
-      const containers = await prisma.warehouseContainer.findMany({
-        where:  { id: { in: toteIds } },
-        select: { id: true, createdAt: true },
-      })
-      for (const c of containers) toteDate.set(c.id, c.createdAt.getTime())
+      const containers = await prisma.$queryRaw<{ k: string; d: Date | null }[]>`
+        SELECT upper(btrim("id")) AS k, MIN("createdAt") AS d
+        FROM "WarehouseContainer"
+        WHERE upper(btrim("id")) = ANY(${toteKeys})
+        GROUP BY 1`
+      for (const c of containers) {
+        toteInfo.set(c.k, { dateMs: c.d ? new Date(c.d).getTime() : null, source: "container", bcItems: 0 })
+      }
     } catch { /* leave unresolved */ }
 
-    const stillMissing = toteIds.filter(t => !toteDate.has(t))
-    if (stillMissing.length > 0) {
+    // Ask BC for everything the containers didn't date. Deliberately NOT
+    // filtered on goodsReceivedDate being present — we want to know the
+    // difference between "this tote isn't in BC" and "it is, but BC has no
+    // goods-received date on it", which are very different problems.
+    const missing = toteKeys.filter(k => !toteInfo.get(k)?.dateMs)
+    if (missing.length > 0) {
       try {
-        const bc = await prisma.$queryRaw<{ toteNo: string; d: Date }[]>`
-          SELECT "toteNo", MIN("goodsReceivedDate") AS d
+        const bc = await prisma.$queryRaw<{ k: string; n: number; d: Date | null }[]>`
+          SELECT upper(btrim("toteNo")) AS k, COUNT(*)::int AS n, MIN("goodsReceivedDate") AS d
           FROM "WarehouseItem"
-          WHERE "toteNo" = ANY(${stillMissing}) AND "goodsReceivedDate" IS NOT NULL
-          GROUP BY "toteNo"`
-        for (const r of bc) if (r.d) toteDate.set(r.toteNo, new Date(r.d).getTime())
+          WHERE upper(btrim("toteNo")) = ANY(${missing})
+          GROUP BY 1`
+        for (const r of bc) {
+          const prev = toteInfo.get(r.k)
+          toteInfo.set(r.k, {
+            dateMs:  r.d ? new Date(r.d).getTime() : (prev?.dateMs ?? null),
+            source:  r.d ? "bc" : (prev?.source ?? null),
+            bcItems: r.n,
+          })
+        }
       } catch { /* leave unresolved */ }
     }
   }
@@ -151,7 +173,9 @@ export default async function DepartmentsView() {
 
     // One date per tote — each tote is a single data point in the median,
     // regardless of how many lots came out of it.
-    const dated = totes.map(t => toteDate.get(t.tote)).filter((d): d is number => d != null)
+    const dated = totes
+      .map(t => toteInfo.get(norm(t.tote))?.dateMs)
+      .filter((d): d is number => d != null)
 
     return {
       medianMs:     dated.length > 0 ? median(dated) : null,
@@ -159,7 +183,24 @@ export default async function DepartmentsView() {
       newestMs:     dated.length > 0 ? Math.max(...dated) : null,
       totesSampled: totes.length,
       dated:        dated.length,
-      totes: totes.map(t => ({ tote: t.tote, dateMs: toteDate.get(t.tote) ?? null, lots: t.lotCount })),
+      totes: totes.map(t => {
+        const info = toteInfo.get(norm(t.tote))
+        return {
+          tote:    t.tote,
+          dateMs:  info?.dateMs ?? null,
+          lots:    t.lotCount,
+          // Why it has no date, so the panel can say something useful rather
+          // than just showing a blank.
+          reason:  info?.dateMs != null
+            ? null
+            : info?.bcItems
+              ? "in BC, but no goods-received date"
+              : info?.source === "container"
+                ? "warehouse container has no date"
+                : "no matching warehouse or BC record",
+          source:  info?.source ?? null,
+        }
+      }),
     }
   }
 

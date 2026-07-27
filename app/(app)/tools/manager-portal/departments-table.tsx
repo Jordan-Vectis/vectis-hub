@@ -11,7 +11,7 @@ export type StockAge = {
   newestMs: number | null
   totesSampled: number      // distinct totes sampled (the last 10 worked)
   dated: number             // how many of those resolved to a date
-  totes: { tote: string; dateMs: number | null; lots: number }[]
+  totes: { tote: string; dateMs: number | null; lots: number; reason: string | null; source: string | null }[]
 }
 
 export type SaleRow = {
@@ -280,7 +280,10 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
                           )
                         }).flatMap((row, i) => {
                           const s = g.active[i]
-                          if (openStock !== s.id || !s.stock) return [row]
+                          // Nothing resolved? Show the totes without being asked —
+                          // the whole point of the panel then is to say why.
+                          const forced = !!s.stock && s.stock.dated === 0
+                          if ((openStock !== s.id && !forced) || !s.stock) return [row]
                           return [row, (
                             <tr key={`${s.id}-totes`} className="border-b border-gray-50 dark:border-gray-800/50">
                               <td colSpan={6} className="py-3 px-3 bg-gray-50 dark:bg-gray-800/40">
@@ -303,7 +306,10 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
                                   {s.stock.totes.map(t => (
                                     <span
                                       key={t.tote}
-                                      title={`${t.lots} lot${t.lots === 1 ? "" : "s"} on this sale came out of this tote`}
+                                      title={
+                                        `${t.lots} lot${t.lots === 1 ? "" : "s"} on this sale came out of this tote` +
+                                        (t.reason ? ` — ${t.reason}` : t.source === "bc" ? " — dated from Business Central" : " — dated from the warehouse container")
+                                      }
                                       className={`text-xs px-2 py-1 rounded-lg border whitespace-nowrap ${
                                         t.dateMs == null
                                           ? "border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500"
@@ -312,7 +318,7 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
                                     >
                                       <b className="font-mono font-semibold">{t.tote}</b>
                                       <span className="opacity-60 mx-1">·</span>
-                                      {t.dateMs == null ? "no date" : fmtDate(t.dateMs)}
+                                      {t.dateMs == null ? (t.reason ?? "no date") : fmtDate(t.dateMs)}
                                       {t.lots > 1 && <span className="opacity-60 ml-1.5">×{t.lots}</span>}
                                     </span>
                                   ))}
