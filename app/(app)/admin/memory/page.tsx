@@ -1308,6 +1308,19 @@ Core sync rules (full detail on the reference card):
 - Fair Warning after 15s inactivity (both, manual). Sell 20s after FW (both, manual): Vectis HAMMER then NEXT LOT; Saleroom SELL then NEXT.
 - Undo is a manual button only (no auto-detection). Saleroom buttons have NO exclamation marks.
 
+## Recent work (2026-07-23/24) — reports + activity popup — ALL STAGING ONLY
+
+⚠ Nothing from this session is on production. Staging has all of it; main is behind. Don't assume any of it is live.
+
+- **Cataloguing Performance PDFs** — /tools/reports has **Summary (PDF)** (one-page team league table plus team-wide by-auction, by-reason and daily-output breakdowns) and **Export all (PDF)** (one clean page per cataloguer); clicking a name gives just that person. One route (/api/reports/pdf with ?summary=1 / ?range= / ?userId=) and one builder (lib/reports-pdf.ts). ⚠ Every figure is scoped to the selected period — Jordan rejected v1 for showing "Today" and "This week" columns inside a 30-day report.
+- **"idle" removed from user-facing URLs** — now /admin/activity-timer, /admin/unaccounted-time and /tools/reports/activity; the old paths are redirect stubs. Code identifiers, DB tables (IdleLog / IdleGateDecision) and API routes still say "idle" — leave those alone. Jordan flagged the URLs twice, so don't let them drift back.
+- **Activity popup reworked** — heading softened to "How was this time spent?", multi-select reasons, fully manual time sliders (nothing auto-adjusts — two earlier models were rejected), a live "Not allocated" figure, an "Other" reminder, and a warning on submit when time is left unallocated. Whole minutes only, rounded up.
+- **⚠ Reporting knock-ons (fixed 2026-07-24) — the important bit.** The split writes SEVERAL IdleLog rows per break, which broke three things: unallocated time was **excusing gaps** in both the Unaccounted Time report and the save-gate (a real loophole, now excluded from both covering checks); breaks were counted per row (now per occasion via groupIdleOccasions); and "Most Common Reason" could read "Unallocated" (now excluded, with its own figure instead). If you change how the popup writes rows, re-check all three.
+- **Preview buttons** on /admin/terms and /admin/activity-timer ("👁 Preview the popup"). ⚠ The activity popup's markup exists in TWO places — inline in lot-wizard-tab.tsx and in components/idle-prompt-preview.tsx — keep them in sync.
+- **Admin → Data & Compliance** (/admin/compliance) — plain-English internal note on what data the Hub holds, where it lives, who it is shared with, with staff monitoring flagged as the priority area. Keep its lists updated whenever a new integration is added.
+
+⚠ **The other developer pushes to staging too.** Always pull before pushing AND run a build after pulling — their commit broke the staging build once (pdf-lib's drawRectangle has no borderRadius option; it is a type error that fails the build).
+
 ## Recent work (as of 2026-06-24)
 
 Long session on the Accounts tool (/tools/accounts, admin-only) — mostly bank/card statement reconciliation. All on STAGING only.
