@@ -641,6 +641,18 @@ model IdleGateDecision {
 // This is a REPORT-ONLY exclusion — the underlying CatalogueTimingLog / IdleLog
 // rows are never touched, so the day can be restored at any time by deleting the
 // row. `day` is the London calendar-day key "YYYY-MM-DD" (matches ukDayKey()).
+// A whole cataloguer hidden from the performance reports — for people who
+// aren't really cataloguers (a test account, someone who saved one lot once)
+// and would otherwise skew the team averages and clutter the league table.
+// REPORT-ONLY, exactly like ReportExcludedDay: no log rows are touched, so it
+// is restorable at any time.
+model ReportExcludedUser {
+  userId         String   @id
+  excludedById   String
+  excludedByName String
+  excludedAt     DateTime @default(now())
+}
+
 model ReportExcludedDay {
   id             String   @id @default(cuid())
   userId         String   // the cataloguer whose report the day is hidden from

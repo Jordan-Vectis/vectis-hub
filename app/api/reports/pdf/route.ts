@@ -105,6 +105,18 @@ export async function GET(req: NextRequest) {
         prisma.researchLog.findMany({ where: savedAtFilter, select: { userId: true }, distinct: ["userId"] }),
       ])
       userIds = [...new Set([...t.map(x => x.userId), ...i.map(x => x.userId), ...r.map(x => x.userId)])]
+
+      // Cataloguers an admin has hidden from the reports are left out of the
+      // team export too, so the PDF matches what /tools/reports shows on screen.
+      // Only applies to the team export — asking for one person's PDF by id
+      // still produces it. `.catch` covers the window before Run Migrations.
+      const hidden = await prisma.reportExcludedUser
+        .findMany({ select: { userId: true } })
+        .catch((): { userId: string }[] => [])
+      if (hidden.length > 0) {
+        const hiddenIds = new Set(hidden.map(h => h.userId))
+        userIds = userIds.filter(id => !hiddenIds.has(id))
+      }
     }
 
     const [rawLogs, idleLogs, researchLogs, users, config, excludedRows] = await Promise.all([

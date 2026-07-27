@@ -7,6 +7,7 @@ import { format, subDays, subMonths, startOfDay } from "date-fns"
 import Link from "next/link"
 import CataloguingReportsCharts, { type UserChartData, type MonthBucket } from "./charts"
 import CleanupOrphanLogsButton from "./cleanup-orphan-logs-button"
+import ExcludeUserButton from "./exclude-user-button"
 import { minOf, ukDayKey, ukDayStartUtc } from "@/lib/cataloguing-reports"
 
 export const dynamic = "force-dynamic"
@@ -98,6 +99,20 @@ export default async function ReportsOverviewPage({
   // returns NULL for an absent table; when missing we fall back to no exclusions.
   const [{ exists: hasExclTable }] = await prisma.$queryRaw<{ exists: boolean }[]>`
     SELECT to_regclass('"ReportExcludedDay"') IS NOT NULL AS "exists"`
+
+  // Whole cataloguers hidden from the reports — same deploy-before-migration
+  // guard. Excluded people are dropped from the table, the charts AND the team
+  // totals: the point is that a one-lot account shouldn't drag the averages.
+  const [{ exists: hasExclUserTable }] = await prisma.$queryRaw<{ exists: boolean }[]>`
+    SELECT to_regclass('"ReportExcludedUser"') IS NOT NULL AS "exists"`
+  const excludedUsers: { userId: string; excludedByName: string }[] = hasExclUserTable
+    ? await prisma.$queryRaw<{ userId: string; excludedByName: string }[]>`
+        SELECT "userId", "excludedByName" FROM "ReportExcludedUser"`
+    : []
+  const excludedUserIds = new Set(excludedUsers.map(e => e.userId))
+  const notExcludedUser = hasExclUserTable
+    ? Prisma.sql`AND NOT EXISTS (SELECT 1 FROM "ReportExcludedUser" x WHERE x."userId" = t."userId")`
+    : Prisma.empty
   const notExcluded = hasExclTable
     ? Prisma.sql`AND NOT EXISTS (
         SELECT 1 FROM "ReportExcludedDay" e
@@ -128,6 +143,7 @@ export default async function ReportsOverviewPage({
       WHERE (t."lotId" IS NULL OR EXISTS (SELECT 1 FROM "CatalogueLot" l WHERE l."id" = t."lotId"))
         AND (${since}::timestamptz IS NULL OR t."savedAt" >= ${since})
         ${notExcluded}
+        ${notExcludedUser}
       GROUP BY t."userId"`,
     prisma.$queryRaw<{ userId: string; userName: string; totalMs: number; sessions: number }[]>`
       SELECT r."userId"                          AS "userId",
@@ -136,6 +152,9 @@ export default async function ReportsOverviewPage({
              COUNT(*)::int                       AS "sessions"
       FROM "ResearchLog" r
       WHERE (${since}::timestamptz IS NULL OR r."savedAt" >= ${since})
+        ${hasExclUserTable
+          ? Prisma.sql`AND NOT EXISTS (SELECT 1 FROM "ReportExcludedUser" x WHERE x."userId" = r."userId")`
+          : Prisma.empty}
       GROUP BY r."userId"`,
     prisma.$queryRaw<{ y: number; m: number; n: number }[]>`
       SELECT EXTRACT(YEAR  FROM (t."savedAt" AT TIME ZONE 'Europe/London'))::int AS "y",
@@ -145,6 +164,7 @@ export default async function ReportsOverviewPage({
       WHERE t."savedAt" >= ${twelveMonthsAgo}
         AND (t."lotId" IS NULL OR EXISTS (SELECT 1 FROM "CatalogueLot" l WHERE l."id" = t."lotId"))
         ${notExcluded}
+        ${notExcludedUser}
       GROUP BY 1, 2`,
   ])
 
@@ -218,6 +238,19 @@ export default async function ReportsOverviewPage({
   }))
 
   const activeLabel = RANGES.find(r => r.key === activeRange)?.label ?? "All time"
+
+  // Names for the hidden cataloguers — they're filtered out of every query
+  // above, so the restore list has to read them straight from User.
+  const hiddenUsers = excludedUserIds.size > 0
+    ? (await prisma.user.findMany({
+        where:  { id: { in: [...excludedUserIds] } },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      })).map(u => ({
+        ...u,
+        excludedByName: excludedUsers.find(e => e.userId === u.id)?.excludedByName ?? null,
+      }))
+    : []
 
   return (
     <div className="min-h-full flex flex-col">
@@ -353,6 +386,7 @@ export default async function ReportsOverviewPage({
                           <th className="text-right px-5 py-3">Slowest</th>
                           <th className="text-right px-5 py-3">Research</th>
                           <th className="text-right px-5 py-3">Export</th>
+                          {isAdmin && <th className="text-right px-5 py-3" />}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 dark:divide-gray-800/60">
@@ -390,10 +424,41 @@ export default async function ReportsOverviewPage({
                                 ⬇ PDF
                               </a>
                             </td>
+                            {isAdmin && (
+                              <td className="px-5 py-3.5 text-right">
+                                <ExcludeUserButton userId={u.userId} name={u.name} excluded={false} />
+                              </td>
+                            )}
                           </tr>
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Hidden from the reports (admin) ── */}
+              {isAdmin && hiddenUsers.length > 0 && (
+                <div className="mt-6">
+                  <h2 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                    Hidden from reports ({hiddenUsers.length})
+                  </h2>
+                  <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl px-5 py-3">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2.5">
+                      Left out of the table above, the charts and the team averages. Their lots are
+                      untouched — restoring puts them straight back.
+                    </p>
+                    <div className="flex flex-wrap gap-x-5 gap-y-2">
+                      {hiddenUsers.map(u => (
+                        <span key={u.id} className="inline-flex items-center gap-2 text-sm">
+                          <span className="text-gray-700 dark:text-gray-300">{u.name}</span>
+                          {u.excludedByName && (
+                            <span className="text-[11px] text-gray-400 dark:text-gray-600">by {u.excludedByName}</span>
+                          )}
+                          <ExcludeUserButton userId={u.id} name={u.name} excluded />
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}

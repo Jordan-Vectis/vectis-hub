@@ -21,6 +21,14 @@ const MIGRATIONS = [
   `ALTER TABLE "CatalogueLotEvent" ADD COLUMN IF NOT EXISTS "source" TEXT`,
   `ALTER TABLE "CatalogueLotEvent" ADD COLUMN IF NOT EXISTS "batchId" TEXT`,
   `CREATE INDEX IF NOT EXISTS "CatalogueLotEvent_batchId_idx" ON "CatalogueLotEvent"("batchId")`,
+  // Whole cataloguers hidden from the performance reports (report-only).
+  `CREATE TABLE IF NOT EXISTS "ReportExcludedUser" (
+    "userId"         TEXT NOT NULL,
+    "excludedById"   TEXT NOT NULL,
+    "excludedByName" TEXT NOT NULL,
+    "excludedAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "ReportExcludedUser_pkey" PRIMARY KEY ("userId")
+  )`,
   // When the tote was created in BC (Receipt_Totes_Excel.SystemCreatedAt) —
   // drives the Manager Portal "Stock from" figure.
   `ALTER TABLE "WarehouseTote" ADD COLUMN IF NOT EXISTS "bcCreatedAt" TIMESTAMP(3)`,

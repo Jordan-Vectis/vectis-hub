@@ -3,6 +3,44 @@ import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 
+// Admin-only. Hide or restore a WHOLE cataloguer across every performance
+// report — the league table, the charts, the team totals and the PDFs. For
+// people who aren't really cataloguers (test accounts, someone who saved a
+// single lot once) and would otherwise drag the team averages around.
+// REPORT-ONLY: no CatalogueTimingLog / ResearchLog rows are touched, so it is
+// restorable at any time. Toggles, same as the day exclusion.
+export async function toggleReportExcludedUser(
+  userId: string,
+): Promise<{ ok: boolean; excluded?: boolean; error?: string }> {
+  try {
+    const session = await auth()
+    if (!session || session.user.role !== "ADMIN") return { ok: false, error: "Admins only" }
+    if (!userId) return { ok: false, error: "Invalid user" }
+
+    const existing = await prisma.reportExcludedUser.findUnique({ where: { userId } })
+
+    let excluded: boolean
+    if (existing) {
+      await prisma.reportExcludedUser.delete({ where: { userId } })
+      excluded = false
+    } else {
+      await prisma.reportExcludedUser.create({
+        data: {
+          userId,
+          excludedById:   session.user.id,
+          excludedByName: session.user.name ?? session.user.email ?? "Admin",
+        },
+      })
+      excluded = true
+    }
+
+    revalidatePath("/tools/reports", "layout")
+    return { ok: true, excluded }
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : "Something went wrong" }
+  }
+}
+
 // Admin-only. Hide or restore a single working day from ONE cataloguer's
 // performance report. REPORT-ONLY — the underlying CatalogueTimingLog / IdleLog
 // rows are never touched, so a day can be restored at any time. `day` is the

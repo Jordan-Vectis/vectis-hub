@@ -326,6 +326,16 @@ Admins can hide a single working day from ONE cataloguer's performance report so
 - **Effect — dropped from EVERY figure, in BOTH places:** the individual page filters logs to an "included" set for all stats/cards/splits/detail tables (the Daily Breakdown keeps the full set, tagging each day excluded, so the row stays visible with a Restore button; chart + header totals use included only); the overview list Daily-Avg column + charts add \`AND NOT EXISTS (ReportExcludedDay …)\` to their SQL. Deploy-skew-safe: the SQL clause is gated on to_regclass so it no-ops before Run Migrations, and the individual fetch is .catch(() => []).
 - **NOT changed:** the Excel export — still raw per-day data.
 
+## Excluding a WHOLE cataloguer (built 2026-07-27) — NEEDS RUN MIGRATIONS
+
+Same idea one level up, for people who aren't really cataloguers (a test account, someone who saved a single lot once) and would otherwise clutter the league table and drag the team averages. Jordan's ask: "a way of excluding users like Jack and Emma".
+
+- **Storage:** \`ReportExcludedUser\` — \`userId\` (primary key), \`excludedById/Name\`, \`excludedAt\`.
+- **Action:** \`lib/actions/reports.ts\` → \`toggleReportExcludedUser(userId)\`, ADMIN-gated, returns \`{ok,error}\`.
+- **Where:** \`✕ Hide\` on each row of the Per Cataloguer table (admin-only extra column) via \`app/(app)/tools/reports/exclude-user-button.tsx\`, plus a **"Hidden from reports (N)"** panel under the table with \`↺ Restore\` and who hid them.
+- **Effect:** dropped from the per-user SQL, the research SQL, the monthly-buckets SQL, the charts **and the team totals** — the point is that a one-lot account shouldn't move the averages. Also filtered out of the **team PDF** (\`/api/reports/pdf\` without \`userId\`) so the export matches the screen; one person's PDF by id still works.
+- **Deploy-skew-safe** the same way: \`to_regclass('"ReportExcludedUser"')\` gates the \`Prisma.sql\` fragments, PDF route uses \`.catch(() => [])\`.
+
 ## ⚠ Research-only cataloguers 404'd the detail page (fixed 2026-07-22)
 /tools/reports/[userId]/page.tsx keyed the display name AND its notFound() off a timing log (\`anyLog = catalogueTimingLog.findFirst({where:{userId}}); if (!anyLog) notFound()\`). But the overview list unions timing-log AND research-log users, so someone with ResearchLog rows but zero CatalogueTimingLog appeared in the list and 404'd when clicked. Fix: resolve userName from the User record (user.findUnique) with fallbacks to rawLogs/researchLogs/idleLogs[0].userName, and only notFound() when the name is genuinely unresolvable (bad URL) — never on "no lots in range". Don't reintroduce the timing-log-only gate. It surfaced right after a prod deploy so it looked like deploy skew, but was a real latent bug (a hard refresh did NOT clear it).`,
   },
