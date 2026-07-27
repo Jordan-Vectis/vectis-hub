@@ -57,12 +57,36 @@ export async function POST(req: NextRequest) {
     results.totes = res.ok ? { items: data.itemsProcessed ?? 0 } : { error: data.error ?? `HTTP ${res.status}` }
   } catch (e: any) { results.totes = { error: e.message } }
 
-  // ── Active Totes ────────────────────────────────────────────────────────────
-  try {
-    const res  = await fetch(`${base}/api/warehouse/sync/totes-active`, { method: "POST", headers, body: "{}" })
-    const data = await res.json().catch(() => ({}))
-    results.totesActive = res.ok ? { items: data.itemsProcessed ?? 0 } : { error: data.error ?? `HTTP ${res.status}` }
-  } catch (e: any) { results.totesActive = { error: e.message } }
+  // ── Active Totes (loop until more === false) ────────────────────────────────
+  // Unlike receipt-lines (which resumes by timestamp on a bare "{}" call),
+  // totes-active pages by cursor — so the nextLink must be threaded back in or
+  // every call just re-does the first batch and never reaches the rest. This is
+  // what keeps bcCreatedAt (and any future tote column) backfilled overnight
+  // rather than needing the manual Data Sync button.
+  {
+    let taMore   = true
+    let taPasses = 0
+    let taItems  = 0
+    let taNext: string | null = null
+    while (taMore && taPasses < 200) {
+      try {
+        const res: Response = await fetch(`${base}/api/warehouse/sync/totes-active`, {
+          method: "POST", headers,
+          body:   JSON.stringify({ nextLink: taNext, maxItems: 5000 }),
+        })
+        const data: any = await res.json().catch(() => ({}))
+        if (!res.ok) { results.totesActive = { error: data.error ?? `HTTP ${res.status}` }; break }
+        taItems += data.itemsProcessed ?? 0
+        taMore   = data.more === true
+        taNext   = data.nextLink ?? null
+        taPasses++
+      } catch (e: any) {
+        results.totesActive = { error: e.message }
+        break
+      }
+    }
+    if (!results.totesActive) results.totesActive = { items: taItems, passes: taPasses }
+  }
 
   // ── Auction Names ───────────────────────────────────────────────────────────
   try {
