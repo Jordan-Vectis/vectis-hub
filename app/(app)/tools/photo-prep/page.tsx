@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   DEFAULT_SETTINGS, ACCEPTED_EXT, AI_FALLBACK_CONFIDENCE, mimeForName,
   fmtDuration, hasFileSystemAccess, workerCount, makeWorkerClient, isSameFolder,
-  type PhotoPrepSettings, type WorkerClient,
+  fetchAiBox, AI_CONCURRENCY,
+  type PhotoPrepSettings, type WorkerClient, type CropMode,
 } from "@/lib/photo-prep"
 
 // Photo Prep — auto-crop to the product + brighten, for the photography department.
@@ -214,9 +215,15 @@ export default function PhotoPrepPage() {
       return
     }
 
-    const clients = Array.from({ length: workerCount() }, () => makeWorkerClient("/photo-prep-worker.js"))
+    // In AI mode the Gemini call is the bottleneck — the local worker step is
+    // milliseconds by comparison — so the pool is sized to the API concurrency
+    // rather than to CPU cores.
+    const aiAll = settings.cropMode === "ai"
+    const poolSize = aiAll ? AI_CONCURRENCY : workerCount()
+    const clients = Array.from({ length: poolSize }, () => makeWorkerClient("/photo-prep-worker.js"))
     const out: Result[] = []
     let next = 0
+    let aiUsed = 0
 
     const pump = (client: WorkerClient) => new Promise<void>((resolve) => {
       const takeNext = async (): Promise<void> => {
@@ -224,13 +231,26 @@ export default function PhotoPrepPage() {
         const src = files[next++]
         try {
           const file    = await src.get()
-          const buffer  = await file.arrayBuffer()
           const outType = mimeForName(src.name)
+
+          // AI mode: get the box first. A null (rate-limited, or no product
+          // found) falls through to local detection — degraded, not lost.
+          let forcedBox: any = undefined
+          if (aiAll) {
+            const box = await fetchAiBox(file, src.name)
+            if (box) { forcedBox = box; aiUsed++; setAiFixed(aiUsed) }
+          }
+
+          // Read AFTER the AI call: the fetch above consumes the File, and an
+          // ArrayBuffer taken before it would be held in memory for the whole
+          // round-trip, multiplied by the pool size.
+          const buffer = await file.arrayBuffer()
 
           // Always settles — crash, bad message and timeout all come back as
           // { ok: false }, so one rogue image can't stall the whole batch.
           const res = await client.run(
-            { id: src.name, name: src.name, buffer, type: file.type || outType, settings: { ...settings, outType } },
+            { id: src.name, name: src.name, buffer, type: file.type || outType,
+              settings: { ...settings, outType }, forcedBox },
             [buffer],
           )
 
@@ -297,8 +317,8 @@ export default function PhotoPrepPage() {
         const json = await res.json()
         if (!res.ok || !json.box) continue
 
-        const buffer  = await file.arrayBuffer()
         const outType = mimeForName(src.name)
+        const buffer  = await file.arrayBuffer()
         const out = await client.run(
           { id: src.name, name: src.name, buffer, type: file.type || outType,
             settings: { ...settings, outType }, forcedBox: json.box },
@@ -384,6 +404,38 @@ export default function PhotoPrepPage() {
             <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Settings</h2>
 
             <div>
+              <label className="text-sm text-gray-700 dark:text-gray-300 block mb-2">How to find the product</label>
+              <div className="space-y-1.5">
+                {([
+                  { key: "auto",   label: "Automatic",        hint: "Fast and free. Best on a plain sweep." },
+                  { key: "assist", label: "Automatic + AI",   hint: "Automatic, then AI re-crops only the unsure ones." },
+                  { key: "ai",     label: "AI on every photo", hint: "Handles anything. Much slower, uses API quota." },
+                ] as { key: CropMode; label: string; hint: string }[]).map(m => (
+                  <label key={m.key}
+                    className={`flex gap-2.5 items-start px-2.5 py-2 rounded border cursor-pointer transition-colors
+                      ${settings.cropMode === m.key
+                        ? "border-[#0078D4] bg-blue-50 dark:bg-blue-950/30"
+                        : "border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900"}`}>
+                    <input type="radio" name="cropMode" checked={settings.cropMode === m.key}
+                      onChange={() => set("cropMode", m.key)} disabled={running}
+                      className="mt-0.5 accent-[#0078D4]" />
+                    <span>
+                      <span className="block text-sm text-gray-800 dark:text-gray-200">{m.label}</span>
+                      <span className="block text-[11px] text-gray-500 dark:text-gray-500">{m.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {settings.cropMode === "ai" && files.length > 100 && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-500 mt-2">
+                  {files.length.toLocaleString()} photos through the AI will take a while — {AI_CONCURRENCY} run at a time
+                  and each is an API call. The automatic pass already handles plain-sweep shots, so
+                  &ldquo;Automatic + AI&rdquo; is usually the better trade.
+                </p>
+              )}
+            </div>
+
+            <div className="border-t border-gray-200 dark:border-gray-800 pt-4">
               <div className="flex items-baseline justify-between mb-1">
                 <label className="text-sm text-gray-700 dark:text-gray-300">Margin around product</label>
                 <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">{settings.marginPct}%</span>
@@ -421,6 +473,8 @@ export default function PhotoPrepPage() {
                 <div className="space-y-4 pl-6">
                   <p className="text-[11px] text-gray-500 dark:text-gray-500 -mt-1">
                     Judged on how white your backdrop came out, not on the product — so a navy box stays navy.
+                    Shots that aren&apos;t on a plain light sweep (a bench, a concrete floor) are skipped, since
+                    there&apos;s no white to correct against.
                   </p>
                   <div>
                     <div className="flex items-baseline justify-between mb-1">
@@ -511,13 +565,16 @@ export default function PhotoPrepPage() {
                   <p className="text-gray-500 dark:text-gray-500">Backdrop</p>
                   <p className="font-semibold text-gray-900 dark:text-white tabular-nums">
                     {previewInfo.backdropLuma != null ? Math.round(previewInfo.backdropLuma) : "—"}
-                    <span className="font-normal text-gray-500"> / {settings.backdropThreshold}</span>
+                    <span className="font-normal text-gray-500">
+                      {previewInfo.sweepLike === false ? " · not a sweep" : ` / ${settings.backdropThreshold}`}
+                    </span>
                   </p>
                 </div>
                 <div className="rounded bg-gray-50 dark:bg-black/30 px-2 py-1.5">
                   <p className="text-gray-500 dark:text-gray-500">Brightened</p>
                   <p className={`font-semibold ${previewInfo.brightened ? "text-amber-600 dark:text-amber-400" : "text-gray-500"}`}>
-                    {previewInfo.brightened ? "Yes" : "Not needed"}
+                    {previewInfo.brightened ? "Yes"
+                      : previewInfo.sweepLike === false ? "Skipped" : "Not needed"}
                   </p>
                 </div>
               </div>
@@ -560,6 +617,9 @@ export default function PhotoPrepPage() {
                 {done.toLocaleString()} / {files.length.toLocaleString()}
                 {rate > 0 && ` · ${rate.toFixed(1)}/sec`}
                 {elapsed > 0 && ` · ${fmtDuration(elapsed)}`}
+                {settings.cropMode === "ai" && aiFixed > 0 && ` · ${aiFixed.toLocaleString()} AI crops`}
+                {running && rate > 0 && done > 5 && files.length - done > 0 &&
+                  ` · ~${fmtDuration(((files.length - done) / rate) * 1000)} left`}
               </span>
             )}
           </div>
@@ -584,7 +644,16 @@ export default function PhotoPrepPage() {
                 </p>
               )}
 
-              {lowConf.length > 0 && outDirRef.current && (
+              {settings.cropMode === "ai" && (
+                <p className="text-gray-600 dark:text-gray-400">
+                  {aiFixed.toLocaleString()} cropped using the AI&apos;s box
+                  {aiFixed < results.filter(r => r.status === "done").length &&
+                    ` · ${(results.filter(r => r.status === "done").length - aiFixed).toLocaleString()} fell back to automatic (no product found, or the API was busy)`}.
+                </p>
+              )}
+
+              {/* Only offered when the AI hasn't already seen every photo. */}
+              {settings.cropMode !== "ai" && lowConf.length > 0 && outDirRef.current && (
                 <div className="mt-3 p-3 rounded-lg bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-900">
                   <p className="text-violet-800 dark:text-violet-300 mb-2">
                     <strong>{lowConf.length}</strong> photo{lowConf.length === 1 ? " wasn't" : "s weren't"} cropped confidently —

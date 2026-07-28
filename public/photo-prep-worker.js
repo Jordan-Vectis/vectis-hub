@@ -28,7 +28,17 @@
 const LR = 0.2126, LG = 0.7152, LB = 0.0722
 
 const ANALYSIS_MAX = 500   // long edge of the analysis copy, px
-const MAX_GAIN     = 2.2   // ceiling on the exposure lift — beyond this a shot is too far gone to rescue
+const MAX_GAIN     = 1.55  // ceiling on the exposure lift
+
+// A backdrop only counts as "a white sweep that came out dim" if it is both
+// bright enough and neutral enough to have been white in the first place.
+//
+// ⚠ Without this, a shot taken on a CONCRETE FLOOR (measured luma ~154) is read
+// as a badly underexposed sweep and lifted by ~1.6x, blowing the whole photo
+// out. Grey concrete, a wooden bench or a coloured mat are not white references
+// and their exposure must be left alone.
+const MIN_SWEEP_LUMA   = 170  // below this it is a different surface, not a dim sweep
+const MAX_SWEEP_CHROMA = 26   // max spread between R/G/B before it is "coloured", not neutral
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v))
 
@@ -109,12 +119,22 @@ function detect(bmp, sensitivity) {
 
   const found = x0 >= 0 && y0 >= 0 && x1 > x0 && y1 > y0
 
+  // Is this a plain, near-white sweep at all? Drives BOTH the exposure decision
+  // and confidence — a shot on a floor or bench is neither a white reference
+  // nor a clean crop, and is better sent to the AI pass.
+  const backdropLuma = LR * mR + LG * mG + LB * mB
+  const chroma = Math.max(mR, mG, mB) - Math.min(mR, mG, mB)
+  const sweepLike = chroma <= MAX_SWEEP_CHROMA && backdropLuma >= MIN_SWEEP_LUMA
+
   // 4. Confidence.
   let confidence = 0
   if (found) {
     confidence = 1
     // Busy / non-uniform border means the "backdrop" wasn't really a backdrop.
     confidence *= clamp01((borderBgFrac - 0.72) / 0.2)
+    // Not shot on a sweep — cartons on a floor, items on a bench. The crop may
+    // still be usable, but it is worth a second look.
+    if (!sweepLike) confidence *= 0.55
     // Product filling almost everything usually means detection failed.
     if (fgFrac > 0.6)   confidence *= clamp01((0.9 - fgFrac) / 0.3)
     if (fgFrac < 0.008) confidence = 0
@@ -131,11 +151,12 @@ function detect(bmp, sensitivity) {
     // straight onto Gemini's 0–1000 box convention.
     box: found ? { x0: x0 / aw, y0: y0 / ah, x1: (x1 + 1) / aw, y1: (y1 + 1) / ah } : null,
     subjectLuma: lumaN > 0 ? lumaSum / lumaN : null,
-    // THE exposure reference. On a white sweep the backdrop is a known target —
-    // it should come out near-white, so if it renders grey the shot is
-    // underexposed. Judging exposure by the PRODUCT instead is wrong: a navy
-    // box is legitimately dark, and lifting it washes the colour out.
-    backdropLuma: LR * mR + LG * mG + LB * mB,
+    // THE exposure reference — but only when sweepLike says it really is a
+    // white sweep. It should come out near-white, so if it renders grey the
+    // shot is underexposed. Judging exposure by the PRODUCT instead is wrong:
+    // a navy box is legitimately dark, and lifting it washes the colour out.
+    backdropLuma,
+    sweepLike,
     fgFrac,
     borderBgFrac,
   }
@@ -154,6 +175,7 @@ self.onmessage = async (e) => {
     const d = detect(bmp, settings.sensitivity)
     const subjectLuma  = d.subjectLuma
     const backdropLuma = d.backdropLuma
+    const sweepLike    = d.sweepLike
 
     // forcedBox is supplied by Gemini for a photo detection wasn't sure about.
     let box = forcedBox || d.box
@@ -197,8 +219,10 @@ self.onmessage = async (e) => {
     // 245/205 = 1.20 takes that same navy to 48: visibly lifted, still navy.
     // Auction photos are sold on colour accuracy, so proportion matters more
     // than punchiness. Do not "improve" this back into a gamma curve.
+    // sweepLike gate: without it, a shot on a concrete floor (~154) reads as a
+    // dim sweep and gets lifted ~1.6x, blowing the photo out.
     let brightened = false
-    if (settings.brighten) {
+    if (settings.brighten && sweepLike) {
       const mean = backdropLuma
 
       if (mean != null && mean < settings.backdropThreshold && mean > 0.5) {
@@ -231,7 +255,7 @@ self.onmessage = async (e) => {
     // gets delivered to the newer request's handler.
     self.postMessage(
       { rid, id, name, ok: true, buffer: outBuf, width: sw, height: sh, box, confidence,
-        subjectLuma, backdropLuma, brightened },
+        subjectLuma, backdropLuma, sweepLike, brightened },
       [outBuf],
     )
   } catch (err) {

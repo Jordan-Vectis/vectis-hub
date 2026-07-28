@@ -5,7 +5,16 @@
 // nothing touches the server, which is what makes a 1000-photo batch
 // practical: no upload wait, no body-size limit, no storage cost.
 
+export type CropMode =
+  /** Local backdrop detection only. Fast, free, offline. */
+  | "auto"
+  /** Local detection, then Gemini re-crops only what it wasn't sure about. */
+  | "assist"
+  /** Every photo goes to Gemini. Slow and uses quota, but handles anything. */
+  | "ai"
+
 export type PhotoPrepSettings = {
+  cropMode:          CropMode
   /**
    * Breathing space left around the detected product, as a share of the
    * product's own size. 5 = a margin one-twentieth of the item's width/height,
@@ -33,6 +42,7 @@ export type PhotoPrepSettings = {
 }
 
 export const DEFAULT_SETTINGS: PhotoPrepSettings = {
+  cropMode:          "assist",
   marginPct:         5,
   // 85, set from measurement rather than taste. On mock auction shots a pale
   // inner tray sitting only ~27 units off a white sweep was clipped at 40, 55
@@ -52,6 +62,49 @@ export const DEFAULT_SETTINGS: PhotoPrepSettings = {
  * a second look from Gemini.
  */
 export const AI_FALLBACK_CONFIDENCE = 0.5
+
+/**
+ * How many Gemini crop calls to have in flight at once.
+ *
+ * Kept low deliberately. The API is the bottleneck in AI mode — the local
+ * worker step is milliseconds by comparison — and this codebase has a long
+ * history of 429s when firing concurrent Gemini requests (see the Model Tester
+ * and Batch Run rules). Four is enough to hide latency without tripping limits.
+ */
+export const AI_CONCURRENCY = 4
+
+/** Attempts per photo before giving up and falling back to local detection. */
+export const AI_MAX_ATTEMPTS = 3
+
+/**
+ * Ask Gemini for the product's bounding box in one photo.
+ *
+ * Returns null when the AI can't find a product or keeps failing — callers
+ * fall back to local detection rather than dropping the photo, so a rate limit
+ * degrades quality instead of losing work.
+ */
+export async function fetchAiBox(file: File, name: string): Promise<any | null> {
+  for (let attempt = 1; attempt <= AI_MAX_ATTEMPTS; attempt++) {
+    try {
+      const fd = new FormData()
+      fd.append("image", file, name)
+      const res = await fetch("/api/photo-prep/crop-box", { method: "POST", body: fd })
+
+      if (res.status === 429 || res.status === 503) {
+        // Backs off 4s, 8s — short, because a 1000-photo run can't afford the
+        // 30-minute waits the batch descriptions route uses.
+        await new Promise(r => setTimeout(r, 4000 * attempt))
+        continue
+      }
+      const json = await res.json()
+      if (!res.ok) return null
+      return json.box ?? null
+    } catch {
+      await new Promise(r => setTimeout(r, 1500 * attempt))
+    }
+  }
+  return null
+}
 
 export const ACCEPTED_EXT = /\.(jpe?g|png|webp)$/i
 
