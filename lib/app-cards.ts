@@ -2,6 +2,7 @@ import type { AppKey } from "@/lib/apps"
 
 export const SECTION_DEFS = [
   { key: "CATALOGUING_AI",   label: "Cataloguing & AI" },
+  { key: "PHOTOGRAPHY",      label: "Photography" },
   { key: "REPORTS",          label: "Reports" },
   { key: "BUSINESS_CENTRAL", label: "Business Central" },
   { key: "OPERATIONS",       label: "Operations" },
@@ -92,6 +93,19 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     glow:               "hover:shadow-blue-900/40",
     group:              "CATALOGUING_AI",
     appKey:             "MANAGER_PORTAL",
+  },
+  {
+    key:                "PHOTO_PREP",
+    href:               "/tools/photo-prep",
+    defaultLabel:       "Photo Prep",
+    defaultDescription: "Trim the edges off a batch of product shots and brighten the dark ones in one go. Runs on your own computer — nothing is uploaded — and filenames come back exactly as they went in.",
+    icon:               "📷",
+    border:             "border-fuchsia-500",
+    iconBg:             "text-fuchsia-400",
+    btnBg:              "bg-fuchsia-600 hover:bg-fuchsia-500",
+    glow:               "hover:shadow-fuchsia-900/40",
+    group:              "PHOTOGRAPHY",
+    appKey:             "PHOTO_PREP",
   },
   {
     key:                "REPORTS",

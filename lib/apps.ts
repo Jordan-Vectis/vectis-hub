@@ -1,4 +1,4 @@
-export type AppKey = "CRM" | "AUCTION_AI" | "CATALOGUING" | "REPORTS" | "MARKETING_REPORTS" | "BC_REPORTS" | "SALEROOM_TRAINER" | "WAREHOUSE" | "AUCTION_CONTROLLER" | "BC_WAREHOUSE" | "AI_PRESENTER" | "BC_MARKETING" | "AUTO_CLERK" | "MANAGER_PORTAL" | "SALE_STATISTICS" | "ACCOUNTS" | "DESCRIPTION_FINDER" | "ADMIN_CENTRE"
+export type AppKey = "CRM" | "AUCTION_AI" | "CATALOGUING" | "REPORTS" | "MARKETING_REPORTS" | "BC_REPORTS" | "SALEROOM_TRAINER" | "WAREHOUSE" | "AUCTION_CONTROLLER" | "BC_WAREHOUSE" | "AI_PRESENTER" | "BC_MARKETING" | "AUTO_CLERK" | "MANAGER_PORTAL" | "SALE_STATISTICS" | "ACCOUNTS" | "DESCRIPTION_FINDER" | "PHOTO_PREP" | "ADMIN_CENTRE"
 
 export const ALL_APPS: { key: AppKey; label: string }[] = [
   { key: "CRM",                label: "CRM" },
@@ -18,6 +18,7 @@ export const ALL_APPS: { key: AppKey; label: string }[] = [
   { key: "SALE_STATISTICS",    label: "Sale Statistics" },
   { key: "ACCOUNTS",           label: "Accounts" },
   { key: "DESCRIPTION_FINDER", label: "Description Finder" },
+  { key: "PHOTO_PREP",         label: "Photo Prep" },
   { key: "ADMIN_CENTRE",       label: "Admin Centre" },
 ]
 
