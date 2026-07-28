@@ -2,21 +2,31 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
-  DEFAULT_SETTINGS, ACCEPTED_EXT, mimeForName, fmtBytes, fmtDuration,
-  hasFileSystemAccess, workerCount, type PhotoPrepSettings,
+  DEFAULT_SETTINGS, ACCEPTED_EXT, AI_FALLBACK_CONFIDENCE, mimeForName,
+  fmtDuration, hasFileSystemAccess, workerCount, makeWorkerClient, isSameFolder,
+  type PhotoPrepSettings, type WorkerClient,
 } from "@/lib/photo-prep"
 
-// Photo Prep — bulk crop + brighten for the photography department.
+// Photo Prep — auto-crop to the product + brighten, for the photography department.
 //
-// Everything happens in the browser: photos are read straight off disk,
-// processed in a pool of Web Workers, and written back into a folder the
-// user picks. Nothing is uploaded. That is what makes ~1000 photos practical
-// — no upload wait, no request size limit, and memory stays flat because only
-// a handful of images are ever in flight.
+// Runs entirely in the browser. Photos are read straight off disk, processed in
+// a pool of Web Workers, and written back into a folder the user picks. Nothing
+// is uploaded (the server's body limit is 20MB — a 1000-photo batch could never
+// go through it) and memory stays flat because only a few images are in flight.
+//
+// Cropping is local backdrop detection, which is fast, free and pixel-exact on a
+// plain sweep. Photos it isn't confident about can be sent to Gemini afterwards,
+// one at a time, and re-cropped with the box it returns.
 
 type SourceFile = { name: string; size: number; get: () => Promise<File> }
-type Status     = "pending" | "done" | "skipped" | "error"
-type Result     = { name: string; status: Status; brightened?: boolean; error?: string }
+type Result = {
+  name: string
+  status: "done" | "error"
+  confidence?: number
+  brightened?: boolean
+  backdropLuma?: number
+  error?: string
+}
 
 const PREVIEW_DEBOUNCE_MS = 250
 
@@ -30,7 +40,9 @@ export default function PhotoPrepPage() {
   const [beforeUrl, setBeforeUrl]     = useState<string | null>(null)
   const [afterUrl, setAfterUrl]       = useState<string | null>(null)
   const [previewBusy, setPreviewBusy] = useState(false)
-  const [previewInfo, setPreviewInfo] = useState<{ w: number; h: number; brightened: boolean } | null>(null)
+  const [previewInfo, setPreviewInfo] = useState<any>(null)
+  const [aiBox, setAiBox]             = useState<any>(null)
+  const [aiBusy, setAiBusy]           = useState(false)
 
   // Run
   const [running, setRunning]   = useState(false)
@@ -39,54 +51,88 @@ export default function PhotoPrepPage() {
   const [error, setError]       = useState<string | null>(null)
   const [elapsed, setElapsed]   = useState(0)
   const [finished, setFinished] = useState(false)
+  const [aiFixing, setAiFixing] = useState(false)
+  const [aiFixed, setAiFixed]   = useState(0)
 
   const cancelRef  = useRef(false)
-  const previewRef = useRef<Worker | null>(null)
+  const previewRef = useRef<WorkerClient | null>(null)
+  const outDirRef  = useRef<any>(null)
+  const inDirRef   = useRef<any>(null)
+  const seqRef     = useRef(0)
 
   useEffect(() => { setFsa(hasFileSystemAccess()) }, [])
 
-  // ── Preview worker ───────────────────────────────────────────────────────
   useEffect(() => {
-    const w = new Worker("/photo-prep-worker.js")
-    previewRef.current = w
-    return () => { w.terminate(); previewRef.current = null }
+    const c = makeWorkerClient("/photo-prep-worker.js")
+    previewRef.current = c
+    return () => { c.terminate(); previewRef.current = null }
   }, [])
 
-  const runPreview = useCallback(async () => {
-    const src = files[previewIdx]
-    const w   = previewRef.current
-    if (!src || !w) return
+  // Revoke preview object URLs on unmount so a long session doesn't leak.
+  useEffect(() => () => {
+    if (beforeUrl) URL.revokeObjectURL(beforeUrl)
+    if (afterUrl)  URL.revokeObjectURL(afterUrl)
+  }, [beforeUrl, afterUrl])
 
+  // ── Preview ──────────────────────────────────────────────────────────────
+  const runPreview = useCallback(async (forcedBox?: any) => {
+    const src = files[previewIdx]
+    const c   = previewRef.current
+    if (!src || !c) return
+
+    // Guard against an older in-flight preview landing after a newer one.
+    const seq = ++seqRef.current
     setPreviewBusy(true)
     try {
       const file = await src.get()
-      setBeforeUrl(prev => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(file) })
+      const url  = URL.createObjectURL(file)
+      setBeforeUrl(prev => { if (prev) URL.revokeObjectURL(prev); return url })
 
-      const buffer = await file.arrayBuffer()
+      const buffer  = await file.arrayBuffer()
       const outType = mimeForName(src.name)
 
-      const out = await new Promise<any>((resolve) => {
-        const onMsg = (e: MessageEvent) => { w.removeEventListener("message", onMsg); resolve(e.data) }
-        w.addEventListener("message", onMsg)
-        w.postMessage({ id: "preview", name: src.name, buffer, type: file.type || outType,
-                        settings: { ...settings, outType } }, [buffer])
-      })
+      const out = await c.run(
+        { id: "preview", name: src.name, buffer, type: file.type || outType,
+          settings: { ...settings, outType }, forcedBox: forcedBox ?? undefined },
+        [buffer],
+      )
 
+      if (seq !== seqRef.current) return   // superseded
       if (out.ok) {
         const blob = new Blob([out.buffer], { type: outType })
-        setAfterUrl(prev => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(blob) })
-        setPreviewInfo({ w: out.width, h: out.height, brightened: !!out.brightened })
+        const aUrl = URL.createObjectURL(blob)
+        setAfterUrl(prev => { if (prev) URL.revokeObjectURL(prev); return aUrl })
+        setPreviewInfo(out)
       }
     } catch { /* preview is best-effort */ }
-    finally { setPreviewBusy(false) }
+    finally { if (seq === seqRef.current) setPreviewBusy(false) }
   }, [files, previewIdx, settings])
 
-  // Re-render the preview when the settings or the chosen photo change.
   useEffect(() => {
     if (files.length === 0) return
-    const t = setTimeout(runPreview, PREVIEW_DEBOUNCE_MS)
+    setAiBox(null)
+    const t = setTimeout(() => runPreview(), PREVIEW_DEBOUNCE_MS)
     return () => clearTimeout(t)
   }, [files, previewIdx, settings, runPreview])
+
+  async function checkPreviewWithAi() {
+    const src = files[previewIdx]
+    if (!src) return
+    setAiBusy(true); setError(null)
+    try {
+      const file = await src.get()
+      const fd = new FormData()
+      fd.append("image", file, src.name)
+      const res  = await fetch("/api/photo-prep/crop-box", { method: "POST", body: fd })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? res.statusText)
+      if (!json.box) { setError("The AI couldn't find a product in that photo."); return }
+      setAiBox(json.box)
+      await runPreview(json.box)
+    } catch (e: any) {
+      setError(e?.message ?? "AI crop failed.")
+    } finally { setAiBusy(false) }
+  }
 
   // ── Picking photos ───────────────────────────────────────────────────────
   async function pickFolder() {
@@ -96,14 +142,11 @@ export default function PhotoPrepPage() {
       const found: SourceFile[] = []
       for await (const entry of dir.values()) {
         if (entry.kind !== "file" || !ACCEPTED_EXT.test(entry.name)) continue
-        found.push({
-          name: entry.name,
-          size: 0,
-          get:  () => entry.getFile(),
-        })
+        found.push({ name: entry.name, size: 0, get: () => entry.getFile() })
       }
       found.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
       resetRun()
+      inDirRef.current = dir   // kept so the run can refuse to overwrite the originals
       setFiles(found)
       if (found.length === 0) setError("No JPG, PNG or WebP files in that folder.")
     } catch (e: any) {
@@ -120,30 +163,50 @@ export default function PhotoPrepPage() {
   }
 
   function resetRun() {
-    setResults([]); setDone(0); setFinished(false); setElapsed(0); setError(null); setPreviewIdx(0)
+    setResults([]); setDone(0); setFinished(false); setElapsed(0)
+    setError(null); setPreviewIdx(0); setAiFixed(0)
+    // Both cleared: a stale input handle from an earlier pick would make the
+    // same-folder guard compare against the wrong folder.
+    outDirRef.current = null
+    inDirRef.current  = null
+  }
+
+  // ── Write one processed blob out ─────────────────────────────────────────
+  async function writeOut(name: string, blob: Blob, zip: any) {
+    if (outDirRef.current) {
+      const fh = await outDirRef.current.getFileHandle(name, { create: true })
+      const ws = await fh.createWritable()
+      await ws.write(blob)
+      await ws.close()
+    } else {
+      zip.file(name, blob)
+    }
   }
 
   // ── The batch run ────────────────────────────────────────────────────────
   async function run() {
     if (files.length === 0 || running) return
     setError(null); setRunning(true); setFinished(false)
-    setDone(0); setResults([])
+    setDone(0); setResults([]); setAiFixed(0)
     cancelRef.current = false
 
     const started = Date.now()
     const tick = setInterval(() => setElapsed(Date.now() - started), 500)
 
-    // Writing straight into a folder keeps memory flat; the zip path has to
-    // hold every processed image until the end, so it is the fallback only.
-    let outDir: any = null
     let zip: any = null
-
     try {
       if (fsa) {
-        outDir = await (window as any).showDirectoryPicker({ mode: "readwrite" })
+        const dir = await (window as any).showDirectoryPicker({ mode: "readwrite" })
+        // ⚠ Writing into the source folder truncates the originals — the photos
+        // would be gone with no undo. Refuse rather than warn.
+        if (await isSameFolder(dir, inDirRef.current)) {
+          clearInterval(tick); setRunning(false)
+          setError("That's the folder your photos came from — saving there would overwrite the originals. Pick or create a different folder.")
+          return
+        }
+        outDirRef.current = dir
       } else {
-        const JSZip = (await import("jszip")).default
-        zip = new JSZip()
+        zip = new ((await import("jszip")).default)()
       }
     } catch (e: any) {
       clearInterval(tick); setRunning(false)
@@ -151,102 +214,136 @@ export default function PhotoPrepPage() {
       return
     }
 
-    const n       = workerCount()
-    const workers = Array.from({ length: n }, () => new Worker("/photo-prep-worker.js"))
+    const clients = Array.from({ length: workerCount() }, () => makeWorkerClient("/photo-prep-worker.js"))
     const out: Result[] = []
     let next = 0
 
-    const pump = (worker: Worker) => new Promise<void>((resolve) => {
-      const takeNext = async () => {
+    const pump = (client: WorkerClient) => new Promise<void>((resolve) => {
+      const takeNext = async (): Promise<void> => {
         if (cancelRef.current || next >= files.length) { resolve(); return }
         const src = files[next++]
-
         try {
           const file    = await src.get()
           const buffer  = await file.arrayBuffer()
           const outType = mimeForName(src.name)
 
-          const res = await new Promise<any>((rs) => {
-            const onMsg = (e: MessageEvent) => { worker.removeEventListener("message", onMsg); rs(e.data) }
-            worker.addEventListener("message", onMsg)
-            worker.postMessage({ id: src.name, name: src.name, buffer, type: file.type || outType,
-                                 settings: { ...settings, outType } }, [buffer])
-          })
+          // Always settles — crash, bad message and timeout all come back as
+          // { ok: false }, so one rogue image can't stall the whole batch.
+          const res = await client.run(
+            { id: src.name, name: src.name, buffer, type: file.type || outType, settings: { ...settings, outType } },
+            [buffer],
+          )
 
           if (res.ok) {
-            const blob = new Blob([res.buffer], { type: outType })
-            if (outDir) {
-              // Original filename, unchanged — the photo-upload flow reads the
-              // lot barcode out of it, so it must survive exactly.
-              const fh = await outDir.getFileHandle(src.name, { create: true })
-              const ws = await fh.createWritable()
-              await ws.write(blob)
-              await ws.close()
-            } else {
-              zip.file(src.name, blob)
-            }
-            out.push({ name: src.name, status: "done", brightened: !!res.brightened })
+            await writeOut(src.name, new Blob([res.buffer], { type: outType }), zip)
+            out.push({ name: src.name, status: "done", confidence: res.confidence,
+                       brightened: !!res.brightened, backdropLuma: res.backdropLuma })
           } else {
             out.push({ name: src.name, status: "error", error: res.error })
           }
         } catch (e: any) {
           out.push({ name: src.name, status: "error", error: e?.message ?? "Failed" })
         }
-
         setDone(d => d + 1)
-        takeNext()
+        return takeNext()
       }
       takeNext()
     })
 
-    await Promise.all(workers.map(pump))
-    workers.forEach(w => w.terminate())
+    await Promise.all(clients.map(pump))
+    clients.forEach(c => c.terminate())
     clearInterval(tick)
     setElapsed(Date.now() - started)
 
-    // Zip fallback: build and download once everything is processed.
     if (zip && !cancelRef.current) {
       try {
-        // JPEGs are already compressed — STORE avoids a pointless second pass.
         const blob = await zip.generateAsync({ type: "blob", compression: "STORE" })
-        const url  = URL.createObjectURL(blob)
-        const a    = document.createElement("a")
-        a.href = url
-        a.download = `photos-prepped-${new Date().toISOString().slice(0, 10)}.zip`
-        a.click()
-        URL.revokeObjectURL(url)
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url; a.download = `photos-prepped-${new Date().toISOString().slice(0, 10)}.zip`
+        a.click(); URL.revokeObjectURL(url)
       } catch (e: any) {
-        setError(`Processed fine, but the zip failed: ${e?.message ?? "unknown error"}. Try a smaller batch, or use Chrome/Edge to save straight to a folder.`)
+        setError(`Processed fine, but the zip failed: ${e?.message ?? "unknown"}. Try a smaller batch, or use Chrome/Edge to save straight to a folder.`)
       }
     }
 
     out.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
-    setResults(out)
-    setRunning(false)
-    setFinished(!cancelRef.current)
+    setResults(out); setRunning(false); setFinished(!cancelRef.current)
   }
 
-  const errors     = useMemo(() => results.filter(r => r.status === "error"), [results])
-  const brightened = useMemo(() => results.filter(r => r.brightened).length, [results])
-  const pct        = files.length > 0 ? Math.round((done / files.length) * 100) : 0
-  const rate       = elapsed > 0 ? done / (elapsed / 1000) : 0
+  // ── Second pass: send the unsure ones to Gemini ──────────────────────────
+  const lowConf = useMemo(
+    () => results.filter(r => r.status === "done" && (r.confidence ?? 0) < AI_FALLBACK_CONFIDENCE),
+    [results],
+  )
+
+  async function fixWithAi() {
+    if (lowConf.length === 0 || !outDirRef.current) return
+    setAiFixing(true); setError(null); setAiFixed(0)
+
+    const byName = new Map(files.map(f => [f.name, f]))
+    const client = makeWorkerClient("/photo-prep-worker.js")
+    let fixed = 0
+
+    for (const r of lowConf) {
+      if (cancelRef.current) break
+      const src = byName.get(r.name)
+      if (!src) continue
+      try {
+        const file = await src.get()
+        const fd = new FormData()
+        fd.append("image", file, src.name)
+        const res = await fetch("/api/photo-prep/crop-box", { method: "POST", body: fd })
+        const json = await res.json()
+        if (!res.ok || !json.box) continue
+
+        const buffer  = await file.arrayBuffer()
+        const outType = mimeForName(src.name)
+        const out = await client.run(
+          { id: src.name, name: src.name, buffer, type: file.type || outType,
+            settings: { ...settings, outType }, forcedBox: json.box },
+          [buffer],
+        )
+        if (out.ok) {
+          await writeOut(src.name, new Blob([out.buffer], { type: outType }), null)
+          fixed++
+          setAiFixed(fixed)
+        }
+      } catch { /* leave this one as the local crop produced it */ }
+    }
+
+    client.terminate()
+    setAiFixing(false)
+    setResults(prev => prev.map(r =>
+      lowConf.some(l => l.name === r.name) ? { ...r, confidence: 1 } : r,
+    ))
+  }
+
+  const errors = useMemo(() => results.filter(r => r.status === "error"), [results])
+  const brightenedCount = useMemo(() => results.filter(r => r.brightened).length, [results])
+  const pct  = files.length > 0 ? Math.round((done / files.length) * 100) : 0
+  const rate = elapsed > 0 ? done / (elapsed / 1000) : 0
 
   const set = <K extends keyof PhotoPrepSettings>(k: K, v: PhotoPrepSettings[K]) =>
     setSettings(s => ({ ...s, [k]: v }))
 
+  const conf = previewInfo?.confidence ?? 0
+  const confLabel = aiBox ? "AI crop" : conf >= 0.75 ? "Confident" : conf >= 0.5 ? "Probably fine" : "Not sure"
+  const confColour = aiBox ? "text-violet-600 dark:text-violet-400"
+    : conf >= 0.75 ? "text-green-600 dark:text-green-400"
+    : conf >= 0.5 ? "text-amber-600 dark:text-amber-400"
+    : "text-red-600 dark:text-red-400"
+
   return (
     <div className="p-6 max-w-[1400px]">
-      <div className="mb-1">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Photo Prep</h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-          Trim the edges off a batch of product shots and lift the dark ones. Filenames are kept exactly as they are.
-        </p>
-      </div>
-      <p className="text-xs text-gray-500 dark:text-gray-500 mb-5">
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Photo Prep</h1>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+        Crops each photo to the product and lifts the under-exposed ones. Filenames are kept exactly as they are.
+      </p>
+      <p className="text-xs text-gray-500 dark:text-gray-500 mb-5 mt-1">
         Photos are processed on this computer and never uploaded.
-        {fsa
-          ? " Results are written straight into a folder you choose."
-          : " Your browser can't save straight to a folder, so results come back as a zip — use Chrome or Edge for the folder option."}
+        {fsa ? " Results are written straight into a folder you choose."
+             : " Your browser can't save straight to a folder, so results come back as a zip — use Chrome or Edge for the folder option."}
       </p>
 
       {error && (
@@ -255,14 +352,12 @@ export default function PhotoPrepPage() {
         </div>
       )}
 
-      {/* ── Step 1: choose photos ──────────────────────────────────────── */}
+      {/* Step 1 — choose */}
       <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0d0f1a] p-5 mb-4">
         <div className="flex flex-wrap items-center gap-3">
           {fsa && (
-            <button
-              onClick={pickFolder} disabled={running}
-              className="px-4 py-2 bg-[#0078D4] hover:bg-blue-500 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
-            >
+            <button onClick={pickFolder} disabled={running}
+              className="px-4 py-2 bg-[#0078D4] hover:bg-blue-500 text-white text-sm font-medium rounded transition-colors disabled:opacity-50">
               📁 Choose folder
             </button>
           )}
@@ -274,7 +369,6 @@ export default function PhotoPrepPage() {
             <input type="file" multiple accept="image/jpeg,image/png,image/webp"
                    onChange={pickFiles} disabled={running} className="hidden" />
           </label>
-
           {files.length > 0 && (
             <span className="text-sm text-gray-600 dark:text-gray-400">
               <strong className="text-gray-900 dark:text-white">{files.length.toLocaleString()}</strong> photo{files.length === 1 ? "" : "s"} ready
@@ -285,66 +379,66 @@ export default function PhotoPrepPage() {
 
       {files.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-4 mb-4">
-          {/* ── Step 2: settings ─────────────────────────────────────────── */}
+          {/* Step 2 — settings */}
           <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0d0f1a] p-5 space-y-5">
             <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Settings</h2>
 
             <div>
               <div className="flex items-baseline justify-between mb-1">
-                <label className="text-sm text-gray-700 dark:text-gray-300">Trim from each edge</label>
-                <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">{settings.trimPct}%</span>
+                <label className="text-sm text-gray-700 dark:text-gray-300">Margin around product</label>
+                <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">{settings.marginPct}%</span>
               </div>
-              <input
-                type="range" min={0} max={25} step={0.5} value={settings.trimPct}
-                onChange={e => set("trimPct", Number(e.target.value))}
-                disabled={running}
-                className="w-full accent-[#0078D4]"
-              />
+              <input type="range" min={0} max={30} step={1} value={settings.marginPct}
+                onChange={e => set("marginPct", Number(e.target.value))} disabled={running}
+                className="w-full accent-[#0078D4]" />
               <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-1">
-                Same amount off the left, right, top and bottom of every photo.
+                Breathing space, sized to the product — small and large items both get proportionate space.
+              </p>
+            </div>
+
+            <div>
+              <div className="flex items-baseline justify-between mb-1">
+                <label className="text-sm text-gray-700 dark:text-gray-300">Edge detection</label>
+                <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">{settings.sensitivity}</span>
+              </div>
+              <input type="range" min={10} max={95} step={1} value={settings.sensitivity}
+                onChange={e => set("sensitivity", Number(e.target.value))} disabled={running}
+                className="w-full accent-[#0078D4]" />
+              <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-1">
+                Higher crops tighter. Lower it if pale items are getting clipped.
               </p>
             </div>
 
             <div className="border-t border-gray-200 dark:border-gray-800 pt-4">
               <label className="flex items-center gap-2 cursor-pointer select-none mb-3">
-                <input
-                  type="checkbox" checked={settings.brighten}
-                  onChange={e => set("brighten", e.target.checked)}
-                  disabled={running}
-                  className="w-4 h-4 accent-[#0078D4]"
-                />
-                <span className="text-sm text-gray-700 dark:text-gray-300">Brighten the dark ones</span>
+                <input type="checkbox" checked={settings.brighten}
+                  onChange={e => set("brighten", e.target.checked)} disabled={running}
+                  className="w-4 h-4 accent-[#0078D4]" />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Brighten under-exposed shots</span>
               </label>
 
               {settings.brighten && (
                 <div className="space-y-4 pl-6">
+                  <p className="text-[11px] text-gray-500 dark:text-gray-500 -mt-1">
+                    Judged on how white your backdrop came out, not on the product — so a navy box stays navy.
+                  </p>
                   <div>
                     <div className="flex items-baseline justify-between mb-1">
-                      <label className="text-xs text-gray-600 dark:text-gray-400">Counts as dark below</label>
-                      <span className="text-xs font-semibold tabular-nums text-gray-900 dark:text-white">{settings.darkThreshold}</span>
+                      <label className="text-xs text-gray-600 dark:text-gray-400">Backdrop looks dim below</label>
+                      <span className="text-xs font-semibold tabular-nums text-gray-900 dark:text-white">{settings.backdropThreshold}</span>
                     </div>
-                    <input
-                      type="range" min={40} max={190} step={1} value={settings.darkThreshold}
-                      onChange={e => set("darkThreshold", Number(e.target.value))}
-                      disabled={running} className="w-full accent-[#0078D4]"
-                    />
-                    <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-1">
-                      Higher = more photos get lifted. Anything brighter than this is left untouched.
-                    </p>
+                    <input type="range" min={150} max={250} step={1} value={settings.backdropThreshold}
+                      onChange={e => set("backdropThreshold", Number(e.target.value))} disabled={running}
+                      className="w-full accent-[#0078D4]" />
                   </div>
                   <div>
                     <div className="flex items-baseline justify-between mb-1">
-                      <label className="text-xs text-gray-600 dark:text-gray-400">Brighten up to</label>
-                      <span className="text-xs font-semibold tabular-nums text-gray-900 dark:text-white">{settings.targetLuma}</span>
+                      <label className="text-xs text-gray-600 dark:text-gray-400">Lift backdrop to</label>
+                      <span className="text-xs font-semibold tabular-nums text-gray-900 dark:text-white">{settings.targetBackdrop}</span>
                     </div>
-                    <input
-                      type="range" min={90} max={200} step={1} value={settings.targetLuma}
-                      onChange={e => set("targetLuma", Number(e.target.value))}
-                      disabled={running} className="w-full accent-[#0078D4]"
-                    />
-                    <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-1">
-                      Shadows and midtones lift; white backdrops stay white.
-                    </p>
+                    <input type="range" min={200} max={255} step={1} value={settings.targetBackdrop}
+                      onChange={e => set("targetBackdrop", Number(e.target.value))} disabled={running}
+                      className="w-full accent-[#0078D4]" />
                   </div>
                 </div>
               )}
@@ -355,41 +449,29 @@ export default function PhotoPrepPage() {
                 <label className="text-sm text-gray-700 dark:text-gray-300">JPEG quality</label>
                 <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">{Math.round(settings.quality * 100)}</span>
               </div>
-              <input
-                type="range" min={0.6} max={1} step={0.01} value={settings.quality}
-                onChange={e => set("quality", Number(e.target.value))}
-                disabled={running} className="w-full accent-[#0078D4]"
-              />
+              <input type="range" min={0.6} max={1} step={0.01} value={settings.quality}
+                onChange={e => set("quality", Number(e.target.value))} disabled={running}
+                className="w-full accent-[#0078D4]" />
             </div>
 
-            <button
-              onClick={() => setSettings(DEFAULT_SETTINGS)} disabled={running}
-              className="text-xs text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline disabled:opacity-50"
-            >
+            <button onClick={() => setSettings(DEFAULT_SETTINGS)} disabled={running}
+              className="text-xs text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline disabled:opacity-50">
               Reset to defaults
             </button>
           </div>
 
-          {/* ── Preview ──────────────────────────────────────────────────── */}
+          {/* Preview */}
           <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0d0f1a] p-5">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
                 Preview {previewBusy && <span className="text-xs font-normal text-gray-500">· updating…</span>}
               </h2>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPreviewIdx(i => Math.max(0, i - 1))}
-                  disabled={previewIdx === 0}
-                  className="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 disabled:opacity-30"
-                >‹</button>
-                <span className="text-xs text-gray-500 dark:text-gray-500 tabular-nums">
-                  {previewIdx + 1} / {files.length}
-                </span>
-                <button
-                  onClick={() => setPreviewIdx(i => Math.min(files.length - 1, i + 1))}
-                  disabled={previewIdx >= files.length - 1}
-                  className="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 disabled:opacity-30"
-                >›</button>
+                <button onClick={() => setPreviewIdx(i => Math.max(0, i - 1))} disabled={previewIdx === 0}
+                  className="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 disabled:opacity-30">‹</button>
+                <span className="text-xs text-gray-500 dark:text-gray-500 tabular-nums">{previewIdx + 1} / {files.length}</span>
+                <button onClick={() => setPreviewIdx(i => Math.min(files.length - 1, i + 1))} disabled={previewIdx >= files.length - 1}
+                  className="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 disabled:opacity-30">›</button>
               </div>
             </div>
 
@@ -399,9 +481,8 @@ export default function PhotoPrepPage() {
               <div>
                 <p className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500 mb-1.5">Before</p>
                 <div className="aspect-square rounded border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-black/40 overflow-hidden flex items-center justify-center">
-                  {beforeUrl
-                    ? <img src={beforeUrl} alt="Before" className="max-w-full max-h-full object-contain" />
-                    : <span className="text-xs text-gray-400">…</span>}
+                  {beforeUrl ? <img src={beforeUrl} alt="Before" className="max-w-full max-h-full object-contain" />
+                             : <span className="text-xs text-gray-400">…</span>}
                 </div>
               </div>
               <div>
@@ -409,42 +490,71 @@ export default function PhotoPrepPage() {
                   After {previewInfo?.brightened && <span className="text-amber-600 dark:text-amber-400 normal-case">· brightened</span>}
                 </p>
                 <div className="aspect-square rounded border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-black/40 overflow-hidden flex items-center justify-center">
-                  {afterUrl
-                    ? <img src={afterUrl} alt="After" className="max-w-full max-h-full object-contain" />
-                    : <span className="text-xs text-gray-400">…</span>}
+                  {afterUrl ? <img src={afterUrl} alt="After" className="max-w-full max-h-full object-contain" />
+                            : <span className="text-xs text-gray-400">…</span>}
                 </div>
               </div>
             </div>
 
+            {/* The numbers behind the decision — so it's obvious why it did or didn't brighten */}
             {previewInfo && (
-              <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-2 tabular-nums">
-                Output {previewInfo.w} × {previewInfo.h} px
-              </p>
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                <div className="rounded bg-gray-50 dark:bg-black/30 px-2 py-1.5">
+                  <p className="text-gray-500 dark:text-gray-500">Crop</p>
+                  <p className="font-semibold text-gray-900 dark:text-white tabular-nums">{previewInfo.width}×{previewInfo.height}</p>
+                </div>
+                <div className="rounded bg-gray-50 dark:bg-black/30 px-2 py-1.5">
+                  <p className="text-gray-500 dark:text-gray-500">Confidence</p>
+                  <p className={`font-semibold ${confColour}`}>{confLabel}</p>
+                </div>
+                <div className="rounded bg-gray-50 dark:bg-black/30 px-2 py-1.5">
+                  <p className="text-gray-500 dark:text-gray-500">Backdrop</p>
+                  <p className="font-semibold text-gray-900 dark:text-white tabular-nums">
+                    {previewInfo.backdropLuma != null ? Math.round(previewInfo.backdropLuma) : "—"}
+                    <span className="font-normal text-gray-500"> / {settings.backdropThreshold}</span>
+                  </p>
+                </div>
+                <div className="rounded bg-gray-50 dark:bg-black/30 px-2 py-1.5">
+                  <p className="text-gray-500 dark:text-gray-500">Brightened</p>
+                  <p className={`font-semibold ${previewInfo.brightened ? "text-amber-600 dark:text-amber-400" : "text-gray-500"}`}>
+                    {previewInfo.brightened ? "Yes" : "Not needed"}
+                  </p>
+                </div>
+              </div>
             )}
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button onClick={checkPreviewWithAi} disabled={aiBusy || running}
+                className="px-3 py-1.5 text-xs font-medium rounded border border-violet-300 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/40 disabled:opacity-50">
+                {aiBusy ? "Asking AI…" : "✨ Crop this one with AI"}
+              </button>
+              {aiBox && (
+                <button onClick={() => { setAiBox(null); runPreview() }}
+                  className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline">
+                  back to automatic
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      {/* ── Step 3: run ─────────────────────────────────────────────────── */}
+      {/* Step 3 — run */}
       {files.length > 0 && (
         <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0d0f1a] p-5">
           <div className="flex flex-wrap items-center gap-3 mb-4">
             {!running ? (
-              <button
-                onClick={run}
-                className="px-5 py-2.5 bg-green-600 hover:bg-green-500 text-white text-sm font-semibold rounded transition-colors"
-              >
-                {fsa ? `Process ${files.length.toLocaleString()} photos & save to folder` : `Process ${files.length.toLocaleString()} photos & download zip`}
+              <button onClick={run}
+                className="px-5 py-2.5 bg-green-600 hover:bg-green-500 text-white text-sm font-semibold rounded transition-colors">
+                {fsa ? `Process ${files.length.toLocaleString()} photos & save to folder`
+                     : `Process ${files.length.toLocaleString()} photos & download zip`}
               </button>
             ) : (
-              <button
-                onClick={() => { cancelRef.current = true }}
-                className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded transition-colors"
-              >
+              <button onClick={() => { cancelRef.current = true }}
+                className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded transition-colors">
                 Stop
               </button>
             )}
-
             {(running || finished) && (
               <span className="text-sm text-gray-600 dark:text-gray-400 tabular-nums">
                 {done.toLocaleString()} / {files.length.toLocaleString()}
@@ -456,35 +566,46 @@ export default function PhotoPrepPage() {
 
           {(running || finished) && (
             <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden mb-4">
-              <div
-                className={`h-full rounded-full transition-all duration-300 ${finished && errors.length === 0 ? "bg-green-500" : "bg-[#0078D4]"}`}
-                style={{ width: `${pct}%` }}
-              />
+              <div className={`h-full rounded-full transition-all duration-300 ${finished && errors.length === 0 ? "bg-green-500" : "bg-[#0078D4]"}`}
+                   style={{ width: `${pct}%` }} />
             </div>
           )}
 
           {finished && (
-            <div className="text-sm space-y-1">
+            <div className="text-sm space-y-2">
               <p className="text-green-700 dark:text-green-400 font-medium">
                 ✓ Done — {results.filter(r => r.status === "done").length.toLocaleString()} photo
-                {results.filter(r => r.status === "done").length === 1 ? "" : "s"} processed
+                {results.filter(r => r.status === "done").length === 1 ? "" : "s"} cropped
                 {fsa ? " and saved to your folder." : " and downloaded."}
               </p>
               {settings.brighten && (
                 <p className="text-gray-600 dark:text-gray-400">
-                  {brightened.toLocaleString()} were dark enough to brighten; the rest were left as shot.
+                  {brightenedCount.toLocaleString()} had a dim backdrop and were lifted; the rest were already well exposed.
                 </p>
               )}
+
+              {lowConf.length > 0 && outDirRef.current && (
+                <div className="mt-3 p-3 rounded-lg bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-900">
+                  <p className="text-violet-800 dark:text-violet-300 mb-2">
+                    <strong>{lowConf.length}</strong> photo{lowConf.length === 1 ? " wasn't" : "s weren't"} cropped confidently —
+                    busy background, or the item runs off the edge.
+                  </p>
+                  <button onClick={fixWithAi} disabled={aiFixing}
+                    className="px-4 py-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold rounded disabled:opacity-50">
+                    {aiFixing ? `Re-cropping with AI… ${aiFixed}/${lowConf.length}` : `✨ Re-crop those ${lowConf.length} with AI`}
+                  </button>
+                  <p className="text-[11px] text-violet-700/70 dark:text-violet-400/70 mt-1.5">
+                    Sends only these to Gemini and overwrites them in your output folder.
+                  </p>
+                </div>
+              )}
+
               {errors.length > 0 && (
                 <details className="mt-2">
-                  <summary className="text-red-600 dark:text-red-400 cursor-pointer">
-                    {errors.length} failed — click to see which
-                  </summary>
+                  <summary className="text-red-600 dark:text-red-400 cursor-pointer">{errors.length} failed — click to see which</summary>
                   <ul className="mt-2 space-y-0.5 max-h-48 overflow-y-auto">
                     {errors.map(e => (
-                      <li key={e.name} className="text-xs font-mono text-gray-600 dark:text-gray-400">
-                        {e.name} — {e.error}
-                      </li>
+                      <li key={e.name} className="text-xs font-mono text-gray-600 dark:text-gray-400">{e.name} — {e.error}</li>
                     ))}
                   </ul>
                 </details>
