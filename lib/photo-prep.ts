@@ -6,25 +6,52 @@
 // practical: no upload wait, no body-size limit, no storage cost.
 
 export type PhotoPrepSettings = {
-  /** Percentage taken off EACH edge. 5 = 5% off left, right, top and bottom. */
-  trimPct:       number
-  /** Lift under-exposed frames. Correctly-exposed ones are left alone. */
-  brighten:      boolean
-  /** Mean luma (0–255) below which a photo counts as "dark". */
-  darkThreshold: number
-  /** Mean luma to lift a dark photo up to. */
-  targetLuma:    number
+  /**
+   * Breathing space left around the detected product, as a share of the
+   * product's own size. 5 = a margin one-twentieth of the item's width/height,
+   * so a small item and a large one both get proportionate space.
+   */
+  marginPct:         number
+  /**
+   * How eagerly a pixel counts as product rather than backdrop (0–100).
+   * Higher = tighter crop. Lower = more forgiving on low-contrast items.
+   */
+  sensitivity:       number
+  /** Lift under-exposed shots. Correctly-exposed ones are left alone. */
+  brighten:          boolean
+  /**
+   * Backdrop luma (0–255) below which the shot counts as underexposed.
+   * Exposure is judged on the SWEEP, not the product — a navy box is
+   * legitimately dark and must not be lifted, but a grey sweep means the
+   * whole frame is under.
+   */
+  backdropThreshold: number
+  /** Backdrop luma to lift an underexposed shot up to — i.e. the white point. */
+  targetBackdrop:    number
   /** JPEG/WebP encode quality, 0–1. Ignored for PNG. */
-  quality:       number
+  quality:           number
 }
 
 export const DEFAULT_SETTINGS: PhotoPrepSettings = {
-  trimPct:       5,
-  brighten:      true,
-  darkThreshold: 110,
-  targetLuma:    135,
-  quality:       0.92,
+  marginPct:         5,
+  // 85, set from measurement rather than taste. On mock auction shots a pale
+  // inner tray sitting only ~27 units off a white sweep was clipped at 40, 55
+  // and 70, and first came back in at 85 — with detected coverage rising 23%
+  // -> 33% and scattered dust specks still correctly ignored. Erring
+  // tight-but-inclusive is the safer failure: a slightly loose crop is a
+  // nuisance, a clipped product is a reshoot.
+  sensitivity:       85,
+  brighten:          true,
+  backdropThreshold: 225,
+  targetBackdrop:    245,
+  quality:           0.92,
 }
+
+/**
+ * Below this, local detection isn't trusted and the photo is a candidate for
+ * a second look from Gemini.
+ */
+export const AI_FALLBACK_CONFIDENCE = 0.5
 
 export const ACCEPTED_EXT = /\.(jpe?g|png|webp)$/i
 
@@ -65,4 +92,78 @@ export function hasFileSystemAccess(): boolean {
 export function workerCount(): number {
   const cores = (typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 4
   return Math.max(2, Math.min(8, cores - 2))
+}
+
+/** A single image is given this long before it is written off as stuck. */
+const TASK_TIMEOUT_MS = 120_000
+
+/**
+ * Wraps a Worker so every request gets a reply — or a failure — and never
+ * simply hangs.
+ *
+ * Three things this exists to prevent, all of which stall a 1000-photo run:
+ *  - Two requests in flight on one worker. With one-shot listeners the FIRST
+ *    reply is handed to BOTH waiting promises, so the newer request silently
+ *    receives the older result. Every reply carries its request id instead.
+ *  - The worker script 404ing after a deploy, or the browser killing it under
+ *    memory pressure. postMessage still succeeds but no reply ever comes, so
+ *    without an error handler the batch waits forever.
+ *  - A single pathological image wedging its worker. A timeout releases it.
+ */
+export function makeWorkerClient(url: string) {
+  const worker = new Worker(url)
+  const pending = new Map<number, (v: any) => void>()
+  let seq = 0
+
+  const settle = (rid: number, value: any) => {
+    const resolve = pending.get(rid)
+    if (!resolve) return
+    pending.delete(rid)
+    resolve(value)
+  }
+  const failAll = (error: string) => {
+    for (const rid of [...pending.keys()]) settle(rid, { ok: false, error })
+  }
+
+  worker.onmessage      = (e: MessageEvent) => settle(e.data?.rid, e.data)
+  worker.onerror        = (e: any) => failAll(e?.message || "Image worker crashed")
+  worker.onmessageerror = () => failAll("Image worker sent an unreadable reply")
+
+  return {
+    worker,
+    run(payload: any, transfer: Transferable[] = []): Promise<any> {
+      const rid = ++seq
+      return new Promise<any>((resolve) => {
+        const timer = setTimeout(
+          () => settle(rid, { ok: false, error: "Timed out — image too large or malformed" }),
+          TASK_TIMEOUT_MS,
+        )
+        pending.set(rid, (v) => { clearTimeout(timer); resolve(v) })
+        try {
+          worker.postMessage({ ...payload, rid }, transfer)
+        } catch (err: any) {
+          settle(rid, { ok: false, error: err?.message ?? "Could not send image to worker" })
+        }
+      })
+    },
+    terminate() {
+      failAll("Cancelled")
+      worker.terminate()
+    },
+  }
+}
+
+export type WorkerClient = ReturnType<typeof makeWorkerClient>
+
+/**
+ * True when two directory handles point at the same folder.
+ *
+ * ⚠ Writing results into the SOURCE folder destroys the originals —
+ * createWritable() truncates the file it opens, so the untouched photo is gone
+ * with no undo. The tool's own "same filenames, saved to a folder" behaviour
+ * makes picking the same folder the natural mistake, so it has to be blocked.
+ */
+export async function isSameFolder(a: any, b: any): Promise<boolean> {
+  if (!a || !b) return false
+  try { return await a.isSameEntry(b) } catch { return false }
 }
