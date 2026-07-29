@@ -231,7 +231,13 @@ self.onmessage = async (e) => {
   const { rid, id, buffer, type, name, settings, forcedBox } = e.data
 
   try {
-    const bmp = await createImageBitmap(new Blob([buffer], { type }))
+    // ⚠ imageOrientation MUST be explicit. Cameras store the pixels unrotated
+    // and record an EXIF orientation tag for viewers to honour — but re-encoding
+    // through a canvas DROPS that tag. Decode without applying it and an upright
+    // photo is written back sideways, because the tag is gone and the pixels
+    // were never turned. The spec default for this option has changed across
+    // browser versions, so it is pinned rather than assumed.
+    const bmp = await createImageBitmap(new Blob([buffer], { type }), { imageOrientation: "from-image" })
     const W = bmp.width, H = bmp.height
 
     // ── Decide the crop box ────────────────────────────────────────────────
