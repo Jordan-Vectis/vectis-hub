@@ -3,28 +3,35 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { getBCToken, bcFetchAll } from "@/lib/bc"
 
-export const maxDuration = 120
+export const maxDuration = 300
 
 // GET /api/manager-portal/bc-tote-dates
 //
 // Powers the Manager Portal → Departments "Using totes from — Business Central
-// categories" table, LIVE from BC. Everything comes from one feed —
-// Receipt_Totes_Excel — which holds, per tote: the category
+// categories" table, LIVE from BC. Everything about the DATES comes from one
+// feed — Receipt_Totes_Excel — which holds, per tote: the category
 // (EVA_TOT_ArticleCategory), the CHECK-IN date (SystemCreatedAt), and
 // PTE_Benched — the reliable "this tote has been catalogued" signal (Jordan:
 // EVA_TOT_Catalogued is unreliable; a tote is catalogued when it's benched).
 //
-// Our synced WarehouseTote can't be used here — BC drops a tote from the feed's
-// default view once catalogued, so catalogued totes aren't in our copy. Hence
-// the live pull.
-//
 // "Using totes from" = the median check-in month of the newest 10 benched totes
 // per category.
 //
-// ⚠ PTE_Benched is a BC FLOW/calculated field — an OData `$filter=PTE_Benched eq
-// true` silently returns the WRONG subset (it gave only 4 MILITARY totes when BC
-// shows many). So we DON'T filter on it server-side: we page the whole
-// Receipt_Totes_Excel feed and test PTE_Benched in code instead.
+// ⚠ HOW WE FETCH — the proven pattern from the working BC Warehouse tab.
+// The BC Warehouse report (app/api/bc/warehouse/route.ts) pulls the WHOLE
+// Receipt_Totes_Excel feed in one call — `bcFetchAll(token, "Receipt_Totes_Excel")`
+// with NO $filter and NO $select — then groups by EVA_TOT_ArticleCategory in
+// code. We do exactly the same here. Two earlier approaches under-fetched and are
+// deliberately NOT used again:
+//   1. Filtering the whole feed and relying on server paging — BC didn't emit a
+//      nextLink, so only the first 500 rows came back (GAMING got 1).
+//   2. One filtered query PER CATEGORY (`EVA_TOT_ArticleCategory eq '<cat>'`) —
+//      still under-returned (GAMING got 5), and the category list came from a
+//      DIFFERENT table (WarehouseItem), so names could miss entirely.
+// The unfiltered full pull is the only pattern proven to return every tote, so
+// we page the lot once and do BOTH the benched filter and the category grouping
+// in code. PTE_Benched is a BC flow/calculated field — an OData `$filter` on it
+// silently returns the wrong subset, another reason to keep it in code.
 
 const SAMPLE = 10                 // newest N benched totes per category
 const CAT_COL     = "EVA_TOT_ArticleCategory"
@@ -41,13 +48,12 @@ function bcMs(v: unknown): number | null {
   return d.getTime()
 }
 
+// BC returns booleans as strings sometimes ("Yes"/"true").
 const isBenched = (v: unknown) => v === true || v === 1 || v === "true" || v === "Yes" || v === "1"
 
-async function inBatches<T>(items: T[], concurrency: number, fn: (t: T) => Promise<void>) {
-  for (let i = 0; i < items.length; i += concurrency) {
-    await Promise.all(items.slice(i, i + concurrency).map(fn))
-  }
-}
+// Join key between the feed's category and our WarehouseItem counts — case- and
+// punctuation-insensitive so "TV & Film" / "TV_FILM" still line up.
+const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "")
 
 // Median — robust to a stray old/new tote even on a tiny sample (a category may
 // only have a few totes benched right now). A trimmed mean needs enough points
@@ -82,9 +88,9 @@ export async function GET() {
     const token = await getBCToken()
     if (!token) return NextResponse.json({ connected: false, categories: [] })
 
-    // ── Counts + last-worked from our own data (reliable, WarehouseItem) ──
-    // Kept from the Hub side so the "Catalogued / Still to do / Last worked"
-    // columns are unchanged; only the dates go live.
+    // ── Counts + last-worked from our own data (WarehouseItem), joined onto the
+    // BC categories by normalised name. These populate the Catalogued / Still to
+    // do / Last worked columns; the DATES come purely from the live feed below.
     const totals = await prisma.$queryRaw<{ category: string; catalogued: number; outstanding: number; lastAt: Date | null }[]>`
       SELECT btrim(w."category")                                            AS "category",
              COUNT(*) FILTER (WHERE w."catalogued" = true)::int             AS "catalogued",
@@ -93,46 +99,39 @@ export async function GET() {
       FROM "WarehouseItem" w
       WHERE w."category" IS NOT NULL AND btrim(w."category") <> ''
       GROUP BY 1`
+    const totalsByNorm = new Map(totals.map(t => [norm(t.category), t]))
 
-    // ── Live: ONE query PER CATEGORY, filtered by category, benched in code ──
-    // ⚠ Filtering the whole feed and relying on paging failed — BC didn't emit a
-    // nextLink on the unfiltered feed, so only the first 500 rows came back and a
-    // category got whatever crumbs were in that slice (GAMING got 1). Category IS
-    // a real filterable field (EVA_TOT_ArticleCategory), so query each category
-    // directly, page THAT (small) result to completion, and keep benched in code.
-    const catList = [...new Set(totals.map(t => t.category))]
+    // ── Live: ONE unfiltered pull of the whole feed, grouped + benched in code ──
+    const allRows = await bcFetchAll(token, "Receipt_Totes_Excel")
+
+    // Group BENCHED totes by the feed's own category.
     const benchedByCategory = new Map<string, { tote: string; ms: number | null }[]>()
+    // Every category the feed holds (benched or not), so a category with nothing
+    // benched yet still shows a row ("nothing benched yet").
+    const feedCategories = new Set<string>()
+    for (const r of allRows as any[]) {
+      const category = String(r[CAT_COL] ?? "").trim()
+      if (!category) continue
+      feedCategories.add(category)
+      if (!isBenched(r[BENCHED_COL])) continue
+      const arr = benchedByCategory.get(category) ?? []
+      arr.push({
+        tote: String(r[TOTE_COL] ?? "").trim() || "(no tote no)",
+        ms:   bcMs(r[CREATED_COL]),
+      })
+      benchedByCategory.set(category, arr)
+    }
 
-    // bcFetchAll pages via $skip (works when BC emits no nextLink). A single
-    // category is well under the ~38k $skip limit, so it fetches ALL that
-    // category's totes; we keep the benched ones in code.
-    await inBatches(catList, 4, async (category) => {
-      const filter = `${CAT_COL} eq '${category.replace(/'/g, "''")}'`
-      let rows: any[] = []
-      try {
-        rows = await bcFetchAll(token, "Receipt_Totes_Excel", filter, `${CAT_COL},${TOTE_COL},${CREATED_COL},${BENCHED_COL}`)
-      } catch { rows = [] }
-      const collected = rows
-        .filter(r => isBenched((r as any)[BENCHED_COL]))   // benched filter — in code
-        .map(r => ({
-          tote: String((r as any)[TOTE_COL] ?? "").trim() || "(no tote no)",
-          ms:   bcMs((r as any)[CREATED_COL]),
-        }))
-      benchedByCategory.set(category, collected)
-    })
-
-    // ── Per category: newest SAMPLE benched totes, trimmed-mean month ──
-    const totalsByCat = new Map(totals.map(t => [t.category, t]))
-    const allCats = new Set<string>([...totals.map(t => t.category), ...benchedByCategory.keys()])
+    // ── Per category: newest SAMPLE benched totes, median month ──
     const categories: CategoryOut[] = []
-    for (const category of allCats) {
+    for (const category of feedCategories) {
       // Newest-first by check-in; undated totes sort to the end.
       const benched = (benchedByCategory.get(category) ?? [])
         .slice()
         .sort((a, b) => (b.ms ?? -Infinity) - (a.ms ?? -Infinity))
       const sample = benched.slice(0, SAMPLE)
       const dated  = sample.map(t => t.ms).filter((d): d is number => d != null).sort((a, b) => a - b)
-      const t = totalsByCat.get(category)
+      const t = totalsByNorm.get(norm(category))
       categories.push({
         category,
         monthMs:  median(dated),
