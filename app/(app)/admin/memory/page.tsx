@@ -211,7 +211,13 @@ A static, admin-only, plain-English internal note (app/(app)/admin/compliance/pa
 
 It lists: what personal data the Hub holds (customers, bidders, staff accounts + monitoring, financial); the STAFF-MONITORING features (cataloguing activity, away popup, Unaccounted Time, device clock/timezone tamper detection, lot change log) flagged RED as the priority (DPIA + transparency likely needed); where data lives (Neon Postgres / Cloudflare R2 / Railway); third parties data is shared with (Google Gemini, Microsoft/Business Central, Royal Mail Click & Drop, D-ID, GA4, ntfy.sh); and points to raise (employee monitoring, ICO data-protection fee, privacy notice, retention + 72h breach notice, PCI/no full card numbers, third-party ToS + OSS licences).
 
-⚠ KEEP IT IN SYNC: when the Hub gains a NEW third-party integration, data store, or staff-monitoring feature, update the STORES / PROCESSORS / MONITORING arrays in that page. Linked from the Admin overview grid ("System & AI", ⚖️ icon).`,
+⚠ KEEP IT IN SYNC: when the Hub gains a NEW third-party integration, data store, or staff-monitoring feature, update the STORES / PROCESSORS / MONITORING arrays in that page. Linked from the Admin overview grid ("System & AI", ⚖️ icon).
+
+## DPIA page (/admin/dpia) — added 2026-07-29
+
+**Admin → DPIA** (app/(app)/admin/dpia/page.tsx, admin-only, 🛡️ icon, linked from the admin grid AND cross-linked from the compliance page). A **Data Protection Impact Assessment** following the **ICO DPIA template** (UK GDPR Art. 35), built when Jordan asked for "a DPIA for the system". Same house style + "NOT legal advice, working DRAFT" framing. Steps: 0 document control, 1 need (staff monitoring = trigger), 2 describe processing, 3 consultation, 4 necessity & proportionality (lawful-basis table), 5 risk register (R1–R8, likelihood×severity→Low/Med/High badges), 6 measures (existing vs recommended per risk), 7 sign-off. Identity/DPO/sign-off fields are deliberately "to complete"; company identity pre-filled (Vectis Auctions Ltd, Thornaby TS17 9JZ). R1 (staff monitoring) rated High.
+
+⚠ It DUPLICATES the compliance page's data inventory in its own STORES/PROCESSORS/MONITORING arrays (plus DATA_CATEGORIES/LAWFUL_BASIS/RISKS/MEASURES) — update BOTH pages when integrations/stores/monitoring change.`,
   },
   {
     filename: "dolls_bears_descriptions.md",

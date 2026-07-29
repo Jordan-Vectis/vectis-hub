@@ -84,6 +84,9 @@ export default async function CompliancePage() {
       <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
         A plain-English overview of what the Vectis Hub holds, where it lives, and what to check with an adviser.
       </p>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+        See also: <Link href="/admin/dpia" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">Data Protection Impact Assessment (DPIA)</Link> — the formal risk assessment, which the staff monitoring below makes advisable.
+      </p>
 
       {/* Disclaimer */}
       <div className="mt-5 mb-8 rounded-xl border border-amber-300 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
