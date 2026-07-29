@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
-import { getBCToken, bcPageWithNext } from "@/lib/bc"
+import { getBCToken, bcFetchAll } from "@/lib/bc"
 
 export const maxDuration = 120
 
@@ -103,33 +103,21 @@ export async function GET() {
     const catList = [...new Set(totals.map(t => t.category))]
     const benchedByCategory = new Map<string, { tote: string; ms: number | null }[]>()
 
+    // bcFetchAll pages via $skip (works when BC emits no nextLink). A single
+    // category is well under the ~38k $skip limit, so it fetches ALL that
+    // category's totes; we keep the benched ones in code.
     await inBatches(catList, 4, async (category) => {
       const filter = `${CAT_COL} eq '${category.replace(/'/g, "''")}'`
-      const collected: { tote: string; ms: number | null }[] = []
-      let url: string | null = null
-      let firstParams: Record<string, string | number> | undefined = {
-        $filter: filter,
-        $select: `${CAT_COL},${TOTE_COL},${CREATED_COL},${BENCHED_COL}`,
-        $top: 500,
-      }
-      let page = 0
-      while (page < 30) {   // a single category is small; cap is a backstop
-        let res: { rows: any[]; nextLink: string | null }
-        try {
-          res = await bcPageWithNext(token, url ?? "Receipt_Totes_Excel", url ? undefined : firstParams)
-        } catch { break }
-        firstParams = undefined
-        for (const r of res.rows) {
-          if (!isBenched((r as any)[BENCHED_COL])) continue   // benched filter — in code
-          collected.push({
-            tote: String((r as any)[TOTE_COL] ?? "").trim() || "(no tote no)",
-            ms:   bcMs((r as any)[CREATED_COL]),
-          })
-        }
-        page++
-        if (!res.nextLink) break
-        url = res.nextLink
-      }
+      let rows: any[] = []
+      try {
+        rows = await bcFetchAll(token, "Receipt_Totes_Excel", filter, `${CAT_COL},${TOTE_COL},${CREATED_COL},${BENCHED_COL}`)
+      } catch { rows = [] }
+      const collected = rows
+        .filter(r => isBenched((r as any)[BENCHED_COL]))   // benched filter — in code
+        .map(r => ({
+          tote: String((r as any)[TOTE_COL] ?? "").trim() || "(no tote no)",
+          ms:   bcMs((r as any)[CREATED_COL]),
+        }))
       benchedByCategory.set(category, collected)
     })
 
