@@ -117,21 +117,22 @@ export default async function DepartmentsView() {
   // category taken from the items on that receipt (the tote table has no
   // category of its own). We keep the newest 10 catalogued totes per category
   // for the expandable list; row 1 is the frontier.
-  let bcFrontierRows: { category: string; tote: string; d: Date | null }[] = []
+  let bcFrontierRows: { category: string; tote: string; d: Date | null; src: string | null }[] = []
   let bcCatTotals: { category: string; catalogued: number; outstanding: number; lastAt: Date | null }[] = []
   try {
     [bcFrontierRows, bcCatTotals] = await Promise.all([
-      prisma.$queryRaw<{ category: string; tote: string; d: Date | null }[]>`
-        -- "Using totes from" = the check-in date RANGE (with a median) of the last
-        -- 10 receipts catalogued in the category. Cataloguing happens out of order
-        -- (MILITARY had stray April ticks over a dense mid-March block), so a
-        -- single "newest catalogued" frontier is meaningless — the last-10
-        -- recently-worked receipts give the real "we're working across ~mid March".
+      prisma.$queryRaw<{ category: string; tote: string; d: Date | null; src: string | null }[]>`
+        -- "Using totes from" = an average month of the last 10 receipts catalogued
+        -- in the category. Driven off WarehouseItem.catalogued + cataloguedAt
+        -- (reliable), ordered by MAX(cataloguedAt) per receipt.
         --
-        -- Driven off WarehouseItem.catalogued + cataloguedAt (reliable — same
-        -- signal as the counts / Last worked), NOT WarehouseTote.catalogued.
-        -- "Recently worked" = ordered by MAX(cataloguedAt) per receipt. Check-in
-        -- date per receipt = MAX of its totes' bcCreatedAt.
+        -- ⚠ Each receipt is dated by its CHECK-IN, from TWO sources via LEFT JOIN
+        -- so ALL 10 come back (not just the few that match): the item's
+        -- goodsReceivedDate FIRST (WarehouseTote — Receipt_Totes_Excel — mostly
+        -- only holds UNCATALOGUED totes, so a catalogued receipt usually has no
+        -- tote there; that inner-join dropped 8 of MILITARY's 10 and left 2
+        -- outliers). Tote bcCreatedAt is the fallback. The src column says which
+        -- was used; undated receipts still appear (so you can see why).
         WITH cat_receipt AS (
           SELECT upper(btrim("receiptNo")) AS receipt,
                  MAX(btrim("category"))    AS category,
@@ -149,14 +150,30 @@ export default async function DepartmentsView() {
                    ROW_NUMBER() OVER (PARTITION BY category ORDER BY last_catalogued DESC)::int AS rn
             FROM cat_receipt
           ) x WHERE rn <= 10
+        ),
+        item_date AS (
+          SELECT upper(btrim("receiptNo")) AS receipt, MIN("goodsReceivedDate") AS d
+          FROM "WarehouseItem"
+          WHERE upper(btrim("receiptNo")) IN (SELECT receipt FROM recent)
+            AND "goodsReceivedDate" IS NOT NULL AND "goodsReceivedDate" >= DATE '1990-01-01'
+          GROUP BY 1
+        ),
+        tote_date AS (
+          SELECT upper(btrim("receiptNo")) AS receipt, MAX("bcCreatedAt") AS d
+          FROM "WarehouseTote"
+          WHERE upper(btrim("receiptNo")) IN (SELECT receipt FROM recent)
+            AND "bcCreatedAt" IS NOT NULL AND "bcCreatedAt" >= DATE '1990-01-01'
+          GROUP BY 1
         )
-        SELECT r.category AS category, r.receipt AS tote, MAX(t."bcCreatedAt") AS d
+        SELECT r.category AS category, r.receipt AS tote,
+               COALESCE(id.d, td.d) AS d,
+               CASE WHEN id.d IS NOT NULL THEN 'received'
+                    WHEN td.d IS NOT NULL THEN 'tote'
+                    ELSE NULL END AS src
         FROM recent r
-        JOIN "WarehouseTote" t ON upper(btrim(t."receiptNo")) = r.receipt
-        -- ⚠ BC sends an empty date as 0001-01-01, which is a VALID date
-        WHERE t."bcCreatedAt" IS NOT NULL AND t."bcCreatedAt" >= DATE '1990-01-01'
-        GROUP BY r.category, r.receipt
-        ORDER BY r.category, MAX(t."bcCreatedAt") DESC`,
+        LEFT JOIN item_date id ON id.receipt = r.receipt
+        LEFT JOIN tote_date td ON td.receipt = r.receipt
+        ORDER BY r.category, COALESCE(id.d, td.d) DESC NULLS LAST`,
       prisma.$queryRaw<{ category: string; catalogued: number; outstanding: number; lastAt: Date | null }[]>`
         SELECT btrim(w."category")                                          AS "category",
                COUNT(*) FILTER (WHERE w."catalogued" = true)::int            AS "catalogued",
@@ -294,11 +311,13 @@ export default async function DepartmentsView() {
     totesBySale.set(r.auctionId, [...(totesBySale.get(r.auctionId) ?? []), { tote: r.tote, lotCount: r.lotCount }])
   }
 
-  // Newest catalogued totes per BC category, rn order (row 1 = the frontier).
-  const bcTotesByCategory = new Map<string, { tote: string; dateMs: number | null }[]>()
+  // The last 10 catalogued receipts per BC category, each with its check-in date
+  // and which source dated it ('received' = item goodsReceivedDate, 'tote' =
+  // tote bcCreatedAt, null = neither). Ordered newest-dated first, undated last.
+  const bcTotesByCategory = new Map<string, { tote: string; dateMs: number | null; src: string | null }[]>()
   for (const r of bcFrontierRows) {
     const dateMs = r.d ? new Date(r.d).getTime() : null
-    bcTotesByCategory.set(r.category, [...(bcTotesByCategory.get(r.category) ?? []), { tote: r.tote, dateMs }])
+    bcTotesByCategory.set(r.category, [...(bcTotesByCategory.get(r.category) ?? []), { tote: r.tote, dateMs, src: r.src }])
   }
 
   const median = (xs: number[]): number => {
@@ -365,7 +384,7 @@ export default async function DepartmentsView() {
   // and take the MEAN of the middle — removing the odd old straggler pulls it to
   // the real "we're working through ~March". medianMs holds that trimmed mean so
   // the shared StockAge shape + lag colours work unchanged.
-  function bcStockFor(totes: { tote: string; dateMs: number | null }[]): BcCategoryRow["stock"] {
+  function bcStockFor(totes: { tote: string; dateMs: number | null; src: string | null }[]): BcCategoryRow["stock"] {
     if (totes.length === 0) return null
     const dated = totes.map(t => t.dateMs).filter((d): d is number => d != null).sort((a, b) => a - b)
     let typical: number | null = null
@@ -384,8 +403,8 @@ export default async function DepartmentsView() {
         tote:    t.tote,
         dateMs:  t.dateMs,
         lots:    1,
-        reason:  t.dateMs != null ? null : "no created date yet — run the totes sync",
-        source:  t.dateMs != null ? "tote" : null,
+        reason:  t.dateMs != null ? null : "no check-in date (not in warehouse or BC)",
+        source:  t.src,   // 'received' = item goods-received, 'tote' = tote created
       })),
     }
   }

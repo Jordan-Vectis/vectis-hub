@@ -634,15 +634,16 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                     <tr className="border-b border-gray-50 dark:border-gray-800/50">
                       <td colSpan={6} className="px-3 py-3 bg-gray-50/60 dark:bg-gray-800/25">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                          Last {r.stock.totesSampled} receipt{r.stock.totesSampled === 1 ? "" : "s"} catalogued in {r.category},
-                          by check-in date{r.stock.oldestMs != null && ` — spanning ${fmtToteDate(r.stock.oldestMs)} to ${fmtToteDate(r.stock.newestMs!)}`}.
-                          The month above is their average with the oldest/newest trimmed off.
+                          The last {r.stock.totesSampled} receipt{r.stock.totesSampled === 1 ? "" : "s"} catalogued in {r.category}
+                          {" "}({r.stock.dated} of {r.stock.totesSampled} have a check-in date). The month above is the average
+                          of the dated ones with the oldest/newest trimmed off.{" "}
+                          <span className="text-gray-400 dark:text-gray-500">rcvd = goods-received date · tote = tote created date</span>
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           {r.stock.totes.map(t => (
                             <span
                               key={t.tote}
-                              title={`Receipt ${t.tote}${t.reason ? ` — ${t.reason}` : " — checked into Business Central"}`}
+                              title={`Receipt ${t.tote}${t.reason ? ` — ${t.reason}` : t.source === "received" ? " — dated by goods-received date" : " — dated by the tote's created date"}`}
                               className={`text-xs px-2 py-1 rounded-lg border whitespace-nowrap ${
                                 t.dateMs == null
                                   ? "border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500"
@@ -652,7 +653,7 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                               <b className="font-mono font-semibold">{t.tote}</b>
                               <span className="opacity-60 mx-1">·</span>
                               {t.dateMs == null ? (t.reason ?? "no date") : fmtToteDate(t.dateMs)}
-                              {t.lots > 1 && <span className="opacity-60 ml-1.5">×{t.lots}</span>}
+                              {t.source && <span className="opacity-50 ml-1.5">{t.source === "received" ? "rcvd" : "tote"}</span>}
                             </span>
                           ))}
                         </div>
