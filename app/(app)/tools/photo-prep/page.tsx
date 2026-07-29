@@ -522,35 +522,45 @@ export default function PhotoPrepPage() {
           <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0d0f1a] p-5 space-y-5">
             <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Settings</h2>
 
+            {/* The AI crop modes were removed: on plain-sweep auction shots the
+                local crop is both better and ~100x faster, and the Gemini route
+                was only surfacing errors. The route and the preview button are
+                gone with it. Everything below is local. */}
             <div>
-              <label className="text-sm text-gray-700 dark:text-gray-300 block mb-2">How to find the product</label>
-              <div className="space-y-1.5">
-                {([
-                  { key: "auto",   label: "Automatic",        hint: "Fast and free. Best on a plain sweep." },
-                  { key: "assist", label: "Automatic + AI",   hint: "Automatic, then AI re-crops only the unsure ones." },
-                  { key: "ai",     label: "AI on every photo", hint: "Handles anything. Much slower, uses API quota." },
-                ] as { key: CropMode; label: string; hint: string }[]).map(m => (
-                  <label key={m.key}
-                    className={`flex gap-2.5 items-start px-2.5 py-2 rounded border cursor-pointer transition-colors
-                      ${settings.cropMode === m.key
-                        ? "border-[#0078D4] bg-blue-50 dark:bg-blue-950/30"
-                        : "border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900"}`}>
-                    <input type="radio" name="cropMode" checked={settings.cropMode === m.key}
-                      onChange={() => set("cropMode", m.key)} disabled={running}
-                      className="mt-0.5 accent-[#0078D4]" />
-                    <span>
-                      <span className="block text-sm text-gray-800 dark:text-gray-200">{m.label}</span>
-                      <span className="block text-[11px] text-gray-500 dark:text-gray-500">{m.hint}</span>
-                    </span>
+              <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                <input type="checkbox" checked={settings.barcodeAware}
+                  onChange={e => set("barcodeAware", e.target.checked)} disabled={running}
+                  className="mt-0.5 w-4 h-4 accent-[#0078D4]" />
+                <span>
+                  <span className="block text-sm text-gray-800 dark:text-gray-200">Handle barcode tags separately</span>
+                  <span className="block text-[11px] text-gray-500 dark:text-gray-500">
+                    Reads the barcode to spot a tag photo, then crops to the tag and straightens it.
+                    Photos without one of your barcodes are cropped normally.
+                  </span>
+                </span>
+              </label>
+
+              {settings.barcodeAware && (
+                <div className="mt-3 pl-6 space-y-4">
+                  <div>
+                    <div className="flex items-baseline justify-between mb-1">
+                      <label className="text-xs text-gray-600 dark:text-gray-400">Margin around the tag</label>
+                      <span className="text-xs font-semibold tabular-nums text-gray-900 dark:text-white">{settings.tagMarginPct}%</span>
+                    </div>
+                    <input type="range" min={0} max={40} step={1} value={settings.tagMarginPct}
+                      onChange={e => set("tagMarginPct", Number(e.target.value))} disabled={running}
+                      className="w-full accent-[#0078D4]" />
+                    <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-1">
+                      Separate from the lot-photo margin below. Raise it if tags look too tight.
+                    </p>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input type="checkbox" checked={settings.rotateMode === "tags"}
+                      onChange={e => set("rotateMode", e.target.checked ? "tags" : "off")} disabled={running}
+                      className="w-4 h-4 accent-[#0078D4]" />
+                    <span className="text-xs text-gray-700 dark:text-gray-300">Straighten tags using the barcode angle</span>
                   </label>
-                ))}
-              </div>
-              {settings.cropMode === "ai" && files.length > 100 && (
-                <p className="text-[11px] text-amber-600 dark:text-amber-500 mt-2">
-                  {files.length.toLocaleString()} photos through the AI will take a while — {AI_CONCURRENCY} run at a time
-                  and each is an API call. The automatic pass already handles plain-sweep shots, so
-                  &ldquo;Automatic + AI&rdquo; is usually the better trade.
-                </p>
+                </div>
               )}
             </div>
 
@@ -712,18 +722,23 @@ export default function PhotoPrepPage() {
               </div>
             )}
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button onClick={checkPreviewWithAi} disabled={aiBusy || running}
-                className="px-3 py-1.5 text-xs font-medium rounded border border-violet-300 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/40 disabled:opacity-50">
-                {aiBusy ? "Asking AI…" : "✨ Crop this one with AI"}
-              </button>
-              {aiBox && (
-                <button onClick={() => { setAiBox(null); runPreview() }}
-                  className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline">
-                  back to automatic
-                </button>
-              )}
-            </div>
+            {/* Shows which path the photo took, so a mis-classified shot is
+                obvious here rather than after 300 files have been written. */}
+            {previewInfo?.kind && (
+              <p className="mt-3 text-[11px] text-gray-600 dark:text-gray-400">
+                {previewInfo.kind === "tag" ? (
+                  <>
+                    Read as a <strong>barcode tag</strong> ({previewInfo.barcode})
+                    {previewInfo.rotateDeg ? ` · straightened ${Math.round(Math.abs(previewInfo.rotateDeg))}°` : ""}
+                    {previewInfo.verified === false
+                      ? " · ⚠ couldn't re-read it after cropping, so the whole photo was kept"
+                      : " · barcode still scans after cropping"}
+                  </>
+                ) : (
+                  <>Treated as a <strong>lot photo</strong> — cropped to the product.</>
+                )}
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -776,37 +791,30 @@ export default function PhotoPrepPage() {
                 </p>
               )}
 
-              {settings.cropMode === "ai" && (
+              {/* How the batch split, so a mis-classification shows up as a
+                  number that looks wrong rather than as a bad file. */}
+              {settings.barcodeAware && (
                 <p className="text-gray-600 dark:text-gray-400">
-                  {aiFixed.toLocaleString()} cropped using the AI&apos;s box
-                  {aiFixed < results.filter(r => r.status === "done").length &&
-                    ` · ${(results.filter(r => r.status === "done").length - aiFixed).toLocaleString()} fell back to automatic (no product found, or the API was busy)`}.
+                  {results.filter(r => r.kind === "tag").length.toLocaleString()} barcode tags
+                  {" · "}
+                  {results.filter(r => r.kind === "lot").length.toLocaleString()} lot photos
+                  {results.filter(r => r.kind === "tag" && r.verified === false).length > 0 && (
+                    <span className="text-amber-600 dark:text-amber-500">
+                      {" · "}
+                      {results.filter(r => r.kind === "tag" && r.verified === false).length} tag
+                      {results.filter(r => r.kind === "tag" && r.verified === false).length === 1 ? "" : "s"} kept
+                      whole (no crop would still scan)
+                    </span>
+                  )}
                 </p>
               )}
 
-              {/* Without this, "Automatic + AI" that finds nothing to fix looks
-                  like the AI silently did nothing. */}
-              {settings.cropMode === "assist" && lowConf.length === 0 && (
-                <p className="text-gray-600 dark:text-gray-400">
-                  Every photo was cropped confidently, so none needed the AI.
+              {results.filter(r => r.cropRejected).length > 0 && (
+                <p className="text-amber-600 dark:text-amber-500">
+                  {results.filter(r => r.cropRejected).length} photo
+                  {results.filter(r => r.cropRejected).length === 1 ? " was" : "s were"} left uncropped —
+                  the crop came out implausibly small, so the full photo was kept instead.
                 </p>
-              )}
-
-              {/* Only offered when the AI hasn't already seen every photo. */}
-              {settings.cropMode !== "ai" && lowConf.length > 0 && outDirRef.current && (
-                <div className="mt-3 p-3 rounded-lg bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-900">
-                  <p className="text-violet-800 dark:text-violet-300 mb-2">
-                    <strong>{lowConf.length}</strong> photo{lowConf.length === 1 ? " wasn't" : "s weren't"} cropped confidently —
-                    busy background, or the item runs off the edge.
-                  </p>
-                  <button onClick={fixWithAi} disabled={aiFixing}
-                    className="px-4 py-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold rounded disabled:opacity-50">
-                    {aiFixing ? `Re-cropping with AI… ${aiFixed}/${lowConf.length}` : `✨ Re-crop those ${lowConf.length} with AI`}
-                  </button>
-                  <p className="text-[11px] text-violet-700/70 dark:text-violet-400/70 mt-1.5">
-                    Sends only these to Gemini and overwrites them in your output folder.
-                  </p>
-                </div>
               )}
 
               {errors.length > 0 && (

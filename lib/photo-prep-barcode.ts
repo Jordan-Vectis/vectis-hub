@@ -51,6 +51,23 @@ const CARD = {
   below:    3.6,   // extra height below — the printed number lives here
 }
 
+/**
+ * A decoded barcode only means "tag photo" if it is one of OURS.
+ *
+ * ⚠ Product packaging carries barcodes too. Treating any barcode as a tag made
+ * the tool read the EAN printed on a Hornby box, decide the photo was a label
+ * shot, and crop to tag-sized geometry around it — cutting straight into the
+ * product. A Vectis tag reads like "F098516"; a retail EAN reads
+ * "5010963424732". Same patterns as RULES.md → Lot Identifiers.
+ */
+const VECTIS_BARCODE  = /^[A-Za-z]\d{6,7}$/
+const VECTIS_UNIQUEID = /^[A-Za-z]\d{4,7}-\d{1,6}$/
+
+export function isVectisTag(text: string): boolean {
+  const clean = (text ?? "").replace(/[^\x20-\x7E]/g, "").trim()
+  return VECTIS_BARCODE.test(clean) || VECTIS_UNIQUEID.test(clean)
+}
+
 let modulePrepared = false
 
 /**
@@ -99,12 +116,18 @@ export async function findBarcode(bitmap: ImageBitmap): Promise<BarcodeHit | nul
       tryInvert:   false,   // always dark-on-light; skipping halves the work
       tryHarder:   true,    // worth it — a missed barcode falls back to the bad crop
       tryDownscale: true,
-      maxNumberOfSymbols: 1,
-      // Restricting formats is a large speed win over scanning for everything.
-      formats: ["Code128", "Code39", "ITF", "EAN-13", "DataBar"],
+      // A product box can carry its own barcode alongside our tag, so read
+      // several and pick ours rather than whichever is found first.
+      maxNumberOfSymbols: 4,
+      // Restricting formats is both a speed win and a correctness one: retail
+      // EAN/UPC codes on packaging are deliberately NOT in this list.
+      formats: ["Code128", "Code39"],
     } as any)
 
-    const hit = (results ?? []).find((r: any) => r?.isValid !== false && r?.text)
+    // Only OUR tags count. A barcode printed on the product is not a label shot.
+    const hit = (results ?? []).find(
+      (r: any) => r?.isValid !== false && r?.text && isVectisTag(String(r.text)),
+    )
     if (!hit) return null
 
     const p: any = hit.position ?? {}
