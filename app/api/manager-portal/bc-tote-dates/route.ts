@@ -18,8 +18,13 @@ export const maxDuration = 120
 // default view once catalogued, so catalogued totes aren't in our copy. Hence
 // the live pull.
 //
-// "Using totes from" = the average month of the newest 10 benched totes per
-// category (by check-in date), trimmed to drop stray old/new outliers.
+// "Using totes from" = the median check-in month of the newest 10 benched totes
+// per category.
+//
+// ⚠ PTE_Benched is a BC FLOW/calculated field — an OData `$filter=PTE_Benched eq
+// true` silently returns the WRONG subset (it gave only 4 MILITARY totes when BC
+// shows many). So we DON'T filter on it server-side: we page the whole
+// Receipt_Totes_Excel feed and test PTE_Benched in code instead.
 
 const SAMPLE = 10                 // newest N benched totes per category
 const CAT_COL     = "EVA_TOT_ArticleCategory"
@@ -83,23 +88,21 @@ export async function GET() {
       WHERE w."category" IS NOT NULL AND btrim(w."category") <> ''
       GROUP BY 1`
 
-    // ── Live: all BENCHED totes from Receipt_Totes_Excel, paginated by nextLink ──
+    // ── Live: page the whole Receipt_Totes_Excel feed, keep benched in code ──
     const benchedByCategory = new Map<string, { tote: string; ms: number | null }[]>()
     const startedAt = Date.now()
     let url: string | null = null
     let firstParams: Record<string, string | number> | undefined = {
-      $filter: `${BENCHED_COL} eq true`,
       $select: `${CAT_COL},${TOTE_COL},${CREATED_COL},${BENCHED_COL}`,
       $top: 500,
     }
     let pages = 0
-    while (pages < 300) {
-      if (Date.now() - startedAt > 100_000) break   // wall-clock budget
+    while (pages < 400) {
+      if (Date.now() - startedAt > 110_000) break   // wall-clock budget
       const { rows, nextLink } = await bcPageWithNext(token, url ?? "Receipt_Totes_Excel", url ? undefined : firstParams)
       firstParams = undefined
       for (const r of rows) {
-        // Belt-and-braces: BC honours the $filter, but re-check the flag.
-        if (!isBenched((r as any)[BENCHED_COL])) continue
+        if (!isBenched((r as any)[BENCHED_COL])) continue   // the real filter — in code
         const category = String((r as any)[CAT_COL] ?? "").trim()
         if (!category) continue
         const tote = String((r as any)[TOTE_COL] ?? "").trim() || "(no tote no)"
