@@ -21,7 +21,10 @@ export const config = {
   // which have no file extension and are still matched. `.html` is
   // deliberately NOT excluded, so the gated pages in /public
   // (auto-clerk-*.html, saleroom-trainer.html) stay behind login.
+  // `wasm` is here for the same reason as `js`: Photo Prep's barcode reader
+  // fetches /zxing_reader.wasm at runtime, and a redirect to /login would make
+  // it fail to instantiate — barcode photos would silently stop being detected.
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|js|mjs|css|txt|woff|woff2)$).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|js|mjs|css|txt|woff|woff2|wasm)$).*)",
   ],
 }

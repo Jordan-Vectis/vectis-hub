@@ -255,6 +255,20 @@ self.onmessage = async (e) => {
     // Nothing found — keep the whole frame rather than guessing.
     if (!box) box = { x0: 0, y0: 0, x1: 1, y1: 1 }
 
+    // ⚠ Catastrophic-crop guard. A real batch produced an output containing
+    // nothing but a stray orange fragment at the frame edge: on a white tag
+    // against a white wall the fragment was the only thing with any contrast,
+    // so it won the crop and the tag was discarded. Whatever the cause, a crop
+    // this small is never right, and keeping the whole photo is recoverable
+    // where a destroyed one is not.
+    const boxArea = Math.max(0, box.x1 - box.x0) * Math.max(0, box.y1 - box.y0)
+    let cropRejected = false
+    if (!forcedBox && boxArea < 0.05) {
+      box = { x0: 0, y0: 0, x1: 1, y1: 1 }
+      confidence = 0
+      cropRejected = true
+    }
+
     // ── Apply the margin, in pixels, equal on all sides ────────────────────
     const m = Math.max(0, Math.min(50, settings.marginPct)) / 100
     let left   = box.x0 * W
@@ -276,7 +290,23 @@ self.onmessage = async (e) => {
 
     const canvas = new OffscreenCanvas(sw, sh)
     const ctx = canvas.getContext("2d", { willReadFrequently: true })
-    ctx.drawImage(bmp, left, top, sw, sh, 0, 0, sw, sh)
+
+    // rotateDeg is supplied for barcode tags, measured from the barcode itself.
+    // Rotating about the CROP's centre and drawing the source offset by the same
+    // amount means the tag ends up square inside the crop — and because the crop
+    // is tight, the triangular gaps rotation normally leaves at the corners fall
+    // outside it and never appear in the output.
+    const rot = Number(settings.rotateDeg) || 0
+    if (rot !== 0) {
+      ctx.save()
+      ctx.translate(sw / 2, sh / 2)
+      ctx.rotate((rot * Math.PI) / 180)
+      ctx.translate(-sw / 2, -sh / 2)
+      ctx.drawImage(bmp, left, top, sw, sh, 0, 0, sw, sh)
+      ctx.restore()
+    } else {
+      ctx.drawImage(bmp, left, top, sw, sh, 0, 0, sw, sh)
+    }
     bmp.close()
 
     // ── Brighten, judged on how white the BACKDROP came out ────────────────
@@ -326,7 +356,7 @@ self.onmessage = async (e) => {
     // gets delivered to the newer request's handler.
     self.postMessage(
       { rid, id, name, ok: true, buffer: outBuf, width: sw, height: sh, box, confidence,
-        subjectLuma, backdropLuma, sweepLike, brightened },
+        subjectLuma, backdropLuma, sweepLike, brightened, cropRejected, rotated: rot },
       [outBuf],
     )
   } catch (err) {

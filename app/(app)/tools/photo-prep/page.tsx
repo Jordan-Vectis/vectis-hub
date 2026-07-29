@@ -7,6 +7,7 @@ import {
   fetchAiBox, AI_CONCURRENCY,
   type PhotoPrepSettings, type WorkerClient, type CropMode,
 } from "@/lib/photo-prep"
+import { findBarcode, cardFromBars, rotationFor, cropIsSane, type BarcodeHit } from "@/lib/photo-prep-barcode"
 
 // Photo Prep — auto-crop to the product + brighten, for the photography department.
 //
@@ -27,6 +28,16 @@ type Result = {
   brightened?: boolean
   backdropLuma?: number
   error?: string
+  /** "tag" when a barcode was read, "lot" otherwise. */
+  kind?: "tag" | "lot"
+  barcode?: string
+  /** Tag only: the barcode still scanned in the finished image. */
+  verified?: boolean
+  /** Tag only: no crop would scan, so the whole frame was kept. */
+  keptWhole?: boolean
+  /** Lot only: the crop was absurdly small and was thrown away. */
+  cropRejected?: boolean
+  rotateDeg?: number
 }
 
 const PREVIEW_DEBOUNCE_MS = 250
@@ -89,14 +100,21 @@ export default function PhotoPrepPage() {
       const url  = URL.createObjectURL(file)
       setBeforeUrl(prev => { if (prev) URL.revokeObjectURL(prev); return url })
 
-      const buffer  = await file.arrayBuffer()
       const outType = mimeForName(src.name)
 
-      const out = await c.run(
-        { id: "preview", name: src.name, buffer, type: file.type || outType,
-          settings: { ...settings, outType }, forcedBox: forcedBox ?? undefined },
-        [buffer],
-      )
+      // Same pipeline as the batch — including barcode detection, tag cropping
+      // and the re-read check — so the preview can't flatter the real run.
+      // An AI box, when the user has asked for one, overrides all of that.
+      const out = forcedBox
+        ? await (async () => {
+            const buffer = await file.arrayBuffer()
+            return c.run(
+              { id: "preview", name: src.name, buffer, type: file.type || outType,
+                settings: { ...settings, outType }, forcedBox },
+              [buffer],
+            )
+          })()
+        : await processPhoto(c, file, src.name)
 
       if (seq !== seqRef.current) return   // superseded
       if (out.ok) {
@@ -170,6 +188,80 @@ export default function PhotoPrepPage() {
     // same-folder guard compare against the wrong folder.
     outDirRef.current = null
     inDirRef.current  = null
+  }
+
+  // ── One photo, start to finish ───────────────────────────────────────────
+  //
+  // Barcode photos and lot photos want opposite things, and a real batch is
+  // half of each with nothing in the filename to tell them apart. So the
+  // barcode decides: it reads, or it doesn't.
+  //
+  // A tag crop is anchored to the barcode rather than to contrast, because a
+  // white tag on a white wall has no contrast — one real batch cropped to a
+  // stray orange fragment and binned the tag entirely. Then the result is
+  // re-read to PROVE the barcode survived, rather than assuming it did.
+  async function processPhoto(
+    client: WorkerClient,
+    file: File,
+    name: string,
+  ): Promise<any> {
+    const outType = mimeForName(name)
+    const base = { id: name, name, type: file.type || outType }
+
+    let hit: BarcodeHit | null = null
+    if (settings.barcodeAware) {
+      try {
+        const bmp = await createImageBitmap(file, { imageOrientation: "from-image" })
+        hit = await findBarcode(bmp)
+        bmp.close()
+      } catch { /* not decodable — treat as a lot photo */ }
+    }
+
+    // ── Lot photo: the path that already works, untouched ──────────────────
+    if (!hit) {
+      const buffer = await file.arrayBuffer()
+      const res = await client.run({ ...base, buffer, settings: { ...settings, outType } }, [buffer])
+      return { ...res, kind: "lot" }
+    }
+
+    // ── Tag photo ─────────────────────────────────────────────────────────
+    const rotateDeg = settings.rotateMode === "tags" ? rotationFor(hit, settings.minRotateDeg) : 0
+
+    // Widen on each retry. If even the most generous crop won't scan, the photo
+    // is kept whole — an uncropped tag is a nuisance, an unreadable one is a reshoot.
+    const attempts = [settings.tagMarginPct, settings.tagMarginPct + 15, settings.tagMarginPct + 40]
+    let last: any = null
+
+    for (let i = 0; i < attempts.length; i++) {
+      const box = cardFromBars(hit.bars, attempts[i])
+      if (!cropIsSane(box)) continue
+
+      const buffer = await file.arrayBuffer()
+      const res = await client.run(
+        { ...base, buffer, forcedBox: box, settings: { ...settings, outType, rotateDeg } },
+        [buffer],
+      )
+      if (!res.ok) return { ...res, kind: "tag", barcode: hit.text }
+      last = res
+
+      // The proof: can the finished image still be read?
+      try {
+        const outBmp = await createImageBitmap(new Blob([res.buffer], { type: outType }))
+        const again = await findBarcode(outBmp)
+        outBmp.close()
+        if (again) {
+          return { ...res, kind: "tag", barcode: hit.text, verified: true, widened: i, rotateDeg }
+        }
+      } catch { /* fall through and widen */ }
+    }
+
+    // Nothing scanned back. Keep the whole frame, rotated only.
+    const buffer = await file.arrayBuffer()
+    const whole = await client.run(
+      { ...base, buffer, forcedBox: { x0: 0, y0: 0, x1: 1, y1: 1 }, settings: { ...settings, outType, rotateDeg } },
+      [buffer],
+    )
+    return { ...(whole.ok ? whole : last), kind: "tag", barcode: hit.text, verified: false, keptWhole: true, rotateDeg }
   }
 
   // ── Write one processed blob out ─────────────────────────────────────────
@@ -257,31 +349,34 @@ export default function PhotoPrepPage() {
           const file    = await src.get()
           const outType = mimeForName(src.name)
 
-          // AI mode: get the box first. A null (rate-limited, or no product
-          // found) falls through to local detection — degraded, not lost.
-          let forcedBox: any = undefined
+          let res: any
           if (aiAll) {
+            // AI mode: get the box first. A null (rate-limited, or no product
+            // found) falls through to local detection — degraded, not lost.
             const box = await fetchAiBox(file, src.name)
-            if (box) { forcedBox = box; aiUsed++; setAiFixed(aiUsed) }
+            if (box) { aiUsed++; setAiFixed(aiUsed) }
+            // Read AFTER the AI call so a pool of in-flight photos isn't holding
+            // full-size buffers across the network wait.
+            const buffer = await file.arrayBuffer()
+            res = await client.run(
+              { id: src.name, name: src.name, buffer, type: file.type || outType,
+                settings: { ...settings, outType }, forcedBox: box ?? undefined },
+              [buffer],
+            )
+          } else {
+            // Barcode-aware pipeline: classifies, crops and verifies.
+            res = await processPhoto(client, file, src.name)
           }
-
-          // Read AFTER the AI call: the fetch above consumes the File, and an
-          // ArrayBuffer taken before it would be held in memory for the whole
-          // round-trip, multiplied by the pool size.
-          const buffer = await file.arrayBuffer()
-
-          // Always settles — crash, bad message and timeout all come back as
-          // { ok: false }, so one rogue image can't stall the whole batch.
-          const res = await client.run(
-            { id: src.name, name: src.name, buffer, type: file.type || outType,
-              settings: { ...settings, outType }, forcedBox },
-            [buffer],
-          )
 
           if (res.ok) {
             await writeOut(src.name, new Blob([res.buffer], { type: outType }), zip)
-            out.push({ name: src.name, status: "done", confidence: res.confidence,
-                       brightened: !!res.brightened, backdropLuma: res.backdropLuma })
+            out.push({
+              name: src.name, status: "done", confidence: res.confidence,
+              brightened: !!res.brightened, backdropLuma: res.backdropLuma,
+              kind: res.kind, barcode: res.barcode, verified: res.verified,
+              keptWhole: res.keptWhole, cropRejected: res.cropRejected,
+              rotateDeg: res.rotateDeg,
+            })
           } else {
             out.push({ name: src.name, status: "error", error: res.error })
           }

@@ -13,8 +13,22 @@ export type CropMode =
   /** Every photo goes to Gemini. Slow and uses quota, but handles anything. */
   | "ai"
 
+/** Where rotation is applied. Only tag photos have a provably correct answer. */
+export type RotateMode = "off" | "tags"
+
 export type PhotoPrepSettings = {
   cropMode:          CropMode
+  /**
+   * Find the barcode first and, when there is one, crop to the tag instead of
+   * to "whatever differs from the backdrop". Off = every photo takes the
+   * original path.
+   */
+  barcodeAware:      boolean
+  /** Margin around the tag, as a share of the tag's size. Separate from lot photos. */
+  tagMarginPct:      number
+  rotateMode:        RotateMode
+  /** Don't re-encode a photo to straighten it by less than this. */
+  minRotateDeg:      number
   /**
    * Breathing space left around the detected product, as a share of the
    * product's own size. 5 = a margin one-twentieth of the item's width/height,
@@ -42,7 +56,11 @@ export type PhotoPrepSettings = {
 }
 
 export const DEFAULT_SETTINGS: PhotoPrepSettings = {
-  cropMode:          "assist",
+  cropMode:          "auto",
+  barcodeAware:      true,
+  tagMarginPct:      8,
+  rotateMode:        "tags",
+  minRotateDeg:      2,
   marginPct:         5,
   // 85, set from measurement rather than taste. On mock auction shots a pale
   // inner tray sitting only ~27 units off a white sweep was clipped at 40, 55
