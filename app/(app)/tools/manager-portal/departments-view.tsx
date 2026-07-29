@@ -347,25 +347,37 @@ export default async function DepartmentsView() {
   const stockFor = (auctionIds: string[]) => stockFrom(auctionIds.map(id => totesBySale.get(id) ?? []))
 
   // ── The BC-only table: one row per BC category, our system not involved ──
-  // "Using totes from" = the FRONTIER: the created date of the newest catalogued
-  // tote (the totes come newest-first, so it's the first entry). medianMs holds
-  // that frontier so the shared StockAge shape + lag colours work unchanged.
+  // "Using totes from" = the FRONTIER: where cataloguing has reached. Naively
+  // that's the newest catalogued tote, but a single tote ticked off out of order
+  // (someone marks a random recent one) would drag the whole category to today.
+  // So we IGNORE the newest BC_FRONTIER_TRIM catalogued totes as outliers and
+  // take the next one — in steady work those newest few are clustered so it's
+  // barely different, but a stray recent tick no longer moves it. `totes` here
+  // is newest-first (rn order); medianMs holds the frontier so the shared
+  // StockAge shape + lag colours work unchanged.
+  const BC_FRONTIER_TRIM = 2
   function bcStockFor(totes: { tote: string; dateMs: number | null }[]): BcCategoryRow["stock"] {
     if (totes.length === 0) return null
-    const dated = totes.map(t => t.dateMs).filter((d): d is number => d != null)
-    const frontier = dated.length > 0 ? Math.max(...dated) : null
+    const datedDesc = totes.map(t => t.dateMs).filter((d): d is number => d != null)  // newest-first
+    // Skip the newest TRIM as possible out-of-order ticks; frontier = the next.
+    const frontier = datedDesc.length > 0
+      ? datedDesc[Math.min(BC_FRONTIER_TRIM, datedDesc.length - 1)]
+      : null
     return {
       medianMs:     frontier,
-      oldestMs:     dated.length > 0 ? Math.min(...dated) : null,
+      // Oldest/newest of what actually COUNTS (≤ frontier), for the panel text.
+      oldestMs:     datedDesc.length > 0 ? Math.min(...datedDesc) : null,
       newestMs:     frontier,
       totesSampled: totes.length,
-      dated:        dated.length,
+      dated:        datedDesc.length,
       totes: totes.map(t => ({
-        tote:   t.tote,
-        dateMs: t.dateMs,
-        lots:   1,
-        reason: t.dateMs != null ? null : "no created date yet — run the totes sync",
-        source: t.dateMs != null ? "tote" : null,
+        tote:    t.tote,
+        dateMs:  t.dateMs,
+        lots:    1,
+        // A dated tote NEWER than the frontier is one we ignored as out-of-order.
+        ignored: t.dateMs != null && frontier != null && t.dateMs > frontier,
+        reason:  t.dateMs != null ? null : "no created date yet — run the totes sync",
+        source:  t.dateMs != null ? "tote" : null,
       })),
     }
   }

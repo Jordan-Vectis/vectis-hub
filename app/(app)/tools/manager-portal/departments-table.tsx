@@ -11,7 +11,7 @@ export type StockAge = {
   newestMs: number | null
   totesSampled: number      // distinct totes sampled (the last 10 worked)
   dated: number             // how many of those resolved to a date
-  totes: { tote: string; dateMs: number | null; lots: number; reason: string | null; source: string | null }[]
+  totes: { tote: string; dateMs: number | null; lots: number; reason: string | null; source: string | null; ignored?: boolean }[]
 }
 
 export type SaleRow = {
@@ -566,8 +566,8 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
           Straight from Business Central and nothing else — grouped by BC&apos;s own main category,
           showing every category it holds whether or not we have a sale or department for it.
-          &ldquo;Using totes from&rdquo; is the newest tote BC has marked catalogued — where
-          cataloguing has reached. Furthest behind first.
+          &ldquo;Using totes from&rdquo; is where cataloguing has reached — the newest tote BC has marked
+          catalogued, ignoring the newest couple in case one was ticked off out of order. Furthest behind first.
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -633,17 +633,24 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                       <td colSpan={6} className="px-3 py-3 bg-gray-50/60 dark:bg-gray-800/25">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
                           Newest {r.stock.totesSampled} tote{r.stock.totesSampled === 1 ? "" : "s"} Business Central has
-                          marked catalogued in {r.category}, newest first — the first is where cataloguing has reached.
+                          marked catalogued in {r.category}, newest first. Ones struck through were ticked off out of
+                          order and are ignored — the frontier is the newest one that counts.
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           {r.stock.totes.map(t => (
                             <span
                               key={t.tote}
-                              title={`Tote ${t.tote}${t.reason ? ` — ${t.reason}` : " — created in Business Central"}`}
+                              title={
+                                t.ignored
+                                  ? `Tote ${t.tote} — newer than the frontier, ignored as an out-of-order tick`
+                                  : `Tote ${t.tote}${t.reason ? ` — ${t.reason}` : " — created in Business Central"}`
+                              }
                               className={`text-xs px-2 py-1 rounded-lg border whitespace-nowrap ${
-                                t.dateMs == null
-                                  ? "border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500"
-                                  : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300"
+                                t.ignored
+                                  ? "border-gray-200 dark:border-gray-700 bg-transparent text-gray-400 dark:text-gray-500 line-through decoration-gray-400/70"
+                                  : t.dateMs == null
+                                    ? "border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500"
+                                    : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300"
                               }`}
                             >
                               <b className="font-mono font-semibold">{t.tote}</b>
