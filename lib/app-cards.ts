@@ -147,21 +147,6 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     appKey:             "BC_REPORTS",
   },
   {
-    // Reads the same Receipt_Totes_Excel data as BC Reports → Warehouse, so it
-    // rides on the BC_REPORTS permission rather than needing its own app key.
-    key:                "TOTE_PROGRESS",
-    href:               "/tools/tote-progress",
-    defaultLabel:       "Tote Progress",
-    defaultDescription: "How far cataloguing has got through the intake queue — the oldest tote still waiting in each check-in category.",
-    icon:               "📦",
-    border:             "border-orange-500",
-    iconBg:             "text-orange-400",
-    btnBg:              "bg-orange-600 hover:bg-orange-500",
-    glow:               "hover:shadow-orange-900/40",
-    group:              "BUSINESS_CENTRAL",
-    appKey:             "BC_REPORTS",
-  },
-  {
     key:                "SALE_STATISTICS",
     href:               "/tools/sale-statistics",
     defaultLabel:       "Sale Statistics",
