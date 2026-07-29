@@ -566,7 +566,7 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
           Straight from Business Central and nothing else — grouped by BC&apos;s own main category,
           showing every category it holds whether or not we have a sale or department for it.
-          &ldquo;Using totes from&rdquo; is where cataloguing has reached — the newest tote BC has marked
+          &ldquo;Using totes from&rdquo; is where cataloguing has reached — the newest receipt BC has
           catalogued, ignoring the newest couple in case one was ticked off out of order. Furthest behind first.
         </p>
       </div>
@@ -632,8 +632,8 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                     <tr className="border-b border-gray-50 dark:border-gray-800/50">
                       <td colSpan={6} className="px-3 py-3 bg-gray-50/60 dark:bg-gray-800/25">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                          Newest {r.stock.totesSampled} tote{r.stock.totesSampled === 1 ? "" : "s"} Business Central has
-                          marked catalogued in {r.category}, newest first. Ones struck through were ticked off out of
+                          Newest {r.stock.totesSampled} receipt{r.stock.totesSampled === 1 ? "" : "s"} Business Central has
+                          catalogued in {r.category}, newest check-in first. Ones struck through were caught up out of
                           order and are ignored — the frontier is the newest one that counts.
                         </p>
                         <div className="flex flex-wrap gap-1.5">
@@ -642,8 +642,8 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                               key={t.tote}
                               title={
                                 t.ignored
-                                  ? `Tote ${t.tote} — newer than the frontier, ignored as an out-of-order tick`
-                                  : `Tote ${t.tote}${t.reason ? ` — ${t.reason}` : " — created in Business Central"}`
+                                  ? `Receipt ${t.tote} — newer than the frontier, ignored as caught up out of order`
+                                  : `Receipt ${t.tote}${t.reason ? ` — ${t.reason}` : " — checked into Business Central"}`
                               }
                               className={`text-xs px-2 py-1 rounded-lg border whitespace-nowrap ${
                                 t.ignored
