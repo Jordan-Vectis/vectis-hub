@@ -20,15 +20,17 @@ export const maxDuration = 60
 // isn't exposed on this OData endpoint.)
 //
 // So we use our COMPLETE item-level data instead. WarehouseItem holds every
-// catalogued item, with `cataloguedAt` (when it was worked) and
-// `goodsReceivedDate` (when the stock arrived). Per category we take the
-// most-recently-catalogued CONSIGNMENTS (grouped by receipt — items don't carry
-// a tote number in BC, EVA_ArticleToteNo is empty on ~all of them) and take the
-// MEDIAN goods-received month of the newest 10. This is the same dating path the
-// Hub-side department view already calls "the path that works for the real
-// data" (departments-view.tsx: receiptNo → goodsReceivedDate).
+// catalogued item with `cataloguedAt` (when it was worked). Per category we
+// take the most-recently-catalogued CONSIGNMENTS (grouped by receipt — items
+// don't carry a tote number in BC, EVA_ArticleToteNo is empty on ~all of them)
+// and date each receipt by its TOTE'S CHECK-IN (WarehouseTote.bcCreatedAt =
+// BC's SystemCreatedAt for the tote, joined on receiptNo).
 //
-// "Using totes from" = median goods-received month of the newest 10 consignments
+// ⚠ NOT goodsReceivedDate — verified 2026-07-29 against production: it is
+// populated on 0 of ~208k WarehouseItem rows. A dead field. bcCreatedAt by
+// receipt resolved 9 of GAMING's top 10.
+//
+// "Using totes from" = median tote check-in month of the newest 10 consignments
 // catalogued in each category.
 
 const SAMPLE = 10   // newest N catalogued consignments (receipts) per category
@@ -73,17 +75,17 @@ export async function GET() {
       WHERE w."category" IS NOT NULL AND btrim(w."category") <> ''
       GROUP BY 1`
 
-    // ── The newest SAMPLE catalogued consignments per category, with the date
-    // that consignment's goods were booked in. Grouped by receipt (a receipt
-    // maps to a tote/consignment); ranked by how recently it was worked; the
-    // top SAMPLE per category kept. goodsReceivedDate is guarded against BC's
-    // empty-date sentinel (0001-01-01 → treated as no date). ──
+    // ── The newest SAMPLE catalogued consignments per category, each dated by
+    // its tote's check-in. Grouped by receipt (a receipt maps to a
+    // tote/consignment); ranked by how recently it was worked; top SAMPLE per
+    // category kept; dated via WarehouseTote.bcCreatedAt on receiptNo (MIN =
+    // when the consignment's first tote was checked in). bcCreatedAt is guarded
+    // against BC's empty-date sentinel (0001-01-01 → treated as no date). ──
     const rows = await prisma.$queryRaw<{ category: string; receipt: string; received: Date | null; rn: number }[]>`
       WITH receipts AS (
         SELECT btrim(w."category")            AS category,
                upper(btrim(w."receiptNo"))    AS receipt,
-               MAX(w."cataloguedAt")          AS last_cat,
-               MIN(w."goodsReceivedDate") FILTER (WHERE w."goodsReceivedDate" >= DATE '1990-01-01') AS received
+               MAX(w."cataloguedAt")          AS last_cat
         FROM "WarehouseItem" w
         WHERE w."catalogued" = true
           AND w."cataloguedAt" >= DATE '1990-01-01'
@@ -92,14 +94,23 @@ export async function GET() {
         GROUP BY 1, 2
       ),
       ranked AS (
-        SELECT category, receipt, received,
+        SELECT category, receipt,
                ROW_NUMBER() OVER (PARTITION BY category ORDER BY last_cat DESC) AS rn
         FROM receipts
+      ),
+      tote_dates AS (
+        SELECT upper(btrim(t."receiptNo")) AS receipt,
+               MIN(t."bcCreatedAt")        AS received
+        FROM "WarehouseTote" t
+        WHERE t."bcCreatedAt" >= DATE '1990-01-01'
+          AND t."receiptNo" IS NOT NULL AND btrim(t."receiptNo") <> ''
+        GROUP BY 1
       )
-      SELECT category, receipt, received, rn::int AS rn
-      FROM ranked
-      WHERE rn <= ${SAMPLE}
-      ORDER BY category, rn`
+      SELECT r.category, r.receipt, td.received, r.rn::int AS rn
+      FROM ranked r
+      LEFT JOIN tote_dates td ON td.receipt = r.receipt
+      WHERE r.rn <= ${SAMPLE}
+      ORDER BY r.category, r.rn`
 
     // Bucket the sampled consignments by category, in rank order (newest first).
     const sampleByCat = new Map<string, { tote: string; dateMs: number | null }[]>()

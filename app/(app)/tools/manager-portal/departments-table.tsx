@@ -167,7 +167,7 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
               tote:   t.tote,
               dateMs: t.dateMs,
               lots:   1,
-              reason: t.dateMs == null ? "no goods-received date" : null,
+              reason: t.dateMs == null ? "no tote check-in date found" : null,
               source: t.dateMs != null ? "bc" : null,
             })),
           } : null,
@@ -624,7 +624,7 @@ function ToteSummary({ title, subtitle, rows, nowMs }: {
  * Business Central on its own terms — no departments, no CatalogueAuction, no
  * CatalogueLot. Rows are BC's own main categories (EVA_ArticleCategoryCode, via
  * the synced WarehouseItem) and every category BC holds appears. "Using totes
- * from" is the median goods-received month of the newest 10 consignments
+ * from" is the median tote check-in month of the newest 10 consignments
  * catalogued in each category (see /api/manager-portal/bc-tote-dates).
  */
 function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number }) {
@@ -639,7 +639,7 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
         </h2>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
           Grouped by Business Central&apos;s own main category. &ldquo;Using totes from&rdquo; is the middle
-          (median) goods-received month of the newest 10 consignments catalogued in each category — where
+          (median) check-in month of the newest 10 consignments catalogued in each category — where
           cataloguing is working from. Furthest behind first.
         </p>
       </div>
@@ -667,13 +667,13 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                     </td>
                     <td className="py-2.5 px-3 whitespace-nowrap">
                       {median != null ? (
-                        <button onClick={() => setOpen(open === r.category ? null : r.category)} className="group text-left" title="Median goods-received month of the last 10 consignments catalogued — click to list them">
+                        <button onClick={() => setOpen(open === r.category ? null : r.category)} className="group text-left" title="Median check-in month of the last 10 consignments catalogued — click to list them">
                           <span className="font-semibold text-gray-900 dark:text-white group-hover:underline">{fmtMonth(median)}</span>
                           <span className="text-gray-400 dark:text-gray-500 ml-1 text-xs">{open === r.category ? "▾" : "▸"}</span>
                         </button>
                       ) : (
                         <span className="text-xs text-gray-400 dark:text-gray-500">
-                          {r.stock ? "no goods-received dates" : "nothing catalogued yet"}
+                          {r.stock ? "no check-in dates found" : "nothing catalogued yet"}
                         </span>
                       )}
                     </td>
@@ -706,13 +706,13 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                       <td colSpan={6} className="px-3 py-3 bg-gray-50/60 dark:bg-gray-800/25">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
                           The newest {r.stock.totesSampled} consignment{r.stock.totesSampled === 1 ? "" : "s"} catalogued in {r.category},
-                          by goods-received date. The month above is the middle (median) of these.
+                          by tote check-in date. The month above is the middle (median) of these.
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           {r.stock.totes.map(t => (
                             <span
                               key={t.tote}
-                              title={`Receipt ${t.tote}${t.reason ? ` — ${t.reason}` : " — goods-received date"}`}
+                              title={`Receipt ${t.tote}${t.reason ? ` — ${t.reason}` : " — its tote's check-in date"}`}
                               className={`text-xs px-2 py-1 rounded-lg border whitespace-nowrap ${
                                 t.dateMs == null
                                   ? "border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500"
