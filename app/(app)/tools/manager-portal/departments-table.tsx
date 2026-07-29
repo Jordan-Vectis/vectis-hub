@@ -11,7 +11,7 @@ export type StockAge = {
   newestMs: number | null
   totesSampled: number      // distinct totes sampled (the last 10 worked)
   dated: number             // how many of those resolved to a date
-  totes: { tote: string; dateMs: number | null; lots: number; reason: string | null; source: string | null; ignored?: boolean }[]
+  totes: { tote: string; dateMs: number | null; lots: number; reason: string | null; source: string | null }[]
 }
 
 export type SaleRow = {
@@ -566,8 +566,8 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
           Straight from Business Central and nothing else — grouped by BC&apos;s own main category,
           showing every category it holds whether or not we have a sale or department for it.
-          &ldquo;Using totes from&rdquo; is where cataloguing has reached — the newest receipt BC has
-          catalogued, ignoring the newest couple in case one was ticked off out of order. Furthest behind first.
+          &ldquo;Using totes from&rdquo; is the typical (middle) check-in date of the last 15 receipts BC has
+          catalogued in each category — where cataloguing is working from. Furthest behind first.
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -632,25 +632,19 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                     <tr className="border-b border-gray-50 dark:border-gray-800/50">
                       <td colSpan={6} className="px-3 py-3 bg-gray-50/60 dark:bg-gray-800/25">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                          Newest {r.stock.totesSampled} receipt{r.stock.totesSampled === 1 ? "" : "s"} Business Central has
-                          catalogued in {r.category}, newest check-in first. Ones struck through were caught up out of
-                          order and are ignored — the frontier is the newest one that counts.
+                          Last {r.stock.totesSampled} receipt{r.stock.totesSampled === 1 ? "" : "s"} catalogued in {r.category},
+                          by their check-in dates{r.stock.oldestMs != null && ` — spanning ${fmtToteDate(r.stock.oldestMs)} to ${fmtToteDate(r.stock.newestMs!)}`}.
+                          The figure above is the middle (median) of these.
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           {r.stock.totes.map(t => (
                             <span
                               key={t.tote}
-                              title={
-                                t.ignored
-                                  ? `Receipt ${t.tote} — newer than the frontier, ignored as caught up out of order`
-                                  : `Receipt ${t.tote}${t.reason ? ` — ${t.reason}` : " — checked into Business Central"}`
-                              }
+                              title={`Receipt ${t.tote}${t.reason ? ` — ${t.reason}` : " — checked into Business Central"}`}
                               className={`text-xs px-2 py-1 rounded-lg border whitespace-nowrap ${
-                                t.ignored
-                                  ? "border-gray-200 dark:border-gray-700 bg-transparent text-gray-400 dark:text-gray-500 line-through decoration-gray-400/70"
-                                  : t.dateMs == null
-                                    ? "border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500"
-                                    : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300"
+                                t.dateMs == null
+                                  ? "border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500"
+                                  : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300"
                               }`}
                             >
                               <b className="font-mono font-semibold">{t.tote}</b>

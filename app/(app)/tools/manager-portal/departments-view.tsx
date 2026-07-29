@@ -122,35 +122,41 @@ export default async function DepartmentsView() {
   try {
     [bcFrontierRows, bcCatTotals] = await Promise.all([
       prisma.$queryRaw<{ category: string; tote: string; d: Date | null }[]>`
-        -- Frontier = the newest checked-in RECEIPT that's been catalogued. Driven
-        -- off WarehouseItem.catalogued (reliable — it's what the counts and "Last
-        -- worked" use), NOT WarehouseTote.catalogued (stored all-false until a
-        -- resync applies the bcBool fix). Computed per RECEIPT — one check-in date
-        -- each (MIN of its totes' bcCreatedAt) — so a receipt split across several
-        -- totes counts once. An earlier per-TOTE version scattered and cliff-dived
-        -- when trimmed (BEARS → Nov 25). Category from any item on the receipt.
+        -- "Using totes from" = the TYPICAL check-in date of the last 15 receipts
+        -- catalogued in the category. Cataloguing happens out of order (MILITARY
+        -- had stray April ticks over a dense mid-March block), so a single
+        -- "newest catalogued" frontier is meaningless — the median of the last 15
+        -- recently-worked receipts gives the real "we're working from ~mid March".
+        --
+        -- Driven off WarehouseItem.catalogued + cataloguedAt (reliable — same
+        -- signal as the counts / Last worked), NOT WarehouseTote.catalogued.
+        -- "Recently worked" = ordered by MAX(cataloguedAt) per receipt. Check-in
+        -- date per receipt = MAX of its totes' bcCreatedAt.
         WITH cat_receipt AS (
-          SELECT upper(btrim("receiptNo")) AS receipt, MAX(btrim("category")) AS category
+          SELECT upper(btrim("receiptNo")) AS receipt,
+                 MAX(btrim("category"))    AS category,
+                 MAX("cataloguedAt")       AS last_catalogued
           FROM "WarehouseItem"
           WHERE "catalogued" = true
+            AND "cataloguedAt" >= DATE '1990-01-01'
             AND "receiptNo" IS NOT NULL AND btrim("receiptNo") <> ''
             AND "category" IS NOT NULL AND btrim("category") <> ''
           GROUP BY 1
         ),
-        receipt_date AS (
-          SELECT cr.category AS category, cr.receipt AS receipt, MIN(t."bcCreatedAt") AS d
-          FROM cat_receipt cr
-          JOIN "WarehouseTote" t ON upper(btrim(t."receiptNo")) = cr.receipt
-          -- ⚠ BC sends an empty date as 0001-01-01, which is a VALID date
-          WHERE t."bcCreatedAt" IS NOT NULL AND t."bcCreatedAt" >= DATE '1990-01-01'
-          GROUP BY cr.category, cr.receipt
+        recent AS (
+          SELECT category, receipt FROM (
+            SELECT category, receipt,
+                   ROW_NUMBER() OVER (PARTITION BY category ORDER BY last_catalogued DESC)::int AS rn
+            FROM cat_receipt
+          ) x WHERE rn <= 15
         )
-        SELECT category, receipt AS tote, d FROM (
-          SELECT category, receipt, d,
-                 ROW_NUMBER() OVER (PARTITION BY category ORDER BY d DESC)::int AS rn
-          FROM receipt_date
-        ) x WHERE rn <= 10
-        ORDER BY category, rn`,
+        SELECT r.category AS category, r.receipt AS tote, MAX(t."bcCreatedAt") AS d
+        FROM recent r
+        JOIN "WarehouseTote" t ON upper(btrim(t."receiptNo")) = r.receipt
+        -- ⚠ BC sends an empty date as 0001-01-01, which is a VALID date
+        WHERE t."bcCreatedAt" IS NOT NULL AND t."bcCreatedAt" >= DATE '1990-01-01'
+        GROUP BY r.category, r.receipt
+        ORDER BY r.category, MAX(t."bcCreatedAt") DESC`,
       prisma.$queryRaw<{ category: string; catalogued: number; outstanding: number; lastAt: Date | null }[]>`
         SELECT btrim(w."category")                                          AS "category",
                COUNT(*) FILTER (WHERE w."catalogued" = true)::int            AS "catalogued",
@@ -352,35 +358,25 @@ export default async function DepartmentsView() {
   const stockFor = (auctionIds: string[]) => stockFrom(auctionIds.map(id => totesBySale.get(id) ?? []))
 
   // ── The BC-only table: one row per BC category, our system not involved ──
-  // "Using totes from" = the FRONTIER: where cataloguing has reached. Naively
-  // that's the newest catalogued tote, but a single tote ticked off out of order
-  // (someone marks a random recent one) would drag the whole category to today.
-  // So we IGNORE the newest BC_FRONTIER_TRIM catalogued totes as outliers and
-  // take the next one — in steady work those newest few are clustered so it's
-  // barely different, but a stray recent tick no longer moves it. `totes` here
-  // is newest-first (rn order); medianMs holds the frontier so the shared
-  // StockAge shape + lag colours work unchanged.
-  const BC_FRONTIER_TRIM = 2
+  // "Using totes from" = the TYPICAL check-in date of the last 15 receipts
+  // catalogued (the MEDIAN of their dates). Cataloguing runs out of order, so a
+  // single "newest catalogued" is meaningless; the median of recent work says
+  // "we're working from ~mid March". Median (not mean) so one stray old/new
+  // receipt in the 15 doesn't drag it. medianMs holds it so the shared StockAge
+  // shape + lag colours work unchanged.
   function bcStockFor(totes: { tote: string; dateMs: number | null }[]): BcCategoryRow["stock"] {
     if (totes.length === 0) return null
-    const datedDesc = totes.map(t => t.dateMs).filter((d): d is number => d != null)  // newest-first
-    // Skip the newest TRIM as possible out-of-order ticks; frontier = the next.
-    const frontier = datedDesc.length > 0
-      ? datedDesc[Math.min(BC_FRONTIER_TRIM, datedDesc.length - 1)]
-      : null
+    const dated = totes.map(t => t.dateMs).filter((d): d is number => d != null)
     return {
-      medianMs:     frontier,
-      // Oldest/newest of what actually COUNTS (≤ frontier), for the panel text.
-      oldestMs:     datedDesc.length > 0 ? Math.min(...datedDesc) : null,
-      newestMs:     frontier,
+      medianMs:     dated.length > 0 ? median(dated) : null,
+      oldestMs:     dated.length > 0 ? Math.min(...dated) : null,
+      newestMs:     dated.length > 0 ? Math.max(...dated) : null,
       totesSampled: totes.length,
-      dated:        datedDesc.length,
+      dated:        dated.length,
       totes: totes.map(t => ({
         tote:    t.tote,
         dateMs:  t.dateMs,
         lots:    1,
-        // A dated tote NEWER than the frontier is one we ignored as out-of-order.
-        ignored: t.dateMs != null && frontier != null && t.dateMs > frontier,
         reason:  t.dateMs != null ? null : "no created date yet — run the totes sync",
         source:  t.dateMs != null ? "tote" : null,
       })),
