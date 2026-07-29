@@ -68,11 +68,38 @@ function detect(bmp, sensitivity) {
   const median = (arr) => { const a = arr.slice().sort((p, q) => p - q); return a[a.length >> 1] || 0 }
   const mR = median(bR), mG = median(bG), mB = median(bB)
 
-  // Spread of the border tells us how busy the background is.
-  let dev = 0
-  for (let k = 0; k < bR.length; k++) {
-    dev += Math.abs(bR[k] - mR) + Math.abs(bG[k] - mG) + Math.abs(bB[k] - mB)
+  // A shot on the floor against a wall has TWO backdrops in one frame, and a
+  // single median splits the difference — so the wall reads as "product" and
+  // gets included in the crop. Split the border by brightness and, when the two
+  // halves are genuinely distinct and both well represented, keep BOTH as
+  // background. One cluster covers the plain-sweep case unchanged.
+  const bL = bR.map((_, k) => LR * bR[k] + LG * bG[k] + LB * bB[k])
+  const lo = [], hi = []
+  const midL = (Math.min(...bL) + Math.max(...bL)) / 2
+  for (let k = 0; k < bL.length; k++) (bL[k] < midL ? lo : hi).push(k)
+
+  const clusters = [{ r: mR, g: mG, b: mB }]
+  const share = Math.min(lo.length, hi.length) / bL.length
+  if (share >= 0.15) {
+    const pick = (idx, arr) => median(idx.map(k => arr[k]))
+    const c1 = { r: pick(lo, bR), g: pick(lo, bG), b: pick(lo, bB) }
+    const c2 = { r: pick(hi, bR), g: pick(hi, bG), b: pick(hi, bB) }
+    const apart = Math.abs(c1.r - c2.r) + Math.abs(c1.g - c2.g) + Math.abs(c1.b - c2.b)
+    if (apart > 60) { clusters.length = 0; clusters.push(c1, c2) }
   }
+
+  // Spread of the border tells us how busy the background is — measured against
+  // the nearest cluster, so a legitimate two-tone background isn't called busy.
+  const distToBackdrop = (r, g, b) => {
+    let best = Infinity
+    for (const c of clusters) {
+      const d = Math.abs(r - c.r) + Math.abs(g - c.g) + Math.abs(b - c.b)
+      if (d < best) best = d
+    }
+    return best
+  }
+  let dev = 0
+  for (let k = 0; k < bR.length; k++) dev += distToBackdrop(bR[k], bG[k], bB[k])
   const mad = bR.length ? dev / bR.length : 0
 
   // 2. Threshold. sensitivity 0..100 -> tolerance; higher sensitivity = tighter
@@ -83,39 +110,77 @@ function detect(bmp, sensitivity) {
   const base = 75 - (sensitivity / 100) * 58        // 75 .. 17
   const tol  = Math.max(12, base + mad * 1.5)
 
-  // 3. Foreground mask + projections.
-  const colCount = new Uint32Array(aw)
-  const rowCount = new Uint32Array(ah)
+  // 3. Foreground mask.
+  const mask = new Uint8Array(aw * ah)
   let fg = 0, borderBg = 0, borderTotal = 0
   let lumaSum = 0, lumaN = 0
 
   for (let y = 0; y < ah; y++) {
     for (let x = 0; x < aw; x++) {
       const i = at(x, y)
-      const d = Math.abs(data[i] - mR) + Math.abs(data[i + 1] - mG) + Math.abs(data[i + 2] - mB)
-      const isFg = d > tol
+      const isFg = distToBackdrop(data[i], data[i + 1], data[i + 2]) > tol
       const onBorder = x < band || y < band || x >= aw - band || y >= ah - band
       if (onBorder) { borderTotal++; if (!isFg) borderBg++ }
       if (isFg) {
+        mask[y * aw + x] = 1
         fg++
-        colCount[x]++
-        rowCount[y]++
         lumaSum += LR * data[i] + LG * data[i + 1] + LB * data[i + 2]
         lumaN++
       }
     }
   }
 
-  const total   = aw * ah
-  const fgFrac  = fg / total
+  const total = aw * ah
+  const fgFrac = fg / total
   const borderBgFrac = borderTotal ? borderBg / borderTotal : 0
 
-  // A line only counts if it carries a real amount of product — kills specks.
-  const colMin = Math.max(1, Math.round(ah * 0.012))
-  const rowMin = Math.max(1, Math.round(aw * 0.012))
+  // 4. Connected components, so the crop can drop things that are separate from
+  //    the lot — a wall behind the items, a price tag at the edge, a stray tool.
+  //    A single global bounding box has to stretch around all of them.
+  //    Components are found with an iterative flood fill (4-connected); the
+  //    stack is explicit because recursion would blow up on a large blob.
+  const labels = new Int32Array(aw * ah).fill(-1)
+  const comps = []
+  const stack = []
+
+  for (let p = 0; p < mask.length; p++) {
+    if (!mask[p] || labels[p] !== -1) continue
+    const id = comps.length
+    const c = { area: 0, x0: aw, y0: ah, x1: -1, y1: -1 }
+    stack.push(p); labels[p] = id
+
+    while (stack.length) {
+      const q = stack.pop()
+      const qx = q % aw, qy = (q / aw) | 0
+      c.area++
+      if (qx < c.x0) c.x0 = qx
+      if (qy < c.y0) c.y0 = qy
+      if (qx > c.x1) c.x1 = qx
+      if (qy > c.y1) c.y1 = qy
+
+      if (qx > 0      && mask[q - 1]  && labels[q - 1]  === -1) { labels[q - 1]  = id; stack.push(q - 1) }
+      if (qx < aw - 1 && mask[q + 1]  && labels[q + 1]  === -1) { labels[q + 1]  = id; stack.push(q + 1) }
+      if (qy > 0      && mask[q - aw] && labels[q - aw] === -1) { labels[q - aw] = id; stack.push(q - aw) }
+      if (qy < ah - 1 && mask[q + aw] && labels[q + aw] === -1) { labels[q + aw] = id; stack.push(q + aw) }
+    }
+    comps.push(c)
+  }
+
+  // Keep the biggest blob plus anything of comparable size — several items in
+  // one lot must all survive — while dropping specks and small strays.
   let x0 = -1, x1 = -1, y0 = -1, y1 = -1
-  for (let x = 0; x < aw; x++)  if (colCount[x] >= colMin) { if (x0 < 0) x0 = x; x1 = x }
-  for (let y = 0; y < ah; y++)  if (rowCount[y] >= rowMin) { if (y0 < 0) y0 = y; y1 = y }
+  if (comps.length > 0) {
+    const biggest = comps.reduce((m, c) => (c.area > m.area ? c : m), comps[0])
+    const keepFrom = Math.max(total * 0.0015, biggest.area * 0.12)
+    for (const c of comps) {
+      if (c.area < keepFrom) continue
+      if (x0 < 0) { x0 = c.x0; y0 = c.y0; x1 = c.x1; y1 = c.y1; continue }
+      if (c.x0 < x0) x0 = c.x0
+      if (c.y0 < y0) y0 = c.y0
+      if (c.x1 > x1) x1 = c.x1
+      if (c.y1 > y1) y1 = c.y1
+    }
+  }
 
   const found = x0 >= 0 && y0 >= 0 && x1 > x0 && y1 > y0
 

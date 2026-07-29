@@ -194,6 +194,26 @@ export default function PhotoPrepPage() {
     const started = Date.now()
     const tick = setInterval(() => setElapsed(Date.now() - started), 500)
 
+    // Preflight the worker. If it can't be fetched as JavaScript — auth
+    // redirect, bad deploy, cached 404 — every photo would fail with no visible
+    // cause and nothing would be written. Fail loudly here instead.
+    try {
+      const probe = await fetch("/photo-prep-worker.js", { cache: "no-store" })
+      const ctype = probe.headers.get("content-type") ?? ""
+      if (!probe.ok || probe.redirected || !/javascript|ecmascript/i.test(ctype)) {
+        clearInterval(tick); setRunning(false)
+        setError(
+          `The image processor couldn't be loaded (got ${probe.status}${probe.redirected ? ", redirected to sign-in" : ""}). ` +
+          `Try a hard refresh — if it persists your session may have expired, so sign in again.`,
+        )
+        return
+      }
+    } catch (e: any) {
+      clearInterval(tick); setRunning(false)
+      setError(`The image processor couldn't be loaded: ${e?.message ?? "network error"}.`)
+      return
+    }
+
     let zip: any = null
     try {
       if (fsa) {
@@ -211,7 +231,11 @@ export default function PhotoPrepPage() {
       }
     } catch (e: any) {
       clearInterval(tick); setRunning(false)
-      if (e?.name !== "AbortError") setError(e?.message ?? "Could not open the output folder.")
+      // Say something even on cancel — a silent no-op reads as "the button is
+      // broken" rather than "you closed the folder picker".
+      setError(e?.name === "AbortError"
+        ? "Cancelled — no output folder was chosen, so nothing was saved."
+        : (e?.message ?? "Could not open the output folder."))
       return
     }
 
@@ -444,20 +468,23 @@ export default function PhotoPrepPage() {
                 onChange={e => set("marginPct", Number(e.target.value))} disabled={running}
                 className="w-full accent-[#0078D4]" />
               <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-1">
-                Breathing space, sized to the product — small and large items both get proportionate space.
+                How much space is left around the item. 0% cuts right to its edge; 5% leaves a small
+                border. It&apos;s a share of the item&apos;s own size, so small and large items look consistent.
               </p>
             </div>
 
             <div>
               <div className="flex items-baseline justify-between mb-1">
-                <label className="text-sm text-gray-700 dark:text-gray-300">Edge detection</label>
+                <label className="text-sm text-gray-700 dark:text-gray-300">How hard to look for edges</label>
                 <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">{settings.sensitivity}</span>
               </div>
               <input type="range" min={10} max={95} step={1} value={settings.sensitivity}
                 onChange={e => set("sensitivity", Number(e.target.value))} disabled={running}
                 className="w-full accent-[#0078D4]" />
               <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-1">
-                Higher crops tighter. Lower it if pale items are getting clipped.
+                How different from the backdrop something must be to count as part of the item.
+                <strong> Raise it</strong> if a white or pale item is getting its edges cut off.
+                <strong> Lower it</strong> if shadows or marks on the sweep are making the crop too loose.
               </p>
             </div>
 
@@ -476,23 +503,33 @@ export default function PhotoPrepPage() {
                     Shots that aren&apos;t on a plain light sweep (a bench, a concrete floor) are skipped, since
                     there&apos;s no white to correct against.
                   </p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-500">
+                    Both numbers are brightness on a 0–255 scale: 0 is black, 255 is pure white.
+                    A well-lit sweep reads about 240. The Preview shows what each photo measured.
+                  </p>
                   <div>
                     <div className="flex items-baseline justify-between mb-1">
-                      <label className="text-xs text-gray-600 dark:text-gray-400">Backdrop looks dim below</label>
+                      <label className="text-xs text-gray-600 dark:text-gray-400">Fix shots whose sweep is below</label>
                       <span className="text-xs font-semibold tabular-nums text-gray-900 dark:text-white">{settings.backdropThreshold}</span>
                     </div>
                     <input type="range" min={150} max={250} step={1} value={settings.backdropThreshold}
                       onChange={e => set("backdropThreshold", Number(e.target.value))} disabled={running}
                       className="w-full accent-[#0078D4]" />
+                    <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-1">
+                      Raise it to fix more photos, lower it to only rescue the really dark ones.
+                    </p>
                   </div>
                   <div>
                     <div className="flex items-baseline justify-between mb-1">
-                      <label className="text-xs text-gray-600 dark:text-gray-400">Lift backdrop to</label>
+                      <label className="text-xs text-gray-600 dark:text-gray-400">Brighten the sweep up to</label>
                       <span className="text-xs font-semibold tabular-nums text-gray-900 dark:text-white">{settings.targetBackdrop}</span>
                     </div>
                     <input type="range" min={200} max={255} step={1} value={settings.targetBackdrop}
                       onChange={e => set("targetBackdrop", Number(e.target.value))} disabled={running}
                       className="w-full accent-[#0078D4]" />
+                    <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-1">
+                      How white to make it. 245 is clean white; push toward 255 and highlights start to blow out.
+                    </p>
                   </div>
                 </div>
               )}
@@ -649,6 +686,14 @@ export default function PhotoPrepPage() {
                   {aiFixed.toLocaleString()} cropped using the AI&apos;s box
                   {aiFixed < results.filter(r => r.status === "done").length &&
                     ` · ${(results.filter(r => r.status === "done").length - aiFixed).toLocaleString()} fell back to automatic (no product found, or the API was busy)`}.
+                </p>
+              )}
+
+              {/* Without this, "Automatic + AI" that finds nothing to fix looks
+                  like the AI silently did nothing. */}
+              {settings.cropMode === "assist" && lowConf.length === 0 && (
+                <p className="text-gray-600 dark:text-gray-400">
+                  Every photo was cropped confidently, so none needed the AI.
                 </p>
               )}
 
