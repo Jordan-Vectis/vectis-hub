@@ -95,9 +95,27 @@ function lagTone(fromMs: number, nowMs: number) {
   return { text: "text-gray-500 dark:text-gray-400", bar: "bg-gray-400 dark:bg-gray-500", pct: Math.max(6, (days / LAG_RED) * 100) }
 }
 
-export default function DepartmentsTable({ groups, bcCategories, migrated, anyDepartments, nowMs }: {
+// Shape returned by /api/manager-portal/bc-tote-dates.
+type BcLiveCategory = {
+  category: string
+  monthMs: number | null
+  oldestMs: number | null
+  newestMs: number | null
+  sampled: number
+  dated: number
+  totes: { tote: string; dateMs: number | null }[]
+  catalogued: number
+  outstanding: number
+  lastCataloguedMs: number | null
+}
+type BcLiveState =
+  | { status: "loading" }
+  | { status: "disconnected" }
+  | { status: "error" }
+  | { status: "ready"; categories: BcCategoryRow[] }
+
+export default function DepartmentsTable({ groups, migrated, anyDepartments, nowMs }: {
   groups: DeptGroup[]
-  bcCategories: BcCategoryRow[]
   migrated: boolean
   anyDepartments: boolean
   nowMs: number
@@ -105,6 +123,9 @@ export default function DepartmentsTable({ groups, bcCategories, migrated, anyDe
   // Same source as the Sales tab, so a sale's lot total reads identically on
   // both. Without a BC connection we fall back to the Hub count.
   const [bc, setBc] = useState<BcState>({ status: "loading" })
+  // The BC-only category table is fetched LIVE from Receipt_Totes_Excel (our
+  // synced copy drops catalogued totes), so it loads async with its own state.
+  const [bcCats, setBcCats] = useState<BcLiveState>({ status: "loading" })
   const [openTotes, setOpenTotes] = useState<string | null>(null)   // sale id
   const [openDept, setOpenDept]   = useState<string | null>(null)   // department id
 
@@ -119,6 +140,40 @@ export default function DepartmentsTable({ groups, bcCategories, migrated, anyDe
         setBc({ status: "error" })
       })
       .catch(() => { if (!cancelled) setBc({ status: "error" }) })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/manager-portal/bc-tote-dates")
+      .then(r => r.json())
+      .then((d: { connected?: boolean; categories?: BcLiveCategory[] }) => {
+        if (cancelled) return
+        if (d?.connected === false) { setBcCats({ status: "disconnected" }); return }
+        if (!d?.categories) { setBcCats({ status: "error" }); return }
+        const rows: BcCategoryRow[] = d.categories.map(c => ({
+          category:         c.category,
+          catalogued:       c.catalogued,
+          outstanding:      c.outstanding,
+          lastCataloguedMs: c.lastCataloguedMs,
+          stock: c.sampled > 0 ? {
+            medianMs:     c.monthMs,
+            oldestMs:     c.oldestMs,
+            newestMs:     c.newestMs,
+            totesSampled: c.sampled,
+            dated:        c.dated,
+            totes: c.totes.map(t => ({
+              tote:   t.tote,
+              dateMs: t.dateMs,
+              lots:   1,
+              reason: t.dateMs == null ? "no check-in date in BC" : null,
+              source: t.dateMs != null ? "bc" : null,
+            })),
+          } : null,
+        }))
+        setBcCats({ status: "ready", categories: rows })
+      })
+      .catch(() => { if (!cancelled) setBcCats({ status: "error" }) })
     return () => { cancelled = true }
   }, [])
 
@@ -174,8 +229,23 @@ export default function DepartmentsTable({ groups, bcCategories, migrated, anyDe
         />
       )}
 
-      {/* ── Business Central on its own terms — nothing from our system ── */}
-      {bcCategories.length > 0 && <BcCategoryTable rows={bcCategories} nowMs={nowMs} />}
+      {/* ── Business Central on its own terms — live from Receipt Totes ── */}
+      {bcCats.status === "loading" && (
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 mb-5 text-sm text-gray-500 dark:text-gray-400">
+          Loading the Business Central categories live from Receipt Totes…
+        </div>
+      )}
+      {bcCats.status === "disconnected" && (
+        <div className="rounded-xl border border-amber-300 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 mb-5 text-sm text-amber-800 dark:text-amber-300">
+          Business Central isn&apos;t connected, so the BC category table can&apos;t be shown. Connect BC from the top bar.
+        </div>
+      )}
+      {bcCats.status === "error" && (
+        <div className="rounded-xl border border-red-300 dark:border-red-800/60 bg-red-50 dark:bg-red-950/20 px-4 py-3 mb-5 text-sm text-red-700 dark:text-red-300">
+          Couldn&apos;t load the Business Central categories. Try reloading.
+        </div>
+      )}
+      {bcCats.status === "ready" && bcCats.categories.length > 0 && <BcCategoryTable rows={bcCats.categories} nowMs={nowMs} />}
 
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
         Projected dates are when each sale reaches {SALE_TARGETS.join(", ")} lots at its current pace
@@ -566,10 +636,10 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
           Using totes from — Business Central categories
         </h2>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          Straight from Business Central and nothing else — grouped by BC&apos;s own main category,
-          showing every category it holds whether or not we have a sale or department for it.
-          &ldquo;Using totes from&rdquo; is the average month of the last 10 receipts BC has catalogued in each
-          category (odd old/new outliers trimmed) — roughly where cataloguing is working from. Furthest behind first.
+          Live from Business Central&apos;s Receipt Totes and nothing else — grouped by BC&apos;s own main
+          category. &ldquo;Using totes from&rdquo; is the average month of the newest 10 totes that have been
+          benched (catalogued) in each category, by check-in date (odd old/new outliers trimmed) — roughly
+          where cataloguing is working from. Furthest behind first.
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -602,7 +672,7 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                         </button>
                       ) : (
                         <span className="text-xs text-gray-400 dark:text-gray-500">
-                          {r.stock ? "no dates yet — run totes sync" : "nothing catalogued"}
+                          {r.stock ? "benched totes have no check-in date" : "nothing benched yet"}
                         </span>
                       )}
                     </td>
@@ -634,16 +704,14 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                     <tr className="border-b border-gray-50 dark:border-gray-800/50">
                       <td colSpan={6} className="px-3 py-3 bg-gray-50/60 dark:bg-gray-800/25">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                          The last {r.stock.totesSampled} receipt{r.stock.totesSampled === 1 ? "" : "s"} catalogued in {r.category}
-                          {" "}({r.stock.dated} of {r.stock.totesSampled} have a check-in date). The month above is the average
-                          of the dated ones with the oldest/newest trimmed off.{" "}
-                          <span className="text-gray-400 dark:text-gray-500">rcvd = goods-received date · tote = tote created date</span>
+                          The newest {r.stock.totesSampled} tote{r.stock.totesSampled === 1 ? "" : "s"} benched (catalogued) in {r.category},
+                          by check-in date. The month above is their average with the oldest/newest trimmed off.
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           {r.stock.totes.map(t => (
                             <span
                               key={t.tote}
-                              title={`Receipt ${t.tote}${t.reason ? ` — ${t.reason}` : t.source === "received" ? " — dated by goods-received date" : " — dated by the tote's created date"}`}
+                              title={`Tote ${t.tote}${t.reason ? ` — ${t.reason}` : " — check-in date from Business Central"}`}
                               className={`text-xs px-2 py-1 rounded-lg border whitespace-nowrap ${
                                 t.dateMs == null
                                   ? "border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500"
@@ -653,7 +721,6 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                               <b className="font-mono font-semibold">{t.tote}</b>
                               <span className="opacity-60 mx-1">·</span>
                               {t.dateMs == null ? (t.reason ?? "no date") : fmtToteDate(t.dateMs)}
-                              {t.source && <span className="opacity-50 ml-1.5">{t.source === "received" ? "rcvd" : "tote"}</span>}
                             </span>
                           ))}
                         </div>

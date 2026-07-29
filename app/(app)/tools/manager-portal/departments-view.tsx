@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import DepartmentsTable, { type DeptGroup, type BcCategoryRow } from "./departments-table"
+import DepartmentsTable, { type DeptGroup } from "./departments-table"
 
 // Manager Portal → Departments.
 // Rolls cataloguing up per department. A department owns a set of auction types,
@@ -101,94 +101,6 @@ export default async function DepartmentsView() {
     }
   }
 
-  // ── Business Central on its own terms ──────────────────────────────────────
-  // Nothing to do with our departments, our sales or our lots. Grouped by BC's
-  // OWN main category (EVA_ArticleCategoryCode), covering every category BC
-  // holds — including ones we have no sale or department for.
-  //
-  // ⚠ "Using totes from" is the FRONTIER — the created date of the newest tote
-  // that BC has marked catalogued in that category. That's literally what you
-  // read off BC's Receipt Totes screen: sort by Created At, and the top ticked
-  // row is where cataloguing has reached. An earlier version took a MEDIAN of
-  // the last-10 catalogued receipts, which dragged the date weeks too far back.
-  //
-  // Built from WarehouseTote (= Receipt_Totes_Excel, which keeps the per-tote
-  // Catalogued flag + SystemCreatedAt as bcCreatedAt), joined to a per-receipt
-  // category taken from the items on that receipt (the tote table has no
-  // category of its own). We keep the newest 10 catalogued totes per category
-  // for the expandable list; row 1 is the frontier.
-  let bcFrontierRows: { category: string; tote: string; d: Date | null; src: string | null }[] = []
-  let bcCatTotals: { category: string; catalogued: number; outstanding: number; lastAt: Date | null }[] = []
-  try {
-    [bcFrontierRows, bcCatTotals] = await Promise.all([
-      prisma.$queryRaw<{ category: string; tote: string; d: Date | null; src: string | null }[]>`
-        -- "Using totes from" = an average month of the last 10 receipts catalogued
-        -- in the category. Driven off WarehouseItem.catalogued + cataloguedAt
-        -- (reliable), ordered by MAX(cataloguedAt) per receipt.
-        --
-        -- ⚠ Each receipt is dated by its CHECK-IN, from TWO sources via LEFT JOIN
-        -- so ALL 10 come back (not just the few that match): the item's
-        -- goodsReceivedDate FIRST (WarehouseTote — Receipt_Totes_Excel — mostly
-        -- only holds UNCATALOGUED totes, so a catalogued receipt usually has no
-        -- tote there; that inner-join dropped 8 of MILITARY's 10 and left 2
-        -- outliers). Tote bcCreatedAt is the fallback. The src column says which
-        -- was used; undated receipts still appear (so you can see why).
-        WITH cat_receipt AS (
-          SELECT upper(btrim("receiptNo")) AS receipt,
-                 MAX(btrim("category"))    AS category,
-                 MAX("cataloguedAt")       AS last_catalogued
-          FROM "WarehouseItem"
-          WHERE "catalogued" = true
-            AND "cataloguedAt" >= DATE '1990-01-01'
-            AND "receiptNo" IS NOT NULL AND btrim("receiptNo") <> ''
-            AND "category" IS NOT NULL AND btrim("category") <> ''
-          GROUP BY 1
-        ),
-        recent AS (
-          SELECT category, receipt FROM (
-            SELECT category, receipt,
-                   ROW_NUMBER() OVER (PARTITION BY category ORDER BY last_catalogued DESC)::int AS rn
-            FROM cat_receipt
-          ) x WHERE rn <= 10
-        ),
-        item_date AS (
-          SELECT upper(btrim("receiptNo")) AS receipt, MIN("goodsReceivedDate") AS d
-          FROM "WarehouseItem"
-          WHERE upper(btrim("receiptNo")) IN (SELECT receipt FROM recent)
-            AND "goodsReceivedDate" IS NOT NULL AND "goodsReceivedDate" >= DATE '1990-01-01'
-          GROUP BY 1
-        ),
-        tote_date AS (
-          SELECT upper(btrim("receiptNo")) AS receipt, MAX("bcCreatedAt") AS d
-          FROM "WarehouseTote"
-          WHERE upper(btrim("receiptNo")) IN (SELECT receipt FROM recent)
-            AND "bcCreatedAt" IS NOT NULL AND "bcCreatedAt" >= DATE '1990-01-01'
-          GROUP BY 1
-        )
-        SELECT r.category AS category, r.receipt AS tote,
-               COALESCE(id.d, td.d) AS d,
-               CASE WHEN id.d IS NOT NULL THEN 'received'
-                    WHEN td.d IS NOT NULL THEN 'tote'
-                    ELSE NULL END AS src
-        FROM recent r
-        LEFT JOIN item_date id ON id.receipt = r.receipt
-        LEFT JOIN tote_date td ON td.receipt = r.receipt
-        ORDER BY r.category, COALESCE(id.d, td.d) DESC NULLS LAST`,
-      prisma.$queryRaw<{ category: string; catalogued: number; outstanding: number; lastAt: Date | null }[]>`
-        SELECT btrim(w."category")                                          AS "category",
-               COUNT(*) FILTER (WHERE w."catalogued" = true)::int            AS "catalogued",
-               COUNT(*) FILTER (WHERE w."catalogued" IS DISTINCT FROM true)::int AS "outstanding",
-               MAX(w."cataloguedAt") FILTER (WHERE w."cataloguedAt" >= DATE '1990-01-01') AS "lastAt"
-        FROM "WarehouseItem" w
-        WHERE w."category" IS NOT NULL AND btrim(w."category") <> ''
-        GROUP BY 1`,
-    ])
-  } catch {
-    // bcCreatedAt column / catalogued flag arrive with Run Migrations + a totes
-    // sync; until then the BC table simply shows no dates.
-    bcFrontierRows = []
-    bcCatTotals    = []
-  }
 
   // Resolve each tote to a date. A tote reference can be either an internal
   // warehouse container (its id IS the tote number, and createdAt = when it was
@@ -311,14 +223,6 @@ export default async function DepartmentsView() {
     totesBySale.set(r.auctionId, [...(totesBySale.get(r.auctionId) ?? []), { tote: r.tote, lotCount: r.lotCount }])
   }
 
-  // The last 10 catalogued receipts per BC category, each with its check-in date
-  // and which source dated it ('received' = item goodsReceivedDate, 'tote' =
-  // tote bcCreatedAt, null = neither). Ordered newest-dated first, undated last.
-  const bcTotesByCategory = new Map<string, { tote: string; dateMs: number | null; src: string | null }[]>()
-  for (const r of bcFrontierRows) {
-    const dateMs = r.d ? new Date(r.d).getTime() : null
-    bcTotesByCategory.set(r.category, [...(bcTotesByCategory.get(r.category) ?? []), { tote: r.tote, dateMs, src: r.src }])
-  }
 
   const median = (xs: number[]): number => {
     const s = [...xs].sort((a, b) => a - b)
@@ -376,55 +280,6 @@ export default async function DepartmentsView() {
   /** From our Hub lots — what the cataloguers recorded. */
   const stockFor = (auctionIds: string[]) => stockFrom(auctionIds.map(id => totesBySale.get(id) ?? []))
 
-  // ── The BC-only table: one row per BC category, our system not involved ──
-  // "Using totes from" = a single AVERAGE MONTH of the last 10 receipts
-  // catalogued. Cataloguing runs out of order, so the last-10 sample has stray
-  // outliers (MILITARY spanned Sept 25 → Jul 26); a plain median ignored them
-  // but a range was meaningless. So: drop the outliers (trim ~20% off each end)
-  // and take the MEAN of the middle — removing the odd old straggler pulls it to
-  // the real "we're working through ~March". medianMs holds that trimmed mean so
-  // the shared StockAge shape + lag colours work unchanged.
-  function bcStockFor(totes: { tote: string; dateMs: number | null; src: string | null }[]): BcCategoryRow["stock"] {
-    if (totes.length === 0) return null
-    const dated = totes.map(t => t.dateMs).filter((d): d is number => d != null).sort((a, b) => a - b)
-    let typical: number | null = null
-    if (dated.length > 0) {
-      const trim = Math.min(Math.floor(dated.length * 0.2), Math.floor((dated.length - 1) / 2))
-      const mid  = dated.slice(trim, dated.length - trim)
-      typical = Math.round(mid.reduce((s, d) => s + d, 0) / mid.length)
-    }
-    return {
-      medianMs:     typical,
-      oldestMs:     dated.length > 0 ? dated[0] : null,
-      newestMs:     dated.length > 0 ? dated[dated.length - 1] : null,
-      totesSampled: totes.length,
-      dated:        dated.length,
-      totes: totes.map(t => ({
-        tote:    t.tote,
-        dateMs:  t.dateMs,
-        lots:    1,
-        reason:  t.dateMs != null ? null : "no check-in date (not in warehouse or BC)",
-        source:  t.src,   // 'received' = item goods-received, 'tote' = tote created
-      })),
-    }
-  }
-
-  const bcCategories: BcCategoryRow[] = bcCatTotals
-    .map(c => ({
-      category:    c.category,
-      stock:       bcStockFor(bcTotesByCategory.get(c.category) ?? []),
-      catalogued:  Number(c.catalogued),
-      outstanding: Number(c.outstanding),
-      lastCataloguedMs: c.lastAt ? new Date(c.lastAt).getTime() : null,
-    }))
-    // Furthest behind first; categories with no dated totes sink to the bottom.
-    .sort((a, b) => {
-      const am = a.stock?.medianMs, bm = b.stock?.medianMs
-      if (am == null && bm == null) return a.category.localeCompare(b.category)
-      if (am == null) return 1
-      if (bm == null) return -1
-      return am - bm
-    })
 
   // Active sales, plus sales finished in the last three months. There is no
   // "completed at" timestamp — `complete` is just a flag — so recency uses the
@@ -500,7 +355,6 @@ export default async function DepartmentsView() {
   return (
     <DepartmentsTable
       groups={groups}
-      bcCategories={bcCategories}
       migrated={migrated}
       anyDepartments={departments.length > 0}
       nowMs={Date.now()}
