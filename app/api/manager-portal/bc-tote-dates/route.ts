@@ -43,6 +43,12 @@ function bcMs(v: unknown): number | null {
 
 const isBenched = (v: unknown) => v === true || v === 1 || v === "true" || v === "Yes" || v === "1"
 
+async function inBatches<T>(items: T[], concurrency: number, fn: (t: T) => Promise<void>) {
+  for (let i = 0; i < items.length; i += concurrency) {
+    await Promise.all(items.slice(i, i + concurrency).map(fn))
+  }
+}
+
 // Median — robust to a stray old/new tote even on a tiny sample (a category may
 // only have a few totes benched right now). A trimmed mean needs enough points
 // to trim; the median doesn't, so MILITARY's [9 Feb, 18 Feb, 17 Apr, 21 Jul]
@@ -88,32 +94,44 @@ export async function GET() {
       WHERE w."category" IS NOT NULL AND btrim(w."category") <> ''
       GROUP BY 1`
 
-    // ── Live: page the whole Receipt_Totes_Excel feed, keep benched in code ──
+    // ── Live: ONE query PER CATEGORY, filtered by category, benched in code ──
+    // ⚠ Filtering the whole feed and relying on paging failed — BC didn't emit a
+    // nextLink on the unfiltered feed, so only the first 500 rows came back and a
+    // category got whatever crumbs were in that slice (GAMING got 1). Category IS
+    // a real filterable field (EVA_TOT_ArticleCategory), so query each category
+    // directly, page THAT (small) result to completion, and keep benched in code.
+    const catList = [...new Set(totals.map(t => t.category))]
     const benchedByCategory = new Map<string, { tote: string; ms: number | null }[]>()
-    const startedAt = Date.now()
-    let url: string | null = null
-    let firstParams: Record<string, string | number> | undefined = {
-      $select: `${CAT_COL},${TOTE_COL},${CREATED_COL},${BENCHED_COL}`,
-      $top: 500,
-    }
-    let pages = 0
-    while (pages < 400) {
-      if (Date.now() - startedAt > 110_000) break   // wall-clock budget
-      const { rows, nextLink } = await bcPageWithNext(token, url ?? "Receipt_Totes_Excel", url ? undefined : firstParams)
-      firstParams = undefined
-      for (const r of rows) {
-        if (!isBenched((r as any)[BENCHED_COL])) continue   // the real filter — in code
-        const category = String((r as any)[CAT_COL] ?? "").trim()
-        if (!category) continue
-        const tote = String((r as any)[TOTE_COL] ?? "").trim() || "(no tote no)"
-        const arr = benchedByCategory.get(category) ?? []
-        arr.push({ tote, ms: bcMs((r as any)[CREATED_COL]) })
-        benchedByCategory.set(category, arr)
+
+    await inBatches(catList, 4, async (category) => {
+      const filter = `${CAT_COL} eq '${category.replace(/'/g, "''")}'`
+      const collected: { tote: string; ms: number | null }[] = []
+      let url: string | null = null
+      let firstParams: Record<string, string | number> | undefined = {
+        $filter: filter,
+        $select: `${CAT_COL},${TOTE_COL},${CREATED_COL},${BENCHED_COL}`,
+        $top: 500,
       }
-      pages++
-      if (!nextLink) break
-      url = nextLink
-    }
+      let page = 0
+      while (page < 30) {   // a single category is small; cap is a backstop
+        let res: { rows: any[]; nextLink: string | null }
+        try {
+          res = await bcPageWithNext(token, url ?? "Receipt_Totes_Excel", url ? undefined : firstParams)
+        } catch { break }
+        firstParams = undefined
+        for (const r of res.rows) {
+          if (!isBenched((r as any)[BENCHED_COL])) continue   // benched filter — in code
+          collected.push({
+            tote: String((r as any)[TOTE_COL] ?? "").trim() || "(no tote no)",
+            ms:   bcMs((r as any)[CREATED_COL]),
+          })
+        }
+        page++
+        if (!res.nextLink) break
+        url = res.nextLink
+      }
+      benchedByCategory.set(category, collected)
+    })
 
     // ── Per category: newest SAMPLE benched totes, trimmed-mean month ──
     const totalsByCat = new Map(totals.map(t => [t.category, t]))
