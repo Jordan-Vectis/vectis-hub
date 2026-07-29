@@ -358,19 +358,26 @@ export default async function DepartmentsView() {
   const stockFor = (auctionIds: string[]) => stockFrom(auctionIds.map(id => totesBySale.get(id) ?? []))
 
   // ── The BC-only table: one row per BC category, our system not involved ──
-  // "Using totes from" = the TYPICAL check-in date of the last 15 receipts
-  // catalogued (the MEDIAN of their dates). Cataloguing runs out of order, so a
-  // single "newest catalogued" is meaningless; the median of recent work says
-  // "we're working from ~mid March". Median (not mean) so one stray old/new
-  // receipt in the 15 doesn't drag it. medianMs holds it so the shared StockAge
-  // shape + lag colours work unchanged.
+  // "Using totes from" = a single AVERAGE MONTH of the last 10 receipts
+  // catalogued. Cataloguing runs out of order, so the last-10 sample has stray
+  // outliers (MILITARY spanned Sept 25 → Jul 26); a plain median ignored them
+  // but a range was meaningless. So: drop the outliers (trim ~20% off each end)
+  // and take the MEAN of the middle — removing the odd old straggler pulls it to
+  // the real "we're working through ~March". medianMs holds that trimmed mean so
+  // the shared StockAge shape + lag colours work unchanged.
   function bcStockFor(totes: { tote: string; dateMs: number | null }[]): BcCategoryRow["stock"] {
     if (totes.length === 0) return null
-    const dated = totes.map(t => t.dateMs).filter((d): d is number => d != null)
+    const dated = totes.map(t => t.dateMs).filter((d): d is number => d != null).sort((a, b) => a - b)
+    let typical: number | null = null
+    if (dated.length > 0) {
+      const trim = Math.min(Math.floor(dated.length * 0.2), Math.floor((dated.length - 1) / 2))
+      const mid  = dated.slice(trim, dated.length - trim)
+      typical = Math.round(mid.reduce((s, d) => s + d, 0) / mid.length)
+    }
     return {
-      medianMs:     dated.length > 0 ? median(dated) : null,
-      oldestMs:     dated.length > 0 ? Math.min(...dated) : null,
-      newestMs:     dated.length > 0 ? Math.max(...dated) : null,
+      medianMs:     typical,
+      oldestMs:     dated.length > 0 ? dated[0] : null,
+      newestMs:     dated.length > 0 ? dated[dated.length - 1] : null,
       totesSampled: totes.length,
       dated:        dated.length,
       totes: totes.map(t => ({
