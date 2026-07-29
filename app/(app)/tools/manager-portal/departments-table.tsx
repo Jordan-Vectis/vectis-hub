@@ -637,9 +637,8 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
         </h2>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
           Live from Business Central&apos;s Receipt Totes and nothing else — grouped by BC&apos;s own main
-          category. &ldquo;Using totes from&rdquo; is the average month of the newest 10 totes that have been
-          benched (catalogued) in each category, by check-in date (odd old/new outliers trimmed) — roughly
-          where cataloguing is working from. Furthest behind first.
+          category. &ldquo;Using totes from&rdquo; is the middle (median) check-in month of the totes currently
+          benched (catalogued) in each category — where cataloguing is working from right now. Furthest behind first.
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -704,8 +703,8 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                     <tr className="border-b border-gray-50 dark:border-gray-800/50">
                       <td colSpan={6} className="px-3 py-3 bg-gray-50/60 dark:bg-gray-800/25">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                          The newest {r.stock.totesSampled} tote{r.stock.totesSampled === 1 ? "" : "s"} benched (catalogued) in {r.category},
-                          by check-in date. The month above is their average with the oldest/newest trimmed off.
+                          The {r.stock.totesSampled} tote{r.stock.totesSampled === 1 ? "" : "s"} currently benched (catalogued) in {r.category},
+                          by check-in date. The month above is the middle (median) of these.
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           {r.stock.totes.map(t => (

@@ -38,13 +38,16 @@ function bcMs(v: unknown): number | null {
 
 const isBenched = (v: unknown) => v === true || v === 1 || v === "true" || v === "Yes" || v === "1"
 
-// Trimmed mean: drop ~20% off each end (kills stray old/new outliers), mean the
-// middle.
-function trimmedMean(msSorted: number[]): number | null {
+// Median — robust to a stray old/new tote even on a tiny sample (a category may
+// only have a few totes benched right now). A trimmed mean needs enough points
+// to trim; the median doesn't, so MILITARY's [9 Feb, 18 Feb, 17 Apr, 21 Jul]
+// gives ~mid-March instead of being dragged to April by the 21 Jul outlier.
+function median(msSorted: number[]): number | null {
   if (msSorted.length === 0) return null
-  const trim = Math.min(Math.floor(msSorted.length * 0.2), Math.floor((msSorted.length - 1) / 2))
-  const mid  = msSorted.slice(trim, msSorted.length - trim)
-  return Math.round(mid.reduce((s, d) => s + d, 0) / mid.length)
+  const mid = Math.floor(msSorted.length / 2)
+  return msSorted.length % 2 === 0
+    ? Math.round((msSorted[mid - 1] + msSorted[mid]) / 2)
+    : msSorted[mid]
 }
 
 type CategoryOut = {
@@ -123,7 +126,7 @@ export async function GET() {
       const t = totalsByCat.get(category)
       categories.push({
         category,
-        monthMs:  trimmedMean(dated),
+        monthMs:  median(dated),
         oldestMs: dated.length > 0 ? dated[0] : null,
         newestMs: dated.length > 0 ? dated[dated.length - 1] : null,
         sampled:  sample.length,

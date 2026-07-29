@@ -109,7 +109,7 @@ Jordan: "you are still getting the dates wrong and it's not finding them". The l
 
 One row per **BC main category** (\`EVA_TOT_ArticleCategory\`), every category BC holds, **nothing** from our CatalogueAuction/Lot/Department. Component \`BcCategoryTable\` (departments-table.tsx); route **\`/api/manager-portal/bc-tote-dates\`**; the client fetches it async (own loading/disconnected/error states) — the server component no longer computes any of this. No "% done". "Last worked" column = MAX(WarehouseItem.cataloguedAt).
 
-**Metric (Jordan's final):** "Using totes from" = the average month of the **newest 10 totes BENCHED in each category, by check-in date, trimmed** (~20% off each end kills outliers), shown as one month ("Mar 2026"). Expand panel = those 10 totes + dates.
+**Metric (Jordan's final):** "Using totes from" = the **MEDIAN check-in month of the totes CURRENTLY benched in each category** ("Mar 2026"). ⚠ Median NOT trimmed-mean — PTE_Benched=true is a small live set (BC removes a tote from the feed once fully catalogued, so MILITARY had 4 not 10); a trimmed mean can't trim a tiny sample so an outlier skewed it, median is robust at any n. Sample is "up to 10" but usually fewer — a snapshot of the bench.
 
 **⚠⚠ LIVE from BC's \`Receipt_Totes_Excel\`, not our synced data.** That feed has per tote: \`EVA_TOT_ArticleCategory\`, \`SystemCreatedAt\` (check-in), and **\`PTE_Benched\`** — Jordan: **PTE_Benched=true is the reliable "catalogued" signal; EVA_TOT_Catalogued is unreliable.** Route paginates \`PTE_Benched eq true\` via \`bcPageWithNext\` (nextLink, NOT $skip). Counts + "Last worked" still from our WarehouseItem; only the dates are live.
 
