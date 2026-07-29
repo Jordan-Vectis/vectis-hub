@@ -123,8 +123,9 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
   // Same source as the Sales tab, so a sale's lot total reads identically on
   // both. Without a BC connection we fall back to the Hub count.
   const [bc, setBc] = useState<BcState>({ status: "loading" })
-  // The BC-only category table is fetched LIVE from Receipt_Totes_Excel (our
-  // synced copy drops catalogued totes), so it loads async with its own state.
+  // The BC-only category table is computed from our synced WarehouseItem data
+  // (the live tote feed only holds active totes, so it can't show finished
+  // work). It loads async with its own state.
   const [bcCats, setBcCats] = useState<BcLiveState>({ status: "loading" })
   const [openTotes, setOpenTotes] = useState<string | null>(null)   // sale id
   const [openDept, setOpenDept]   = useState<string | null>(null)   // department id
@@ -166,7 +167,7 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
               tote:   t.tote,
               dateMs: t.dateMs,
               lots:   1,
-              reason: t.dateMs == null ? "no check-in date in BC" : null,
+              reason: t.dateMs == null ? "no goods-received date" : null,
               source: t.dateMs != null ? "bc" : null,
             })),
           } : null,
@@ -232,7 +233,7 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
       {/* ── Business Central on its own terms — live from Receipt Totes ── */}
       {bcCats.status === "loading" && (
         <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 mb-5 text-sm text-gray-500 dark:text-gray-400">
-          Loading the Business Central categories live from Receipt Totes…
+          Working out the Business Central categories…
         </div>
       )}
       {bcCats.status === "disconnected" && (
@@ -620,10 +621,11 @@ function ToteSummary({ title, subtitle, rows, nowMs }: {
 }
 
 /**
- * Business Central on its own terms. NOTHING in here comes from our system — no
- * departments, no CatalogueAuction, no CatalogueLot. Rows are BC's own main
- * categories (EVA_ArticleCategoryCode) and every category BC holds appears,
- * whether or not we have a sale or department for it.
+ * Business Central on its own terms — no departments, no CatalogueAuction, no
+ * CatalogueLot. Rows are BC's own main categories (EVA_ArticleCategoryCode, via
+ * the synced WarehouseItem) and every category BC holds appears. "Using totes
+ * from" is the median goods-received month of the newest 10 consignments
+ * catalogued in each category (see /api/manager-portal/bc-tote-dates).
  */
 function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number }) {
   const [open, setOpen] = useState<string | null>(null)
@@ -636,9 +638,9 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
           Using totes from — Business Central categories
         </h2>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          Live from Business Central&apos;s Receipt Totes and nothing else — grouped by BC&apos;s own main
-          category. &ldquo;Using totes from&rdquo; is the middle (median) check-in month of the newest 10 totes
-          benched (catalogued) in each category — where cataloguing is working from. Furthest behind first.
+          Grouped by Business Central&apos;s own main category. &ldquo;Using totes from&rdquo; is the middle
+          (median) goods-received month of the newest 10 consignments catalogued in each category — where
+          cataloguing is working from. Furthest behind first.
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -665,13 +667,13 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                     </td>
                     <td className="py-2.5 px-3 whitespace-nowrap">
                       {median != null ? (
-                        <button onClick={() => setOpen(open === r.category ? null : r.category)} className="group text-left" title="Average month of the last 10 receipts catalogued (outliers trimmed) — click to list them">
+                        <button onClick={() => setOpen(open === r.category ? null : r.category)} className="group text-left" title="Median goods-received month of the last 10 consignments catalogued — click to list them">
                           <span className="font-semibold text-gray-900 dark:text-white group-hover:underline">{fmtMonth(median)}</span>
                           <span className="text-gray-400 dark:text-gray-500 ml-1 text-xs">{open === r.category ? "▾" : "▸"}</span>
                         </button>
                       ) : (
                         <span className="text-xs text-gray-400 dark:text-gray-500">
-                          {r.stock ? "benched totes have no check-in date" : "nothing benched yet"}
+                          {r.stock ? "no goods-received dates" : "nothing catalogued yet"}
                         </span>
                       )}
                     </td>
@@ -703,14 +705,14 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                     <tr className="border-b border-gray-50 dark:border-gray-800/50">
                       <td colSpan={6} className="px-3 py-3 bg-gray-50/60 dark:bg-gray-800/25">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                          The newest {r.stock.totesSampled} tote{r.stock.totesSampled === 1 ? "" : "s"} benched (catalogued) in {r.category},
-                          by check-in date. The month above is the middle (median) of these.
+                          The newest {r.stock.totesSampled} consignment{r.stock.totesSampled === 1 ? "" : "s"} catalogued in {r.category},
+                          by goods-received date. The month above is the middle (median) of these.
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           {r.stock.totes.map(t => (
                             <span
                               key={t.tote}
-                              title={`Tote ${t.tote}${t.reason ? ` — ${t.reason}` : " — check-in date from Business Central"}`}
+                              title={`Receipt ${t.tote}${t.reason ? ` — ${t.reason}` : " — goods-received date"}`}
                               className={`text-xs px-2 py-1 rounded-lg border whitespace-nowrap ${
                                 t.dateMs == null
                                   ? "border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500"
