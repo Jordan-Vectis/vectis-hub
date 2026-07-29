@@ -122,23 +122,28 @@ export default async function DepartmentsView() {
   try {
     [bcFrontierRows, bcCatTotals] = await Promise.all([
       prisma.$queryRaw<{ category: string; tote: string; d: Date | null }[]>`
-        WITH receipt_cat AS (
+        -- ⚠ Catalogued state comes from the ITEM (WarehouseItem.catalogued),
+        -- NOT the tote. WarehouseTote.catalogued was unreliable (all-false), so a
+        -- version filtering on it showed "nothing catalogued" everywhere even
+        -- after a full resync. Take the receipts that have a catalogued item,
+        -- then read those receipts' totes purely for the created date.
+        WITH cat_receipt AS (
           SELECT upper(btrim("receiptNo")) AS receipt, MAX(btrim("category")) AS category
           FROM "WarehouseItem"
-          WHERE "receiptNo" IS NOT NULL AND btrim("receiptNo") <> ''
+          WHERE "catalogued" = true
+            AND "receiptNo" IS NOT NULL AND btrim("receiptNo") <> ''
             AND "category" IS NOT NULL AND btrim("category") <> ''
           GROUP BY 1
         )
         SELECT category, tote, d FROM (
-          SELECT rc.category           AS category,
+          SELECT cr.category           AS category,
                  upper(btrim(t."toteNo")) AS tote,
                  t."bcCreatedAt"       AS d,
-                 ROW_NUMBER() OVER (PARTITION BY rc.category ORDER BY t."bcCreatedAt" DESC)::int AS rn
+                 ROW_NUMBER() OVER (PARTITION BY cr.category ORDER BY t."bcCreatedAt" DESC)::int AS rn
           FROM "WarehouseTote" t
-          JOIN receipt_cat rc ON rc.receipt = upper(btrim(t."receiptNo"))
-          WHERE t."catalogued" = true
-            -- ⚠ BC sends an empty date as 0001-01-01, which is a VALID date
-            AND t."bcCreatedAt" IS NOT NULL AND t."bcCreatedAt" >= DATE '1990-01-01'
+          JOIN cat_receipt cr ON cr.receipt = upper(btrim(t."receiptNo"))
+          -- ⚠ BC sends an empty date as 0001-01-01, which is a VALID date
+          WHERE t."bcCreatedAt" IS NOT NULL AND t."bcCreatedAt" >= DATE '1990-01-01'
         ) x WHERE rn <= 10
         ORDER BY category, rn`,
       prisma.$queryRaw<{ category: string; catalogued: number; outstanding: number; lastAt: Date | null }[]>`
