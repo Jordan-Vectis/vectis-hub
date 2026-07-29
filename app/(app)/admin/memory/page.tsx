@@ -831,6 +831,13 @@ PascalCase with underscores: \`User_ID\`, \`Date_and_Time\`, \`Field_Caption\`, 
 ### Auction_Receipt_Lines_Excel
 - Auction code: EVA_SalesAllocation (same as Receipt_Lines_Excel)
 
+### Receipt_Totes_Excel (the totes feed — SMALL, low thousands of rows)
+- Category: **EVA_TOT_ArticleCategory** · Tote no: EVA_TOT_ToteNo / EVA_TOT_No · Receipt: EVA_TOT_ReceiptNo · Location: EVA_TOT_ToteLocation · Cataloguer initials: EVA_TOT_AssignToCataloguer
+- Check-in / age date: **SystemCreatedAt** (guard BC empty-date 0001-01-01 → treat < 1990 as no date)
+- **Catalogued/worked signal: PTE_Benched (bool) — RELIABLE. EVA_TOT_Catalogued is UNRELIABLE (sampled false even on catalogued totes) — don't trust it.**
+- **FETCH: pull the WHOLE feed in one \`bcFetchAll(token, "Receipt_Totes_Excel")\` — NO $filter, NO $select — then group by category + filter PTE_Benched IN CODE** (the proven pattern in app/api/bc/warehouse/route.ts and the Manager Portal bc-tote-dates route). Raw feed holds BOTH catalogued + uncatalogued. Do NOT $filter per-category and do NOT $filter PTE_Benched (flow field) — both under-return.
+- Items can't join to totes on tote no (EVA_ArticleToteNo empty on ~all items) — join by receiptNo.
+
 ### ChangeLogEntries (verified 2026-05-08)
 - Entry_No, User_ID, Date_and_Time
 - Table_No, Table_Caption (e.g. "Auction Line", "Web Invoices")
@@ -850,7 +857,9 @@ PascalCase with underscores: \`User_ID\`, \`Date_and_Time\`, \`Field_Caption\`, 
 
 **Cached fields go stale.** WarehouseItem.auctionName is a cache; use the "Refresh auction names from BC" button in DB Explorer to re-pull.
 
-**Pagination — use @odata.nextLink, not $skip.** BC has a ~38k row $skip limit. Use bcPageWithNext.
+**Pagination — big feeds use @odata.nextLink, not $skip.** BC has a ~38k row $skip limit that breaks plain $skip paging on huge tables (Receipt_Lines_Excel 187k+) — use bcPageWithNext + follow @odata.nextLink. ⚠ EXCEPTION for SMALL feeds (low thousands, e.g. Receipt_Totes_Excel): $skip is fine and is the proven pattern — \`bcFetchAll\` pages the whole thing. Adding $top to an initial query disables nextLink emission.
+
+**Flow/calculated fields can't be $filtered.** An OData \`$filter\` on a BC flow field (e.g. \`PTE_Benched\` on Receipt_Totes_Excel) silently returns the WRONG subset. Pull the rows and test the field IN CODE instead.
 
 **Date filter syntax — OData v4.** Bare ISO 8601: \`Date_and_Time ge 2026-05-08T00:00:00Z\`. No datetime'…' wrapper.
 
