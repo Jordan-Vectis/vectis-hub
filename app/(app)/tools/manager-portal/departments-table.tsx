@@ -65,6 +65,14 @@ const fmtDate = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: 
 // Tote dates carry the year — they can be months or years old, and a bare
 // "31 Dec" hid a year-1 date from Business Central for a whole round.
 const fmtToteDate = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" })
+const fmtToteDayMon = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+// The check-in spread of the sampled receipts. Year shown once when both sides
+// share it; a single day when they're the same.
+function fmtRange(oldest: number, newest: number): string {
+  if (oldest === newest) return fmtToteDate(oldest)
+  const sameYear = new Date(oldest).getFullYear() === new Date(newest).getFullYear()
+  return `${sameYear ? fmtToteDayMon(oldest) : fmtToteDate(oldest)} – ${fmtToteDate(newest)}`
+}
 const fmtSaleDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" }) : "—"
 
@@ -566,8 +574,9 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
           Straight from Business Central and nothing else — grouped by BC&apos;s own main category,
           showing every category it holds whether or not we have a sale or department for it.
-          &ldquo;Using totes from&rdquo; is the typical (middle) check-in date of the last 15 receipts BC has
-          catalogued in each category — where cataloguing is working from. Furthest behind first.
+          &ldquo;Using totes from&rdquo; is the check-in date range of the last 10 receipts BC has catalogued
+          in each category — where cataloguing is working from. &ldquo;How far behind&rdquo; uses the middle of that
+          range. Furthest behind first.
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -593,9 +602,9 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                       <span className="font-mono font-semibold text-gray-900 dark:text-white">{r.category}</span>
                     </td>
                     <td className="py-2.5 px-3 whitespace-nowrap">
-                      {median != null ? (
-                        <button onClick={() => setOpen(open === r.category ? null : r.category)} className="group text-left">
-                          <span className="font-semibold text-gray-900 dark:text-white group-hover:underline">{fmtToteDate(median)}</span>
+                      {median != null && r.stock?.oldestMs != null ? (
+                        <button onClick={() => setOpen(open === r.category ? null : r.category)} className="group text-left" title="The check-in span of the last 10 receipts catalogued — click to list them">
+                          <span className="font-semibold text-gray-900 dark:text-white group-hover:underline">{fmtRange(r.stock.oldestMs, r.stock.newestMs!)}</span>
                           <span className="text-gray-400 dark:text-gray-500 ml-1 text-xs">{open === r.category ? "▾" : "▸"}</span>
                         </button>
                       ) : (
@@ -633,8 +642,8 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                       <td colSpan={6} className="px-3 py-3 bg-gray-50/60 dark:bg-gray-800/25">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
                           Last {r.stock.totesSampled} receipt{r.stock.totesSampled === 1 ? "" : "s"} catalogued in {r.category},
-                          by their check-in dates{r.stock.oldestMs != null && ` — spanning ${fmtToteDate(r.stock.oldestMs)} to ${fmtToteDate(r.stock.newestMs!)}`}.
-                          The figure above is the middle (median) of these.
+                          by check-in date. &ldquo;How far behind&rdquo; uses the middle (median) of these
+                          {median != null && `, ${fmtToteDate(median)}`}.
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           {r.stock.totes.map(t => (

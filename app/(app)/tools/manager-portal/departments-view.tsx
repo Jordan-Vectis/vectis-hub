@@ -122,11 +122,11 @@ export default async function DepartmentsView() {
   try {
     [bcFrontierRows, bcCatTotals] = await Promise.all([
       prisma.$queryRaw<{ category: string; tote: string; d: Date | null }[]>`
-        -- "Using totes from" = the TYPICAL check-in date of the last 15 receipts
-        -- catalogued in the category. Cataloguing happens out of order (MILITARY
-        -- had stray April ticks over a dense mid-March block), so a single
-        -- "newest catalogued" frontier is meaningless — the median of the last 15
-        -- recently-worked receipts gives the real "we're working from ~mid March".
+        -- "Using totes from" = the check-in date RANGE (with a median) of the last
+        -- 10 receipts catalogued in the category. Cataloguing happens out of order
+        -- (MILITARY had stray April ticks over a dense mid-March block), so a
+        -- single "newest catalogued" frontier is meaningless — the last-10
+        -- recently-worked receipts give the real "we're working across ~mid March".
         --
         -- Driven off WarehouseItem.catalogued + cataloguedAt (reliable — same
         -- signal as the counts / Last worked), NOT WarehouseTote.catalogued.
@@ -148,7 +148,7 @@ export default async function DepartmentsView() {
             SELECT category, receipt,
                    ROW_NUMBER() OVER (PARTITION BY category ORDER BY last_catalogued DESC)::int AS rn
             FROM cat_receipt
-          ) x WHERE rn <= 15
+          ) x WHERE rn <= 10
         )
         SELECT r.category AS category, r.receipt AS tote, MAX(t."bcCreatedAt") AS d
         FROM recent r
