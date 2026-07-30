@@ -41,6 +41,7 @@ const GROUPS: { label: string; cards: Card[] }[] = [
     cards: [
       { href: "/admin/about",      label: "About",            description: "How every section of the app works, what it depends on, and the rules that govern it.", icon: "📖" },
       { href: "/admin/compliance", label: "Data & Compliance", description: "Plain-English note on what data the Hub holds, where it's stored, who it's shared with, and what to check with an adviser.", icon: "⚖️" },
+      { href: "/admin/dpia",       label: "DPIA",             description: "Data Protection Impact Assessment draft (ICO template) — the formal risk assessment for the Hub's data processing and staff monitoring. Save-as-PDF for your adviser.", icon: "🛡️" },
       { href: "/admin/ai-models",  label: "AI Models",        description: "Choose which Gemini model each AI feature uses across the app. Fix a retired model in one place instead of in code.", icon: "🤖" },
       { href: "/admin/backup",     label: "Database Backup",  description: "View stored database backups, check when the last backup ran, and trigger a manual backup.", icon: "💾" },
       { href: "/admin/memory",     label: "Claude Memory",    description: "Browse what Claude remembers about you, this project, and how to work with you.", icon: "🧠" },

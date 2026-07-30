@@ -5,11 +5,18 @@ import { prisma } from "@/lib/prisma"
 // POST /api/warehouse/clear-bc-data
 // Body: { confirm: "DELETE", target: "items" | "totes" | "both" }
 // ADMIN ONLY. Wipes the BC-synced cache tables so the next sync re-pulls
-// everything from scratch. Use when names/values look stale and a refresh
-// hasn't fixed it.
+// everything. Use when names/values look stale and a refresh hasn't fixed it.
 //
 // Does NOT touch CatalogueLot, ClaudeMemory, MarketingDraft, or any other
 // non-BC data. Only WarehouseItem and/or WarehouseTote.
+//
+// ⚠⚠ CLEARING TOTES IS NOT FULLY RECOVERABLE (noted 2026-07-30). "the next sync
+// re-pulls everything" is TRUE for items but FALSE for tote enrichment:
+// `WarehouseTote.bcCreatedAt` (check-in date) and `receiptNo` come only from
+// `Receipt_Totes_Excel`, which publishes ONLY totes NOT ticked Catalogued — so a
+// ticked tote's date is unavailable from BC and our row was the last copy. This is
+// a deliberate admin escape hatch, so the wipe stays, but the UI warns about it
+// and `sync/totes` no longer wipes as a side effect of a "full" re-sync.
 
 export async function POST(req: NextRequest) {
   try {

@@ -1163,6 +1163,13 @@ const MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS "McocMiniNode_ownerId_idx" ON "McocMiniNode"("ownerId")`,
   `ALTER TABLE "McocMiniNode" ADD COLUMN IF NOT EXISTS "slot" TEXT`,
+  `CREATE TABLE IF NOT EXISTS "ManagerPortalHiddenCategory" (
+    "category"     TEXT NOT NULL,
+    "hiddenById"   TEXT NOT NULL,
+    "hiddenByName" TEXT NOT NULL,
+    "hiddenAt"     TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "ManagerPortalHiddenCategory_pkey" PRIMARY KEY ("category")
+  )`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

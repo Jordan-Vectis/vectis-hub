@@ -1,8 +1,9 @@
 "use client"
 
-import { Fragment, useEffect, useState } from "react"
+import { Fragment, useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { auctionTypeEmoji, auctionTypeLabel } from "@/lib/auction-types"
+import { toggleHiddenBcCategory } from "@/lib/actions/manager-portal"
 import { fmtPace, daysToSale, paceFor, targetsFor, SALE_TARGETS } from "@/lib/sale-projection"
 
 export type StockAge = {
@@ -11,7 +12,7 @@ export type StockAge = {
   newestMs: number | null
   totesSampled: number      // distinct totes sampled (the last 10 worked)
   dated: number             // how many of those resolved to a date
-  totes: { tote: string; dateMs: number | null; lots: number; reason: string | null; source: string | null }[]
+  totes: { tote: string; dateMs: number | null; lots: number; reason: string | null; source: string | null; location?: string | null; estimated?: boolean }[]
 }
 
 export type SaleRow = {
@@ -49,9 +50,21 @@ export type DeptGroup = {
 export type BcCategoryRow = {
   category: string
   stock: StockAge | null
+  poolTotes: number        // catalogued totes BC holds for this category
+  estimatedCount: number   // of the sample, how many dates are estimated
   catalogued: number
   outstanding: number
   lastCataloguedMs: number | null
+}
+
+export type BcDiagnostics = {
+  endpoint: string
+  anchors: number
+  loggedTotes: number
+  sampled: number
+  estimated: number
+  shortfall: number
+  note: string
 }
 
 type SaleBc = { bc: number; overlap: number; combined: number }
@@ -65,6 +78,8 @@ const fmtDate = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: 
 // Tote dates carry the year — they can be months or years old, and a bare
 // "31 Dec" hid a year-1 date from Business Central for a whole round.
 const fmtToteDate = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" })
+// "Using totes from" shows a single average MONTH, e.g. "Mar 2026".
+const fmtMonth = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { month: "short", year: "numeric" })
 const fmtSaleDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" }) : "—"
 
@@ -93,9 +108,30 @@ function lagTone(fromMs: number, nowMs: number) {
   return { text: "text-gray-500 dark:text-gray-400", bar: "bg-gray-400 dark:bg-gray-500", pct: Math.max(6, (days / LAG_RED) * 100) }
 }
 
-export default function DepartmentsTable({ groups, bcCategories, migrated, anyDepartments, nowMs }: {
+// Shape returned by /api/manager-portal/bc-tote-dates.
+type BcLiveCategory = {
+  category: string
+  monthMs: number | null
+  oldestMs: number | null
+  newestMs: number | null
+  sampled: number
+  dated: number
+  totes: { tote: string; dateMs: number | null; location?: string | null; estimated?: boolean }[]
+  poolTotes?: number
+  estimatedCount?: number
+  catalogued: number
+  outstanding: number
+  lastCataloguedMs: number | null
+}
+export type HiddenBcCategory = { category: string; hiddenByName: string }
+type BcLiveState =
+  | { status: "loading" }
+  | { status: "disconnected"; hidden: HiddenBcCategory[]; isAdmin: boolean }
+  | { status: "error" }
+  | { status: "ready"; categories: BcCategoryRow[]; hidden: HiddenBcCategory[]; isAdmin: boolean; diagnostics: BcDiagnostics | null }
+
+export default function DepartmentsTable({ groups, migrated, anyDepartments, nowMs }: {
   groups: DeptGroup[]
-  bcCategories: BcCategoryRow[]
   migrated: boolean
   anyDepartments: boolean
   nowMs: number
@@ -103,6 +139,9 @@ export default function DepartmentsTable({ groups, bcCategories, migrated, anyDe
   // Same source as the Sales tab, so a sale's lot total reads identically on
   // both. Without a BC connection we fall back to the Hub count.
   const [bc, setBc] = useState<BcState>({ status: "loading" })
+  // The BC-only category table is fetched LIVE from BC's Receipt Totes, so it
+  // loads async with its own state.
+  const [bcCats, setBcCats] = useState<BcLiveState>({ status: "loading" })
   const [openTotes, setOpenTotes] = useState<string | null>(null)   // sale id
   const [openDept, setOpenDept]   = useState<string | null>(null)   // department id
 
@@ -119,6 +158,53 @@ export default function DepartmentsTable({ groups, bcCategories, migrated, anyDe
       .catch(() => { if (!cancelled) setBc({ status: "error" }) })
     return () => { cancelled = true }
   }, [])
+
+  // Re-run after hiding/restoring a category — the data comes from an API route,
+  // so a router refresh wouldn't pick the change up.
+  const loadBcCats = useCallback((cancelledRef?: { current: boolean }) => {
+    const cancelled = () => cancelledRef?.current === true
+    fetch("/api/manager-portal/bc-tote-dates")
+      .then(r => r.json())
+      .then((d: { connected?: boolean; categories?: BcLiveCategory[]; hidden?: HiddenBcCategory[]; isAdmin?: boolean; diagnostics?: BcDiagnostics }) => {
+        if (cancelled()) return
+        const hidden  = d?.hidden ?? []
+        const isAdmin = d?.isAdmin === true
+        if (d?.connected === false) { setBcCats({ status: "disconnected", hidden, isAdmin }); return }
+        if (!d?.categories) { setBcCats({ status: "error" }); return }
+        const rows: BcCategoryRow[] = d.categories.map(c => ({
+          category:         c.category,
+          poolTotes:        c.poolTotes ?? 0,
+          estimatedCount:   c.estimatedCount ?? 0,
+          catalogued:       c.catalogued,
+          outstanding:      c.outstanding,
+          lastCataloguedMs: c.lastCataloguedMs,
+          stock: c.sampled > 0 ? {
+            medianMs:     c.monthMs,
+            oldestMs:     c.oldestMs,
+            newestMs:     c.newestMs,
+            totesSampled: c.sampled,
+            dated:        c.dated,
+            totes: c.totes.map(t => ({
+              tote:      t.tote,
+              dateMs:    t.dateMs,
+              lots:      1,
+              reason:    t.dateMs == null ? "no check-in date in BC" : null,
+              source:    t.dateMs != null ? "bc" : null,
+              location:  t.location ?? null,
+              estimated: t.estimated,
+            })),
+          } : null,
+        }))
+        setBcCats({ status: "ready", categories: rows, hidden, isAdmin, diagnostics: d?.diagnostics ?? null })
+      })
+      .catch(() => { if (!cancelled()) setBcCats({ status: "error" }) })
+  }, [])
+
+  useEffect(() => {
+    const ref = { current: false }
+    loadBcCats(ref)
+    return () => { ref.current = true }
+  }, [loadBcCats])
 
   /** The number the manager actually watches: Hub ∪ BC where BC is available. */
   function totalFor(row: SaleRow): { total: number; combined: boolean } {
@@ -172,8 +258,32 @@ export default function DepartmentsTable({ groups, bcCategories, migrated, anyDe
         />
       )}
 
-      {/* ── Business Central on its own terms — nothing from our system ── */}
-      {bcCategories.length > 0 && <BcCategoryTable rows={bcCategories} nowMs={nowMs} />}
+      {/* ── Business Central on its own terms — live from Receipt Totes ── */}
+      {bcCats.status === "loading" && (
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 mb-5 text-sm text-gray-500 dark:text-gray-400">
+          Loading the Business Central categories live from Receipt Totes…
+        </div>
+      )}
+      {bcCats.status === "disconnected" && (
+        <div className="rounded-xl border border-amber-300 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 mb-5 text-sm text-amber-800 dark:text-amber-300">
+          Business Central isn&apos;t connected, so the BC category table can&apos;t be shown. Connect BC from the top bar.
+        </div>
+      )}
+      {bcCats.status === "error" && (
+        <div className="rounded-xl border border-red-300 dark:border-red-800/60 bg-red-50 dark:bg-red-950/20 px-4 py-3 mb-5 text-sm text-red-700 dark:text-red-300">
+          Couldn&apos;t load the Business Central categories. Try reloading.
+        </div>
+      )}
+      {bcCats.status === "ready" && (bcCats.categories.length > 0 || bcCats.hidden.length > 0) && (
+        <BcCategoryTable
+          rows={bcCats.categories}
+          hidden={bcCats.hidden}
+          isAdmin={bcCats.isAdmin}
+          diagnostics={bcCats.diagnostics}
+          onChanged={loadBcCats}
+          nowMs={nowMs}
+        />
+      )}
 
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
         Projected dates are when each sale reaches {SALE_TARGETS.join(", ")} lots at its current pace
@@ -548,27 +658,117 @@ function ToteSummary({ title, subtitle, rows, nowMs }: {
 }
 
 /**
- * Business Central on its own terms. NOTHING in here comes from our system — no
- * departments, no CatalogueAuction, no CatalogueLot. Rows are BC's own main
- * categories (EVA_ArticleCategoryCode) and every category BC holds appears,
- * whether or not we have a sale or department for it.
+ * Business Central on its own terms — no departments, no CatalogueAuction, no
+ * CatalogueLot. Rows are BC's own article categories, straight off the Receipt
+ * Totes feed. "Using totes from" is the median check-in month of the newest 10
+ * totes sat on a cataloguing bench in each category — the same view Jordan gets
+ * in BC by filtering Receipt Totes to a category + Location BENCH*
+ * (see /api/manager-portal/bc-tote-dates).
  */
-function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number }) {
+function BcCategoryTable({ rows, hidden, isAdmin, diagnostics, onChanged, nowMs }: {
+  rows: BcCategoryRow[]
+  hidden: HiddenBcCategory[]
+  isAdmin: boolean
+  diagnostics: BcDiagnostics | null
+  onChanged: () => void
+  nowMs: number
+}) {
+  const [showDiag, setShowDiag] = useState(false)
   const [open, setOpen] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)      // category being toggled
+  const [pdfBusy, setPdfBusy] = useState<string | null>(null) // "plain" | "totes"
+  const [error, setError] = useState<string | null>(null)
+
+  // ⚠ Fetched, not a plain <a href>. The PDF takes a few seconds to build, and a
+  // bare link gave NO feedback and NO error — clicking it just looked like the
+  // page reloading and doing nothing (2026-07-30). This shows progress and puts
+  // any server error in the header, same lesson as the Hide button.
+  async function exportPdf(withTotes: boolean) {
+    const which = withTotes ? "totes" : "plain"
+    setError(null)
+    setPdfBusy(which)
+    try {
+      const res = await fetch(`/api/manager-portal/bc-tote-dates/pdf${withTotes ? "?totes=1" : ""}`)
+      if (!res.ok) {
+        let msg = `the export failed (${res.status})`
+        try {
+          const j = await res.json()
+          if (j?.error) msg = String(j.error)
+        } catch { /* not JSON — keep the status */ }
+        setError(msg)
+        return
+      }
+      const blob = await res.blob()
+      if (blob.size === 0) { setError("the export came back empty"); return }
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `using-totes-from-${new Date().toISOString().slice(0, 10)}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 10_000)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "the export failed")
+    } finally {
+      setPdfBusy(null)
+    }
+  }
   const TH = "text-left font-medium py-2 px-3 text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400"
+
+  async function toggle(category: string, currentlyHidden: boolean) {
+    if (!currentlyHidden && !confirm(
+      `Hide ${category} from this table?\n\nIt's display-only — nothing about the category, its totes or its items changes, ` +
+      `and you can put it back from the bottom of this table.`,
+    )) return
+    setError(null)
+    setBusy(category)
+    const res = await toggleHiddenBcCategory(category)
+    setBusy(null)
+    if (!res.ok) { setError(res.error ?? "Something went wrong"); return }
+    onChanged()
+  }
 
   return (
     <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden mb-5">
-      <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-800">
-        <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-          Using totes from — Business Central categories
-        </h2>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          Straight from Business Central and nothing else — grouped by BC&apos;s own main category,
-          showing every category it holds whether or not we have a sale or department for it.
-          &ldquo;Using totes from&rdquo; is the newest tote BC has marked catalogued — where
-          cataloguing has reached. Furthest behind first.
-        </p>
+      <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-800 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+            Using totes from — Business Central categories
+          </h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            Live from Business Central, grouped by BC&apos;s own article category. &ldquo;Using totes
+            from&rdquo; is the middle (median) check-in month of the newest 10 totes ticked as catalogued
+            in BC — where cataloguing has got to. Furthest behind first. Dates marked ~ are estimated
+            (those totes predate BC&apos;s change logging).
+          </p>
+          {/* Hide/restore failures surface HERE, next to the controls — the old
+              spot was under 19 rows of table where nobody would see it. */}
+          {error && (
+            <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
+              Couldn&apos;t change that: {error}
+            </p>
+          )}
+        </div>
+        {/* Export mirrors exactly what's on screen; hidden categories are left out. */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={() => exportPdf(false)}
+            disabled={pdfBusy !== null}
+            title="Download this table as a PDF (hidden categories are left out)"
+            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-50 transition-colors whitespace-nowrap"
+          >
+            {pdfBusy === "plain" ? "Preparing…" : "⬇ Export PDF"}
+          </button>
+          <button
+            onClick={() => exportPdf(true)}
+            disabled={pdfBusy !== null}
+            title="PDF including the 10 totes behind each category's month"
+            className="text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-50 transition-colors whitespace-nowrap"
+          >
+            {pdfBusy === "totes" ? "Preparing…" : "+ totes"}
+          </button>
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -588,19 +788,39 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
               const tone   = median != null ? lagTone(median, nowMs) : null
               return (
                 <Fragment key={r.category}>
-                  <tr className="border-b border-gray-50 dark:border-gray-800/50 last:border-0">
-                    <td className="py-2.5 px-3">
+                  <tr className="border-b border-gray-50 dark:border-gray-800/50 last:border-0 group">
+                    <td className="py-2.5 px-3 whitespace-nowrap">
                       <span className="font-mono font-semibold text-gray-900 dark:text-white">{r.category}</span>
+                      {isAdmin && (
+                        <button
+                          onClick={() => toggle(r.category, false)}
+                          disabled={busy === r.category}
+                          title={`Hide ${r.category} from this table`}
+                          className="ml-2 text-[11px] font-semibold text-gray-400 dark:text-gray-600 hover:text-red-500 disabled:opacity-50 transition-colors"
+                        >
+                          {busy === r.category ? "…" : "✕ Hide"}
+                        </button>
+                      )}
                     </td>
                     <td className="py-2.5 px-3 whitespace-nowrap">
                       {median != null ? (
-                        <button onClick={() => setOpen(open === r.category ? null : r.category)} className="group text-left">
-                          <span className="font-semibold text-gray-900 dark:text-white group-hover:underline">{fmtToteDate(median)}</span>
+                        <button onClick={() => setOpen(open === r.category ? null : r.category)} className="group text-left" title={`Median check-in month of the ${r.stock?.totesSampled ?? 0} newest tote(s) on a bench — click to list them`}>
+                          <span className="font-semibold text-gray-900 dark:text-white group-hover:underline">{fmtMonth(median)}</span>
+                          <span
+                            className={`ml-1.5 text-[11px] ${(r.stock?.totesSampled ?? 0) < 10 ? "text-amber-500" : "text-gray-400 dark:text-gray-500"}`}
+                            title={
+                              (r.stock?.totesSampled ?? 0) < 10
+                                ? `Only ${r.stock?.totesSampled ?? 0} tote(s) available — BC's web service doesn't return totes already ticked Catalogued, so recent finished work is invisible here`
+                                : "Based on the full sample of 10 totes"
+                            }
+                          >
+                            {r.stock?.totesSampled ?? 0} tote{(r.stock?.totesSampled ?? 0) === 1 ? "" : "s"}
+                          </span>
                           <span className="text-gray-400 dark:text-gray-500 ml-1 text-xs">{open === r.category ? "▾" : "▸"}</span>
                         </button>
                       ) : (
                         <span className="text-xs text-gray-400 dark:text-gray-500">
-                          {r.stock ? "no dates yet — run totes sync" : "nothing catalogued"}
+                          {r.stock ? "no check-in dates on those totes" : "nothing catalogued yet"}
                         </span>
                       )}
                     </td>
@@ -632,14 +852,20 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                     <tr className="border-b border-gray-50 dark:border-gray-800/50">
                       <td colSpan={6} className="px-3 py-3 bg-gray-50/60 dark:bg-gray-800/25">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                          Newest {r.stock.totesSampled} tote{r.stock.totesSampled === 1 ? "" : "s"} Business Central has
-                          marked catalogued in {r.category}, newest first — the first is where cataloguing has reached.
+                          The newest {r.stock.totesSampled} tote{r.stock.totesSampled === 1 ? "" : "s"} catalogued in {r.category},
+                          by check-in date. The month above is the middle (median) of these.
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           {r.stock.totes.map(t => (
                             <span
                               key={t.tote}
-                              title={`Tote ${t.tote}${t.reason ? ` — ${t.reason}` : " — created in Business Central"}`}
+                              title={`Tote ${t.tote}${t.location ? ` on ${t.location}` : ""}${
+                                t.reason
+                                  ? ` — ${t.reason}`
+                                  : t.estimated
+                                    ? " — estimated from neighbouring tote numbers (this tote predates BC's change logging)"
+                                    : " — checked in on this date (from BC's change log)"
+                              }`}
                               className={`text-xs px-2 py-1 rounded-lg border whitespace-nowrap ${
                                 t.dateMs == null
                                   ? "border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500"
@@ -648,8 +874,8 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                             >
                               <b className="font-mono font-semibold">{t.tote}</b>
                               <span className="opacity-60 mx-1">·</span>
-                              {t.dateMs == null ? (t.reason ?? "no date") : fmtToteDate(t.dateMs)}
-                              {t.lots > 1 && <span className="opacity-60 ml-1.5">×{t.lots}</span>}
+                              {t.dateMs == null ? (t.reason ?? "no date") : `${t.estimated ? "~" : ""}${fmtToteDate(t.dateMs)}`}
+                              {t.location && <span className="opacity-50 ml-1.5">{t.location}</span>}
                             </span>
                           ))}
                         </div>
@@ -662,6 +888,92 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
           </tbody>
         </table>
       </div>
+
+      {/* ── Diagnostics — why a category is thin, without guesswork ── */}
+      {diagnostics && (
+        <div className="px-4 py-2.5 border-t border-gray-100 dark:border-gray-800">
+          <button
+            onClick={() => setShowDiag(v => !v)}
+            className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+          >
+            {showDiag ? "▾" : "▸"} Where these numbers come from
+            {diagnostics.shortfall > 0 && (
+              <span className="ml-1.5 text-amber-500">
+                — {diagnostics.shortfall} categor{diagnostics.shortfall === 1 ? "y has" : "ies have"} fewer than 10 totes
+              </span>
+            )}
+          </button>
+          {showDiag && (
+            <div className="mt-2.5 text-xs text-gray-600 dark:text-gray-400 space-y-2">
+              <p>
+                Totes come from Business Central&apos;s full receipt-tote table via{" "}
+                <code className="font-mono">{diagnostics.endpoint}</code>. Dates come from BC&apos;s change
+                log — <b>{diagnostics.loggedTotes.toLocaleString("en-GB")}</b> logged tote creations, of which{" "}
+                <b>{(diagnostics.sampled - diagnostics.estimated).toLocaleString("en-GB")}</b> of{" "}
+                <b>{diagnostics.sampled.toLocaleString("en-GB")}</b> sampled totes are real dates
+                {diagnostics.estimated > 0 && <> and <b>{diagnostics.estimated}</b> are estimated (shown with ~)</>}.
+              </p>
+              <p className="text-amber-700 dark:text-amber-400">⚠ {diagnostics.note}</p>
+              <div className="overflow-x-auto">
+                <table className="text-xs">
+                  <thead>
+                    <tr className="text-gray-500 dark:text-gray-400">
+                      <th className="text-left font-medium pr-4 pb-1">Category</th>
+                      <th className="text-right font-medium pr-4 pb-1">Totes catalogued in BC</th>
+                      <th className="text-right font-medium pr-4 pb-1">Used for the month</th>
+                      <th className="text-right font-medium pr-4 pb-1">Dates estimated</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...rows]
+                      .sort((a, b) => (a.stock?.totesSampled ?? 0) - (b.stock?.totesSampled ?? 0))
+                      .map(r => (
+                        <tr key={r.category}>
+                          <td className="pr-4 py-0.5 font-mono text-gray-700 dark:text-gray-300">{r.category}</td>
+                          <td className="pr-4 py-0.5 text-right tabular-nums">{r.poolTotes.toLocaleString("en-GB")}</td>
+                          <td className={`pr-4 py-0.5 text-right tabular-nums ${(r.stock?.totesSampled ?? 0) < 10 ? "text-amber-500" : ""}`}>
+                            {r.stock?.totesSampled ?? 0}
+                          </td>
+                          <td className="pr-4 py-0.5 text-right tabular-nums">
+                            {r.estimatedCount > 0 ? r.estimatedCount : <span className="opacity-40">—</span>}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Hidden categories (admin) — display-only, always restorable ── */}
+      {isAdmin && hidden.length > 0 && (
+        <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-800/25">
+          <p className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1.5">
+            Hidden from this table ({hidden.length})
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {hidden.map(h => (
+              <span
+                key={h.category}
+                className="text-xs px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 whitespace-nowrap"
+              >
+                <b className="font-mono font-semibold text-gray-700 dark:text-gray-300">{h.category}</b>
+                <span className="opacity-60 ml-1.5">hidden by {h.hiddenByName}</span>
+                <button
+                  onClick={() => toggle(h.category, true)}
+                  disabled={busy === h.category}
+                  title={`Show ${h.category} in this table again`}
+                  className="ml-2 font-semibold text-[#2AB4A6] hover:underline disabled:opacity-50"
+                >
+                  {busy === h.category ? "…" : "↺ Restore"}
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   )
 }

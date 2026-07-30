@@ -16,6 +16,13 @@ function bcDate(v: unknown): Date | null {
   return d.getUTCFullYear() < 1990 ? null : d
 }
 
+// ⚠ BC returns booleans as strings sometimes ("true"/"Yes"). The old
+// `x === true || x === 1` stored `catalogued` as FALSE for every tote when BC
+// sent a string — matching parseBool in the receipt-lines sync fixes that.
+function bcBool(v: unknown): boolean {
+  return v === true || v === 1 || v === "true" || v === "Yes" || v === "1"
+}
+
 // POST /api/warehouse/sync/totes-active
 // Syncs Receipt_Totes_Excel — active (uncatalogued) totes only, with richer data:
 // precise location, vendor info, reserve status, catalogued flag.
@@ -92,7 +99,7 @@ export async function POST(req: NextRequest) {
             vendorNo:   r.EVA_TOT_VendorNo   ?? null,
             vendorName: r.EVA_TOT_VendorName ?? null,
             status:     r.EVA_TOT_ReserveStatus ?? null,
-            catalogued: r.EVA_TOT_Catalogued === true || r.EVA_TOT_Catalogued === 1,
+            catalogued: bcBool(r.EVA_TOT_Catalogued),
             ...(hasBcCreatedAt ? { bcCreatedAt: bcDate(r.SystemCreatedAt) } : {}),
             syncedAt:   new Date(),
           },
@@ -103,7 +110,7 @@ export async function POST(req: NextRequest) {
             vendorNo:   r.EVA_TOT_VendorNo   ?? null,
             vendorName: r.EVA_TOT_VendorName ?? null,
             status:     r.EVA_TOT_ReserveStatus ?? null,
-            catalogued: r.EVA_TOT_Catalogued === true || r.EVA_TOT_Catalogued === 1,
+            catalogued: bcBool(r.EVA_TOT_Catalogued),
             ...(hasBcCreatedAt ? { bcCreatedAt: bcDate(r.SystemCreatedAt) } : {}),
           },
         }))

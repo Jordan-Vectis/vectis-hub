@@ -2145,6 +2145,18 @@ function DbExplorerTab() {
               BC Marketing) will appear empty until the next sync completes.
               Catalogue lots and other non-BC data are untouched. Admin only.
             </p>
+            {/* Items come back on the next sync; tote check-in dates do NOT — BC
+                only publishes them while a tote is un-ticked. Don't let an admin
+                wipe them believing a sync will restore it. */}
+            {(clearTarget === "totes" || clearTarget === "both") && (
+              <p className="text-xs text-amber-300 mt-2">
+                ⚠ Totes are <b>not fully recoverable</b>. Each tote&apos;s check-in date and receipt
+                only come from Business Central while that tote is <i>not</i> ticked as catalogued —
+                so for any tote already ticked, our row is the last copy and the date cannot be
+                fetched again. Clearing totes will permanently lose those dates, which the Manager
+                Portal&apos;s &ldquo;Using totes from&rdquo; figures rely on.
+              </p>
+            )}
           </div>
 
           <div>

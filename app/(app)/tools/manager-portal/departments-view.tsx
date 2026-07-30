@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import DepartmentsTable, { type DeptGroup, type BcCategoryRow } from "./departments-table"
+import DepartmentsTable, { type DeptGroup } from "./departments-table"
 
 // Manager Portal → Departments.
 // Rolls cataloguing up per department. A department owns a set of auction types,
@@ -101,61 +101,6 @@ export default async function DepartmentsView() {
     }
   }
 
-  // ── Business Central on its own terms ──────────────────────────────────────
-  // Nothing to do with our departments, our sales or our lots. Grouped by BC's
-  // OWN main category (EVA_ArticleCategoryCode), covering every category BC
-  // holds — including ones we have no sale or department for.
-  //
-  // ⚠ "Using totes from" is the FRONTIER — the created date of the newest tote
-  // that BC has marked catalogued in that category. That's literally what you
-  // read off BC's Receipt Totes screen: sort by Created At, and the top ticked
-  // row is where cataloguing has reached. An earlier version took a MEDIAN of
-  // the last-10 catalogued receipts, which dragged the date weeks too far back.
-  //
-  // Built from WarehouseTote (= Receipt_Totes_Excel, which keeps the per-tote
-  // Catalogued flag + SystemCreatedAt as bcCreatedAt), joined to a per-receipt
-  // category taken from the items on that receipt (the tote table has no
-  // category of its own). We keep the newest 10 catalogued totes per category
-  // for the expandable list; row 1 is the frontier.
-  let bcFrontierRows: { category: string; tote: string; d: Date | null }[] = []
-  let bcCatTotals: { category: string; catalogued: number; outstanding: number; lastAt: Date | null }[] = []
-  try {
-    [bcFrontierRows, bcCatTotals] = await Promise.all([
-      prisma.$queryRaw<{ category: string; tote: string; d: Date | null }[]>`
-        WITH receipt_cat AS (
-          SELECT upper(btrim("receiptNo")) AS receipt, MAX(btrim("category")) AS category
-          FROM "WarehouseItem"
-          WHERE "receiptNo" IS NOT NULL AND btrim("receiptNo") <> ''
-            AND "category" IS NOT NULL AND btrim("category") <> ''
-          GROUP BY 1
-        )
-        SELECT category, tote, d FROM (
-          SELECT rc.category           AS category,
-                 upper(btrim(t."toteNo")) AS tote,
-                 t."bcCreatedAt"       AS d,
-                 ROW_NUMBER() OVER (PARTITION BY rc.category ORDER BY t."bcCreatedAt" DESC)::int AS rn
-          FROM "WarehouseTote" t
-          JOIN receipt_cat rc ON rc.receipt = upper(btrim(t."receiptNo"))
-          WHERE t."catalogued" = true
-            -- ⚠ BC sends an empty date as 0001-01-01, which is a VALID date
-            AND t."bcCreatedAt" IS NOT NULL AND t."bcCreatedAt" >= DATE '1990-01-01'
-        ) x WHERE rn <= 10
-        ORDER BY category, rn`,
-      prisma.$queryRaw<{ category: string; catalogued: number; outstanding: number; lastAt: Date | null }[]>`
-        SELECT btrim(w."category")                                          AS "category",
-               COUNT(*) FILTER (WHERE w."catalogued" = true)::int            AS "catalogued",
-               COUNT(*) FILTER (WHERE w."catalogued" IS DISTINCT FROM true)::int AS "outstanding",
-               MAX(w."cataloguedAt") FILTER (WHERE w."cataloguedAt" >= DATE '1990-01-01') AS "lastAt"
-        FROM "WarehouseItem" w
-        WHERE w."category" IS NOT NULL AND btrim(w."category") <> ''
-        GROUP BY 1`,
-    ])
-  } catch {
-    // bcCreatedAt column / catalogued flag arrive with Run Migrations + a totes
-    // sync; until then the BC table simply shows no dates.
-    bcFrontierRows = []
-    bcCatTotals    = []
-  }
 
   // Resolve each tote to a date. A tote reference can be either an internal
   // warehouse container (its id IS the tote number, and createdAt = when it was
@@ -278,12 +223,6 @@ export default async function DepartmentsView() {
     totesBySale.set(r.auctionId, [...(totesBySale.get(r.auctionId) ?? []), { tote: r.tote, lotCount: r.lotCount }])
   }
 
-  // Newest catalogued totes per BC category, rn order (row 1 = the frontier).
-  const bcTotesByCategory = new Map<string, { tote: string; dateMs: number | null }[]>()
-  for (const r of bcFrontierRows) {
-    const dateMs = r.d ? new Date(r.d).getTime() : null
-    bcTotesByCategory.set(r.category, [...(bcTotesByCategory.get(r.category) ?? []), { tote: r.tote, dateMs }])
-  }
 
   const median = (xs: number[]): number => {
     const s = [...xs].sort((a, b) => a - b)
@@ -341,46 +280,6 @@ export default async function DepartmentsView() {
   /** From our Hub lots — what the cataloguers recorded. */
   const stockFor = (auctionIds: string[]) => stockFrom(auctionIds.map(id => totesBySale.get(id) ?? []))
 
-  // ── The BC-only table: one row per BC category, our system not involved ──
-  // "Using totes from" = the FRONTIER: the created date of the newest catalogued
-  // tote (the totes come newest-first, so it's the first entry). medianMs holds
-  // that frontier so the shared StockAge shape + lag colours work unchanged.
-  function bcStockFor(totes: { tote: string; dateMs: number | null }[]): BcCategoryRow["stock"] {
-    if (totes.length === 0) return null
-    const dated = totes.map(t => t.dateMs).filter((d): d is number => d != null)
-    const frontier = dated.length > 0 ? Math.max(...dated) : null
-    return {
-      medianMs:     frontier,
-      oldestMs:     dated.length > 0 ? Math.min(...dated) : null,
-      newestMs:     frontier,
-      totesSampled: totes.length,
-      dated:        dated.length,
-      totes: totes.map(t => ({
-        tote:   t.tote,
-        dateMs: t.dateMs,
-        lots:   1,
-        reason: t.dateMs != null ? null : "no created date yet — run the totes sync",
-        source: t.dateMs != null ? "tote" : null,
-      })),
-    }
-  }
-
-  const bcCategories: BcCategoryRow[] = bcCatTotals
-    .map(c => ({
-      category:    c.category,
-      stock:       bcStockFor(bcTotesByCategory.get(c.category) ?? []),
-      catalogued:  Number(c.catalogued),
-      outstanding: Number(c.outstanding),
-      lastCataloguedMs: c.lastAt ? new Date(c.lastAt).getTime() : null,
-    }))
-    // Furthest behind first; categories with no dated totes sink to the bottom.
-    .sort((a, b) => {
-      const am = a.stock?.medianMs, bm = b.stock?.medianMs
-      if (am == null && bm == null) return a.category.localeCompare(b.category)
-      if (am == null) return 1
-      if (bm == null) return -1
-      return am - bm
-    })
 
   // Active sales, plus sales finished in the last three months. There is no
   // "completed at" timestamp — `complete` is just a flag — so recency uses the
@@ -456,7 +355,6 @@ export default async function DepartmentsView() {
   return (
     <DepartmentsTable
       groups={groups}
-      bcCategories={bcCategories}
       migrated={migrated}
       anyDepartments={departments.length > 0}
       nowMs={Date.now()}
