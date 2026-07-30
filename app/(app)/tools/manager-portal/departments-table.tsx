@@ -705,6 +705,13 @@ function BcCategoryTable({ rows, hidden, isAdmin, diagnostics, onChanged, nowMs 
             in BC — where cataloguing has got to. Furthest behind first. Dates marked ~ are estimated
             (those totes predate BC&apos;s change logging).
           </p>
+          {/* Hide/restore failures surface HERE, next to the controls — the old
+              spot was under 19 rows of table where nobody would see it. */}
+          {error && (
+            <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
+              Couldn&apos;t change that: {error}
+            </p>
+          )}
         </div>
         {/* Export mirrors exactly what's on screen, hidden categories included. */}
         <div className="flex items-center gap-1.5 shrink-0">
@@ -750,7 +757,7 @@ function BcCategoryTable({ rows, hidden, isAdmin, diagnostics, onChanged, nowMs 
                           onClick={() => toggle(r.category, false)}
                           disabled={busy === r.category}
                           title={`Hide ${r.category} from this table`}
-                          className="ml-2 text-[11px] font-semibold text-gray-300 dark:text-gray-600 hover:text-red-500 disabled:opacity-50 transition-colors md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
+                          className="ml-2 text-[11px] font-semibold text-gray-400 dark:text-gray-600 hover:text-red-500 disabled:opacity-50 transition-colors"
                         >
                           {busy === r.category ? "…" : "✕ Hide"}
                         </button>
@@ -928,7 +935,6 @@ function BcCategoryTable({ rows, hidden, isAdmin, diagnostics, onChanged, nowMs 
           </div>
         </div>
       )}
-      {error && <p className="px-4 pb-3 text-xs text-red-500">{error}</p>}
     </section>
   )
 }
