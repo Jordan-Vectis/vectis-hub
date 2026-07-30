@@ -50,9 +50,19 @@ export type DeptGroup = {
 export type BcCategoryRow = {
   category: string
   stock: StockAge | null
+  onBench: number       // totes BC's feed shows on a bench for this category
+  inFeed: number        // totes the feed returned for this category at all
   catalogued: number
   outstanding: number
   lastCataloguedMs: number | null
+}
+
+export type BcDiagnostics = {
+  endpoint: string
+  feedRows: number
+  categories: number
+  shortfall: number
+  note: string
 }
 
 type SaleBc = { bc: number; overlap: number; combined: number }
@@ -106,6 +116,7 @@ type BcLiveCategory = {
   dated: number
   totes: { tote: string; dateMs: number | null; location?: string | null }[]
   onBench?: number
+  inFeed?: number
   catalogued: number
   outstanding: number
   lastCataloguedMs: number | null
@@ -115,7 +126,7 @@ type BcLiveState =
   | { status: "loading" }
   | { status: "disconnected"; hidden: HiddenBcCategory[]; isAdmin: boolean }
   | { status: "error" }
-  | { status: "ready"; categories: BcCategoryRow[]; hidden: HiddenBcCategory[]; isAdmin: boolean }
+  | { status: "ready"; categories: BcCategoryRow[]; hidden: HiddenBcCategory[]; isAdmin: boolean; diagnostics: BcDiagnostics | null }
 
 export default function DepartmentsTable({ groups, migrated, anyDepartments, nowMs }: {
   groups: DeptGroup[]
@@ -152,7 +163,7 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
     const cancelled = () => cancelledRef?.current === true
     fetch("/api/manager-portal/bc-tote-dates")
       .then(r => r.json())
-      .then((d: { connected?: boolean; categories?: BcLiveCategory[]; hidden?: HiddenBcCategory[]; isAdmin?: boolean }) => {
+      .then((d: { connected?: boolean; categories?: BcLiveCategory[]; hidden?: HiddenBcCategory[]; isAdmin?: boolean; diagnostics?: BcDiagnostics }) => {
         if (cancelled()) return
         const hidden  = d?.hidden ?? []
         const isAdmin = d?.isAdmin === true
@@ -160,6 +171,8 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
         if (!d?.categories) { setBcCats({ status: "error" }); return }
         const rows: BcCategoryRow[] = d.categories.map(c => ({
           category:         c.category,
+          onBench:          c.onBench ?? 0,
+          inFeed:           c.inFeed ?? 0,
           catalogued:       c.catalogued,
           outstanding:      c.outstanding,
           lastCataloguedMs: c.lastCataloguedMs,
@@ -179,7 +192,7 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
             })),
           } : null,
         }))
-        setBcCats({ status: "ready", categories: rows, hidden, isAdmin })
+        setBcCats({ status: "ready", categories: rows, hidden, isAdmin, diagnostics: d?.diagnostics ?? null })
       })
       .catch(() => { if (!cancelled()) setBcCats({ status: "error" }) })
   }, [])
@@ -263,6 +276,7 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
           rows={bcCats.categories}
           hidden={bcCats.hidden}
           isAdmin={bcCats.isAdmin}
+          diagnostics={bcCats.diagnostics}
           onChanged={loadBcCats}
           nowMs={nowMs}
         />
@@ -648,13 +662,15 @@ function ToteSummary({ title, subtitle, rows, nowMs }: {
  * in BC by filtering Receipt Totes to a category + Location BENCH*
  * (see /api/manager-portal/bc-tote-dates).
  */
-function BcCategoryTable({ rows, hidden, isAdmin, onChanged, nowMs }: {
+function BcCategoryTable({ rows, hidden, isAdmin, diagnostics, onChanged, nowMs }: {
   rows: BcCategoryRow[]
   hidden: HiddenBcCategory[]
   isAdmin: boolean
+  diagnostics: BcDiagnostics | null
   onChanged: () => void
   nowMs: number
 }) {
+  const [showDiag, setShowDiag] = useState(false)
   const [open, setOpen] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)   // category being toggled
   const [error, setError] = useState<string | null>(null)
@@ -719,8 +735,18 @@ function BcCategoryTable({ rows, hidden, isAdmin, onChanged, nowMs }: {
                     </td>
                     <td className="py-2.5 px-3 whitespace-nowrap">
                       {median != null ? (
-                        <button onClick={() => setOpen(open === r.category ? null : r.category)} className="group text-left" title="Median check-in month of the newest 10 totes on a bench — click to list them">
+                        <button onClick={() => setOpen(open === r.category ? null : r.category)} className="group text-left" title={`Median check-in month of the ${r.stock?.totesSampled ?? 0} newest tote(s) on a bench — click to list them`}>
                           <span className="font-semibold text-gray-900 dark:text-white group-hover:underline">{fmtMonth(median)}</span>
+                          <span
+                            className={`ml-1.5 text-[11px] ${(r.stock?.totesSampled ?? 0) < 10 ? "text-amber-500" : "text-gray-400 dark:text-gray-500"}`}
+                            title={
+                              (r.stock?.totesSampled ?? 0) < 10
+                                ? `Only ${r.stock?.totesSampled ?? 0} tote(s) available — BC's web service doesn't return totes already ticked Catalogued, so recent finished work is invisible here`
+                                : "Based on the full sample of 10 totes"
+                            }
+                          >
+                            {r.stock?.totesSampled ?? 0} tote{(r.stock?.totesSampled ?? 0) === 1 ? "" : "s"}
+                          </span>
                           <span className="text-gray-400 dark:text-gray-500 ml-1 text-xs">{open === r.category ? "▾" : "▸"}</span>
                         </button>
                       ) : (
@@ -787,6 +813,59 @@ function BcCategoryTable({ rows, hidden, isAdmin, onChanged, nowMs }: {
           </tbody>
         </table>
       </div>
+
+      {/* ── Diagnostics — why a category is thin, without guesswork ── */}
+      {diagnostics && (
+        <div className="px-4 py-2.5 border-t border-gray-100 dark:border-gray-800">
+          <button
+            onClick={() => setShowDiag(v => !v)}
+            className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+          >
+            {showDiag ? "▾" : "▸"} Where these numbers come from
+            {diagnostics.shortfall > 0 && (
+              <span className="ml-1.5 text-amber-500">
+                — {diagnostics.shortfall} categor{diagnostics.shortfall === 1 ? "y has" : "ies have"} fewer than 10 totes
+              </span>
+            )}
+          </button>
+          {showDiag && (
+            <div className="mt-2.5 text-xs text-gray-600 dark:text-gray-400 space-y-2">
+              <p>
+                Pulled <b>{diagnostics.feedRows.toLocaleString("en-GB")}</b> totes from Business Central&apos;s{" "}
+                <code className="font-mono">{diagnostics.endpoint}</code> web service, covering{" "}
+                <b>{diagnostics.categories}</b> categories.
+              </p>
+              <p className="text-amber-700 dark:text-amber-400">⚠ {diagnostics.note}</p>
+              <div className="overflow-x-auto">
+                <table className="text-xs">
+                  <thead>
+                    <tr className="text-gray-500 dark:text-gray-400">
+                      <th className="text-left font-medium pr-4 pb-1">Category</th>
+                      <th className="text-right font-medium pr-4 pb-1">Totes in feed</th>
+                      <th className="text-right font-medium pr-4 pb-1">On a bench</th>
+                      <th className="text-right font-medium pr-4 pb-1">Used for the month</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...rows]
+                      .sort((a, b) => (a.stock?.totesSampled ?? 0) - (b.stock?.totesSampled ?? 0))
+                      .map(r => (
+                        <tr key={r.category}>
+                          <td className="pr-4 py-0.5 font-mono text-gray-700 dark:text-gray-300">{r.category}</td>
+                          <td className="pr-4 py-0.5 text-right tabular-nums">{r.inFeed.toLocaleString("en-GB")}</td>
+                          <td className="pr-4 py-0.5 text-right tabular-nums">{r.onBench.toLocaleString("en-GB")}</td>
+                          <td className={`pr-4 py-0.5 text-right tabular-nums ${(r.stock?.totesSampled ?? 0) < 10 ? "text-amber-500" : ""}`}>
+                            {r.stock?.totesSampled ?? 0}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Hidden categories (admin) — display-only, always restorable ── */}
       {isAdmin && hidden.length > 0 && (

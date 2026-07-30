@@ -22,6 +22,21 @@ export const maxDuration = 120
 //     → sort by SystemCreatedAt (the tote's CHECK-IN date) newest first
 //     → take the newest 10, median their check-in = "using totes from"
 //
+// ⚠⚠ KNOWN LIMITATION OF THE WEB SERVICE (measured 2026-07-30, don't re-diagnose).
+// The published `Receipt_Totes_Excel` OData service returns only ~1,776 rows and
+// every one of them is UNCATALOGUED. Totes already ticked Catalogued in BC are
+// absent entirely — not a paging problem: a $skip walk collects all 1,776
+// distinct rows, and direct lookups of catalogued totes (T026013, T025980 …
+// visible on BC's Receipt Totes page) return NOTHING. So a category whose recent
+// work is already ticked off looks thin here: SPORTS shows 3 totes on a bench
+// while BC's page shows ~30. `$filter` on EVA_TOT_Catalogued is also ignored by
+// BC (true and false both return all 1,776 — another flow field).
+// FIX = publish an UNFILTERED Receipt Totes web service in BC, then point
+// FEED_ENDPOINT below at it. No alternative endpoint name exists today (11
+// plausible names probed, all 404; the service root lists nothing).
+// Until then the diagnostics block in the response explains the shortfall
+// instead of the table silently under-reporting.
+//
 // ⚠ DO NOT reintroduce any of these — all tried, all wrong (2026-07-29/30):
 //   • Grouping by WarehouseItem/receipts. Items are NOT the source here; that
 //     road led to receipt numbers in the UI and needed date estimation.
@@ -33,6 +48,9 @@ export const maxDuration = 120
 //     $filter (under-returns). Pull the WHOLE feed, group in code.
 
 const SAMPLE = 10                 // newest N benched totes per category
+// Swap this the moment an unfiltered Receipt Totes web service exists in BC —
+// it's the single change needed to see catalogued totes too (see above).
+const FEED_ENDPOINT = "Receipt_Totes_Excel"
 const CAT_COL     = "EVA_TOT_ArticleCategory"
 const TOTE_COL    = "EVA_TOT_ToteNo"
 const LOC_COL     = "EVA_TOT_ToteLocation"
@@ -72,7 +90,8 @@ type CategoryOut = {
   sampled: number
   dated: number
   totes: { tote: string; dateMs: number | null; location: string | null }[]
-  onBench: number
+  onBench: number      // totes in the feed for this category sat on a bench
+  inFeed: number       // totes the feed returned for this category at all
   catalogued: number
   outstanding: number
   lastCataloguedMs: number | null
@@ -100,15 +119,17 @@ export async function GET() {
     if (!token) return NextResponse.json({ connected: false, categories: [], hidden, isAdmin })
 
     // ── The dates: ONE unfiltered pull of the tote feed, grouped in code ──
-    const allRows = await bcFetchAll(token, "Receipt_Totes_Excel")
+    const allRows = await bcFetchAll(token, FEED_ENDPOINT)
 
     type Tote = { tote: string; location: string; ms: number | null }
     const benchedByCategory = new Map<string, Tote[]>()
     const feedCategories = new Set<string>()
+    const inFeedByCategory = new Map<string, number>()
     for (const r of allRows as Record<string, unknown>[]) {
       const category = String(r[CAT_COL] ?? "").trim()
       if (!category) continue
       feedCategories.add(category)
+      inFeedByCategory.set(category, (inFeedByCategory.get(category) ?? 0) + 1)
       if (!onBench(r[LOC_COL])) continue
       const arr = benchedByCategory.get(category) ?? []
       arr.push({
@@ -150,6 +171,7 @@ export async function GET() {
         dated:    dated.length,
         totes:    sample.map(x => ({ tote: x.tote, dateMs: x.ms, location: x.location || null })),
         onBench:  benched.length,
+        inFeed:   inFeedByCategory.get(category) ?? 0,
         catalogued:  Number(t?.catalogued ?? 0),
         outstanding: Number(t?.outstanding ?? 0),
         lastCataloguedMs: t?.lastAt ? new Date(t.lastAt).getTime() : null,
@@ -164,7 +186,24 @@ export async function GET() {
       return a.monthMs - b.monthMs
     })
 
-    return NextResponse.json({ connected: true, categories, hidden, isAdmin })
+    // Diagnostics — so a thin category is explainable instead of mysterious.
+    // `shortfall` counts categories sampling fewer than SAMPLE totes, which on
+    // this web service almost always means "the rest are ticked catalogued in BC
+    // and the feed doesn't expose them" (see the header note).
+    const diagnostics = {
+      endpoint:   FEED_ENDPOINT,
+      feedRows:   allRows.length,
+      categories: feedCategories.size,
+      shortfall:  categories.filter(c => c.sampled < SAMPLE).length,
+      note:
+        `The ${FEED_ENDPOINT} web service only returns totes that are NOT ticked ` +
+        `Catalogued in Business Central (${allRows.length} rows in total). Totes already ` +
+        `ticked off are not available through it, so a category whose recent work is ` +
+        `finished shows fewer than ${SAMPLE} totes here than on BC's own Receipt Totes page. ` +
+        `Publishing an unfiltered Receipt Totes web service in BC would fix it.`,
+    }
+
+    return NextResponse.json({ connected: true, categories, hidden, isAdmin, diagnostics })
   } catch (e: unknown) {
     console.error("manager-portal/bc-tote-dates error:", e)
     return NextResponse.json({ error: e instanceof Error ? e.message : "BC query failed" }, { status: 500 })
