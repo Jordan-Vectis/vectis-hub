@@ -19,7 +19,24 @@ export async function GET() {
 
 // POST /api/warehouse/sync/totes
 // Syncs Totes_Excel — all T/P-prefixed totes (catalogued + uncatalogued) with basic location data.
-// On full re-sync the table is cleared first.
+//
+// ⚠⚠ A FULL RE-SYNC MUST NOT WIPE THE TABLE (fixed 2026-07-30). It used to run
+// `warehouseTote.deleteMany({})` on the first batch, which destroyed data that
+// CANNOT be re-fetched:
+//   • `bcCreatedAt` (the tote's check-in date) and `receiptNo` — written only by
+//     `sync/totes-active` from `Receipt_Totes_Excel`, and that feed publishes ONLY
+//     totes NOT ticked Catalogued. Once a tote is ticked, its date is gone from
+//     there forever, so our row is the only copy.
+//   • vendor / status / catalogued, same story.
+// Totes_Excel carries none of it — confirmed 2026-07-30, its only fields are
+// EVA_No, EVA_Description, EVA_Location, EVA_Bin, EVA_ParentToteNo,
+// EVA_ParentCount, EVA_Contents and the three estimate/reserve totals.
+//
+// The wipe also wasn't cleaning anything up: Totes_Excel holds ~21,428 totes
+// against ~5,750 in our table, so our copy is a SUBSET of BC's — there are no
+// stale rows to prune. The upsert below adds and refreshes rows on its own, and
+// its `update` branch deliberately touches only `location`/`syncedAt`, leaving
+// every enriched column intact.
 export async function POST(req: NextRequest) {
   if (!await isAuthedOrCron(req)) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
@@ -36,9 +53,8 @@ export async function POST(req: NextRequest) {
     if (body?.maxItems) maxItems = body.maxItems
   } catch {}
 
-  if (full && !nextLink) {
-    await prisma.warehouseTote.deleteMany({})
-  }
+  // `full` now only means "ignore any incremental cursor and walk the whole feed"
+  // — it is NOT a rebuild. See the warning above the handler before changing this.
 
   const syncLog = await prisma.warehouseSyncLog.create({
     data: { source: "totes", status: "running" },

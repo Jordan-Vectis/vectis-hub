@@ -105,6 +105,14 @@ Jordan: "you are still getting the dates wrong and it's not finding them". The l
 
 ⚠ The sync now checks \`information_schema\` once for the column and omits the field if it isn't there — writing a not-yet-migrated column made **every** upsert fail and took the whole tote sync down, not just that field.
 
+## ⚠⚠ NEVER wipe WarehouseTote — its enrichment can't be re-fetched (fixed 2026-07-30)
+
+\`WarehouseTote.bcCreatedAt\` (check-in date) and \`receiptNo\` are written **only** by \`sync/totes-active\` from \`Receipt_Totes_Excel\`, and **that feed publishes only totes NOT ticked Catalogued**. So once a tote is ticked, BC won't hand its date over again — **our row is the last copy**. \`Totes_Excel\` has nothing to rebuild from (just \`EVA_No, EVA_Description, EVA_Location, EVA_Bin, EVA_ParentToteNo, EVA_ParentCount, EVA_Contents\` + 3 estimate/reserve totals).
+
+- **\`sync/totes\` no longer wipes.** It ran \`warehouseTote.deleteMany({})\` on the first batch of a \`full\` re-sync — so pressing "Full re-sync" destroyed every enriched column and rebuilt rows with **toteNo + location only**. Removed; \`full\` now just means "walk the whole feed". The upsert's \`update\` branch deliberately touches only \`location\`/\`syncedAt\`, so enrichment survives. ⚠ The wipe wasn't pruning anything either: \`Totes_Excel\` holds ~21,428 totes vs ~5,750 in our table, so **our copy is a SUBSET of BC's** — no stale rows exist to clear.
+- **\`/api/warehouse/clear-bc-data\` still wipes on purpose** (admin, type-DELETE) — that escape hatch stays, but its "the next sync re-pulls everything" promise is TRUE for items and **FALSE for tote dates**, so the dialog now shows an explicit amber warning whenever totes are included.
+- Not a crisis if it ever happens: the Manager Portal's "Using totes from" takes real dates from **\`ChangeLogEntries\`** (table 76800) and only falls back to \`WarehouseTote\`.
+
 ## The BC-only table — LIVE from Receipt Totes, bench-filtered (SETTLED 2026-07-30)
 
 One row per **BC article category** (\`EVA_TOT_ArticleCategory\`, straight off the tote feed), **nothing** from our CatalogueAuction/Lot/Department. Component \`BcCategoryTable\` (departments-table.tsx); route **\`/api/manager-portal/bc-tote-dates\`**; the client fetches it async. No "% done". "Last worked" = MAX(WarehouseItem.cataloguedAt) and Catalogued/Still-to-do = item counts by category (the only bits still from our DB, joined by normalised category name).
