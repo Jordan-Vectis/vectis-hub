@@ -675,8 +675,45 @@ function BcCategoryTable({ rows, hidden, isAdmin, diagnostics, onChanged, nowMs 
 }) {
   const [showDiag, setShowDiag] = useState(false)
   const [open, setOpen] = useState<string | null>(null)
-  const [busy, setBusy] = useState<string | null>(null)   // category being toggled
+  const [busy, setBusy] = useState<string | null>(null)      // category being toggled
+  const [pdfBusy, setPdfBusy] = useState<string | null>(null) // "plain" | "totes"
   const [error, setError] = useState<string | null>(null)
+
+  // ⚠ Fetched, not a plain <a href>. The PDF takes a few seconds to build, and a
+  // bare link gave NO feedback and NO error — clicking it just looked like the
+  // page reloading and doing nothing (2026-07-30). This shows progress and puts
+  // any server error in the header, same lesson as the Hide button.
+  async function exportPdf(withTotes: boolean) {
+    const which = withTotes ? "totes" : "plain"
+    setError(null)
+    setPdfBusy(which)
+    try {
+      const res = await fetch(`/api/manager-portal/bc-tote-dates/pdf${withTotes ? "?totes=1" : ""}`)
+      if (!res.ok) {
+        let msg = `the export failed (${res.status})`
+        try {
+          const j = await res.json()
+          if (j?.error) msg = String(j.error)
+        } catch { /* not JSON — keep the status */ }
+        setError(msg)
+        return
+      }
+      const blob = await res.blob()
+      if (blob.size === 0) { setError("the export came back empty"); return }
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `using-totes-from-${new Date().toISOString().slice(0, 10)}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 10_000)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "the export failed")
+    } finally {
+      setPdfBusy(null)
+    }
+  }
   const TH = "text-left font-medium py-2 px-3 text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400"
 
   async function toggle(category: string, currentlyHidden: boolean) {
@@ -713,22 +750,24 @@ function BcCategoryTable({ rows, hidden, isAdmin, diagnostics, onChanged, nowMs 
             </p>
           )}
         </div>
-        {/* Export mirrors exactly what's on screen, hidden categories included. */}
+        {/* Export mirrors exactly what's on screen; hidden categories are left out. */}
         <div className="flex items-center gap-1.5 shrink-0">
-          <a
-            href="/api/manager-portal/bc-tote-dates/pdf"
+          <button
+            onClick={() => exportPdf(false)}
+            disabled={pdfBusy !== null}
             title="Download this table as a PDF (hidden categories are left out)"
-            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors whitespace-nowrap"
+            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-50 transition-colors whitespace-nowrap"
           >
-            ⬇ Export PDF
-          </a>
-          <a
-            href="/api/manager-portal/bc-tote-dates/pdf?totes=1"
+            {pdfBusy === "plain" ? "Preparing…" : "⬇ Export PDF"}
+          </button>
+          <button
+            onClick={() => exportPdf(true)}
+            disabled={pdfBusy !== null}
             title="PDF including the 10 totes behind each category's month"
-            className="text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors whitespace-nowrap"
+            className="text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-50 transition-colors whitespace-nowrap"
           >
-            + totes
-          </a>
+            {pdfBusy === "totes" ? "Preparing…" : "+ totes"}
+          </button>
         </div>
       </div>
       <div className="overflow-x-auto">

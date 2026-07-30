@@ -156,43 +156,38 @@ export async function buildBcToteDatesPdf(
   // ── The table ──
   sectionTitle("By Business Central category - furthest behind first")
 
+  // Three columns only. Jordan cut Last worked / Totes / Catalogued / Still to do
+  // (2026-07-30) — this report answers one question: how far behind is each
+  // category. Don't add stock counts back without asking.
   const cols: Col[] = [
-    { title: "BC CATEGORY",       x: MARGIN,       w: 118, align: "left"  },
-    { title: "USING TOTES FROM",  x: MARGIN + 122, w:  74, align: "left"  },
-    { title: "HOW FAR BEHIND",    x: MARGIN + 200, w:  90, align: "left"  },
-    { title: "LAST WORKED",       x: MARGIN + 294, w:  62, align: "left"  },
-    { title: "TOTES",             x: MARGIN + 360, w:  36, align: "right" },
-    { title: "CATALOGUED",        x: MARGIN + 400, w:  60, align: "right" },
-    { title: "STILL TO DO",       x: MARGIN + 464, w:  59, align: "right" },
+    { title: "BC CATEGORY",      x: MARGIN,       w: 165, align: "left" },
+    { title: "USING TOTES FROM", x: MARGIN + 175, w:  95, align: "left" },
+    { title: "HOW FAR BEHIND",   x: MARGIN + 280, w: 243, align: "left" },
   ]
 
   drawHeaderRow(cols)
-  const rowH = 15
+  const rowH = 17
   for (const c of data.categories) {
     if (y - rowH < MARGIN + 26) { page = doc.addPage([PAGE_W, PAGE_H]); header(); drawHeaderRow(cols) }
-    const base = y - 10
+    const base = y - 11
 
-    page.drawText(truncate(c.category, helvB, 8, cols[0].w), { x: cols[0].x, y: base, size: 8, font: helvB, color: INK })
+    page.drawText(truncate(c.category, helvB, 9, cols[0].w), { x: cols[0].x, y: base, size: 9, font: helvB, color: INK })
 
     if (c.monthMs != null) {
       const tone = lagColour(c.monthMs, nowMs)
-      page.drawText(fmtMonth(c.monthMs), { x: cols[1].x, y: base, size: 8, font: helvB, color: INK })
-      // bar + words, same reading as the screen
-      const barW = 44
+      // A month resting on an estimated date is flagged, so nobody treats it as gospel.
+      const monthLabel = `${fmtMonth(c.monthMs)}${c.estimatedCount > 0 ? " *" : ""}`
+      page.drawText(monthLabel, { x: cols[1].x, y: base, size: 9, font: helvB, color: INK })
+      // Bar + words, reading the same as the screen.
+      const barW = 96
       const pct  = Math.max(0.06, Math.min(1, ((nowMs - c.monthMs) / 86_400_000) / LAG_RED))
-      page.drawRectangle({ x: cols[2].x, y: base + 1, width: barW, height: 3.5, color: FAINT })
-      page.drawRectangle({ x: cols[2].x, y: base + 1, width: barW * pct, height: 3.5, color: tone })
-      page.drawText(`${fmtLag(c.monthMs, nowMs)} behind`, { x: cols[2].x + barW + 5, y: base, size: 7.5, font: helv, color: tone })
+      page.drawRectangle({ x: cols[2].x, y: base + 1.5, width: barW, height: 4, color: FAINT })
+      page.drawRectangle({ x: cols[2].x, y: base + 1.5, width: barW * pct, height: 4, color: tone })
+      page.drawText(`${fmtLag(c.monthMs, nowMs)} behind`, { x: cols[2].x + barW + 8, y: base, size: 8.5, font: helvB, color: tone })
     } else {
       page.drawText(c.sampled > 0 ? "no dates on those totes" : "nothing catalogued yet",
-        { x: cols[1].x, y: base, size: 7.5, font: helv, color: MUTE })
+        { x: cols[1].x, y: base, size: 8, font: helv, color: MUTE })
     }
-
-    page.drawText(c.lastCataloguedMs != null ? fmtDate(c.lastCataloguedMs) : "-",
-      { x: cols[3].x, y: base, size: 8, font: helv, color: GREY })
-    drawRight(`${c.sampled}${c.estimatedCount > 0 ? "*" : ""}`, cols[4].x + cols[4].w, base, 8, helv, c.sampled < 10 ? AMBER : GREY)
-    drawRight(c.catalogued.toLocaleString("en-GB"),  cols[5].x + cols[5].w, base, 8, helv,  GREY)
-    drawRight(c.outstanding.toLocaleString("en-GB"), cols[6].x + cols[6].w, base, 8, helvB, c.outstanding > 0 ? INK : MUTE)
 
     y -= rowH
     page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_W - MARGIN, y }, thickness: 0.3, color: FAINT })
@@ -225,7 +220,9 @@ export async function buildBcToteDatesPdf(
   const notes = [
     `"Using totes from" is the middle (median) check-in month of the newest 10 totes ticked as catalogued in Business Central - i.e. where cataloguing has got to in each category. Amber from ${LAG_AMBER} days behind, red from ${LAG_RED}.`,
     data.diagnostics.note,
-    "* fewer than 10 totes available, or some dates estimated - the on-screen table shows which.",
+    ...(data.categories.some(c => c.estimatedCount > 0)
+      ? ["* this month rests partly on an estimated check-in date - the on-screen table marks which totes."]
+      : []),
   ]
   for (const n of notes) {
     for (const ln of wrap(n, helv, 6.5, CONTENT_W)) {

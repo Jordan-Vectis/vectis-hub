@@ -85,6 +85,97 @@ async function inBatches<T>(items: T[], concurrency: number, fn: (t: T) => Promi
   }
 }
 
+// Page an endpoint CONCURRENTLY: ask for the count with the first page, then fetch
+// the remaining offsets in parallel. Sequential paging made the export take
+// uncomfortably long (~19 round trips one after another) — this cuts it to a few
+// batches. Safe here because these feeds are small (well under BC's ~38k $skip
+// ceiling) and we re-sort in code anyway, so page order doesn't matter.
+async function bcPagesParallel(
+  token: string,
+  endpoint: string,
+  params: Record<string, string | number>,
+  pageSize = 500,
+  concurrency = 5,
+): Promise<Record<string, unknown>[]> {
+  const first = await bcQuery(token, endpoint, { ...params, $top: pageSize, $skip: 0, $count: "true" })
+  const rows = [...first.rows]
+  const total = first.count ?? first.rows.length
+  if (first.rows.length < pageSize || total <= pageSize) return rows
+
+  const skips: number[] = []
+  for (let s = pageSize; s < Math.min(total, 40_000); s += pageSize) skips.push(s)
+  await inBatches(skips, concurrency, async (skip) => {
+    const { rows: page } = await bcQuery(token, endpoint, { ...params, $top: pageSize, $skip: skip })
+    rows.push(...page)          // order doesn't matter; single-threaded push is safe
+  })
+  return rows
+}
+
+// ── Short-lived result cache ──
+// Railway runs a long-lived Node process (server.js), so a module-level cache
+// persists between requests. The point: the page and the PDF export ask for the
+// same thing seconds apart, and recomputing ~60 BC calls for the download is what
+// made "Export PDF" feel broken. Keyed by the hidden-category set so hiding one
+// recomputes immediately.
+const CACHE_TTL_MS = 5 * 60_000
+let cache: { key: string; at: number; result: BcToteDatesResult } | null = null
+
+// ── Change-log anchor cache (the expensive bit) ──
+// Fetching every tote-creation entry is ~15 pages and BC answers them slowly:
+// measured 24s even fetched in parallel, which is what made the first load and
+// the PDF export drag. But the change log is APPEND-ONLY history — yesterday's
+// answers can't change. So keep the rows in the process and top up with only the
+// entries newer than the newest one we hold (normally a single page).
+// A deploy/restart empties it, costing one slow load; everything after is seconds.
+const ANCHOR_FULL_REFRESH_MS = 12 * 60 * 60_000
+let anchorCache: { rows: { key: string; ms: number }[]; newestMs: number; fullAt: number } | null = null
+
+async function fetchToteCreationDates(token: string): Promise<{ rows: { key: string; ms: number }[]; logged: number }> {
+  const baseParams = {
+    $filter: `Table_No eq ${TOTE_TABLE_NO} and Field_Caption eq 'Tote No.' and Type_of_Change eq 'Insertion'`,
+    $select: "New_Value,Date_and_Time",
+  }
+  const parse = (raw: Record<string, unknown>[]) => {
+    const out: { key: string; ms: number }[] = []
+    for (const r of raw) {
+      const key = String(r.New_Value ?? "").trim().toUpperCase()
+      const ms  = bcMs(r.Date_and_Time)
+      if (key && ms != null) out.push({ key, ms })
+    }
+    return out
+  }
+
+  const stale = !anchorCache || Date.now() - anchorCache.fullAt > ANCHOR_FULL_REFRESH_MS
+  if (!stale && anchorCache) {
+    // Incremental top-up. `gt` (not `ge`) — we already hold the newest entry.
+    const since = new Date(anchorCache.newestMs).toISOString().replace(/\.\d{3}Z$/, "Z")
+    try {
+      const raw = await bcPagesParallel(token, "ChangeLogEntries", {
+        ...baseParams,
+        $filter: `${baseParams.$filter} and Date_and_Time gt ${since}`,
+      })
+      const fresh = parse(raw)
+      if (fresh.length > 0) {
+        const seen = new Set(anchorCache.rows.map(r => `${r.key}|${r.ms}`))
+        for (const f of fresh) if (!seen.has(`${f.key}|${f.ms}`)) anchorCache.rows.push(f)
+        anchorCache.newestMs = Math.max(anchorCache.newestMs, ...fresh.map(f => f.ms))
+      }
+      return { rows: anchorCache.rows, logged: anchorCache.rows.length }
+    } catch {
+      return { rows: anchorCache.rows, logged: anchorCache.rows.length }   // keep serving what we have
+    }
+  }
+
+  const raw = await bcPagesParallel(token, "ChangeLogEntries", baseParams)
+  const rows = parse(raw)
+  anchorCache = {
+    rows,
+    newestMs: rows.length ? Math.max(...rows.map(r => r.ms)) : Date.now(),
+    fullAt:   Date.now(),
+  }
+  return { rows, logged: rows.length }
+}
+
 // ⚠ BC sends an empty date as 0001-01-01 — a valid Date. Before 1990 = no date.
 function bcMs(v: unknown): number | null {
   if (!v) return null
@@ -208,6 +299,9 @@ export async function computeBcToteDates(
   token: string,
   hiddenCategories: Set<string> = new Set(),
 ): Promise<BcToteDatesResult> {
+  const cacheKey = [...hiddenCategories].sort().join("|")
+  if (cache && cache.key === cacheKey && Date.now() - cache.at < CACHE_TTL_MS) return cache.result
+
   // ── Count columns + part of the category list, from our own WarehouseItem ──
   const totals = await prisma.$queryRaw<{ category: string; catalogued: number; outstanding: number; lastAt: Date | null }[]>`
     SELECT btrim(w."category")                                               AS "category",
@@ -221,44 +315,25 @@ export async function computeBcToteDates(
 
   // ── Real dates, best source first: BC's change log ──
   const anchorRows: { key: string; ms: number }[] = []
-  let loggedTotes = 0
-  try {
-    let clSkip = 0
-    for (;;) {
-      const { rows } = await bcQuery(token, "ChangeLogEntries", {
-        $filter: `Table_No eq ${TOTE_TABLE_NO} and Field_Caption eq 'Tote No.' and Type_of_Change eq 'Insertion'`,
-        $select: "New_Value,Date_and_Time",
-        $top:    500,
-        $skip:   clSkip,
-      })
-      for (const r of rows) {
-        const key = String(r.New_Value ?? "").trim().toUpperCase()
-        const ms  = bcMs(r.Date_and_Time)
-        if (key && ms != null) { anchorRows.push({ key, ms }); loggedTotes++ }
-      }
-      if (rows.length < 500) break
-      clSkip += 500
-      if (clSkip > 40_000) break        // guard: BC's ~38k $skip ceiling
-    }
-  } catch { /* change log unavailable — the sources below still work */ }
-
-  // ── Then the dated feed (un-ticked totes only) and our own records ──
   const feedCategories = new Set<string>()
-  let skip = 0
-  for (;;) {
-    const { rows } = await bcQuery(token, DATED_ENDPOINT, {
-      $top: 500, $skip: skip,
+  let loggedTotes = 0
+
+  // The change log and the dated feed are independent — fetch both at once.
+  const [logged, feedRows] = await Promise.all([
+    fetchToteCreationDates(token).catch(() => ({ rows: [], logged: 0 })),   // no change log → other sources still work
+    bcPagesParallel(token, DATED_ENDPOINT, {
       $select: "EVA_TOT_ToteNo,EVA_TOT_ArticleCategory,SystemCreatedAt",
-    })
-    for (const r of rows) {
-      const cat = String(r.EVA_TOT_ArticleCategory ?? "").trim()
-      if (cat) feedCategories.add(cat)
-      const key = String(r.EVA_TOT_ToteNo ?? "").trim().toUpperCase()
-      const ms  = bcMs(r.SystemCreatedAt)
-      if (key && ms != null) anchorRows.push({ key, ms })
-    }
-    if (rows.length < 500) break
-    skip += 500
+    }).catch(() => [] as Record<string, unknown>[]),
+  ])
+
+  anchorRows.push(...logged.rows)
+  loggedTotes = logged.logged
+  for (const r of feedRows) {
+    const cat = String(r.EVA_TOT_ArticleCategory ?? "").trim()
+    if (cat) feedCategories.add(cat)
+    const key = String(r.EVA_TOT_ToteNo ?? "").trim().toUpperCase()
+    const ms  = bcMs(r.SystemCreatedAt)
+    if (key && ms != null) anchorRows.push({ key, ms })
   }
   try {
     const own = await prisma.$queryRaw<{ toteNo: string; d: Date }[]>`
@@ -278,7 +353,7 @@ export async function computeBcToteDates(
   const candidatesByCat = new Map<string, { tote: string; location: string }[]>()
   const poolByCat = new Map<string, number>()
 
-  await inBatches(catList, 5, async (category) => {
+  await inBatches(catList, 8, async (category) => {
     const esc = category.replace(/'/g, "''")
     const found: { tote: string; location: string }[] = []
     let pool = 0
@@ -362,5 +437,7 @@ export async function computeBcToteDates(
         : `Every date shown is a real logged date — none estimated.`),
   }
 
-  return { categories, diagnostics }
+  const result: BcToteDatesResult = { categories, diagnostics }
+  cache = { key: cacheKey, at: Date.now(), result }
+  return result
 }
