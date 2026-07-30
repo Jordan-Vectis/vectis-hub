@@ -57,7 +57,11 @@ export type PhotoPrepSettings = {
 
 export const DEFAULT_SETTINGS: PhotoPrepSettings = {
   cropMode:          "auto",
-  barcodeAware:      true,
+  // OFF by default, deliberately. Turning this on by default put the barcode
+  // path in front of every photo and it mis-classified boxed lots as tags,
+  // ruining them. The lot-photo crop is the part that already works and must
+  // stay the untouched default; tag handling is opted into for a tag batch.
+  barcodeAware:      false,
   tagMarginPct:      8,
   rotateMode:        "tags",
   minRotateDeg:      2,
