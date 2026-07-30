@@ -642,8 +642,10 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
           Grouped by Business Central&apos;s own main category. &ldquo;Using totes from&rdquo; is the middle
           (median) check-in month of the newest 10 totes catalogued in each category — where
-          cataloguing is working from. Furthest behind first. Dates marked ~ are estimated from
-          neighbouring tote numbers where the exact check-in wasn&apos;t recorded.
+          cataloguing is working from. Only totes that reached a cataloguing bench count (a tote
+          still sat on a shelf is skipped even if odd items on it are ticked). Furthest behind
+          first. Dates marked ~ are estimated from neighbouring tote numbers where the exact
+          check-in wasn&apos;t recorded.
         </p>
       </div>
       <div className="overflow-x-auto">

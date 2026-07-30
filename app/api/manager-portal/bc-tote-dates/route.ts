@@ -132,7 +132,16 @@ export async function GET() {
     // source tote (not yet re-synced) group by receipt instead, keyed
     // "R:<receiptNo>" and dated via the receipt's totes. Ranked by how recently
     // each group was worked. bcCreatedAt is guarded against BC's empty-date
-    // sentinel (0001-01-01 → treated as no date). ──
+    // sentinel (0001-01-01 → treated as no date).
+    //
+    // ⚠ BENCHED FILTER (Jordan, 2026-07-30): a tote only counts if it actually
+    // reached a cataloguing bench — otherwise a stray item flagged catalogued
+    // off a SHELVED tote drags an ancient tote into the sample. Our
+    // WarehouseTote keeps each tote's LAST-KNOWN location (e.g. "BENCH34"), so:
+    // keep a tote if its location contains BENCH, or if we have no location for
+    // it (a cleared/never-captured tote — it left the feed because it was
+    // finished, i.e. it WAS worked). Exclude only totes we KNOW sit on a shelf.
+    // Receipt-fallback groups can't be assessed and are kept. ──
     const rows = await prisma.$queryRaw<{ category: string; grp: string; received: Date | null; rn: number }[]>`
       WITH groups AS (
         SELECT btrim(w."category")                                       AS category,
@@ -146,10 +155,24 @@ export async function GET() {
           AND (NULLIF(btrim(w."toteNo"), '') IS NOT NULL OR NULLIF(btrim(w."receiptNo"), '') IS NOT NULL)
         GROUP BY 1, 2
       ),
+      tote_loc AS (
+        SELECT upper(btrim("toteNo")) AS tote,
+               MAX(upper(btrim(coalesce("location", '')))) AS loc
+        FROM "WarehouseTote"
+        GROUP BY 1
+      ),
+      benched AS (
+        SELECT g.category, g.grp, g.last_cat
+        FROM groups g
+        LEFT JOIN tote_loc tl ON tl.tote = g.grp
+        WHERE g.grp LIKE 'R:%'                -- receipt fallback: can't assess
+           OR tl.loc IS NULL OR tl.loc = ''   -- unknown/cleared tote: keep
+           OR tl.loc LIKE '%BENCH%'           -- on (or last seen on) a bench
+      ),
       ranked AS (
         SELECT category, grp,
                ROW_NUMBER() OVER (PARTITION BY category ORDER BY last_cat DESC) AS rn
-        FROM groups
+        FROM benched
       ),
       tote_dates AS (
         SELECT upper(btrim(t."toteNo")) AS tote, MIN(t."bcCreatedAt") AS received
