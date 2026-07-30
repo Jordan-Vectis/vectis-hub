@@ -37,6 +37,7 @@ type Identification = {
   confidence: "high" | "medium" | "low"
   reasoning: string | null
   searchTerms: string[]
+  keyPoints: string | null
 }
 
 const PROMPT = `You identify collectable auction items for a UK auction house from a single photograph.
@@ -53,8 +54,15 @@ Return ONLY a JSON object, no markdown fence, with exactly these keys:
   "variant": "colour/version/issue detail that changes what it is" or null,
   "confidence": "high" | "medium" | "low",
   "reasoning": "one short sentence on what you based it on (markings, box, casting)",
-  "searchTerms": ["3-6 short terms to find this item in a sold-lot archive"]
+  "searchTerms": ["3-6 short terms to find this item in a sold-lot archive"],
+  "keyPoints": "a short plain-text key points line the cataloguer can paste"
 }
+
+keyPoints must read exactly like the ones our cataloguers write — one short line of plain text, no bullets, no headings, no line breaks, roughly 6-25 words. Real examples:
+  "Boxed Commodore 64 Personal Computer"
+  "Wrenn, OO gauge, 2x ref. W2206 , box inserts included but no instructions"
+  "Corgi loose busses comprising of corgi omnibus and similar, no boxes included"
+Include maker, model and reference number. ONLY mention a box, packaging, completeness or damage if you can plainly SEE it in the photo — never assume it. If you are not confident what the item is, keep keyPoints to what is genuinely visible rather than naming a model you are unsure of.
 
 Rules:
 - NEVER state the item's size, scale or dimensions. The cataloguer is holding it.

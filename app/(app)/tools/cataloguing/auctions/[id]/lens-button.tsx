@@ -24,6 +24,7 @@ type Identification = {
   confidence: "high" | "medium" | "low"
   reasoning: string | null
   searchTerms: string[]
+  keyPoints: string | null
 }
 
 type Source = { title: string; uri: string }
@@ -71,6 +72,7 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
   const [result, setResult]   = useState<Result | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [note, setNote]       = useState("")
+  const [copied, setCopied]   = useState(false)
   const [file, setFile]       = useState<File | Blob | null>(null)
   const cameraRef  = useRef<HTMLInputElement>(null)
   const libraryRef = useRef<HTMLInputElement>(null)
@@ -134,8 +136,28 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
     clearResult()
     setFile(null)
     setNote("")
+    setCopied(false)
     if (preview) URL.revokeObjectURL(preview)
     setPreview(null)
+  }
+
+  async function copyKeyPoints(text: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      // Clipboard API needs a secure context and can be blocked on iPad — fall
+      // back to the old select-and-copy trick so the button always does something.
+      const ta = document.createElement("textarea")
+      ta.value = text
+      ta.style.position = "fixed"
+      ta.style.opacity = "0"
+      document.body.appendChild(ta)
+      ta.select()
+      try { document.execCommand("copy") } catch { /* nothing more we can do */ }
+      ta.remove()
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   const id      = result?.identification
@@ -179,6 +201,18 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
             </div>
 
             <div className="p-5 space-y-4">
+              {/* Shown every time it's opened — this is new and we want people
+                  telling us what's wrong with it rather than quietly distrusting it. */}
+              <div className="rounded-xl border border-amber-700/50 bg-amber-950/25 px-4 py-3">
+                <p className="text-sm font-semibold text-amber-300">🧪 Experimental — still being built</p>
+                <p className="text-xs text-amber-200/80 mt-1">
+                  This is a work in progress, so please double-check anything it tells you before using it.
+                  If you spot something wrong, or you can think of a way it&apos;d be more useful, come and
+                  tell <b>Jack</b> or <b>Jordan</b> — we&apos;re actively improving it and your feedback shapes
+                  what it does next.
+                </p>
+              </div>
+
               <p className="text-sm text-gray-400">
                 Photograph the item — markings, base or box work best — or paste a picture in. You&apos;ll
                 get what it looks like it is, and what we&apos;ve sold the same thing for.
@@ -288,6 +322,32 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
                       the markings or the box.
                     </p>
                   )}
+                </div>
+              )}
+
+              {/* ── Suggested key points, ready to paste ──
+                  ⚠ Key points are treated as AUTHORITATIVE by the batch AI — it is
+                  told never to overrule them. So anything pasted from here becomes
+                  fact downstream, which is exactly why this says check it first. */}
+              {id?.keyPoints && (
+                <div className="rounded-xl border border-gray-700 bg-black/20 p-4">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <h3 className="text-sm font-bold text-gray-200">Suggested key points</h3>
+                    <button
+                      onClick={() => copyKeyPoints(id.keyPoints!)}
+                      style={{ touchAction: "manipulation" }}
+                      className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-600 text-gray-200 hover:bg-white/5 transition-colors whitespace-nowrap"
+                    >
+                      {copied ? "✓ Copied" : "📋 Copy"}
+                    </button>
+                  </div>
+                  <p className="text-sm text-gray-200 bg-black/30 rounded-lg px-3 py-2 border border-gray-800">
+                    {id.keyPoints}
+                  </p>
+                  <p className="text-[11px] text-amber-300/80 mt-2">
+                    ⚠ Read it before you paste — key points are taken as fact when the descriptions
+                    are written, so anything wrong here carries straight through.
+                  </p>
                 </div>
               )}
 
