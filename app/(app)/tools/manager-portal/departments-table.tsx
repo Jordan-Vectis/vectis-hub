@@ -11,7 +11,7 @@ export type StockAge = {
   newestMs: number | null
   totesSampled: number      // distinct totes sampled (the last 10 worked)
   dated: number             // how many of those resolved to a date
-  totes: { tote: string; dateMs: number | null; lots: number; reason: string | null; source: string | null }[]
+  totes: { tote: string; dateMs: number | null; lots: number; reason: string | null; source: string | null; estimated?: boolean }[]
 }
 
 export type SaleRow = {
@@ -103,7 +103,7 @@ type BcLiveCategory = {
   newestMs: number | null
   sampled: number
   dated: number
-  totes: { tote: string; dateMs: number | null }[]
+  totes: { tote: string; dateMs: number | null; estimated?: boolean }[]
   catalogued: number
   outstanding: number
   lastCataloguedMs: number | null
@@ -169,6 +169,7 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
               lots:   1,
               reason: t.dateMs == null ? "no tote check-in date found" : null,
               source: t.dateMs != null ? "bc" : null,
+              estimated: t.estimated,
             })),
           } : null,
         }))
@@ -641,7 +642,8 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
           Grouped by Business Central&apos;s own main category. &ldquo;Using totes from&rdquo; is the middle
           (median) check-in month of the newest 10 totes catalogued in each category — where
-          cataloguing is working from. Furthest behind first.
+          cataloguing is working from. Furthest behind first. Dates marked ~ are estimated from
+          neighbouring tote numbers where the exact check-in wasn&apos;t recorded.
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -713,7 +715,13 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                           {r.stock.totes.map(t => (
                             <span
                               key={t.tote}
-                              title={`${t.tote.startsWith("R0") ? "Receipt" : "Tote"} ${t.tote}${t.reason ? ` — ${t.reason}` : " — check-in date"}`}
+                              title={`${t.tote.startsWith("R0") ? "Receipt" : "Tote"} ${t.tote}${
+                                t.reason
+                                  ? ` — ${t.reason}`
+                                  : t.estimated
+                                    ? " — check-in estimated from neighbouring tote numbers (the exact date wasn't recorded)"
+                                    : " — check-in date"
+                              }`}
                               className={`text-xs px-2 py-1 rounded-lg border whitespace-nowrap ${
                                 t.dateMs == null
                                   ? "border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500"
@@ -722,7 +730,7 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
                             >
                               <b className="font-mono font-semibold">{t.tote}</b>
                               <span className="opacity-60 mx-1">·</span>
-                              {t.dateMs == null ? (t.reason ?? "no date") : fmtToteDate(t.dateMs)}
+                              {t.dateMs == null ? (t.reason ?? "no date") : `${t.estimated ? "~" : ""}${fmtToteDate(t.dateMs)}`}
                             </span>
                           ))}
                         </div>

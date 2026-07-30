@@ -52,6 +52,53 @@ function median(msSorted: number[]): number | null {
 
 const toMs = (d: Date | null) => (d ? new Date(d).getTime() : null)
 
+// ── Estimating a check-in date from the tote NUMBER ──
+// Tote numbers are allocated sequentially over time (verified 2026-07-30:
+// nearest dated neighbours bracket a tote within a day or two), so a tote whose
+// check-in was never captured (it left BC's feed before we stored dates) can be
+// dated by interpolating between the nearest dated tote numbers either side.
+// T- and P-numbers are separate sequences. Month-level accuracy is all the
+// table needs; estimates are flagged so the UI can show them as "~Mar 26".
+type Anchor = { n: number; ms: number }
+
+function buildAnchors(rows: { toteNo: string; ms: number }[]): Map<string, Anchor[]> {
+  const byPrefix = new Map<string, Anchor[]>()
+  for (const r of rows) {
+    const m = /^([TP])0*(\d+)$/.exec(r.toteNo)
+    if (!m) continue
+    const arr = byPrefix.get(m[1]) ?? []
+    arr.push({ n: parseInt(m[2], 10), ms: r.ms })
+    byPrefix.set(m[1], arr)
+  }
+  for (const arr of byPrefix.values()) arr.sort((a, b) => a.n - b.n)
+  return byPrefix
+}
+
+function estimateToteMs(anchors: Map<string, Anchor[]>, toteNo: string): number | null {
+  const m = /^([TP])0*(\d+)$/.exec(toteNo)
+  if (!m) return null
+  const arr = anchors.get(m[1])
+  if (!arr || arr.length === 0) return null
+  const n = parseInt(m[2], 10)
+  // Binary search for the nearest anchors below and above this number.
+  let lo = -1, hi = arr.length
+  let a = 0, b = arr.length - 1
+  while (a <= b) {
+    const mid = (a + b) >> 1
+    if (arr[mid].n <= n) { lo = mid; a = mid + 1 } else { hi = mid; b = mid - 1 }
+  }
+  const below = lo >= 0 ? arr[lo] : null
+  const above = hi < arr.length ? arr[hi] : null
+  if (below && above) {
+    if (above.n === below.n) return below.ms
+    // A stray out-of-order anchor (recreated tote) can invert the pair — fall
+    // back to whichever anchor is numerically closer instead of interpolating.
+    if (above.ms < below.ms) return (n - below.n) <= (above.n - n) ? below.ms : above.ms
+    return Math.round(below.ms + ((above.ms - below.ms) * (n - below.n)) / (above.n - below.n))
+  }
+  return below?.ms ?? above?.ms ?? null
+}
+
 type CategoryOut = {
   category: string
   monthMs: number | null
@@ -59,7 +106,7 @@ type CategoryOut = {
   newestMs: number | null
   sampled: number
   dated: number
-  totes: { tote: string; dateMs: number | null }[]
+  totes: { tote: string; dateMs: number | null; estimated?: boolean }[]
   catalogued: number
   outstanding: number
   lastCataloguedMs: number | null
@@ -126,12 +173,30 @@ export async function GET() {
       WHERE r.rn <= ${SAMPLE}
       ORDER BY r.category, r.rn`
 
+    // Anchors for estimating undated totes: every tote with a captured
+    // check-in, keyed by its sequential number.
+    const anchorRows = await prisma.$queryRaw<{ toteNo: string; received: Date }[]>`
+      SELECT "toteNo", MIN("bcCreatedAt") AS received
+      FROM "WarehouseTote"
+      WHERE "bcCreatedAt" >= DATE '1990-01-01' AND "toteNo" ~ '^[TP][0-9]+$'
+      GROUP BY 1`
+    const anchors = buildAnchors(anchorRows.map(a => ({ toteNo: a.toteNo, ms: new Date(a.received).getTime() })))
+
     // Bucket the sampled totes by category, in rank order (newest first).
-    // "R:" receipt-fallback keys lose the prefix for display.
-    const sampleByCat = new Map<string, { tote: string; dateMs: number | null }[]>()
+    // "R:" receipt-fallback keys lose the prefix for display. Totes with no
+    // captured check-in get an estimate from their numeric neighbours.
+    const sampleByCat = new Map<string, { tote: string; dateMs: number | null; estimated?: boolean }[]>()
     for (const r of rows) {
+      const isReceipt = r.grp.startsWith("R:")
+      const label = isReceipt ? r.grp.slice(2) : r.grp
+      let dateMs = toMs(r.received)
+      let estimated = false
+      if (dateMs == null && !isReceipt) {
+        const est = estimateToteMs(anchors, r.grp)
+        if (est != null) { dateMs = est; estimated = true }
+      }
       const arr = sampleByCat.get(r.category) ?? []
-      arr.push({ tote: r.grp.startsWith("R:") ? r.grp.slice(2) : r.grp, dateMs: toMs(r.received) })
+      arr.push(estimated ? { tote: label, dateMs, estimated: true } : { tote: label, dateMs })
       sampleByCat.set(r.category, arr)
     }
 
