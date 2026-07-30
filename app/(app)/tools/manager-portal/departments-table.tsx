@@ -694,16 +694,35 @@ function BcCategoryTable({ rows, hidden, isAdmin, diagnostics, onChanged, nowMs 
 
   return (
     <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden mb-5">
-      <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-800">
-        <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-          Using totes from — Business Central categories
-        </h2>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          Live from Business Central, grouped by BC&apos;s own article category. &ldquo;Using totes
-          from&rdquo; is the middle (median) check-in month of the newest 10 totes ticked as catalogued
-          in BC — where cataloguing has got to. Furthest behind first. Dates marked ~ are estimated
-          (those totes predate BC&apos;s change logging).
-        </p>
+      <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-800 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+            Using totes from — Business Central categories
+          </h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            Live from Business Central, grouped by BC&apos;s own article category. &ldquo;Using totes
+            from&rdquo; is the middle (median) check-in month of the newest 10 totes ticked as catalogued
+            in BC — where cataloguing has got to. Furthest behind first. Dates marked ~ are estimated
+            (those totes predate BC&apos;s change logging).
+          </p>
+        </div>
+        {/* Export mirrors exactly what's on screen, hidden categories included. */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <a
+            href="/api/manager-portal/bc-tote-dates/pdf"
+            title="Download this table as a PDF (hidden categories are left out)"
+            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors whitespace-nowrap"
+          >
+            ⬇ Export PDF
+          </a>
+          <a
+            href="/api/manager-portal/bc-tote-dates/pdf?totes=1"
+            title="PDF including the 10 totes behind each category's month"
+            className="text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors whitespace-nowrap"
+          >
+            + totes
+          </a>
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
