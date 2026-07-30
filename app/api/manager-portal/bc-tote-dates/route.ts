@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
-import { getBCToken, bcFetchAll } from "@/lib/bc"
+import { getBCToken } from "@/lib/bc"
 
 export const maxDuration = 120
 
@@ -10,54 +10,93 @@ export const maxDuration = 120
 // Powers the Manager Portal → Departments "Using totes from — Business Central
 // categories" table: how far behind cataloguing is, per BC category.
 //
-// ⚠ THIS IS DELIBERATELY SIMPLE — it mirrors exactly what Jordan does in BC by
-// hand (Receipt Totes, filter Article Category + Location BENCH*, sort by
-// Created At desc). Verified 2026-07-30 to reproduce his view row for row.
+// ── WHICH BC ENDPOINT, AND WHY (settled 2026-07-30 — do not "simplify" this) ──
+// Two endpoints are needed because neither alone is enough:
 //
-//   Receipt_Totes_Excel
-//     → group by EVA_TOT_ArticleCategory   (BC's own category, on the tote)
-//     → keep totes whose EVA_TOT_ToteLocation contains BENCH  (on a bench = being
-//       or has been catalogued — Jordan: use the LOCATION, it's the reliable
-//       signal and catches more than the PTE_Benched flag: TRAINS 74 vs 42)
-//     → sort by SystemCreatedAt (the tote's CHECK-IN date) newest first
-//     → take the newest 10, median their check-in = "using totes from"
+//  1. FULL_ENDPOINT `Receipt_ExcelEVA_TOT_ReceiptTotesSubpage` — the WHOLE tote
+//     table (20,418 rows = BC table 76800 EVA_TOT_ReceiptTote, confirmed against
+//     BC's own record count). Has category, tote no, location, receipt,
+//     PTE_Benched and EVA_TOT_Catalogued. `$filter` / `$orderby` / `$count` all
+//     work. ⚠ It has NO date field at all (SystemCreatedAt/SystemModifiedAt are
+//     not properties of this type — asking for them 400s).
+//  2. `ChangeLogEntries` — the REAL check-in dates, via a different table
+//     (Jordan's idea). BC logs an Insertion row per tote with
+//     `Table_No = 76800`, `Field_Caption = 'Tote No.'`, `New_Value` = the tote
+//     number and `Date_and_Time` = when it was created. Verified 2026-07-30
+//     against BC's own screen: **10 of 10 dates EXACT**. 7,296 totes are logged
+//     (change logging wasn't on for the older ones), which covers the recent end
+//     — exactly what a "newest 10" sample needs.
+//  3. DATED_ENDPOINT `Receipt_Totes_Excel` — carries `SystemCreatedAt` but is
+//     restricted to totes NOT ticked Catalogued: only 1,776 rows, so ~91% of the
+//     table is invisible through it. This is why SPORTS used to show 2 totes when
+//     BC's page shows ~30 — every SPORTS tote recently worked is ticked, and
+//     ticked totes are simply not published there. Still useful as a date source.
 //
-// ⚠⚠ KNOWN LIMITATION OF THE WEB SERVICE (measured 2026-07-30, don't re-diagnose).
-// The published `Receipt_Totes_Excel` OData service returns only ~1,776 rows and
-// every one of them is UNCATALOGUED. Totes already ticked Catalogued in BC are
-// absent entirely — not a paging problem: a $skip walk collects all 1,776
-// distinct rows, and direct lookups of catalogued totes (T026013, T025980 …
-// visible on BC's Receipt Totes page) return NOTHING. So a category whose recent
-// work is already ticked off looks thin here: SPORTS shows 3 totes on a bench
-// while BC's page shows ~30. `$filter` on EVA_TOT_Catalogued is also ignored by
-// BC (true and false both return all 1,776 — another flow field).
-// FIX = publish an UNFILTERED Receipt Totes web service in BC, then point
-// FEED_ENDPOINT below at it. No alternative endpoint name exists today (11
-// plausible names probed, all 404; the service root lists nothing).
-// Until then the diagnostics block in the response explains the shortfall
-// instead of the table silently under-reporting.
+// So: SAMPLE from the full table (1); DATES from the change log (2), falling back
+// to the dated feed (3) and our own WarehouseTote, and only then to an estimate
+// from the tote-number sequence (see estimateMs).
 //
-// ⚠ DO NOT reintroduce any of these — all tried, all wrong (2026-07-29/30):
-//   • Grouping by WarehouseItem/receipts. Items are NOT the source here; that
-//     road led to receipt numbers in the UI and needed date estimation.
-//   • WarehouseItem.goodsReceivedDate — populated on 0 of ~208k rows, dead.
-//   • Concluding a category "isn't toted" because items lack a source tote
-//     (EVA_CFA_TOT_CreatedFromToteNo is blank for TRAINS items) — the TOTE side
-//     has the TRAINS totes regardless. Always look at the tote feed.
-//   • $filter on PTE_Benched (BC flow field → wrong subset) or per-category
-//     $filter (under-returns). Pull the WHOLE feed, group in code.
+// ⚠ FILTER = `EVA_TOT_Catalogued eq true`, NOT the bench location. 16,833 of
+// 20,418 totes carry a BENCH* location because it is the LAST-KNOWN location, so
+// bench-filtering lets brand-new uncatalogued stock in: TRAINS' newest
+// bench-located totes (T026621, T026613) are not catalogued at all and would have
+// made TRAINS look bang up to date. Catalogued = "we have finished this tote",
+// which is exactly "where cataloguing has got to".
+//
+// ⚠ DEAD ENDS — do not retry (each cost real time):
+//   • Grouping by WarehouseItem/receipts, or `goodsReceivedDate` (0 of ~208k rows).
+//   • Concluding a category "isn't toted" from blank item source-totes (TRAINS).
+//   • `$filter` on PTE_Benched/EVA_TOT_Catalogued against Receipt_Totes_Excel —
+//     ignored there (true and false both return all 1,776). It DOES work on the
+//     full subpage endpoint.
+//   • Hunting another endpoint: the OData service root lists nothing; the full
+//     list came from `$metadata` (136 entity sets). If you need to discover
+//     endpoints again, read $metadata, not the service doc.
 
-const SAMPLE = 10                 // newest N benched totes per category
-// Swap this the moment an unfiltered Receipt Totes web service exists in BC —
-// it's the single change needed to see catalogued totes too (see above).
-const FEED_ENDPOINT = "Receipt_Totes_Excel"
-const CAT_COL     = "EVA_TOT_ArticleCategory"
-const TOTE_COL    = "EVA_TOT_ToteNo"
-const LOC_COL     = "EVA_TOT_ToteLocation"
-const CREATED_COL = "SystemCreatedAt"
+const SAMPLE = 10                  // newest N catalogued totes per category
+const CANDIDATES_PER_PREFIX = 15   // pulled per tote prefix before date-sorting
+const FULL_ENDPOINT  = "Receipt_ExcelEVA_TOT_ReceiptTotesSubpage"
+const DATED_ENDPOINT = "Receipt_Totes_Excel"
+const TOTE_TABLE_NO  = 76800        // BC table EVA_TOT_ReceiptTote, per BC's Edit Tables page
 
-// ⚠ BC sends an empty date as 0001-01-01 — a valid Date. Anything before 1990 is
-// "no date".
+const BC_BASE =
+  "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environment}/ODataV4/Company('{company}')/"
+const baseUrl = () =>
+  BC_BASE
+    .replace("{tenantId}",    process.env.BC_TENANT_ID ?? "")
+    .replace("{environment}", process.env.BC_ENVIRONMENT ?? "production")
+    .replace("{company}",     encodeURIComponent(process.env.BC_COMPANY ?? "Vectis"))
+
+// Local fetch helper: OData keys must stay unencoded, values encoded.
+async function bcQuery(
+  token: string,
+  endpoint: string,
+  params: Record<string, string | number>,
+): Promise<{ rows: Record<string, unknown>[]; count?: number }> {
+  const qs = Object.entries(params)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
+    .join("&")
+  const res = await fetch(`${baseUrl()}${endpoint}?${qs}`, {
+    headers: {
+      Accept:             "application/json",
+      "OData-MaxVersion": "4.0",
+      Authorization:      `Bearer ${token}`,
+      Prefer:             'odata.include-annotations="*"',
+    },
+    signal: AbortSignal.timeout(45_000),
+  })
+  if (!res.ok) throw new Error(`BC ${res.status}: ${(await res.text()).slice(0, 200)}`)
+  const json = await res.json()
+  return { rows: json.value ?? [], count: json["@odata.count"] }
+}
+
+async function inBatches<T>(items: T[], concurrency: number, fn: (t: T) => Promise<void>) {
+  for (let i = 0; i < items.length; i += concurrency) {
+    await Promise.all(items.slice(i, i + concurrency).map(fn))
+  }
+}
+
+// ⚠ BC sends an empty date as 0001-01-01 — a valid Date. Before 1990 = no date.
 function bcMs(v: unknown): number | null {
   if (!v) return null
   const d = new Date(String(v))
@@ -65,11 +104,58 @@ function bcMs(v: unknown): number | null {
   return d.getTime()
 }
 
-// On a cataloguing bench — locations look like "BENCH5", "BENCH41".
-const onBench = (v: unknown) => String(v ?? "").toUpperCase().includes("BENCH")
+// ── Dating a tote whose check-in BC won't tell us ──
+// Tote numbers are issued in sequence over time, so a tote with no date sits
+// between two numbered neighbours that DO have dates — read across.
+// Verified 2026-07-30 against the 11 SPORTS totes on BC's own screen (dates the
+// API refuses to serve): every estimate landed within 0.6 days of the truth and
+// all 11 in the correct month. T and P are separate sequences.
+type Anchor = { n: number; ms: number }
 
-// Median — robust on a small sample (some categories only have a few totes on a
-// bench right now). A trimmed mean needs enough points to trim; this doesn't.
+function buildAnchors(rows: { key: string; ms: number }[]): Map<string, Anchor[]> {
+  const earliest = new Map<string, Map<number, number>>()
+  for (const r of rows) {
+    const m = /^([A-Z])0*(\d+)$/.exec(r.key)
+    if (!m) continue
+    const seq = earliest.get(m[1]) ?? new Map<number, number>()
+    const n = parseInt(m[2], 10)
+    const prev = seq.get(n)
+    if (prev == null || r.ms < prev) seq.set(n, r.ms)
+    earliest.set(m[1], seq)
+  }
+  const out = new Map<string, Anchor[]>()
+  for (const [prefix, seq] of earliest) {
+    out.set(prefix, [...seq.entries()].map(([n, ms]) => ({ n, ms })).sort((a, b) => a.n - b.n))
+  }
+  return out
+}
+
+function estimateMs(anchors: Map<string, Anchor[]>, key: string): number | null {
+  const m = /^([A-Z])0*(\d+)$/.exec(key)
+  if (!m) return null
+  const arr = anchors.get(m[1])
+  if (!arr || arr.length === 0) return null
+  const n = parseInt(m[2], 10)
+  // nearest anchor at/below n
+  let lo = -1, a = 0, b = arr.length - 1
+  while (a <= b) {
+    const mid = (a + b) >> 1
+    if (arr[mid].n <= n) { lo = mid; a = mid + 1 } else { b = mid - 1 }
+  }
+  const below = lo >= 0 ? arr[lo] : null
+  let ai = lo + 1
+  while (ai < arr.length && arr[ai].n < n) ai++
+  const above = ai < arr.length ? arr[ai] : null
+  if (below && above) {
+    if (above.n === below.n) return below.ms
+    // A recreated/out-of-order tote can invert the pair — use the closer anchor
+    // rather than interpolating backwards.
+    if (above.ms < below.ms) return (n - below.n) <= (above.n - n) ? below.ms : above.ms
+    return Math.round(below.ms + ((above.ms - below.ms) * (n - below.n)) / (above.n - below.n))
+  }
+  return below?.ms ?? above?.ms ?? null
+}
+
 function median(msSorted: number[]): number | null {
   if (msSorted.length === 0) return null
   const mid = Math.floor(msSorted.length / 2)
@@ -78,10 +164,10 @@ function median(msSorted: number[]): number | null {
     : msSorted[mid]
 }
 
-// Join key between the tote feed's category and our WarehouseItem counts —
-// case/punctuation-insensitive so "DOLLS & BEARS" still lines up.
+// Join key between BC's category and our WarehouseItem counts.
 const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "")
 
+type ToteOut = { tote: string; dateMs: number | null; location: string | null; estimated: boolean }
 type CategoryOut = {
   category: string
   monthMs: number | null
@@ -89,9 +175,9 @@ type CategoryOut = {
   newestMs: number | null
   sampled: number
   dated: number
-  totes: { tote: string; dateMs: number | null; location: string | null }[]
-  onBench: number      // totes in the feed for this category sat on a bench
-  inFeed: number       // totes the feed returned for this category at all
+  estimatedCount: number
+  poolTotes: number          // catalogued totes BC holds for this category
+  totes: ToteOut[]
   catalogued: number
   outstanding: number
   lastCataloguedMs: number | null
@@ -103,9 +189,9 @@ export async function GET() {
     if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
     const isAdmin = session.user.role === "ADMIN"
 
-    // Categories an admin has hidden (display-only, restorable). ⚠ The table
-    // arrives with Run Migrations while code deploys instantly, so a missing
-    // table must simply mean "nothing hidden" — never a 500.
+    // Hidden categories — display-only, restorable. ⚠ The table arrives with Run
+    // Migrations while code deploys instantly, so a missing table must read as
+    // "nothing hidden", never a 500.
     let hidden: { category: string; hiddenByName: string }[] = []
     try {
       hidden = await prisma.managerPortalHiddenCategory.findMany({
@@ -118,30 +204,7 @@ export async function GET() {
     const token = await getBCToken()
     if (!token) return NextResponse.json({ connected: false, categories: [], hidden, isAdmin })
 
-    // ── The dates: ONE unfiltered pull of the tote feed, grouped in code ──
-    const allRows = await bcFetchAll(token, FEED_ENDPOINT)
-
-    type Tote = { tote: string; location: string; ms: number | null }
-    const benchedByCategory = new Map<string, Tote[]>()
-    const feedCategories = new Set<string>()
-    const inFeedByCategory = new Map<string, number>()
-    for (const r of allRows as Record<string, unknown>[]) {
-      const category = String(r[CAT_COL] ?? "").trim()
-      if (!category) continue
-      feedCategories.add(category)
-      inFeedByCategory.set(category, (inFeedByCategory.get(category) ?? 0) + 1)
-      if (!onBench(r[LOC_COL])) continue
-      const arr = benchedByCategory.get(category) ?? []
-      arr.push({
-        tote:     String(r[TOTE_COL] ?? "").trim() || "(no tote no)",
-        location: String(r[LOC_COL] ?? "").trim(),
-        ms:       bcMs(r[CREATED_COL]),
-      })
-      benchedByCategory.set(category, arr)
-    }
-
-    // ── The count columns (Catalogued / Still to do / Last worked) stay on our
-    // own WarehouseItem data, joined to the feed's categories by name. ──
+    // ── Count columns + category list from our own WarehouseItem ──
     const totals = await prisma.$queryRaw<{ category: string; catalogued: number; outstanding: number; lastAt: Date | null }[]>`
       SELECT btrim(w."category")                                               AS "category",
              COUNT(*) FILTER (WHERE w."catalogued" = true)::int                AS "catalogued",
@@ -152,33 +215,127 @@ export async function GET() {
       GROUP BY 1`
     const totalsByNorm = new Map(totals.map(t => [norm(t.category), t]))
 
+    // ── Real dates, best source first ──
+    // 1. The change log: an Insertion row per tote carrying its creation date.
+    //    This is the only source that covers totes already ticked Catalogued.
+    const anchorRows: { key: string; ms: number }[] = []
+    let loggedTotes = 0
+    try {
+      let clSkip = 0
+      for (;;) {
+        const { rows } = await bcQuery(token, "ChangeLogEntries", {
+          $filter: `Table_No eq ${TOTE_TABLE_NO} and Field_Caption eq 'Tote No.' and Type_of_Change eq 'Insertion'`,
+          $select: "New_Value,Date_and_Time",
+          $top:    500,
+          $skip:   clSkip,
+        })
+        for (const r of rows) {
+          const key = String(r.New_Value ?? "").trim().toUpperCase()
+          const ms  = bcMs(r.Date_and_Time)
+          if (key && ms != null) { anchorRows.push({ key, ms }); loggedTotes++ }
+        }
+        if (rows.length < 500) break
+        clSkip += 500
+        if (clSkip > 40_000) break        // guard: BC's ~38k $skip ceiling
+      }
+    } catch { /* change log unavailable — the sources below still work */ }
+
+    // 2. The dated feed (small, un-ticked totes only) + 3. our own records.
+    const feedCategories = new Set<string>()
+    let skip = 0
+    for (;;) {
+      const { rows } = await bcQuery(token, DATED_ENDPOINT, {
+        $top: 500, $skip: skip,
+        $select: "EVA_TOT_ToteNo,EVA_TOT_ArticleCategory,SystemCreatedAt",
+      })
+      for (const r of rows) {
+        const cat = String(r.EVA_TOT_ArticleCategory ?? "").trim()
+        if (cat) feedCategories.add(cat)
+        const key = String(r.EVA_TOT_ToteNo ?? "").trim().toUpperCase()
+        const ms  = bcMs(r.SystemCreatedAt)
+        if (key && ms != null) anchorRows.push({ key, ms })
+      }
+      if (rows.length < 500) break
+      skip += 500
+    }
+    try {
+      const own = await prisma.$queryRaw<{ toteNo: string; d: Date }[]>`
+        SELECT upper(btrim("toteNo")) AS "toteNo", MIN("bcCreatedAt") AS d
+        FROM "WarehouseTote"
+        WHERE "bcCreatedAt" >= DATE '1990-01-01' AND "toteNo" IS NOT NULL
+        GROUP BY 1`
+      for (const r of own) anchorRows.push({ key: r.toteNo, ms: new Date(r.d).getTime() })
+    } catch { /* column arrives with Run Migrations — anchors from BC alone still work */ }
+
+    const anchors  = buildAnchors(anchorRows)
+    const realDate = new Map(anchorRows.map(a => [a.key, a.ms]))
+
+    // ── The sample: newest catalogued totes per category, from the FULL table ──
+    // Two queries per category, one per tote prefix: ordering is by tote NUMBER
+    // (the only ordering this endpoint offers) and "T…" sorts above "P…", so a
+    // single query would bury pallets entirely. Candidates are then dated and
+    // re-sorted by date, which is what the sample is actually meant to be.
+    const catList = [...new Set([...feedCategories, ...totals.map(t => t.category)])]
+      .filter(c => c && !hiddenSet.has(c))
+    const candidatesByCat = new Map<string, { tote: string; location: string }[]>()
+    const poolByCat = new Map<string, number>()
+
+    await inBatches(catList, 5, async (category) => {
+      const esc = category.replace(/'/g, "''")
+      const found: { tote: string; location: string }[] = []
+      let pool = 0
+      for (const prefix of ["T", "P"]) {
+        try {
+          const { rows, count } = await bcQuery(token, FULL_ENDPOINT, {
+            $filter:  `EVA_TOT_ArticleCategory eq '${esc}' and EVA_TOT_Catalogued eq true and startswith(EVA_TOT_ToteNo,'${prefix}')`,
+            $orderby: "EVA_TOT_ToteNo desc",
+            $top:     CANDIDATES_PER_PREFIX,
+            $count:   "true",
+            $select:  "EVA_TOT_ToteNo,EVA_TOT_ToteLocation",
+          })
+          pool += count ?? rows.length
+          for (const r of rows) {
+            const tote = String(r.EVA_TOT_ToteNo ?? "").trim().toUpperCase()
+            if (tote) found.push({ tote, location: String(r.EVA_TOT_ToteLocation ?? "").trim() })
+          }
+        } catch { /* one prefix failing shouldn't lose the other */ }
+      }
+      candidatesByCat.set(category, found)
+      poolByCat.set(category, pool)
+    })
+
+    // ── Date the candidates, keep the newest SAMPLE, take the median month ──
     const categories: CategoryOut[] = []
-    for (const category of feedCategories) {
-      if (hiddenSet.has(category)) continue
-      // Newest-first by check-in; undated totes sort to the end.
-      const benched = (benchedByCategory.get(category) ?? [])
-        .slice()
-        .sort((a, b) => (b.ms ?? -Infinity) - (a.ms ?? -Infinity))
-      const sample = benched.slice(0, SAMPLE)
-      const dated  = sample.map(t => t.ms).filter((d): d is number => d != null).sort((a, b) => a - b)
+    for (const category of catList) {
+      const candidates = candidatesByCat.get(category) ?? []
+      const dated: ToteOut[] = candidates.map(c => {
+        const real = realDate.get(c.tote)
+        if (real != null) return { tote: c.tote, dateMs: real, location: c.location || null, estimated: false }
+        const est = estimateMs(anchors, c.tote)
+        return { tote: c.tote, dateMs: est, location: c.location || null, estimated: est != null }
+      })
+      // Newest first by check-in; undated totes sort to the end.
+      dated.sort((a, b) => (b.dateMs ?? -Infinity) - (a.dateMs ?? -Infinity))
+      const sample = dated.slice(0, SAMPLE)
+      const days   = sample.map(s => s.dateMs).filter((d): d is number => d != null).sort((a, b) => a - b)
       const t = totalsByNorm.get(norm(category))
       categories.push({
         category,
-        monthMs:  median(dated),
-        oldestMs: dated.length > 0 ? dated[0] : null,
-        newestMs: dated.length > 0 ? dated[dated.length - 1] : null,
+        monthMs:  median(days),
+        oldestMs: days.length > 0 ? days[0] : null,
+        newestMs: days.length > 0 ? days[days.length - 1] : null,
         sampled:  sample.length,
-        dated:    dated.length,
-        totes:    sample.map(x => ({ tote: x.tote, dateMs: x.ms, location: x.location || null })),
-        onBench:  benched.length,
-        inFeed:   inFeedByCategory.get(category) ?? 0,
+        dated:    days.length,
+        estimatedCount: sample.filter(s => s.estimated).length,
+        poolTotes: poolByCat.get(category) ?? 0,
+        totes:     sample,
         catalogued:  Number(t?.catalogued ?? 0),
         outstanding: Number(t?.outstanding ?? 0),
         lastCataloguedMs: t?.lastAt ? new Date(t.lastAt).getTime() : null,
       })
     }
 
-    // Furthest behind first; categories with nothing on a bench sink to the bottom.
+    // Furthest behind first; categories with no dated sample sink to the bottom.
     categories.sort((a, b) => {
       if (a.monthMs == null && b.monthMs == null) return a.category.localeCompare(b.category)
       if (a.monthMs == null) return 1
@@ -186,21 +343,25 @@ export async function GET() {
       return a.monthMs - b.monthMs
     })
 
-    // Diagnostics — so a thin category is explainable instead of mysterious.
-    // `shortfall` counts categories sampling fewer than SAMPLE totes, which on
-    // this web service almost always means "the rest are ticked catalogued in BC
-    // and the feed doesn't expose them" (see the header note).
+    const estimatedTotal = categories.reduce((n, c) => n + c.estimatedCount, 0)
+    const sampledTotal   = categories.reduce((n, c) => n + c.sampled, 0)
     const diagnostics = {
-      endpoint:   FEED_ENDPOINT,
-      feedRows:   allRows.length,
-      categories: feedCategories.size,
-      shortfall:  categories.filter(c => c.sampled < SAMPLE).length,
+      endpoint:  FULL_ENDPOINT,
+      anchors:   realDate.size,
+      loggedTotes,
+      sampled:   sampledTotal,
+      estimated: estimatedTotal,
+      shortfall: categories.filter(c => c.sampled < SAMPLE).length,
       note:
-        `The ${FEED_ENDPOINT} web service only returns totes that are NOT ticked ` +
-        `Catalogued in Business Central (${allRows.length} rows in total). Totes already ` +
-        `ticked off are not available through it, so a category whose recent work is ` +
-        `finished shows fewer than ${SAMPLE} totes here than on BC's own Receipt Totes page. ` +
-        `Publishing an unfiltered Receipt Totes web service in BC would fix it.`,
+        `Totes come from BC's full receipt-tote table (every tote, including ones ticked ` +
+        `Catalogued): the newest ${SAMPLE} catalogued totes per category. Check-in dates are the ` +
+        `real ones from BC's change log (${loggedTotes.toLocaleString("en-GB")} tote creations ` +
+        `logged) — spot-checked against BC's own screen, 10 of 10 exact. ` +
+        (estimatedTotal > 0
+          ? `${estimatedTotal} of ${sampledTotal} totes predate change logging, so their date is ` +
+            `estimated from the tote-number sequence and shown with a ~ (accurate to about a day ` +
+            `when tested).`
+          : `Every date shown is a real logged date — none estimated.`),
     }
 
     return NextResponse.json({ connected: true, categories, hidden, isAdmin, diagnostics })

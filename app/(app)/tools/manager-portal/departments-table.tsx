@@ -12,7 +12,7 @@ export type StockAge = {
   newestMs: number | null
   totesSampled: number      // distinct totes sampled (the last 10 worked)
   dated: number             // how many of those resolved to a date
-  totes: { tote: string; dateMs: number | null; lots: number; reason: string | null; source: string | null; location?: string | null }[]
+  totes: { tote: string; dateMs: number | null; lots: number; reason: string | null; source: string | null; location?: string | null; estimated?: boolean }[]
 }
 
 export type SaleRow = {
@@ -50,8 +50,8 @@ export type DeptGroup = {
 export type BcCategoryRow = {
   category: string
   stock: StockAge | null
-  onBench: number       // totes BC's feed shows on a bench for this category
-  inFeed: number        // totes the feed returned for this category at all
+  poolTotes: number        // catalogued totes BC holds for this category
+  estimatedCount: number   // of the sample, how many dates are estimated
   catalogued: number
   outstanding: number
   lastCataloguedMs: number | null
@@ -59,8 +59,10 @@ export type BcCategoryRow = {
 
 export type BcDiagnostics = {
   endpoint: string
-  feedRows: number
-  categories: number
+  anchors: number
+  loggedTotes: number
+  sampled: number
+  estimated: number
   shortfall: number
   note: string
 }
@@ -114,9 +116,9 @@ type BcLiveCategory = {
   newestMs: number | null
   sampled: number
   dated: number
-  totes: { tote: string; dateMs: number | null; location?: string | null }[]
-  onBench?: number
-  inFeed?: number
+  totes: { tote: string; dateMs: number | null; location?: string | null; estimated?: boolean }[]
+  poolTotes?: number
+  estimatedCount?: number
   catalogued: number
   outstanding: number
   lastCataloguedMs: number | null
@@ -171,8 +173,8 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
         if (!d?.categories) { setBcCats({ status: "error" }); return }
         const rows: BcCategoryRow[] = d.categories.map(c => ({
           category:         c.category,
-          onBench:          c.onBench ?? 0,
-          inFeed:           c.inFeed ?? 0,
+          poolTotes:        c.poolTotes ?? 0,
+          estimatedCount:   c.estimatedCount ?? 0,
           catalogued:       c.catalogued,
           outstanding:      c.outstanding,
           lastCataloguedMs: c.lastCataloguedMs,
@@ -183,12 +185,13 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
             totesSampled: c.sampled,
             dated:        c.dated,
             totes: c.totes.map(t => ({
-              tote:     t.tote,
-              dateMs:   t.dateMs,
-              lots:     1,
-              reason:   t.dateMs == null ? "no check-in date in BC" : null,
-              source:   t.dateMs != null ? "bc" : null,
-              location: t.location ?? null,
+              tote:      t.tote,
+              dateMs:    t.dateMs,
+              lots:      1,
+              reason:    t.dateMs == null ? "no check-in date in BC" : null,
+              source:    t.dateMs != null ? "bc" : null,
+              location:  t.location ?? null,
+              estimated: t.estimated,
             })),
           } : null,
         }))
@@ -696,9 +699,10 @@ function BcCategoryTable({ rows, hidden, isAdmin, diagnostics, onChanged, nowMs 
           Using totes from — Business Central categories
         </h2>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          Live from Business Central&apos;s Receipt Totes, grouped by BC&apos;s own article category.
-          &ldquo;Using totes from&rdquo; is the middle (median) check-in month of the newest 10 totes
-          sat on a cataloguing bench — where cataloguing is working from. Furthest behind first.
+          Live from Business Central, grouped by BC&apos;s own article category. &ldquo;Using totes
+          from&rdquo; is the middle (median) check-in month of the newest 10 totes ticked as catalogued
+          in BC — where cataloguing has got to. Furthest behind first. Dates marked ~ are estimated
+          (those totes predate BC&apos;s change logging).
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -751,7 +755,7 @@ function BcCategoryTable({ rows, hidden, isAdmin, diagnostics, onChanged, nowMs 
                         </button>
                       ) : (
                         <span className="text-xs text-gray-400 dark:text-gray-500">
-                          {r.stock ? "no check-in dates on those totes" : "nothing on a bench"}
+                          {r.stock ? "no check-in dates on those totes" : "nothing catalogued yet"}
                         </span>
                       )}
                     </td>
@@ -783,14 +787,20 @@ function BcCategoryTable({ rows, hidden, isAdmin, diagnostics, onChanged, nowMs 
                     <tr className="border-b border-gray-50 dark:border-gray-800/50">
                       <td colSpan={6} className="px-3 py-3 bg-gray-50/60 dark:bg-gray-800/25">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                          The newest {r.stock.totesSampled} tote{r.stock.totesSampled === 1 ? "" : "s"} on a cataloguing bench in {r.category},
+                          The newest {r.stock.totesSampled} tote{r.stock.totesSampled === 1 ? "" : "s"} catalogued in {r.category},
                           by check-in date. The month above is the middle (median) of these.
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           {r.stock.totes.map(t => (
                             <span
                               key={t.tote}
-                              title={`Tote ${t.tote}${t.location ? ` on ${t.location}` : ""}${t.reason ? ` — ${t.reason}` : " — checked in on this date"}`}
+                              title={`Tote ${t.tote}${t.location ? ` on ${t.location}` : ""}${
+                                t.reason
+                                  ? ` — ${t.reason}`
+                                  : t.estimated
+                                    ? " — estimated from neighbouring tote numbers (this tote predates BC's change logging)"
+                                    : " — checked in on this date (from BC's change log)"
+                              }`}
                               className={`text-xs px-2 py-1 rounded-lg border whitespace-nowrap ${
                                 t.dateMs == null
                                   ? "border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500"
@@ -799,7 +809,7 @@ function BcCategoryTable({ rows, hidden, isAdmin, diagnostics, onChanged, nowMs 
                             >
                               <b className="font-mono font-semibold">{t.tote}</b>
                               <span className="opacity-60 mx-1">·</span>
-                              {t.dateMs == null ? (t.reason ?? "no date") : fmtToteDate(t.dateMs)}
+                              {t.dateMs == null ? (t.reason ?? "no date") : `${t.estimated ? "~" : ""}${fmtToteDate(t.dateMs)}`}
                               {t.location && <span className="opacity-50 ml-1.5">{t.location}</span>}
                             </span>
                           ))}
@@ -831,9 +841,12 @@ function BcCategoryTable({ rows, hidden, isAdmin, diagnostics, onChanged, nowMs 
           {showDiag && (
             <div className="mt-2.5 text-xs text-gray-600 dark:text-gray-400 space-y-2">
               <p>
-                Pulled <b>{diagnostics.feedRows.toLocaleString("en-GB")}</b> totes from Business Central&apos;s{" "}
-                <code className="font-mono">{diagnostics.endpoint}</code> web service, covering{" "}
-                <b>{diagnostics.categories}</b> categories.
+                Totes come from Business Central&apos;s full receipt-tote table via{" "}
+                <code className="font-mono">{diagnostics.endpoint}</code>. Dates come from BC&apos;s change
+                log — <b>{diagnostics.loggedTotes.toLocaleString("en-GB")}</b> logged tote creations, of which{" "}
+                <b>{(diagnostics.sampled - diagnostics.estimated).toLocaleString("en-GB")}</b> of{" "}
+                <b>{diagnostics.sampled.toLocaleString("en-GB")}</b> sampled totes are real dates
+                {diagnostics.estimated > 0 && <> and <b>{diagnostics.estimated}</b> are estimated (shown with ~)</>}.
               </p>
               <p className="text-amber-700 dark:text-amber-400">⚠ {diagnostics.note}</p>
               <div className="overflow-x-auto">
@@ -841,9 +854,9 @@ function BcCategoryTable({ rows, hidden, isAdmin, diagnostics, onChanged, nowMs 
                   <thead>
                     <tr className="text-gray-500 dark:text-gray-400">
                       <th className="text-left font-medium pr-4 pb-1">Category</th>
-                      <th className="text-right font-medium pr-4 pb-1">Totes in feed</th>
-                      <th className="text-right font-medium pr-4 pb-1">On a bench</th>
+                      <th className="text-right font-medium pr-4 pb-1">Totes catalogued in BC</th>
                       <th className="text-right font-medium pr-4 pb-1">Used for the month</th>
+                      <th className="text-right font-medium pr-4 pb-1">Dates estimated</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -852,10 +865,12 @@ function BcCategoryTable({ rows, hidden, isAdmin, diagnostics, onChanged, nowMs 
                       .map(r => (
                         <tr key={r.category}>
                           <td className="pr-4 py-0.5 font-mono text-gray-700 dark:text-gray-300">{r.category}</td>
-                          <td className="pr-4 py-0.5 text-right tabular-nums">{r.inFeed.toLocaleString("en-GB")}</td>
-                          <td className="pr-4 py-0.5 text-right tabular-nums">{r.onBench.toLocaleString("en-GB")}</td>
+                          <td className="pr-4 py-0.5 text-right tabular-nums">{r.poolTotes.toLocaleString("en-GB")}</td>
                           <td className={`pr-4 py-0.5 text-right tabular-nums ${(r.stock?.totesSampled ?? 0) < 10 ? "text-amber-500" : ""}`}>
                             {r.stock?.totesSampled ?? 0}
+                          </td>
+                          <td className="pr-4 py-0.5 text-right tabular-nums">
+                            {r.estimatedCount > 0 ? r.estimatedCount : <span className="opacity-40">—</span>}
                           </td>
                         </tr>
                       ))}
