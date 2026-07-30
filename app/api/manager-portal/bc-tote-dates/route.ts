@@ -82,9 +82,22 @@ export async function GET() {
   try {
     const session = await auth()
     if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+    const isAdmin = session.user.role === "ADMIN"
+
+    // Categories an admin has hidden (display-only, restorable). ⚠ The table
+    // arrives with Run Migrations while code deploys instantly, so a missing
+    // table must simply mean "nothing hidden" — never a 500.
+    let hidden: { category: string; hiddenByName: string }[] = []
+    try {
+      hidden = await prisma.managerPortalHiddenCategory.findMany({
+        select:  { category: true, hiddenByName: true },
+        orderBy: { category: "asc" },
+      })
+    } catch { hidden = [] }
+    const hiddenSet = new Set(hidden.map(h => h.category))
 
     const token = await getBCToken()
-    if (!token) return NextResponse.json({ connected: false, categories: [] })
+    if (!token) return NextResponse.json({ connected: false, categories: [], hidden, isAdmin })
 
     // ── The dates: ONE unfiltered pull of the tote feed, grouped in code ──
     const allRows = await bcFetchAll(token, "Receipt_Totes_Excel")
@@ -120,6 +133,7 @@ export async function GET() {
 
     const categories: CategoryOut[] = []
     for (const category of feedCategories) {
+      if (hiddenSet.has(category)) continue
       // Newest-first by check-in; undated totes sort to the end.
       const benched = (benchedByCategory.get(category) ?? [])
         .slice()
@@ -150,7 +164,7 @@ export async function GET() {
       return a.monthMs - b.monthMs
     })
 
-    return NextResponse.json({ connected: true, categories })
+    return NextResponse.json({ connected: true, categories, hidden, isAdmin })
   } catch (e: unknown) {
     console.error("manager-portal/bc-tote-dates error:", e)
     return NextResponse.json({ error: e instanceof Error ? e.message : "BC query failed" }, { status: 500 })

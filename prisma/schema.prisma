@@ -646,6 +646,16 @@ model IdleGateDecision {
 // and would otherwise skew the team averages and clutter the league table.
 // REPORT-ONLY, exactly like ReportExcludedDay: no log rows are touched, so it
 // is restorable at any time.
+// A BC article category an admin has hidden from the Manager Portal →
+// Departments "Using totes from" table. Display-only and always restorable —
+// nothing about the category or its totes is changed.
+model ManagerPortalHiddenCategory {
+  category     String   @id
+  hiddenById   String
+  hiddenByName String
+  hiddenAt     DateTime @default(now())
+}
+
 model ReportExcludedUser {
   userId         String   @id
   excludedById   String

@@ -1,8 +1,9 @@
 "use client"
 
-import { Fragment, useEffect, useState } from "react"
+import { Fragment, useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { auctionTypeEmoji, auctionTypeLabel } from "@/lib/auction-types"
+import { toggleHiddenBcCategory } from "@/lib/actions/manager-portal"
 import { fmtPace, daysToSale, paceFor, targetsFor, SALE_TARGETS } from "@/lib/sale-projection"
 
 export type StockAge = {
@@ -109,11 +110,12 @@ type BcLiveCategory = {
   outstanding: number
   lastCataloguedMs: number | null
 }
+export type HiddenBcCategory = { category: string; hiddenByName: string }
 type BcLiveState =
   | { status: "loading" }
-  | { status: "disconnected" }
+  | { status: "disconnected"; hidden: HiddenBcCategory[]; isAdmin: boolean }
   | { status: "error" }
-  | { status: "ready"; categories: BcCategoryRow[] }
+  | { status: "ready"; categories: BcCategoryRow[]; hidden: HiddenBcCategory[]; isAdmin: boolean }
 
 export default function DepartmentsTable({ groups, migrated, anyDepartments, nowMs }: {
   groups: DeptGroup[]
@@ -144,13 +146,17 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
     return () => { cancelled = true }
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
+  // Re-run after hiding/restoring a category — the data comes from an API route,
+  // so a router refresh wouldn't pick the change up.
+  const loadBcCats = useCallback((cancelledRef?: { current: boolean }) => {
+    const cancelled = () => cancelledRef?.current === true
     fetch("/api/manager-portal/bc-tote-dates")
       .then(r => r.json())
-      .then((d: { connected?: boolean; categories?: BcLiveCategory[] }) => {
-        if (cancelled) return
-        if (d?.connected === false) { setBcCats({ status: "disconnected" }); return }
+      .then((d: { connected?: boolean; categories?: BcLiveCategory[]; hidden?: HiddenBcCategory[]; isAdmin?: boolean }) => {
+        if (cancelled()) return
+        const hidden  = d?.hidden ?? []
+        const isAdmin = d?.isAdmin === true
+        if (d?.connected === false) { setBcCats({ status: "disconnected", hidden, isAdmin }); return }
         if (!d?.categories) { setBcCats({ status: "error" }); return }
         const rows: BcCategoryRow[] = d.categories.map(c => ({
           category:         c.category,
@@ -173,11 +179,16 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
             })),
           } : null,
         }))
-        setBcCats({ status: "ready", categories: rows })
+        setBcCats({ status: "ready", categories: rows, hidden, isAdmin })
       })
-      .catch(() => { if (!cancelled) setBcCats({ status: "error" }) })
-    return () => { cancelled = true }
+      .catch(() => { if (!cancelled()) setBcCats({ status: "error" }) })
   }, [])
+
+  useEffect(() => {
+    const ref = { current: false }
+    loadBcCats(ref)
+    return () => { ref.current = true }
+  }, [loadBcCats])
 
   /** The number the manager actually watches: Hub ∪ BC where BC is available. */
   function totalFor(row: SaleRow): { total: number; combined: boolean } {
@@ -247,7 +258,15 @@ export default function DepartmentsTable({ groups, migrated, anyDepartments, now
           Couldn&apos;t load the Business Central categories. Try reloading.
         </div>
       )}
-      {bcCats.status === "ready" && bcCats.categories.length > 0 && <BcCategoryTable rows={bcCats.categories} nowMs={nowMs} />}
+      {bcCats.status === "ready" && (bcCats.categories.length > 0 || bcCats.hidden.length > 0) && (
+        <BcCategoryTable
+          rows={bcCats.categories}
+          hidden={bcCats.hidden}
+          isAdmin={bcCats.isAdmin}
+          onChanged={loadBcCats}
+          nowMs={nowMs}
+        />
+      )}
 
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
         Projected dates are when each sale reaches {SALE_TARGETS.join(", ")} lots at its current pace
@@ -629,9 +648,30 @@ function ToteSummary({ title, subtitle, rows, nowMs }: {
  * in BC by filtering Receipt Totes to a category + Location BENCH*
  * (see /api/manager-portal/bc-tote-dates).
  */
-function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number }) {
+function BcCategoryTable({ rows, hidden, isAdmin, onChanged, nowMs }: {
+  rows: BcCategoryRow[]
+  hidden: HiddenBcCategory[]
+  isAdmin: boolean
+  onChanged: () => void
+  nowMs: number
+}) {
   const [open, setOpen] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)   // category being toggled
+  const [error, setError] = useState<string | null>(null)
   const TH = "text-left font-medium py-2 px-3 text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400"
+
+  async function toggle(category: string, currentlyHidden: boolean) {
+    if (!currentlyHidden && !confirm(
+      `Hide ${category} from this table?\n\nIt's display-only — nothing about the category, its totes or its items changes, ` +
+      `and you can put it back from the bottom of this table.`,
+    )) return
+    setError(null)
+    setBusy(category)
+    const res = await toggleHiddenBcCategory(category)
+    setBusy(null)
+    if (!res.ok) { setError(res.error ?? "Something went wrong"); return }
+    onChanged()
+  }
 
   return (
     <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden mb-5">
@@ -663,9 +703,19 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
               const tone   = median != null ? lagTone(median, nowMs) : null
               return (
                 <Fragment key={r.category}>
-                  <tr className="border-b border-gray-50 dark:border-gray-800/50 last:border-0">
-                    <td className="py-2.5 px-3">
+                  <tr className="border-b border-gray-50 dark:border-gray-800/50 last:border-0 group">
+                    <td className="py-2.5 px-3 whitespace-nowrap">
                       <span className="font-mono font-semibold text-gray-900 dark:text-white">{r.category}</span>
+                      {isAdmin && (
+                        <button
+                          onClick={() => toggle(r.category, false)}
+                          disabled={busy === r.category}
+                          title={`Hide ${r.category} from this table`}
+                          className="ml-2 text-[11px] font-semibold text-gray-300 dark:text-gray-600 hover:text-red-500 disabled:opacity-50 transition-colors md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
+                        >
+                          {busy === r.category ? "…" : "✕ Hide"}
+                        </button>
+                      )}
                     </td>
                     <td className="py-2.5 px-3 whitespace-nowrap">
                       {median != null ? (
@@ -737,6 +787,35 @@ function BcCategoryTable({ rows, nowMs }: { rows: BcCategoryRow[]; nowMs: number
           </tbody>
         </table>
       </div>
+
+      {/* ── Hidden categories (admin) — display-only, always restorable ── */}
+      {isAdmin && hidden.length > 0 && (
+        <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-800/25">
+          <p className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1.5">
+            Hidden from this table ({hidden.length})
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {hidden.map(h => (
+              <span
+                key={h.category}
+                className="text-xs px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 whitespace-nowrap"
+              >
+                <b className="font-mono font-semibold text-gray-700 dark:text-gray-300">{h.category}</b>
+                <span className="opacity-60 ml-1.5">hidden by {h.hiddenByName}</span>
+                <button
+                  onClick={() => toggle(h.category, true)}
+                  disabled={busy === h.category}
+                  title={`Show ${h.category} in this table again`}
+                  className="ml-2 font-semibold text-[#2AB4A6] hover:underline disabled:opacity-50"
+                >
+                  {busy === h.category ? "…" : "↺ Restore"}
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {error && <p className="px-4 pb-3 text-xs text-red-500">{error}</p>}
     </section>
   )
 }
