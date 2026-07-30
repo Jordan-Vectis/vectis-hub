@@ -105,6 +105,19 @@ Jordan: "you are still getting the dates wrong and it's not finding them". The l
 
 ⚠ The sync now checks \`information_schema\` once for the column and omits the field if it isn't there — writing a not-yet-migrated column made **every** upsert fail and took the whole tote sync down, not just that field.
 
+## 🔍 Lens — identify an item from a photo (TEST BUILD 2026-07-30)
+
+Tablet cataloguing header, next to Guide / Help: photograph an item → **what it is** + **what we've sold the same thing for**. \`LensButton\` (\`auctions/[id]/lens-button.tsx\`, rendered from \`tablet-tabs.tsx\`) is a **modal for the same reason the guide is** — it opens mid-lot and must not lose the entry in progress. Route **\`/api/catalogue/lens\`**; model slot **\`catalogue_lens\`**.
+
+- **Identify** = Gemini with **Google Search grounding**, reusing the plumbing proven in \`/api/auction-ai/chat-grounded\` (\`tools: [{ googleSearch: {} }]\`). Grounding matters because catalogue numbers recalled from training data are often wrong. Returns structured JSON (maker, model, catalogue no, year, variant, confidence, reasoning, searchTerms) — parsed with a fence-tolerant extractor.
+- **Comparables** = our OWN archive, the bit Google Lens can't do: \`WarehouseItem\` has **192,147 rows with a real hammerPrice** (of 209,850) plus auction dates. Verified matching against real data for Corgi, Dinky, Hornby, Steiff, Matchbox.
+- ⚠ **SUGGESTION ONLY — nothing writes to the lot.** Gemini identifies boxed/marked items well and confidently guesses at unmarked ones, so confidence + reasoning + the searches performed are shown and the cataloguer decides. Same principle as the batch route: the person holding the item is the authority.
+- ⚠ **No size/scale in the output** (Jordan) — they're holding the item, so it wastes the answer.
+
+**⚠⚠ Two matching traps, both found by testing against real data — do NOT "simplify" these away:**
+1. **GROUP LOTS.** Much of the archive reads *"Corgi Unboxed Group Of Cars to include 497 Man from UNCLE; 261 James Bond DB5…"* — that £150 is for six cars, not the one in hand. Grouped lots are detected (\`GROUPED\` regex) and shown **separately, excluded from the headline range**. Never average them in.
+2. **CATALOGUE-NUMBER SUBSTRINGS.** \`Hornby R351\` also substring-matched **R3514 / R3516 / R3510** — different trains, one at £190. Number-bearing terms therefore need a **whole-word** match. ⚠ Applied **only** to terms containing a digit: forcing whole words on ordinary vocabulary broke plurals and "Steiff bear" then missed every *"teddy bears"* lot (150 matches → 141, all the plural ones gone).
+
 ## ⚠⚠ NEVER wipe WarehouseTote — its enrichment can't be re-fetched (fixed 2026-07-30)
 
 \`WarehouseTote.bcCreatedAt\` (check-in date) and \`receiptNo\` are written **only** by \`sync/totes-active\` from \`Receipt_Totes_Excel\`, and **that feed publishes only totes NOT ticked Catalogued**. So once a tote is ticked, BC won't hand its date over again — **our row is the last copy**. \`Totes_Excel\` has nothing to rebuild from (just \`EVA_No, EVA_Description, EVA_Location, EVA_Bin, EVA_ParentToteNo, EVA_ParentCount, EVA_Contents\` + 3 estimate/reserve totals).
