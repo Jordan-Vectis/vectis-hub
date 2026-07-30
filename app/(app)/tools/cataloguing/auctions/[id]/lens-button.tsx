@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { Comparable } from "@/app/api/catalogue/lens/route"
 
 // "Lens" for the tablet cataloguing screen — photograph an item, get back what it
@@ -26,7 +26,13 @@ type Identification = {
   searchTerms: string[]
 }
 
-type Result = { identification: Identification; comparables: Comparable[]; searchQueries: string[] }
+type Source = { title: string; uri: string }
+type Result = {
+  identification: Identification
+  comparables: Comparable[]
+  searchQueries: string[]
+  sources: Source[]
+}
 
 const CONFIDENCE: Record<string, { label: string; cls: string }> = {
   high:   { label: "High confidence",   cls: "text-emerald-400 border-emerald-700/60 bg-emerald-950/30" },
@@ -39,7 +45,7 @@ const fmtDate = (d: string | null) =>
 
 // Downscale before upload — iPad photos are ~4MB and the long edge is far more
 // detail than identification needs. Same reasoning as the smart-scan upload.
-async function shrink(file: File, maxEdge = 1600): Promise<Blob> {
+async function shrink(file: File | Blob, maxEdge = 1600): Promise<Blob> {
   try {
     const bitmap = await createImageBitmap(file)
     const scale  = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height))
@@ -64,25 +70,55 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
   const [error, setError]     = useState<string | null>(null)
   const [result, setResult]   = useState<Result | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [note, setNote]       = useState("")
+  const [file, setFile]       = useState<File | Blob | null>(null)
+  const cameraRef  = useRef<HTMLInputElement>(null)
+  const libraryRef = useRef<HTMLInputElement>(null)
 
-  function reset() {
+  function clearResult() {
     setResult(null)
     setError(null)
-    if (preview) URL.revokeObjectURL(preview)
-    setPreview(null)
   }
 
-  async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
+  function takeImage(f: File | Blob) {
+    clearResult()
+    setFile(f)
+    setPreview(prev => {
+      if (prev) URL.revokeObjectURL(prev)
+      return URL.createObjectURL(f)
+    })
+  }
+
+  // Paste an image straight in (⌘/Ctrl-V) — handy on a desktop where the picture
+  // is already on the clipboard from our own website or an email.
+  useEffect(() => {
+    if (!open) return
+    function onPaste(e: ClipboardEvent) {
+      const item = Array.from(e.clipboardData?.items ?? []).find(i => i.type.startsWith("image/"))
+      if (!item) return
+      const blob = item.getAsFile()
+      if (!blob) return
+      e.preventDefault()
+      takeImage(blob)
+    }
+    window.addEventListener("paste", onPaste)
+    return () => window.removeEventListener("paste", onPaste)
+  }, [open])
+
+  function onPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = e.target.files?.[0]
     e.target.value = ""                       // so the same photo can be retaken
-    if (!file) return
-    reset()
-    setPreview(URL.createObjectURL(file))
+    if (picked) takeImage(picked)
+  }
+
+  async function run() {
+    if (!file || busy) return
+    clearResult()
     setBusy(true)
     try {
       const body = new FormData()
       body.append("image", await shrink(file), "lens.jpg")
+      if (note.trim()) body.append("note", note.trim())
       const res  = await fetch("/api/catalogue/lens", { method: "POST", body })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) { setError(data?.error ?? `Lens failed (${res.status})`); return }
@@ -92,6 +128,14 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
     } finally {
       setBusy(false)
     }
+  }
+
+  function reset() {
+    clearResult()
+    setFile(null)
+    setNote("")
+    if (preview) URL.revokeObjectURL(preview)
+    setPreview(null)
   }
 
   const id      = result?.identification
@@ -136,31 +180,59 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
 
             <div className="p-5 space-y-4">
               <p className="text-sm text-gray-400">
-                Photograph the item — markings, base or box work best. You&apos;ll get what it looks
-                like it is, and what we&apos;ve sold the same thing for.
+                Photograph the item — markings, base or box work best — or paste a picture in. You&apos;ll
+                get what it looks like it is, and what we&apos;ve sold the same thing for.
                 <span className="text-gray-500"> It&apos;s a second opinion, not a valuation — nothing is saved to the lot.</span>
               </p>
 
-              <input
-                ref={inputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={onPick}
-                className="hidden"
-              />
-              <button
-                onClick={() => inputRef.current?.click()}
-                disabled={busy}
-                style={{ touchAction: "manipulation", background: ACCENT }}
-                className="w-full rounded-xl py-4 text-base font-bold text-black disabled:opacity-50"
-              >
-                {busy ? "Looking…" : result ? "📷 Take another photo" : "📷 Take a photo"}
-              </button>
+              {/* Two inputs: `capture` forces the camera on a tablet, so choosing an
+                  existing picture needs its own input without it. */}
+              <input ref={cameraRef}  type="file" accept="image/*" capture="environment" onChange={onPick} className="hidden" />
+              <input ref={libraryRef} type="file" accept="image/*" onChange={onPick} className="hidden" />
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => cameraRef.current?.click()}
+                  disabled={busy}
+                  style={{ touchAction: "manipulation", background: ACCENT }}
+                  className="flex-1 rounded-xl py-3.5 text-base font-bold text-black disabled:opacity-50"
+                >
+                  📷 Take a photo
+                </button>
+                <button
+                  onClick={() => libraryRef.current?.click()}
+                  disabled={busy}
+                  style={{ touchAction: "manipulation" }}
+                  className="flex-1 rounded-xl py-3.5 text-base font-medium text-gray-200 border border-gray-700 hover:bg-white/5 disabled:opacity-50"
+                >
+                  🖼 Choose / paste
+                </button>
+              </div>
 
               {preview && (
                 <img src={preview} alt="" className="w-full max-h-48 object-contain rounded-xl border border-gray-800" />
               )}
+
+              {/* Optional note — they're holding the item, so what they can see beats
+                  what the model thinks it sees. Also lets them ask a direct question. */}
+              <textarea
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                rows={2}
+                placeholder="Anything to add? e.g. “base says Dinky Toys 741” or “which variant is this?” (optional)"
+                className="w-full rounded-xl bg-black/30 border border-gray-700 px-3 py-2 text-sm text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-gray-500"
+              />
+
+              <button
+                onClick={run}
+                disabled={busy || !file}
+                style={{ touchAction: "manipulation", background: file && !busy ? ACCENT : undefined }}
+                className={`w-full rounded-xl py-4 text-base font-bold disabled:opacity-40 ${
+                  file && !busy ? "text-black" : "text-gray-400 border border-gray-700"
+                }`}
+              >
+                {busy ? "Looking…" : file ? "🔍 Identify it" : "Add a picture first"}
+              </button>
 
               {error && (
                 <div className="rounded-xl border border-red-800/60 bg-red-950/30 px-4 py-3 text-sm text-red-300">
@@ -191,6 +263,24 @@ export default function LensButton({ tablet = false }: { tablet?: boolean }) {
                         </span>
                       </div>
                       {id.reasoning && <p className="text-xs text-gray-500">{id.reasoning}</p>}
+
+                      {/* Where it found it — so the cataloguer can check the claim
+                          rather than take the model's word for it. */}
+                      {result!.sources?.length > 0 && (
+                        <div className="pt-1 space-y-1">
+                          {result!.sources.slice(0, 3).map((s, i) => (
+                            <a
+                              key={i}
+                              href={s.uri}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block text-xs text-blue-400 hover:underline truncate"
+                            >
+                              🔗 {s.title}
+                            </a>
+                          ))}
+                        </div>
+                      )}
                     </>
                   ) : (
                     <p className="text-sm text-amber-400">
