@@ -151,7 +151,10 @@ export async function POST(req: NextRequest) {
             reservePrice:     parseFloat_(r.EVA_ReservePrice),
             location:         r.EVA_ArticleLocationCode ?? null,
             binCode:          r.EVA_ArticleBinCode      ?? null,
-            toteNo:           r.EVA_ArticleToteNo       ?? null,
+            // Source tote: EVA_CFA_TOT_CreatedFromToteNo is the REAL item→tote
+            // link (verified populated 2026-07-29, incl. old receipts).
+            // EVA_ArticleToteNo is empty on ~every row — kept only as fallback.
+            toteNo:           String(r.EVA_CFA_TOT_CreatedFromToteNo ?? "").trim() || (r.EVA_ArticleToteNo ?? null),
             collectionNo:       r.EVA_CollectionNo ?? null,
             sizeClassification: r.EVA_SHIP_EVA_SizeClassification ?? null,
             catalogued:       parseBool(r.EVA_Catalogued),
@@ -184,7 +187,7 @@ export async function POST(req: NextRequest) {
             reservePrice:     parseFloat_(r.EVA_ReservePrice),
             location:         r.EVA_ArticleLocationCode ?? null,
             binCode:          r.EVA_ArticleBinCode      ?? null,
-            toteNo:           r.EVA_ArticleToteNo       ?? null,
+            toteNo:           String(r.EVA_CFA_TOT_CreatedFromToteNo ?? "").trim() || (r.EVA_ArticleToteNo ?? null),
             collectionNo:       r.EVA_CollectionNo ?? null,
             sizeClassification: r.EVA_SHIP_EVA_SizeClassification ?? null,
             catalogued:       parseBool(r.EVA_Catalogued),

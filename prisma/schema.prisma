@@ -931,7 +931,7 @@ model WarehouseItem {
   // Physical location
   location     String?           // EVA_ArticleLocationCode
   binCode      String?           // EVA_ArticleBinCode
-  toteNo       String?           // EVA_ArticleToteNo
+  toteNo       String?           // EVA_CFA_TOT_CreatedFromToteNo (source tote; EVA_ArticleToteNo fallback — that one is ~always empty)
   locationScannedAt DateTime?    // from ChangeLogEntries — when location was last scanned
 
   // Shipping (used by the BC Reports → Shipping report)

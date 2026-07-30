@@ -20,20 +20,25 @@ export const maxDuration = 60
 // isn't exposed on this OData endpoint.)
 //
 // So we use our COMPLETE item-level data instead. WarehouseItem holds every
-// catalogued item with `cataloguedAt` (when it was worked). Per category we
-// take the most-recently-catalogued CONSIGNMENTS (grouped by receipt — items
-// don't carry a tote number in BC, EVA_ArticleToteNo is empty on ~all of them)
-// and date each receipt by its TOTE'S CHECK-IN (WarehouseTote.bcCreatedAt =
-// BC's SystemCreatedAt for the tote, joined on receiptNo).
+// catalogued item with `cataloguedAt` (when it was worked) and — since the
+// 2026-07-29 sync change — `toteNo`, the item's SOURCE TOTE from
+// `EVA_CFA_TOT_CreatedFromToteNo` (verified populated in BC incl. old receipts;
+// `EVA_ArticleToteNo` is the empty one). So we group by ACTUAL TOTE: the
+// newest-10 totes catalogued per category, each dated by its own check-in
+// (WarehouseTote.bcCreatedAt, joined directly on toteNo).
 //
-// ⚠ NOT goodsReceivedDate — verified 2026-07-29 against production: it is
-// populated on 0 of ~208k WarehouseItem rows. A dead field. bcCreatedAt by
-// receipt resolved 9 of GAMING's top 10.
+// Items synced before that change have no toteNo until a full Receipt Lines
+// re-sync backfills it — those fall back to grouping by RECEIPT (keyed
+// "R:<receiptNo>", dated via the receipt's totes). So the table degrades to the
+// receipt view where tote data is missing, never breaks.
 //
-// "Using totes from" = median tote check-in month of the newest 10 consignments
-// catalogued in each category.
+// ⚠ NOT goodsReceivedDate — verified 2026-07-29 against production: populated on
+// 0 of ~208k WarehouseItem rows. A dead field.
+//
+// "Using totes from" = median check-in month of the newest 10 totes catalogued
+// in each category.
 
-const SAMPLE = 10   // newest N catalogued consignments (receipts) per category
+const SAMPLE = 10   // newest N catalogued totes per category
 
 // Median — robust to a stray old/new consignment even on a small sample. A
 // trimmed mean needs enough points to trim; the median doesn't.
@@ -75,48 +80,58 @@ export async function GET() {
       WHERE w."category" IS NOT NULL AND btrim(w."category") <> ''
       GROUP BY 1`
 
-    // ── The newest SAMPLE catalogued consignments per category, each dated by
-    // its tote's check-in. Grouped by receipt (a receipt maps to a
-    // tote/consignment); ranked by how recently it was worked; top SAMPLE per
-    // category kept; dated via WarehouseTote.bcCreatedAt on receiptNo (MIN =
-    // when the consignment's first tote was checked in). bcCreatedAt is guarded
-    // against BC's empty-date sentinel (0001-01-01 → treated as no date). ──
-    const rows = await prisma.$queryRaw<{ category: string; receipt: string; received: Date | null; rn: number }[]>`
-      WITH receipts AS (
-        SELECT btrim(w."category")            AS category,
-               upper(btrim(w."receiptNo"))    AS receipt,
-               MAX(w."cataloguedAt")          AS last_cat
+    // ── The newest SAMPLE catalogued TOTES per category, each dated by its own
+    // check-in (WarehouseTote.bcCreatedAt joined on toteNo). Items without a
+    // source tote (not yet re-synced) group by receipt instead, keyed
+    // "R:<receiptNo>" and dated via the receipt's totes. Ranked by how recently
+    // each group was worked. bcCreatedAt is guarded against BC's empty-date
+    // sentinel (0001-01-01 → treated as no date). ──
+    const rows = await prisma.$queryRaw<{ category: string; grp: string; received: Date | null; rn: number }[]>`
+      WITH groups AS (
+        SELECT btrim(w."category")                                       AS category,
+               COALESCE(NULLIF(upper(btrim(w."toteNo")), ''),
+                        'R:' || upper(btrim(w."receiptNo")))             AS grp,
+               MAX(w."cataloguedAt")                                     AS last_cat
         FROM "WarehouseItem" w
         WHERE w."catalogued" = true
           AND w."cataloguedAt" >= DATE '1990-01-01'
-          AND w."category"  IS NOT NULL AND btrim(w."category")  <> ''
-          AND w."receiptNo" IS NOT NULL AND btrim(w."receiptNo") <> ''
+          AND w."category" IS NOT NULL AND btrim(w."category") <> ''
+          AND (NULLIF(btrim(w."toteNo"), '') IS NOT NULL OR NULLIF(btrim(w."receiptNo"), '') IS NOT NULL)
         GROUP BY 1, 2
       ),
       ranked AS (
-        SELECT category, receipt,
+        SELECT category, grp,
                ROW_NUMBER() OVER (PARTITION BY category ORDER BY last_cat DESC) AS rn
-        FROM receipts
+        FROM groups
       ),
       tote_dates AS (
-        SELECT upper(btrim(t."receiptNo")) AS receipt,
-               MIN(t."bcCreatedAt")        AS received
+        SELECT upper(btrim(t."toteNo")) AS tote, MIN(t."bcCreatedAt") AS received
+        FROM "WarehouseTote" t
+        WHERE t."bcCreatedAt" >= DATE '1990-01-01'
+        GROUP BY 1
+      ),
+      receipt_dates AS (
+        SELECT upper(btrim(t."receiptNo")) AS receipt, MIN(t."bcCreatedAt") AS received
         FROM "WarehouseTote" t
         WHERE t."bcCreatedAt" >= DATE '1990-01-01'
           AND t."receiptNo" IS NOT NULL AND btrim(t."receiptNo") <> ''
         GROUP BY 1
       )
-      SELECT r.category, r.receipt, td.received, r.rn::int AS rn
+      SELECT r.category, r.grp,
+             CASE WHEN r.grp LIKE 'R:%' THEN rd.received ELSE td.received END AS received,
+             r.rn::int AS rn
       FROM ranked r
-      LEFT JOIN tote_dates td ON td.receipt = r.receipt
+      LEFT JOIN tote_dates    td ON td.tote    = r.grp
+      LEFT JOIN receipt_dates rd ON rd.receipt = substring(r.grp FROM 3)
       WHERE r.rn <= ${SAMPLE}
       ORDER BY r.category, r.rn`
 
-    // Bucket the sampled consignments by category, in rank order (newest first).
+    // Bucket the sampled totes by category, in rank order (newest first).
+    // "R:" receipt-fallback keys lose the prefix for display.
     const sampleByCat = new Map<string, { tote: string; dateMs: number | null }[]>()
     for (const r of rows) {
       const arr = sampleByCat.get(r.category) ?? []
-      arr.push({ tote: r.receipt || "(no receipt)", dateMs: toMs(r.received) })
+      arr.push({ tote: r.grp.startsWith("R:") ? r.grp.slice(2) : r.grp, dateMs: toMs(r.received) })
       sampleByCat.set(r.category, arr)
     }
 
