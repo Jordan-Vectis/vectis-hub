@@ -67,6 +67,7 @@ model User {
   devices             Device[]
   departmentLinks     UserDepartment[]
   auctionAccess       CatalogueAuctionAccess[]
+  lotDrafts           CatalogueLotDraft[]
 }
 
 model BCToken {
@@ -388,6 +389,7 @@ model CatalogueAuction {
   webDescriptions WebDescription[]
   conditionReports ConditionReport[]
   extraAccess CatalogueAuctionAccess[]
+  lotDrafts   CatalogueLotDraft[]
 }
 
 // One-off access to a single sale for someone outside its department — the
@@ -566,6 +568,50 @@ model CatalogueLot {
   auction      CatalogueAuction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
   commissionBids CommissionBid[]
   parcelLots   ParcelLot[]
+}
+
+// The lot someone was part-way through in the Lot Wizard, autosaved as they type
+// so a crash / sign-out / closed tab doesn't lose it ("Resume lot" banner).
+// ONE row per user per sale — the wizard only ever has one lot on the go.
+// Photos are deliberately NOT kept (camera Files); photoCount is only so the
+// resume banner can warn that any photos taken need retaking.
+model CatalogueLotDraft {
+  id        String           @id @default(cuid())
+  auctionId String
+  userId    String
+  auction   CatalogueAuction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  step            Int      @default(2)
+  vendor          String   @default("")
+  tote            String   @default("")
+  receipt         String   @default("")
+  barcode         String   @default("")
+  keyPoints       String   @default("") @db.Text
+  aiExcluded      Boolean  @default(false)
+  manualDesc      String   @default("") @db.Text
+  category        String   @default("")
+  subCategory     String   @default("")
+  brand           String   @default("")
+  // Estimates stay as TEXT — the draft restores exactly what was typed
+  // ("1,200", a half-finished number), not a parsed value.
+  estimateLow     String   @default("")
+  estimateHigh    String   @default("")
+  cond1           String   @default("")
+  cond2           String   @default("")
+  boxOn           Boolean  @default(false)
+  boxPrefixMode   String   @default("Box is")
+  boxCustomPrefix String   @default("")
+  boxCond1        String   @default("")
+  boxCond2        String   @default("")
+  parcel          String   @default("")
+  photoCount      Int      @default(0)
+
+  startedAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([auctionId, userId])
+  @@index([userId])
 }
 
 model CommissionBid {

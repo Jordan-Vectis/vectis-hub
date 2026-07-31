@@ -298,6 +298,89 @@ export async function saveLastLotFields(fields: { tote?: string; vendor?: string
   })
 }
 
+// ── Lot Wizard "Resume lot" draft ───────────────────────────────────────────
+// The lot someone is part-way through, autosaved as they type so a crash, a
+// sign-out or a closed tab doesn't lose it. One row per user per sale, on the
+// SERVER on purpose: it has to survive picking up a different iPad.
+//
+// ⚠ Every one of these swallows its errors (silent no-op / null). A draft is a
+// convenience — a failure here must never interrupt cataloguing, and the table
+// only exists once Run Migrations has been clicked, while the code reaches
+// Railway immediately (same reasoning as lib/departments.ts).
+export type LotDraftFields = {
+  step: number
+  vendor: string
+  tote: string
+  receipt: string
+  barcode: string
+  keyPoints: string
+  aiExcluded: boolean
+  manualDesc: string
+  category: string
+  subCategory: string
+  brand: string
+  estimateLow: string
+  estimateHigh: string
+  cond1: string
+  cond2: string
+  boxOn: boolean
+  boxPrefixMode: string
+  boxCustomPrefix: string
+  boxCond1: string
+  boxCond2: string
+  parcel: string
+  photoCount: number
+}
+
+export async function saveLotDraft(auctionId: string, draft: LotDraftFields): Promise<void> {
+  try {
+    const session = await auth()
+    if (!session) return
+    // userId comes from the session, never the caller — a draft is only ever
+    // your own.
+    const userId = session.user.id
+    await prisma.catalogueLotDraft.upsert({
+      where:  { auctionId_userId: { auctionId, userId } },
+      create: { auctionId, userId, ...draft },
+      update: draft,
+    })
+  } catch { /* draft is best-effort — never block the wizard */ }
+}
+
+export async function getLotDraft(auctionId: string): Promise<
+  (LotDraftFields & { startedAt: number; updatedAt: number }) | null
+> {
+  try {
+    const session = await auth()
+    if (!session) return null
+    const d = await prisma.catalogueLotDraft.findUnique({
+      where: { auctionId_userId: { auctionId, userId: session.user.id } },
+    })
+    if (!d) return null
+    return {
+      step: d.step,
+      vendor: d.vendor, tote: d.tote, receipt: d.receipt, barcode: d.barcode,
+      keyPoints: d.keyPoints, aiExcluded: d.aiExcluded, manualDesc: d.manualDesc,
+      category: d.category, subCategory: d.subCategory, brand: d.brand,
+      estimateLow: d.estimateLow, estimateHigh: d.estimateHigh,
+      cond1: d.cond1, cond2: d.cond2,
+      boxOn: d.boxOn, boxPrefixMode: d.boxPrefixMode, boxCustomPrefix: d.boxCustomPrefix,
+      boxCond1: d.boxCond1, boxCond2: d.boxCond2,
+      parcel: d.parcel, photoCount: d.photoCount,
+      startedAt: d.startedAt.getTime(),
+      updatedAt: d.updatedAt.getTime(),
+    }
+  } catch { return null }
+}
+
+export async function clearLotDraft(auctionId: string): Promise<void> {
+  try {
+    const session = await auth()
+    if (!session) return
+    await prisma.catalogueLotDraft.deleteMany({ where: { auctionId, userId: session.user.id } })
+  } catch { /* nothing to clean up if the table isn't there yet */ }
+}
+
 // Is this barcode already assigned to a lot ANYWHERE in the app? Deliberately
 // a live server lookup rather than a check against the lots the page happens to
 // have loaded — a stale client can't see a lot another cataloguer just created
