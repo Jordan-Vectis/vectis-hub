@@ -225,10 +225,24 @@ export default async function ReportsUserPage({
   const fastest      = minOf(timedDurations)
   const slowest      = maxOf(timedDurations)
 
+  // Idle that happened INSIDE a lot is already part of that lot's durationMs, so
+  // counting the full duration as "cataloguing" AND the idle row separately
+  // double-counts it. Every figure on this page uses the ACTIVE part of a lot —
+  // see the daily breakdown and the range split below, which share this map.
+  const MAX_IDLE_MS = 10 * 60 * 60 * 1000
+  const countedIdle = idleLogs.filter(l => l.idleDurationMs <= MAX_IDLE_MS)
+  const breakdowns  = computeLotBreakdowns(logs, countedIdle)
+
   // ── Today stats (derived from range-filtered logs; shows correctly when range includes today) ──
   const todayLogs       = incLogs.filter(l => l.savedAt >= todayStart)
   const lotsToday       = todayLogs.length
-  const activeTimeToday = todayLogs.reduce((s, l) => s + l.durationMs, 0)
+  // ⚠ ACTIVE time, not raw durationMs. Today's Productivity adds this to the
+  // time-away total, so a raw sum counted every mid-lot break twice — that is
+  // how the card managed to report 11h 37m of an 8-hour day and still call it
+  // "100% of expected time accounted for" (the % is capped at 100, so the
+  // overrun showed up as a confident green tick instead of an impossible
+  // figure). Same rule as everywhere else on this page.
+  const activeTimeToday = todayLogs.reduce((s, l) => s + (breakdowns.get(l.id)?.activeMs ?? l.durationMs), 0)
   const todayIdleSegs   = incIdleSegs.filter(s => s.startedAt >= todayStart)
 
   const weekStart = ukDayStartUtc(now, 7)
@@ -269,16 +283,9 @@ export default async function ReportsUserPage({
     .sort((a, b) => b.count - a.count)
 
   // ── Daily breakdown: cataloguing vs idle per day ──
-  const MAX_IDLE_MS = 10 * 60 * 60 * 1000
+  // Cataloguing is the ACTIVE part of each lot (see `breakdowns` above); the idle
+  // is still counted once, in the idle column.
   const dayMap = new Map<string, { date: string; lots: number; cataloguingMs: number; idleMs: number }>()
-
-  // Idle that happened INSIDE a lot is already part of that lot's durationMs, so
-  // counting the full duration as "cataloguing" AND the idle row separately
-  // double-counts it — which silently steals from "unaccounted" rather than
-  // pushing the bar past 100%. Count only the active part as cataloguing; the
-  // idle is still counted once, in the idle column.
-  const countedIdle = idleLogs.filter(l => l.idleDurationMs <= MAX_IDLE_MS)
-  const breakdowns  = computeLotBreakdowns(logs, countedIdle)
 
   for (const log of logs) {
     const day = ukDayKey(log.savedAt)
