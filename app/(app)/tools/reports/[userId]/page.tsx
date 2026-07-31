@@ -17,6 +17,7 @@ import {
 } from "../../../admin/cataloguing-reports/[userId]/collapsible-sections"
 import { buildLotMap, lotRef, minOf, maxOf, ukDayKey, ukDayStartUtc, computeLotBreakdowns } from "@/lib/cataloguing-reports"
 import { splitIdleByWorkingDay } from "@/lib/idle-gaps"
+import { groupIdleOccasions } from "@/lib/idle-timer-config"
 
 export const dynamic = "force-dynamic"
 
@@ -245,6 +246,40 @@ export default async function ReportsUserPage({
   const activeTimeToday = todayLogs.reduce((s, l) => s + (breakdowns.get(l.id)?.activeMs ?? l.durationMs), 0)
   const todayIdleSegs   = incIdleSegs.filter(s => s.startedAt >= todayStart)
 
+  // ── Today's breaks, grouped the way they actually happened ──────────────────
+  // One answer to the activity popup writes one IdleLog row PER REASON, tiled
+  // back-to-back from the start of the gap. That tiling is a storage convenience:
+  // the cataloguer says WHAT they were doing and FOR HOW LONG, never in which
+  // order — so a per-reason start time is invented, and listing the rows
+  // separately reads as several breaks when it was one.
+  //
+  // Regroup them into the real break (groupIdleOccasions — the same helper the
+  // team Activity report uses), then split THAT by working day so a break which
+  // began before 9am still shows its morning slice. Only the break carries a
+  // time; the reasons inside it carry durations only.
+  const todayBreaks = groupIdleOccasions(incIdle).flatMap(occ => {
+    const slices = splitIdleByWorkingDay(occ.startedAt.getTime(), occ.totalMs)
+    return slices.map(seg => ({
+      startedAt:  new Date(seg.startMs).toISOString(),
+      endedAt:    new Date(seg.endMs).toISOString(),
+      durationMs: seg.ms,
+      dayKey:     ukDayKey(new Date(seg.startMs)),
+      // True when this is only part of the break — the rest fell on another
+      // working day. The reason durations then describe the WHOLE break, so the
+      // card shows them without times and says so rather than inventing a share.
+      partial:    slices.length > 1,
+      wholeMs:    occ.totalMs,
+      realStart:  occ.startedAt.toISOString(),
+      reasons:    occ.rows.map(r => ({
+        reason:      r.reason,
+        durationMs:  r.idleDurationMs,
+        toteNumbers: r.toteNumbers,
+        notes:       r.notes,
+      })),
+    }))
+  }).filter(b => !excludedDays.has(b.dayKey) && new Date(b.startedAt) >= todayStart)
+    .sort((a, b) => a.startedAt.localeCompare(b.startedAt))
+
   const weekStart = ukDayStartUtc(now, 7)
   const lotsThisWeek = incLogs.filter(l => l.savedAt >= weekStart).length
 
@@ -393,6 +428,7 @@ export default async function ReportsUserPage({
           notes:       s.notes,
           startedAt:   s.startedAt.toISOString(),
         }))}
+        breaks={todayBreaks}
       />
 
       {/* Today's timeline — visual 9am–5pm activity map */}
@@ -410,6 +446,7 @@ export default async function ReportsUserPage({
           toteNumbers: s.toteNumbers,
           notes:       s.notes,
         }))}
+        breaks={todayBreaks}
       />
 
       {/* No data in range */}
