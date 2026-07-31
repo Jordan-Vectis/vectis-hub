@@ -40,7 +40,16 @@ interface Lot {
   tote: string | null; receipt: string | null; receiptUniqueId: string | null; category: string | null
   subCategory: string | null; brand: string | null; notes: string | null
   status: string; aiUpgraded: boolean; addedToBC: boolean; aiExcluded: boolean; createdByName: string | null; imageUrls: string[]
+  createdAt: string          // ISO — when the lot was created ("Date Added" column)
   extraDetails: string | null
+}
+
+// "Date Added" — short and scannable in a table column, and the time matters
+// (several lots a day from the same person), so both are shown.
+function fmtDateAdded(iso: string) {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return "—"
+  return `${d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" })} ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`
 }
 
 
@@ -1078,7 +1087,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
   const [photoMsg, setPhotoMsg]     = useState<string | null>(null)
 
   // Column sort
-  type SortCol = "barcode" | "receiptUniqueId" | "title" | "vendor" | "receipt" | "tote" | "category" | "photos" | "addedBy"
+  type SortCol = "barcode" | "receiptUniqueId" | "title" | "vendor" | "receipt" | "tote" | "category" | "photos" | "addedBy" | "dateAdded"
   const [sortCol, setSortCol] = useState<SortCol>("barcode")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
 
@@ -1202,6 +1211,10 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
       let cmp = 0
       if (sortCol === "photos") {
         cmp = a.imageUrls.length - b.imageUrls.length
+      } else if (sortCol === "dateAdded") {
+        // Sorted as a real date, not the formatted string — "01 Aug" must not
+        // land before "31 Jul".
+        cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
       } else {
         const getVal = (l: Lot) => {
           if (sortCol === "barcode")        return l.barcode
@@ -1317,6 +1330,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
       "Photos":        l.imageUrls.length,
       "AI Upgraded":   l.aiUpgraded ? "Yes" : "No",
       "Added By":      l.createdByName ?? "",
+      "Date Added":    fmtDateAdded(l.createdAt),
     }))
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
@@ -2019,10 +2033,10 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                 <input type="checkbox" checked={filtered.length > 0 && selected.size === filtered.length}
                   onChange={toggleSelectAll} className="w-4 h-4 rounded border-gray-600 accent-[#2AB4A6]" />
               </th>
-              {(["barcode","receiptUniqueId","title","vendor","receipt","tote","category","photos","addedBy"] as SortCol[]).map((col, i) => (
+              {(["barcode","receiptUniqueId","title","vendor","receipt","tote","category","photos","addedBy","dateAdded"] as SortCol[]).map((col, i) => (
                 <th key={col} onClick={() => toggleSort(col)}
                   className="text-left px-4 py-3 text-xs font-medium text-gray-600 dark:text-gray-500 uppercase tracking-wide cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
-                  {["Barcode","Unique ID","Title","Vendor","Receipt","Tote","Category","Photos","Added By"][i]}
+                  {["Barcode","Unique ID","Title","Vendor","Receipt","Tote","Category","Photos","Added By","Date Added"][i]}
                   {sortCol === col ? (sortDir === "asc" ? " ▲" : " ▼") : <span className="text-gray-700"> ⇅</span>}
                 </th>
               ))}
@@ -2048,7 +2062,8 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                   <option value="none">No photos</option>
                 </select>
               </td>
-              <td className="px-2 py-1.5" />
+              <td className="px-2 py-1.5" />{/* Added By */}
+              <td className="px-2 py-1.5" />{/* Date Added */}
               <td className="px-2 py-1.5">
                 <select value={fKeyPoints} onChange={e => setFKeyPoints(e.target.value)} className={COL_SELECT}>
                   <option value="">All</option>
@@ -2111,6 +2126,9 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                 <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-500 whitespace-nowrap">
                   {lot.createdByName ?? "—"}
                 </td>
+                <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-500 whitespace-nowrap">
+                  {fmtDateAdded(lot.createdAt)}
+                </td>
                 <td className="px-4 py-3 text-center">
                   {lot.keyPoints?.trim()
                     ? <span className="text-green-500 text-xs" title="Has key points">✓</span>
@@ -2156,7 +2174,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={14} className="px-4 py-8 text-center text-gray-600 text-sm">No lots match your filters</td></tr>
+              <tr><td colSpan={15} className="px-4 py-8 text-center text-gray-600 text-sm">No lots match your filters</td></tr>
             )}
           </tbody>
         </table>
