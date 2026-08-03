@@ -404,14 +404,38 @@ export async function autocorrectLotsFromTotes(auctionId: string): Promise<{
 
 // Tick / untick one BC correction. Any signed-in cataloguer — this is a shared
 // worklist, not a per-user one.
-export async function setBcCorrectionDone(id: string, done: boolean): Promise<{ ok: boolean; error?: string }> {
+//
+// ⚠ Keyed on the LOT, not on a row id, and it UPSERTS. The list is live: most
+// rows are a mismatch computed on the spot and have no saved row yet, and
+// ticking one is what first records it. The snapshot is only written on create —
+// on a row Match BC already wrote, the stored values are the ones that were
+// real at the time and must not be replaced by whatever the lot says now.
+export async function setBcCorrectionDone(input: {
+  auctionId: string
+  lotId:     string
+  done:      boolean
+  snapshot?: {
+    barcode:         string | null
+    receiptUniqueId: string | null
+    title:           string | null
+    tote:            string | null
+    oldVendor:       string | null
+    oldReceipt:      string | null
+    newVendor:       string | null
+    newReceipt:      string | null
+  }
+}): Promise<{ ok: boolean; error?: string }> {
   try {
     const session = await requireCataloguer()
-    await prisma.catalogueBcCorrection.update({
-      where: { id },
-      data: done
-        ? { done: true,  doneBy: changedByOf(session), doneAt: new Date() }
-        : { done: false, doneBy: null, doneAt: null },
+    const { auctionId, lotId, done, snapshot } = input
+    const doneFields = done
+      ? { done: true,  doneBy: changedByOf(session), doneAt: new Date() }
+      : { done: false, doneBy: null, doneAt: null }
+
+    await prisma.catalogueBcCorrection.upsert({
+      where:  { auctionId_lotId: { auctionId, lotId } },
+      create: { auctionId, lotId, ...(snapshot ?? {}), ...doneFields },
+      update: doneFields,
     })
     return { ok: true }
   } catch (e: any) {

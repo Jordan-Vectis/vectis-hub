@@ -1,16 +1,20 @@
 "use client"
 
 import { useCallback, useEffect, useState, useTransition } from "react"
-import type { BcCorrectionGroup } from "@/app/api/catalogue/bc-corrections/route"
+import type { BcCorrectionGroup, BcCorrectionRow } from "@/app/api/catalogue/bc-corrections/route"
 import { setBcCorrectionDone } from "@/lib/actions/catalogue"
 
-// The BC to-do list: lots whose vendor/receipt were wrong in the Hub and have
-// since been corrected to match BC (Tote Check → "Match BC"). Because the wrong
-// values are most likely what got pushed INTO BC, each row says "this barcode
-// is on the wrong receipt/vendor in BC, and here's where it belongs".
+// The BC to-do list. BC is correct and our data was wrong, so the wrong
+// vendor/receipt is most likely what got pushed INTO BC — each row says "this
+// barcode is on the wrong receipt/vendor in BC, and here's where it belongs".
+//
+// ⚠ LIVE, not a leftover of the Match BC button: the list shows today's
+// mismatches straight away so BC can be put right FIRST and checked back on
+// afterwards. Ticks persist, and rows survive the Hub being corrected (at which
+// point they simply stop saying "Hub still wrong").
 //
 // Grouped by the move itself (from → to), so a whole group can be dealt with in
-// BC in one go, and ticked off as it's done.
+// BC in one go.
 
 type Data = { groups: BcCorrectionGroup[]; total: number; done: number; notReady?: boolean }
 
@@ -33,29 +37,35 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
 
   useEffect(() => { load() }, [load])
 
-  // Tick optimistically — the list is a worklist and must feel instant on a
-  // tablet; a failed save puts the tick back and shows why.
-  function toggle(id: string, done: boolean) {
-    setData(d => d && ({
+  // Tick optimistically — a worklist has to feel instant on a tablet; a failed
+  // save puts the tick back and says why.
+  function toggle(row: BcCorrectionRow, done: boolean) {
+    const flip = (want: boolean) => setData(d => d && ({
       ...d,
-      done: d.done + (done ? 1 : -1),
-      groups: d.groups.map(g => ({ ...g, rows: g.rows.map(r => r.id === id ? { ...r, done } : r) })),
+      done: d.done + (want ? 1 : -1),
+      groups: d.groups.map(g => ({ ...g, rows: g.rows.map(r => r.lotId === row.lotId ? { ...r, done: want } : r) })),
     }))
+    flip(done)
     startSave(async () => {
-      const res = await setBcCorrectionDone(id, done)
+      const res = await setBcCorrectionDone({
+        auctionId, lotId: row.lotId, done,
+        // Only used when this lot has no saved row yet — ticking a live
+        // mismatch is what first records what BC is holding.
+        snapshot: {
+          barcode: row.barcode, receiptUniqueId: row.receiptUniqueId, title: row.title, tote: row.tote,
+          oldVendor: row.oldVendor, oldReceipt: row.oldReceipt,
+          newVendor: row.newVendor, newReceipt: row.newReceipt,
+        },
+      })
       if (!res.ok) {
         setError(res.error ?? "Couldn't save that tick")
-        setData(d => d && ({
-          ...d,
-          done: d.done + (done ? -1 : 1),
-          groups: d.groups.map(g => ({ ...g, rows: g.rows.map(r => r.id === id ? { ...r, done: !done } : r) })),
-        }))
+        flip(!done)
       }
     })
   }
 
   function toggleGroup(g: BcCorrectionGroup, done: boolean) {
-    for (const r of g.rows) if (r.done !== done) toggle(r.id, done)
+    for (const r of g.rows) if (r.done !== done) toggle(r, done)
   }
 
   if (loading && !data) return <p className="text-sm text-gray-500 dark:text-gray-400 py-8 text-center">Loading…</p>
@@ -78,13 +88,14 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
             {data.total === 0
               ? "Nothing to correct in BC."
               : <>
-                  <span className="font-bold text-amber-500">{outstanding}</span> still to correct in BC
-                  {data.done > 0 && <span className="text-green-500"> · {data.done} done</span>}
+                  <span className="font-bold text-amber-500">{outstanding}</span> to correct in BC
+                  {data.done > 0 && <span className="text-green-500"> · {data.done} ticked off</span>}
                 </>}
           </p>
-          <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
-            These lots held the wrong vendor or receipt in the Hub, so that is most likely what went into BC.
-            The Hub has been put right — this is what BC still needs.
+          <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5 max-w-3xl">
+            Each of these lots is on the wrong receipt or vendor. BC is right, so the wrong value is most likely what
+            went into BC — fix these there, ticking them off as you go. The list stays put after Tote Check → Match BC
+            tidies the Hub, so you can come back to it.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -95,7 +106,7 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
                   ? "bg-[#2AB4A6]/15 border-[#2AB4A6] text-[#2AB4A6]"
                   : "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400"
               }`}>
-              Hide done
+              Hide ticked off
             </button>
           )}
           <button onClick={load} disabled={loading}
@@ -106,14 +117,16 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
       </div>
 
       {data.notReady && (
-        <p className="text-xs text-amber-500">The corrections list isn&apos;t available yet on this environment.</p>
+        <p className="text-xs text-amber-500">
+          Ticking these off isn&apos;t available on this environment yet — the list still shows what needs correcting.
+        </p>
       )}
 
       {data.total === 0 ? (
         <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl p-12 text-center">
           <p className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-1">Nothing waiting on BC</p>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            This fills up when Tote Check → Match BC corrects a lot that held the wrong vendor or receipt.
+            No lot is on a different receipt or vendor from the tote it was catalogued from.
           </p>
         </div>
       ) : (
@@ -126,15 +139,16 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
                 {/* Group header — the move to make in BC */}
                 <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#141416] flex items-center gap-3 flex-wrap">
                   <div className="text-sm">
-                    <span className="text-gray-500 dark:text-gray-500">Currently on </span>
+                    <span className="text-gray-500 dark:text-gray-500">On </span>
                     <span className="font-mono font-bold text-red-500">{g.oldReceipt ?? "—"}</span>
-                    <span className="text-gray-500 dark:text-gray-500"> / vendor </span>
+                    <span className="text-gray-500 dark:text-gray-500"> / </span>
                     <span className="font-mono font-bold text-red-500">{g.oldVendor ?? "—"}</span>
                     <span className="mx-2 text-gray-400">→</span>
                     <span className="text-gray-500 dark:text-gray-500">should be </span>
                     <span className="font-mono font-bold text-green-500">{g.newReceipt ?? "—"}</span>
-                    <span className="text-gray-500 dark:text-gray-500"> / vendor </span>
+                    <span className="text-gray-500 dark:text-gray-500"> / </span>
                     <span className="font-mono font-bold text-green-500">{g.newVendor ?? "—"}</span>
+                    {g.newVendorName && <span className="text-gray-500"> · {g.newVendorName}</span>}
                   </div>
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                     left === 0
@@ -167,10 +181,10 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
                   </thead>
                   <tbody>
                     {g.rows.map(r => (
-                      <tr key={r.id} className={`border-b border-gray-200 dark:border-gray-800 last:border-0 transition-colors ${r.done ? "opacity-50" : ""}`}>
+                      <tr key={r.lotId} className={`border-b border-gray-200 dark:border-gray-800 last:border-0 transition-colors ${r.done ? "opacity-50" : ""}`}>
                         <td className="px-4 py-2.5 w-16">
                           <label className="flex items-center cursor-pointer">
-                            <input type="checkbox" checked={r.done} onChange={e => toggle(r.id, e.target.checked)}
+                            <input type="checkbox" checked={r.done} onChange={e => toggle(r, e.target.checked)}
                               className="w-4 h-4 rounded border-gray-600 accent-[#2AB4A6] cursor-pointer" />
                           </label>
                         </td>
@@ -181,9 +195,12 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
                         <td className="px-4 py-2.5 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{r.tote ?? "—"}</td>
                         <td className="px-4 py-2.5 text-xs text-gray-600 dark:text-gray-400">
                           <span className="line-clamp-1">{r.title || "—"}</span>
-                          {r.done && r.doneBy && (
-                            <span className="text-gray-500"> · ticked by {r.doneBy}</span>
+                          {!r.stillWrong && (
+                            <span className="text-gray-500" title="Tote Check → Match BC has already put the Hub right for this lot.">
+                              {" "}· Hub corrected
+                            </span>
                           )}
+                          {r.done && r.doneBy && <span className="text-gray-500"> · ticked by {r.doneBy}</span>}
                         </td>
                       </tr>
                     ))}
