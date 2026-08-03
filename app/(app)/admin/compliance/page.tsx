@@ -9,13 +9,13 @@ export const metadata = { title: "Data & Compliance" }
 // ⚠ NOT legal advice — a working note to make those conversations quicker.
 
 const STORES: { name: string; what: string }[] = [
-  { name: "Neon (PostgreSQL)", what: "The main database — customer contacts & submissions, bidder registrations, staff accounts, catalogue lots, activity/monitoring logs, and the accounting/reconciliation records." },
+  { name: "Neon (PostgreSQL)", what: "The main database — customer contacts & submissions, bidder registrations, staff accounts, catalogue lots, activity/monitoring logs, the accounting/reconciliation records, and a copy of the Business Central extension source code (vendor code — no personal data)." },
   { name: "Cloudflare R2", what: "File storage — lot photos, uploaded documents, invoices, and the nightly database backups." },
   { name: "Railway", what: "Hosting — runs the app servers (production and staging). The database itself is on Neon, not Railway." },
 ]
 
 const PROCESSORS: { name: string; what: string; data: string }[] = [
-  { name: "Google (Gemini AI API)", what: "Generates lot descriptions and marketing copy, and reads uploaded photos.", data: "Lot photos, cataloguer text, and marketing content are sent to Google. Confirm whether any customer personal data can reach it, and that your account's terms cover it (the paid API generally does not train on your data — verify)." },
+  { name: "Google (Gemini AI API)", what: "Generates lot descriptions and marketing copy, reads uploaded photos, and explains the Business Central source code (IT Tools → BC Source).", data: "Lot photos, cataloguer text, marketing content and the vendor's BC source code (no personal data) are sent to Google. Confirm whether any customer personal data can reach it, and that your account's terms cover it (the paid API generally does not train on your data — verify)." },
   { name: "Microsoft — Business Central", what: "Syncs warehouse, auction and receipt data (BC Warehouse / Reports / Marketing).", data: "Item, location and sale data. Governed by your existing Microsoft agreement." },
   { name: "Royal Mail — Click & Drop", what: "Dispatch and packing labels.", data: "Customer names and delivery addresses for parcels." },
   { name: "D-ID", what: "The AI Presenter avatar.", data: "Whatever script/likeness is sent to generate the avatar — take extra care if a real person's likeness is used." },

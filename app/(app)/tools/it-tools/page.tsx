@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import ModelPingTester from "@/components/model-ping-tester"
+import BcSourceTab from "./bc-source-tab"
 
 const FALLBACK_MODEL = "gemini-3-flash-preview"
 
@@ -17,10 +18,10 @@ type Template = {
 }
 
 export default function ITToolsPage() {
-  const [tab, setTab] = useState<"reply" | "templates">("reply")
+  const [tab, setTab] = useState<"reply" | "templates" | "bc-source">("reply")
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
+    <div className={tab === "bc-source" ? "p-8 max-w-[1700px] mx-auto" : "p-8 max-w-5xl mx-auto"}>
       <div className="mb-6">
         <Link href="/hub" className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:text-gray-300">← Hub</Link>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">IT Tools</h1>
@@ -30,7 +31,7 @@ export default function ITToolsPage() {
       </div>
 
       <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 mb-6">
-        {(["reply", "templates"] as const).map(t => (
+        {(["reply", "templates", "bc-source"] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -40,13 +41,14 @@ export default function ITToolsPage() {
                 : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 dark:text-gray-200"
             }`}
           >
-            {t === "reply" ? "✍️ Draft Reply" : "📋 Templates"}
+            {t === "reply" ? "✍️ Draft Reply" : t === "templates" ? "📋 Templates" : "🧩 BC Source"}
           </button>
         ))}
       </div>
 
       {tab === "reply"     ? <DraftReplyTab /> : null}
       {tab === "templates" ? <TemplatesTab />  : null}
+      {tab === "bc-source" ? <BcSourceTab />   : null}
     </div>
   )
 }

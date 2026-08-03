@@ -36,6 +36,8 @@ export const AI_TOOLS: AiTool[] = [
   // ── IT ──
   { slot: "it_help",                group: "IT",           label: "IT Help assistant",                    default: "gemini-3-flash-preview" },
   { slot: "it_draft_reply",         group: "IT",           label: "Draft reply (IT Tools)",               default: "gemini-3-flash-preview" },
+  { slot: "bc_source_guide",        group: "IT",           label: "BC Source — extension guides",         default: "gemini-3-flash-preview" },
+  { slot: "bc_source_chat",         group: "IT",           label: "BC Source — ask the code",             default: "gemini-3-flash-preview" },
   // ── Accounts (bookkeeping AI) ──
   { slot: "accounts_extract",       group: "Accounts",     label: "Invoice/receipt extract",              default: "gemini-3-flash-preview" },
   { slot: "accounts_split",         group: "Accounts",     label: "Split multi-doc files",                default: "gemini-3-flash-preview" },

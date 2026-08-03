@@ -1244,6 +1244,31 @@ const MIGRATIONS = [
     ALTER TABLE "CatalogueBcCorrection" ADD CONSTRAINT "CatalogueBcCorrection_auctionId_fkey"
       FOREIGN KEY ("auctionId") REFERENCES "CatalogueAuction"("id") ON DELETE CASCADE ON UPDATE CASCADE;
   EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+
+  // ── IT Tools → BC Source: the Evo-soft AL source, uploaded as a zip ──
+  `CREATE TABLE IF NOT EXISTS "BcSourceFile" (
+    "id"         TEXT NOT NULL,
+    "extension"  TEXT NOT NULL,
+    "path"       TEXT NOT NULL,
+    "name"       TEXT NOT NULL,
+    "kind"       TEXT NOT NULL,
+    "content"    TEXT NOT NULL,
+    "size"       INTEGER NOT NULL,
+    "uploadedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "BcSourceFile_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "BcSourceFile_path_key" ON "BcSourceFile"("path")`,
+  `CREATE INDEX IF NOT EXISTS "BcSourceFile_extension_idx" ON "BcSourceFile"("extension")`,
+  `CREATE TABLE IF NOT EXISTS "BcSourceGuide" (
+    "extension"   TEXT NOT NULL,
+    "content"     TEXT NOT NULL,
+    "model"       TEXT,
+    "generatedBy" TEXT,
+    "edited"      BOOLEAN NOT NULL DEFAULT FALSE,
+    "generatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt"   TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "BcSourceGuide_pkey" PRIMARY KEY ("extension")
+  )`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,
