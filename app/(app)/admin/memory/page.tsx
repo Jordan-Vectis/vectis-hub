@@ -610,7 +610,7 @@ last_updated: 2026-07-31
 
 # Vendor / Tote Check (built 2026-07-31)
 
-A per-auction tab (**🧾 Vendor / Tote Check**, sitting between Locking Check and BC Check) answering *"does this lot still agree with the tote it was catalogued from?"*.
+A per-auction tab (**🧾 Tote Check**, sitting between Locking Check and BC Check) answering *"does this lot still agree with the tote it was catalogued from?"*.
 
 **Source of truth = \`WarehouseTote\`** (BC-synced: \`toteNo → receiptNo → vendorNo/vendorName\`) — deliberately the SAME table the lot wizard's tote box reads through \`/api/warehouse/tote-search\`, so the check measures each lot against what the cataloguer was actually shown. ⚠ Do **not** switch it to \`WarehouseContainer\`/\`WarehouseReceipt\` — those belong to the separate internal warehouse tool (that lineage is what \`fillLotsFromTotes\` uses).
 
@@ -621,7 +621,9 @@ A per-auction tab (**🧾 Vendor / Tote Check**, sitting between Locking Check a
 
 ⚠ **Two traps handled on purpose — don't undo them:**
 1. **Prisma \`in\` is case-sensitive** and totes get hand-typed, so the route queries every casing the lots actually use (raw + upper + lower), indexes by lowercase, and compares everything trimmed + lowercased.
-2. **A stale sync must not read as hundreds of mistakes** — tote_unknown is amber rather than red, and the header shows when WarehouseTote was last pulled from BC (from \`max(syncedAt)\`) with a pointer to BC Warehouse → Data Sync.`,
+2. **A stale sync must not read as hundreds of mistakes** — tote_unknown is amber rather than red, and the header shows when WarehouseTote was last pulled from BC (from \`max(syncedAt)\`) with a pointer to BC Warehouse → Data Sync.
+
+⚠ **Keep the tab LABEL short.** It first shipped as "🧾 Vendor / Tote Check" and that one extra word overflowed the auction tab strip, drawing a scrollbar across the tabs. Root cause: the strip carries \`overflow-x-auto scrollbar-none\`, but **\`scrollbar-none\` was never defined** — Tailwind v4 has no such built-in and this repo is CSS-first with no config file, so the class did nothing until it was declared as an \`@utility\` at the bottom of \`app/globals.css\` (2026-07-31). \`databases-client.tsx\` used the same phantom class. When adding any new tab, check the strip still fits.`,
   },
   {
     filename: "lot_wizard_resume.md",
