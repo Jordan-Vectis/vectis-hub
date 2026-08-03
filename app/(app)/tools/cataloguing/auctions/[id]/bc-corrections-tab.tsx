@@ -23,7 +23,39 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
   const [hideDone, setHideDone] = useState(false)
+  const [copied, setCopied] = useState<string | null>(null)   // "<groupKey>:ids" | "<groupKey>:receipt"
   const [, startSave] = useTransition()
+
+  // BC's Transfer/Copy Receipt Line dialog takes the unique IDs pipe-separated
+  // in its UniqueID filter, and the destination in Target Receipt No. — so the
+  // two things worth copying are exactly those.
+  async function copy(text: string, token: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      // Clipboard API needs a secure context / permission; fall back so the
+      // button still works rather than silently doing nothing.
+      const el = document.createElement("textarea")
+      el.value = text
+      el.style.position = "fixed"
+      el.style.opacity = "0"
+      document.body.appendChild(el)
+      el.select()
+      try { document.execCommand("copy") } catch { /* nothing more to try */ }
+      document.body.removeChild(el)
+    }
+    setCopied(token)
+    setTimeout(() => setCopied(c => (c === token ? null : c)), 1800)
+  }
+
+  // The ones still to do — ticked-off rows have already been transferred.
+  // Falls back to the whole group once everything is ticked, so the button
+  // never copies an empty string.
+  function idsFor(g: BcCorrectionGroup): string[] {
+    const left = g.rows.filter(r => !r.done)
+    const use  = left.length > 0 ? left : g.rows
+    return use.map(r => (r.receiptUniqueId ?? "").trim()).filter(Boolean)
+  }
 
   const load = useCallback(() => {
     setLoading(true)
@@ -133,6 +165,10 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
         <div className="space-y-4">
           {groups.map(g => {
             const left = g.rows.filter(r => !r.done).length
+            const ids  = idsFor(g)
+            // Lots with no unique ID can't go in the BC filter — say so rather
+            // than quietly copying a short list.
+            const noId = (left > 0 ? g.rows.filter(r => !r.done) : g.rows).length - ids.length
             return (
               <div key={g.key} className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
 
@@ -158,6 +194,23 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
                     {left === 0 ? "✓ all done" : `${left} of ${g.rows.length} left`}
                   </span>
                   <div className="ml-auto flex items-center gap-2">
+                    {/* Straight into BC's Transfer/Copy dialog: the UniqueID
+                        filter takes them pipe-separated, and Target Receipt No.
+                        is the receipt they should be on. */}
+                    <button
+                      onClick={() => copy(ids.join("|"), `${g.key}:ids`)}
+                      disabled={ids.length === 0}
+                      title="Copies the unique IDs still to do, pipe-separated, ready for the UniqueID filter in BC's Transfer/Copy Receipt Line dialog."
+                      className="text-xs font-semibold px-2.5 py-1 rounded border transition-colors disabled:opacity-40 border-[#2AB4A6]/60 text-[#2AB4A6] hover:bg-[#2AB4A6]/10">
+                      {copied === `${g.key}:ids` ? "✓ Copied" : `⧉ Copy ${ids.length} ID${ids.length === 1 ? "" : "s"}`}
+                    </button>
+                    <button
+                      onClick={() => copy(g.newReceipt ?? "", `${g.key}:receipt`)}
+                      disabled={!g.newReceipt}
+                      title="Copies the receipt these should be moved to, for Target Receipt No."
+                      className="text-xs font-semibold px-2.5 py-1 rounded border transition-colors disabled:opacity-40 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-400">
+                      {copied === `${g.key}:receipt` ? "✓ Copied" : `⧉ ${g.newReceipt ?? "—"}`}
+                    </button>
                     <button onClick={() => toggleGroup(g, true)} disabled={left === 0}
                       className="text-xs font-semibold px-2.5 py-1 rounded border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-400 transition-colors disabled:opacity-40">
                       Tick all
@@ -169,6 +222,11 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
                       </button>
                     )}
                   </div>
+                  {noId > 0 && (
+                    <p className="w-full text-xs text-amber-500">
+                      ⚠ {noId} of these {noId === 1 ? "has" : "have"} no unique ID, so {noId === 1 ? "it isn't" : "they aren't"} in the copied list — those need doing by barcode.
+                    </p>
+                  )}
                 </div>
 
                 <table className="w-full text-sm">
