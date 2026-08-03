@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState, useTransition } from "react"
+import * as XLSX from "xlsx"
 import type { BcCorrectionGroup, BcCorrectionRow } from "@/app/api/catalogue/bc-corrections/route"
 import { setBcCorrectionDone } from "@/lib/actions/catalogue"
 
@@ -18,13 +19,126 @@ import { setBcCorrectionDone } from "@/lib/actions/catalogue"
 
 type Data = { groups: BcCorrectionGroup[]; total: number; done: number; notReady?: boolean }
 
+// ── Verifying against a BC export ────────────────────────────────────────────
+// A "Lines" export from BC is what things look like in BC *now*, so it settles
+// whether a transfer actually landed.
+//
+// ⚠ Matched on INTERNAL BARCODE, never on UniqueID: a transferred item is
+// re-sequenced under its new receipt (R008300-677 becomes R008584-something),
+// so matching on the unique ID would fail for exactly the rows that succeeded.
+// The unique ID is only a fallback for a lot that has no barcode.
+type VerifyStatus = "done" | "not_done" | "different" | "missing"
+
+type Verify = {
+  fileName: string
+  rows:     number
+  byLot:    Record<string, { status: VerifyStatus; bcReceipt: string; bcVendor: string }>
+  counts:   Record<VerifyStatus, number>
+}
+
+const VERIFY_LABEL: Record<VerifyStatus, string> = {
+  done:      "✓ done in BC",
+  not_done:  "✗ still on the old receipt",
+  different: "⚠ on something else",
+  missing:   "? not in the export",
+}
+
+const VERIFY_TONE: Record<VerifyStatus, string> = {
+  done:      "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800/60",
+  not_done:  "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800/60",
+  different: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/60",
+  missing:   "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700",
+}
+
+const nrm = (v: unknown) => String(v ?? "").trim().toLowerCase()
+
+// BC's column headings vary between exports, so take the first one that's there.
+function col(row: Record<string, unknown>, ...names: string[]): string {
+  for (const n of names) {
+    const hit = Object.keys(row).find(k => k.trim().toLowerCase() === n.toLowerCase())
+    if (hit !== undefined && String(row[hit] ?? "").trim() !== "") return String(row[hit]).trim()
+  }
+  return ""
+}
+
 export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
   const [data,    setData]    = useState<Data | null>(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
   const [hideDone, setHideDone] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)   // "<groupKey>:ids" | "<groupKey>:receipt"
+  const [verify, setVerify] = useState<Verify | null>(null)
   const [, startSave] = useTransition()
+
+  // Read a BC "Lines" export and work out, per correction, whether the transfer
+  // actually landed. Parsed in the browser — the file is never uploaded.
+  function handleExport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !data) return
+    setError(null)
+    const reader = new FileReader()
+    reader.onload = ev => {
+      try {
+        const wb    = XLSX.read(ev.target?.result, { type: "array" })
+        const sheet = wb.Sheets[wb.SheetNames[0]]
+        const rows  = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" })
+        if (rows.length === 0) { setError("That sheet has no rows in it."); return }
+
+        const byBarcode = new Map<string, Record<string, unknown>>()
+        const byUniqueId = new Map<string, Record<string, unknown>>()
+        for (const r of rows) {
+          const bc  = nrm(col(r, "Internal Barcode", "Barcode", "PTE_InternalBarcode"))
+          const uid = nrm(col(r, "UniqueID", "Unique ID", "EVA_UniqueID"))
+          if (bc)  byBarcode.set(bc, r)
+          if (uid) byUniqueId.set(uid, r)
+        }
+
+        const byLot: Verify["byLot"] = {}
+        const counts: Record<VerifyStatus, number> = { done: 0, not_done: 0, different: 0, missing: 0 }
+
+        for (const g of data.groups) {
+          for (const row of g.rows) {
+            const hit = (row.barcode && byBarcode.get(nrm(row.barcode)))
+              || (row.receiptUniqueId && byUniqueId.get(nrm(row.receiptUniqueId)))
+            if (!hit) {
+              byLot[row.lotId] = { status: "missing", bcReceipt: "", bcVendor: "" }
+              counts.missing++
+              continue
+            }
+            const bcReceipt = col(hit, "Receipt No.", "Receipt No", "EVA_ReceiptNo")
+            const bcVendor  = col(hit, "Vendor No.", "Vendor No", "EVA_VendorNo")
+
+            // Only compare the halves we actually asked to change.
+            const receiptOk = !row.newReceipt || nrm(bcReceipt) === nrm(row.newReceipt)
+            const vendorOk  = !row.newVendor  || nrm(bcVendor)  === nrm(row.newVendor)
+            const stillOld  = (!!row.oldReceipt && nrm(bcReceipt) === nrm(row.oldReceipt))
+                           || (!!row.oldVendor  && nrm(bcVendor)  === nrm(row.oldVendor))
+
+            const status: VerifyStatus = receiptOk && vendorOk ? "done" : stillOld ? "not_done" : "different"
+            byLot[row.lotId] = { status, bcReceipt, bcVendor }
+            counts[status]++
+          }
+        }
+
+        setVerify({ fileName: file.name, rows: rows.length, byLot, counts })
+      } catch (err: any) {
+        setError(err?.message ?? "Couldn't read that file — is it the BC Lines export?")
+      }
+    }
+    reader.readAsArrayBuffer(file)
+    e.target.value = ""
+  }
+
+  // Put right the ticks the export disproves — the whole point of checking.
+  function untickUnfinished() {
+    if (!verify || !data) return
+    for (const g of data.groups) {
+      for (const row of g.rows) {
+        const v = verify.byLot[row.lotId]
+        if (row.done && v && (v.status === "not_done" || v.status === "different")) toggle(row, false)
+      }
+    }
+  }
 
   // BC's Transfer/Copy Receipt Line dialog takes the unique IDs pipe-separated
   // in its UniqueID filter, and the destination in Target Receipt No. — so the
@@ -141,12 +255,57 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
               Hide ticked off
             </button>
           )}
+          {data.total > 0 && (
+            <label className="px-3 py-2 text-sm font-medium rounded-lg border border-[#2AB4A6]/60 text-[#2AB4A6] hover:bg-[#2AB4A6]/10 transition-colors cursor-pointer whitespace-nowrap"
+              title="Upload a BC Lines export to check the transfers actually landed. The file is read in your browser — nothing is uploaded.">
+              ⬆ Check against a BC export
+              <input type="file" accept=".xlsx,.xls,.csv" onChange={handleExport} className="hidden" />
+            </label>
+          )}
           <button onClick={load} disabled={loading}
             className="px-3 py-2 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500 transition-colors disabled:opacity-50">
             {loading ? "Loading…" : "↻ Refresh"}
           </button>
         </div>
       </div>
+
+      {/* What the BC export says actually happened */}
+      {verify && (
+        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E] px-4 py-3 space-y-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">Checked against {verify.fileName}</span>
+            <span className="text-xs text-gray-500">{verify.rows.toLocaleString()} rows in the export</span>
+            <button onClick={() => setVerify(null)}
+              className="ml-auto text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+              Clear
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(["done", "not_done", "different", "missing"] as VerifyStatus[])
+              .filter(s => verify.counts[s] > 0)
+              .map(s => (
+                <span key={s} className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${VERIFY_TONE[s]}`}>
+                  {verify.counts[s]} · {VERIFY_LABEL[s]}
+                </span>
+              ))}
+          </div>
+          {verify.counts.done === Object.values(verify.counts).reduce((a, b) => a + b, 0) ? (
+            <p className="text-xs text-green-600 dark:text-green-400">Every one of them is on the right receipt and vendor in BC.</p>
+          ) : (
+            <div className="flex items-center gap-3 flex-wrap">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Matched on internal barcode — a transferred item gets a new unique ID, so the barcode is the only thing that survives the move.
+              </p>
+              {data.groups.some(g => g.rows.some(r => r.done && ["not_done", "different"].includes(verify.byLot[r.lotId]?.status ?? ""))) && (
+                <button onClick={untickUnfinished}
+                  className="text-xs font-semibold px-2.5 py-1 rounded border border-red-500/60 text-red-500 hover:bg-red-500/10 transition-colors">
+                  Untick the ones BC says aren&apos;t done
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {data.notReady && (
         <p className="text-xs text-amber-500">
@@ -232,7 +391,7 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-200 dark:border-gray-800 text-left">
-                      {["Done", "Barcode", "Unique ID", "Tote", "Item"].map(h => (
+                      {(verify ? ["Done", "Barcode", "Unique ID", "Tote", "In BC now", "Item"] : ["Done", "Barcode", "Unique ID", "Tote", "Item"]).map(h => (
                         <th key={h} className="px-4 py-2 text-xs font-medium text-gray-600 dark:text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -251,6 +410,23 @@ export default function BcCorrectionsTab({ auctionId }: { auctionId: string }) {
                         </td>
                         <td className="px-4 py-2.5 font-mono text-xs text-cyan-500 whitespace-nowrap">{r.receiptUniqueId ?? "—"}</td>
                         <td className="px-4 py-2.5 font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{r.tote ?? "—"}</td>
+                        {verify && (() => {
+                          const v = verify.byLot[r.lotId]
+                          return (
+                            <td className="px-4 py-2.5 whitespace-nowrap">
+                              {v ? (
+                                <div className="flex flex-col gap-0.5 items-start">
+                                  <span className={`px-2 py-0.5 rounded text-xs font-semibold border ${VERIFY_TONE[v.status]}`}>
+                                    {VERIFY_LABEL[v.status]}
+                                  </span>
+                                  {v.status !== "done" && v.status !== "missing" && (
+                                    <span className="font-mono text-[11px] text-gray-500">{v.bcReceipt || "—"} / {v.bcVendor || "—"}</span>
+                                  )}
+                                </div>
+                              ) : <span className="text-xs text-gray-500">—</span>}
+                            </td>
+                          )
+                        })()}
                         <td className="px-4 py-2.5 text-xs text-gray-600 dark:text-gray-400">
                           <span className="line-clamp-1">{r.title || "—"}</span>
                           {!r.stillWrong && (
