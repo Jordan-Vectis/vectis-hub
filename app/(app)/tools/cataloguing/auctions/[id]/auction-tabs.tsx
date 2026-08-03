@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, fillLotsFromTotes, togglePublished, generateTitlesFromDescriptions, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, bulkSetLotsAiExcluded, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, bulkRemoveConditionsFromDescriptions, bulkClearDescriptions, transferLots, bulkClearLotPhotos, listBulkUndos, undoBulk } from "@/lib/actions/catalogue"
+import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, lookupToteOrReceipt, setLotsVendorReceipt, togglePublished, generateTitlesFromDescriptions, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, bulkSetLotsAiExcluded, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, bulkRemoveConditionsFromDescriptions, bulkClearDescriptions, transferLots, bulkClearLotPhotos, listBulkUndos, undoBulk } from "@/lib/actions/catalogue"
 import { grantAuctionAccess, revokeAuctionAccess } from "@/lib/actions/admin"
 import LotWizardTab, { BRANDS_LIST } from "./lot-wizard-tab"
 import { useCategoryMap } from "@/lib/use-category-map"
@@ -1096,6 +1096,12 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
   const [pending, start]            = useTransition()
   const [fillPending, startFill]    = useTransition()
   const [fillMsg, setFillMsg]       = useState<string | null>(null)
+  // Change Vendor panel — type a tote or receipt, confirm what it belongs to,
+  // then apply it to the ticked lots.
+  const [showVendorChange, setShowVendorChange] = useState(false)
+  const [vendorQuery, setVendorQuery]           = useState("")
+  const [vendorHit, setVendorHit]               = useState<Awaited<ReturnType<typeof lookupToteOrReceipt>> | null>(null)
+  const [vendorLooking, startVendorLookup]      = useTransition()
   const [photoExporting, setPhotoExporting] = useState(false)
   const [photoMsg, setPhotoMsg]     = useState<string | null>(null)
 
@@ -1155,6 +1161,33 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
 
   const selectedIds = () => (selected.size > 0 ? Array.from(selected) : [])
   const scopeWord = () => (selected.size > 0 ? `the ${selected.size} selected lot${selected.size !== 1 ? "s" : ""}` : "every lot in this auction")
+
+  function doVendorLookup() {
+    const q = vendorQuery.trim()
+    if (!q) return
+    setVendorHit(null)
+    startVendorLookup(async () => setVendorHit(await lookupToteOrReceipt(q)))
+  }
+
+  function applyVendorChange() {
+    if (!vendorHit?.ok || selected.size === 0) return
+    const who = `${vendorHit.receipt ?? "—"} / ${vendorHit.vendor ?? "—"}${vendorHit.vendorName ? ` (${vendorHit.vendorName})` : ""}`
+    if (!confirm(`Put ${scopeWord()} onto ${who}?`)) return
+    setFillMsg(null)
+    startFill(async () => {
+      const res = await setLotsVendorReceipt(auctionId, Array.from(selected), {
+        vendor:  vendorHit.vendor  ?? "",
+        receipt: vendorHit.receipt ?? "",
+      })
+      if (!res.ok) { setFillMsg(`⚠ ${res.error}`); return }
+      setFillMsg(`✓ Changed ${res.updated} lot${res.updated === 1 ? "" : "s"} to ${who}`)
+      setShowVendorChange(false)
+      setVendorHit(null)
+      setVendorQuery("")
+      setTimeout(() => setFillMsg(null), 5000)
+      onDelete()   // parent refresh — the lots list has changed
+    })
+  }
 
   function handleBulkAddConditions() {
     const pool = selected.size > 0 ? lots.filter(l => selected.has(l.id)) : lots
@@ -1657,18 +1690,9 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
             <span className={TB_LABEL}>Tools</span>
             <div className="flex items-center gap-1.5 flex-wrap">
               <button
-                onClick={() => {
-                  setFillMsg(null)
-                  startFill(async () => {
-                    const result = await fillLotsFromTotes(auctionId)
-                    setFillMsg(result.updated > 0 ? `✓ Updated ${result.updated} lot${result.updated !== 1 ? "s" : ""}` : "No lots needed updating")
-                    setTimeout(() => setFillMsg(null), 3000)
-                    onDelete()
-                  })
-                }}
-                disabled={fillPending}
-                className={`${TB_NEUTRAL} hover:border-[#2AB4A6] hover:text-[#2AB4A6]`}>
-                {fillPending ? "Pulling…" : "⟳ Pull Vendor/Receipt from Totes"}
+                onClick={() => { setShowVendorChange(v => !v); setShowMassAdd(false); setShowBids(false); setFillMsg(null) }}
+                className={showVendorChange ? `${TB_BTN} border-[#2AB4A6] text-[#2AB4A6] bg-[#2AB4A6]/10` : `${TB_NEUTRAL} hover:border-[#2AB4A6] hover:text-[#2AB4A6]`}>
+                🏷 Change Vendor
               </button>
               {!bcLocked && (
                 <button
@@ -1872,6 +1896,70 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
               {massAdding ? "Creating…" : `Create ${massCount} lot${massCount !== 1 ? "s" : ""}`}
             </button>
             <button onClick={() => setShowMassAdd(false)} className="text-xs text-gray-600 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Change Vendor panel ──
+          Type a tote or a receipt, see who it belongs to in the BC tote data,
+          then put that vendor/receipt onto the ticked lots. Deliberately
+          selection-only: no "all lots" fallback for an action that moves lots
+          onto a different vendor. */}
+      {showVendorChange && (
+        <div className="mb-4 bg-white dark:bg-[#1C1C1E] border border-[#2AB4A6]/40 rounded-xl p-4 space-y-3">
+          <p className="text-sm font-semibold text-[#2AB4A6]">Change Vendor</p>
+          <p className="text-xs text-gray-600 dark:text-gray-500">
+            Enter a <span className="font-semibold">tote</span> or a <span className="font-semibold">receipt</span> number — the vendor and receipt behind it are read from the BC tote data,
+            the same source the lot wizard uses. Existing unique IDs are kept; one is only created where a lot hasn&apos;t got one.
+          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              value={vendorQuery}
+              onChange={e => { setVendorQuery(e.target.value); setVendorHit(null) }}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); doVendorLookup() } }}
+              placeholder="Tote or receipt number…"
+              className="w-56 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm font-mono text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#2AB4A6]"
+            />
+            <button onClick={doVendorLookup} disabled={vendorLooking || !vendorQuery.trim()}
+              className={`${TB_NEUTRAL} hover:border-[#2AB4A6] hover:text-[#2AB4A6] disabled:opacity-40`}>
+              {vendorLooking ? "Looking up…" : "Look up"}
+            </button>
+          </div>
+
+          {vendorHit && !vendorHit.ok && (
+            <p className="text-xs text-red-400">{vendorHit.error}</p>
+          )}
+
+          {vendorHit?.ok && (
+            <div className="rounded-lg bg-gray-100 dark:bg-[#2C2C2E] border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm space-y-1">
+              <div>
+                <span className="text-gray-500">Receipt </span>
+                <span className="font-mono font-bold text-gray-800 dark:text-gray-100">{vendorHit.receipt ?? "—"}</span>
+                <span className="text-gray-500"> · Vendor </span>
+                <span className="font-mono font-bold text-gray-800 dark:text-gray-100">{vendorHit.vendor ?? "—"}</span>
+                {vendorHit.vendorName && <span className="text-gray-500"> · {vendorHit.vendorName}</span>}
+              </div>
+              <p className="text-xs text-gray-500">
+                {vendorHit.kind === "tote"
+                  ? `Matched tote ${vendorHit.tote}.`
+                  : `Matched receipt ${vendorHit.receipt}${vendorHit.toteCount ? ` across ${vendorHit.toteCount} tote${vendorHit.toteCount === 1 ? "" : "s"}` : ""}.`}
+              </p>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={applyVendorChange}
+              disabled={fillPending || !vendorHit?.ok || selected.size === 0}
+              className="px-4 py-1.5 text-sm font-semibold rounded transition-colors disabled:opacity-40"
+              style={{ background: "#2AB4A6", color: "#1C1C1E" }}>
+              {fillPending ? "Applying…" : `Apply to ${selected.size} selected lot${selected.size === 1 ? "" : "s"}`}
+            </button>
+            {selected.size === 0 && (
+              <span className="text-xs text-amber-500">Tick the lots you want to change first.</span>
+            )}
+            <button onClick={() => { setShowVendorChange(false); setVendorHit(null); setVendorQuery("") }}
+              className="text-xs text-gray-600 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Cancel</button>
           </div>
         </div>
       )}

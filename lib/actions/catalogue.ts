@@ -299,6 +299,129 @@ export async function saveLastLotFields(fields: { tote?: string; vendor?: string
   })
 }
 
+// ── Change Vendor (Manage Lots → Tools) ─────────────────────────────────────
+// Type a tote OR a receipt, and the vendor/receipt behind it is looked up in the
+// BC-synced tote data — the same table the wizard's tote box reads — so the
+// answer matches what Tote Check will say afterwards.
+//
+// Replaced "Pull Vendor/Receipt from Totes", which only filled BLANKS and read
+// the separate INTERNAL warehouse tables, so it could neither correct a wrong
+// vendor nor see a tote that only exists in BC.
+export async function lookupToteOrReceipt(query: string): Promise<{
+  ok: boolean
+  error?: string
+  kind?: "tote" | "receipt"
+  tote?: string | null
+  receipt?: string | null
+  vendor?: string | null
+  vendorName?: string | null
+  toteCount?: number
+}> {
+  try {
+    await requireCataloguer()
+    const q = query.trim()
+    if (!q) return { ok: false, error: "Type a tote or receipt number." }
+
+    // Prisma's `in` is case-sensitive and these get hand-typed.
+    const variants = [q, q.toUpperCase(), q.toLowerCase()]
+
+    const byTote = await prisma.warehouseTote.findFirst({
+      where:  { toteNo: { in: variants } },
+      select: { toteNo: true, receiptNo: true, vendorNo: true, vendorName: true },
+    })
+    if (byTote) {
+      return {
+        ok: true, kind: "tote",
+        tote: byTote.toteNo, receipt: byTote.receiptNo,
+        vendor: byTote.vendorNo, vendorName: byTote.vendorName,
+      }
+    }
+
+    const byReceipt = await prisma.warehouseTote.findMany({
+      where:  { receiptNo: { in: variants } },
+      select: { toteNo: true, receiptNo: true, vendorNo: true, vendorName: true },
+    })
+    if (byReceipt.length === 0) {
+      return { ok: false, error: `Nothing in the BC tote data matches "${q}". Check the number, or refresh the data on BC Warehouse → Data Sync.` }
+    }
+    // A receipt normally has one vendor across its totes. If BC disagrees with
+    // itself, say so rather than picking one at random.
+    const vendors = [...new Set(byReceipt.map(t => (t.vendorNo ?? "").trim()).filter(Boolean))]
+    if (vendors.length > 1) {
+      return { ok: false, error: `Receipt ${q} has more than one vendor in BC (${vendors.join(", ")}) — enter a tote instead.` }
+    }
+    const first = byReceipt[0]
+    return {
+      ok: true, kind: "receipt",
+      tote: null, receipt: first.receiptNo,
+      vendor: first.vendorNo, vendorName: first.vendorName,
+      toteCount: byReceipt.length,
+    }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Lookup failed" }
+  }
+}
+
+// Put the looked-up vendor/receipt onto the chosen lots.
+//
+// ⚠ Requires an explicit selection — deliberately NO "else the whole auction"
+// fallback like the description tools have. Moving every lot in a sale onto one
+// vendor by a mis-click is not a mistake worth making easy.
+//
+// ⚠ An existing receiptUniqueId is PRESERVED; one is only minted where it's
+// missing (same rule as everywhere else — see RULES → Lot Identifiers).
+export async function setLotsVendorReceipt(
+  auctionId: string,
+  lotIds: string[],
+  input: { vendor: string; receipt: string },
+): Promise<{ ok: boolean; error?: string; updated?: number }> {
+  try {
+    const session = await requireCataloguer()
+    await requireNotBCLocked(auctionId, session)
+
+    if (lotIds.length === 0) return { ok: false, error: "Tick the lots you want to change first." }
+    const vendor  = input.vendor.trim()
+    const receipt = input.receipt.trim()
+    if (!vendor && !receipt) return { ok: false, error: "Nothing to set." }
+
+    const lots = await prisma.catalogueLot.findMany({
+      where:  { id: { in: lotIds }, auctionId },
+      select: { id: true, vendor: true, receipt: true, receiptUniqueId: true },
+    })
+    if (lots.length === 0) return { ok: false, error: "None of those lots are in this auction." }
+
+    // One running suffix per receipt for the lots that need a unique ID.
+    let offset = receipt ? await maxReceiptSuffix(receipt) : 0
+
+    const ctx: LotLogCtx = { changedBy: changedByOf(session), source: "vendor_change", batchId: newBatchId() }
+    const undo: { lotId: string; fields: Record<string, { before: unknown; after: unknown }> }[] = []
+    let updated = 0
+
+    for (const lot of lots) {
+      const data: Record<string, string> = {}
+      if (vendor  && lot.vendor  !== vendor)  data.vendor  = vendor
+      if (receipt && lot.receipt !== receipt) data.receipt = receipt
+      if (receipt && !lot.receiptUniqueId) data.receiptUniqueId = `${receipt}-${++offset}`
+      if (Object.keys(data).length === 0) continue
+
+      const fields: Record<string, { before: unknown; after: unknown }> = {}
+      if (data.vendor          !== undefined) fields.vendor          = { before: lot.vendor,          after: data.vendor }
+      if (data.receipt         !== undefined) fields.receipt         = { before: lot.receipt,         after: data.receipt }
+      if (data.receiptUniqueId !== undefined) fields.receiptUniqueId = { before: lot.receiptUniqueId, after: data.receiptUniqueId }
+
+      await updateLotLogged(lot.id, data, ctx)
+      undo.push({ lotId: lot.id, fields })
+      updated++
+    }
+
+    await recordBulkUndo(auctionId, session, `Change vendor / receipt (${updated})`, undo)
+    revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+    return { ok: true, updated }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Couldn't change those lots" }
+  }
+}
+
 // ── Tote Check → "Match BC" ─────────────────────────────────────────────────
 // Corrects every lot whose Vendor / Receipt disagrees with the BC tote data.
 // BC is treated as correct, so the LOT is what gets rewritten.

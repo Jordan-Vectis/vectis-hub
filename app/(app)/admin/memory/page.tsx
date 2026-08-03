@@ -646,6 +646,17 @@ Table \`CatalogueBcCorrection\` (**NEEDS Run Migrations**), \`@@unique([auctionI
 1. **Prisma \`in\` is case-sensitive** and totes get hand-typed, so the route queries every casing the lots actually use (raw + upper + lower), indexes by lowercase, and compares everything trimmed + lowercased.
 2. **A stale sync must not read as hundreds of mistakes** — tote_unknown is amber rather than red, and the header shows when WarehouseTote was last pulled from BC (from \`max(syncedAt)\`) with a pointer to BC Warehouse → Data Sync.
 
+## 🏷 Change Vendor (Manage Lots → Tools, 2026-08-03)
+
+**Replaced "⟳ Pull Vendor/Receipt from Totes".** The old button only filled **blanks** (\`lot.vendor || tote.vendor\`), so it could never correct a wrong vendor, and it read the **internal** warehouse tables (WarehouseContainer → WarehouseReceipt → contact) rather than the BC tote data the wizard actually uses — so it silently skipped totes that only exist in BC.
+
+The new one: tick the lots → **🏷 Change Vendor** → type a **tote OR a receipt** → \`lookupToteOrReceipt\` reads WarehouseTote and shows the receipt + vendor no + vendor name → apply. \`setLotsVendorReceipt\` writes vendor/receipt through \`updateLotLogged\` (source "vendor_change"), records a \`recordBulkUndo\` entry so it's reversible, and honours requireNotBCLocked.
+
+- ⚠ **Selection-only — deliberately NO "else the whole auction" fallback** (unlike the description tools). Moving every lot in a sale onto one vendor by a mis-click isn't a mistake worth making easy.
+- ⚠ **Existing receiptUniqueId is preserved**; one is only minted ({receipt}-N via maxReceiptSuffix) where a lot hasn't got one.
+- A receipt with more than one vendor across its totes is **refused** with an explanation rather than picking one at random.
+- ⚠ **\`fillLotsFromTotes\` is now unreferenced** — nothing calls it; RULES was updated to point at the new button. Don't wire it back up without deciding which of the two tote sources is meant.
+
 ## ⚠ The auction tab strip
 
 Adding "🧾 Vendor / Tote Check" tipped the strip into overflow and drew a scrollbar across the tabs ("what are these ugly bars"). Two causes, both fixed:
