@@ -15,6 +15,7 @@ import StatsTab from "./stats-tab"
 import ReviewTab from "./review-tab"
 import LotHistoryTab from "./lot-history-tab"
 import LockingCheckTab from "./locking-check-tab"
+import ToteCheckTab from "./tote-check-tab"
 import BcCheckTab from "./bc-check-tab"
 import BcFillTab from "./bc-fill-tab"
 import * as XLSX from "xlsx"
@@ -22,7 +23,7 @@ import JSZip from "jszip"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "settings" | "add-lot" | "manage-lots" | "photo-only" | "import" | "ai-upgrade" | "stats" | "lot-history" | "review" | "locking-check" | "bc-check" | "bc-fill"
+type Tab = "settings" | "add-lot" | "manage-lots" | "photo-only" | "import" | "ai-upgrade" | "stats" | "lot-history" | "review" | "locking-check" | "tote-check" | "bc-check" | "bc-fill"
 
 interface Auction {
   id: string; code: string; name: string; auctionDate: Date | null
@@ -581,6 +582,7 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
     { id: "stats",        label: "📊 Statistics" },
     { id: "lot-history",    label: "📖 Lot History" },
     { id: "locking-check", label: "🔒 Locking Check" },
+    { id: "tote-check",    label: "🧾 Vendor / Tote Check" },
     { id: "bc-check",      label: "📋 BC Check" },
     { id: "bc-fill",       label: "📤 Push to BC" },
     { id: "settings",      label: "Auction Settings" },
@@ -756,6 +758,10 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
             }))}
             onOpenLot={openLotInManager}
           />
+        )}
+
+        {tab === "tote-check" && (
+          <ToteCheckTab auctionId={auction.id} onOpenLot={openLotInManager} />
         )}
 
         {tab === "bc-check" && (

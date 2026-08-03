@@ -601,6 +601,29 @@ A deliberate easter egg — do not "clean it up". The page at /jordan (app/(app)
 - Lint gotcha (hit twice here): the eslint react-compiler rule bans synchronous setState inside effects — localStorage restores are wrapped in queueMicrotask (chat-panel.tsx and jordan-menu.tsx).`,
   },
   {
+    filename: "tote_check.md",
+    content: `---
+name: Vendor / Tote Check tab
+purpose: The per-auction tab that checks lots against the BC tote data. Read before touching it or changing where tote data comes from.
+last_updated: 2026-07-31
+---
+
+# Vendor / Tote Check (built 2026-07-31)
+
+A per-auction tab (**🧾 Vendor / Tote Check**, sitting between Locking Check and BC Check) answering *"does this lot still agree with the tote it was catalogued from?"*.
+
+**Source of truth = \`WarehouseTote\`** (BC-synced: \`toteNo → receiptNo → vendorNo/vendorName\`) — deliberately the SAME table the lot wizard's tote box reads through \`/api/warehouse/tote-search\`, so the check measures each lot against what the cataloguer was actually shown. ⚠ Do **not** switch it to \`WarehouseContainer\`/\`WarehouseReceipt\` — those belong to the separate internal warehouse tool (that lineage is what \`fillLotsFromTotes\` uses).
+
+- **Route:** \`app/api/catalogue/tote-check/route.ts\` (GET \`?auctionId=\`) → \`{checked, clean, rows, lastSync}\`; exports the \`ToteCheckRow\` / \`ToteCheckIssue\` types the tab imports.
+- **Tab:** \`app/(app)/tools/cataloguing/auctions/[id]/tote-check-tab.tsx\` — summary line, clickable issue chips that filter the table, full-width table (Barcode · Unique ID · Tote · What's wrong · BC says · On the lot · Added by), row click opens the lot in Manage Lots.
+- **Issues:** receipt_mismatch, vendor_mismatch, unique_id_mismatch (red — the unique ID's R008729 prefix disagrees with the lot's receipt field), receipt_missing, vendor_missing, tote_unknown (amber), no_tote (grey).
+- **READ-ONLY.** It reports; it never writes to a lot. Fixes happen in the lot itself or via Manage Lots → Pull Vendor/Receipt from Totes.
+
+⚠ **Two traps handled on purpose — don't undo them:**
+1. **Prisma \`in\` is case-sensitive** and totes get hand-typed, so the route queries every casing the lots actually use (raw + upper + lower), indexes by lowercase, and compares everything trimmed + lowercased.
+2. **A stale sync must not read as hundreds of mistakes** — tote_unknown is amber rather than red, and the header shows when WarehouseTote was last pulled from BC (from \`max(syncedAt)\`) with a pointer to BC Warehouse → Data Sync.`,
+  },
+  {
     filename: "lot_wizard_resume.md",
     content: `---
 name: Lot Wizard — Resume an unfinished lot
