@@ -617,13 +617,30 @@ A per-auction tab (**🧾 Tote Check**, sitting between Locking Check and BC Che
 - **Route:** \`app/api/catalogue/tote-check/route.ts\` (GET \`?auctionId=\`) → \`{checked, clean, rows, lastSync}\`; exports the \`ToteCheckRow\` / \`ToteCheckIssue\` types the tab imports.
 - **Tab:** \`app/(app)/tools/cataloguing/auctions/[id]/tote-check-tab.tsx\` — summary line, clickable issue chips that filter the table, full-width table (Barcode · Unique ID · Tote · What's wrong · BC says · On the lot · Added by), row click opens the lot in Manage Lots.
 - **Issues:** receipt_mismatch, vendor_mismatch, unique_id_mismatch (red — the unique ID's R008729 prefix disagrees with the lot's receipt field), receipt_missing, vendor_missing, tote_unknown (amber), no_tote (grey).
-- **READ-ONLY.** It reports; it never writes to a lot. Fixes happen in the lot itself or via Manage Lots → Pull Vendor/Receipt from Totes.
+- The comparison itself lives in **\`lib/tote-check.ts\`** (\`checkLot\`, \`toteLookupVariants\`, \`buildToteMap\`, \`norm\`) — shared by the route AND the Match BC button, so the button can never fix something different from what the report shows.
+
+## "✓ Match BC" + the BC Corrections tab (2026-08-03)
+
+Jordan's rule: **BC is correct; our system was wrong; and because our system was wrong we have most likely pushed the wrong values INTO BC.** Two halves:
+
+1. **✓ Match BC** — button on Tote Check behind a confirm that lists exactly what will happen → \`autocorrectLotsFromTotes(auctionId)\` in lib/actions/catalogue.ts. Rewrites each lot's vendor/receipt to the tote's BC values, through \`updateLotLogged\` with \`source: "tote_autocorrect"\` and one shared batchId so every change lands in the Lot Change Log. Uses \`requireNotBCLocked\` — on a sale already in BC that means admins only, the normal house rule.
+2. **🔧 BC Corrections tab** (\`bc-corrections-tab.tsx\` + \`/api/catalogue/bc-corrections\`) — the to-do list for putting BC right. Grouped by the MOVE (old receipt/vendor → new receipt/vendor), each group listing barcode · unique ID · tote · item with a per-row tick box, Tick all / Untick all, a Hide-done toggle, and outstanding groups sorted first. Ticks persist via \`setBcCorrectionDone\` (shared worklist, not per-user).
+
+⚠ **The correction row MUST be written at the moment of the fix** — afterwards the lot no longer holds the wrong value and the discrepancy is unrecoverable. Table \`CatalogueBcCorrection\` (**NEEDS Run Migrations**), \`@@unique([auctionId, lotId])\` so re-running upserts rather than duplicating, and **\`done\` is deliberately left alone on update** so a re-run can't resurrect ticked-off work. \`lotId\` is deliberately NOT a relation — deleting a lot must not delete the reminder that BC still holds its wrong receipt.
+
+⚠ **Only a MISMATCH creates a correction row**, never a blank being filled in — nothing wrong was pushed to BC for a value we never had.
+
+⚠ **\`receiptUniqueId\` is NOT re-minted** by the button. It is an identity field (AI runs, receipt matching, anything already in BC) and rewriting hundreds as a side effect of a tidy-up is a separate deliberate decision — RULES → Lot Identifiers. A corrected lot can therefore still report unique_id_mismatch; that is honest, not a bug.
 
 ⚠ **Two traps handled on purpose — don't undo them:**
 1. **Prisma \`in\` is case-sensitive** and totes get hand-typed, so the route queries every casing the lots actually use (raw + upper + lower), indexes by lowercase, and compares everything trimmed + lowercased.
 2. **A stale sync must not read as hundreds of mistakes** — tote_unknown is amber rather than red, and the header shows when WarehouseTote was last pulled from BC (from \`max(syncedAt)\`) with a pointer to BC Warehouse → Data Sync.
 
-⚠ **Keep the tab LABEL short.** It first shipped as "🧾 Vendor / Tote Check" and that one extra word overflowed the auction tab strip, drawing a scrollbar across the tabs. Root cause: the strip carries \`overflow-x-auto scrollbar-none\`, but **\`scrollbar-none\` was never defined** — Tailwind v4 has no such built-in and this repo is CSS-first with no config file, so the class did nothing until it was declared as an \`@utility\` at the bottom of \`app/globals.css\` (2026-07-31). \`databases-client.tsx\` used the same phantom class. When adding any new tab, check the strip still fits.`,
+## ⚠ The auction tab strip
+
+Adding "🧾 Vendor / Tote Check" tipped the strip into overflow and drew a scrollbar across the tabs ("what are these ugly bars"). Two causes, both fixed:
+- **\`scrollbar-none\` was never defined** — Tailwind v4 has no such built-in and this repo is CSS-first with no config file, so the class the strip had always carried did nothing. Now declared as an \`@utility\` at the bottom of \`app/globals.css\`. \`databases-client.tsx\` used the same phantom class.
+- The strip now **wraps instead of scrolling** (\`flex-wrap\`, 2026-08-03): with 14+ tabs it overflows a normal window, and a *hidden* horizontal scroll just loses the last tabs off the edge where nobody finds them. Keep new tab labels short anyway.`,
   },
   {
     filename: "lot_wizard_resume.md",

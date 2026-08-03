@@ -16,6 +16,7 @@ import ReviewTab from "./review-tab"
 import LotHistoryTab from "./lot-history-tab"
 import LockingCheckTab from "./locking-check-tab"
 import ToteCheckTab from "./tote-check-tab"
+import BcCorrectionsTab from "./bc-corrections-tab"
 import BcCheckTab from "./bc-check-tab"
 import BcFillTab from "./bc-fill-tab"
 import * as XLSX from "xlsx"
@@ -23,7 +24,7 @@ import JSZip from "jszip"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "settings" | "add-lot" | "manage-lots" | "photo-only" | "import" | "ai-upgrade" | "stats" | "lot-history" | "review" | "locking-check" | "tote-check" | "bc-check" | "bc-fill"
+type Tab = "settings" | "add-lot" | "manage-lots" | "photo-only" | "import" | "ai-upgrade" | "stats" | "lot-history" | "review" | "locking-check" | "tote-check" | "bc-corrections" | "bc-check" | "bc-fill"
 
 interface Auction {
   id: string; code: string; name: string; auctionDate: Date | null
@@ -583,6 +584,7 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
     { id: "lot-history",    label: "📖 Lot History" },
     { id: "locking-check", label: "🔒 Locking Check" },
     { id: "tote-check",    label: "🧾 Tote Check" },
+    { id: "bc-corrections", label: "🔧 BC Corrections" },
     { id: "bc-check",      label: "📋 BC Check" },
     { id: "bc-fill",       label: "📤 Push to BC" },
     { id: "settings",      label: "Auction Settings" },
@@ -667,7 +669,10 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
       </div>
 
       {/* Tab bar */}
-      <div className="flex-shrink-0 flex border-b border-gray-300 dark:border-gray-700 mb-6 overflow-x-auto scrollbar-none -mx-6 px-6">
+      {/* Wraps rather than scrolls: with this many tabs the strip overflows on a
+          normal window, and a hidden horizontal scroll just loses the last tabs
+          off the edge where nobody finds them. */}
+      <div className="flex-shrink-0 flex flex-wrap border-b border-gray-300 dark:border-gray-700 mb-6 -mx-6 px-6">
         {tabs.map(t => (
           <button key={t.id} onClick={() => switchTab(t.id)}
             className={`flex-shrink-0 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap ${
@@ -763,6 +768,8 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
         {tab === "tote-check" && (
           <ToteCheckTab auctionId={auction.id} onOpenLot={openLotInManager} />
         )}
+
+        {tab === "bc-corrections" && <BcCorrectionsTab auctionId={auction.id} />}
 
         {tab === "bc-check" && (
           <BcCheckTab

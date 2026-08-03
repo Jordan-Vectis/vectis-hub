@@ -1,7 +1,8 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState, useTransition } from "react"
 import type { ToteCheckIssue, ToteCheckRow } from "@/app/api/catalogue/tote-check/route"
+import { autocorrectLotsFromTotes } from "@/lib/actions/catalogue"
 
 // Checks every lot's Vendor / Receipt / Tote against the BC-synced tote data —
 // the same source the lot wizard's tote box reads, so this is "does the lot
@@ -65,6 +66,9 @@ export default function ToteCheckTab({
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
   const [filter,  setFilter]  = useState<ToteCheckIssue | null>(null)
+  const [confirmFix, setConfirmFix] = useState(false)
+  const [fixResult,  setFixResult]  = useState<string | null>(null)
+  const [fixing, startFix] = useTransition()
 
   const run = useCallback(() => {
     setLoading(true)
@@ -77,6 +81,30 @@ export default function ToteCheckTab({
   }, [auctionId])
 
   useEffect(() => { run() }, [run])
+
+  function applyFix() {
+    setConfirmFix(false)
+    setError(null)
+    setFixResult(null)
+    startFix(async () => {
+      const res = await autocorrectLotsFromTotes(auctionId)
+      if (!res.ok) { setError(res.error ?? "Couldn't correct the lots"); return }
+      setFixResult(
+        `Corrected ${res.updated ?? 0} lot${res.updated === 1 ? "" : "s"} to match BC.` +
+        ((res.corrections ?? 0) > 0
+          ? ` ${res.corrections} had a wrong value that has most likely gone into BC — see the BC Corrections tab.`
+          : "") +
+        ((res.skipped ?? 0) > 0 ? ` ${res.skipped} couldn't be checked (no tote, or the tote isn't in BC).` : ""),
+      )
+      run()
+    })
+  }
+
+  // Only mismatches and blanks with a known tote can be corrected — an unknown
+  // tote has nothing to correct against.
+  const fixable = (result?.rows ?? []).filter(r =>
+    r.issues.some(i => i === "receipt_mismatch" || i === "vendor_mismatch" || i === "receipt_missing" || i === "vendor_missing"),
+  ).length
 
   if (loading && !result) return <p className="text-sm text-gray-500 dark:text-gray-400 py-8 text-center">Checking lots against the BC tote data…</p>
   if (error)   return <p className="text-sm text-red-500 py-8 text-center">{error}</p>
@@ -104,14 +132,59 @@ export default function ToteCheckTab({
             Tote data last pulled from BC {fmtWhen(result.lastSync)} · refresh it on BC Warehouse → Data Sync
           </p>
         </div>
-        <button
-          onClick={run}
-          disabled={loading}
-          className="px-3 py-2 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500 transition-colors disabled:opacity-50"
-        >
-          {loading ? "Checking…" : "↻ Check again"}
-        </button>
+        <div className="flex items-center gap-2">
+          {fixable > 0 && (
+            <button
+              onClick={() => setConfirmFix(true)}
+              disabled={fixing || loading}
+              title="Rewrites the vendor and receipt on these lots to whatever BC has for their tote."
+              className="px-3 py-2 text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
+              style={{ background: "#2AB4A6", color: "#1C1C1E" }}
+            >
+              {fixing ? "Correcting…" : `✓ Match BC (${fixable})`}
+            </button>
+          )}
+          <button
+            onClick={run}
+            disabled={loading || fixing}
+            className="px-3 py-2 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500 transition-colors disabled:opacity-50"
+          >
+            {loading ? "Checking…" : "↻ Check again"}
+          </button>
+        </div>
       </div>
+
+      {fixResult && (
+        <div className="rounded-xl border border-green-600/50 bg-green-50 dark:bg-green-950/30 px-4 py-3 text-sm text-green-800 dark:text-green-300">
+          {fixResult}
+        </div>
+      )}
+
+      {/* Confirm — this rewrites lot data, so it says exactly what will happen */}
+      {confirmFix && (
+        <div className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-4" onClick={() => setConfirmFix(false)}>
+          <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-bold text-gray-900 dark:text-white mb-2">Correct {fixable} lot{fixable === 1 ? "" : "s"} to match BC?</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+              The vendor and receipt on these lots will be set to whatever BC has for their tote. BC is treated as correct.
+            </p>
+            <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1.5 mb-4 list-disc pl-4">
+              <li>Any lot that held a <span className="font-semibold">wrong</span> value is saved to the <span className="font-semibold">BC Corrections</span> tab first — that wrong value most likely went into BC, and this is the only record of it afterwards.</li>
+              <li>Unique IDs are <span className="font-semibold">not</span> changed, so a corrected lot may still show &ldquo;unique ID against a different receipt&rdquo;.</li>
+              <li>Lots with no tote, or a tote BC doesn&apos;t have, are left alone.</li>
+              <li>Every change is recorded in the Lot Change Log.</li>
+            </ul>
+            <div className="flex gap-2 justify-end">
+              <button type="button" onClick={() => setConfirmFix(false)}
+                className="px-4 py-2 text-sm font-semibold rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-400">Cancel</button>
+              <button type="button" onClick={applyFix}
+                className="px-4 py-2 text-sm font-semibold rounded-lg" style={{ background: "#2AB4A6", color: "#1C1C1E" }}>
+                Correct them
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Issue chips — click one to see only those lots */}
       {result.rows.length > 0 && (

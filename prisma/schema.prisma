@@ -390,6 +390,7 @@ model CatalogueAuction {
   conditionReports ConditionReport[]
   extraAccess CatalogueAuctionAccess[]
   lotDrafts   CatalogueLotDraft[]
+  bcCorrections CatalogueBcCorrection[]
 }
 
 // One-off access to a single sale for someone outside its department — the
@@ -568,6 +569,45 @@ model CatalogueLot {
   auction      CatalogueAuction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
   commissionBids CommissionBid[]
   parcelLots   ParcelLot[]
+}
+
+// A lot whose Vendor / Receipt was WRONG in the Hub and has been corrected to
+// match the BC tote data ("Match BC" on the Tote Check tab). BC is correct, so
+// the wrong values were most likely pushed INTO BC when the sale went over —
+// this row is the to-do list for putting that right in BC itself, ticked off on
+// the BC Corrections tab.
+//
+// ⚠ Written at the moment of the correction, because afterwards the lot no
+// longer carries the wrong values and the discrepancy would be unrecoverable.
+model CatalogueBcCorrection {
+  id        String           @id @default(cuid())
+  auctionId String
+  auction   CatalogueAuction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  // Deliberately NOT a relation: deleting a lot must not delete the reminder
+  // that BC still holds its wrong receipt.
+  lotId     String
+
+  barcode         String?
+  receiptUniqueId String?
+  title           String?
+  tote            String?
+
+  // What the Hub had — and therefore what BC most likely received
+  oldVendor  String?
+  oldReceipt String?
+  // What the BC tote data says it should be
+  newVendor  String?
+  newReceipt String?
+
+  done        Boolean   @default(false)
+  doneBy      String?
+  doneAt      DateTime?
+  correctedBy String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([auctionId, lotId])
+  @@index([auctionId, done])
 }
 
 // The lot someone was part-way through in the Lot Wizard, autosaved as they type

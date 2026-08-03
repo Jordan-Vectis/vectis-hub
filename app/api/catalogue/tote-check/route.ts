@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { buildToteMap, checkLot, toteLookupVariants, type ToteCheckIssue } from "@/lib/tote-check"
 
 // GET /api/catalogue/tote-check?auctionId=xxx
 //
@@ -11,16 +12,10 @@ import { prisma } from "@/lib/prisma"
 // vendor carried over from the previous batch, a unique ID minted against the
 // wrong receipt.
 //
-// Read-only: it reports, it never writes.
+// Read-only: it reports, it never writes. The comparison itself lives in
+// lib/tote-check.ts so the "Match BC" button fixes exactly what this reports.
 
-export type ToteCheckIssue =
-  | "no_tote"             // nothing to check against
-  | "tote_unknown"        // tote isn't in the BC data (typo, or not synced yet)
-  | "receipt_mismatch"
-  | "receipt_missing"
-  | "vendor_mismatch"
-  | "vendor_missing"
-  | "unique_id_mismatch"  // R008729-38 on a lot whose receipt says something else
+export type { ToteCheckIssue } from "@/lib/tote-check"
 
 export type ToteCheckRow = {
   id:              string
@@ -37,10 +32,6 @@ export type ToteCheckRow = {
   bcVendorName:    string | null
   issues:          ToteCheckIssue[]
 }
-
-// Tote / receipt / vendor numbers are compared trimmed and case-insensitively —
-// a hand-typed "t024808" is the same tote as "T024808".
-const norm = (v: string | null | undefined) => (v ?? "").trim().toLowerCase()
 
 export async function GET(req: NextRequest) {
   try {
@@ -59,22 +50,15 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: "asc" },
     })
 
-    // Look the totes up by every casing the lots actually use — Prisma's `in`
-    // is case-sensitive, and a hand-typed tote may not match the BC casing.
-    const toteVariants = new Set<string>()
-    for (const l of lots) {
-      const t = (l.tote ?? "").trim()
-      if (t) { toteVariants.add(t); toteVariants.add(t.toUpperCase()); toteVariants.add(t.toLowerCase()) }
-    }
-
-    const totes = toteVariants.size > 0
+    const variants = toteLookupVariants(lots)
+    const totes = variants.length > 0
       ? await prisma.warehouseTote.findMany({
-          where:  { toteNo: { in: [...toteVariants] } },
-          select: { toteNo: true, receiptNo: true, vendorNo: true, vendorName: true, syncedAt: true },
+          where:  { toteNo: { in: variants } },
+          select: { toteNo: true, receiptNo: true, vendorNo: true, vendorName: true },
         })
       : []
 
-    const toteMap = new Map(totes.map(t => [norm(t.toteNo), t]))
+    const toteMap = buildToteMap(totes)
 
     // When the tote table was last refreshed from BC — shown on the tab so an
     // "unknown tote" pile reads as "the sync is stale", not "600 mistakes".
@@ -82,43 +66,16 @@ export async function GET(req: NextRequest) {
 
     const rows: ToteCheckRow[] = []
     for (const l of lots) {
-      const issues: ToteCheckIssue[] = []
-      const tote = norm(l.tote) ? toteMap.get(norm(l.tote)) : undefined
-
-      if (!norm(l.tote)) {
-        issues.push("no_tote")
-      } else if (!tote) {
-        issues.push("tote_unknown")
-      } else {
-        if (norm(tote.receiptNo)) {
-          if (!norm(l.receipt))                            issues.push("receipt_missing")
-          else if (norm(l.receipt) !== norm(tote.receiptNo)) issues.push("receipt_mismatch")
-        }
-        if (norm(tote.vendorNo)) {
-          if (!norm(l.vendor))                           issues.push("vendor_missing")
-          else if (norm(l.vendor) !== norm(tote.vendorNo)) issues.push("vendor_mismatch")
-        }
-      }
-
-      // The unique ID carries its receipt as a prefix (R008729-38). If the lot's
-      // receipt says otherwise, one of the two is wrong — worth seeing even when
-      // the tote itself checks out.
-      const uid = (l.receiptUniqueId ?? "").trim()
-      if (uid && norm(l.receipt)) {
-        const base = uid.includes("-") ? uid.slice(0, uid.lastIndexOf("-")) : uid
-        if (norm(base) !== norm(l.receipt)) issues.push("unique_id_mismatch")
-      }
-
-      if (issues.length > 0) {
-        rows.push({
-          id: l.id, barcode: l.barcode, receiptUniqueId: l.receiptUniqueId, title: l.title,
-          tote: l.tote, vendor: l.vendor, receipt: l.receipt, createdByName: l.createdByName,
-          bcReceipt:    tote?.receiptNo   ?? null,
-          bcVendor:     tote?.vendorNo    ?? null,
-          bcVendorName: tote?.vendorName  ?? null,
-          issues,
-        })
-      }
+      const { issues, tote } = checkLot(l, toteMap)
+      if (issues.length === 0) continue
+      rows.push({
+        id: l.id, barcode: l.barcode, receiptUniqueId: l.receiptUniqueId, title: l.title,
+        tote: l.tote, vendor: l.vendor, receipt: l.receipt, createdByName: l.createdByName,
+        bcReceipt:    tote?.receiptNo  ?? null,
+        bcVendor:     tote?.vendorNo   ?? null,
+        bcVendorName: tote?.vendorName ?? null,
+        issues,
+      })
     }
 
     return NextResponse.json({
