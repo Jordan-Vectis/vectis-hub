@@ -53,7 +53,8 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
   const [flaggedOnly, setFlaggedOnly]       = useState(false)
   const [aiFlaggedOnly, setAiFlaggedOnly]   = useState(false)
   const [cataloguer, setCataloguer]   = useState("")
-  const [issueFilter, setIssueFilter] = useState<"all" | "issues" | "good">("all")
+  type IssueFilter = "all" | "attention" | "wording" | "issues" | "good"
+  const [issueFilter, setIssueFilter] = useState<IssueFilter>("all")
   const [photoLot, setPhotoLot] = useState<ReviewLot | null>(null)
   const [flagOpenId, setFlagOpenId] = useState<string | null>(null)
   const [flagText, setFlagText]     = useState("")
@@ -88,24 +89,50 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
     [...new Set(lots.map(l => l.createdByName).filter(Boolean))].sort() as string[],
   [lots])
 
-  // A lot "has issues" if any key point is missing/partial, or it lacks a
-  // description or photos, or it has been flagged.
-  function hasIssues(l: ReviewLot): boolean {
+  // Issues are split in two, because they are not the same job (Jordan
+  // 2026-07-31: almost every "issue" was only a wording check, which buried the
+  // handful of real problems).
+  //
+  //  NEEDS ATTENTION — something is actually wrong or absent: a key point that
+  //  isn't in the description at all, no description, no photos, or a human has
+  //  flagged an error. These need fixing.
+  //
+  //  WORDING CHECK — the key point IS covered, just not word for word (partial,
+  //  or "reworded" in relaxed mode). These only need reading.
+  //
+  // The buckets are exclusive — a lot with a missing key point AND a partial one
+  // counts as "needs attention" only, so the two counts plus the all-good lots
+  // add up to the total.
+  function needsAttention(l: ReviewLot): boolean {
     if (l.reviewFlag) return true
     if (!l.description?.trim() || l.imageUrls.length === 0) return true
     const a = analysed.get(l.id)
-    return !!a && a.matches.some(m => m.status !== "found")
+    return !!a && a.matches.some(m => m.status === "missing")
   }
 
-  const issueCount = lots.filter(hasIssues).length
+  function wordingOnly(l: ReviewLot): boolean {
+    if (needsAttention(l)) return false
+    const a = analysed.get(l.id)
+    return !!a && a.matches.some(m => m.status === "partial" || m.status === "reworded")
+  }
+
+  // Either bucket — what the old single "with issues" filter meant.
+  function hasIssues(l: ReviewLot): boolean {
+    return needsAttention(l) || wordingOnly(l)
+  }
+
+  const attentionCount = lots.filter(needsAttention).length
+  const wordingCount   = lots.filter(wordingOnly).length
 
   const filtered = lots.filter(l => {
     if (l.id === editDescId) return true
     if (flaggedOnly && !l.reviewFlag) return false
     if (aiFlaggedOnly && !l.aiFlagNote) return false
     if (cataloguer && l.createdByName !== cataloguer) return false
-    if (issueFilter === "issues" && !hasIssues(l)) return false
-    if (issueFilter === "good"   &&  hasIssues(l)) return false
+    if (issueFilter === "attention" && !needsAttention(l)) return false
+    if (issueFilter === "wording"   && !wordingOnly(l))    return false
+    if (issueFilter === "issues"    && !hasIssues(l))      return false
+    if (issueFilter === "good"      &&  hasIssues(l))      return false
     if (!search.trim()) return true
     const q = search.toLowerCase()
     return [l.barcode, l.receiptUniqueId, l.title, l.description]
@@ -201,17 +228,30 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
                 ✍ Relaxed wording matching
               </span>
             )}
-            {issueCount > 0 && (
+            {attentionCount > 0 && (
               <button
-                onClick={() => setIssueFilter(f => (f === "issues" ? "all" : "issues"))}
-                title="Show only the lots with issues (missing, partial or reworded key points, no description or photos, or flagged)"
+                onClick={() => setIssueFilter(f => (f === "attention" ? "all" : "attention"))}
+                title="Something is wrong or missing: a key point that isn't in the description at all, no description, no photos, or an error someone has flagged."
                 className={`ml-2 font-semibold rounded px-1.5 py-0.5 transition-colors ${
-                  issueFilter === "issues"
+                  issueFilter === "attention"
+                    ? "bg-red-500/20 text-red-400 ring-1 ring-red-500/50"
+                    : "text-red-500 hover:bg-red-500/10"
+                }`}
+              >
+                ⚠ {attentionCount} need{attentionCount === 1 ? "s" : ""} attention
+              </button>
+            )}
+            {wordingCount > 0 && (
+              <button
+                onClick={() => setIssueFilter(f => (f === "wording" ? "all" : "wording"))}
+                title="The key points ARE covered, just not word for word — read them over. Nothing is missing on these."
+                className={`ml-2 font-semibold rounded px-1.5 py-0.5 transition-colors ${
+                  issueFilter === "wording"
                     ? "bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/50"
                     : "text-amber-500 hover:bg-amber-500/10"
                 }`}
               >
-                ⚠ {issueCount} with issues
+                ≈ {wordingCount} wording check{wordingCount === 1 ? "" : "s"}
               </button>
             )}
             {flaggedCount > 0 && <span className="ml-2 text-red-500 font-semibold">🚩 {flaggedCount} flagged</span>}
@@ -234,11 +274,13 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
             </select>
             <select
               value={issueFilter}
-              onChange={e => setIssueFilter(e.target.value as "all" | "issues" | "good")}
+              onChange={e => setIssueFilter(e.target.value as IssueFilter)}
               className="bg-white dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-[#2AB4A6]"
             >
               <option value="all">All lots</option>
-              <option value="issues">⚠ With issues</option>
+              <option value="attention">⚠ Needs attention</option>
+              <option value="wording">≈ Wording to check</option>
+              <option value="issues">Either of the above</option>
               <option value="good">✓ All good</option>
             </select>
             <button
