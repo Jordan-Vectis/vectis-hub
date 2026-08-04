@@ -37,8 +37,12 @@ export const EDIT_PRESETS: EditPreset[] = [
   {
     key: "extend", group: "Framing", aspect: true,
     label: "Extend the shot",
-    blurb: "Adds more background around a photo cropped too tight, so the item isn't jammed against the edge.",
-    prompt: "Extend this photograph outwards, generating more of the existing background around the subject so the item is no longer tight against the edges. Match the existing backdrop's colour, texture, lighting and grain seamlessly. Leave the item itself untouched and in the same place — only add new background around it.",
+    blurb: "Adds more background around a photo cropped too tight. Pick a shape and how much to add — the space is added for real before the model fills it.",
+    // ⚠ This preset is OUTPAINTING and works differently from the others: the
+    // route pads the real canvas with flat grey BEFORE sending, so the model is
+    // filling a blank area rather than being asked to imagine a bigger picture.
+    // Asking alone did nothing — the model just returned the same framing.
+    prompt: "The flat mid-grey (#808080) border around this photograph is EMPTY CANVAS — it is not part of the picture. Paint into that grey area only, continuing the existing background outwards so the result looks like one photograph that was always framed this wide. Match the backdrop's colour, texture, lighting, focus falloff and grain exactly where they meet. Leave every non-grey pixel exactly as it is — do not move, rescale, recrop or redraw the original photograph or the item in it. Do not add any new object, prop, surface or scenery: the added area is a continuation of the SAME background.",
   },
   {
     key: "straighten", group: "Framing",
@@ -129,6 +133,24 @@ export const EDIT_PRESETS: EditPreset[] = [
 export const PRESET_BY_KEY: Record<string, EditPreset> =
   Object.fromEntries(EDIT_PRESETS.map(p => [p.key, p]))
 
+// How much canvas the extend preset adds, as a fraction of the longest edge.
+export const GROW = [
+  { key: "a-little", label: "A little", factor: 0.25 },
+  { key: "some",     label: "Some",     factor: 0.5  },
+  { key: "a-lot",    label: "A lot",    factor: 1.0  },
+] as const
+
+// Which sides gain the space. Vertical/horizontal are the two most-wanted:
+// "make it taller" and "make it wider". `top`/`bottom` are there for the
+// lopsided case — an item shoved against one edge.
+export const DIRECTIONS = [
+  { key: "all",        label: "All round" },
+  { key: "vertical",   label: "↕ Taller" },
+  { key: "horizontal", label: "↔ Wider" },
+  { key: "top",        label: "↑ Above only" },
+  { key: "bottom",     label: "↓ Below only" },
+] as const
+
 export const ASPECTS = [
   { key: "keep",  label: "Same shape" },
   { key: "1:1",   label: "Square" },
@@ -140,14 +162,11 @@ export const ASPECTS = [
 /** The full instruction sent to the model: preset + options + any free text. */
 export function buildEditPrompt(
   presetKey: string,
-  opts?: { aspect?: string; extra?: string },
+  opts?: { extra?: string },
 ): string | null {
   const preset = PRESET_BY_KEY[presetKey]
   if (!preset) return null
   const bits = [preset.prompt]
-  if (preset.aspect && opts?.aspect && opts.aspect !== "keep") {
-    bits.push(`Produce the result in a ${opts.aspect} aspect ratio, adding background as needed rather than cropping the item.`)
-  }
   if (opts?.extra?.trim()) {
     bits.push(`Also: ${opts.extra.trim()}`)
   }

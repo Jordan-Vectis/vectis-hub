@@ -4,13 +4,13 @@ import { prisma } from "@/lib/prisma"
 import { hasAppAccess } from "@/lib/apps"
 import sharp from "sharp"
 import { getToolModel } from "@/lib/ai-models"
-import { buildEditPrompt } from "@/lib/photo-edit-presets"
+import { buildEditPrompt, GROW } from "@/lib/photo-edit-presets"
 
 export const maxDuration = 120
 export const runtime = "nodejs"
 
 // POST /api/photo-prep/edit — edit ONE photo with Gemini's image model
-// ("nano banana"). FormData: image, preset, aspect?, extra?
+// ("nano banana"). FormData: image, preset, aspect?, grow?, direction?, extra?
 // Returns { image: <base64>, mimeType }.
 //
 // ⚠ Unlike the rest of Photo Prep, this DOES send the photo to Google. The tab
@@ -27,6 +27,56 @@ const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/interactions"
 // the request slow and costly. 2048px on the long edge is plenty for a
 // catalogue image and keeps the round trip sane.
 const MAX_EDGE = 2048
+
+// The grey we pad with. The prompt names this exact colour so the model can tell
+// the blank area from a genuinely grey backdrop.
+const CANVAS_GREY = { r: 128, g: 128, b: 128 }
+
+// ⚠ WHY THE CANVAS IS PADDED HERE RATHER THAN ASKED FOR IN THE PROMPT.
+// The first version just told the model to "extend the photograph outwards" and
+// it changed nothing — it returned the same framing, because a model handed a
+// 16:9 photo has no reason to produce anything but a 16:9 photo. Real
+// outpainting gives it the bigger canvas up front, with the new area blanked,
+// so the task becomes "fill this gap" instead of "imagine a wider picture".
+// Padding also guarantees the original pixels survive, which asking never did.
+function planPadding(
+  w: number, h: number,
+  opts: { aspect: string; grow: string; direction: string },
+): { top: number; bottom: number; left: number; right: number } {
+  const factor = GROW.find(g => g.key === opts.grow)?.factor ?? 0.5
+  const pad    = Math.round(Math.max(w, h) * factor)
+
+  const half = Math.round(pad / 2)
+  let top = 0, bottom = 0, left = 0, right = 0
+  switch (opts.direction) {
+    case "top":        top = pad; break
+    case "bottom":     bottom = pad; break
+    case "vertical":   top = bottom = half; break
+    case "horizontal": left = right = half; break
+    default:           top = bottom = left = right = half
+  }
+
+  // A chosen shape only ever ADDS space — never crop to reach it, or we'd throw
+  // away the photograph to satisfy a ratio.
+  const m = /^(\d+):(\d+)$/.exec(opts.aspect)
+  if (m) {
+    const target = Number(m[1]) / Number(m[2])
+    const W = w + left + right, H = h + top + bottom
+    if (W / H < target) {
+      const extra = Math.round(target * H - W)
+      left  += Math.floor(extra / 2)
+      right += extra - Math.floor(extra / 2)
+    } else if (W / H > target) {
+      const extra = Math.round(W / target - H)
+      // Respect the side the photographer asked for: "Above only" puts the
+      // whole of the extra height at the top, not half of it.
+      if (opts.direction === "top")         top    += extra
+      else if (opts.direction === "bottom") bottom += extra
+      else { top += Math.floor(extra / 2); bottom += extra - Math.floor(extra / 2) }
+    }
+  }
+  return { top, bottom, left, right }
+}
 
 // ⚠ Don't hard-code one path to the image. Google's image APIs have returned it
 // as `output_image`, as an `inlineData` content part, and inside an `output`
@@ -89,19 +139,32 @@ export async function POST(req: NextRequest) {
     const preset = String(form.get("preset") ?? "").trim()
     const aspect = String(form.get("aspect") ?? "").trim()
     const extra  = String(form.get("extra") ?? "").trim()
+    const grow      = String(form.get("grow") ?? "some").trim()
+    const direction = String(form.get("direction") ?? "all").trim()
 
     if (!(file instanceof File)) return NextResponse.json({ error: "No photo received" }, { status: 400 })
 
-    const prompt = buildEditPrompt(preset, { aspect, extra })
+    const prompt = buildEditPrompt(preset, { extra })
     if (!prompt) return NextResponse.json({ error: `Unknown preset "${preset}"` }, { status: 400 })
 
     // Normalise first: apply EXIF rotation (or the model edits a sideways photo)
     // and shrink to a sensible size.
-    const jpeg = await sharp(Buffer.from(await file.arrayBuffer()))
+    let pipeline = sharp(Buffer.from(await file.arrayBuffer()))
       .rotate()
       .resize({ width: MAX_EDGE, height: MAX_EDGE, fit: "inside", withoutEnlargement: true })
-      .jpeg({ quality: 92 })
-      .toBuffer()
+
+    // Only `extend` outpaints. Every other preset works on the photo as it is.
+    if (preset === "extend") {
+      const base = await pipeline.jpeg({ quality: 92 }).toBuffer()
+      const meta = await sharp(base).metadata()
+      const pad  = planPadding(meta.width ?? 1, meta.height ?? 1, { aspect, grow, direction })
+      pipeline = sharp(base)
+        .extend({ ...pad, background: CANVAS_GREY })
+        // Padding can push past MAX_EDGE, so bring it back down afterwards.
+        .resize({ width: MAX_EDGE, height: MAX_EDGE, fit: "inside", withoutEnlargement: true })
+    }
+
+    const jpeg = await pipeline.jpeg({ quality: 92 }).toBuffer()
 
     const model = await getToolModel("photo_prep_edit")
 

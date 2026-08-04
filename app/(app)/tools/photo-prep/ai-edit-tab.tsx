@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { EDIT_PRESETS, ASPECTS, type EditPreset } from "@/lib/photo-edit-presets"
+import { EDIT_PRESETS, ASPECTS, GROW, DIRECTIONS, type EditPreset } from "@/lib/photo-edit-presets"
 
 // Photo Prep → AI Edit. Drop photos in, pick a preset, keep what you like.
 //
@@ -29,11 +29,34 @@ const CARD = "rounded-xl border border-gray-200 dark:border-gray-800 bg-white da
 
 const GROUPS: EditPreset["group"][] = ["Framing", "Background", "Light", "Quality"]
 
+function Pills({ label, options, value, onPick }: {
+  label:   string
+  options: readonly { key: string; label: string }[]
+  value:   string
+  onPick:  (key: string) => void
+}) {
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="text-xs text-gray-600 dark:text-gray-400 w-16 shrink-0">{label}</span>
+      {options.map(o => (
+        <button key={o.key} onClick={() => onPick(o.key)}
+          className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+            value === o.key ? "border-[#0078D4] text-[#0078D4] bg-[#0078D4]/10"
+                            : "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-400"}`}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function AiEditTab() {
   const [shots, setShots]     = useState<Shot[]>([])
   const [selId, setSelId]     = useState<string | null>(null)
   const [preset, setPreset]   = useState<string>("extend")
   const [aspect, setAspect]   = useState<string>("keep")
+  const [grow, setGrow]       = useState<string>("some")
+  const [dir, setDir]         = useState<string>("all")
   const [extra, setExtra]     = useState("")
   const [compare, setCompare] = useState(true)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -67,6 +90,8 @@ export default function AiEditTab() {
       fd.append("image", sel.file, sel.name)
       fd.append("preset", preset)
       fd.append("aspect", aspect)
+      fd.append("grow", grow)
+      fd.append("direction", dir)
       fd.append("extra", extra)
       const res  = await fetch("/api/photo-prep/edit", { method: "POST", body: fd })
       const json = await res.json()
@@ -219,16 +244,15 @@ export default function AiEditTab() {
                   {chosen && <p className="text-xs text-gray-500 dark:text-gray-400">{chosen.blurb}</p>}
 
                   {chosen?.aspect && (
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs text-gray-600 dark:text-gray-400">Shape:</span>
-                      {ASPECTS.map(a => (
-                        <button key={a.key} onClick={() => setAspect(a.key)}
-                          className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
-                            aspect === a.key ? "border-[#0078D4] text-[#0078D4] bg-[#0078D4]/10"
-                                             : "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400"}`}>
-                          {a.label}
-                        </button>
-                      ))}
+                    <div className="space-y-2 rounded-lg border border-gray-200 dark:border-gray-800 p-3">
+                      <Pills label="Direction" options={DIRECTIONS} value={dir}    onPick={setDir} />
+                      <Pills label="How much"  options={GROW}       value={grow}  onPick={setGrow} />
+                      <Pills label="Shape"     options={ASPECTS}    value={aspect} onPick={setAspect} />
+                      <p className="text-[11px] text-gray-500 dark:text-gray-500">
+                        The space is added to the picture for real before it's sent, then filled in — so
+                        &ldquo;{DIRECTIONS.find(d => d.key === dir)?.label}&rdquo; genuinely gains room on that side.
+                        A shape only ever adds more space; it never crops the photo to fit.
+                      </p>
                     </div>
                   )}
 
