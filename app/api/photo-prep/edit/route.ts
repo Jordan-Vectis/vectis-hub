@@ -28,6 +28,46 @@ const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/interactions"
 // catalogue image and keeps the round trip sane.
 const MAX_EDGE = 2048
 
+// ⚠ Don't hard-code one path to the image. Google's image APIs have returned it
+// as `output_image`, as an `inlineData` content part, and inside an `output`
+// array, and the field names vary (data / bytesBase64Encoded, mime_type /
+// mimeType). Walking the response for the first plausible base64 image is far
+// more robust than guessing which shape today's endpoint uses — and it keeps
+// working when they change it again.
+function extractImage(node: unknown, depth = 0): { data: string; mimeType: string } | null {
+  if (!node || typeof node !== "object" || depth > 6) return null
+
+  if (!Array.isArray(node)) {
+    const o = node as Record<string, any>
+    const data = o.data ?? o.bytesBase64Encoded ?? o.imageBytes ?? o.b64_json
+    const mime = o.mime_type ?? o.mimeType ?? o.media_type
+    // A base64 image is long; a short string here is an id or a label.
+    if (typeof data === "string" && data.length > 512 && (!mime || String(mime).startsWith("image/"))) {
+      return { data, mimeType: mime ? String(mime) : "image/png" }
+    }
+  }
+
+  for (const value of Object.values(node as Record<string, unknown>)) {
+    const hit = extractImage(value, depth + 1)
+    if (hit) return hit
+  }
+  return null
+}
+
+/** Any text the model sent back instead — usually a refusal worth showing. */
+function extractText(node: unknown, depth = 0): string {
+  if (!node || typeof node !== "object" || depth > 6) return ""
+  if (!Array.isArray(node)) {
+    const o = node as Record<string, any>
+    if (typeof o.text === "string" && o.text.trim()) return o.text.trim()
+  }
+  for (const value of Object.values(node as Record<string, unknown>)) {
+    const hit = extractText(value, depth + 1)
+    if (hit) return hit
+  }
+  return ""
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await auth()
@@ -84,17 +124,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: msg }, { status: res.status === 429 ? 429 : 502 })
     }
 
-    // The edited image comes back as output_image, not as content parts.
-    const out = json?.output_image ?? json?.interaction?.output_image
-    const data = out?.data
-    if (!data) {
-      return NextResponse.json(
-        { error: "The model didn't return an image. It may have refused this edit — try a different preset or photo." },
-        { status: 502 },
-      )
+    const found = extractImage(json)
+    if (!found) {
+      // ⚠ Don't just say "no image" — say what DID come back, or this is
+      // undebuggable from the outside. Image APIs move around: the payload has
+      // been output_image, content parts and an output array at various times,
+      // and the model can also answer with text (a refusal, or a description)
+      // instead of a picture.
+      const text  = extractText(json)
+      const shape = Object.keys(json ?? {}).join(", ") || "empty response"
+      return NextResponse.json({
+        error: text
+          ? `The model replied with words instead of a picture: "${text.slice(0, 300)}"`
+          : `The model didn't return an image. The reply contained: ${shape}.`,
+        debug: { keys: Object.keys(json ?? {}), sample: JSON.stringify(json).slice(0, 600) },
+      }, { status: 502 })
     }
 
-    return NextResponse.json({ image: data, mimeType: out.mime_type ?? "image/png" })
+    return NextResponse.json({ image: found.data, mimeType: found.mimeType })
   } catch (e: any) {
     console.error("photo-prep/edit error:", e)
     return NextResponse.json({ error: e?.message ?? "Edit failed" }, { status: 500 })
