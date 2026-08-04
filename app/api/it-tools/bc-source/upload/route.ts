@@ -55,24 +55,47 @@ export async function POST(req: NextRequest) {
 
     const loaded = await JSZip.loadAsync(await zip.arrayBuffer())
 
-    // Zips made by right-click → "Compress to zip" wrap everything in one root
-    // folder ("Source/…"); zips made from inside the folder don't. Detect a
-    // single shared root and strip it so paths always start at the extension.
     const entryPaths = Object.keys(loaded.files).filter(p => !loaded.files[p].dir)
     if (entryPaths.length === 0) return NextResponse.json({ error: "That zip is empty" }, { status: 400 })
-    const firstSeg = (p: string) => p.split("/")[0]
-    const roots = new Set(entryPaths.map(firstSeg))
-    // Only strip when the single root is a WRAPPER (no files directly inside it
-    // would remain path-less) — i.e. every file sits at least two levels deep.
-    const stripRoot = roots.size === 1 && entryPaths.every(p => p.split("/").length >= 3)
+
+    // ── Find the extensions ──
+    // An extension folder is one that directly contains app.json — that's the BC
+    // manifest, and every extension has exactly one. Keying on that instead of
+    // guessing at wrapper folders means ANY zip shape works: the Source folder,
+    // its parent, or a single extension on its own.
+    //
+    // ⚠ Do NOT go back to "strip one shared root folder". The real archive has
+    // TWO roots (Source/… plus a sibling "Webservices - PTE"), so that rule
+    // didn't fire and all 62 extensions were filed under one called "Source".
+    const appDirs = entryPaths
+      .filter(p => p.toLowerCase().endsWith("app.json") && p.split("/").pop()?.toLowerCase() === "app.json")
+      .map(p => p.slice(0, p.lastIndexOf("/") + 1))   // keeps the trailing slash; "" when at the zip root
+      .sort((a, b) => b.length - a.length)            // longest first, so nested wins
+
+    // Two extensions can't share a display name — `path` is unique in the DB, so
+    // a collision would fail the whole upload. Fall back to the full folder path.
+    const nameFor = new Map<string, string>()
+    const taken = new Set<string>()
+    for (const dir of [...appDirs].sort()) {
+      const segs = dir.split("/").filter(Boolean)
+      const short = segs.length > 0 ? segs[segs.length - 1] : (zip.name.replace(/\.zip$/i, "") || "Extension")
+      const label = taken.has(short) ? (segs.join("/") || short) : short
+      taken.add(label)
+      nameFor.set(dir, label)
+    }
 
     const rows: { extension: string; path: string; name: string; kind: string; content: string; size: number }[] = []
     let skipped = 0
 
     for (const rawPath of entryPaths) {
-      const path = stripRoot ? rawPath.slice(rawPath.indexOf("/") + 1) : rawPath
+      // The extension this file belongs to = the deepest app.json folder above it.
+      const dir = appDirs.find(d => rawPath.startsWith(d))
+      if (dir === undefined) { skipped++; continue }   // stray file outside any extension
+      const extName = nameFor.get(dir)!
+      const rest = rawPath.slice(dir.length)
+      if (!rest) { skipped++; continue }
+      const path = `${extName}/${rest}`
       const segs = path.split("/").filter(Boolean)
-      if (segs.length < 2) { skipped++; continue }   // loose files at the top level aren't part of an extension
       const name = segs[segs.length - 1]
       const extDot = name.toLowerCase().split(".").pop() ?? ""
       const isRuleset = name.toLowerCase().endsWith(".ruleset.json")
@@ -83,7 +106,8 @@ export async function POST(req: NextRequest) {
       const content = new TextDecoder("utf-8").decode(buf)
 
       rows.push({
-        extension: segs[0],
+        // extName, not segs[0] — the collision fallback can itself contain "/".
+        extension: extName,
         path,
         name,
         kind: kindOf(name),

@@ -64,15 +64,32 @@ export async function POST(req: NextRequest) {
     const terms  = tokenise(`${q} ${recent}`)
     if (terms.length === 0) return NextResponse.json({ error: "Ask with a few more words" }, { status: 400 })
 
+    // ⚠ Narrow in SQL FIRST. The stored source is ~23 MB across ~3,000 files —
+    // pulling all of it into memory to score in JS would spike the container on
+    // every question. Only files containing at least one search term (or the
+    // term in their path) are loaded, capped, and scored properly below.
+    const probe = terms.slice(0, 8)
     let files: { id: string; extension: string; path: string; kind: string; content: string }[] = []
     try {
       files = await prisma.bcSourceFile.findMany({
+        where: {
+          OR: probe.flatMap(t => [
+            { content: { contains: t, mode: "insensitive" as const } },
+            { path:    { contains: t, mode: "insensitive" as const } },
+          ]),
+        },
         select: { id: true, extension: true, path: true, kind: true, content: true },
+        take: 400,
       })
     } catch {
       return NextResponse.json({ error: "No BC source has been uploaded yet." }, { status: 400 })
     }
-    if (files.length === 0) return NextResponse.json({ error: "No BC source has been uploaded yet." }, { status: 400 })
+    if (files.length === 0) {
+      return NextResponse.json({
+        answer: "Nothing in the BC source mentions those words. Try the exact name off the screen — a page title, a field name, or a report name.",
+        sources: [],
+      })
+    }
 
     const scored = files
       .map(f => ({ f, score: scoreText(f.content, terms) + scoreText(f.path, terms) * 4 }))
