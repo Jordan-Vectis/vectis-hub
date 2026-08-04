@@ -147,6 +147,10 @@ export async function GET(req: NextRequest) {
         barcode: l.barcode ?? bc?.barcode ?? "",
         uniqueId: l.receiptUniqueId ?? bc?.uniqueId ?? "",
         title: l.title || bc?.description || "",
+        // BC's toteNo is EVA_CFA_TOT_CreatedFromToteNo — the tote the item was
+        // actually made from. The Hub's is what the cataloguer typed in.
+        bcTote: bc?.toteNo ?? "",
+        hubTote: l.tote ?? "",
         inHub: true,
         hubCataloguedBy: l.createdByName ?? "",
         hubSaleCode: l.auction?.code ?? "",
@@ -171,6 +175,8 @@ export async function GET(req: NextRequest) {
       barcode: w.barcode ?? "",
       uniqueId: w.uniqueId,
       title: w.description ?? "",
+      bcTote: w.toteNo ?? "",
+      hubTote: "",
       inHub: false,
       hubCataloguedBy: "", hubSaleCode: "", hubSaleName: "", hubSaleDate: "",
       inBC: true,

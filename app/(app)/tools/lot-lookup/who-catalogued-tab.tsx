@@ -145,7 +145,7 @@ export default function WhoCataloguedTab() {
                   {lot.barcode         && <Fact label="Barcode"   value={lot.barcode} mono />}
                   {lot.receiptUniqueId && <Fact label="Unique ID" value={lot.receiptUniqueId} mono />}
                   {lot.receipt && <Fact label="Receipt" value={lot.receipt} mono />}
-                  {lot.tote    && <Fact label="Tote"    value={lot.tote} mono />}
+                  {lot.tote    && <Fact label="Made from tote" value={lot.tote} mono />}
                   {lot.vendor  && <Fact label="Customer" value={lot.vendor} mono />}
                 </div>
                 <div className="flex flex-wrap items-center gap-3 mt-6">
@@ -196,6 +196,9 @@ export default function WhoCataloguedTab() {
                     {/* BC writes 0 until the sale is numbered — say so, don't print 0. */}
                     <Fact label="Lot number" value={bc.lotNo && bc.lotNo !== "0" ? bc.lotNo : "Not numbered yet"} mono={!!bc.lotNo && bc.lotNo !== "0"} />
                     <Fact label="Location" value={bc.location || "—"} mono />
+                    {/* EVA_CFA_TOT_CreatedFromToteNo — usually empty in BC, so the
+                        Hub's tote above is the one to trust. */}
+                    <Fact label="Made from tote" value={bc.toteNo || "Not recorded in BC"} mono={!!bc.toteNo} />
                     <Fact label="Photos" value={String(bc.photos)} />
                   </div>
                 )}
@@ -305,6 +308,7 @@ export default function WhoCataloguedTab() {
               <Fact label="Sale" value={saleLine(b.saleCode, b.saleName, b.saleDate)} />
               <Fact label="Customer" value={b.vendorName || b.vendorNo || "—"} />
               <Fact label="Location" value={b.location || "—"} mono />
+              <Fact label="Made from tote" value={b.toteNo || "Not recorded"} mono={!!b.toteNo} />
             </div>
           </div>
         </div>

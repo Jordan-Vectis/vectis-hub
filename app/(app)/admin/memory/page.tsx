@@ -61,6 +61,10 @@ The two side-by-side Hub / BC panels are **gone**. They made the journey impossi
 
 \`addedToBC\` is a **manual tick the cataloguers rarely make**. Measured on production for receipt R008414 (2026-08-04): **44 Hub lots, only 11 ticked, but 44/44 matched a BC item on barcode.** The route therefore runs its own \`WarehouseItem\` query on the lots' barcodes (falling back to \`receiptUniqueId\` ↔ BC \`uniqueId\`) — a separate query, because a lot can be in BC under a different receipt from the one searched. ⚠ Prisma \`in\` is **case-sensitive**, so it queries original/upper/lower variants and matches case-insensitively in code. The Who-catalogued tab's BC chip uses the same real match. **Don't "simplify" either back to \`addedToBC\`.**
 
+### ⚠ "Made from tote" — trust the HUB's tote, not BC's
+
+There is a **Made from tote** column. BC's \`WarehouseItem.toteNo\` is \`EVA_CFA_TOT_CreatedFromToteNo\`, which *sounds* authoritative but is almost always empty — measured on receipt R008414 (2026-08-04): **all 44 Hub lots had \`CatalogueLot.tote\`, only 2 of 52 BC items had \`toteNo\`** (and those two agreed). So the column shows the **Hub's** tote, falls back to BC's (marked "from BC"), and flags an amber "⚠ BC says …" when they disagree. Don't flip the preference back to BC.
+
 ### ⚠ The lot number is \`currentLotNo\`, NOT \`lotNo\`
 
 BC's \`lotNo\` is \`0\` on these rows while \`currentLotNo\` holds the real number (166, 167…). Always read \`currentLotNo || lotNo\`, and show "No lot number yet" rather than a bare 0.

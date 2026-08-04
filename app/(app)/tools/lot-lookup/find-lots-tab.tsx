@@ -16,7 +16,7 @@ import { useState } from "react"
 import { CARD, INPUT, BTN_PRIMARY, HINT, formatSaleDate } from "./ui"
 
 type Row = {
-  key: string; barcode: string; uniqueId: string; title: string
+  key: string; barcode: string; uniqueId: string; title: string; bcTote: string; hubTote: string
   inHub: boolean; hubCataloguedBy: string; hubSaleCode: string; hubSaleName: string; hubSaleDate: string
   inBC: boolean; bcCataloguedBy: string; bcCatalogued: boolean
   bcSaleCode: string; bcSaleName: string; bcSaleDate: string; bcLotNo: string; bcLocation: string
@@ -245,6 +245,7 @@ export default function FindLotsTab() {
                     <thead className="bg-gray-50/60 dark:bg-gray-900/40 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
                       <tr>
                         <th className="text-left px-6 py-3 font-semibold">Item</th>
+                        <th className="text-left px-6 py-3 font-semibold">Made from tote</th>
                         <th className="text-left px-6 py-3 font-semibold">Catalogued by</th>
                         <th className="text-left px-6 py-3 font-semibold">1 · In the Hub</th>
                         <th className="text-left px-6 py-3 font-semibold">2 · In Business Central</th>
@@ -259,6 +260,27 @@ export default function FindLotsTab() {
                               <p className="font-mono text-sm text-gray-500 dark:text-gray-500">{r.uniqueId}</p>
                             )}
                             <p className="text-gray-700 dark:text-gray-300 max-w-lg mt-0.5">{r.title || "No description"}</p>
+                          </td>
+                          {/* ⚠ The HUB's tote is the reliable one — measured on
+                              receipt R008414: all 44 Hub lots had it, only 2 of
+                              52 BC items did (and they agreed). So prefer the
+                              Hub's, fall back to BC's, flag a disagreement. */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {r.hubTote || r.bcTote
+                              ? <>
+                                  <span className="font-mono font-semibold text-cyan-700 dark:text-cyan-300">
+                                    {r.hubTote || r.bcTote}
+                                  </span>
+                                  {!r.hubTote && r.bcTote && (
+                                    <span className="block text-sm text-gray-500">from BC</span>
+                                  )}
+                                  {r.hubTote && r.bcTote && r.hubTote.toUpperCase() !== r.bcTote.toUpperCase() && (
+                                    <span className="block text-sm text-amber-600 dark:text-amber-400 font-semibold">
+                                      ⚠ BC says {r.bcTote}
+                                    </span>
+                                  )}
+                                </>
+                              : <span className="text-gray-400 dark:text-gray-600">Not recorded</span>}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             {r.hubCataloguedBy
