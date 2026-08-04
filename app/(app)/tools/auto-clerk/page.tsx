@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 
+// ⚠ LEGACY simulation timings only (sped up for testing). The real-world rule
+// on the reference card is 15s of silence → Fair Warning, then 20s → Sell.
 const SILENCE_BEFORE_FW_MS  = 10_000  // 10s no bids → Fair Warning
 const SILENCE_BEFORE_HAMMER_MS = 10_000  // 10s after FW → Hammer
 
@@ -357,8 +359,11 @@ export default function AutoClerkPage() {
             </div>
 
             <div>
-              <p className="font-semibold">6. Undo — manual mistakes only</p>
-              <p className="text-blue-700 dark:text-blue-300/80 mt-0.5">Both platforms have an Undo button to remove the last bid if something goes wrong. No automatic detection.</p>
+              <p className="font-semibold">6. Undo — auto-detected in Scenario 1, manual everywhere else</p>
+              <p className="text-blue-700 dark:text-blue-300/80 mt-0.5">Both platforms have an Undo button to remove the last bid.
+                The <strong>Scenario 1 auto-clerk</strong> detects a retraction on Vectis (the bid amount drops below the last seen)
+                and clicks Undo on Saleroom until the amounts match again. The <strong>shadow views</strong> do no undo detection,
+                and the clerk&apos;s own mistakes are always a manual Undo press.</p>
             </div>
           </div>
         </div>
@@ -372,7 +377,7 @@ export default function AutoClerkPage() {
             <li>❌ The only ! button is on Vectis, and it's only for dropping the Vectis bidder (favour Saleroom)</li>
             <li>❌ Hammer, Next Lot and Fair Warning on Vectis are labelled buttons — they are NOT !</li>
             <li>❌ No automatic same-amount detection in shadow pages — the tie-break logic only applies when both feeds are visible together</li>
-            <li>❌ No automatic double-bid / undo detection — undo is a manual button only</li>
+            <li>❌ No automatic double-bid detection anywhere — and undo auto-detection exists ONLY in the Scenario 1 rig (Vectis bid amount drops); the shadow views never detect undos</li>
           </ul>
         </div>
 

@@ -16,6 +16,187 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "auto_clerk_review.md",
+    content: `---
+name: Auto Clerk — 2026-08-04 review fixes
+purpose: The full-review fixes to the Scenario 1 rig, shadow pages, gap-relay and the reference card — including the undo-rule card update. Read WITH the reference card before touching auto-clerk code.
+last_updated: 2026-08-04
+---
+
+# Auto Clerk — review fixes (2026-08-04)
+
+A full review of /tools/auto-clerk; these fixes shipped to staging. The reference card on the launcher remains the source of truth — it was **updated** as part of this (see Undo below).
+
+## Scenario 1 rig (public/auto-clerk-fake-saleroom.html)
+
+- **\`act('undo')\` now rolls back \`S.hi\` too** (was only \`S.bid\`). \`readSaleroomBid()\` reads \`S.hi\`, so the stale high made undo-then-rebid-at-the-same-amount a no-op — the re-bid never registered on Saleroom.
+- **\`syncSaleroomDownToTarget()\`** — downward twin of \`syncSaleroomToTarget\`: one Vectis retraction can drop more than one step, and one Undo click removes one row. Verify-and-retry, then the red banner. ⚠ The 2s watchdog is deliberately still **upward-only**: "Saleroom ahead" is a legitimate state (an independent saleroom.com bidder can lead until Vectis catches up) — do NOT make the watchdog auto-undo.
+- **\`onlineBidAt(amount)\`** — on an automatic (allowlist) bid the REPLICA now simulates the online bid arriving at the exact amount. ⚠ Deliberately NOT an \`autoClick\` — it stands in for saleroom.com's own feed, which the real page shows by itself. Before this, the watchdog "corrected" the invisible gap 2s later by pressing Bid, logging phantom **ROOM** bids for online bidders.
+- **Digit-typing guard**: the type-a-digit→bid-box shortcut now skips when focus is in ANY input/textarea/contentEditable (typing into Find lot / chat / H was being hijacked).
+- **\`hiRow(v)\`** highlights the increment row at exactly v; \`setLiveAskingPrice\` uses it (the old \`hiInc(asking-1)\` targeted a row that never exists, e.g. £109 for asking £100).
+- FW toggle only posts the red chat line when turning ON; the stale "Sell then Next 2.2s later" comment corrected (Next fires on \`activeLotChange\`); dead \`RECOGNISED\` set removed.
+
+## Reference card — Undo rule changed (approved)
+
+Rule 6 now reads: **auto-detected in Scenario 1, manual everywhere else** — the Scenario 1 auto-clerk clicks Undo when the Vectis amount drops below the last seen, until matched; shadow views never detect undos; clerk mistakes stay manual. The don't-exist list matches. Don't "restore" the old "undo is manual only" wording — code and card now agree. The legacy coordinator's 10s constants are commented as sped-up sim timings (real rule: 15s → FW, 20s → Sell).
+
+## gap-relay classification order
+
+\`classify()\` now checks **terminal states before bid substrings**: fair warning → unsold/passed → sold → offered → internet bid → room bid → paused → resumed. "**Sold to internet bidder**" previously hit \`'internet bid'\` first and the HAMMER prompt never fired. ⚠ Still validate against a real captured GAP session — actual message texts are unconfirmed.
+
+## Shadow pages
+
+- auto-clerk-live: unreachable duplicate \`lotInformationUpdate\` branch removed; **Production/Staging WS preset dropdown** added (was hardcoded to production), persisted per machine.
+- auto-clerk-saleroom: unused import + dead \`lastSeen\` state removed.
+`,
+  },
+  {
+    filename: "ai_cost.md",
+    content: `---
+name: AI cost — prompt caching + run price estimator
+purpose: Claude prompt caching in lib/ai-provider.ts (cachePrefix) and the "estimated cost" panel before Auction AI runs, priced from lib/ai-pricing.ts + the admin-editable AiModelRate table.
+last_updated: 2026-08-04
+---
+
+# AI cost — prompt caching + the run price estimator (built 2026-08-04)
+
+Prompted by an Anthropic Console showing **$4.73 spent for ~10 test messages**. Two things came out of it.
+
+## ⚠ First, the finding that matters: the Hub was NOT the spend
+
+Checked against production: there is **no \`ANTHROPIC_API_KEY\` in the environment** and the **\`ToolModel\` table has zero rows**, so every AI tool falls back to its Gemini default and the Hub cannot make a Claude call at all. If Claude API spend appears again, that is Claude Code or the Console Workbench on the same key — **Console → Usage** breaks it down. Don't go hunting in the Hub first.
+
+## 1. Prompt caching (Claude only)
+
+\`AiRequest\` gained **\`cachePrefix?: string\`** — big *repeated* context that goes BEFORE the prompt. On Claude it's sent as its own block with \`cache_control: {type:"ephemeral"}\`; the \`system\` prompt is now sent in block form with the same marker. Gemini has no equivalent here, so it just gets the text glued in front of the prompt.
+
+- **Caching is a prefix match.** The stable text must come first and the varying text after. ⚠ Anything that changes per call (a question, a timestamp, an id) above a marker invalidates the cache every time and you pay the +25% write premium for nothing.
+- Re-read costs ~10% of input price; the write costs 25% more, so it pays off from the **second** call reusing the prefix (a 300-lot batch reuses one instruction 300 times).
+- A prefix under the model's minimum (512 tokens on Opus 5, 1024 on Sonnet 5) simply isn't cached — no error, no write charge — so marking a short one is harmless.
+- **Wired up in BC Source "ask the code"** (\`app/api/it-tools/bc-source/chat/route.ts\`): instructions + source files → \`cachePrefix\`, **only the question** → \`prompt\`. That split is the whole point; putting the question back in the prefix caches nothing.
+- \`generateAnthropic\` logs \`cache: wrote N, read N\` — a permanent \`read 0\` means a silent invalidator crept into the prefix.
+
+## 2. The run price estimator
+
+**\`lib/ai-pricing.ts\`** (pure, importable client-side) holds \`DEFAULT_RATES\` in **USD per 1M tokens** plus the token maths. **\`components/run-cost-estimate.tsx\`** renders the panel; it appears above the Run button on **Auction AI → Batch Run** and **Auto Pipeline** (pipeline passes \`passes={3}\` — Batch, Key Points, Double Check).
+
+⚠ **Three deliberate honesty rules — don't "improve" them away:**
+1. **A model with no known price shows "Price not set", never $0.** Anthropic's rates are published and exact; Google's model *ids* (\`gemini-3-flash-preview\`) don't match the names on their price page, so those rows carry \`confident: false\` and the UI labels them **Assumed**. An invented number is worse than no number.
+2. Unknown Claude ids fall through to Opus pricing — an estimate must never **under**-quote.
+3. The panel says on screen it's a rough estimate. Lot counts and photo counts are real (read off the screen); **tokens-per-photo and reply length are assumptions** (\`TOKENS_PER_PHOTO\` = 1032 Gemini / 1600 Claude, ~4 chars per token).
+
+**Admin → AI Models** gained a *"What each model costs"* section: per-model In $ / Out $ boxes, tagged Published / Assumed / Yours. Saving writes **\`AiModelRate\`** (**NEEDS Run Migrations**) via \`PUT /api/ai-rates\` (admins only; \`GET\` is any signed-in user because the estimator needs it). Blanking a row drops back to the built-in default. Reads are try/caught so a missing table degrades to "no overrides" rather than breaking the run tabs.
+
+Sanity-checked on real shapes: 340 lots × 6 photos ≈ **$0.88** on Gemini 2.5 Flash, **$2.65** through the 3-stage pipeline, **$19.51** on Claude Opus 5.
+`,
+  },
+  {
+    filename: "admin_centre.md",
+    content: `---
+name: Admin Centre (/tools/lot-lookup) — two tabs, big UI
+purpose: The Admin Centre is tabbed (Find a customer's lots + Who catalogued this lot?) and deliberately oversized for non-technical admins. Read before touching it.
+last_updated: 2026-08-04
+---
+
+# Admin Centre — /tools/lot-lookup (rebuilt 2026-08-04)
+
+Gated on the **\`ADMIN_CENTRE\`** app key via \`hasAppAccess\` — the page redirect **and** both API routes check it.
+
+## ⚠ The audience is the design constraint
+
+The brief: *"this is getting used by non technical admins so really make everything nice and big and clear."* So this tool deliberately **breaks the Hub's usual 10–12px table style**: base/lg body text, \`py-3\` table rows, \`px-8 py-8\` answer panels, 2px borders, big hit targets, and plain-English wording ("Where from", "Changed to", "Not recorded") instead of raw field/source keys. Shared classes live in **\`app/(app)/tools/lot-lookup/ui.ts\`** — use them rather than re-styling, and **don't "tidy" this back down to the compact house style.** Full width (\`max-w-[1800px] mx-auto\`).
+
+## The files
+
+| File | What |
+|---|---|
+| \`lookup-client.tsx\` | shell + the two big tab buttons (\`useState\`, no URL param) |
+| \`find-lots-tab.tsx\` | the original receipt / tote / customer lookup, redesigned |
+| \`who-catalogued-tab.tsx\` | the new tab |
+| \`ui.ts\` | shared classes + the plain-English label maps + date formatting |
+| \`app/api/lot-lookup/route.ts\` | the cross-system search (behaviour unchanged) |
+| \`app/api/lot-lookup/who/route.ts\` | new — one lot in, who catalogued it out |
+
+## Tab 2 — "Who catalogued this lot?"
+
+Scan/type a **barcode** (\`F066001\`) **or a unique ID** (\`R000016-413\`) — both identifier fields are matched, non-ASCII stripped first (scanners emit junk). Returns a **list**, because the same barcode can legitimately appear in more than one sale.
+
+Three layers of answer, in this order:
+1. **\`CatalogueLot.createdByName\` is the authoritative answer** — the huge name at the top, with \`createdAt\`. It is blank on old/imported lots; the card explains that in plain English rather than showing nothing.
+2. **What BC says** — \`WarehouseItem.catalogued\` / \`cataloguedBy\` / \`cataloguedAt\`. ⚠ BC stores a **staff CODE** ("KS"), so it is resolved through **\`lookupCataloguerByCode\`** (\`lib/cataloguer-directory.ts\`) — never show the raw initials. The same resolution was added to the **Find lots** tab's BC table.
+3. **Everyone who has changed it since** — grouped from **\`CatalogueLotEvent\`** (the Lot Change Log audit trail) with a "Show the full history" table. ⚠ That log only covers lots edited **since 1 July 2026**, so "no changes recorded" is normal for older lots and the UI says so.
+
+An item found in BC with **no** matching Hub lot gets its own orange "Found in Business Central only" card.
+
+## Tab 1 — Find lots: ONE merged row per item (reworked 2026-08-04)
+
+The two side-by-side Hub / BC panels are **gone**. They made the journey impossible to follow, because the same physical item appears on each side under a different number (\`F090447\` in the Hub, \`R008414-7\` in BC). Now: **one row per item**, grouped under a big labelled **Auction** header band (code · name · 📅 date · counts), with columns *Item · Catalogued by · 1 · In the Hub · 2 · In Business Central*, an explainer strip showing the Hub → BC flow, and three tiles — in both / Hub only / BC only. \`hub[]\` and \`bc[]\` were dropped from the API response; it returns \`rows[]\`.
+
+### ⚠⚠ "In BC" is matched on the BARCODE — never on \`CatalogueLot.addedToBC\`
+
+\`addedToBC\` is a **manual tick the cataloguers rarely make**. Measured on production for receipt R008414 (2026-08-04): **44 Hub lots, only 11 ticked, but 44/44 matched a BC item on barcode.** The route therefore runs its own \`WarehouseItem\` query on the lots' barcodes (falling back to \`receiptUniqueId\` ↔ BC \`uniqueId\`) — a separate query, because a lot can be in BC under a different receipt from the one searched. ⚠ Prisma \`in\` is **case-sensitive**, so it queries original/upper/lower variants and matches case-insensitively in code. The Who-catalogued tab's BC chip uses the same real match. **Don't "simplify" either back to \`addedToBC\`.**
+
+### ⚠ "Made from tote" — trust the HUB's tote, not BC's
+
+There is a **Made from tote** column. BC's \`WarehouseItem.toteNo\` is \`EVA_CFA_TOT_CreatedFromToteNo\`, which *sounds* authoritative but is almost always empty — measured on receipt R008414 (2026-08-04): **all 44 Hub lots had \`CatalogueLot.tote\`, only 2 of 52 BC items had \`toteNo\`** (and those two agreed). So the column shows the **Hub's** tote, falls back to BC's (marked "from BC"), and flags an amber "⚠ BC says …" when they disagree. Don't flip the preference back to BC.
+
+### ⚠ The lot number is \`currentLotNo\`, NOT \`lotNo\`
+
+BC's \`lotNo\` is \`0\` on these rows while \`currentLotNo\` holds the real number (166, 167…). Always read \`currentLotNo || lotNo\`, and show "No lot number yet" rather than a bare 0.
+
+### ⚠ Lot STATUS is not shown anywhere in this tool
+
+It had been removed once already (same call as Manage Lots — it reads ENTERED on virtually every lot and tells an admin nothing). It came back only because it was in the original lookup component that got redesigned. \`STATUS_TONE\` was deleted from \`ui.ts\` and a comment left in its place. **Don't reintroduce it.**
+
+A **"Catalogued by"** column shows the Hub's \`createdByName\`, falling back to BC's resolved name (marked "recorded in BC").
+
+## Sale date
+
+Every sale is shown with its **date** — a 📅 chip on each sale group in Find lots, and part of the Sale line in the Who-catalogued cards. ⚠ Two different sources: the Hub sends \`CatalogueAuction.auctionDate\` (a real DateTime → ISO), BC sends \`WarehouseItem.auctionDate\` as a **plain string** and uses **\`0001-01-01\` for "no date"**. \`formatSaleDate\` in \`ui.ts\` handles both and blanks anything before 1990 — don't format these dates inline anywhere else. BC also leaves the date off some rows of a sale, so the grouping takes the first non-empty one.
+`,
+  },
+  {
+    filename: "warehouse_filter_table.md",
+    content: `---
+name: BC Warehouse — Excel filters + print what's on screen
+purpose: Every BC Warehouse results table uses the shared <FilterTable> (click-a-column Excel dropdown) with a PDF that prints the filtered rows. Read before touching those tables or adding a new one.
+last_updated: 2026-08-04
+---
+
+# BC Warehouse results tables — Excel-style filters + PDF (built 2026-08-04)
+
+The ask: make the \`/tools/bc-warehouse\` results filterable **"like Excel — you click on it and it tells you all the options"**, with a printable PDF. Applied to **every** results table, and **the PDF prints exactly what is on screen**.
+
+## The two shared pieces — use them, don't hand-roll another table
+
+- **\`components/filter-table.tsx\`** → \`<FilterTable>\` + \`FilterColumn<T>\`. Click a column heading and you get the Excel dropdown: **Sort A→Z / Z→A**, a **search box**, **(Select all)**, and a **tickbox per distinct value with counts**. The header bar shows \`Title · X of Y\` when filtered, plus **✕ Clear filters** and the **🖨 PDF** button.
+- **\`lib/warehouse-table-pdf.ts\`** + **\`POST /api/warehouse/table-pdf\`** — Vectis-branded A4 sheet (auto-landscape above 5 columns), repeating column header, banded rows, page numbers.
+
+## Four things that are deliberate — don't "simplify" them away
+
+1. **The client posts the finished strings.** \`<FilterTable>\` sends its visible rows, already filtered and sorted, as \`string[][]\`. The route does **no** lookup, filter or sort, so the sheet can never disagree with the screen. Don't make the route re-query BC "to be safe".
+2. **The dropdown is rendered in a \`createPortal\` at fixed position.** These tables sit inside \`overflow-y-auto\` panes that would clip an absolutely-positioned panel. It closes on outside click / Escape / any scroll that isn't inside the panel itself.
+3. **Options are computed under the OTHER columns' filters** (real Excel behaviour), so the values offered are ones that still exist in the rows you can see.
+4. **An empty selection is a real filter that matches nothing.** A key being *present* in \`filters\` means that column is filtered; untick everything and the table empties (with a "Clear filters" link in the body). Everything ticked deletes the key = no filter.
+
+Other props: \`resetKey\` (change it — e.g. to the search term — and the filters drop, so a stale filter can't silently empty a new search), \`initialRows\` (the "Show all N rows" button), \`rowClassName\` (kept Sale Checklist's red missing-item rows), \`onVisibleChange\` (lifts the visible rows for a caller's own export), and per column \`render\`, \`filterable: false\`, \`pdfWidth\` / \`pdfHide\`.
+
+⚠ Each column needs a **plain-text \`value(row)\`** — that string is what filtering, sorting AND the PDF all use. \`render\` is only for the on-screen cell (badges, colours).
+
+## Where it is wired in
+
+| Tab | Table |
+|---|---|
+| Search by Location | Totes **and** Items (Location column still only in aisle mode) |
+| | ⚠ The **totes** columns are Tote No · Location · Receipt · **Customer no** · Customer. Status and State were **deliberately dropped** on 2026-08-04 (not needed) and \`vendorNo\` added in their place — \`/api/warehouse/tote/report\` had to start selecting \`vendorNo\`. Don't put Status/State back. |
+| Tote Data | Raw Data view (kept the 150-row "Show all" behaviour via \`initialRows\`) |
+| Unsold Items | the flat list (Group-by-vendor view unchanged, no filters there) |
+| Sale Checklist | the per-auction item table inside the accordion |
+
+⚠ **Unsold Items has TWO PDFs and both follow the filters.** The green button is the **picking sheet** (per-aisle pages with tickboxes) — \`app/api/warehouse/unsold-items/pdf/route.ts\` gained a **POST** handler that builds the same sheet from client-supplied rows, fed the visible rows via \`onVisibleChange\`. The old GET (re-queries BC for whole aisles) still exists; don't switch the button back to it or the sheet would print rows the user filtered out.
+`,
+  },
+  {
     filename: "departments.md",
     content: `---
 name: Departments — sale access + reports
@@ -202,6 +383,8 @@ Three things the multi-row split broke. **Keep these in mind for any change to h
 1. **Unallocated must NEVER excuse a gap** (serious — it reopened the hole the detector exists to close: tick 2 reasons for a minute each, dump hours in unallocated, and the gap read as explained + the save gate cleared). Both covering checks now EXCLUDE UNALLOCATED: \`coveringIdle\` in **lib/idle-gaps.ts** and \`evaluateIdleGate\` in **lib/idle-gate.ts** (\`reason: { not: UNALLOCATED_REASON.key }\`). ⚠ Same rule in two places — keep them in step.
 2. **Breaks counted per OCCASION, not per row** — \`groupIdleOccasions()\` (lib/idle-timer-config.ts) regroups the contiguous rows one answer writes (2s tolerance) into one break. Used for sessions / totalSessions / avgSessionMs and the **Longest breaks** table (a split break now shows at its TRUE length, labelled with its biggest slice) in lib/idle-report.ts, plus awaySessions in /api/reports/pdf. Per-REASON counts stay per-row (correct).
 3. **"Most Common Reason" + per-cataloguer "usual reason" exclude Unallocated**; it gets **its own figure** instead (\`unallocatedMs\` → a 5th headline card on /tools/reports/activity and a 5th stat box in the Activity PDF, shown only when > 0).
+4. **NEVER sum lot time + away time** (found 2026-07-31 from a screenshot Jordan sent: "Today's Productivity" read **6h 22m on lots + 5h 15m away = 11h 37m of an 8-hour day**, and still claimed "100% of expected time accounted for" because that % is \`Math.min(100, …)\` — the cap turned an impossible total into a confident green tick). A break taken **mid-lot is already inside that lot's \`durationMs\`** (deliberate: idle is a SUBSET of a lot's time, never an addition — a lot held up for two hours of research took two hours). The rest of /tools/reports/[userId] already used **\`computeLotBreakdowns\` / \`activeMs\`** from **lib/cataloguing-reports.ts** (overlaps each lot's [savedAt − durationMs, savedAt] window with the idle spans); only \`activeTimeToday\`, which feeds TodayProductivityCard, summed raw durationMs. Fixed by hoisting the shared \`breakdowns\` map above the Today block. ⚠ **Any new figure putting cataloguing time next to away time must use \`activeMs\`, not \`durationMs\`.** Per-lot "how long it took" stays the full duration — that is correct.
+5. **Only the BREAK gets a time; the activities inside it get durations** (2026-07-31 — Jordan: "how would it know what time, the cataloguer doesn't pick that part when doing a multi select?"). The popup asks WHAT and HOW LONG, never in which ORDER; the API tiles the rows back-to-back only so they cover the gap, so a per-reason clock time is **invented**. Today's Productivity now groups today's raw logs with \`groupIdleOccasions\` → \`splitIdleByWorkingDay\` into \`TodayBreak[]\` (\`todayBreaks\` in /tools/reports/[userId]/page.tsx) and shows **"When They Were Away"** — one entry per real break (\`09:00 – 10:20 · 1h 20m\`) with activity chips carrying durations. A break that began outside working hours gets a \`↩ began Thu 16:40 — counted from 9am\` chip (that clamping, in splitIdleByWorkingDay, is why several rows used to pile up at 09:00 looking simultaneous). A break spanning two working days shows chips **without** durations plus "part of a longer break", rather than inventing a per-day share. Reason totals became a **"What It Went On"** list with share bars; TodayTimeline draws one bar per break (stacked rows hid each other and made breaks look shorter); the header says "N breaks", not "N sessions".
 
 Verified with a temp tsx suite (10 cases incl. token-reasons+huge-unallocated = UNEXPLAINED, honest split = explained, legacy single reason = explained). All passed.
 
@@ -597,6 +780,237 @@ A deliberate easter egg — do not "clean it up". The page at /jordan (app/(app)
 - Model resolved via getToolModel("jordan_fun", clientModel) — slot registered in AI_TOOLS (group Other) per the central AI-model-config rule. Standard Gemini block handling (422 on blocks). A MODEL selector (model-picker.tsx; localStorage jordan_ai_model, blank = AUTO/default; options from /api/auction-ai/models) sits in the chat footer and the airfryer tab, and both requests send the choice.
 - 503/overloaded handling: lib/gemini-retry.ts (withGeminiRetry — 3 attempts with short backoff; isTransientGeminiError) wraps both routes, and after exhausted retries a friendly 503 message suggests switching model. The helper is reusable for other one-shot Gemini routes.
 - Lint gotcha (hit twice here): the eslint react-compiler rule bans synchronous setState inside effects — localStorage restores are wrapped in queueMicrotask (chat-panel.tsx and jordan-menu.tsx).`,
+  },
+  {
+    filename: "photo_ai_edit.md",
+    content: `---
+name: Photo Prep — AI edit (nano banana)
+purpose: The Gemini image-editing tab in Photo Prep, its presets, the condition-integrity rule governing all of them, and why extend outpaints server-side and pastes the original back. Read before touching photo editing.
+last_updated: 2026-08-04
+---
+
+# Photo Prep → 🎨 AI edit (built 2026-08-04)
+
+Photo Prep is now **tabbed**: **🪄 Prepare photos** (the original local crop/brighten run) and **🎨 AI edit** (Gemini's image model, "nano banana"). A separate tab was chosen over folding it into the batch, so each tab's privacy promise stays unambiguous.
+
+## ⚠⚠ CONDITION INTEGRITY — the rule the whole feature hangs on
+
+These photographs are what bidders bid on. An edit that removes a scratch, chip, crack, fading, wear or a missing part **misrepresents the lot**. So every preset fixes the **PHOTOGRAPH** (framing, backdrop, lighting, glare, clutter around the item) and never the **ITEM**, and \`CONDITION_RULE\` in **lib/photo-edit-presets.ts** is appended to *every* prompt — telling the model in absolute terms not to clean, repair, restore or improve the object, and to return the image unchanged if it can't comply. **Test for any new preset: would a bidder feel misled seeing the original next to yours? If yes, don't add it.**
+
+## The pieces
+
+- **lib/photo-edit-presets.ts** — 13 presets in 4 groups, shared by route and UI so buttons and prompts can't drift. Framing (extend / straighten / centre), Background (clean sweep / cut out to white / remove clutter / remove label), Light (even lighting / kill glare / fix colour cast), Quality (sharpen / reduce grain / upscale / remove dust specks). \`buildEditPrompt(key, {extra})\` assembles preset + free text + CONDITION_RULE. Only \`extend\` offers the shape/direction/amount controls — see the outpainting note below.
+- **app/api/photo-prep/edit/route.ts** — one photo per call; sharp applies EXIF rotation and caps the long edge at 2048px first. PHOTO_PREP app access required.
+- **app/(app)/tools/photo-prep/ai-edit-tab.tsx** — choose photos → filmstrip → preset grid → Edit → before/after side by side → Download (keeps the original name + "-edited") or Discard.
+
+## ⚠ Image editing is NOT the shape the other AI routes use
+
+It is \`POST https://generativelanguage.googleapis.com/v1beta/interactions\` with header \`x-goog-api-key\`, body \`{model, input: [{type:"text",text},{type:"image",mime_type,data}]}\`, and the result arrives at **output_image.data** (base64) — *not* content parts. The installed @google/generative-ai (0.24.x) is the legacy SDK with **no image-output support**, which is why this route uses a direct fetch rather than the SDK or lib/ai-provider (text-out only). Verified against Google's docs. Multi-turn edits are possible via previous_interaction_id (not used yet).
+
+✅ **Verified working end-to-end on staging (2026-08-04)** — "Extend the shot → Square" returned a real edited image and rendered before/after. ⚠ **The first attempt failed with "the model didn't return an image"** — that was our own fallback, because the doc's \`output_image.data\` path was hard-coded. **Don't hard-code one path**: \`extractImage()\` now walks the response for the first plausible base64 image (handles data / bytesBase64Encoded / imageBytes / b64_json and mime_type / mimeType, requiring >512 chars so an id isn't mistaken for an image), and \`extractText()\` surfaces the model's own words when it replies with a refusal. When there is genuinely no image the error names the response's top-level keys — otherwise it's undebuggable from outside. Google embeds **C2PA provenance metadata** in the result (a JUMBF block signed by Google C2PA Media Services) on top of the invisible SynthID watermark.
+
+Model slot **photo_prep_edit** (Admin → AI Models, group Other), default \`gemini-3.1-flash-image\`; gemini-3-pro-image, gemini-3.1-flash-lite-image and nano-banana-pro-preview are also available. **Not claudeOk** — Claude writes text, not pictures.
+
+## ⚠ “Extend the shot” is OUTPAINTING — asking alone did nothing (2026-08-04)
+
+v1 just told the model to “extend this photograph outwards” and **the result came back unchanged** — same framing, same shape. A model handed a 16:9 photo has no reason to return anything but a 16:9 photo, so “extend it much higher” had nowhere to go.
+
+**The fix: pad the real canvas BEFORE sending.** \`planPadding()\` in the route works out the new edges and \`sharp.extend()\` fills them with flat mid-grey (#808080, named in the prompt so the model can tell blank canvas from a genuinely grey backdrop); the prompt then says “paint into the grey only, leave every non-grey pixel exactly as it is”. That turns the job into *fill this gap* instead of *imagine a wider picture*, and it guarantees the original pixels survive — which asking never did. Padding happens **only** for \`extend\`; every other preset gets the photo as-is. The canvas is re-capped to 2048px after padding.
+
+Three controls, all shared from lib/photo-edit-presets.ts: **Direction** (all round / ↕ taller / ↔ wider / ↑ above only / ↓ below only — Jordan asked for vertical-vs-horizontal specifically), **How much** (a little / some / a lot = 0.25 / 0.5 / 1.0 × the long edge) and **Shape**. ⚠ A chosen shape now only ever **ADDS** space — it never crops the photo to hit a ratio — and “above only”/“below only” keep the whole of a shape's extra height on that side. \`buildEditPrompt\` no longer takes \`aspect\`: the canvas expresses it, not the wording.
+
+
+## ⚠ Quality — and why the original is composited back (2026-08-04)
+
+Jordan: *“the quality coming back is a bit bad”.* Two causes, one of them serious.
+
+1. **A double squeeze.** The photo was resized to 2048, padded, then resized to 2048 **again** — so the picture itself reached the model at a fraction of its size (with “a lot”, about a third). It now scales **once**, with the *padded canvas* as the 2048 target.
+2. **⚠⚠ The model REDRAWS the whole picture.** It cannot “leave the original pixels alone” however firmly the prompt asks — nano-banana-class models re-render the entire frame. That is a quality loss *and* a **condition-integrity** failure: a redrawn item is no longer evidence of the item's condition, which is the one thing this feature may never touch. So \`extend\` now **composites the ORIGINAL back over the generated canvas at full resolution** (\`featherEdges()\` fades ~20px at any edge that gained canvas, so the joint doesn't show; an edge with no padding stays hard). Only the new border is AI-generated, and the item is **guaranteed** untouched rather than merely asked to be. Output is capped at FINAL_MAX 3000px. ⚠ Compositing applies to **\`extend\` only** — every other preset is *meant* to change the picture, so the model's output is returned as-is.
+
+Padding is also now measured against the **axis being extended** (taller → height, wider → width), not always the long edge — “40% taller” on a wide photo used to be enormous.
+
+If the generated border still isn't good enough, the model slot is the knob: **Admin → AI Models → Photo Prep AI edit** → \`gemini-3-pro-image\` instead of the \`gemini-3.1-flash-image\` default. No code change.
+
+## ⚠ Mobile — the Download button did nothing (2026-08-04)
+
+It set an anchor's \`href\` to the **data: URL** and clicked it while **detached from the DOM**. iOS Safari ignores \`download\` on a \`data:\` URL, and some browsers won't act on an anchor that isn't in the document — so on a phone the button was dead. Now: convert to a **Blob**, offer the **share sheet** first (\`navigator.canShare({files})\` — that's how you get “Save Image” into Photos on iOS; an AbortError means they cancelled, so do *not* then fire a download), and fall back to an object-URL anchor that **is** appended to \`document.body\`. “Download all” deliberately skips the share sheet (one sheet per photo is unusable). The tab also stacks on a phone: filmstrip becomes a horizontal scroller, before/after goes single-column.
+
+
+## Privacy — the wording had to change
+
+The Prepare tab said "photos are processed on this computer and never uploaded", which was **already not quite true** (the optional "fix with AI" step sends those few photos to Google for a crop box). The header is now per-tab: Prepare says cropping/brightening are local *and* names the AI-crop exception; AI edit says plainly that its photos **are** uploaded, that results carry an invisible SynthID watermark, and that the item is never altered. Gemini's entry on the Data & Compliance and DPIA pages now includes photo editing — keep both in sync.`,
+  },
+  {
+    filename: "ai_providers.md",
+    content: `---
+name: Two AI providers — Gemini + Claude
+purpose: The Hub can run an AI tool on Gemini OR Anthropic Claude, chosen per tool. Read before touching any AI route or the model registry.
+last_updated: 2026-08-04
+---
+
+# Gemini + Claude, selectable per tool (built 2026-08-04)
+
+Claude was added because it reasons about code better than Gemini (the BC Source tools were the trigger). Jordan chose the full version: **any capable tool** can be switched between providers from **Admin → AI Models**, with no code change.
+
+**The model id decides the provider.** Anything starting with \`claude-\` goes to Anthropic; everything else to Gemini. That single rule lives in \`providerOf()\` in **lib/ai-provider.ts**, which also exports the one function routes call:
+
+\`generateAiText({ model, prompt, system?, images?, history?, maxOutputTokens?, json? })\`
+
+It hides both providers' quirks so ~30 call sites don't re-implement them: Gemini's promptFeedback.blockReason + finishReason checks (RULES: never call .text() first) and Claude's stop_reason "refusal" plus a **never-return-empty** guard (the empty-reply bug that poisoned BC Source chat histories is now impossible by construction). It throws \`AiBlockedError\` (surface it, don't retry) or \`AiNotConfiguredError\`.
+
+⚠ **History handling is shared** — blank turns dropped, a leading assistant turn trimmed. BOTH providers reject those (Gemini: "parts[0].data: required oneof field 'data'"; Anthropic: "First content should be with role 'user'"). Don't re-add per-route history cleaning.
+
+## ⚠ Only \`claudeOk\` slots may use Claude
+
+\`AI_TOOLS\` in **lib/ai-models.ts** carries \`claudeOk?: boolean\`. **Only set it once that route actually calls generateAiText.** Converted so far (6): bc_source_guide, bc_source_chat, it_help, it_draft_reply, patch_notes_draft, catalogue_lot_history. Everything else still calls the Gemini SDK directly — images (batch, lens, accounts, smart scan, photo prep), chat history, or Google Search grounding (catalogue_chat_grounded is Gemini-only by nature).
+
+Two guards keep the dropdown honest: the **admin page** only lists Claude ids for claudeOk slots (and "Set every tool to" never offers Claude), and **\`usable()\` inside getToolModel** falls back to the slot default when a Claude model is set on a non-claudeOk slot **or ANTHROPIC_API_KEY is missing**. Same spirit as RETIRED_MODELS: a bad config must never take a tool down, and environments can have different keys.
+
+⚠ **TWO routes list models, and BOTH need Claude appending.** \`/api/auction-ai/models\` feeds the in-app pickers; **\`/api/auction-ai/model-config\` is what Admin → AI Models actually reads**. Patching only the first left every admin dropdown Gemini-only while everything else was correctly wired — found only by clicking the page (2026-08-04).
+
+✅ **Verified live on staging**: all 3 Claude ids offered, the 6 claudeOk slots switchable, BC Source set to claude-opus-5 and answering from the real AL source. Claude is slower (~25-30s vs Gemini's 11-20s) and markedly more precise — on the lotting-order question Gemini said "the source doesn't contain this" while Claude walked through the per-category lines, the report's follow-up passes with their exact prompts, EVA_FindLastCatLotNo, the other filters, and the Sort Lots / Missing Lots tidy-up.
+
+## Facts checked against the current API, not remembered
+
+- Model ids are exact with **NO date suffix**: claude-opus-5, claude-sonnet-5, claude-haiku-4-5. Appending a date 404s.
+- Opus 5: 1M context, $5/$25 per M tokens in/out.
+- **No temperature / top_p / top_k** on Opus 5 — sending any is a **400**. Don't port Gemini sampling settings over.
+- **Thinking is ON by default**, and max_tokens caps thinking + answer together — hence roomy maxOutputTokens.
+- **Stream anything big** (\`messages.stream()\` + \`.finalMessage()\`); a non-streaming call with high max_tokens hits the SDK HTTP timeout. The provider layer always streams.
+- Claude has no responseMimeType — JSON mode is a prompt instruction plus a fence strip.
+- SDK \`@anthropic-ai/sdk\`; key **ANTHROPIC_API_KEY** in Railway (separate account and billing from Google).
+- Rough cost at Opus 5: a BC Source question ~30p, a small guide ~15p, a guide for Evo-auction - Base ~£1.20. Gemini Flash is pennies.
+
+Anthropic was added to the **Data & Compliance** and **DPIA** processor lists. **To make another tool switchable:** convert its route to generateAiText FIRST, then set claudeOk: true.`,
+  },
+  {
+    filename: "bc_source_browser.md",
+    content: `---
+name: BC Source browser (IT Tools)
+purpose: The in-app copy of the Evo-soft Business Central source with AI guides + chat. Read before touching it.
+last_updated: 2026-08-03
+---
+
+# IT Tools → BC Source (built 2026-08-03)
+
+Third tab on /tools/it-tools (\`bc-source-tab.tsx\`): the complete Evo-soft AL source for our Business Central, uploaded into the app so staff can browse it, search it, and have it explained.
+
+**How the source gets in:** an **admin-only** zip upload — the server unzips with jszip and stores text files in \`BcSourceFile\`, replace-all in one transaction. ⚠ **The source lives in the DB, deliberately NOT in the git repo** — it is Evo-soft's proprietary code and must stay out of GitHub. Viewing needs only the IT Tools app permission; replacing the source needs ADMIN.
+
+⚠ **An extension = a folder that directly contains \`app.json\`.** Do NOT go back to "strip one shared wrapper folder" — that was v1 and it broke on the real archive (2026-08-04): the zipped folder (BCN Vectis Source Code) has **TWO** roots, \`Source/\` plus a sibling \`Webservices - PTE\`, so the single-root rule never fired and all 62 extensions were filed under one fake extension called "Source". Keying on app.json makes any zip shape work. Verified against the real tree: **63 extensions, 2,989 files**. Duplicate display names fall back to the full folder path, because \`path\` is @unique and a collision would fail the whole upload. \`Webservices - PTE\` is a genuine extension and an important one — it holds APIReceiptTotes / APIShipmentRequest, the OData pages the Hub reads.
+
+⚠ **The stored source is ~23 MB** (a \`du\` on the OneDrive folder reports ~2.7 MB because the files are cloud-only placeholders until read — that figure lies). Size any budget off 23 MB.
+
+**Routes** (all under \`app/api/it-tools/bc-source/\`):
+- **files** — extension list → per-extension files (grouped by AL object kind: Table/Page/Codeunit/…) → file content. A missing table (pre-Run-Migrations) presents as "nothing uploaded yet", never a 500.
+- **search** — case-insensitive search across every file (path + content), matching lines with line numbers, click-through to the viewer.
+- **guide** — one plain-English guide per extension, generated by Gemini from the actual source (slot \`bc_source_guide\`), stored in \`BcSourceGuide\`, with ✨ Regenerate (confirm warns if the guide was hand-edited) and ✎ Edit. The prompt demands **plain text, NO markdown** (nothing in the app renders \`**\`), CAPITAL headings, and six fixed sections: what it is / the screens / the data / how it works / how it connects / jargon.
+
+  ⚠ **Two-tier packing, because the big extensions are genuinely big** — Evo-auction - Base alone is **7.5 MB / 1,113 files**, so the original flat "include files until the budget runs out" wrote the most important guide from about 5% of it. Now: verbatim source to FULL_BUDGET (700k chars), then the remaining code files go in **condensed** form (object declaration + procedure/trigger names, Caption/ToolTip/field/action lines) to CONDENSED_BUDGET (250k), and only then are files dropped. The prompt labels those OUTLINE ONLY and tells the model to name what exists without inventing how it works. Measured on a 13-file extension: 13 s, ~4.8k chars, no markdown leakage, content accurate.
+- ⚠ **Both AI routes now go through \`generateAiText\` (lib/ai-provider.ts) and can run on Gemini OR Claude** — set per tool in Admin → AI Models; Claude Opus 5's 1M window swallows even Evo-auction - Base. See the "Two AI providers" entry. The empty-answer guard below now lives in the provider layer.
+- **chat** — ⚠ **GEMINI HISTORY RULES — one blank reply used to break a conversation permanently** (found 2026-08-04, "it keeps getting stuck"). Two chained bugs: a reply came back with **no text** (a thinking-capable model can spend its whole output budget reasoning), rendering as a blank bubble that looks like a hang; that empty message then went back up as history, and **Gemini 400s the entire request if any history part is empty** — contents[N].parts[0].data: required oneof field 'data' must have one initialized field — so every later question in that thread failed. Guards now exist in BOTH halves, keep them: the server strips blank turns, **trims the history to start on a user turn** (the slice(-8) could begin on a model reply, which Gemini also rejects: "First content should be with role 'user'"), returns a clear error instead of an empty answer, and uses a roomier maxOutputTokens (16384); the client marks a failed turn and **excludes it from the history it sends**, showing an error notice rather than an empty bubble. Verified against the exact poisoned shape.
+- **chat** — "Ask the code": keyword scoring (same retrieval pattern as IT Help's ask route; path matches weighted ×4), top ~25 files (≤300k chars) to Gemini (slot \`bc_source_chat\`), answering **citing file paths**; cited files are clickable chips that open in the browser. ⚠ It **shortlists in SQL, RANKED** — v1 loaded every file to score in JS (23 MB per question, a container spike); v2 fixed that with a plain OR-contains + take 400, which returned an **arbitrary** 400 rows and broke relevance: asking "filter and group the lots by category and start at lot 600" answered "the source doesn't contain this" while **naming the very files it needed**. The score is now computed in Postgres (a **path** match worth 5x a body hit), ordered, top 60 — don't revert to an unordered take. ⚠ **Follow-ups also need the previous answer's files carried forward**: the client sends \`pinnedIds\` (the ids the last answer cited) and the route always includes them with a large score bonus, so the \`score > 0\` filter can't drop them — that filter would otherwise discard the pinned files, which is the whole point of pinning.
+
+📎 **Screenshots in "Ask the code" (2026-08-04).** Paste (Ctrl+V) or 📎-attach up to **4** screenshots of the BC screen alongside the question. Downscaled client-side to 1800px / JPEG 0.9 (\`processImage\`, mirrors jordan/chat-panel) — readable for BC's small on-screen text without a huge base64 payload. Sent as \`images: [{mimeType, data}]\` and passed straight to \`generateAiText\`, so BOTH providers handle them. When pictures are attached the prompt gains a block telling the model to read what's filled in, compare it against the code, and **say which it is** — wrong values (with exactly what to change) or a genuine code limitation (which object and why) — plus locate where any visible error text is raised. ⚠ **A screenshot alone can't retrieve anything** (retrieval is keyword-based on the question text), so a picture with no words returns "add a few words — name the screen, field or error" rather than answering from nothing.
+
+Tables \`BcSourceFile\` + \`BcSourceGuide\` — **NEEDS Run Migrations**. Both AI slots are in \`AI_TOOLS\` (group IT) per the central model-config rule. The compliance + DPIA inventories were updated (BC source stored in Neon; vendor source code sent to Gemini — no personal data either way).
+
+⚠ **Re-uploading the source does NOT touch stored guides** — after a BC update, stale guides need regenerating by hand (the generatedAt date on each guide is the tell).`,
+  },
+  {
+    filename: "tote_check.md",
+    content: `---
+name: Vendor / Tote Check tab
+purpose: The per-auction tab that checks lots against the BC tote data. Read before touching it or changing where tote data comes from.
+last_updated: 2026-07-31
+---
+
+# Vendor / Tote Check (built 2026-07-31)
+
+A per-auction tab (**🧾 Tote Check**, sitting between Locking Check and BC Check) answering *"does this lot still agree with the tote it was catalogued from?"*.
+
+**Source of truth = \`WarehouseTote\`** (BC-synced: \`toteNo → receiptNo → vendorNo/vendorName\`) — deliberately the SAME table the lot wizard's tote box reads through \`/api/warehouse/tote-search\`, so the check measures each lot against what the cataloguer was actually shown. ⚠ Do **not** switch it to \`WarehouseContainer\`/\`WarehouseReceipt\` — those belong to the separate internal warehouse tool (that lineage is what \`fillLotsFromTotes\` uses).
+
+- **Route:** \`app/api/catalogue/tote-check/route.ts\` (GET \`?auctionId=\`) → \`{checked, clean, rows, lastSync}\`; exports the \`ToteCheckRow\` / \`ToteCheckIssue\` types the tab imports.
+- **Tab:** \`app/(app)/tools/cataloguing/auctions/[id]/tote-check-tab.tsx\` — summary line, clickable issue chips that filter the table, full-width table (Barcode · Unique ID · Tote · What's wrong · BC says · On the lot · Added by), row click opens the lot in Manage Lots.
+- **Issues:** receipt_mismatch, vendor_mismatch, unique_id_mismatch (red — the unique ID's R008729 prefix disagrees with the lot's receipt field), receipt_missing, vendor_missing, tote_unknown (amber), no_tote (grey).
+- The comparison itself lives in **\`lib/tote-check.ts\`** (\`checkLot\`, \`toteLookupVariants\`, \`buildToteMap\`, \`norm\`) — shared by the route AND the Match BC button, so the button can never fix something different from what the report shows.
+
+## "✓ Match BC" + the BC Corrections tab (2026-08-03)
+
+Jordan's rule: **BC is correct; our system was wrong; and because our system was wrong we have most likely pushed the wrong values INTO BC.** Two halves:
+
+1. **✓ Match BC** — button on Tote Check behind a confirm that lists exactly what will happen → \`autocorrectLotsFromTotes(auctionId)\` in lib/actions/catalogue.ts. Rewrites each lot's vendor/receipt to the tote's BC values, through \`updateLotLogged\` with \`source: "tote_autocorrect"\` and one shared batchId so every change lands in the Lot Change Log. Uses \`requireNotBCLocked\` — on a sale already in BC that means admins only, the normal house rule.
+2. **🔧 BC Corrections tab** (\`bc-corrections-tab.tsx\` + \`/api/catalogue/bc-corrections\`) — the to-do list for putting BC right. Grouped by the MOVE (old receipt/vendor → new receipt/vendor), each group listing barcode · unique ID · tote · item with a per-row tick box, Tick all / Untick all, a Hide-ticked-off toggle, and outstanding groups sorted first. Shared worklist, not per-user.
+
+**⬆ Check against a BC export (2026-08-03).** After working through BC, upload a BC **"Lines"** export on the tab to prove the transfers landed. Parsed **in the browser** with \`xlsx\` — nothing is uploaded. Per correction it reports ✓ done in BC / ✗ still on the old receipt / ⚠ on something else (showing what BC has) / ? not in the export, as summary chips plus an "In BC now" column, and offers **"Untick the ones BC says aren't done"** to put the ticks right.
+
+⚠ **Match on INTERNAL BARCODE, never on UniqueID.** A transferred item is re-sequenced under its new receipt (R008300-677 → R008584-…), so matching on the unique ID would fail for exactly the rows that *succeeded*. UniqueID is only a fallback for a lot with no barcode. Columns are read by name with fallbacks (Internal Barcode/Barcode, Receipt No./Receipt No, Vendor No./Vendor No, UniqueID) — verified against a real 641-row export.
+
+**Built for BC's Transfer/Copy Receipt Line dialog (2026-08-03).** That dialog takes **UniqueID** as a **pipe-separated** filter (R008300-677|R008300-678|…) plus a **Target Receipt No.**, so each group header carries two copy buttons: **⧉ Copy N IDs** (the still-to-do rows' receiptUniqueId joined with "|"; falls back to the whole group once everything is ticked so it never copies an empty string) and **⧉ R008584** (the target receipt). Uses \`navigator.clipboard\` with a hidden-textarea + execCommand fallback, since the clipboard API needs a secure context. Lots with no unique ID can't go in the filter — the header says how many were left out rather than quietly copying a short list.
+
+⚠ **The list is LIVE, not a leftover of Match BC** (fixed 2026-08-03 — Jordan: *"I need to be able to do that before I do the match so I can check back after"*). v1 only showed rows the button had written, so the tab was empty exactly when it was needed. It now merges TWO sources on \`lotId\`: **live mismatches** recomputed on load via \`checkLot\` (only receipt_mismatch / vendor_mismatch — a blank was never pushed to BC), and **saved CatalogueBcCorrection rows**, which is what keeps a row on the list AFTER the Hub has been corrected and the live mismatch no longer exists. A saved row wins the merge (it holds the tick and the values from when the discrepancy was real); rows whose live mismatch has gone show "· Hub corrected".
+
+⚠ **\`setBcCorrectionDone\` is keyed on the LOT and UPSERTS**, not on a row id — most rows are live with no saved row until ticked, and ticking is what first records them. The snapshot is written **on create only**: a row Match BC already wrote holds the values that were real then and must not be overwritten by whatever the lot says now.
+
+Table \`CatalogueBcCorrection\` (**NEEDS Run Migrations**), \`@@unique([auctionId, lotId])\` so both the button and a tick upsert rather than duplicate, and **\`done\` is deliberately left alone on update** so a Match BC re-run can't resurrect ticked-off work. \`lotId\` is deliberately NOT a relation — deleting a lot must not delete the reminder that BC still holds its wrong receipt.
+
+⚠ **Only a MISMATCH creates a correction row**, never a blank being filled in — nothing wrong was pushed to BC for a value we never had.
+
+⚠ **\`receiptUniqueId\` is NOT re-minted** by the button. It is an identity field (AI runs, receipt matching, anything already in BC) and rewriting hundreds as a side effect of a tidy-up is a separate deliberate decision — RULES → Lot Identifiers. A corrected lot can therefore still report unique_id_mismatch; that is honest, not a bug.
+
+⚠ **Two traps handled on purpose — don't undo them:**
+1. **Prisma \`in\` is case-sensitive** and totes get hand-typed, so the route queries every casing the lots actually use (raw + upper + lower), indexes by lowercase, and compares everything trimmed + lowercased.
+2. **A stale sync must not read as hundreds of mistakes** — tote_unknown is amber rather than red, and the header shows when WarehouseTote was last pulled from BC (from \`max(syncedAt)\`) with a pointer to BC Warehouse → Data Sync.
+
+## 🏷 Change Vendor (Manage Lots → Tools, 2026-08-03)
+
+**Replaced "⟳ Pull Vendor/Receipt from Totes".** The old button only filled **blanks** (\`lot.vendor || tote.vendor\`), so it could never correct a wrong vendor, and it read the **internal** warehouse tables (WarehouseContainer → WarehouseReceipt → contact) rather than the BC tote data the wizard actually uses — so it silently skipped totes that only exist in BC.
+
+The new one: tick the lots → **🏷 Change Vendor** → type a **tote OR a receipt** → \`lookupToteOrReceipt\` reads WarehouseTote and shows the receipt + vendor no + vendor name → apply. \`setLotsVendorReceipt\` writes vendor/receipt through \`updateLotLogged\` (source "vendor_change"), records a \`recordBulkUndo\` entry so it's reversible, and honours requireNotBCLocked.
+
+- ⚠ **Selection-only — deliberately NO "else the whole auction" fallback** (unlike the description tools). Moving every lot in a sale onto one vendor by a mis-click isn't a mistake worth making easy.
+- ⚠ **Existing receiptUniqueId is preserved**; one is only minted ({receipt}-N via maxReceiptSuffix) where a lot hasn't got one.
+- A receipt with more than one vendor across its totes is **refused** with an explanation rather than picking one at random.
+- ⚠ **\`fillLotsFromTotes\` is now unreferenced** — nothing calls it; RULES was updated to point at the new button. Don't wire it back up without deciding which of the two tote sources is meant.
+
+## ⚠ The auction tab strip
+
+Adding "🧾 Vendor / Tote Check" tipped the strip into overflow and drew a scrollbar across the tabs ("what are these ugly bars"). Two causes, both fixed:
+- **\`scrollbar-none\` was never defined** — Tailwind v4 has no such built-in and this repo is CSS-first with no config file, so the class the strip had always carried did nothing. Now declared as an \`@utility\` at the bottom of \`app/globals.css\`. \`databases-client.tsx\` used the same phantom class.
+- The strip now **wraps instead of scrolling** (\`flex-wrap\`, 2026-08-03): with 14+ tabs it overflows a normal window, and a *hidden* horizontal scroll just loses the last tabs off the edge where nobody finds them. Keep new tab labels short anyway.`,
+  },
+  {
+    filename: "lot_wizard_resume.md",
+    content: `---
+name: Lot Wizard — Resume an unfinished lot
+purpose: The server-side draft that lets a cataloguer pick up a lot they were kicked out of. Read before touching wizard state or the draft.
+last_updated: 2026-07-31
+---
+
+# Resume an unfinished lot (built 2026-07-31)
+
+Everything typed into the Lot Wizard lived in React state, so being kicked out or closing the page lost the whole lot. Only Vendor / Tote / Receipt survived (already saved on the user's account by \`saveLastLotFields\`). The in-progress lot is now **autosaved to the server** and offered back with an amber **"↩ You have an unfinished lot"** banner.
+
+**Server-side rather than localStorage (Jordan's choice):** it has to survive picking up a *different* iPad, a sign-out, or a wiped browser.
+
+- **Table \`CatalogueLotDraft\`** — one row per **user per sale** (\`@@unique([auctionId, userId])\`), **NEEDS Run Migrations**. Holds the step plus every wizard field. Estimates are stored as **TEXT** so a half-typed "1,2" comes back exactly as typed.
+- **Actions in \`lib/actions/catalogue.ts\`:** \`saveLotDraft\` / \`getLotDraft\` / \`clearLotDraft\`. ⚠ All three **swallow their errors** (silent no-op / null) — a draft is a convenience and must never interrupt cataloguing, and the table only exists once Run Migrations has been clicked while the code reaches Railway instantly (same reasoning as departments). \`userId\` always comes from the session, never a parameter.
+- **Autosave** is debounced 1200ms in \`lot-wizard-tab.tsx\`, held back until the initial load finishes so an empty wizard can't overwrite the draft it is about to offer. Emptying the wizard deletes the row; a successful save clears it.
+
+## ⚠ Photos are NOT saved
+
+They're camera \`File\` objects and can't go in the row. Only \`photoCount\` is stored, so the banner can say "The 3 photos you had taken were not saved — you'll need to take them again." Jordan asked for that wording specifically. Restoring photos would mean uploading each to R2 as an orphan plus a cleanup job — deliberately not built.
+
+## ⚠ Timing starts fresh on resume
+
+\`resumeDraft()\` calls \`startLotTiming()\` / \`startLotTimerDisplay()\` — it does **not** restore the draft's original start time. Restoring it would report a lot that took all night and poison the performance reports. The gap itself isn't lost: the server-side idle gate still measures from the last **saved** lot.
+
+## Why a banner, not a blocking modal
+
+Ignoring it leaves the draft untouched, so nothing is lost by accident — a modal would force Resume/Discard even when someone opens the sale on a desktop while their real work sits on an iPad. While the banner is up, **autosave is suppressed** so the offer can't be overwritten; it clears on Resume, Discard, or saving a lot.
+
+Desktop and tablet share the same \`LotWizardTab\`, and both parents keep it **mounted** (\`className="hidden"\`), so switching tabs mid-lot does not re-trigger the banner — it only appears on a genuine page load.`,
   },
   {
     filename: "lot_wizard_warnings.md",
@@ -1127,12 +1541,12 @@ Customer database. Paginated list + search. Detail overlay: Details / Seller / B
 - **Locking Check tab** (locking-check-tab.tsx): validates every lot has title (not 'Untitled'), description, estimateLow, estimateHigh, and ≥1 photo. Summary cards (total/ready/failing). Filter: Failing only / All lots. Red issue badges per lot. "Fix →" navigates to the lot in Manage Lots tab.
 - **BC Check tab** (bc-check-tab.tsx): upload BC Lines export (.xlsx), cross-references by UniqueID then barcode. Flags title mismatches (case-insensitive normalised), estimate low/high mismatches, lots in our system missing from BC, lots in BC not in our system. BC columns used: Internal Barcode, UniqueID, Short Description, Low Estimate, High Estimate.
 - **Push to BC tab** (bc-fill-tab.tsx, tab id "bc-fill", added 2026-06-24): copy-paste BC-import builder. Paste the BC import sheet (TSV from Excel, MUST include the header row) → it fills the Hub-owned columns matched by **UniqueID = receiptUniqueId (NOT row position)** → copy the result back over the same top-left cell. Columns filled: Short Description ← title; Low/High Estimate ← real estimateLow/High, falling back to aiEstimateLow/High (flagged); Size Classification ← lot.notes (the parcel size: Small/Medium/Large/Contact/Collection Only); Article Category Code ← category; Article Subcategory Code ← subCategory. Category values are already BC-style codes (e.g. RETRO_TOYS). Matches columns by header NAME (case-insensitive) so "Article Subcategory Code" never collides with "Article Subcategory 2 Code", and a shifted/extra cell can't misalign. Preserves every other cell, same column count/order, so paste-back is cell-for-cell identical. Validation report: UniqueIDs not in Hub, lots missing estimate/size/category, AI-estimate fallbacks, Hub lots absent from the sheet, expected columns missing from the paste. Pure client-side (no API) — page already passes all needed lot fields. Solves the positional copy-paste errors that broke imports when one cell was out of line. Verified against a real BC export (2026-06-24): 75-column sheet, mapped headers at UniqueID=C, Short Description=H, Article Category Code=N, Article Subcategory Code=O, Size Classification=Q, Low Estimate=U, High Estimate=V — matched by name so column letters are informational only.
-- Review tab (shared review-tab.tsx, also on tablet): photo (tap for modal; each image has hover "⛶ Fullscreen" → full-screen overlay), key points with ✓/≈/⚠ markers (word-level stem matching), description with per-KP colour highlights. Filters: search, cataloguer, issues dropdown (All lots / ⚠ With issues / ✓ All good), Flagged-only, **AI-flagged only toggle** (filters to lots with aiFlagNote). THREE DISTINCT things: "with issues" = hasIssues() (any key point missing/partial OR no description OR no photos OR reviewFlag); "Flagged only" = human reviewFlag; "AI-flagged only" = aiFlagNote. The header "⚠ N with issues" count is a CLICKABLE button (2026-06-24) toggling the issues filter — previously users clicked the flag buttons expecting those lots and got nothing. Error flagging: setLotReviewFlag action. **AI flag note:** CatalogueLot.aiFlagNote (TEXT nullable) — set by pipeline batch when AI spots a potential cataloguer mistake; shown as amber ⚠️ banner with two options: "Edit description to fix…" (inline textarea, saves + clears flag) and **"Ignore (AI is wrong)"** button (calls saveAiFlagNote(id, null) to dismiss without editing). A lot with an active edit textarea is always kept in filtered results regardless of active filters. Key point analysis shared lib: lib/kp-analysis.tsx (analyseKeyPoints, HighlightedDescription, kpColour) — imported by review-tab.tsx and AI Upgrade tab. Save-description error UX (2026-07-01): failures now show INLINE at the Save button (saveErr state) instead of the far-off top banner (cataloguers on a long/tablet list couldn't see it and thought Save "did nothing"). Bigger fix same day: in production Next.js REDACTS a thrown server-action error's message to the generic "Server Components render" string, so a cataloguer editing a BC-LOCKED auction (addedToBC=true → requireNotBCLocked blocks non-admins; admins bypass — hence "works for admin, not cataloguers") saw gibberish. Fixed by making saveLotDescription/setLotReviewFlag/saveAiFlagNote RETURN {ok,error} instead of throwing, and showing res.error. Button shows "Saving…" via useTransition pending. THEN (2026-07-01, per Jordan) those three Review actions were made to BYPASS the BC lock entirely — the Review tab is QA/corrections and cataloguers may fix lots even after the auction is in BC; the lock still applies to the wizard/Manage Lots/updateLot, delete, bulk actions and transfer. Don't re-add requireNotBCLocked to the three Review actions.
+- Review tab (shared review-tab.tsx, also on tablet): photo (tap for modal; each image has hover "⛶ Fullscreen" → full-screen overlay), key points with ✓/≈/⚠ markers (word-level stem matching), description with per-KP colour highlights. Filters: search, cataloguer, issues dropdown (All lots / ⚠ Needs attention / ≈ Wording to check / Either of the above / ✓ All good), Flagged-only, **AI-flagged only toggle** (filters to lots with aiFlagNote). **⚠ ISSUES ARE SPLIT IN TWO (2026-07-31, Jordan: "almost all of them are just partial word checks")** — the single "⚠ N with issues" button buried the handful of real problems among ~90 wording checks. Now TWO clickable header buttons, each toggling its own filter: **"⚠ N needs attention"** (red) = \`needsAttention()\` — a key point with status **missing**, or no description, or no photos, or a human \`reviewFlag\`; and **"≈ N wording checks"** (amber) = \`wordingOnly()\` — status **partial** or **reworded** only. ⚠ The buckets are **EXCLUSIVE** (a lot with a missing key point never also counts as a wording check) so the two counts plus the all-good lots add up to the total; \`hasIssues()\` is kept as "either" and still backs the "Either of the above" option. Colours deliberately mirror the per-lot chips (missing = red, partial/reworded = amber). THREE DISTINCT things beyond that: issues (above); "Flagged only" = human reviewFlag; "AI-flagged only" = aiFlagNote. The header counts have been CLICKABLE buttons since 2026-06-24 — previously users clicked the flag buttons expecting those lots and got nothing. Error flagging: setLotReviewFlag action. **AI flag note:** CatalogueLot.aiFlagNote (TEXT nullable) — set by pipeline batch when AI spots a potential cataloguer mistake; shown as amber ⚠️ banner with two options: "Edit description to fix…" (inline textarea, saves + clears flag) and **"Ignore (AI is wrong)"** button (calls saveAiFlagNote(id, null) to dismiss without editing). A lot with an active edit textarea is always kept in filtered results regardless of active filters. Key point analysis shared lib: lib/kp-analysis.tsx (analyseKeyPoints, HighlightedDescription, kpColour) — imported by review-tab.tsx and AI Upgrade tab. Save-description error UX (2026-07-01): failures now show INLINE at the Save button (saveErr state) instead of the far-off top banner (cataloguers on a long/tablet list couldn't see it and thought Save "did nothing"). Bigger fix same day: in production Next.js REDACTS a thrown server-action error's message to the generic "Server Components render" string, so a cataloguer editing a BC-LOCKED auction (addedToBC=true → requireNotBCLocked blocks non-admins; admins bypass — hence "works for admin, not cataloguers") saw gibberish. Fixed by making saveLotDescription/setLotReviewFlag/saveAiFlagNote RETURN {ok,error} instead of throwing, and showing res.error. Button shows "Saving…" via useTransition pending. THEN (2026-07-01, per Jordan) those three Review actions were made to BYPASS the BC lock entirely — the Review tab is QA/corrections and cataloguers may fix lots even after the auction is in BC; the lock still applies to the wizard/Manage Lots/updateLot, delete, bulk actions and transfer. Don't re-add requireNotBCLocked to the three Review actions.
 - **Upload Photos tab — Smart scan rework (2026-07-15, photo-upload-tab.tsx):** the "Smart scan folder" mode reads Vectis barcodes (F066001 / R000016-413 formats only — retail EANs rejected) from a folder of photos and groups them sequentially: a barcode photo STARTS a lot group (the label photo itself is discarded, never uploaded), following photos join it until the next barcode. Reworked in one pass: (1) scanning is now PARALLEL, 3 images at once via an order-preserving pool (mapPool — results land at their file's index so grouping order is untouched); (2) photos before the first barcode are no longer silently dropped — collected into preGroup and shown in the preview as a warned "won't be uploaded" bucket with thumbnails; (3) files the browser can't decode (HEIC from iPhones on Windows/Android) are counted as "unreadable" with an orange warning that labels inside them can't be detected (they still group + upload fine as item photos — Thumb component falls back to a 🖼️ tile); (4) the preview is now thumbnail CARDS per group (object URLs cached in a ref Map keyed by File, created in makeThumbs, revoked on reset/unmount) instead of a filename text table, so misfiled photos are visible before upload; (5) groups with photos.length >= max(6, 2×median) get an amber "unusually many photos" flag — the signature of a label that failed to scan merging two lots (scan mode only; filename mode grouping is deterministic); (6) uploadLotPhoto (lib/actions/catalogue.ts) now RETURNS { ok, imageUrls | error } instead of throwing (production redacts thrown server-action messages — same fix pattern as the Review tab actions); all four callers updated (photo-upload-tab per-photo failure list, auction-tabs / tablet-tabs / lot-photos-tab alert the real reason, e.g. the BC lock). Done screen counts uploaded = attempts − failures. No migration.
 - **Photo Only Cataloguing tab** (lot-photos-tab.tsx): per-lot panel shows photos with teal border + "Main" label on index 0, gray "Photo N" labels on others, original filename underneath each thumbnail. "↕ Reverse order" button (2+ photos) calls reorderLotPhotos action. On filename-based import, photos within each lot group are **reversed** (highest-numbered file → main). R2 key format: 'lot-photos/[auctionId]/[lotId]/[Date.now()]-[safeName]' (preserves original filename; old format had no filename). Lot wizard also shows filenames under photo thumbnails.
 - **Lot Wizard** (lot-wizard-tab.tsx): 8 sequential steps — 1 Vendor & Tote, 2 Barcode, 3 Key Points, 4 Categories, 5 Estimate, 6 Condition, 7 Parcel Size, 8 Photos. Step dots are NOT clickable (advance via Next/Back only). Required fields are enforced in validateStep(s) which blocks Next (error shown above the nav): step 1 vendor+tote+receipt (receipt made required 2026-06-25), step 2 barcode, step 5 estimate low+high, **step 7 parcel size (made required 2026-06-24 — needed for the BC Size Classification column; parcel stored in CatalogueLot.notes)**. Required labels show a red *. Field checks are only a soft 7-character length warning (bypassable) + maxLength 7 — no strict pattern check. Remember-last (2026-06-25): Tote/Vendor/Receipt persist per USER ACCOUNT (User.lastTote/lastVendor/lastReceipt columns — NEEDS Run Migrations) so they follow a cataloguer across shared iPads and survive closing the app; wizard pre-fills blank fields on open via getLastLotFields() and saves via saveLastLotFields() after each createLot (barcode still uses localStorage). **Step-1 rework (2026-07-07):** removed the Tote/Vendor/Receipt **Pin buttons** (category Main/Sub pin kept). **The tote is now the source of truth** — typing/selecting a tote ALWAYS overwrites vendor+receipt (the old "only if blank" guards in selectTote/lookupVendorFromBC caused a changed tote to keep the previous vendor/receipt = the mismatch bug), and editing the tote text clears the derived vendor/receipt so a not-in-BC tote can't keep stale values. Step-1 nav button is **"Start cataloguing →"** (startCataloguing → validate → 7-char gate → commitStart), which sets 'locked' {tote,vendor,receipt,vendorName} and advances; the values carry across every lot (no pins). Changing mid-batch: the step-2 "Change Tote / Vendor" chip runs **changeVendor()** (wipes tote/vendor/receipt for a clean re-entry, keeps 'locked'), and pressing Start with values differing from 'locked' opens a **confirmation modal** ("change vendor to X · tote · receipt", shows current). Receipt→vendor reverse lookup only runs when NO tote is set (tote wins). goBack() now clears barcodeWarning/step1LengthWarning (else the Start button stayed disabled back on step 1). Client-only, no migration. **Spell flagging on Key Points / Description (2026-07-07):** step 3 lists unrecognised words underneath the textarea ("⚠ Possible spelling mistakes: …") — FLAG ONLY, no auto-fix/suggestions (Jordan's choice). Fully client-side + offline via lib/spellcheck.ts: lazy-fetches a 274k-word British/English list from public/dict/en-words.txt (built once from the an-array-of-english-words package, then committed; ~2.7MB, gzips to ~800KB, loaded only when step 3 is first reached), builds a Set, debounced 400ms. Deliberately NOT flagged: brand names (reuses the wizard's BRANDS_LIST, split into tokens), all-caps codes (LNER/GWR/BR), any token with a digit (catalogue numbers, scales like R2290 / 1:76), tokens under 3 chars, and a small VECTIS_TERMS allowlist (diecast/playworn/approx/vgc/…). Hyphenated words check each part. Fails open (network error → no flags). No AI, no network round-trip per lot, no migration. **Separate box/packaging condition (2026-06-24, extended to all editors 2026-06-25):** checkbox under the main condition reveals a Wording picker ("Box is" / "Packaging is" / Custom free-text) plus the same grade selector with its own optional "to" range. Saved as a separate sentence on the condition — e.g. "Near Mint to Excellent. Box is Good to Good Plus." Only added when the box is ticked AND a prefix AND grade are set. Now available in all three lot editors via shared lib/condition.ts (parseCondition/buildCondition/CONDITION_GRADES): the Lot Wizard (buttons), the desktop auction-manager editor (buttons, autosaves) and the tablet editor (dropdowns). Wizard only builds; desktop + tablet also parse the stored string back into the fields. Edit lib/condition.ts to change the format. Wording presets are DB-managed (2026-06-25): the "Box is"/"Packaging is" picker is driven by the ConditionWording table, seeded with Box is / Packaging is / Carded Back is / Blister Card is (format "<wording> is" so it reads "Carded Back is Mint"). Read via useConditionWordings() hook + /api/catalogue/condition-wordings; managed (add/rename/reorder/delete) at Admin → Condition Wording (/admin/condition-wording, admin-only). Each editor also keeps a per-lot Custom free-text wording. NEEDS Run Migrations on staging (ConditionWording table).
 - Auctions list page: split into Active and Completed tables. Complete column is an interactive toggle (CompleteToggle → toggleAuctionComplete). **Filterable** (2026-06-26) via a shared filter bar (search code/name + Type dropdown + status dropdown) in the client component auctions-tables.tsx; both tables filter together and show a (count). Each auction Type shows a **fun emoji** (🚂 trains, 🚗 diecast, 🎬 TV/film, 🧸 bears, etc.) on desktop + tablet lists + the New Auction dropdown — single source of truth in lib/auction-types.ts (auctionTypeEmoji/auctionTypeLabel/AUCTION_TYPES).
-- Manage Lots table: Added By (createdByName, sortable), **KP column** (✓/— with Has KP / No KP filter), **AI column** (🚫 excluded / ✨ upgraded), **AI Excluded filter**.
+- Manage Lots table: Added By (createdByName, sortable), **Date Added** (createdAt, sortable — sorts on the real date, not the formatted string; also in the Excel export), **KP column** (✓/— with Has KP / No KP filter), **AI column** (🚫 excluded / ✨ upgraded), **AI Excluded filter**.
 - Manage Lots mass actions: mark/unmark added to BC, generate titles, transfer, delete lots, 📷🗑 Delete photos (bulkClearLotPhotos), **🚫 Exclude/Unexclude from AI** (bulkSetLotsAiExcluded)
 - **Tablet lots list** (tablet-tabs.tsx → TabletManageLots, /tools/cataloguing/tablet/auctions/[id]): card list with a search box (barcode/title/vendor/tote), Sort chips (Lot No. / Newest / Oldest) and — added 2026-07-14 — a **Cataloguer filter** dropdown (built from the distinct CatalogueLot.createdByName values on that auction, with an ✕ to clear). It only renders when 2+ people have catalogued in the auction, combines with the search + sort, and the "N of M" count shows whenever either filter is active. Client-side only — no query/API change. ⚠ **The search/sort/cataloguer state is OWNED BY THE PARENT (TabletTabs), not by TabletManageLots** (fixed 2026-07-16): opening a lot swaps the list out for TabletLotEdit, which UNMOUNTS TabletManageLots — so local filter state was wiped every time a cataloguer came back from a lot, and they had to re-filter each time. Don't move those three useStates back into TabletManageLots. (Same reason the Add Lot tab is hidden-not-unmounted.)
 - Lots have addedToBC boolean, aiExcluded boolean, aliases for Unique ID matcher
@@ -1442,7 +1856,7 @@ Follow-ups (/follow-ups): Submissions with DECLINED or FOLLOW_UP status.
 
 Contacts (/contacts): Customer database with paginated list, create modal, detail overlay (Details/Seller/Buyer/Documents tabs).
 
-Cataloguing (/tools/cataloguing): Auction list (Active/Completed split, Complete toggle) with Export/Import xlsx. Per-auction tabs: Manage Lots (KP column ✓/— + Has KP/No KP filter; AI column 🚫 excluded/✨ upgraded; AI Excluded filter; Added By column; bulk Exclude/Unexclude from AI via bulkSetLotsAiExcluded), Add Lot, Photo Only, Import Lots, Upload Photos, AI Upgrade, Review (key points highlighted, error flagging, AI flag note amber banners + inline edit, AI-flagged only filter, fullscreen photo viewer — also on tablet), Statistics (Lots Missing Photos), Lot History, Auction Settings, **📤 Push to BC** (copy-paste BC-import builder — fills Short Description/estimates/Size Classification/categories matched by UniqueID, not position). CatalogueLot.aiFlagNote (TEXT nullable) — set by pipeline/recheck, cleared by saveLotDescription. bcLocked = auction.addedToBC && userRole !== "ADMIN". Lotting Up, Research, Tablet Mode.
+Cataloguing (/tools/cataloguing): Auction list (Active/Completed split, Complete toggle) with Export/Import xlsx. Per-auction tabs: Manage Lots (KP column ✓/— + Has KP/No KP filter; AI column 🚫 excluded/✨ upgraded; AI Excluded filter; Added By + Date Added columns; bulk Exclude/Unexclude from AI via bulkSetLotsAiExcluded), Add Lot, Photo Only, Import Lots, Upload Photos, AI Upgrade, Review (key points highlighted, error flagging, AI flag note amber banners + inline edit, AI-flagged only filter, fullscreen photo viewer — also on tablet), Statistics (Lots Missing Photos), Lot History, Auction Settings, **📤 Push to BC** (copy-paste BC-import builder — fills Short Description/estimates/Size Classification/categories matched by UniqueID, not position). CatalogueLot.aiFlagNote (TEXT nullable) — set by pipeline/recheck, cleared by saveLotDescription. bcLocked = auction.addedToBC && userRole !== "ADMIN". Lotting Up, Research, Tablet Mode.
 
 Auction AI (/tools/auction-ai) — 12 tabs, grouped sidebar (Chat/Run/History/Tools/Reference): Chat Window, Batch Run, Key Points Check, Double Check, Auto Pipeline, AI Upgrade, Saved Runs, KP Check Runs, Description Copier, Barcode Sorter, Instructions, Macro Downloader. All run tabs alternate primary/fallback model on retries. applyAiDescriptionOne estimate fields optional — only Batch sets estimates. KP Check: validates descriptions (partial word matches don't count), stored in KPCheckRun/KPCheckLot. Double Check: second-pass validation, uses React 18 batching fix. AI Upgrade: mass rewrite (/api/auction-ai/upgrade). Auto Pipeline: chains Batch→Key Points→Double Check (TEST ORDER 2026-06-05); Batch applies desc+estimate to catalogue + saves aiFlagNote; KP auto-applies; DC is final MANUAL Review & Apply gate. Stage cards show per-reason "not processed" breakdown. Re-check Cataloguer Flags button (text-only AI scan on existing descriptions, /api/auction-ai/recheck-flags). React 18 fix: use local working[] + setState([...working]) full replace — never setState(prev=>prev.map(...)) in 100+ item loop.
 

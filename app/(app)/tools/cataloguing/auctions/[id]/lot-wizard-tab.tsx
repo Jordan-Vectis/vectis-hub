@@ -2,7 +2,8 @@
 
 import { useState, useTransition, useRef, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { createLot, getLastLotFields, saveLastLotFields, checkBarcodeAssigned, getMyLotsToday } from "@/lib/actions/catalogue"
+import { createLot, getLastLotFields, saveLastLotFields, checkBarcodeAssigned, getMyLotsToday,
+         saveLotDraft, getLotDraft, clearLotDraft } from "@/lib/actions/catalogue"
 import { loadSpellDict, findMisspellings } from "@/lib/spellcheck"
 import { DEFAULT_REASONS, workingMsBetween } from "@/lib/idle-timer-config"
 import type { IdleReason } from "@/lib/idle-timer-config"
@@ -869,6 +870,108 @@ export default function LotWizardTab({
   const [toteIgnored,   setToteIgnored]   = useState(false)
   const [vendorHint,    setVendorHint]    = useState<string | null>(null)   // name hint from BC lookup
 
+  // ── Resume an unfinished lot ────────────────────────────────────────────────
+  // Everything typed into the wizard lives in React state, so a crash, a
+  // sign-out or a closed tab used to lose the whole lot. It is now autosaved to
+  // the server (CatalogueLotDraft, one row per user per sale) and offered back
+  // as a banner next time the wizard loads. Server-side rather than
+  // localStorage so it survives picking up a DIFFERENT iPad.
+  //
+  // ⚠ Photos are NOT in the draft — they're camera File objects. Only the count
+  // is stored, so the banner can say how many need retaking.
+  const [draftOffer,  setDraftOffer]  = useState<Awaited<ReturnType<typeof getLotDraft>>>(null)
+  const [draftLoaded, setDraftLoaded] = useState(false)
+  // Whether a draft row currently exists for this user+sale, so an emptied
+  // wizard only issues a delete when there's actually something to delete.
+  const draftWritten = useRef(false)
+
+  useEffect(() => {
+    getLotDraft(auctionId)
+      .then(d => { if (d && draftHasContent(d)) { setDraftOffer(d); draftWritten.current = true } })
+      .catch(() => {})
+      .finally(() => setDraftLoaded(true))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auctionId])
+
+  // Anything beyond the tote/vendor/receipt identity — those persist on the
+  // user's account anyway, and a draft holding only those is not an unfinished
+  // lot worth offering back.
+  function draftHasContent(d: { barcode: string; keyPoints: string; manualDesc: string; category: string; subCategory: string; brand: string; estimateLow: string; estimateHigh: string; cond1: string; cond2: string; boxCond1: string; boxCond2: string; parcel: string; photoCount: number }) {
+    return !!(d.barcode.trim() || d.keyPoints.trim() || d.manualDesc.trim() || d.category || d.subCategory
+      || d.brand || d.estimateLow.trim() || d.estimateHigh.trim() || d.cond1 || d.cond2
+      || d.boxCond1 || d.boxCond2 || d.parcel || d.photoCount > 0)
+  }
+
+  const draftFields = {
+    step, vendor, tote, receipt, barcode,
+    keyPoints, aiExcluded, manualDesc,
+    category: mainCat, subCategory: subCat, brand,
+    estimateLow: estLow, estimateHigh: estHigh,
+    cond1, cond2,
+    boxOn, boxPrefixMode, boxCustomPrefix, boxCond1, boxCond2,
+    parcel, photoCount: photoFiles.length,
+  }
+
+  // Autosave, debounced. Held back until the initial load has finished (an empty
+  // wizard must never overwrite the draft it is about to offer) and while the
+  // banner is still up — leaving it alone is then non-destructive, so nobody
+  // loses the unfinished lot by ignoring the banner.
+  useEffect(() => {
+    if (!draftLoaded || draftOffer) return
+    if (!draftHasContent(draftFields)) {
+      if (draftWritten.current) {
+        draftWritten.current = false
+        clearLotDraft(auctionId).catch(() => {})
+      }
+      return
+    }
+    const t = setTimeout(() => {
+      draftWritten.current = true
+      saveLotDraft(auctionId, draftFields).catch(() => {})
+    }, 1200)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftLoaded, draftOffer, auctionId, step, vendor, tote, receipt, barcode,
+      keyPoints, aiExcluded, manualDesc, mainCat, subCat, brand, estLow, estHigh,
+      cond1, cond2, boxOn, boxPrefixMode, boxCustomPrefix, boxCond1, boxCond2,
+      parcel, photoFiles.length])
+
+  function resumeDraft() {
+    const d = draftOffer
+    if (!d) return
+    setDraftOffer(null)
+    if (d.vendor) setVendor(d.vendor)
+    if (d.tote)   setTote(d.tote)
+    if (d.receipt) setReceipt(d.receipt)
+    // Put the batch identity back the way it was, so "Change Tote / Vendor"
+    // still asks for confirmation rather than silently switching vendor.
+    if (d.vendor && d.tote && d.receipt) {
+      setLocked({ tote: d.tote, vendor: d.vendor, receipt: d.receipt, vendorName: "" })
+      lookupVendorFromBC({ tote: d.tote, hintOnly: true })   // name label only
+    }
+    setBarcode(d.barcode)
+    setKeyPoints(d.keyPoints); setAiExcluded(d.aiExcluded); setManualDesc(d.manualDesc)
+    setMainCat(d.category); setSubCat(d.subCategory); setBrand(d.brand)
+    setEstLow(d.estimateLow); setEstHigh(d.estimateHigh)
+    setCond1(d.cond1); setCond2(d.cond2)
+    setBoxOn(d.boxOn); setBoxPrefixMode(d.boxPrefixMode as BoxPrefixMode)
+    setBoxCustomPrefix(d.boxCustomPrefix); setBoxCond1(d.boxCond1); setBoxCond2(d.boxCond2)
+    setParcel(d.parcel)
+    setStep(Math.min(Math.max(d.step, 2), 8))
+    // ⚠ Timing starts FRESH from the resume, never from the draft's original
+    // start — restoring the old baseline would report a lot that took all night
+    // (and the same for the blue lot timer). The gap itself isn't lost: the
+    // server-side idle gate still measures it from the last SAVED lot.
+    if (!barcodeStartedAt.current) startLotTiming()
+    if (d.barcode) startLotTimerDisplay()
+  }
+
+  function discardDraft() {
+    setDraftOffer(null)
+    draftWritten.current = false
+    clearLotDraft(auctionId).catch(() => {})
+  }
+
   async function searchTotes(q: string) {
     setToteInfo(null)
     setToteIgnored(false)
@@ -1203,8 +1306,24 @@ export default function LotWizardTab({
       photoFiles.forEach(p => URL.revokeObjectURL(p.preview))
       setPhotoFiles([])
       setStep(2)
+      // The lot is written — there is nothing left to resume. Also drops any
+      // banner still on screen: saving a lot is them moving on from it.
+      setDraftOffer(null)
+      draftWritten.current = false
+      clearLotDraft(auctionId).catch(() => {})
       onCreated()
     })
+  }
+
+  // When the unfinished lot was last touched — the time on its own if it was
+  // today, otherwise the weekday too so a draft from last week can't read as
+  // one from this morning.
+  function fmtDraftWhen(ms: number) {
+    const d = new Date(ms)
+    const t = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+    return d.toDateString() === new Date().toDateString()
+      ? `today at ${t}`
+      : `${d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} at ${t}`
   }
 
   // Whole minutes, ROUNDED UP — the popup deliberately shows no seconds
@@ -1474,6 +1593,41 @@ export default function LotWizardTab({
               <button type="button" onClick={() => commitStart(changeConfirm)}
                 className="px-4 py-2 text-sm font-semibold rounded-lg" style={{ background: CAT_ACCENT, color: "#1C1C1E" }}>Yes, change vendor</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resume an unfinished lot — shown when a draft was left behind by a
+          crash / closed page. Deliberately a banner, not a blocking modal:
+          ignoring it leaves the draft untouched, so nothing is lost by accident. */}
+      {draftOffer && (
+        <div className="mb-4 rounded-xl border border-amber-600/60 bg-amber-50 dark:bg-amber-950/40 px-4 py-3">
+          <p className={`font-bold text-amber-800 dark:text-amber-300 ${tablet ? "text-base" : "text-sm"}`}>
+            ↩ You have an unfinished lot
+          </p>
+          <p className={`text-amber-800/90 dark:text-amber-200/90 mt-1 ${tablet ? "text-sm" : "text-xs"}`}>
+            {draftOffer.barcode
+              ? <>Barcode <span className="font-mono font-semibold">{draftOffer.barcode}</span> — </>
+              : <>Started but no barcode yet — </>}
+            you got to step {draftOffer.step} ({STEP_LABELS[draftOffer.step - 1]}), last edited {fmtDraftWhen(draftOffer.updatedAt)}.
+          </p>
+          {draftOffer.photoCount > 0 && (
+            <p className={`text-amber-800 dark:text-amber-300 font-semibold mt-1 ${tablet ? "text-sm" : "text-xs"}`}>
+              ⚠ The {draftOffer.photoCount} photo{draftOffer.photoCount !== 1 ? "s" : ""} you had taken {draftOffer.photoCount !== 1 ? "were" : "was"} not
+              saved — you&apos;ll need to take {draftOffer.photoCount !== 1 ? "them" : "it"} again.
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2 mt-3">
+            <button type="button" onClick={resumeDraft}
+              style={{ background: CAT_ACCENT, color: "#1C1C1E", touchAction: tablet ? "manipulation" : undefined }}
+              className={`font-semibold rounded transition-colors ${tablet ? "px-6 py-3 text-base" : "px-4 py-1.5 text-sm"}`}>
+              Resume this lot
+            </button>
+            <button type="button" onClick={discardDraft}
+              style={{ touchAction: tablet ? "manipulation" : undefined }}
+              className={`font-semibold rounded border border-amber-700/50 text-amber-800 dark:text-amber-300 hover:border-amber-500 transition-colors ${tablet ? "px-6 py-3 text-base" : "px-4 py-1.5 text-sm"}`}>
+              Discard it
+            </button>
           </div>
         </div>
       )}

@@ -230,3 +230,17 @@ html.crt-mode::after {
 html.crt-mode body {
   text-shadow: 0 0 2px rgba(140, 255, 170, 0.35);
 }
+
+/* `scrollbar-none` — used on the auction tab strip and the databases sidebar.
+   It was being applied as a class but never existed, so as soon as a strip
+   overflowed (an extra tab, a narrow window) the browser drew a scrollbar
+   across it. Tailwind v4 is CSS-first, so the utility is declared here. */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+  }
+}

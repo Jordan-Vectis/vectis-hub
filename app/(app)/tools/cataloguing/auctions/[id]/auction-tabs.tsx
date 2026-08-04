@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, fillLotsFromTotes, togglePublished, generateTitlesFromDescriptions, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, bulkSetLotsAiExcluded, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, bulkRemoveConditionsFromDescriptions, bulkClearDescriptions, transferLots, bulkClearLotPhotos, listBulkUndos, undoBulk } from "@/lib/actions/catalogue"
+import { updateAuction, updateLot, deleteLot, deleteAuction, uploadLotPhoto, deleteLotPhoto, lookupToteOrReceipt, setLotsVendorReceipt, togglePublished, generateTitlesFromDescriptions, setStartingBids, toggleLotAiUpgraded, toggleLotAddedToBC, bulkSetLotsAddedToBC, bulkSetLotsAiExcluded, massCreateLots, bulkAssignUniqueIds, bulkAddConditionsToDescriptions, bulkRemoveConditionsFromDescriptions, bulkClearDescriptions, transferLots, bulkClearLotPhotos, listBulkUndos, undoBulk } from "@/lib/actions/catalogue"
 import { grantAuctionAccess, revokeAuctionAccess } from "@/lib/actions/admin"
 import LotWizardTab, { BRANDS_LIST } from "./lot-wizard-tab"
 import { useCategoryMap } from "@/lib/use-category-map"
@@ -15,6 +15,8 @@ import StatsTab from "./stats-tab"
 import ReviewTab from "./review-tab"
 import LotHistoryTab from "./lot-history-tab"
 import LockingCheckTab from "./locking-check-tab"
+import ToteCheckTab from "./tote-check-tab"
+import BcCorrectionsTab from "./bc-corrections-tab"
 import BcCheckTab from "./bc-check-tab"
 import BcFillTab from "./bc-fill-tab"
 import * as XLSX from "xlsx"
@@ -22,7 +24,7 @@ import JSZip from "jszip"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "settings" | "add-lot" | "manage-lots" | "photo-only" | "import" | "ai-upgrade" | "stats" | "lot-history" | "review" | "locking-check" | "bc-check" | "bc-fill"
+type Tab = "settings" | "add-lot" | "manage-lots" | "photo-only" | "import" | "ai-upgrade" | "stats" | "lot-history" | "review" | "locking-check" | "tote-check" | "bc-corrections" | "bc-check" | "bc-fill"
 
 interface Auction {
   id: string; code: string; name: string; auctionDate: Date | null
@@ -40,7 +42,16 @@ interface Lot {
   tote: string | null; receipt: string | null; receiptUniqueId: string | null; category: string | null
   subCategory: string | null; brand: string | null; notes: string | null
   status: string; aiUpgraded: boolean; addedToBC: boolean; aiExcluded: boolean; createdByName: string | null; imageUrls: string[]
+  createdAt: string          // ISO — when the lot was created ("Date Added" column)
   extraDetails: string | null
+}
+
+// "Date Added" — short and scannable in a table column, and the time matters
+// (several lots a day from the same person), so both are shown.
+function fmtDateAdded(iso: string) {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return "—"
+  return `${d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" })} ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`
 }
 
 
@@ -572,6 +583,8 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
     { id: "stats",        label: "📊 Statistics" },
     { id: "lot-history",    label: "📖 Lot History" },
     { id: "locking-check", label: "🔒 Locking Check" },
+    { id: "tote-check",    label: "🧾 Tote Check" },
+    { id: "bc-corrections", label: "🔧 BC Corrections" },
     { id: "bc-check",      label: "📋 BC Check" },
     { id: "bc-fill",       label: "📤 Push to BC" },
     { id: "settings",      label: "Auction Settings" },
@@ -656,7 +669,10 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
       </div>
 
       {/* Tab bar */}
-      <div className="flex-shrink-0 flex border-b border-gray-300 dark:border-gray-700 mb-6 overflow-x-auto scrollbar-none -mx-6 px-6">
+      {/* Wraps rather than scrolls: with this many tabs the strip overflows on a
+          normal window, and a hidden horizontal scroll just loses the last tabs
+          off the edge where nobody finds them. */}
+      <div className="flex-shrink-0 flex flex-wrap border-b border-gray-300 dark:border-gray-700 mb-6 -mx-6 px-6">
         {tabs.map(t => (
           <button key={t.id} onClick={() => switchTab(t.id)}
             className={`flex-shrink-0 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap ${
@@ -748,6 +764,12 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
             onOpenLot={openLotInManager}
           />
         )}
+
+        {tab === "tote-check" && (
+          <ToteCheckTab auctionId={auction.id} onOpenLot={openLotInManager} />
+        )}
+
+        {tab === "bc-corrections" && <BcCorrectionsTab auctionId={auction.id} />}
 
         {tab === "bc-check" && (
           <BcCheckTab
@@ -1074,11 +1096,17 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
   const [pending, start]            = useTransition()
   const [fillPending, startFill]    = useTransition()
   const [fillMsg, setFillMsg]       = useState<string | null>(null)
+  // Change Vendor panel — type a tote or receipt, confirm what it belongs to,
+  // then apply it to the ticked lots.
+  const [showVendorChange, setShowVendorChange] = useState(false)
+  const [vendorQuery, setVendorQuery]           = useState("")
+  const [vendorHit, setVendorHit]               = useState<Awaited<ReturnType<typeof lookupToteOrReceipt>> | null>(null)
+  const [vendorLooking, startVendorLookup]      = useTransition()
   const [photoExporting, setPhotoExporting] = useState(false)
   const [photoMsg, setPhotoMsg]     = useState<string | null>(null)
 
   // Column sort
-  type SortCol = "barcode" | "receiptUniqueId" | "title" | "vendor" | "receipt" | "tote" | "category" | "photos" | "addedBy"
+  type SortCol = "barcode" | "receiptUniqueId" | "title" | "vendor" | "receipt" | "tote" | "category" | "photos" | "addedBy" | "dateAdded"
   const [sortCol, setSortCol] = useState<SortCol>("barcode")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
 
@@ -1133,6 +1161,33 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
 
   const selectedIds = () => (selected.size > 0 ? Array.from(selected) : [])
   const scopeWord = () => (selected.size > 0 ? `the ${selected.size} selected lot${selected.size !== 1 ? "s" : ""}` : "every lot in this auction")
+
+  function doVendorLookup() {
+    const q = vendorQuery.trim()
+    if (!q) return
+    setVendorHit(null)
+    startVendorLookup(async () => setVendorHit(await lookupToteOrReceipt(q)))
+  }
+
+  function applyVendorChange() {
+    if (!vendorHit?.ok || selected.size === 0) return
+    const who = `${vendorHit.receipt ?? "—"} / ${vendorHit.vendor ?? "—"}${vendorHit.vendorName ? ` (${vendorHit.vendorName})` : ""}`
+    if (!confirm(`Put ${scopeWord()} onto ${who}?`)) return
+    setFillMsg(null)
+    startFill(async () => {
+      const res = await setLotsVendorReceipt(auctionId, Array.from(selected), {
+        vendor:  vendorHit.vendor  ?? "",
+        receipt: vendorHit.receipt ?? "",
+      })
+      if (!res.ok) { setFillMsg(`⚠ ${res.error}`); return }
+      setFillMsg(`✓ Changed ${res.updated} lot${res.updated === 1 ? "" : "s"} to ${who}`)
+      setShowVendorChange(false)
+      setVendorHit(null)
+      setVendorQuery("")
+      setTimeout(() => setFillMsg(null), 5000)
+      onDelete()   // parent refresh — the lots list has changed
+    })
+  }
 
   function handleBulkAddConditions() {
     const pool = selected.size > 0 ? lots.filter(l => selected.has(l.id)) : lots
@@ -1202,6 +1257,10 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
       let cmp = 0
       if (sortCol === "photos") {
         cmp = a.imageUrls.length - b.imageUrls.length
+      } else if (sortCol === "dateAdded") {
+        // Sorted as a real date, not the formatted string — "01 Aug" must not
+        // land before "31 Jul".
+        cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
       } else {
         const getVal = (l: Lot) => {
           if (sortCol === "barcode")        return l.barcode
@@ -1317,6 +1376,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
       "Photos":        l.imageUrls.length,
       "AI Upgraded":   l.aiUpgraded ? "Yes" : "No",
       "Added By":      l.createdByName ?? "",
+      "Date Added":    fmtDateAdded(l.createdAt),
     }))
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
@@ -1630,18 +1690,9 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
             <span className={TB_LABEL}>Tools</span>
             <div className="flex items-center gap-1.5 flex-wrap">
               <button
-                onClick={() => {
-                  setFillMsg(null)
-                  startFill(async () => {
-                    const result = await fillLotsFromTotes(auctionId)
-                    setFillMsg(result.updated > 0 ? `✓ Updated ${result.updated} lot${result.updated !== 1 ? "s" : ""}` : "No lots needed updating")
-                    setTimeout(() => setFillMsg(null), 3000)
-                    onDelete()
-                  })
-                }}
-                disabled={fillPending}
-                className={`${TB_NEUTRAL} hover:border-[#2AB4A6] hover:text-[#2AB4A6]`}>
-                {fillPending ? "Pulling…" : "⟳ Pull Vendor/Receipt from Totes"}
+                onClick={() => { setShowVendorChange(v => !v); setShowMassAdd(false); setShowBids(false); setFillMsg(null) }}
+                className={showVendorChange ? `${TB_BTN} border-[#2AB4A6] text-[#2AB4A6] bg-[#2AB4A6]/10` : `${TB_NEUTRAL} hover:border-[#2AB4A6] hover:text-[#2AB4A6]`}>
+                🏷 Change Vendor
               </button>
               {!bcLocked && (
                 <button
@@ -1849,6 +1900,70 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
         </div>
       )}
 
+      {/* ── Change Vendor panel ──
+          Type a tote or a receipt, see who it belongs to in the BC tote data,
+          then put that vendor/receipt onto the ticked lots. Deliberately
+          selection-only: no "all lots" fallback for an action that moves lots
+          onto a different vendor. */}
+      {showVendorChange && (
+        <div className="mb-4 bg-white dark:bg-[#1C1C1E] border border-[#2AB4A6]/40 rounded-xl p-4 space-y-3">
+          <p className="text-sm font-semibold text-[#2AB4A6]">Change Vendor</p>
+          <p className="text-xs text-gray-600 dark:text-gray-500">
+            Enter a <span className="font-semibold">tote</span> or a <span className="font-semibold">receipt</span> number — the vendor and receipt behind it are read from the BC tote data,
+            the same source the lot wizard uses. Existing unique IDs are kept; one is only created where a lot hasn&apos;t got one.
+          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              value={vendorQuery}
+              onChange={e => { setVendorQuery(e.target.value); setVendorHit(null) }}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); doVendorLookup() } }}
+              placeholder="Tote or receipt number…"
+              className="w-56 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded px-3 py-1.5 text-sm font-mono text-gray-700 dark:text-gray-200 focus:outline-none focus:border-[#2AB4A6]"
+            />
+            <button onClick={doVendorLookup} disabled={vendorLooking || !vendorQuery.trim()}
+              className={`${TB_NEUTRAL} hover:border-[#2AB4A6] hover:text-[#2AB4A6] disabled:opacity-40`}>
+              {vendorLooking ? "Looking up…" : "Look up"}
+            </button>
+          </div>
+
+          {vendorHit && !vendorHit.ok && (
+            <p className="text-xs text-red-400">{vendorHit.error}</p>
+          )}
+
+          {vendorHit?.ok && (
+            <div className="rounded-lg bg-gray-100 dark:bg-[#2C2C2E] border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm space-y-1">
+              <div>
+                <span className="text-gray-500">Receipt </span>
+                <span className="font-mono font-bold text-gray-800 dark:text-gray-100">{vendorHit.receipt ?? "—"}</span>
+                <span className="text-gray-500"> · Vendor </span>
+                <span className="font-mono font-bold text-gray-800 dark:text-gray-100">{vendorHit.vendor ?? "—"}</span>
+                {vendorHit.vendorName && <span className="text-gray-500"> · {vendorHit.vendorName}</span>}
+              </div>
+              <p className="text-xs text-gray-500">
+                {vendorHit.kind === "tote"
+                  ? `Matched tote ${vendorHit.tote}.`
+                  : `Matched receipt ${vendorHit.receipt}${vendorHit.toteCount ? ` across ${vendorHit.toteCount} tote${vendorHit.toteCount === 1 ? "" : "s"}` : ""}.`}
+              </p>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={applyVendorChange}
+              disabled={fillPending || !vendorHit?.ok || selected.size === 0}
+              className="px-4 py-1.5 text-sm font-semibold rounded transition-colors disabled:opacity-40"
+              style={{ background: "#2AB4A6", color: "#1C1C1E" }}>
+              {fillPending ? "Applying…" : `Apply to ${selected.size} selected lot${selected.size === 1 ? "" : "s"}`}
+            </button>
+            {selected.size === 0 && (
+              <span className="text-xs text-amber-500">Tick the lots you want to change first.</span>
+            )}
+            <button onClick={() => { setShowVendorChange(false); setVendorHit(null); setVendorQuery("") }}
+              className="text-xs text-gray-600 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Cancel</button>
+          </div>
+        </div>
+      )}
+
       {/* ── Set Starting Bids panel ── */}
       {showBids && (() => {
         const eligible = (selected.size > 0 ? lots.filter(l => selected.has(l.id)) : lots).filter(l => l.estimateLow != null)
@@ -2019,10 +2134,10 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                 <input type="checkbox" checked={filtered.length > 0 && selected.size === filtered.length}
                   onChange={toggleSelectAll} className="w-4 h-4 rounded border-gray-600 accent-[#2AB4A6]" />
               </th>
-              {(["barcode","receiptUniqueId","title","vendor","receipt","tote","category","photos","addedBy"] as SortCol[]).map((col, i) => (
+              {(["barcode","receiptUniqueId","title","vendor","receipt","tote","category","photos","addedBy","dateAdded"] as SortCol[]).map((col, i) => (
                 <th key={col} onClick={() => toggleSort(col)}
                   className="text-left px-4 py-3 text-xs font-medium text-gray-600 dark:text-gray-500 uppercase tracking-wide cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
-                  {["Barcode","Unique ID","Title","Vendor","Receipt","Tote","Category","Photos","Added By"][i]}
+                  {["Barcode","Unique ID","Title","Vendor","Receipt","Tote","Category","Photos","Added By","Date Added"][i]}
                   {sortCol === col ? (sortDir === "asc" ? " ▲" : " ▼") : <span className="text-gray-700"> ⇅</span>}
                 </th>
               ))}
@@ -2048,7 +2163,8 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                   <option value="none">No photos</option>
                 </select>
               </td>
-              <td className="px-2 py-1.5" />
+              <td className="px-2 py-1.5" />{/* Added By */}
+              <td className="px-2 py-1.5" />{/* Date Added */}
               <td className="px-2 py-1.5">
                 <select value={fKeyPoints} onChange={e => setFKeyPoints(e.target.value)} className={COL_SELECT}>
                   <option value="">All</option>
@@ -2111,6 +2227,9 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                 <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-500 whitespace-nowrap">
                   {lot.createdByName ?? "—"}
                 </td>
+                <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-500 whitespace-nowrap">
+                  {fmtDateAdded(lot.createdAt)}
+                </td>
                 <td className="px-4 py-3 text-center">
                   {lot.keyPoints?.trim()
                     ? <span className="text-green-500 text-xs" title="Has key points">✓</span>
@@ -2156,7 +2275,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={14} className="px-4 py-8 text-center text-gray-600 text-sm">No lots match your filters</td></tr>
+              <tr><td colSpan={15} className="px-4 py-8 text-center text-gray-600 text-sm">No lots match your filters</td></tr>
             )}
           </tbody>
         </table>

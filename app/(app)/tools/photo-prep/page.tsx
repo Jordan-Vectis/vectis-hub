@@ -8,6 +8,7 @@ import {
   type PhotoPrepSettings, type WorkerClient, type CropMode,
 } from "@/lib/photo-prep"
 import { findBarcode, cardFromBars, rotationFor, cropIsSane, type BarcodeHit } from "@/lib/photo-prep-barcode"
+import AiEditTab from "./ai-edit-tab"
 
 // Photo Prep — auto-crop to the product + brighten, for the photography department.
 //
@@ -43,6 +44,10 @@ type Result = {
 const PREVIEW_DEBOUNCE_MS = 250
 
 export default function PhotoPrepPage() {
+  // "prepare" = the local crop/brighten run (nothing leaves this computer).
+  // "ai" = the Gemini image editor, which DOES upload the photo it edits.
+  // Deliberately separate so the privacy promise on each is unambiguous.
+  const [tab, setTab] = useState<"prepare" | "ai">("prepare")
   const [files, setFiles]       = useState<SourceFile[]>([])
   const [settings, setSettings] = useState<PhotoPrepSettings>(DEFAULT_SETTINGS)
   const [fsa, setFsa]           = useState(false)
@@ -479,12 +484,33 @@ export default function PhotoPrepPage() {
       <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
         Crops each photo to the product and lifts the under-exposed ones. Filenames are kept exactly as they are.
       </p>
-      <p className="text-xs text-gray-500 dark:text-gray-500 mb-5 mt-1">
-        Photos are processed on this computer and never uploaded.
-        {fsa ? " Results are written straight into a folder you choose."
-             : " Your browser can't save straight to a folder, so results come back as a zip — use Chrome or Edge for the folder option."}
+      <p className="text-xs text-gray-500 dark:text-gray-500 mb-4 mt-1">
+        {tab === "prepare" ? (
+          <>
+            Cropping and brightening happen on this computer — the photos are never uploaded.
+            {fsa ? " Results are written straight into a folder you choose."
+                 : " Your browser can't save straight to a folder, so results come back as a zip — use Chrome or Edge for the folder option."}
+            {" "}(The optional &ldquo;fix with AI&rdquo; step sends just those few photos to Google for a crop box.)
+          </>
+        ) : (
+          <>Edits a single photo with Google&apos;s image model. These photos <span className="font-semibold">are</span> uploaded.</>
+        )}
       </p>
 
+      <div className="flex gap-1 border-b border-gray-200 dark:border-gray-800 mb-5">
+        {([["prepare", "🪄 Prepare photos"], ["ai", "🎨 AI edit"]] as const).map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={`text-sm font-medium px-4 py-2 -mb-px border-b-2 transition-colors ${
+              tab === k ? "border-[#0078D4] text-[#0078D4]"
+                        : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "ai" && <AiEditTab />}
+
+      {tab === "prepare" && (<>
       {error && (
         <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-sm">
           {error}
@@ -840,6 +866,7 @@ export default function PhotoPrepPage() {
           </p>
         </div>
       )}
+      </>)}
     </div>
   )
 }

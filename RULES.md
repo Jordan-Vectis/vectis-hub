@@ -202,7 +202,16 @@ inside a `prisma.$transaction` holding a per-receipt advisory lock (`pg_advisory
 `MAX(existing suffix) + 1` via the shared `maxReceiptSuffix` helper (also used by `importLots` /
 `massCreateLots` / `fillLotsFromTotes`). The earlier count-based, non-atomic scheme caused recurring
 skipped/duplicate/blank IDs from concurrent tablet saves. There is no DB unique constraint (existing
-duplicates would block it), so the fix is forward-only — backfill blanks via `fillLotsFromTotes`.
+duplicates would block it), so the fix is forward-only.
+
+⚠ Blanks are backfilled from the **Change Vendor** button (Manage Lots → Tools): tick the lots,
+type the tote or receipt, and it sets vendor/receipt from the **BC-synced** tote data and mints a
+`{receipt}-N` unique ID for any lot that hasn't got one (existing ones are always preserved).
+It replaced "Pull Vendor/Receipt from Totes" on 2026-08-03 — that button only ever filled BLANKS
+(so it could never correct a wrong vendor) and read the **internal** warehouse tables
+(`WarehouseContainer`/`WarehouseReceipt`), not the BC tote data the wizard actually uses.
+`fillLotsFromTotes` still exists in `lib/actions/catalogue.ts` but **nothing calls it** — don't
+reach for it, and don't wire it back up without deciding which of the two tote sources is meant.
 
 Detection regex:
 ```

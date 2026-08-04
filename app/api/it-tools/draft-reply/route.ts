@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
+import { generateAiText, AiBlockedError } from "@/lib/ai-provider"
 
 export const maxDuration = 60
 
@@ -137,23 +138,19 @@ ${context}
 
 DRAFTED REPLY:`
 
-    const genai = new GoogleGenerativeAI(apiKey)
-    const model = genai.getGenerativeModel({
-      model: await getToolModel("it_draft_reply", modelId),
-      generationConfig: { maxOutputTokens: 2048 },
-    })
-
-    const result   = await model.generateContent(prompt)
-    const response = result.response
-    if (response.promptFeedback?.blockReason) {
-      return NextResponse.json({ error: `Gemini blocked: ${response.promptFeedback.blockReason}` }, { status: 422 })
+    // Runs on whichever provider this slot is set to in Admin → AI Models —
+    // generateAiText handles each one's block/refusal rules.
+    let reply: string
+    try {
+      reply = await generateAiText({
+        model:  await getToolModel("it_draft_reply", modelId),
+        prompt,
+        maxOutputTokens: 2048,
+      })
+    } catch (err) {
+      if (err instanceof AiBlockedError) return NextResponse.json({ error: err.message }, { status: 422 })
+      throw err
     }
-    const finishReason = response.candidates?.[0]?.finishReason
-    if (finishReason && finishReason !== "STOP" && finishReason !== "MAX_TOKENS") {
-      return NextResponse.json({ error: `Gemini stopped: ${finishReason}` }, { status: 422 })
-    }
-
-    const reply = response.text().trim()
     return NextResponse.json({ reply, sources: top.map(s => s.source) })
   } catch (e: any) {
     console.error("it-tools/draft-reply error:", e)

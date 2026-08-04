@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
+import { generateAiText, AiBlockedError } from "@/lib/ai-provider"
 
 export const maxDuration = 60
 export const dynamic = "force-dynamic"
@@ -68,26 +69,17 @@ export async function POST(_req: NextRequest) {
       return NextResponse.json({ available: false, reason: "GEMINI_API_KEY isn't configured, so the draft can't be written.", commitMessage, sha })
     }
 
-    const genai = new GoogleGenerativeAI(apiKey)
-    const model = genai.getGenerativeModel({
-      model: await getToolModel("patch_notes_draft"),
-      generationConfig: { maxOutputTokens: 512 },
-    })
-
-    const result = await model.generateContent(PROMPT(commitMessage))
-    const response = result.response
-
-    // Check both before calling .text() — it throws on a blocked response and loses
-    // the reason (RULES: Gemini Response Handling).
-    if (response.promptFeedback?.blockReason) {
-      return NextResponse.json({ error: `Gemini blocked: ${response.promptFeedback.blockReason}` }, { status: 422 })
+    let text: string
+    try {
+      text = await generateAiText({
+        model:  await getToolModel("patch_notes_draft"),
+        prompt: PROMPT(commitMessage),
+        maxOutputTokens: 512,
+      })
+    } catch (err) {
+      if (err instanceof AiBlockedError) return NextResponse.json({ error: err.message }, { status: 422 })
+      throw err
     }
-    const finishReason = response.candidates?.[0]?.finishReason
-    if (finishReason && finishReason !== "STOP" && finishReason !== "MAX_TOKENS") {
-      return NextResponse.json({ error: `Gemini stopped: ${finishReason}` }, { status: 422 })
-    }
-
-    const text = response.text().trim()
 
     if (text.includes(NOTHING_MARKER)) {
       return NextResponse.json({

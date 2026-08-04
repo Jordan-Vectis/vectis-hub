@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { rateFor, type ModelRate } from "@/lib/ai-pricing"
 
 type Tool = {
   slot: string
@@ -9,7 +10,13 @@ type Tool = {
   default: string
   configured: string | null
   effective: string
+  // Whether this tool's route can talk to Claude at all — set in lib/ai-models.
+  // Tools without it still call the Gemini SDK directly (images, chat history,
+  // Google Search), so a Claude model would just fall back to their default.
+  claudeOk?: boolean
 }
+
+const isClaude = (id: string) => id.toLowerCase().startsWith("claude-")
 type ModelRow = {
   id: string
   displayName?: string
@@ -58,17 +65,28 @@ export default function AiModelsPage() {
   const [tests, setTests]       = useState<Record<string, TestState | "testing">>({})
   const [testingAll, setTestingAll] = useState(false)
 
+  // Prices, USD per 1M tokens. `overrides` = what an admin has corrected;
+  // anything absent falls back to the built-in table in lib/ai-pricing.ts.
+  const [overrides, setOverrides]   = useState<Record<string, ModelRate>>({})
+  const [rateEdits, setRateEdits]   = useState<Record<string, { input: string; output: string }>>({})
+  const [savingRates, setSavingRates] = useState(false)
+  const [ratesSavedAt, setRatesSavedAt] = useState(0)
+
   async function load() {
     setLoading(true); setError("")
     try {
-      const [tr, mr] = await Promise.all([
+      const [tr, mr, rr] = await Promise.all([
         fetch("/api/admin/ai-models").then((r) => r.json()),
         fetch("/api/auction-ai/model-config").then((r) => r.json()),
+        // Prices are a nice-to-have — a failure here must not stop the page.
+        fetch("/api/ai-rates").then((r) => r.json()).catch(() => ({})),
       ])
       if (tr.error) throw new Error(tr.error)
       setTools(tr.tools ?? [])
       setEdits(Object.fromEntries((tr.tools ?? []).map((t: Tool) => [t.slot, t.configured ?? ""])))
       setAllModels(mr.models ?? [])
+      setOverrides(rr?.overrides ?? {})
+      setRateEdits({})
     } catch (e: any) {
       setError(e?.message ?? "Failed to load")
     } finally {
@@ -88,8 +106,11 @@ export default function AiModelsPage() {
   )
   const enabledCount = allModels.filter((m) => m.enabled).length
 
-  function optionsFor(current: string) {
-    const set = new Set(enabledModels)
+  // ⚠ Claude ids are only offered for slots whose route goes through
+  // generateAiText. Listing them everywhere would let an admin pick a model
+  // that silently falls back to Gemini — a dropdown that lies.
+  function optionsFor(current: string, claudeOk?: boolean) {
+    const set = new Set(enabledModels.filter((m) => claudeOk || !isClaude(m)))
     if (current) set.add(current) // keep a configured value visible even if since-disabled
     return [...set].sort()
   }
@@ -154,6 +175,43 @@ export default function AiModelsPage() {
     setTestingAll(false)
   }
 
+  // Every model a price could matter for: the ones Google lists, plus anything
+  // a tool is actually pointed at (that's where Claude ids come from), plus
+  // anything already overridden.
+  const pricedModels = useMemo(() => {
+    const set = new Set<string>()
+    for (const m of allModels) if (m.enabled) set.add(m.id)
+    for (const t of tools) { if (t.effective) set.add(t.effective); if (t.configured) set.add(t.configured) }
+    for (const id of Object.keys(overrides)) set.add(id)
+    return [...set].sort()
+  }, [allModels, tools, overrides])
+
+  const ratesDirty = Object.keys(rateEdits).length > 0
+
+  async function saveRates() {
+    setSavingRates(true); setError("")
+    try {
+      const updates = Object.entries(rateEdits).map(([modelId, v]) => ({
+        modelId,
+        inputPerM:  v.input.trim()  === "" ? null : Number(v.input),
+        outputPerM: v.output.trim() === "" ? null : Number(v.output),
+      }))
+      const r = await fetch("/api/ai-rates", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ updates }),
+      })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || "Save failed")
+      setOverrides(j.overrides ?? {})
+      setRateEdits({})
+      setRatesSavedAt(Date.now())
+    } catch (e: any) {
+      setError(`${e?.message ?? "Save failed"} — if it mentions a missing table, run the Migrations button on /admin first.`)
+    } finally {
+      setSavingRates(false)
+    }
+  }
+
   const groups = useMemo(() => {
     const order: string[] = []
     const byGroup: Record<string, Tool[]> = {}
@@ -191,7 +249,8 @@ export default function AiModelsPage() {
               className="text-sm rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#0d0f1a] text-gray-800 dark:text-gray-200 px-2 py-1.5 max-w-[16rem]"
             >
               <option value="">Default (each tool's built-in)</option>
-              {enabledModels.map((m) => <option key={m} value={m}>{m}</option>)}
+              {/* Bulk-set never offers Claude — it would hit the Gemini-only tools. */}
+              {enabledModels.filter((m) => !isClaude(m)).map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
             <button
               onClick={applyToAll}
@@ -216,6 +275,12 @@ export default function AiModelsPage() {
                           <p className="text-sm text-gray-800 dark:text-gray-200 truncate">{t.label}</p>
                           <p className="text-[11px] text-gray-500 dark:text-gray-500">
                             Using: <span className="font-medium">{val || t.default}</span>{!val && <span> (default)</span>}
+                            {isClaude(val || t.default) && (
+                              <span className="ml-1.5 text-amber-600 dark:text-amber-500">· Anthropic — costs more per use than Gemini</span>
+                            )}
+                            {!t.claudeOk && (
+                              <span className="ml-1.5 text-gray-400 dark:text-gray-600">· Gemini only (this tool sends images or uses Google Search)</span>
+                            )}
                           </p>
                         </div>
                         <select
@@ -224,7 +289,7 @@ export default function AiModelsPage() {
                           className="text-sm rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#0d0f1a] text-gray-800 dark:text-gray-200 px-2 py-1.5 max-w-[18rem]"
                         >
                           <option value="">Default ({t.default})</option>
-                          {optionsFor(val).map((m) => <option key={m} value={m}>{m}</option>)}
+                          {optionsFor(val, t.claudeOk).map((m) => <option key={m} value={m}>{m}</option>)}
                         </select>
                       </div>
                     )
@@ -244,6 +309,89 @@ export default function AiModelsPage() {
             </button>
             {dirty && !saving && <span className="text-xs text-amber-600 dark:text-amber-400">Unsaved changes</span>}
             {!dirty && savedAt > 0 && <span className="text-xs text-green-600 dark:text-green-400">Saved</span>}
+          </div>
+
+          {/* ── Prices, used by the run cost estimate ── */}
+          <div className="border-t border-gray-200 dark:border-gray-800 pt-6 mb-8">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">What each model costs</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+              USD per 1,000,000 tokens — the unit Anthropic and Google both bill in, so these can be checked straight
+              against a bill. This is what the <span className="font-medium">estimated cost</span> shown before a run on
+              Auction AI is worked out from.
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-500 mb-4">
+              Leave a row blank to use the built-in figure. <span className="text-emerald-600 dark:text-emerald-400">Published</span> = taken
+              from the provider&apos;s own price list. <span className="text-amber-600 dark:text-amber-400">Assumed</span> = our best
+              match to their list, worth checking against a real bill. <span className="text-blue-600 dark:text-blue-400">Yours</span> = you
+              set it here.
+            </p>
+
+            {pricedModels.length === 0 ? (
+              <p className="text-sm text-gray-500">No models to price yet.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {pricedModels.map((id) => {
+                  const current = rateFor(id, overrides)
+                  const edit = rateEdits[id]
+                  const tone =
+                    current?.source === "override"  ? "text-blue-600 dark:text-blue-400"
+                    : current?.source === "published" ? "text-emerald-600 dark:text-emerald-400"
+                    : current?.source === "assumed"   ? "text-amber-600 dark:text-amber-400"
+                    : "text-gray-500"
+                  const label =
+                    current?.source === "override"  ? "Yours"
+                    : current?.source === "published" ? "Published"
+                    : current?.source === "assumed"   ? "Assumed"
+                    : "Not set"
+                  const setEdit = (patch: Partial<{ input: string; output: string }>) =>
+                    setRateEdits((p) => ({
+                      ...p,
+                      [id]: {
+                        input:  patch.input  ?? p[id]?.input  ?? (overrides[id] ? String(overrides[id].inputPerM)  : ""),
+                        output: patch.output ?? p[id]?.output ?? (overrides[id] ? String(overrides[id].outputPerM) : ""),
+                      },
+                    }))
+                  return (
+                    <div key={id} className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-800 px-3 py-2">
+                      <span className="font-mono text-xs text-gray-800 dark:text-gray-200 flex-1 min-w-[14rem] truncate">{id}</span>
+                      <span className={`text-[11px] font-semibold w-20 ${tone}`}>{label}</span>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
+                        In $
+                        <input
+                          type="number" min="0" step="0.01" inputMode="decimal"
+                          value={edit?.input ?? (overrides[id] ? String(overrides[id].inputPerM) : "")}
+                          placeholder={current ? String(current.inputPerM) : "—"}
+                          onChange={(e) => setEdit({ input: e.target.value })}
+                          className="w-24 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#0d0f1a] px-2 py-1 text-gray-900 dark:text-gray-100"
+                        />
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
+                        Out $
+                        <input
+                          type="number" min="0" step="0.01" inputMode="decimal"
+                          value={edit?.output ?? (overrides[id] ? String(overrides[id].outputPerM) : "")}
+                          placeholder={current ? String(current.outputPerM) : "—"}
+                          onChange={(e) => setEdit({ output: e.target.value })}
+                          className="w-24 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#0d0f1a] px-2 py-1 text-gray-900 dark:text-gray-100"
+                        />
+                      </label>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 mt-4">
+              <button
+                onClick={saveRates}
+                disabled={!ratesDirty || savingRates}
+                className="rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2"
+              >
+                {savingRates ? "Saving…" : "Save prices"}
+              </button>
+              {ratesDirty && !savingRates && <span className="text-xs text-amber-600 dark:text-amber-400">Unsaved changes</span>}
+              {!ratesDirty && ratesSavedAt > 0 && <span className="text-xs text-green-600 dark:text-green-400">Saved</span>}
+            </div>
           </div>
 
           {/* ── Available models (enable/disable + test) ── */}

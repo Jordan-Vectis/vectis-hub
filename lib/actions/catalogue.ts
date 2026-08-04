@@ -9,6 +9,7 @@ import {
 } from "@/lib/lot-log"
 import { headers } from "next/headers"
 import { evaluateIdleGate, logIdleDecision, clockLooksTampered } from "@/lib/idle-gate"
+import { buildToteMap, checkLot, toteLookupVariants } from "@/lib/tote-check"
 import { ukDayStartUtc } from "@/lib/cataloguing-reports"
 
 // First 83 characters of the description — no sentence splitting, full stops do not break title
@@ -296,6 +297,356 @@ export async function saveLastLotFields(fields: { tote?: string; vendor?: string
       lastReceipt: (fields.receipt ?? "").trim() || null,
     },
   })
+}
+
+// ── Change Vendor (Manage Lots → Tools) ─────────────────────────────────────
+// Type a tote OR a receipt, and the vendor/receipt behind it is looked up in the
+// BC-synced tote data — the same table the wizard's tote box reads — so the
+// answer matches what Tote Check will say afterwards.
+//
+// Replaced "Pull Vendor/Receipt from Totes", which only filled BLANKS and read
+// the separate INTERNAL warehouse tables, so it could neither correct a wrong
+// vendor nor see a tote that only exists in BC.
+export async function lookupToteOrReceipt(query: string): Promise<{
+  ok: boolean
+  error?: string
+  kind?: "tote" | "receipt"
+  tote?: string | null
+  receipt?: string | null
+  vendor?: string | null
+  vendorName?: string | null
+  toteCount?: number
+}> {
+  try {
+    await requireCataloguer()
+    const q = query.trim()
+    if (!q) return { ok: false, error: "Type a tote or receipt number." }
+
+    // Prisma's `in` is case-sensitive and these get hand-typed.
+    const variants = [q, q.toUpperCase(), q.toLowerCase()]
+
+    const byTote = await prisma.warehouseTote.findFirst({
+      where:  { toteNo: { in: variants } },
+      select: { toteNo: true, receiptNo: true, vendorNo: true, vendorName: true },
+    })
+    if (byTote) {
+      return {
+        ok: true, kind: "tote",
+        tote: byTote.toteNo, receipt: byTote.receiptNo,
+        vendor: byTote.vendorNo, vendorName: byTote.vendorName,
+      }
+    }
+
+    const byReceipt = await prisma.warehouseTote.findMany({
+      where:  { receiptNo: { in: variants } },
+      select: { toteNo: true, receiptNo: true, vendorNo: true, vendorName: true },
+    })
+    if (byReceipt.length === 0) {
+      return { ok: false, error: `Nothing in the BC tote data matches "${q}". Check the number, or refresh the data on BC Warehouse → Data Sync.` }
+    }
+    // A receipt normally has one vendor across its totes. If BC disagrees with
+    // itself, say so rather than picking one at random.
+    const vendors = [...new Set(byReceipt.map(t => (t.vendorNo ?? "").trim()).filter(Boolean))]
+    if (vendors.length > 1) {
+      return { ok: false, error: `Receipt ${q} has more than one vendor in BC (${vendors.join(", ")}) — enter a tote instead.` }
+    }
+    const first = byReceipt[0]
+    return {
+      ok: true, kind: "receipt",
+      tote: null, receipt: first.receiptNo,
+      vendor: first.vendorNo, vendorName: first.vendorName,
+      toteCount: byReceipt.length,
+    }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Lookup failed" }
+  }
+}
+
+// Put the looked-up vendor/receipt onto the chosen lots.
+//
+// ⚠ Requires an explicit selection — deliberately NO "else the whole auction"
+// fallback like the description tools have. Moving every lot in a sale onto one
+// vendor by a mis-click is not a mistake worth making easy.
+//
+// ⚠ An existing receiptUniqueId is PRESERVED; one is only minted where it's
+// missing (same rule as everywhere else — see RULES → Lot Identifiers).
+export async function setLotsVendorReceipt(
+  auctionId: string,
+  lotIds: string[],
+  input: { vendor: string; receipt: string },
+): Promise<{ ok: boolean; error?: string; updated?: number }> {
+  try {
+    const session = await requireCataloguer()
+    await requireNotBCLocked(auctionId, session)
+
+    if (lotIds.length === 0) return { ok: false, error: "Tick the lots you want to change first." }
+    const vendor  = input.vendor.trim()
+    const receipt = input.receipt.trim()
+    if (!vendor && !receipt) return { ok: false, error: "Nothing to set." }
+
+    const lots = await prisma.catalogueLot.findMany({
+      where:  { id: { in: lotIds }, auctionId },
+      select: { id: true, vendor: true, receipt: true, receiptUniqueId: true },
+    })
+    if (lots.length === 0) return { ok: false, error: "None of those lots are in this auction." }
+
+    // One running suffix per receipt for the lots that need a unique ID.
+    let offset = receipt ? await maxReceiptSuffix(receipt) : 0
+
+    const ctx: LotLogCtx = { changedBy: changedByOf(session), source: "vendor_change", batchId: newBatchId() }
+    const undo: { lotId: string; fields: Record<string, { before: unknown; after: unknown }> }[] = []
+    let updated = 0
+
+    for (const lot of lots) {
+      const data: Record<string, string> = {}
+      if (vendor  && lot.vendor  !== vendor)  data.vendor  = vendor
+      if (receipt && lot.receipt !== receipt) data.receipt = receipt
+      if (receipt && !lot.receiptUniqueId) data.receiptUniqueId = `${receipt}-${++offset}`
+      if (Object.keys(data).length === 0) continue
+
+      const fields: Record<string, { before: unknown; after: unknown }> = {}
+      if (data.vendor          !== undefined) fields.vendor          = { before: lot.vendor,          after: data.vendor }
+      if (data.receipt         !== undefined) fields.receipt         = { before: lot.receipt,         after: data.receipt }
+      if (data.receiptUniqueId !== undefined) fields.receiptUniqueId = { before: lot.receiptUniqueId, after: data.receiptUniqueId }
+
+      await updateLotLogged(lot.id, data, ctx)
+      undo.push({ lotId: lot.id, fields })
+      updated++
+    }
+
+    await recordBulkUndo(auctionId, session, `Change vendor / receipt (${updated})`, undo)
+    revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+    return { ok: true, updated }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Couldn't change those lots" }
+  }
+}
+
+// ── Tote Check → "Match BC" ─────────────────────────────────────────────────
+// Corrects every lot whose Vendor / Receipt disagrees with the BC tote data.
+// BC is treated as correct, so the LOT is what gets rewritten.
+//
+// ⚠ Where the Hub held a WRONG value (not merely a blank), that wrong value was
+// most likely pushed into BC when the sale went over — so before overwriting it
+// we write a CatalogueBcCorrection row. That row is the only remaining record of
+// the discrepancy once the lot is fixed, and it drives the BC Corrections tab.
+//
+// ⚠ receiptUniqueId is deliberately NOT re-minted. It is an identity field (AI
+// runs, receipt matching, anything already in BC) and rewriting hundreds of them
+// as a side effect of a tidy-up is a separate, deliberate decision — see RULES →
+// Lot Identifiers. Corrected lots will therefore still report "unique_id_mismatch"
+// on the Tote Check tab; that is honest, not a bug.
+export async function autocorrectLotsFromTotes(auctionId: string): Promise<{
+  ok: boolean
+  error?: string
+  updated?: number
+  corrections?: number
+  skipped?: number
+}> {
+  try {
+    const session = await requireCataloguer()
+    // Same rule as everywhere else: an auction that's gone to BC is admin-only.
+    await requireNotBCLocked(auctionId, session)
+
+    const lots = await prisma.catalogueLot.findMany({
+      where:  { auctionId },
+      select: {
+        id: true, barcode: true, receiptUniqueId: true, title: true,
+        vendor: true, tote: true, receipt: true,
+      },
+      orderBy: { createdAt: "asc" },
+    })
+
+    const variants = toteLookupVariants(lots)
+    const totes = variants.length > 0
+      ? await prisma.warehouseTote.findMany({
+          where:  { toteNo: { in: variants } },
+          select: { toteNo: true, receiptNo: true, vendorNo: true, vendorName: true },
+        })
+      : []
+    const toteMap = buildToteMap(totes)
+
+    const ctx: LotLogCtx = { changedBy: changedByOf(session), source: "tote_autocorrect", batchId: newBatchId() }
+    let updated = 0, corrections = 0, skipped = 0
+
+    for (const lot of lots) {
+      const { issues, tote } = checkLot(lot, toteMap)
+      // Nothing to correct against — a missing or unknown tote is reported, not
+      // guessed at.
+      if (!tote) { if (issues.length) skipped++; continue }
+
+      const data: Record<string, string> = {}
+      if (issues.includes("receipt_mismatch") || issues.includes("receipt_missing")) {
+        if (tote.receiptNo) data.receipt = tote.receiptNo
+      }
+      if (issues.includes("vendor_mismatch") || issues.includes("vendor_missing")) {
+        if (tote.vendorNo) data.vendor = tote.vendorNo
+      }
+      if (Object.keys(data).length === 0) continue
+
+      // Only a WRONG value means BC needs putting right. A blank one was never
+      // pushed as anything, so filling it in isn't a BC correction.
+      const wasWrong = issues.includes("receipt_mismatch") || issues.includes("vendor_mismatch")
+
+      await updateLotLogged(lot.id, data, ctx)
+      updated++
+
+      if (wasWrong) {
+        await prisma.catalogueBcCorrection.upsert({
+          where:  { auctionId_lotId: { auctionId, lotId: lot.id } },
+          create: {
+            auctionId, lotId: lot.id,
+            barcode: lot.barcode, receiptUniqueId: lot.receiptUniqueId, title: lot.title,
+            tote: lot.tote,
+            oldVendor: lot.vendor, oldReceipt: lot.receipt,
+            newVendor: tote.vendorNo, newReceipt: tote.receiptNo,
+            correctedBy: changedByOf(session),
+          },
+          // Re-running the button must not resurrect a ticked-off correction as
+          // new work, so `done` is left alone on update.
+          update: {
+            barcode: lot.barcode, receiptUniqueId: lot.receiptUniqueId, title: lot.title,
+            tote: lot.tote,
+            oldVendor: lot.vendor, oldReceipt: lot.receipt,
+            newVendor: tote.vendorNo, newReceipt: tote.receiptNo,
+            correctedBy: changedByOf(session),
+          },
+        })
+        corrections++
+      }
+    }
+
+    revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+    return { ok: true, updated, corrections, skipped }
+  } catch (e: any) {
+    // Returned, not thrown — production redacts a thrown server action's message
+    // and the BC lock message is one the user needs to read (RULES).
+    return { ok: false, error: e?.message ?? "Couldn't correct the lots" }
+  }
+}
+
+// Tick / untick one BC correction. Any signed-in cataloguer — this is a shared
+// worklist, not a per-user one.
+//
+// ⚠ Keyed on the LOT, not on a row id, and it UPSERTS. The list is live: most
+// rows are a mismatch computed on the spot and have no saved row yet, and
+// ticking one is what first records it. The snapshot is only written on create —
+// on a row Match BC already wrote, the stored values are the ones that were
+// real at the time and must not be replaced by whatever the lot says now.
+export async function setBcCorrectionDone(input: {
+  auctionId: string
+  lotId:     string
+  done:      boolean
+  snapshot?: {
+    barcode:         string | null
+    receiptUniqueId: string | null
+    title:           string | null
+    tote:            string | null
+    oldVendor:       string | null
+    oldReceipt:      string | null
+    newVendor:       string | null
+    newReceipt:      string | null
+  }
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const session = await requireCataloguer()
+    const { auctionId, lotId, done, snapshot } = input
+    const doneFields = done
+      ? { done: true,  doneBy: changedByOf(session), doneAt: new Date() }
+      : { done: false, doneBy: null, doneAt: null }
+
+    await prisma.catalogueBcCorrection.upsert({
+      where:  { auctionId_lotId: { auctionId, lotId } },
+      create: { auctionId, lotId, ...(snapshot ?? {}), ...doneFields },
+      update: doneFields,
+    })
+    return { ok: true }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Couldn't save" }
+  }
+}
+
+// ── Lot Wizard "Resume lot" draft ───────────────────────────────────────────
+// The lot someone is part-way through, autosaved as they type so a crash, a
+// sign-out or a closed tab doesn't lose it. One row per user per sale, on the
+// SERVER on purpose: it has to survive picking up a different iPad.
+//
+// ⚠ Every one of these swallows its errors (silent no-op / null). A draft is a
+// convenience — a failure here must never interrupt cataloguing, and the table
+// only exists once Run Migrations has been clicked, while the code reaches
+// Railway immediately (same reasoning as lib/departments.ts).
+export type LotDraftFields = {
+  step: number
+  vendor: string
+  tote: string
+  receipt: string
+  barcode: string
+  keyPoints: string
+  aiExcluded: boolean
+  manualDesc: string
+  category: string
+  subCategory: string
+  brand: string
+  estimateLow: string
+  estimateHigh: string
+  cond1: string
+  cond2: string
+  boxOn: boolean
+  boxPrefixMode: string
+  boxCustomPrefix: string
+  boxCond1: string
+  boxCond2: string
+  parcel: string
+  photoCount: number
+}
+
+export async function saveLotDraft(auctionId: string, draft: LotDraftFields): Promise<void> {
+  try {
+    const session = await auth()
+    if (!session) return
+    // userId comes from the session, never the caller — a draft is only ever
+    // your own.
+    const userId = session.user.id
+    await prisma.catalogueLotDraft.upsert({
+      where:  { auctionId_userId: { auctionId, userId } },
+      create: { auctionId, userId, ...draft },
+      update: draft,
+    })
+  } catch { /* draft is best-effort — never block the wizard */ }
+}
+
+export async function getLotDraft(auctionId: string): Promise<
+  (LotDraftFields & { startedAt: number; updatedAt: number }) | null
+> {
+  try {
+    const session = await auth()
+    if (!session) return null
+    const d = await prisma.catalogueLotDraft.findUnique({
+      where: { auctionId_userId: { auctionId, userId: session.user.id } },
+    })
+    if (!d) return null
+    return {
+      step: d.step,
+      vendor: d.vendor, tote: d.tote, receipt: d.receipt, barcode: d.barcode,
+      keyPoints: d.keyPoints, aiExcluded: d.aiExcluded, manualDesc: d.manualDesc,
+      category: d.category, subCategory: d.subCategory, brand: d.brand,
+      estimateLow: d.estimateLow, estimateHigh: d.estimateHigh,
+      cond1: d.cond1, cond2: d.cond2,
+      boxOn: d.boxOn, boxPrefixMode: d.boxPrefixMode, boxCustomPrefix: d.boxCustomPrefix,
+      boxCond1: d.boxCond1, boxCond2: d.boxCond2,
+      parcel: d.parcel, photoCount: d.photoCount,
+      startedAt: d.startedAt.getTime(),
+      updatedAt: d.updatedAt.getTime(),
+    }
+  } catch { return null }
+}
+
+export async function clearLotDraft(auctionId: string): Promise<void> {
+  try {
+    const session = await auth()
+    if (!session) return
+    await prisma.catalogueLotDraft.deleteMany({ where: { auctionId, userId: session.user.id } })
+  } catch { /* nothing to clean up if the table isn't there yet */ }
 }
 
 // Is this barcode already assigned to a lot ANYWHERE in the app? Deliberately

@@ -1170,6 +1170,114 @@ const MIGRATIONS = [
     "hiddenAt"     TIMESTAMP(3) NOT NULL DEFAULT NOW(),
     CONSTRAINT "ManagerPortalHiddenCategory_pkey" PRIMARY KEY ("category")
   )`,
+
+  // ── Lot Wizard "Resume lot": the in-progress lot, autosaved as they type ──
+  // One row per user per sale. Photos are not kept (photoCount is only so the
+  // resume banner can say how many need retaking).
+  `CREATE TABLE IF NOT EXISTS "CatalogueLotDraft" (
+    "id"              TEXT NOT NULL,
+    "auctionId"       TEXT NOT NULL,
+    "userId"          TEXT NOT NULL,
+    "step"            INTEGER NOT NULL DEFAULT 2,
+    "vendor"          TEXT NOT NULL DEFAULT '',
+    "tote"            TEXT NOT NULL DEFAULT '',
+    "receipt"         TEXT NOT NULL DEFAULT '',
+    "barcode"         TEXT NOT NULL DEFAULT '',
+    "keyPoints"       TEXT NOT NULL DEFAULT '',
+    "aiExcluded"      BOOLEAN NOT NULL DEFAULT FALSE,
+    "manualDesc"      TEXT NOT NULL DEFAULT '',
+    "category"        TEXT NOT NULL DEFAULT '',
+    "subCategory"     TEXT NOT NULL DEFAULT '',
+    "brand"           TEXT NOT NULL DEFAULT '',
+    "estimateLow"     TEXT NOT NULL DEFAULT '',
+    "estimateHigh"    TEXT NOT NULL DEFAULT '',
+    "cond1"           TEXT NOT NULL DEFAULT '',
+    "cond2"           TEXT NOT NULL DEFAULT '',
+    "boxOn"           BOOLEAN NOT NULL DEFAULT FALSE,
+    "boxPrefixMode"   TEXT NOT NULL DEFAULT 'Box is',
+    "boxCustomPrefix" TEXT NOT NULL DEFAULT '',
+    "boxCond1"        TEXT NOT NULL DEFAULT '',
+    "boxCond2"        TEXT NOT NULL DEFAULT '',
+    "parcel"          TEXT NOT NULL DEFAULT '',
+    "photoCount"      INTEGER NOT NULL DEFAULT 0,
+    "startedAt"       TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt"       TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "CatalogueLotDraft_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "CatalogueLotDraft_auctionId_userId_key" ON "CatalogueLotDraft"("auctionId", "userId")`,
+  `CREATE INDEX IF NOT EXISTS "CatalogueLotDraft_userId_idx" ON "CatalogueLotDraft"("userId")`,
+  `DO $$ BEGIN
+    ALTER TABLE "CatalogueLotDraft" ADD CONSTRAINT "CatalogueLotDraft_auctionId_fkey"
+      FOREIGN KEY ("auctionId") REFERENCES "CatalogueAuction"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  `DO $$ BEGIN
+    ALTER TABLE "CatalogueLotDraft" ADD CONSTRAINT "CatalogueLotDraft_userId_fkey"
+      FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+
+  // ── Tote Check → "Match BC": what BC still needs putting right ──
+  // Written when a lot's wrong Vendor/Receipt is corrected to the BC tote data,
+  // because afterwards the lot no longer carries the wrong values.
+  `CREATE TABLE IF NOT EXISTS "CatalogueBcCorrection" (
+    "id"              TEXT NOT NULL,
+    "auctionId"       TEXT NOT NULL,
+    "lotId"           TEXT NOT NULL,
+    "barcode"         TEXT,
+    "receiptUniqueId" TEXT,
+    "title"           TEXT,
+    "tote"            TEXT,
+    "oldVendor"       TEXT,
+    "oldReceipt"      TEXT,
+    "newVendor"       TEXT,
+    "newReceipt"      TEXT,
+    "done"            BOOLEAN NOT NULL DEFAULT FALSE,
+    "doneBy"          TEXT,
+    "doneAt"          TIMESTAMP(3),
+    "correctedBy"     TEXT,
+    "createdAt"       TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt"       TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "CatalogueBcCorrection_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "CatalogueBcCorrection_auctionId_lotId_key" ON "CatalogueBcCorrection"("auctionId", "lotId")`,
+  `CREATE INDEX IF NOT EXISTS "CatalogueBcCorrection_auctionId_done_idx" ON "CatalogueBcCorrection"("auctionId", "done")`,
+  `DO $$ BEGIN
+    ALTER TABLE "CatalogueBcCorrection" ADD CONSTRAINT "CatalogueBcCorrection_auctionId_fkey"
+      FOREIGN KEY ("auctionId") REFERENCES "CatalogueAuction"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+
+  // ── IT Tools → BC Source: the Evo-soft AL source, uploaded as a zip ──
+  `CREATE TABLE IF NOT EXISTS "BcSourceFile" (
+    "id"         TEXT NOT NULL,
+    "extension"  TEXT NOT NULL,
+    "path"       TEXT NOT NULL,
+    "name"       TEXT NOT NULL,
+    "kind"       TEXT NOT NULL,
+    "content"    TEXT NOT NULL,
+    "size"       INTEGER NOT NULL,
+    "uploadedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "BcSourceFile_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "BcSourceFile_path_key" ON "BcSourceFile"("path")`,
+  `CREATE INDEX IF NOT EXISTS "BcSourceFile_extension_idx" ON "BcSourceFile"("extension")`,
+  `CREATE TABLE IF NOT EXISTS "BcSourceGuide" (
+    "extension"   TEXT NOT NULL,
+    "content"     TEXT NOT NULL,
+    "model"       TEXT,
+    "generatedBy" TEXT,
+    "edited"      BOOLEAN NOT NULL DEFAULT FALSE,
+    "generatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    "updatedAt"   TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "BcSourceGuide_pkey" PRIMARY KEY ("extension")
+  )`,
+
+  // Admin-corrected AI prices (USD per 1M tokens) for the run cost estimator.
+  `CREATE TABLE IF NOT EXISTS "AiModelRate" (
+    "modelId"    TEXT NOT NULL,
+    "inputPerM"  DOUBLE PRECISION NOT NULL,
+    "outputPerM" DOUBLE PRECISION NOT NULL,
+    "updatedAt"  TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "AiModelRate_pkey" PRIMARY KEY ("modelId")
+  )`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

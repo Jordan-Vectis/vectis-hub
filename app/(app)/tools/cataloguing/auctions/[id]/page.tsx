@@ -178,6 +178,7 @@ export default async function AuctionDetailPage({
           addedToBC: l.addedToBC,
           aiExcluded: l.aiExcluded,
           createdByName: l.createdByName,
+          createdAt: l.createdAt.toISOString(),
           imageUrls: l.imageUrls,
           extraDetails: l.extraDetails ?? null,
         }))}

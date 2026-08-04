@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { CLAUDE_MODELS } from "@/lib/ai-models"
 
 export async function GET() {
   const session = await auth()
@@ -32,6 +33,22 @@ export async function GET() {
         description:     m.description,
         inputTokenLimit:  m.inputTokenLimit,
         outputTokenLimit: m.outputTokenLimit,
+      }
+    }
+
+    // Anthropic has no list endpoint to poll, so Claude's ids come from the
+    // registry — and only when this environment actually has a key, so the
+    // dropdown never offers a model that would fall straight back to Gemini.
+    if (process.env.ANTHROPIC_API_KEY) {
+      for (const c of CLAUDE_MODELS) {
+        if (disabled.has(c.id)) continue
+        models.push(c.id)
+        details[c.id] = {
+          displayName:      c.displayName,
+          description:      c.description,
+          inputTokenLimit:  c.inputTokenLimit,
+          outputTokenLimit: c.outputTokenLimit,
+        }
       }
     }
 

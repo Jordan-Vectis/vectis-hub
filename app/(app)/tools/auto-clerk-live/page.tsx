@@ -77,8 +77,16 @@ const AUTOMATIC_ON_SALEROOM = new Set(['Online', 'Saleroom'])
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+// Same presets as the Scenario 1 rig — the shadow page previously hardcoded
+// production, so it couldn't watch a staging auction at all.
+const WS_PRESETS = [
+  { label: 'Production', base: 'wss://www.vectis.co.uk/wss/' },
+  { label: 'Staging',    base: 'wss://staging.vectis.auctionmarketer.co.uk/wss/' },
+]
+
 export default function AutoClerkLivePage() {
   const [auctionId, setAuctionId]   = useState('')
+  const [wsBase, setWsBase]         = useState(WS_PRESETS[0].base)
   const [connState, setConnState]   = useState<ConnState>('idle')
   const [actions, setActions]       = useState<ActionEntry[]>([])
   const [liveState, setLiveState]   = useState<LiveState>({
@@ -294,10 +302,6 @@ export default function AutoClerkLivePage() {
       return
     }
 
-    // Non-sold lotInformationUpdate updates are ignored silently
-    if (cmd === 'lotInformationUpdate') {
-      return
-    }
   }
 
   // ── Connect / disconnect ──────────────────────────────────────────────────
@@ -312,11 +316,17 @@ export default function AutoClerkLivePage() {
     setConnState('closed')
   }, [])
 
+  // Restore the last-used WS base (per machine, like the Scenario 1 rig)
+  useEffect(() => {
+    const saved = localStorage.getItem('autoClerkLive_wsBase')
+    if (saved) setWsBase(saved)
+  }, [])
+
   const connect = useCallback((id: string) => {
     if (!id.trim()) return
     disconnect()
 
-    const url = `wss://www.vectis.co.uk/wss/${id.trim()}`
+    const url = `${wsBase.endsWith('/') ? wsBase : wsBase + '/'}${id.trim()}`
     setConnState('connecting')
     addAction('info', `Connecting to Bidpath — auction ${id.trim()}`, url)
 
@@ -349,7 +359,7 @@ export default function AutoClerkLivePage() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [disconnect])
+  }, [disconnect, wsBase])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -454,6 +464,19 @@ export default function AutoClerkLivePage() {
 
         {/* Connect form */}
         <div className="mt-4 flex items-center gap-3 flex-wrap">
+          <label className="text-sm text-slate-400 shrink-0">Feed:</label>
+          <select
+            value={wsBase}
+            onChange={e => {
+              setWsBase(e.target.value)
+              localStorage.setItem('autoClerkLive_wsBase', e.target.value)
+            }}
+            disabled={connState === 'open' || connState === 'connecting'}
+            className="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {WS_PRESETS.map(p => <option key={p.base} value={p.base}>{p.label}</option>)}
+            {!WS_PRESETS.some(p => p.base === wsBase) && <option value={wsBase}>Custom</option>}
+          </select>
           <label className="text-sm text-slate-400 shrink-0">Bidpath Auction ID:</label>
           <input
             type="text"

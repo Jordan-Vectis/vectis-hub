@@ -91,6 +91,28 @@ export type TodayIdleSession = {
   startedAt:   string
 }
 
+// One real break — the gap the system measured — with the activities the
+// cataloguer said it was made up of.
+//
+// ⚠ Only the BREAK has a time. The popup asks what they were doing and for how
+// long, never in what order, so the per-reason rows are stored back-to-back for
+// convenience and a per-reason clock time would be invented. Show the window on
+// the break; show durations only on the activities inside it.
+export type TodayBreak = {
+  startedAt:  string   // ISO — start of this working-day slice
+  endedAt:    string   // ISO
+  durationMs: number   // length of THIS slice
+  partial:    boolean  // the break also covered another working day
+  wholeMs:    number   // length of the whole break
+  realStart:  string   // ISO — when the break actually began (may be before 9am)
+  reasons: {
+    reason:      string
+    durationMs:  number
+    toteNumbers: string | null
+    notes:       string | null
+  }[]
+}
+
 // Built at module load from defaults; refreshed per-component via useIdleReasons().
 // UNALLOCATED is display-only (popup leftover time) — merged so its logs label
 // nicely, never a pickable/admin-editable reason.
@@ -116,10 +138,12 @@ export function TodayProductivityCard({
   activeMs,
   lotsCount,
   idleSessions,
+  breaks = [],
 }: {
   activeMs:      number
   lotsCount:     number
   idleSessions:  TodayIdleSession[]
+  breaks?:       TodayBreak[]
 }) {
   const reasonConfig = buildReasonConfig(useIdleReasons())
   const totalIdleMs = idleSessions.reduce((s, l) => s + l.durationMs, 0)
@@ -222,7 +246,14 @@ export function TodayProductivityCard({
               </div>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-bold text-orange-500 font-mono">{fmtDuration(totalIdleMs)}</span>
-                <span className="text-xs text-gray-400 dark:text-gray-500">away ({idleSessions.length} session{idleSessions.length !== 1 ? "s" : ""})</span>
+                {/* Real breaks, not stored rows — one answer to the popup writes
+                    a row per activity, so counting rows turned one break into
+                    several. Falls back to rows only if no breaks were passed. */}
+                <span className="text-xs text-gray-400 dark:text-gray-500">
+                  {breaks.length > 0
+                    ? `away (${breaks.length} break${breaks.length !== 1 ? "s" : ""})`
+                    : `away (${idleSessions.length} session${idleSessions.length !== 1 ? "s" : ""})`}
+                </span>
               </div>
               {unaccountedMs > 0 && (
                 <div className="flex items-baseline gap-2">
@@ -243,51 +274,94 @@ export function TodayProductivityCard({
             )}
           </div>
 
-          {/* Idle breakdown */}
+          {/* ── Time away ────────────────────────────────────────────────────
+              Two views of the same time: WHAT it went on (totals per activity —
+              the only thing the cataloguer actually states) and WHEN they were
+              away (the real breaks, each with its own window).                */}
           {byReason.length > 0 && (
-            <div className="border-t border-gray-100 dark:border-gray-700 pt-4 space-y-3">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Time Away — Breakdown</p>
-              {byReason.map(({ key, cfg, sessions, totalMs: reasonMs }) => (
-                <div key={key} className="space-y-1.5">
-                  {/* Reason header */}
-                  <div className="flex items-center gap-2">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold border ${cfg.colour}`}>
-                      {cfg.icon} {cfg.label}
-                    </span>
-                    <span className="font-mono font-bold text-sm text-gray-700 dark:text-gray-300">{fmtDuration(reasonMs)}</span>
-                    <span className="text-xs text-gray-400 dark:text-gray-500">
-                      ({sessions.length} session{sessions.length !== 1 ? "s" : ""})
-                    </span>
-                  </div>
+            <div className="border-t border-gray-100 dark:border-gray-700 pt-4 space-y-5">
 
-                  {/* Per-session detail */}
-                  <div className="ml-2 space-y-1">
-                    {sessions.map((s, i) => (
-                      <div key={i} className="flex items-start gap-3 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2">
-                        <span className="text-gray-400 dark:text-gray-500 font-mono whitespace-nowrap shrink-0">
-                          {format(new Date(s.startedAt), "HH:mm")}
+              {/* What the time went on */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Time Away — What It Went On</p>
+                <div className="space-y-1.5">
+                  {[...byReason].sort((a, b) => b.totalMs - a.totalMs).map(({ key, cfg, totalMs: reasonMs }) => {
+                    const pct = totalIdleMs > 0 ? Math.round((reasonMs / totalIdleMs) * 100) : 0
+                    return (
+                      <div key={key} className="flex items-center gap-3">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold border shrink-0 ${cfg.colour}`}>
+                          {cfg.icon} {cfg.label}
                         </span>
-                        <span className="font-mono font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap shrink-0">
-                          {fmtDuration(s.durationMs)}
-                        </span>
-                        {s.toteNumbers && (
-                          <span className="text-blue-600">
-                            Totes: <span className="font-mono font-semibold">{s.toteNumbers}</span>
-                          </span>
-                        )}
-                        {s.notes && (
-                          <span className="text-gray-500 italic break-words">
-                            "{s.notes}"
-                          </span>
-                        )}
-                        {!s.toteNumbers && !s.notes && (
-                          <span className="text-gray-300 italic">No details recorded</span>
-                        )}
+                        <span className="font-mono font-bold text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmtDuration(reasonMs)}</span>
+                        <div className="flex-1 min-w-[40px] h-1.5 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${pct}%`, background: cfg.idleColour }} />
+                        </div>
+                        <span className="text-xs text-gray-400 dark:text-gray-500 w-9 text-right tabular-nums">{pct}%</span>
                       </div>
-                    ))}
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* When they were away — one entry per real break */}
+              {breaks.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    When They Were Away — {breaks.length} break{breaks.length !== 1 ? "s" : ""}
+                  </p>
+                  <div className="space-y-1.5">
+                    {breaks.map((b, i) => {
+                      // The break began before the working day (an overnight or
+                      // early-start gap) and is counted from 09:00.
+                      const carried = new Date(b.realStart).getTime() < new Date(b.startedAt).getTime()
+                      const detailed = b.reasons.filter(r => r.toteNumbers || r.notes)
+                      return (
+                        <div key={i} className="bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2 space-y-1.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">
+                              {format(new Date(b.startedAt), "HH:mm")} – {format(new Date(b.endedAt), "HH:mm")}
+                            </span>
+                            <span className="font-mono font-bold text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                              {fmtDuration(b.durationMs)}
+                            </span>
+                            {carried && (
+                              <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                ↩ began {format(new Date(b.realStart), "EEE HH:mm")} — counted from 9am
+                              </span>
+                            )}
+                          </div>
+                          {/* The activities that made up this break. Durations
+                              only — the popup never asks which came first. */}
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {b.reasons.map((r, j) => {
+                              const cfg = reasonConfig[r.reason] ?? { label: r.reason, icon: "•", colour: "bg-gray-100 text-gray-600 border-gray-200" } as IdleReason
+                              return (
+                                <span key={j} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold border ${cfg.colour}`}>
+                                  {cfg.icon} {cfg.label}
+                                  {!b.partial && <span className="font-mono font-normal opacity-80">{fmtDuration(r.durationMs)}</span>}
+                                </span>
+                              )
+                            })}
+                          </div>
+                          {b.partial && (
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500 italic">
+                              Part of a longer break — {fmtDuration(b.wholeMs)} in total across more than one day, so the times per activity aren&apos;t shown here.
+                            </p>
+                          )}
+                          {detailed.map((r, j) => (
+                            <p key={j} className="text-xs text-gray-500 dark:text-gray-400">
+                              {r.toteNumbers && (
+                                <span className="text-blue-600">Totes: <span className="font-mono font-semibold">{r.toteNumbers}</span> </span>
+                              )}
+                              {r.notes && <span className="italic break-words">&ldquo;{r.notes}&rdquo;</span>}
+                            </p>
+                          ))}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>
@@ -972,9 +1046,11 @@ export type TodayLot = {
 export function TodayTimeline({
   lots,
   idleSessions,
+  breaks = [],
 }: {
   lots:         TodayLot[]
   idleSessions: TodayIdleSession[]
+  breaks?:      TodayBreak[]
 }) {
   const reasonConfig = buildReasonConfig(useIdleReasons())
   const now         = new Date()
@@ -1041,19 +1117,35 @@ export function TodayTimeline({
               {/* Main track */}
               <div className="relative h-12 bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden">
 
-                {/* Idle sessions — orange bars */}
-                {idleSessions.map((session, i) => {
-                  const startMs = new Date(session.startedAt).getTime()
+                {/* Time away — one bar per real BREAK. Drawn from `breaks`
+                    rather than the stored rows: one answer to the popup writes
+                    a row per activity, all starting at the top of the gap, so
+                    drawing rows stacked several bars on the same spot and the
+                    break looked shorter than it was. */}
+                {(breaks.length > 0
+                  ? breaks.map(b => ({
+                      startedAt:  b.startedAt,
+                      durationMs: b.durationMs,
+                      label:      b.reasons.map(r => reasonConfig[r.reason]?.label ?? r.reason).join(" + "),
+                      notes:      b.reasons.map(r => r.notes).filter(Boolean).join(" · "),
+                    }))
+                  : idleSessions.map(s => ({
+                      startedAt:  s.startedAt,
+                      durationMs: s.durationMs,
+                      label:      reasonConfig[s.reason]?.label ?? s.reason,
+                      notes:      s.notes ?? "",
+                    }))
+                ).map((bar, i) => {
+                  const startMs = new Date(bar.startedAt).getTime()
                   const left    = toPct(startMs)
-                  const width   = Math.min(toWidthPct(session.durationMs), 100 - left)
+                  const width   = Math.min(toWidthPct(bar.durationMs), 100 - left)
                   if (left >= 100 || width <= 0) return null
-                  const cfg = reasonConfig[session.reason]
                   return (
                     <div
                       key={i}
                       className="absolute top-0 h-full bg-orange-400/75 hover:bg-orange-400 transition-colors cursor-default"
                       style={{ left: `${left}%`, width: `${width}%` }}
-                      title={`${cfg?.label ?? session.reason} · ${fmtDuration(session.durationMs)} · from ${format(new Date(session.startedAt), "HH:mm")}${session.notes ? ` · "${session.notes}"` : ""}`}
+                      title={`${bar.label} · ${fmtDuration(bar.durationMs)} · from ${format(new Date(bar.startedAt), "HH:mm")}${bar.notes ? ` · "${bar.notes}"` : ""}`}
                     />
                   )
                 })}

@@ -32,13 +32,14 @@ const DATA_CATEGORIES: { cat: string; detail: string }[] = [
 ]
 
 const STORES: { name: string; what: string; location: string }[] = [
-  { name: "Neon (PostgreSQL)", what: "The main database — customer contacts & submissions, bidder registrations, staff accounts, catalogue lots, activity/monitoring logs, accounting records.", location: "Confirm the Neon region. If US/non-UK, an international-transfer safeguard is needed." },
+  { name: "Neon (PostgreSQL)", what: "The main database — customer contacts & submissions, bidder registrations, staff accounts, catalogue lots, activity/monitoring logs, accounting records, and a copy of the Business Central extension source code (vendor code — no personal data).", location: "Confirm the Neon region. If US/non-UK, an international-transfer safeguard is needed." },
   { name: "Cloudflare R2", what: "File storage — lot photos, uploaded documents, invoices, and the nightly database backups.", location: "Confirm the R2 bucket region / jurisdiction." },
   { name: "Railway", what: "Hosting — runs the app servers (production and staging). The database itself is on Neon, not Railway.", location: "Confirm the Railway deployment region." },
 ]
 
 const PROCESSORS: { name: string; what: string; data: string; transfer: string }[] = [
-  { name: "Google (Gemini AI API)", what: "Generates lot descriptions and marketing copy; reads uploaded photos.", data: "Lot photos, cataloguer text and marketing content.", transfer: "Confirm the paid API terms (generally no training on your data — verify) and whether any customer personal data can reach it." },
+  { name: "Google (Gemini AI API)", what: "Generates lot descriptions and marketing copy; reads uploaded photos; edits photos (Photo Prep → AI edit); explains the Business Central source code (IT Tools → BC Source).", data: "Lot photos, cataloguer text, marketing content, photos sent for AI editing, and the vendor's BC source code (no personal data).", transfer: "Confirm the paid API terms (generally no training on your data — verify) and whether any customer personal data can reach it." },
+  { name: "Anthropic (Claude AI API)", what: "Alternative AI provider, selectable per tool in Admin → AI Models; chiefly explaining the Business Central source code.", data: "BC source code, IT knowledge-base text and staff questions — whatever the chosen tool sends.", transfer: "Confirm the paid API terms (no training on your data) and whether any customer personal data can reach it. US-based — an international-transfer safeguard is likely needed." },
   { name: "Microsoft — Business Central", what: "Syncs warehouse, auction and receipt data.", data: "Item, location, receipt and sale data — includes consignor names/addresses.", transfer: "Governed by your existing Microsoft agreement." },
   { name: "Royal Mail — Click & Drop", what: "Dispatch and packing labels.", data: "Customer names and delivery addresses for parcels.", transfer: "UK-based; covered by Royal Mail's terms." },
   { name: "D-ID", what: "The AI Presenter avatar.", data: "Whatever script/likeness is sent to generate the avatar.", transfer: "Take extra care if a real person's likeness is used — likely needs its own basis/consent." },

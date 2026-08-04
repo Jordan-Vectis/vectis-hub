@@ -31,12 +31,16 @@ const MAX_EVENTS = 300
 
 function classify(message: string): GapEventType {
   const m = message.toLowerCase()
-  if (m.includes('internet bid'))                    return 'bid_internet'
-  if (m.includes('room bid') || m === 'room bid')    return 'bid_room'
-  if (m.includes('offered'))                         return 'lot_offered'
-  if (m.includes('sold'))                            return 'lot_sold'
+  // ⚠ Terminal states FIRST. These are substring matches, and GAP messages can
+  // read like "Sold to internet bidder" — with the bid checks first that
+  // classified as bid_internet ("internet bid" is a substring of "internet
+  // bidder") and the HAMMER prompt never fired. Same for "sold to room bidder".
   if (m.includes('fair warning'))                    return 'fair_warning'
-  if (m.includes('passed'))                          return 'lot_passed'
+  if (m.includes('unsold') || m.includes('passed'))  return 'lot_passed'
+  if (m.includes('sold'))                            return 'lot_sold'
+  if (m.includes('offered'))                         return 'lot_offered'
+  if (m.includes('internet bid'))                    return 'bid_internet'
+  if (m.includes('room bid'))                        return 'bid_room'
   if (m.includes('paused'))                          return 'auction_paused'
   if (m.includes('resumed') || m.includes('welcome')) return 'auction_resumed'
   return 'other'
