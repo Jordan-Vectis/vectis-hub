@@ -639,6 +639,22 @@ v1 just told the model to “extend this photograph outwards” and **the result
 Three controls, all shared from lib/photo-edit-presets.ts: **Direction** (all round / ↕ taller / ↔ wider / ↑ above only / ↓ below only — Jordan asked for vertical-vs-horizontal specifically), **How much** (a little / some / a lot = 0.25 / 0.5 / 1.0 × the long edge) and **Shape**. ⚠ A chosen shape now only ever **ADDS** space — it never crops the photo to hit a ratio — and “above only”/“below only” keep the whole of a shape's extra height on that side. \`buildEditPrompt\` no longer takes \`aspect\`: the canvas expresses it, not the wording.
 
 
+## ⚠ Quality — and why the original is composited back (2026-08-04)
+
+Jordan: *“the quality coming back is a bit bad”.* Two causes, one of them serious.
+
+1. **A double squeeze.** The photo was resized to 2048, padded, then resized to 2048 **again** — so the picture itself reached the model at a fraction of its size (with “a lot”, about a third). It now scales **once**, with the *padded canvas* as the 2048 target.
+2. **⚠⚠ The model REDRAWS the whole picture.** It cannot “leave the original pixels alone” however firmly the prompt asks — nano-banana-class models re-render the entire frame. That is a quality loss *and* a **condition-integrity** failure: a redrawn item is no longer evidence of the item's condition, which is the one thing this feature may never touch. So \`extend\` now **composites the ORIGINAL back over the generated canvas at full resolution** (\`featherEdges()\` fades ~20px at any edge that gained canvas, so the joint doesn't show; an edge with no padding stays hard). Only the new border is AI-generated, and the item is **guaranteed** untouched rather than merely asked to be. Output is capped at FINAL_MAX 3000px. ⚠ Compositing applies to **\`extend\` only** — every other preset is *meant* to change the picture, so the model's output is returned as-is.
+
+Padding is also now measured against the **axis being extended** (taller → height, wider → width), not always the long edge — “40% taller” on a wide photo used to be enormous.
+
+If the generated border still isn't good enough, the model slot is the knob: **Admin → AI Models → Photo Prep AI edit** → \`gemini-3-pro-image\` instead of the \`gemini-3.1-flash-image\` default. No code change.
+
+## ⚠ Mobile — the Download button did nothing (2026-08-04)
+
+It set an anchor's \`href\` to the **data: URL** and clicked it while **detached from the DOM**. iOS Safari ignores \`download\` on a \`data:\` URL, and some browsers won't act on an anchor that isn't in the document — so on a phone the button was dead. Now: convert to a **Blob**, offer the **share sheet** first (\`navigator.canShare({files})\` — that's how you get “Save Image” into Photos on iOS; an AbortError means they cancelled, so do *not* then fire a download), and fall back to an object-URL anchor that **is** appended to \`document.body\`. “Download all” deliberately skips the share sheet (one sheet per photo is unusable). The tab also stacks on a phone: filmstrip becomes a horizontal scroller, before/after goes single-column.
+
+
 ## Privacy — the wording had to change
 
 The Prepare tab said "photos are processed on this computer and never uploaded", which was **already not quite true** (the optional "fix with AI" step sends those few photos to Google for a crop box). The header is now per-tab: Prepare says cropping/brightening are local *and* names the AI-crop exception; AI edit says plainly that its photos **are** uploaded, that results carry an invisible SynthID watermark, and that the item is never altered. Gemini's entry on the Data & Compliance and DPIA pages now includes photo editing — keep both in sync.`,
