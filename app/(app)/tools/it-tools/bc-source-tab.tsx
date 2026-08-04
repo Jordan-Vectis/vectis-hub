@@ -16,7 +16,49 @@ type Guide      = { extension: string; content: string; model: string | null; ge
 type SearchHit  = { id: string; extension: string; path: string; name: string; kind: string; hits: { line: number; text: string }[]; more: number }
 // `failed` marks a message that is an error notice rather than a real answer —
 // those are shown but deliberately kept OUT of the history sent back up.
-type ChatMsg    = { role: "user" | "model"; text: string; failed?: boolean; sources?: { id: string; path: string; extension: string }[] }
+type ChatMsg    = { role: "user" | "model"; text: string; failed?: boolean; images?: string[]; sources?: { id: string; path: string; extension: string }[] }
+
+type Attachment = { url: string; mimeType: string; data: string }
+
+// Downscale before sending: a screenshot pasted at full size makes a huge
+// base64 payload and costs tokens. 1800px keeps BC's small on-screen text
+// readable while staying sensible. Mirrors the pattern in jordan/chat-panel.
+async function processImage(file: File): Promise<Attachment> {
+  const dataUrl: string = await new Promise((res, rej) => {
+    const r = new FileReader()
+    r.onload = () => res(String(r.result))
+    r.onerror = () => rej(new Error("read failed"))
+    r.readAsDataURL(file)
+  })
+  const toAttachment = (url: string, fallbackMime: string): Attachment => {
+    const comma = url.indexOf(",")
+    const meta  = url.slice(0, comma)
+    const mime  = meta.slice(5, meta.indexOf(";") >= 0 ? meta.indexOf(";") : meta.length) || fallbackMime
+    return { url, mimeType: mime, data: url.slice(comma + 1) }
+  }
+  try {
+    const img: HTMLImageElement = await new Promise((res, rej) => {
+      const i = new Image()
+      i.onload = () => res(i)
+      i.onerror = () => rej(new Error("decode failed"))
+      i.src = dataUrl
+    })
+    let { width, height } = img
+    const max = 1800
+    if (Math.max(width, height) > max) {
+      const scale = max / Math.max(width, height)
+      width = Math.round(width * scale); height = Math.round(height * scale)
+    }
+    const canvas = document.createElement("canvas")
+    canvas.width = width; canvas.height = height
+    const ctx = canvas.getContext("2d")
+    if (!ctx) throw new Error("no canvas context")
+    ctx.drawImage(img, 0, 0, width, height)
+    return toAttachment(canvas.toDataURL("image/jpeg", 0.9), "image/jpeg")
+  } catch {
+    return toAttachment(dataUrl, file.type || "image/png")
+  }
+}
 
 function fmtBytes(n: number): string {
   if (n < 1024) return `${n} B`
@@ -428,14 +470,28 @@ function AskView({ onOpenFile }: { onOpenFile: (id: string, extension?: string) 
   const [msgs, setMsgs] = useState<ChatMsg[]>([])
   const [input, setInput] = useState("")
   const [busy, setBusy] = useState(false)
+  const [attachments, setAttachments] = useState<Attachment[]>([])
   const endRef = useRef<HTMLDivElement>(null)
+  const picInputRef = useRef<HTMLInputElement>(null)
+
+  // Screenshots of the BC screen the question is about — attach or just paste.
+  // Max 4: each one costs tokens, and the model reads a handful far better
+  // than a wall of them.
+  async function addFiles(files: FileList | File[] | null) {
+    const pics = [...(files ?? [])].filter(f => f.type.startsWith("image/"))
+    if (pics.length === 0) return
+    const done = await Promise.all(pics.slice(0, 4).map(processImage))
+    setAttachments(prev => [...prev, ...done].slice(0, 4))
+  }
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }) }, [msgs])
 
   function send() {
     const q = input.trim()
-    if (!q || busy) return
+    if ((!q && attachments.length === 0) || busy) return
+    const pics = attachments
     setInput("")
+    setAttachments([])
     // ⚠ Only real, non-empty turns go back as history. An error notice or a
     // blank reply sent back up gets the whole request rejected by Gemini
     // ("parts[0].data: required oneof field 'data' must have one initialized
@@ -447,11 +503,14 @@ function AskView({ onOpenFile }: { onOpenFile: (id: string, extension?: string) 
     // nearly always about the same objects, but its wording on its own rarely
     // retrieves them — so hand them back to be included again.
     const pinnedIds = [...msgs].reverse().find(m => m.role === "model" && m.sources?.length)?.sources?.map(s => s.id) ?? []
-    setMsgs(prev => [...prev, { role: "user", text: q }])
+    setMsgs(prev => [...prev, { role: "user", text: q, images: pics.map(p => p.url) }])
     setBusy(true)
     fetch("/api/it-tools/bc-source/chat", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: q, history, pinnedIds }),
+      body: JSON.stringify({
+        question: q, history, pinnedIds,
+        images: pics.map(p => ({ mimeType: p.mimeType, data: p.data })),
+      }),
     })
       .then(r => r.json())
       .then(d => {
@@ -471,6 +530,7 @@ function AskView({ onOpenFile }: { onOpenFile: (id: string, extension?: string) 
           <div className="text-center text-sm text-gray-500 dark:text-gray-400 pt-10 space-y-2">
             <p className="font-semibold">Ask how anything in BC works — answered from the actual source code.</p>
             <p className="text-xs">e.g. &ldquo;What does Recreate Auction Line do on the transfer dialog?&rdquo; · &ldquo;How does the tote scanner decide which receipt to use?&rdquo; · &ldquo;What happens when a lot is marked as collected?&rdquo;</p>
+            <p className="text-xs text-gray-500">📎 Paste or attach a screenshot of the BC screen and it will compare what you&apos;ve filled in against the code — and say whether it&apos;s the settings or the code that&apos;s wrong.</p>
           </div>
         )}
         {msgs.map((m, i) => (
@@ -479,6 +539,14 @@ function AskView({ onOpenFile }: { onOpenFile: (id: string, extension?: string) 
               m.role === "user"
                 ? "bg-cyan-600 text-white"
                 : "bg-gray-100 dark:bg-[#2C2C2E] text-gray-800 dark:text-gray-200"}`}>
+              {m.images && m.images.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {m.images.map((src, j) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={j} src={src} alt="" className="h-24 rounded border border-white/30 object-cover" />
+                  ))}
+                </div>
+              )}
               {m.text}
               {m.sources && m.sources.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-gray-300/40 dark:border-gray-600/40 flex flex-wrap gap-1">
@@ -497,15 +565,41 @@ function AskView({ onOpenFile }: { onOpenFile: (id: string, extension?: string) 
         {busy && <p className="text-xs text-gray-500 animate-pulse">Reading the source…</p>}
         <div ref={endRef} />
       </div>
-      <div className="border-t border-gray-200 dark:border-gray-700 p-3 flex gap-2">
-        <input value={input} onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter") send() }}
-          placeholder="How does… ?"
-          className="flex-1 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-cyan-500" />
-        <button onClick={send} disabled={busy || !input.trim()}
-          className={`${BTN} border-cyan-600 bg-cyan-600 !text-white disabled:opacity-50`}>
-          Ask
-        </button>
+      <div className="border-t border-gray-200 dark:border-gray-700 p-3 space-y-2">
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {attachments.map((a, i) => (
+              <div key={i} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={a.url} alt="" className="h-16 rounded border border-gray-300 dark:border-gray-700 object-cover" />
+                <button type="button"
+                  onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-600 text-white text-xs flex items-center justify-center">
+                  ✕
+                </button>
+              </div>
+            ))}
+            <span className="self-end text-[11px] text-gray-500">{attachments.length}/4</span>
+          </div>
+        )}
+        <div className="flex gap-2">
+          <input ref={picInputRef} type="file" accept="image/*" multiple className="hidden"
+            onChange={e => { addFiles(e.target.files); e.target.value = "" }} />
+          <button type="button" onClick={() => picInputRef.current?.click()}
+            title="Attach a screenshot of the screen you're asking about (or just paste one)"
+            className={`${BTN} border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-400`}>
+            📎
+          </button>
+          <input value={input} onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") send() }}
+            onPaste={e => { if (e.clipboardData?.files?.length) addFiles(e.clipboardData.files) }}
+            placeholder={attachments.length > 0 ? "What should it be doing?" : "How does… ?"}
+            className="flex-1 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-cyan-500" />
+          <button onClick={send} disabled={busy || (!input.trim() && attachments.length === 0)}
+            className={`${BTN} border-cyan-600 bg-cyan-600 !text-white disabled:opacity-50`}>
+            Ask
+          </button>
+        </div>
       </div>
     </div>
   )
