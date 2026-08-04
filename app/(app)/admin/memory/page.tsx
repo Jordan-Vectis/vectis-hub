@@ -604,7 +604,7 @@ A deliberate easter egg — do not "clean it up". The page at /jordan (app/(app)
     filename: "photo_ai_edit.md",
     content: `---
 name: Photo Prep — AI edit (nano banana)
-purpose: The Gemini image-editing tab in Photo Prep, its presets, and the condition-integrity rule governing all of them. Read before touching photo editing.
+purpose: The Gemini image-editing tab in Photo Prep, its presets, the condition-integrity rule governing all of them, and why extend outpaints server-side and pastes the original back. Read before touching photo editing.
 last_updated: 2026-08-04
 ---
 
