@@ -53,9 +53,23 @@ Three layers of answer, in this order:
 
 An item found in BC with **no** matching Hub lot gets its own orange "Found in Business Central only" card.
 
-## Also on the Find-lots tab
+## Tab 1 — Find lots: ONE merged row per item (reworked 2026-08-04)
 
-A **"Catalogued by"** column on the Hub table (the API already returned \`createdByName\`; it was simply never displayed), and headline stat tiles — lots in the Hub / items in BC / catalogued in BC.
+The two side-by-side Hub / BC panels are **gone**. They made the journey impossible to follow, because the same physical item appears on each side under a different number (\`F090447\` in the Hub, \`R008414-7\` in BC). Now: **one row per item**, grouped under a big labelled **Auction** header band (code · name · 📅 date · counts), with columns *Item · Catalogued by · 1 · In the Hub · 2 · In Business Central*, an explainer strip showing the Hub → BC flow, and three tiles — in both / Hub only / BC only. \`hub[]\` and \`bc[]\` were dropped from the API response; it returns \`rows[]\`.
+
+### ⚠⚠ "In BC" is matched on the BARCODE — never on \`CatalogueLot.addedToBC\`
+
+\`addedToBC\` is a **manual tick the cataloguers rarely make**. Measured on production for receipt R008414 (2026-08-04): **44 Hub lots, only 11 ticked, but 44/44 matched a BC item on barcode.** The route therefore runs its own \`WarehouseItem\` query on the lots' barcodes (falling back to \`receiptUniqueId\` ↔ BC \`uniqueId\`) — a separate query, because a lot can be in BC under a different receipt from the one searched. ⚠ Prisma \`in\` is **case-sensitive**, so it queries original/upper/lower variants and matches case-insensitively in code. The Who-catalogued tab's BC chip uses the same real match. **Don't "simplify" either back to \`addedToBC\`.**
+
+### ⚠ The lot number is \`currentLotNo\`, NOT \`lotNo\`
+
+BC's \`lotNo\` is \`0\` on these rows while \`currentLotNo\` holds the real number (166, 167…). Always read \`currentLotNo || lotNo\`, and show "No lot number yet" rather than a bare 0.
+
+### ⚠ Lot STATUS is not shown anywhere in this tool
+
+It had been removed once already (same call as Manage Lots — it reads ENTERED on virtually every lot and tells an admin nothing). It came back only because it was in the original lookup component that got redesigned. \`STATUS_TONE\` was deleted from \`ui.ts\` and a comment left in its place. **Don't reintroduce it.**
+
+A **"Catalogued by"** column shows the Hub's \`createdByName\`, falling back to BC's resolved name (marked "recorded in BC").
 
 ## Sale date
 

@@ -8,7 +8,7 @@
 
 import { useState } from "react"
 import {
-  CARD, INPUT, BTN_PRIMARY, HINT, STATUS_TONE,
+  CARD, INPUT, BTN_PRIMARY, HINT,
   actionLabel, sourceLabel, fieldLabel, formatWhen, formatDay, saleLine,
 } from "./ui"
 
@@ -149,17 +149,17 @@ export default function WhoCataloguedTab() {
                   {lot.vendor  && <Fact label="Customer" value={lot.vendor} mono />}
                 </div>
                 <div className="flex flex-wrap items-center gap-3 mt-6">
-                  <span className={`px-4 py-2 rounded-full text-base font-semibold ${STATUS_TONE[lot.status] ?? STATUS_TONE.ENTERED}`}>
-                    {lot.status}
-                  </span>
                   <span className="px-4 py-2 rounded-full text-base font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
                     📷 {lot.photos} photo{lot.photos === 1 ? "" : "s"}
                   </span>
+                  {/* Whether it reached BC comes from an actual BC match on the
+                      barcode — NOT CatalogueLot.addedToBC, a manual tick that is
+                      routinely left unticked on lots that are plainly in BC. */}
                   <span className={`px-4 py-2 rounded-full text-base font-medium ${
-                    lot.addedToBC
+                    bc
                       ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
-                      : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"}`}>
-                    {lot.addedToBC ? "✓ Added to Business Central" : "Not yet added to Business Central"}
+                      : "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300"}`}>
+                    {bc ? "✓ In Business Central" : "Not pushed to Business Central yet"}
                   </span>
                   {lot.category && (
                     <span className="px-4 py-2 rounded-full text-base font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">

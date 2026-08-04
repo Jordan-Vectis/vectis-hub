@@ -18,14 +18,9 @@ export const BTN_PRIMARY =
 export const SECTION_TITLE = "text-xl font-bold text-gray-900 dark:text-white"
 export const HINT          = "text-sm text-gray-500 dark:text-gray-400"
 
-export const STATUS_TONE: Record<string, string> = {
-  ENTERED:   "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200",
-  REVIEWED:  "bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300",
-  PUBLISHED: "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300",
-  SOLD:      "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300",
-  UNSOLD:    "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300",
-  WITHDRAWN: "bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400",
-}
+// ⚠ Lot STATUS is deliberately not shown anywhere in the Admin Centre. It was
+// dropped from Manage Lots for the same reason — it reads ENTERED on virtually
+// every lot and tells an admin nothing. Don't reintroduce a status column here.
 
 // Plain-English wording for the lot audit trail (CatalogueLotEvent).
 export const ACTION_LABELS: Record<string, string> = {
