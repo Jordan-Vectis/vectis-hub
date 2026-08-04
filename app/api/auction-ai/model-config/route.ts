@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { CLAUDE_MODELS } from "@/lib/ai-models"
 
 export const maxDuration = 30
 
@@ -20,7 +21,7 @@ export async function GET() {
     ])
     const disabled = new Set(disabledRows.map(d => d.modelId))
 
-    const models = (googleRes.models ?? [])
+    const models: { id: string; displayName?: string; description?: string; inputTokenLimit?: number; outputTokenLimit?: number; enabled: boolean }[] = (googleRes.models ?? [])
       .filter((m: any) => m.supportedGenerationMethods?.includes("generateContent"))
       .map((m: any) => {
         const id = m.name.replace("models/", "")
@@ -33,6 +34,22 @@ export async function GET() {
           enabled:          !disabled.has(id),
         }
       })
+
+    // ⚠ The Admin → AI Models page reads THIS route, not /api/auction-ai/models
+    // — both list models and both need Claude appending, or the dropdowns show
+    // Gemini only however well the rest is wired up.
+    if (process.env.ANTHROPIC_API_KEY) {
+      for (const c of CLAUDE_MODELS) {
+        models.push({
+          id:               c.id,
+          displayName:      c.displayName,
+          description:      c.description,
+          inputTokenLimit:  c.inputTokenLimit,
+          outputTokenLimit: c.outputTokenLimit,
+          enabled:          !disabled.has(c.id),
+        })
+      }
+    }
 
     return NextResponse.json({ models })
   } catch (e: any) {
