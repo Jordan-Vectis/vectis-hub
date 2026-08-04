@@ -15,15 +15,44 @@ export const maxDuration = 300
 // overwrites (including a hand-edited guide — the UI warns first).
 
 // Feed order: the manifest and readme set the scene, then data (Tables),
-// screens (Pages), logic (Codeunits), and the rest. Budgeted so the biggest
-// extensions still fit comfortably in the model's context.
+// screens (Pages), logic (Codeunits), and the rest.
 const KIND_PRIORITY = ["Config", "Docs", "Table", "TableExt", "TableExtension", "Enum", "EnumExt", "EnumExtension",
   "Page", "PageExt", "PageExtension", "Codeunit", "Report", "Query", "XmlPort", "Interface", "ControlAddin"]
-const CONTEXT_BUDGET = 400_000   // characters
+
+// ⚠ The big extensions are genuinely big — Evo-auction - Base alone is 7.5 MB
+// across 1,113 files. A flat "include files until the budget runs out" left a
+// guide for the MOST important extension written from ~5% of it.
+//
+// So: full text while it fits, then fall back to a CONDENSED form of the
+// remaining code files (object header + procedure/trigger signatures) rather
+// than dropping them. The reader wants what the screens and workflows are —
+// which needs breadth of object names far more than every line of a codeunit.
+const FULL_BUDGET      = 700_000   // characters of verbatim source
+const CONDENSED_BUDGET = 250_000   // characters of signature-only summaries
 
 function priorityOf(kind: string): number {
   const i = KIND_PRIORITY.findIndex(k => k.toLowerCase() === kind.toLowerCase())
   return i === -1 ? KIND_PRIORITY.length : i
+}
+
+// Object declaration + the procedures/triggers it exposes. Enough for the model
+// to say "pressing X runs Y" and name it, without the whole implementation.
+function condense(content: string): string {
+  const keep: string[] = []
+  for (const raw of content.split("\n")) {
+    const line = raw.trim()
+    if (!line) continue
+    if (/^(table|tableextension|page|pageextension|codeunit|report|query|xmlport|enum|enumextension|interface|controladdin|profile|permissionset\w*)\s/i.test(line)
+      || /^(local\s+|internal\s+|protected\s+)?procedure\s/i.test(line)
+      || /^trigger\s/i.test(line)
+      || /^(Caption|ToolTip|SourceTable|ApplicationArea|Description)\s*=/i.test(line)
+      || /^field\(/i.test(line)
+      || /^action\(/i.test(line)) {
+      keep.push(line)
+    }
+    if (keep.length > 400) break   // a single monster object shouldn't eat the budget
+  }
+  return keep.join("\n")
 }
 
 export async function GET(req: NextRequest) {
@@ -79,15 +108,26 @@ export async function POST(req: NextRequest) {
     })
     if (files.length === 0) return NextResponse.json({ error: "No source files stored for that extension" }, { status: 404 })
 
-    // Pack files into the budget, most explanatory first.
+    // Pack files into the budget, most explanatory first: verbatim while there's
+    // room, then signature-only, then genuinely omitted.
     const ordered = [...files].sort((a, b) => priorityOf(a.kind) - priorityOf(b.kind) || a.path.localeCompare(b.path))
-    let used = 0
+    let used = 0, condensedUsed = 0
     const included: string[] = []
+    const condensed: string[] = []
     let left = 0
     for (const f of ordered) {
-      if (used + f.content.length > CONTEXT_BUDGET) { left++; continue }
-      included.push(`===== FILE: ${f.path} =====\n${f.content}`)
-      used += f.content.length
+      if (used + f.content.length <= FULL_BUDGET) {
+        included.push(`===== FILE: ${f.path} =====\n${f.content}`)
+        used += f.content.length
+        continue
+      }
+      const summary = condense(f.content)
+      if (summary && condensedUsed + summary.length <= CONDENSED_BUDGET) {
+        condensed.push(`===== OUTLINE ONLY: ${f.path} =====\n${summary}`)
+        condensedUsed += summary.length
+      } else {
+        left++
+      }
     }
 
     const prompt = `You are writing an internal guide for Vectis Auctions (a UK toy auction house) explaining one extension of their Business Central system. The reader is NOT a programmer — they are the staff member who administers the system. British English.
@@ -106,11 +146,11 @@ FORMAT RULES — important:
 - Headings in CAPITALS on their own line. Lists as simple "- " lines.
 - Be concrete and specific to THIS code — never generic filler about Business Central.
 - If something in the source is unclear, say so rather than guessing.
-${left > 0 ? `\nNOTE: ${left} less-important file(s) did not fit and were omitted — mention at the end that the guide covers the main objects.` : ""}
+${condensed.length > 0 ? `\nSOME FILES ARE OUTLINE ONLY: this extension is large, so ${condensed.length} file(s) appear below as "OUTLINE ONLY" — just their object declaration and procedure names. Use them to say WHAT exists and what it is for; do not describe their inner workings in detail, because you cannot see them.` : ""}${left > 0 ? `\nNOTE: ${left} further file(s) did not fit at all. Say at the end that the guide covers the main objects rather than every one.` : ""}
 
 SOURCE CODE:
 
-${included.join("\n\n")}`
+${included.join("\n\n")}${condensed.length > 0 ? `\n\n${condensed.join("\n\n")}` : ""}`
 
     const genai = new GoogleGenerativeAI(apiKey)
     const model = await getToolModel("bc_source_guide", modelId)
