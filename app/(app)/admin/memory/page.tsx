@@ -626,6 +626,10 @@ It hides both providers' quirks so ~30 call sites don't re-implement them: Gemin
 
 Two guards keep the dropdown honest: the **admin page** only lists Claude ids for claudeOk slots (and "Set every tool to" never offers Claude), and **\`usable()\` inside getToolModel** falls back to the slot default when a Claude model is set on a non-claudeOk slot **or ANTHROPIC_API_KEY is missing**. Same spirit as RETIRED_MODELS: a bad config must never take a tool down, and environments can have different keys.
 
+⚠ **TWO routes list models, and BOTH need Claude appending.** \`/api/auction-ai/models\` feeds the in-app pickers; **\`/api/auction-ai/model-config\` is what Admin → AI Models actually reads**. Patching only the first left every admin dropdown Gemini-only while everything else was correctly wired — found only by clicking the page (2026-08-04).
+
+✅ **Verified live on staging**: all 3 Claude ids offered, the 6 claudeOk slots switchable, BC Source set to claude-opus-5 and answering from the real AL source. Claude is slower (~25-30s vs Gemini's 11-20s) and markedly more precise — on the lotting-order question Gemini said "the source doesn't contain this" while Claude walked through the per-category lines, the report's follow-up passes with their exact prompts, EVA_FindLastCatLotNo, the other filters, and the Sort Lots / Missing Lots tidy-up.
+
 ## Facts checked against the current API, not remembered
 
 - Model ids are exact with **NO date suffix**: claude-opus-5, claude-sonnet-5, claude-haiku-4-5. Appending a date 404s.
