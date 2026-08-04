@@ -28,6 +28,14 @@ const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/interactions"
 // catalogue image and keeps the round trip sane.
 const MAX_EDGE = 2048
 
+// What we hand back. The photo region is restored from the ORIGINAL at this
+// scale, so it's worth being larger than what we send.
+const FINAL_MAX = 3000
+
+// Pixels blended at the joint between the original and the generated border.
+// Enough to hide a slight colour step, small enough never to reach the item.
+const FEATHER = 20
+
 // The grey we pad with. The prompt names this exact colour so the model can tell
 // the blank area from a genuinely grey backdrop.
 const CANVAS_GREY = { r: 128, g: 128, b: 128 }
@@ -43,8 +51,13 @@ function planPadding(
   w: number, h: number,
   opts: { aspect: string; grow: string; direction: string },
 ): { top: number; bottom: number; left: number; right: number } {
-  const factor = GROW.find(g => g.key === opts.grow)?.factor ?? 0.5
-  const pad    = Math.round(Math.max(w, h) * factor)
+  const factor = GROW.find(g => g.key === opts.grow)?.factor ?? 0.4
+  // Base the amount on the axis actually being extended — "40% taller" is what
+  // a photographer means, and basing it on the long edge made a vertical
+  // extension of a wide photo enormous.
+  const axis = opts.direction === "horizontal" ? w
+             : (opts.direction === "all" ? Math.max(w, h) : h)
+  const pad  = Math.round(axis * factor)
 
   const half = Math.round(pad / 2)
   let top = 0, bottom = 0, left = 0, right = 0
@@ -104,6 +117,37 @@ function extractImage(node: unknown, depth = 0): { data: string; mimeType: strin
   return null
 }
 
+type Pad = { top: number; bottom: number; left: number; right: number }
+
+// ⚠⚠ THE MODEL REDRAWS THE WHOLE PICTURE — it cannot literally "leave the
+// original pixels alone" however firmly the prompt asks. For an auction photo
+// that is both a QUALITY problem (the item comes back softer, re-rendered at
+// the model's own fixed output resolution) and a CONDITION INTEGRITY problem: a
+// redrawn item is no longer evidence of the item's condition, which is the one
+// thing this whole feature is not allowed to touch.
+//
+// So for `extend` we composite the ORIGINAL photo back over the returned canvas
+// at full resolution. The generated part is then only ever the new border, and
+// the item is guaranteed — not merely asked — to be untouched, pixel for pixel.
+// The edge is feathered so the joint doesn't show.
+async function featherEdges(img: Buffer, w: number, h: number, pad: Pad): Promise<Buffer> {
+  const f = Math.min(FEATHER, Math.floor(Math.min(w, h) / 8)) || 1
+  const mask = Buffer.alloc(w * h * 4, 255)
+  for (let y = 0; y < h; y++) {
+    // Only fade an edge that actually gained canvas — a side with no padding is
+    // the photo's true border and must stay hard.
+    const dy = Math.min(pad.top ? y : Infinity, pad.bottom ? h - 1 - y : Infinity)
+    for (let x = 0; x < w; x++) {
+      const d = Math.min(dy, pad.left ? x : Infinity, pad.right ? w - 1 - x : Infinity)
+      if (d < f) mask[(y * w + x) * 4 + 3] = Math.round((d / f) * 255)
+    }
+  }
+  return sharp(img).ensureAlpha()
+    .composite([{ input: mask, raw: { width: w, height: h, channels: 4 }, blend: "dest-in" }])
+    .png()
+    .toBuffer()
+}
+
 /** Any text the model sent back instead — usually a refusal worth showing. */
 function extractText(node: unknown, depth = 0): string {
   if (!node || typeof node !== "object" || depth > 6) return ""
@@ -147,24 +191,41 @@ export async function POST(req: NextRequest) {
     const prompt = buildEditPrompt(preset, { extra })
     if (!prompt) return NextResponse.json({ error: `Unknown preset "${preset}"` }, { status: 400 })
 
-    // Normalise first: apply EXIF rotation (or the model edits a sideways photo)
-    // and shrink to a sensible size.
-    let pipeline = sharp(Buffer.from(await file.arrayBuffer()))
-      .rotate()
-      .resize({ width: MAX_EDGE, height: MAX_EDGE, fit: "inside", withoutEnlargement: true })
+    // Bake in EXIF rotation once (or the model edits a sideways photo) and keep
+    // this full-resolution copy — for `extend` it goes back on top at the end.
+    const original = await sharp(Buffer.from(await file.arrayBuffer())).rotate().toBuffer()
+    const om = await sharp(original).metadata()
+    const ow = om.width ?? 1, oh = om.height ?? 1
 
     // Only `extend` outpaints. Every other preset works on the photo as it is.
-    if (preset === "extend") {
-      const base = await pipeline.jpeg({ quality: 92 }).toBuffer()
-      const meta = await sharp(base).metadata()
-      const pad  = planPadding(meta.width ?? 1, meta.height ?? 1, { aspect, grow, direction })
-      pipeline = sharp(base)
-        .extend({ ...pad, background: CANVAS_GREY })
-        // Padding can push past MAX_EDGE, so bring it back down afterwards.
-        .resize({ width: MAX_EDGE, height: MAX_EDGE, fit: "inside", withoutEnlargement: true })
-    }
+    let pad: Pad | null = null
+    let jpeg: Buffer
 
-    const jpeg = await pipeline.jpeg({ quality: 92 }).toBuffer()
+    if (preset === "extend") {
+      pad = planPadding(ow, oh, { aspect, grow, direction })
+      const padW = ow + pad.left + pad.right
+      const padH = oh + pad.top + pad.bottom
+
+      // ⚠ Scale ONCE, and scale the PADDED canvas to fit — the first version
+      // shrank the photo to 2048, padded it, then shrank the result to 2048
+      // again, so the photo itself came back a third of the size it went in at.
+      // That double squeeze was most of the "quality is a bit bad".
+      const k = Math.min(1, MAX_EDGE / Math.max(padW, padH))
+      jpeg = await sharp(original)
+        .resize({ width: Math.max(1, Math.round(ow * k)), height: Math.max(1, Math.round(oh * k)) })
+        .extend({
+          top:    Math.round(pad.top    * k), bottom: Math.round(pad.bottom * k),
+          left:   Math.round(pad.left   * k), right:  Math.round(pad.right  * k),
+          background: CANVAS_GREY,
+        })
+        .jpeg({ quality: 95 })
+        .toBuffer()
+    } else {
+      jpeg = await sharp(original)
+        .resize({ width: MAX_EDGE, height: MAX_EDGE, fit: "inside", withoutEnlargement: true })
+        .jpeg({ quality: 95 })
+        .toBuffer()
+    }
 
     const model = await getToolModel("photo_prep_edit")
 
@@ -204,7 +265,31 @@ export async function POST(req: NextRequest) {
       }, { status: 502 })
     }
 
-    return NextResponse.json({ image: found.data, mimeType: found.mimeType })
+    // Everything except `extend` is meant to change the picture itself, so the
+    // model's output is the answer.
+    if (!pad) return NextResponse.json({ image: found.data, mimeType: found.mimeType })
+
+    // Restore the real photograph over the generated canvas — see featherEdges.
+    const generated = Buffer.from(found.data, "base64")
+    const f  = Math.min(1, FINAL_MAX / Math.max(ow + pad.left + pad.right, oh + pad.top + pad.bottom))
+    const iw = Math.max(1, Math.round(ow * f)), ih = Math.max(1, Math.round(oh * f))
+    const pl = Math.round(pad.left * f), pr = Math.round(pad.right  * f)
+    const pt = Math.round(pad.top  * f), pb = Math.round(pad.bottom * f)
+    const scaled: Pad = { top: pt, bottom: pb, left: pl, right: pr }
+
+    // `fill` because the model may hand back a slightly different ratio; any
+    // stretch lands on the generated border, never on the photo we paste back.
+    const canvas = await sharp(generated)
+      .resize({ width: pl + iw + pr, height: pt + ih + pb, fit: "fill" })
+      .toBuffer()
+    const inner  = await sharp(original).resize({ width: iw, height: ih }).toBuffer()
+
+    const merged = await sharp(canvas)
+      .composite([{ input: await featherEdges(inner, iw, ih, scaled), left: pl, top: pt }])
+      .jpeg({ quality: 94 })
+      .toBuffer()
+
+    return NextResponse.json({ image: merged.toString("base64"), mimeType: "image/jpeg" })
   } catch (e: any) {
     console.error("photo-prep/edit error:", e)
     return NextResponse.json({ error: e?.message ?? "Edit failed" }, { status: 500 })

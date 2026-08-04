@@ -37,7 +37,7 @@ function Pills({ label, options, value, onPick }: {
 }) {
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      <span className="text-xs text-gray-600 dark:text-gray-400 w-16 shrink-0">{label}</span>
+      <span className="text-xs text-gray-600 dark:text-gray-400 w-full sm:w-16 sm:shrink-0">{label}</span>
       {options.map(o => (
         <button key={o.key} onClick={() => onPick(o.key)}
           className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
@@ -111,18 +111,44 @@ export default function AiEditTab() {
 
   // Keep the original filename — Photo Prep's whole promise is that names don't
   // change — with a suffix so an edit can't silently overwrite the original.
-  function download(shot: Shot) {
+  //
+  // ⚠ MOBILE: the button used to do nothing on a phone. It set `href` to the
+  // data: URL and clicked a detached anchor — iOS Safari ignores `download` on a
+  // data: URL, and some browsers won't act on an anchor that isn't in the DOM.
+  // So: turn it into a Blob, offer the share sheet first (that's how you get
+  // "Save Image" into Photos on iOS), and fall back to a real object-URL anchor
+  // that IS in the document.
+  async function download(shot: Shot, allowShare = true) {
     if (!shot.edited) return
     const dot  = shot.name.lastIndexOf(".")
     const stem = dot > 0 ? shot.name.slice(0, dot) : shot.name
+    const blob = await (await fetch(shot.edited)).blob()
+    const name = `${stem}-edited.${blob.type === "image/png" ? "png" : "jpg"}`
+
+    const nav = navigator as Navigator & { canShare?: (d: any) => boolean }
+    if (allowShare && typeof nav.share === "function") {
+      const file = new File([blob], name, { type: blob.type })
+      if (nav.canShare?.({ files: [file] })) {
+        try { await nav.share({ files: [file] }); return }
+        // Cancelling the share sheet is a decision, not a failure — don't then
+        // fire a download they just backed out of.
+        catch (e: any) { if (e?.name === "AbortError") return }
+      }
+    }
+
+    const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
-    a.href = shot.edited
-    a.download = `${stem}-edited.png`
+    a.href = url
+    a.download = name
+    document.body.appendChild(a)
     a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 10_000)
   }
 
-  function downloadAll() {
-    for (const s of shots) if (s.edited) download(s)
+  // Never the share sheet here — one sheet per photo would be unusable.
+  async function downloadAll() {
+    for (const s of shots) if (s.edited) await download(s, false)
   }
 
   return (
@@ -163,13 +189,13 @@ export default function AiEditTab() {
           <p className="text-sm text-gray-600 dark:text-gray-400">Choose some photos to edit.</p>
         </div>
       ) : (
-        <div className="flex gap-4 items-start">
+        <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-start">
 
           {/* Filmstrip */}
-          <div className={`${CARD} w-44 shrink-0 max-h-[70vh] overflow-y-auto p-2 space-y-2`}>
+          <div className={`${CARD} p-2 flex gap-2 overflow-x-auto md:w-44 md:shrink-0 md:block md:space-y-2 md:max-h-[70vh] md:overflow-y-auto md:overflow-x-visible`}>
             {shots.map(s => (
               <button key={s.id} onClick={() => setSelId(s.id)}
-                className={`w-full text-left rounded-lg overflow-hidden border transition-colors ${
+                className={`w-28 shrink-0 md:w-full text-left rounded-lg overflow-hidden border transition-colors ${
                   selId === s.id ? "border-[#0078D4]" : "border-transparent hover:border-gray-300 dark:hover:border-gray-700"}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={s.edited ?? s.url} alt="" className="w-full h-24 object-cover" />
@@ -203,7 +229,7 @@ export default function AiEditTab() {
                     )}
                   </div>
 
-                  <div className={sel.edited && compare ? "grid grid-cols-2 gap-3" : ""}>
+                  <div className={sel.edited && compare ? "grid grid-cols-1 sm:grid-cols-2 gap-3" : ""}>
                     {(!sel.edited || compare) && (
                       <figure>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -261,7 +287,7 @@ export default function AiEditTab() {
                     className="w-full bg-gray-100 dark:bg-[#151824] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-[#0078D4]" />
 
                   <button onClick={runEdit} disabled={sel.busy}
-                    className="px-4 py-2 bg-[#0078D4] hover:bg-blue-500 text-white text-sm font-medium rounded transition-colors disabled:opacity-50">
+                    className="w-full sm:w-auto px-4 py-2 bg-[#0078D4] hover:bg-blue-500 text-white text-sm font-medium rounded transition-colors disabled:opacity-50">
                     {sel.busy ? "Editing… (up to a minute)" : sel.edited ? "✨ Edit again" : "✨ Edit this photo"}
                   </button>
                 </div>
