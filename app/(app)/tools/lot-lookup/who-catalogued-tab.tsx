@@ -193,7 +193,8 @@ export default function WhoCataloguedTab() {
                 {bc && (
                   <div className="flex flex-wrap gap-x-8 gap-y-3 mt-5 text-base">
                     <Fact label="Sale" value={saleLine(bc.saleCode, bc.saleName, bc.saleDate)} />
-                    <Fact label="Lot no" value={bc.lotNo || "—"} mono />
+                    {/* BC writes 0 until the sale is numbered — say so, don't print 0. */}
+                    <Fact label="Lot number" value={bc.lotNo && bc.lotNo !== "0" ? bc.lotNo : "Not numbered yet"} mono={!!bc.lotNo && bc.lotNo !== "0"} />
                     <Fact label="Location" value={bc.location || "—"} mono />
                     <Fact label="Photos" value={String(bc.photos)} />
                   </div>

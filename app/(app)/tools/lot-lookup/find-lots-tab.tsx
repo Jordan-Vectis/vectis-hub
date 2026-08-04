@@ -279,9 +279,18 @@ export default function FindLotsTab() {
                             {r.inBC ? (
                               <>
                                 <span className="text-emerald-600 dark:text-emerald-400 font-semibold">✓ In BC</span>
-                                <span className="block text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                                  {r.bcLotNo && r.bcLotNo !== "0" ? `Lot ${r.bcLotNo}` : "No lot number yet"}
-                                  {r.bcLocation ? ` · ${r.bcLocation}` : ""}
+                                {/* Spelled out — a bare "166 · 5F3" means nothing to an admin. */}
+                                <span className="block text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                  <span className="text-gray-500 dark:text-gray-500">Lot number:</span>{" "}
+                                  {r.bcLotNo && r.bcLotNo !== "0"
+                                    ? <span className="font-mono font-semibold text-gray-800 dark:text-gray-200">{r.bcLotNo}</span>
+                                    : "not numbered yet"}
+                                </span>
+                                <span className="block text-sm text-gray-600 dark:text-gray-400">
+                                  <span className="text-gray-500 dark:text-gray-500">Location:</span>{" "}
+                                  {r.bcLocation
+                                    ? <span className="font-mono font-semibold text-gray-800 dark:text-gray-200">{r.bcLocation}</span>
+                                    : "not recorded"}
                                 </span>
                                 {r.bcSaleCode && g.code && r.bcSaleCode !== g.code && (
                                   <span className="block text-sm text-amber-600 dark:text-amber-400 font-semibold mt-0.5">
