@@ -31,6 +31,7 @@ export async function GET() {
           toteNo:     true,
           location:   true,
           receiptNo:  true,
+          vendorNo:   true,
           vendorName: true,
           status:     true,
           catalogued: true,

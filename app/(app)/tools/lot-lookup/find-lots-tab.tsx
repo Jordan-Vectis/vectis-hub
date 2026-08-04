@@ -7,17 +7,18 @@
 // catalogued each one.
 
 import { useState } from "react"
-import { CARD, INPUT, BTN_PRIMARY, HINT, STATUS_TONE } from "./ui"
+import { CARD, INPUT, BTN_PRIMARY, HINT, STATUS_TONE, formatSaleDate } from "./ui"
 
 type HubLot = {
   id: string; title: string; barcode: string | null; receiptUniqueId: string | null
   receipt: string | null; tote: string | null; vendor: string | null
   status: string; addedToBC: boolean; category: string | null; cataloguedBy: string | null
-  saleCode: string; saleName: string
+  saleCode: string; saleName: string; saleDate: string
 }
 type BcItem = {
   uniqueId: string; description: string; receiptNo: string; vendorNo: string; vendorName: string
-  catalogued: boolean; cataloguedBy: string; cataloguedByName: string; saleCode: string; saleName: string
+  catalogued: boolean; cataloguedBy: string; cataloguedByName: string
+  saleCode: string; saleName: string; saleDate: string
   lotNo: string; location: string; toteNo: string; barcode: string
 }
 type ToteInfo = { toteNo: string; location: string; receiptNo: string; vendorName: string; catalogued: boolean }
@@ -34,12 +35,14 @@ const MODES: { key: Mode; label: string; blurb: string; placeholder: string }[] 
   { key: "vendor",  label: "Customer number", blurb: "Everything for one customer",         placeholder: "C224652" },
 ]
 
-function groupBySale<T extends { saleCode: string; saleName: string }>(rows: T[]) {
-  const m = new Map<string, { code: string; name: string; rows: T[] }>()
+function groupBySale<T extends { saleCode: string; saleName: string; saleDate: string }>(rows: T[]) {
+  const m = new Map<string, { code: string; name: string; date: string; rows: T[] }>()
   for (const r of rows) {
     const key = `${r.saleCode}||${r.saleName}`   // keep distinct sales apart even when the code is blank
-    if (!m.has(key)) m.set(key, { code: r.saleCode, name: r.saleName, rows: [] })
-    m.get(key)!.rows.push(r)
+    if (!m.has(key)) m.set(key, { code: r.saleCode, name: r.saleName, date: r.saleDate, rows: [] })
+    const g = m.get(key)!
+    if (!g.date && r.saleDate) g.date = r.saleDate   // BC leaves the date off some rows of the same sale
+    g.rows.push(r)
   }
   return [...m.values()].sort((a, b) => (a.code || "~").localeCompare(b.code || "~"))
 }
@@ -172,7 +175,7 @@ export default function FindLotsTab() {
               empty={hubGroups.length === 0 ? "No matching lots in the Hub." : null}
             >
               {hubGroups.map(g => (
-                <SaleGroup key={`${g.code}||${g.name}`} code={g.code} name={g.name} count={g.rows.length} noun="lot" fallback="No sale assigned">
+                <SaleGroup key={`${g.code}||${g.name}`} code={g.code} name={g.name} date={g.date} count={g.rows.length} noun="lot" fallback="No sale assigned">
                   <table className="w-full text-base">
                     <thead className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-800">
                       <tr>
@@ -221,7 +224,7 @@ export default function FindLotsTab() {
               empty={bcGroups.length === 0 ? "No matching items in Business Central." : null}
             >
               {bcGroups.map(g => (
-                <SaleGroup key={`${g.code}||${g.name}`} code={g.code} name={g.name} count={g.rows.length} noun="item" fallback="No sale allocated">
+                <SaleGroup key={`${g.code}||${g.name}`} code={g.code} name={g.name} date={g.date} count={g.rows.length} noun="item" fallback="No sale allocated">
                   <table className="w-full text-base">
                     <thead className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-800">
                       <tr>
@@ -288,9 +291,10 @@ function Panel({ title, blurb, capped, empty, children }: {
   )
 }
 
-function SaleGroup({ code, name, count, noun, fallback, children }: {
-  code: string; name: string; count: number; noun: string; fallback: string; children: React.ReactNode
+function SaleGroup({ code, name, date, count, noun, fallback, children }: {
+  code: string; name: string; date: string; count: number; noun: string; fallback: string; children: React.ReactNode
 }) {
+  const when = formatSaleDate(date)
   return (
     <div className="mb-8 last:mb-0">
       <div className="flex flex-wrap items-baseline gap-x-3 mb-2">
@@ -298,6 +302,11 @@ function SaleGroup({ code, name, count, noun, fallback, children }: {
           {code ? <span className="font-mono">{code}</span> : fallback}
         </span>
         {code && name && <span className="text-base text-gray-600 dark:text-gray-400">{name}</span>}
+        {when && (
+          <span className="px-3 py-1 rounded-full text-sm font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 whitespace-nowrap">
+            📅 {when}
+          </span>
+        )}
         <span className="text-base text-gray-500 dark:text-gray-500">
           {count} {noun}{count === 1 ? "" : "s"}
         </span>

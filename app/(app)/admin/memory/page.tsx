@@ -56,6 +56,10 @@ An item found in BC with **no** matching Hub lot gets its own orange "Found in B
 ## Also on the Find-lots tab
 
 A **"Catalogued by"** column on the Hub table (the API already returned \`createdByName\`; it was simply never displayed), and headline stat tiles — lots in the Hub / items in BC / catalogued in BC.
+
+## Sale date
+
+Every sale is shown with its **date** — a 📅 chip on each sale group in Find lots, and part of the Sale line in the Who-catalogued cards. ⚠ Two different sources: the Hub sends \`CatalogueAuction.auctionDate\` (a real DateTime → ISO), BC sends \`WarehouseItem.auctionDate\` as a **plain string** and uses **\`0001-01-01\` for "no date"**. \`formatSaleDate\` in \`ui.ts\` handles both and blanks anything before 1990 — don't format these dates inline anywhere else. BC also leaves the date off some rows of a sale, so the grouping takes the first non-empty one.
 `,
   },
   {
@@ -91,6 +95,7 @@ Other props: \`resetKey\` (change it — e.g. to the search term — and the fil
 | Tab | Table |
 |---|---|
 | Search by Location | Totes **and** Items (Location column still only in aisle mode) |
+| | ⚠ The **totes** columns are Tote No · Location · Receipt · **Customer no** · Customer. Status and State were **deliberately dropped** on 2026-08-04 (not needed) and \`vendorNo\` added in their place — \`/api/warehouse/tote/report\` had to start selecting \`vendorNo\`. Don't put Status/State back. |
 | Tote Data | Raw Data view (kept the 150-row "Show all" behaviour via \`initialRows\`) |
 | Unsold Items | the flat list (Group-by-vendor view unchanged, no filters there) |
 | Sale Checklist | the per-auction item table inside the accordion |

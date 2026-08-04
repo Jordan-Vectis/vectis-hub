@@ -853,18 +853,9 @@ function SearchByLocationTab() {
     ...(mode === "aisle"
       ? [{ key: "location", label: "Location", value: (t: SearchTote) => t.location ?? "", className: "font-mono text-gray-600 dark:text-gray-500" }]
       : []),
-    { key: "receiptNo", label: "Receipt",  value: t => t.receiptNo ?? "", className: "font-mono text-gray-600 dark:text-gray-400" },
-    { key: "vendor",    label: "Vendor",   value: t => t.vendorName ?? t.vendorNo ?? "", pdfWidth: 2 },
-    { key: "status",    label: "Status",   value: t => (t.status && t.status !== "No Reserve" ? t.status : "") },
-    {
-      key: "state", label: "State",
-      value: t => (t.catalogued == null ? "" : t.catalogued ? "Catalogued" : "Active"),
-      render: t => t.catalogued == null ? <span className="text-gray-400 dark:text-gray-700">—</span> : (
-        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${t.catalogued ? "bg-green-900/50 text-green-300" : "bg-amber-900/50 text-amber-300"}`}>
-          {t.catalogued ? "Catalogued" : "Active"}
-        </span>
-      ),
-    },
+    { key: "receiptNo", label: "Receipt",     value: t => t.receiptNo ?? "", className: "font-mono text-gray-600 dark:text-gray-400" },
+    { key: "vendorNo",  label: "Customer no", value: t => t.vendorNo ?? "", className: "font-mono text-gray-600 dark:text-gray-400" },
+    { key: "vendor",    label: "Customer",    value: t => t.vendorName ?? "", pdfWidth: 2 },
   ], [mode])
 
   const itemColumns = useMemo<FilterColumn<SearchItem>[]>(() => [
@@ -1344,11 +1335,11 @@ function HorizBar({ value, max, color = "bg-blue-500" }: { value: number; max: n
 }
 
 const TOTE_RAW_COLUMNS: FilterColumn<SearchTote>[] = [
-  { key: "toteNo",    label: "Tote No",  value: t => t.toteNo, className: "font-mono text-cyan-700 dark:text-cyan-300 font-semibold" },
-  { key: "location",  label: "Location", value: t => t.location ?? "", className: "font-mono text-gray-600 dark:text-gray-400" },
-  { key: "receiptNo", label: "Receipt",  value: t => t.receiptNo ?? "", className: "text-gray-600 dark:text-gray-400" },
-  { key: "vendor",    label: "Vendor",   value: t => t.vendorName ?? "", className: "text-gray-600 dark:text-gray-300", pdfWidth: 2 },
-  { key: "status",    label: "Status",   value: t => (t.status && t.status !== "No Reserve" ? t.status : ""), className: "text-gray-600 dark:text-gray-500" },
+  { key: "toteNo",    label: "Tote No",     value: t => t.toteNo, className: "font-mono text-cyan-700 dark:text-cyan-300 font-semibold" },
+  { key: "location",  label: "Location",    value: t => t.location ?? "", className: "font-mono text-gray-600 dark:text-gray-400" },
+  { key: "receiptNo", label: "Receipt",     value: t => t.receiptNo ?? "", className: "font-mono text-gray-600 dark:text-gray-400" },
+  { key: "vendorNo",  label: "Customer no", value: t => t.vendorNo ?? "", className: "font-mono text-gray-600 dark:text-gray-400" },
+  { key: "vendor",    label: "Customer",    value: t => t.vendorName ?? "", className: "text-gray-600 dark:text-gray-300", pdfWidth: 2 },
 ]
 
 function ToteDataTab() {

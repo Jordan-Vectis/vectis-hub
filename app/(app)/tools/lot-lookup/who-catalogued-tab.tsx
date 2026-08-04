@@ -9,7 +9,7 @@
 import { useState } from "react"
 import {
   CARD, INPUT, BTN_PRIMARY, HINT, STATUS_TONE,
-  actionLabel, sourceLabel, fieldLabel, formatWhen, formatDay,
+  actionLabel, sourceLabel, fieldLabel, formatWhen, formatDay, saleLine,
 } from "./ui"
 
 type Person  = { name: string; changes: number; firstAt: string; lastAt: string; created: boolean }
@@ -17,14 +17,14 @@ type Event   = { action: string; source: string; field: string; oldValue: string
 type HubLot  = {
   id: string; title: string; barcode: string; receiptUniqueId: string; receipt: string; tote: string
   vendor: string; status: string; addedToBC: boolean; category: string; photos: number
-  saleId: string; saleCode: string; saleName: string
+  saleId: string; saleCode: string; saleName: string; saleDate: string
   cataloguedBy: string; cataloguedAt: string; updatedAt: string
   people: Person[]; history: Event[]
 }
 type BcItem = {
   uniqueId: string; barcode: string; description: string; receiptNo: string; vendorNo: string; vendorName: string
   catalogued: boolean; cataloguedByCode: string; cataloguedByName: string; cataloguedAt: string; photos: number
-  saleCode: string; saleName: string; lotNo: string; location: string; toteNo: string
+  saleCode: string; saleName: string; saleDate: string; lotNo: string; location: string; toteNo: string
 }
 type Result = { q: string; lots: HubLot[]; bc: BcItem[]; historyCapped: boolean }
 
@@ -141,7 +141,7 @@ export default function WhoCataloguedTab() {
               <div className="px-8 py-6">
                 <p className="text-2xl font-semibold text-gray-900 dark:text-white leading-snug">{lot.title}</p>
                 <div className="flex flex-wrap items-center gap-x-8 gap-y-3 mt-5 text-base">
-                  <Fact label="Sale" value={lot.saleCode ? `${lot.saleCode}${lot.saleName ? ` — ${lot.saleName}` : ""}` : "Not in a sale"} />
+                  <Fact label="Sale" value={saleLine(lot.saleCode, lot.saleName, lot.saleDate, "Not in a sale")} />
                   {lot.barcode         && <Fact label="Barcode"   value={lot.barcode} mono />}
                   {lot.receiptUniqueId && <Fact label="Unique ID" value={lot.receiptUniqueId} mono />}
                   {lot.receipt && <Fact label="Receipt" value={lot.receipt} mono />}
@@ -192,7 +192,7 @@ export default function WhoCataloguedTab() {
                 )}
                 {bc && (
                   <div className="flex flex-wrap gap-x-8 gap-y-3 mt-5 text-base">
-                    <Fact label="Sale" value={bc.saleCode ? `${bc.saleCode}${bc.saleName ? ` — ${bc.saleName}` : ""}` : "—"} />
+                    <Fact label="Sale" value={saleLine(bc.saleCode, bc.saleName, bc.saleDate)} />
                     <Fact label="Lot no" value={bc.lotNo || "—"} mono />
                     <Fact label="Location" value={bc.location || "—"} mono />
                     <Fact label="Photos" value={String(bc.photos)} />
@@ -301,7 +301,7 @@ export default function WhoCataloguedTab() {
             <div className="flex flex-wrap gap-x-8 gap-y-3 mt-5 text-base">
               <Fact label="Unique ID" value={b.uniqueId} mono />
               {b.barcode && <Fact label="Barcode" value={b.barcode} mono />}
-              <Fact label="Sale" value={b.saleCode ? `${b.saleCode}${b.saleName ? ` — ${b.saleName}` : ""}` : "—"} />
+              <Fact label="Sale" value={saleLine(b.saleCode, b.saleName, b.saleDate)} />
               <Fact label="Customer" value={b.vendorName || b.vendorNo || "—"} />
               <Fact label="Location" value={b.location || "—"} mono />
             </div>

@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
       select: {
         id: true, title: true, barcode: true, receiptUniqueId: true, receipt: true, tote: true, vendor: true,
         status: true, addedToBC: true, category: true, createdByName: true,
-        auction: { select: { code: true, name: true } },
+        auction: { select: { code: true, name: true, auctionDate: true } },
       },
       orderBy: [{ auctionId: "asc" }, { createdAt: "asc" }],
       take: LIMIT + 1,   // fetch one extra so we can tell a truncated result from an exactly-full one
@@ -91,7 +91,7 @@ export async function GET(req: NextRequest) {
           where: bcWhere,
           select: {
             uniqueId: true, description: true, receiptNo: true, vendorNo: true, vendorName: true,
-            catalogued: true, cataloguedBy: true, auctionCode: true, auctionName: true,
+            catalogued: true, cataloguedBy: true, auctionCode: true, auctionName: true, auctionDate: true,
             lotNo: true, location: true, toteNo: true, barcode: true,
           },
           orderBy: [{ auctionCode: "asc" }, { receiptNo: "asc" }],
@@ -109,6 +109,7 @@ export async function GET(req: NextRequest) {
         receipt: l.receipt, tote: l.tote, vendor: l.vendor, status: l.status, addedToBC: l.addedToBC,
         category: l.category, cataloguedBy: l.createdByName,
         saleCode: l.auction?.code ?? "", saleName: cleanName(l.auction?.name),
+        saleDate: l.auction?.auctionDate?.toISOString() ?? "",
       })),
       bc: bcItems.slice(0, LIMIT).map((w) => ({
         uniqueId: w.uniqueId, description: w.description ?? "", receiptNo: w.receiptNo ?? "",
@@ -117,6 +118,7 @@ export async function GET(req: NextRequest) {
         // BC stores a staff CODE ("KS") — resolve it so nobody has to decode initials.
         cataloguedByName: lookupCataloguerByCode(w.cataloguedBy)?.name ?? "",
         saleCode: w.auctionCode ?? "", saleName: cleanName(w.auctionName),
+        saleDate: w.auctionDate ?? "",   // BC sends this as a plain string
         lotNo: w.lotNo ?? "", location: w.location ?? "", toteNo: w.toteNo ?? "", barcode: w.barcode ?? "",
       })),
       totes: totesInfo.map((t) => ({

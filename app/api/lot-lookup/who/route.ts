@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
         id: true, title: true, barcode: true, receiptUniqueId: true, receipt: true, tote: true,
         vendor: true, status: true, addedToBC: true, category: true, imageUrls: true,
         createdByName: true, createdAt: true, updatedAt: true,
-        auction: { select: { id: true, code: true, name: true } },
+        auction: { select: { id: true, code: true, name: true, auctionDate: true } },
       },
       orderBy: { createdAt: "desc" },
       take: MAX_LOTS,
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
       select: {
         uniqueId: true, barcode: true, description: true, receiptNo: true, vendorNo: true, vendorName: true,
         catalogued: true, cataloguedBy: true, cataloguedAt: true, noOfPhotos: true,
-        auctionCode: true, auctionName: true, lotNo: true, currentLotNo: true,
+        auctionCode: true, auctionName: true, auctionDate: true, lotNo: true, currentLotNo: true,
         location: true, binCode: true, toteNo: true,
       },
       take: MAX_LOTS,
@@ -117,6 +117,7 @@ export async function GET(req: NextRequest) {
           saleId: l.auction?.id ?? "",
           saleCode: l.auction?.code ?? "",
           saleName: cleanName(l.auction?.name),
+          saleDate: l.auction?.auctionDate?.toISOString() ?? "",
           // The authoritative "who catalogued it" — stamped when the lot was created.
           cataloguedBy: l.createdByName ?? "",
           cataloguedAt: l.createdAt.toISOString(),
@@ -146,6 +147,7 @@ export async function GET(req: NextRequest) {
           photos: w.noOfPhotos ?? 0,
           saleCode: w.auctionCode ?? "",
           saleName: cleanName(w.auctionName),
+          saleDate: w.auctionDate ?? "",   // BC sends this as a plain string
           lotNo: w.currentLotNo || w.lotNo || "",
           location: [w.location, w.binCode].filter(Boolean).join(" · "),
           toteNo: w.toteNo ?? "",

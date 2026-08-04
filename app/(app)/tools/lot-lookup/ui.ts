@@ -66,6 +66,23 @@ export function formatWhen(iso: string): string {
   } catch { return iso }
 }
 
+// Sale date. The Hub sends an ISO string; BC sends its own plain string and uses
+// 0001-01-01 for "no date", so anything absurdly old is treated as blank.
+export function formatSaleDate(value: string): string {
+  if (!value) return ""
+  const d = new Date(value)
+  if (isNaN(d.getTime()) || d.getFullYear() < 1990) return ""
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/London" })
+}
+
+// "F088 — Diecast Sale · 15 Aug 2026", skipping whatever is missing.
+export function saleLine(code: string, name: string, date: string, fallback = "—"): string {
+  const head = [code, name].filter(Boolean).join(" — ")
+  const when = formatSaleDate(date)
+  if (!head && !when) return fallback
+  return [head || fallback, when].filter(Boolean).join(" · ")
+}
+
 export function formatDay(iso: string): string {
   if (!iso) return ""
   try {
