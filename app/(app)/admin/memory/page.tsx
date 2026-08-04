@@ -16,6 +16,49 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "admin_centre.md",
+    content: `---
+name: Admin Centre (/tools/lot-lookup) — two tabs, big UI
+purpose: The Admin Centre is tabbed (Find a customer's lots + Who catalogued this lot?) and deliberately oversized for non-technical admins. Read before touching it.
+last_updated: 2026-08-04
+---
+
+# Admin Centre — /tools/lot-lookup (rebuilt 2026-08-04)
+
+Gated on the **\`ADMIN_CENTRE\`** app key via \`hasAppAccess\` — the page redirect **and** both API routes check it.
+
+## ⚠ The audience is the design constraint
+
+The brief: *"this is getting used by non technical admins so really make everything nice and big and clear."* So this tool deliberately **breaks the Hub's usual 10–12px table style**: base/lg body text, \`py-3\` table rows, \`px-8 py-8\` answer panels, 2px borders, big hit targets, and plain-English wording ("Where from", "Changed to", "Not recorded") instead of raw field/source keys. Shared classes live in **\`app/(app)/tools/lot-lookup/ui.ts\`** — use them rather than re-styling, and **don't "tidy" this back down to the compact house style.** Full width (\`max-w-[1800px] mx-auto\`).
+
+## The files
+
+| File | What |
+|---|---|
+| \`lookup-client.tsx\` | shell + the two big tab buttons (\`useState\`, no URL param) |
+| \`find-lots-tab.tsx\` | the original receipt / tote / customer lookup, redesigned |
+| \`who-catalogued-tab.tsx\` | the new tab |
+| \`ui.ts\` | shared classes + the plain-English label maps + date formatting |
+| \`app/api/lot-lookup/route.ts\` | the cross-system search (behaviour unchanged) |
+| \`app/api/lot-lookup/who/route.ts\` | new — one lot in, who catalogued it out |
+
+## Tab 2 — "Who catalogued this lot?"
+
+Scan/type a **barcode** (\`F066001\`) **or a unique ID** (\`R000016-413\`) — both identifier fields are matched, non-ASCII stripped first (scanners emit junk). Returns a **list**, because the same barcode can legitimately appear in more than one sale.
+
+Three layers of answer, in this order:
+1. **\`CatalogueLot.createdByName\` is the authoritative answer** — the huge name at the top, with \`createdAt\`. It is blank on old/imported lots; the card explains that in plain English rather than showing nothing.
+2. **What BC says** — \`WarehouseItem.catalogued\` / \`cataloguedBy\` / \`cataloguedAt\`. ⚠ BC stores a **staff CODE** ("KS"), so it is resolved through **\`lookupCataloguerByCode\`** (\`lib/cataloguer-directory.ts\`) — never show the raw initials. The same resolution was added to the **Find lots** tab's BC table.
+3. **Everyone who has changed it since** — grouped from **\`CatalogueLotEvent\`** (the Lot Change Log audit trail) with a "Show the full history" table. ⚠ That log only covers lots edited **since 1 July 2026**, so "no changes recorded" is normal for older lots and the UI says so.
+
+An item found in BC with **no** matching Hub lot gets its own orange "Found in Business Central only" card.
+
+## Also on the Find-lots tab
+
+A **"Catalogued by"** column on the Hub table (the API already returned \`createdByName\`; it was simply never displayed), and headline stat tiles — lots in the Hub / items in BC / catalogued in BC.
+`,
+  },
+  {
     filename: "warehouse_filter_table.md",
     content: `---
 name: BC Warehouse — Excel filters + print what's on screen

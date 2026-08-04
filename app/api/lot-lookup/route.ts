@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { hasAppAccess } from "@/lib/apps"
+import { lookupCataloguerByCode } from "@/lib/cataloguer-directory"
 
 export const dynamic = "force-dynamic"
 
@@ -113,6 +114,8 @@ export async function GET(req: NextRequest) {
         uniqueId: w.uniqueId, description: w.description ?? "", receiptNo: w.receiptNo ?? "",
         vendorNo: w.vendorNo ?? "", vendorName: w.vendorName ?? "",
         catalogued: w.catalogued === true, cataloguedBy: w.cataloguedBy ?? "",
+        // BC stores a staff CODE ("KS") — resolve it so nobody has to decode initials.
+        cataloguedByName: lookupCataloguerByCode(w.cataloguedBy)?.name ?? "",
         saleCode: w.auctionCode ?? "", saleName: cleanName(w.auctionName),
         lotNo: w.lotNo ?? "", location: w.location ?? "", toteNo: w.toteNo ?? "", barcode: w.barcode ?? "",
       })),
