@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import type { GapEvent, GapEventType } from '@/app/api/gap-relay/route'
+import type { GapEvent } from '@/app/api/gap-relay/route'
 
 // ── Action mapping ────────────────────────────────────────────────────────────
 
@@ -103,7 +103,6 @@ function defaultRelayUrl() {
 export default function AutoClerkSaleroomPage() {
   const [actions, setActions]       = useState<Action[]>([])
   const [relayUrl, setRelayUrl]     = useState(defaultRelayUrl)
-  const [lastSeen, setLastSeen]     = useState(0)
   const [active, setActive]         = useState(false)
   const [lastEventAt, setLastEventAt] = useState<number | null>(null)
   const [lotState, setLotState]     = useState({ lot: '—', hammer: 0, asking: 0, message: '—' })
@@ -139,7 +138,6 @@ export default function AutoClerkSaleroomPage() {
     if (pollRef.current) clearInterval(pollRef.current)
     setActive(true)
     cursorRef.current = 0
-    setLastSeen(0)
 
     addAction({
       id: -Date.now(), at: ts(), aType: 'connect',

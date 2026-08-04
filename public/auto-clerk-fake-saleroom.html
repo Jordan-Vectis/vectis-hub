@@ -459,12 +459,6 @@ const PLATFORM_LABEL = {
   Telephone:  'Telephone',
   Invaluable: 'Invaluable',
 };
-const RECOGNISED = new Set([
-  'activeLotChange','liveBidEvent','liveCommissionBidEvent',
-  'setLiveAskingPrice','getFairWarningStatus','lotInformationUpdate',
-  'activeLotLock','sensorNetworkEvent',
-]);
-
 let bpWs = null;
 let bpReconnectTimer = null;
 let bpCurrentLot = '—';
@@ -509,6 +503,50 @@ function syncSaleroomToTarget() {
   }, 350);
 }
 
+// Step Saleroom DOWN to the target after an undo. Mirrors syncSaleroomToTarget
+// but in the other direction: a single Vectis retraction can drop the bid more
+// than one step, and one Undo click only removes one row — without this the
+// replica sat one step HIGH with no warning (all the other failsafes only
+// cover "behind", never "ahead").
+function syncSaleroomDownToTarget() {
+  const current = readSaleroomBid();
+  if (current <= bpTargetBid) {
+    bpSyncTries = 0;
+    clearSyncWarning();
+    return;
+  }
+  if (bpSyncTries >= MAX_SYNC_TRIES) {
+    showSyncWarning('Saleroom stuck at ' + fmt(current) + ' after undo — target ' + fmt(bpTargetBid) + '. Press Undo manually.');
+    return;
+  }
+  bpSyncTries++;
+  autoClick('btn-undo', 'amber');
+  setTimeout(() => {
+    if (readSaleroomBid() > bpTargetBid) {
+      syncSaleroomDownToTarget();
+    } else {
+      bpSyncTries = 0;
+      clearSyncWarning();
+    }
+  }, 350);
+}
+
+// ── Saleroom.com online-bid feed (replica stand-in) ─────────────────────────
+// On the REAL Saleroom page an online bid shows up by itself — the auto-clerk
+// rightly does nothing. The replica has no saleroom.com behind it, so this
+// simulates that feed arriving at the exact amount. ⚠ This is the REPLICA's
+// job, not the auto-clerk's — it is deliberately not an autoClick. Without it
+// the watchdog "corrected" the invisible gap 2s later by pressing Bid, logging
+// phantom ROOM bids for what were really online bidders.
+function onlineBidAt(amount) {
+  if (amount <= readSaleroomBid()) return;
+  S.bid = amount; S.hi = amount; S.lbdr = 'Online'; S.lname = 'Online';
+  addLog('Online', amount, 'Online', '');
+  setNotif('ng'); setAmt(amount); hiInc(amount);
+  updateSrState(amount);
+  setTimeout(function(){ setNotif(''); }, 2000);
+}
+
 function showSyncWarning(msg) {
   const el = document.getElementById('syncWarn');
   if (el) { el.textContent = '⚠ ' + msg; el.style.display = 'block'; }
@@ -519,7 +557,6 @@ function clearSyncWarning() {
 }
 
 function bpLog(text) {
-  const el = document.getElementById('connLabel');
   // Use the existing status bar for important sync messages
   setSbarText(text);
 }
@@ -643,11 +680,13 @@ function bpHandleMsg(raw) {
     if (amount <= 0) return;
 
     // UNDO — the bid dropped below what we last saw → a bid was retracted on
-    // Vectis. Click Undo on Saleroom to step it back to match.
+    // Vectis. Click Undo on Saleroom until it matches (one retraction can
+    // drop more than one step, and one click removes one row).
     if (amount < bpLastBid) {
       setSbarText('Bid dropped to ' + fmt(amount) + ' → clicking Undo on Saleroom');
       bpTargetBid = amount;
-      autoClick('btn-undo', 'amber');
+      bpSyncTries = 0;
+      syncSaleroomDownToTarget();
       bpLastBid = amount;
       return;
     }
@@ -656,9 +695,10 @@ function bpHandleMsg(raw) {
     if (auto) {
       // AUTOMATIC bid (Vectis Online or Saleroom Online).
       // Already on Saleroom on its own — the auto-clerk does NOTHING.
-      // But still track the target so a later non-auto bid lands correctly
-      // and the watchdog knows the true current level.
+      // The REPLICA simulates the online bid arriving (see onlineBidAt) so the
+      // watchdog doesn't later mislabel the gap as a ROOM bid.
       bpTargetBid = Math.max(bpTargetBid, amount);
+      onlineBidAt(amount);
       setSbarText('No action — ' + label + ' bid ' + fmt(amount) + ' already on Saleroom');
     } else {
       // Non-automatic source (Room / Telephone / Invaluable / BSCB / Commission)
@@ -677,7 +717,8 @@ function bpHandleMsg(raw) {
       if (amount < bpLastBid) {
         setSbarText('Bid dropped to ' + fmt(amount) + ' → clicking Undo on Saleroom');
         bpTargetBid = amount;
-        autoClick('btn-undo', 'amber');
+        bpSyncTries = 0;
+        syncSaleroomDownToTarget();
       } else {
         bpTargetBid = amount;
         setSbarText('Commission bid ' + fmt(amount) + ' → setting Saleroom to exact amount');
@@ -691,7 +732,7 @@ function bpHandleMsg(raw) {
   // ── Asking price update ────────────────────────────────────────
   if (cmd === 'setLiveAskingPrice') {
     const asking = Number(d.asking_bid ?? 0);
-    if (asking > 0) hiInc(asking - 1);
+    if (asking > 0) hiRow(asking);
     return;
   }
 
@@ -711,7 +752,8 @@ function bpHandleMsg(raw) {
     return;
   }
 
-  // ── Lot sold → CLICK Sell, then CLICK Next 2.2s later ─────────
+  // ── Lot sold → CLICK Sell. (Next is NOT clicked here — it fires on the
+  //    activeLotChange that follows when Vectis actually advances.) ────────
   if (cmd === 'lotInformationUpdate') {
     const keyName  = d.key_name ?? '';
     const keyValue = d.key_value;
@@ -796,9 +838,15 @@ document.getElementById('auctionId').addEventListener('keydown', e => {
 /* ─── ACTIONS ─── */
 function act(a){
   if(a === 'fairwarn'){
-    document.getElementById('bFW').classList.toggle('active-fw');
-    addChat('⚠️ Fair Warning — lot about to close!');
-    setSbarText('Fair Warning issued');
+    // Toggle. The warning chat line only belongs on the way ON — the cancel
+    // click used to post a fresh "lot about to close!" as it cancelled.
+    const nowActive = document.getElementById('bFW').classList.toggle('active-fw');
+    if(nowActive){
+      addChat('⚠️ Fair Warning — lot about to close!');
+      setSbarText('Fair Warning issued');
+    } else {
+      setSbarText('Fair Warning cleared');
+    }
   } else if(a === 'sell'){
     doSell();
   } else if(a === 'pass'){
@@ -864,7 +912,11 @@ function act(a){
     if(S.log.length > 0){
       S.log.pop(); renderLogFull();
       const prev = S.log.length > 0 && typeof S.log[S.log.length-1].a === 'number' ? S.log[S.log.length-1].a : 0;
-      S.bid = prev; setAmt(prev); hiInc(prev);
+      // ⚠ S.hi must roll back too — readSaleroomBid() reads S.hi, so leaving it
+      // at the old high made the failsafe think Saleroom was still there. The
+      // classic undo-then-rebid at the same amount then did nothing ("already
+      // at target") and the re-bid never registered.
+      S.bid = prev; S.hi = prev; setAmt(prev); hiInc(prev);
       updateSrState(prev);
     }
   } else if(a === 'once'){
@@ -965,9 +1017,15 @@ function setAmt(v){
   setTimeout(function(){ el.classList.remove('lit'); }, 600);
 }
 function hiInc(bid){
+  hiRow(nextBid(bid));
+}
+// Highlight the increment row at EXACTLY this value. hiInc() is for "highlight
+// the next asking after a bid at X"; use hiRow() when you already have the
+// asking figure itself — hiInc(asking - 1) looked for a row at asking-1+inc
+// (e.g. £109 for asking £100), which never exists.
+function hiRow(value){
   document.querySelectorAll('#itbl-body tr').forEach(r => r.classList.remove('hi'));
-  const next = nextBid(bid);
-  const target = document.querySelector('#itbl-body tr[data-bid="'+next+'"]');
+  const target = document.querySelector('#itbl-body tr[data-bid="'+value+'"]');
   if(target){ target.classList.add('hi'); target.scrollIntoView({block:'nearest'}); }
 }
 function resetOnce(){
@@ -1042,9 +1100,15 @@ function buildIncTable(){
 }
 
 /* ─── KEY BINDING ─── */
+// Typing a digit anywhere jumps focus to the bid override box — but NOT when
+// the user is already typing in some other field (Find lot, chat, the H
+// field…). The old guard only checked the override box itself, so digits
+// typed into any other input were hijacked mid-keystroke.
 document.addEventListener('keydown', function(e){
   const el = document.getElementById('bidOverride');
-  if(!el || document.activeElement === el) return;
+  if(!el) return;
+  const ae = document.activeElement;
+  if(ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
   if(e.ctrlKey || e.altKey || e.metaKey) return;
   if(/^\d$/.test(e.key) || e.key === 'Backspace'){
     el.focus();

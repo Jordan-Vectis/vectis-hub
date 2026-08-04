@@ -16,6 +16,41 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "auto_clerk_review.md",
+    content: `---
+name: Auto Clerk — 2026-08-04 review fixes
+purpose: The full-review fixes to the Scenario 1 rig, shadow pages, gap-relay and the reference card — including the undo-rule card update. Read WITH the reference card before touching auto-clerk code.
+last_updated: 2026-08-04
+---
+
+# Auto Clerk — review fixes (2026-08-04)
+
+A full review of /tools/auto-clerk; these fixes shipped to staging. The reference card on the launcher remains the source of truth — it was **updated** as part of this (see Undo below).
+
+## Scenario 1 rig (public/auto-clerk-fake-saleroom.html)
+
+- **\`act('undo')\` now rolls back \`S.hi\` too** (was only \`S.bid\`). \`readSaleroomBid()\` reads \`S.hi\`, so the stale high made undo-then-rebid-at-the-same-amount a no-op — the re-bid never registered on Saleroom.
+- **\`syncSaleroomDownToTarget()\`** — downward twin of \`syncSaleroomToTarget\`: one Vectis retraction can drop more than one step, and one Undo click removes one row. Verify-and-retry, then the red banner. ⚠ The 2s watchdog is deliberately still **upward-only**: "Saleroom ahead" is a legitimate state (an independent saleroom.com bidder can lead until Vectis catches up) — do NOT make the watchdog auto-undo.
+- **\`onlineBidAt(amount)\`** — on an automatic (allowlist) bid the REPLICA now simulates the online bid arriving at the exact amount. ⚠ Deliberately NOT an \`autoClick\` — it stands in for saleroom.com's own feed, which the real page shows by itself. Before this, the watchdog "corrected" the invisible gap 2s later by pressing Bid, logging phantom **ROOM** bids for online bidders.
+- **Digit-typing guard**: the type-a-digit→bid-box shortcut now skips when focus is in ANY input/textarea/contentEditable (typing into Find lot / chat / H was being hijacked).
+- **\`hiRow(v)\`** highlights the increment row at exactly v; \`setLiveAskingPrice\` uses it (the old \`hiInc(asking-1)\` targeted a row that never exists, e.g. £109 for asking £100).
+- FW toggle only posts the red chat line when turning ON; the stale "Sell then Next 2.2s later" comment corrected (Next fires on \`activeLotChange\`); dead \`RECOGNISED\` set removed.
+
+## Reference card — Undo rule changed (approved)
+
+Rule 6 now reads: **auto-detected in Scenario 1, manual everywhere else** — the Scenario 1 auto-clerk clicks Undo when the Vectis amount drops below the last seen, until matched; shadow views never detect undos; clerk mistakes stay manual. The don't-exist list matches. Don't "restore" the old "undo is manual only" wording — code and card now agree. The legacy coordinator's 10s constants are commented as sped-up sim timings (real rule: 15s → FW, 20s → Sell).
+
+## gap-relay classification order
+
+\`classify()\` now checks **terminal states before bid substrings**: fair warning → unsold/passed → sold → offered → internet bid → room bid → paused → resumed. "**Sold to internet bidder**" previously hit \`'internet bid'\` first and the HAMMER prompt never fired. ⚠ Still validate against a real captured GAP session — actual message texts are unconfirmed.
+
+## Shadow pages
+
+- auto-clerk-live: unreachable duplicate \`lotInformationUpdate\` branch removed; **Production/Staging WS preset dropdown** added (was hardcoded to production), persisted per machine.
+- auto-clerk-saleroom: unused import + dead \`lastSeen\` state removed.
+`,
+  },
+  {
     filename: "ai_cost.md",
     content: `---
 name: AI cost — prompt caching + run price estimator
