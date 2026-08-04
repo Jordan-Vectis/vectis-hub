@@ -601,6 +601,38 @@ A deliberate easter egg — do not "clean it up". The page at /jordan (app/(app)
 - Lint gotcha (hit twice here): the eslint react-compiler rule bans synchronous setState inside effects — localStorage restores are wrapped in queueMicrotask (chat-panel.tsx and jordan-menu.tsx).`,
   },
   {
+    filename: "photo_ai_edit.md",
+    content: `---
+name: Photo Prep — AI edit (nano banana)
+purpose: The Gemini image-editing tab in Photo Prep, its presets, and the condition-integrity rule governing all of them. Read before touching photo editing.
+last_updated: 2026-08-04
+---
+
+# Photo Prep → 🎨 AI edit (built 2026-08-04)
+
+Photo Prep is now **tabbed**: **🪄 Prepare photos** (the original local crop/brighten run) and **🎨 AI edit** (Gemini's image model, "nano banana"). A separate tab was chosen over folding it into the batch, so each tab's privacy promise stays unambiguous.
+
+## ⚠⚠ CONDITION INTEGRITY — the rule the whole feature hangs on
+
+These photographs are what bidders bid on. An edit that removes a scratch, chip, crack, fading, wear or a missing part **misrepresents the lot**. So every preset fixes the **PHOTOGRAPH** (framing, backdrop, lighting, glare, clutter around the item) and never the **ITEM**, and \`CONDITION_RULE\` in **lib/photo-edit-presets.ts** is appended to *every* prompt — telling the model in absolute terms not to clean, repair, restore or improve the object, and to return the image unchanged if it can't comply. **Test for any new preset: would a bidder feel misled seeing the original next to yours? If yes, don't add it.**
+
+## The pieces
+
+- **lib/photo-edit-presets.ts** — 13 presets in 4 groups, shared by route and UI so buttons and prompts can't drift. Framing (extend / straighten / centre), Background (clean sweep / cut out to white / remove clutter / remove label), Light (even lighting / kill glare / fix colour cast), Quality (sharpen / reduce grain / upscale / remove dust specks). \`buildEditPrompt(key, {aspect, extra})\` assembles preset + aspect + free text + CONDITION_RULE. Only \`extend\` offers aspect ratios.
+- **app/api/photo-prep/edit/route.ts** — one photo per call; sharp applies EXIF rotation and caps the long edge at 2048px first. PHOTO_PREP app access required.
+- **app/(app)/tools/photo-prep/ai-edit-tab.tsx** — choose photos → filmstrip → preset grid → Edit → before/after side by side → Download (keeps the original name + "-edited") or Discard.
+
+## ⚠ Image editing is NOT the shape the other AI routes use
+
+It is \`POST https://generativelanguage.googleapis.com/v1beta/interactions\` with header \`x-goog-api-key\`, body \`{model, input: [{type:"text",text},{type:"image",mime_type,data}]}\`, and the result arrives at **output_image.data** (base64) — *not* content parts. The installed @google/generative-ai (0.24.x) is the legacy SDK with **no image-output support**, which is why this route uses a direct fetch rather than the SDK or lib/ai-provider (text-out only). Verified against Google's docs. Multi-turn edits are possible via previous_interaction_id (not used yet).
+
+Model slot **photo_prep_edit** (Admin → AI Models, group Other), default \`gemini-3.1-flash-image\`; gemini-3-pro-image, gemini-3.1-flash-lite-image and nano-banana-pro-preview are also available. **Not claudeOk** — Claude writes text, not pictures.
+
+## Privacy — the wording had to change
+
+The Prepare tab said "photos are processed on this computer and never uploaded", which was **already not quite true** (the optional "fix with AI" step sends those few photos to Google for a crop box). The header is now per-tab: Prepare says cropping/brightening are local *and* names the AI-crop exception; AI edit says plainly that its photos **are** uploaded, that results carry an invisible SynthID watermark, and that the item is never altered. Gemini's entry on the Data & Compliance and DPIA pages now includes photo editing — keep both in sync.`,
+  },
+  {
     filename: "ai_providers.md",
     content: `---
 name: Two AI providers — Gemini + Claude

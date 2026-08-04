@@ -50,6 +50,8 @@ export const AI_TOOLS: AiTool[] = [
   { slot: "accounts_statement",     group: "Accounts",     label: "Bank/card statement parse",            default: "gemini-3-flash-preview" },
   // ── Other ──
   { slot: "photo_prep_crop",        group: "Other",        label: "Photo Prep crop box (hard photos only)", default: "gemini-3-flash-preview" },
+  // Image IN, image OUT ("nano banana"). Not claudeOk — Claude writes text, not pictures.
+  { slot: "photo_prep_edit",        group: "Other",        label: "Photo Prep AI edit (image editing)",   default: "gemini-3.1-flash-image" },
   { slot: "condition_extract",      group: "Other",        label: "Condition report extract",             default: "gemini-3-flash-preview" },
   { slot: "patch_notes_draft",      group: "Other",        label: "Patch notes draft (summarise a deploy)", default: "gemini-3-flash-preview", claudeOk: true },
   { slot: "jordan_fun",             group: "Other",        label: "Jordan's secret menu (chat, cooking, air fryer)", default: "gemini-3-flash-preview" },
