@@ -14,7 +14,9 @@ type FileMeta   = { id: string; path: string; name: string; kind: string; size: 
 type FullFile   = FileMeta & { extension: string; content: string }
 type Guide      = { extension: string; content: string; model: string | null; generatedBy: string | null; edited: boolean; generatedAt: string }
 type SearchHit  = { id: string; extension: string; path: string; name: string; kind: string; hits: { line: number; text: string }[]; more: number }
-type ChatMsg    = { role: "user" | "model"; text: string; sources?: { id: string; path: string; extension: string }[] }
+// `failed` marks a message that is an error notice rather than a real answer —
+// those are shown but deliberately kept OUT of the history sent back up.
+type ChatMsg    = { role: "user" | "model"; text: string; failed?: boolean; sources?: { id: string; path: string; extension: string }[] }
 
 function fmtBytes(n: number): string {
   if (n < 1024) return `${n} B`
@@ -434,7 +436,13 @@ function AskView({ onOpenFile }: { onOpenFile: (id: string, extension?: string) 
     const q = input.trim()
     if (!q || busy) return
     setInput("")
-    const history = msgs.map(m => ({ role: m.role, text: m.text }))
+    // ⚠ Only real, non-empty turns go back as history. An error notice or a
+    // blank reply sent back up gets the whole request rejected by Gemini
+    // ("parts[0].data: required oneof field 'data' must have one initialized
+    // field"), which permanently breaks every later question in the thread.
+    const history = msgs
+      .filter(m => !m.failed && m.text.trim().length > 0)
+      .map(m => ({ role: m.role, text: m.text }))
     setMsgs(prev => [...prev, { role: "user", text: q }])
     setBusy(true)
     fetch("/api/it-tools/bc-source/chat", {
@@ -443,11 +451,12 @@ function AskView({ onOpenFile }: { onOpenFile: (id: string, extension?: string) 
     })
       .then(r => r.json())
       .then(d => {
-        setMsgs(prev => [...prev, d.error
-          ? { role: "model", text: `⚠ ${d.error}` }
-          : { role: "model", text: d.answer, sources: d.sources }])
+        const answer = typeof d.answer === "string" ? d.answer.trim() : ""
+        setMsgs(prev => [...prev, d.error || !answer
+          ? { role: "model", text: `⚠ ${d.error ?? "No answer came back — try asking again."}`, failed: true }
+          : { role: "model", text: answer, sources: d.sources }])
       })
-      .catch(e => setMsgs(prev => [...prev, { role: "model", text: `⚠ ${e?.message ?? "Failed"}` }]))
+      .catch(e => setMsgs(prev => [...prev, { role: "model", text: `⚠ ${e?.message ?? "Failed"}`, failed: true }]))
       .finally(() => setBusy(false))
   }
 

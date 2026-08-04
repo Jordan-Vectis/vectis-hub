@@ -114,7 +114,17 @@ export async function POST(req: NextRequest) {
 
     const context = picked.map(f => `===== FILE: ${f.path} =====\n${f.content}`).join("\n\n")
 
-    const convo = (history ?? []).slice(-8).map(h => ({ role: h.role, parts: [{ text: h.text }] }))
+    // ⚠ Gemini rejects the WHOLE request if any history part is empty:
+    //   "contents[3].parts[0].data: required oneof field 'data' must have one
+    //    initialized field"
+    // One blank reply therefore poisoned the conversation permanently — every
+    // later question 400'd. Blank turns are dropped, and the history must also
+    // START with a user turn (the slice can otherwise begin on a model reply).
+    const cleanHistory = (history ?? [])
+      .filter(h => h && typeof h.text === "string" && h.text.trim().length > 0)
+      .slice(-8)
+    while (cleanHistory.length > 0 && cleanHistory[0].role !== "user") cleanHistory.shift()
+    const convo = cleanHistory.map(h => ({ role: h.role, parts: [{ text: h.text }] }))
 
     const prompt = `You are explaining Vectis Auctions' Business Central system to the staff member who administers it. They are NOT a programmer. British English.
 
@@ -132,7 +142,10 @@ QUESTION: ${q}`
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
       model: await getToolModel("bc_source_chat", modelId),
-      generationConfig: { maxOutputTokens: 8192 },
+      // Roomy on purpose: a thinking-capable model can spend most of its output
+      // budget reasoning and return no text at all, which is what produced the
+      // blank reply that then poisoned the history.
+      generationConfig: { maxOutputTokens: 16384 },
     })
 
     const chat   = model.startChat({ history: convo })
@@ -145,8 +158,21 @@ QUESTION: ${q}`
       return NextResponse.json({ error: `Gemini stopped: ${finish}` }, { status: 422 })
     }
 
+    // ⚠ Never hand back an empty answer. It renders as a blank bubble that
+    // looks like a hang, and worse, it goes back into the history on the next
+    // question and gets the whole conversation rejected.
+    const answer = response.text().trim()
+    if (!answer) {
+      return NextResponse.json(
+        { error: finish === "MAX_TOKENS"
+            ? "The model ran out of room before writing an answer. Ask it in a narrower way — name the screen or field you mean."
+            : "The model came back with nothing. Try asking again." },
+        { status: 502 },
+      )
+    }
+
     return NextResponse.json({
-      answer:  response.text().trim(),
+      answer,
       sources: picked.map(f => ({ id: f.id, path: f.path, extension: f.extension })),
     })
   } catch (e: any) {
