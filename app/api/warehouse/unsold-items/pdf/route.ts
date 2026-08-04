@@ -74,37 +74,86 @@ export async function GET(req: NextRequest) {
       return a.barcode.localeCompare(b.barcode)
     })
 
-    // Group by aisle
-    const groups = new Map<string, Item[]>()
-    for (const a of aisleList) groups.set(a, [])
-    const other: Item[] = []
-    for (const it of items) {
-      const matched = aisleList.find(a => it.location.toUpperCase().startsWith(a))
-      if (matched) groups.get(matched)!.push(it)
-      else         other.push(it)
-    }
-    const aisleGroups: { aisle: string; items: Item[] }[] = []
-    for (const a of aisleList) {
-      const list = groups.get(a)!
-      if (list.length > 0) aisleGroups.push({ aisle: a, items: list })
-    }
-    if (other.length > 0) aisleGroups.push({ aisle: "Other", items: other })
-
-    const pdfBytes = await buildPdf(aisleGroups)
-
-    const filename = `unsold-items-${aisleList.join("-")}-${new Date().toISOString().slice(0, 10)}.pdf`
-    return new NextResponse(new Uint8Array(pdfBytes), {
-      status: 200,
-      headers: {
-        "Content-Type":        "application/pdf",
-        "Content-Disposition": `attachment; filename="${filename}"`,
-        "Content-Length":      String(pdfBytes.length),
-      },
-    })
+    return await pdfResponse(items, aisleList)
   } catch (e: any) {
     console.error("unsold-items/pdf error:", e)
     return NextResponse.json({ error: e?.message ?? "PDF generation failed" }, { status: 500 })
   }
+}
+
+// POST — same sheet, but the client supplies the rows. Used by the Unsold Items
+// tab so the picking sheet prints exactly the rows left after the on-screen
+// column filters, rather than re-querying BC and printing everything.
+export async function POST(req: NextRequest) {
+  try {
+    const session = await auth()
+    if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+
+    const body = await req.json().catch(() => null)
+    const rows = Array.isArray(body?.items) ? body.items : null
+    if (!rows) return NextResponse.json({ error: "No items supplied" }, { status: 400 })
+
+    const aisleList = String(body?.aisles ?? "")
+      .split(/[,\s.;/|]+/)
+      .map((s: string) => s.trim().toUpperCase())
+      .filter(Boolean)
+
+    const items: Item[] = rows.map((raw: unknown) => {
+      const r = (raw ?? {}) as Partial<Record<keyof Item, unknown>>
+      return {
+        uniqueId:    String(r.uniqueId ?? ""),
+        receiptNo:   String(r.receiptNo ?? ""),
+        articleNo:   String(r.articleNo ?? ""),
+        barcode:     String(r.barcode ?? ""),
+        description: String(r.description ?? ""),
+        location:    String(r.location ?? ""),
+        vendorNo:    String(r.vendorNo ?? ""),
+        vendorName:  String(r.vendorName ?? ""),
+        auctionCode: String(r.auctionCode ?? ""),
+      }
+    }).sort((a: Item, b: Item) => {
+      const locCmp = a.location.localeCompare(b.location)
+      if (locCmp !== 0) return locCmp
+      return a.barcode.localeCompare(b.barcode)
+    })
+
+    return await pdfResponse(items, aisleList)
+  } catch (e: any) {
+    console.error("unsold-items/pdf POST error:", e)
+    return NextResponse.json({ error: e?.message ?? "PDF generation failed" }, { status: 500 })
+  }
+}
+
+// Groups by aisle (anything outside the requested prefixes lands under "Other")
+// and returns the finished PDF response.
+async function pdfResponse(items: Item[], aisleList: string[]) {
+  const groups = new Map<string, Item[]>()
+  for (const a of aisleList) groups.set(a, [])
+  const other: Item[] = []
+  for (const it of items) {
+    const matched = aisleList.find(a => it.location.toUpperCase().startsWith(a))
+    if (matched) groups.get(matched)!.push(it)
+    else         other.push(it)
+  }
+  const aisleGroups: { aisle: string; items: Item[] }[] = []
+  for (const a of aisleList) {
+    const list = groups.get(a)!
+    if (list.length > 0) aisleGroups.push({ aisle: a, items: list })
+  }
+  if (other.length > 0) aisleGroups.push({ aisle: "Other", items: other })
+
+  const pdfBytes = await buildPdf(aisleGroups)
+
+  const suffix = aisleList.length > 0 ? aisleList.join("-") : "all"
+  const filename = `unsold-items-${suffix}-${new Date().toISOString().slice(0, 10)}.pdf`
+  return new NextResponse(new Uint8Array(pdfBytes), {
+    status: 200,
+    headers: {
+      "Content-Type":        "application/pdf",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Length":      String(pdfBytes.length),
+    },
+  })
 }
 
 // ─── PDF builder ─────────────────────────────────────────────────────────────

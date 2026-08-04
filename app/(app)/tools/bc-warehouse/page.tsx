@@ -1,7 +1,8 @@
 ﻿"use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import GuideTab from "./guide-tab"
+import { FilterTable, type FilterColumn } from "@/components/filter-table"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -668,6 +669,42 @@ function WarehouseHeatmapTab() {
 
 // ─── SaleChecklistTab ─────────────────────────────────────────────────────────
 
+const SALE_COLUMNS: FilterColumn<SaleItem>[] = [
+  { key: "uniqueId", label: "Unique ID", value: i => i.uniqueId, className: "font-mono text-gray-600 dark:text-gray-300" },
+  { key: "barcode",  label: "Barcode",   value: i => i.barcode ?? "", className: "font-mono text-gray-600 dark:text-gray-400" },
+  { key: "lot",      label: "Lot",       value: i => i.currentLotNo ?? i.lotNo ?? "", className: "text-gray-600 dark:text-gray-300" },
+  {
+    key: "description", label: "Description", filterable: false, pdfWidth: 5,
+    value: i => [i.artist, i.description].filter(Boolean).join(" — "),
+    className: "text-gray-700 dark:text-gray-200 max-w-xs truncate",
+    render: i => (
+      <>
+        {i.artist ? <span className="text-yellow-400">{i.artist} — </span> : null}
+        {i.description ?? "—"}
+      </>
+    ),
+  },
+  {
+    key: "location", label: "Location", pdfWidth: 1.5,
+    value: i => (i.location ? [i.location, i.binCode, i.toteNo].filter(Boolean).join("·") : "Missing"),
+    className: "font-mono",
+    render: i => i.location
+      ? <span className="text-green-400">{[i.location, i.binCode, i.toteNo].filter(Boolean).join("·")}</span>
+      : <span className="text-red-400">Missing</span>,
+  },
+  { key: "vendor", label: "Vendor", value: i => i.vendorName ?? i.vendorNo ?? "", pdfWidth: 2, className: "text-gray-600 dark:text-gray-400" },
+  {
+    key: "status", label: "Status",
+    value: i => [i.withdrawLot ? "Withdraw" : null, i.collected ? "Collected" : null].filter(Boolean).join(" · "),
+    render: i => (
+      <>
+        {i.withdrawLot && <span className="text-orange-400">Withdraw</span>}
+        {i.collected && <span className="text-blue-400">Collected</span>}
+      </>
+    ),
+  },
+]
+
 function SaleChecklistTab() {
   const [data, setData] = useState<SaleData | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -755,46 +792,18 @@ function SaleChecklistTab() {
               </button>
 
               {isOpen && (
-                <div className="border-t border-gray-300 dark:border-gray-700">
-                  <table className="w-full text-xs">
-                    <thead className="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-400">
-                      <tr>
-                        <th className="px-3 py-2 text-left">Unique ID</th>
-                        <th className="px-3 py-2 text-left">Barcode</th>
-                        <th className="px-3 py-2 text-left">Lot</th>
-                        <th className="px-3 py-2 text-left">Description</th>
-                        <th className="px-3 py-2 text-left">Location</th>
-                        <th className="px-3 py-2 text-left">Vendor</th>
-                        <th className="px-3 py-2 text-left">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {items.map(item => (
-                        <tr key={item.uniqueId} className={!item.location ? "bg-red-950/30" : ""}>
-                          <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-300">{item.uniqueId}</td>
-                          <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-400">{item.barcode ?? "—"}</td>
-                          <td className="px-3 py-2 text-gray-600 dark:text-gray-300">{item.currentLotNo ?? item.lotNo ?? "—"}</td>
-                          <td className="px-3 py-2 text-gray-700 dark:text-gray-200 max-w-xs truncate">
-                            {item.artist ? <span className="text-yellow-400">{item.artist} — </span> : null}
-                            {item.description ?? "—"}
-                          </td>
-                          <td className="px-3 py-2 font-mono">
-                            {item.location ? (
-                              <span className="text-green-400">{[item.location, item.binCode, item.toteNo].filter(Boolean).join("·")}</span>
-                            ) : (
-                              <span className="text-red-400">Missing</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{item.vendorName ?? item.vendorNo ?? "—"}</td>
-                          <td className="px-3 py-2">
-                            {item.withdrawLot && <span className="text-orange-400">Withdraw</span>}
-                            {item.collected && <span className="text-blue-400">Collected</span>}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <FilterTable
+                  className="border-t border-gray-300 dark:border-gray-700"
+                  title={auction.code}
+                  columns={SALE_COLUMNS}
+                  rows={items}
+                  rowKey={item => item.uniqueId}
+                  rowClassName={item => (!item.location ? "bg-red-950/30" : "")}
+                  resetKey={`${auction.code}:${filter}`}
+                  pdfTitle={`Sale checklist - ${auction.code}`}
+                  pdfSubtitle={[auction.name, filter === "all" ? null : filter === "located" ? "Located items only" : "Missing items only"].filter(Boolean).join(" · ")}
+                  pdfFilename={`sale-checklist-${auction.code}`}
+                />
               )}
             </div>
           )
@@ -832,6 +841,59 @@ function SearchByLocationTab() {
   }
 
   const total = items.length + totes.length
+
+  // A new search wipes any column filters left over from the last one.
+  const resetKey    = `${mode}:${searchedFor}`
+  const pdfSubtitle = searchedFor
+    ? `${mode === "aisle" ? "Aisle" : "Location / barcode / tote"}: ${searchedFor}`
+    : undefined
+
+  const toteColumns = useMemo<FilterColumn<SearchTote>[]>(() => [
+    { key: "toteNo",   label: "Tote No",  value: t => t.toteNo, className: "font-mono text-cyan-700 dark:text-cyan-300 font-semibold" },
+    ...(mode === "aisle"
+      ? [{ key: "location", label: "Location", value: (t: SearchTote) => t.location ?? "", className: "font-mono text-gray-600 dark:text-gray-500" }]
+      : []),
+    { key: "receiptNo", label: "Receipt",  value: t => t.receiptNo ?? "", className: "font-mono text-gray-600 dark:text-gray-400" },
+    { key: "vendor",    label: "Vendor",   value: t => t.vendorName ?? t.vendorNo ?? "", pdfWidth: 2 },
+    { key: "status",    label: "Status",   value: t => (t.status && t.status !== "No Reserve" ? t.status : "") },
+    {
+      key: "state", label: "State",
+      value: t => (t.catalogued == null ? "" : t.catalogued ? "Catalogued" : "Active"),
+      render: t => t.catalogued == null ? <span className="text-gray-400 dark:text-gray-700">—</span> : (
+        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${t.catalogued ? "bg-green-900/50 text-green-300" : "bg-amber-900/50 text-amber-300"}`}>
+          {t.catalogued ? "Catalogued" : "Active"}
+        </span>
+      ),
+    },
+  ], [mode])
+
+  const itemColumns = useMemo<FilterColumn<SearchItem>[]>(() => [
+    { key: "uniqueId", label: "Unique ID", value: i => i.uniqueId, className: "font-mono text-gray-600 dark:text-gray-300" },
+    { key: "barcode",  label: "Barcode",   value: i => i.barcode ?? "", className: "font-mono text-gray-600 dark:text-gray-500" },
+    ...(mode === "aisle"
+      ? [{ key: "location", label: "Location", value: (i: SearchItem) => i.location ?? "", className: "font-mono text-gray-600 dark:text-gray-400" }]
+      : []),
+    {
+      key: "description", label: "Description", filterable: false, pdfWidth: 5,
+      value: i => [i.artist, i.description].filter(Boolean).join(" — "),
+      className: "text-gray-700 dark:text-gray-200 max-w-xs",
+      render: i => (
+        <>
+          {i.artist && <span className="text-yellow-400">{i.artist} — </span>}
+          {i.description ?? "—"}
+        </>
+      ),
+    },
+    {
+      key: "auctionCode", label: "Auction", value: i => i.auctionCode ?? "",
+      render: i => i.auctionCode
+        ? <span className="bg-blue-900/60 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded font-mono">{i.auctionCode}</span>
+        : <span className="text-gray-400 dark:text-gray-700">—</span>,
+    },
+    { key: "lot",      label: "Lot",        value: i => i.currentLotNo ?? i.lotNo ?? "", className: "text-gray-600 dark:text-gray-400" },
+    { key: "category", label: "Category",   value: i => i.category ?? "", className: "text-gray-600 dark:text-gray-500" },
+    { key: "toteBin",  label: "Tote / Bin", value: i => [i.toteNo, i.binCode].filter(Boolean).join(" / "), className: "font-mono text-gray-600 dark:text-gray-500" },
+  ], [mode])
 
   return (
     <div className="h-full flex flex-col">
@@ -909,85 +971,32 @@ function SearchByLocationTab() {
 
         {/* Totes section */}
         {totes.length > 0 && (
-          <div className="border-b border-gray-200 dark:border-gray-800">
-            <div className="px-4 py-2 bg-gray-100 dark:bg-gray-900/50 text-xs font-medium text-cyan-500 uppercase tracking-wider">
-              Totes · {totes.length.toLocaleString()}
-            </div>
-            <table className="w-full text-xs">
-              <thead className="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-500 sticky top-0">
-                <tr>
-                  <th className="px-4 py-2 text-left font-medium">Tote No</th>
-                  {mode === "aisle" && <th className="px-4 py-2 text-left font-medium">Location</th>}
-                  <th className="px-4 py-2 text-left font-medium">Receipt</th>
-                  <th className="px-4 py-2 text-left font-medium">Vendor</th>
-                  <th className="px-4 py-2 text-left font-medium">Status</th>
-                  <th className="px-4 py-2 text-left font-medium">State</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-800/60">
-                {totes.map(t => (
-                  <tr key={t.toteNo} className="hover:bg-gray-800/40 transition-colors">
-                    <td className="px-4 py-2.5 font-mono text-cyan-700 dark:text-cyan-300 font-semibold">{t.toteNo}</td>
-                    {mode === "aisle" && <td className="px-4 py-2.5 font-mono text-gray-600 dark:text-gray-500">{t.location ?? "—"}</td>}
-                    <td className="px-4 py-2.5 font-mono text-gray-600 dark:text-gray-400">{t.receiptNo ?? "—"}</td>
-                    <td className="px-4 py-2.5 text-gray-600 dark:text-gray-300">{t.vendorName ?? t.vendorNo ?? "—"}</td>
-                    <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400">{t.status && t.status !== "No Reserve" ? t.status : "—"}</td>
-                    <td className="px-4 py-2.5">
-                      {t.catalogued != null
-                        ? <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${t.catalogued ? "bg-green-900/50 text-green-300" : "bg-amber-900/50 text-amber-300"}`}>
-                            {t.catalogued ? "Catalogued" : "Active"}
-                          </span>
-                        : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <FilterTable
+            className="border-b border-gray-200 dark:border-gray-800"
+            title="Totes"
+            titleClassName="text-cyan-500"
+            columns={toteColumns}
+            rows={totes}
+            rowKey={t => t.toteNo}
+            resetKey={resetKey}
+            pdfTitle="Warehouse totes"
+            pdfSubtitle={pdfSubtitle}
+            pdfFilename={`warehouse-totes-${searchedFor}`}
+          />
         )}
 
         {/* Items section */}
         {items.length > 0 && (
-          <div>
-            <div className="px-4 py-2 bg-gray-100 dark:bg-gray-900/50 text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-              Items · {items.length.toLocaleString()}
-            </div>
-            <table className="w-full text-xs">
-              <thead className="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-500 sticky top-0">
-                <tr>
-                  <th className="px-4 py-2 text-left font-medium">Unique ID</th>
-                  <th className="px-4 py-2 text-left font-medium">Barcode</th>
-                  {mode === "aisle" && <th className="px-4 py-2 text-left font-medium">Location</th>}
-                  <th className="px-4 py-2 text-left font-medium">Description</th>
-                  <th className="px-4 py-2 text-left font-medium">Auction</th>
-                  <th className="px-4 py-2 text-left font-medium">Lot</th>
-                  <th className="px-4 py-2 text-left font-medium">Category</th>
-                  <th className="px-4 py-2 text-left font-medium">Tote / Bin</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-800/60">
-                {items.map(item => (
-                  <tr key={item.uniqueId} className="hover:bg-gray-800/40 transition-colors">
-                    <td className="px-4 py-2.5 font-mono text-gray-600 dark:text-gray-300">{item.uniqueId}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-600 dark:text-gray-500">{item.barcode ?? "—"}</td>
-                    {mode === "aisle" && <td className="px-4 py-2.5 font-mono text-gray-600 dark:text-gray-400">{item.location ?? "—"}</td>}
-                    <td className="px-4 py-2.5 text-gray-700 dark:text-gray-200 max-w-xs">
-                      {item.artist && <span className="text-yellow-400">{item.artist} — </span>}
-                      {item.description ?? "—"}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {item.auctionCode
-                        ? <span className="bg-blue-900/60 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded font-mono">{item.auctionCode}</span>
-                        : <span className="text-gray-600 dark:text-gray-400">—</span>}
-                    </td>
-                    <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400">{item.currentLotNo ?? item.lotNo ?? "—"}</td>
-                    <td className="px-4 py-2.5 text-gray-600 dark:text-gray-500">{item.category ?? "—"}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-600 dark:text-gray-500">{[item.toteNo, item.binCode].filter(Boolean).join(" / ") || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <FilterTable
+            title="Items"
+            columns={itemColumns}
+            rows={items}
+            rowKey={i => i.uniqueId}
+            resetKey={resetKey}
+            pdfTitle="Warehouse items"
+            pdfSubtitle={pdfSubtitle}
+            pdfFilename={`warehouse-items-${searchedFor}`}
+          />
         )}
       </div>
     </div>
@@ -1334,12 +1343,19 @@ function HorizBar({ value, max, color = "bg-blue-500" }: { value: number; max: n
   )
 }
 
+const TOTE_RAW_COLUMNS: FilterColumn<SearchTote>[] = [
+  { key: "toteNo",    label: "Tote No",  value: t => t.toteNo, className: "font-mono text-cyan-700 dark:text-cyan-300 font-semibold" },
+  { key: "location",  label: "Location", value: t => t.location ?? "", className: "font-mono text-gray-600 dark:text-gray-400" },
+  { key: "receiptNo", label: "Receipt",  value: t => t.receiptNo ?? "", className: "text-gray-600 dark:text-gray-400" },
+  { key: "vendor",    label: "Vendor",   value: t => t.vendorName ?? "", className: "text-gray-600 dark:text-gray-300", pdfWidth: 2 },
+  { key: "status",    label: "Status",   value: t => (t.status && t.status !== "No Reserve" ? t.status : ""), className: "text-gray-600 dark:text-gray-500" },
+]
+
 function ToteDataTab() {
   const [data, setData]       = useState<ToteReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
   const [view, setView]       = useState<"category" | "location" | "raw">("category")
-  const [showAll, setShowAll] = useState(false)
 
   async function load() {
     setLoading(true); setError(null)
@@ -1371,7 +1387,6 @@ function ToteDataTab() {
   const maxLoc     = Math.max(...byLocation.map(r => r.toteCount), 1)
 
   const largestCategory = byCategory[0]?.category ?? "—"
-  const visibleTotes    = showAll ? totes : totes.slice(0, 150)
 
   return (
     <div className="h-full flex flex-col">
@@ -1496,46 +1511,22 @@ function ToteDataTab() {
 
         {/* ── Raw data table ── */}
         {view === "raw" && (
-          <div className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
-            {totes.length === 0 ? (
-              <div className="p-6 text-center text-gray-600 dark:text-gray-400 text-sm">No active totes found</div>
-            ) : (
-              <>
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-500 sticky top-0">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-medium">Tote No</th>
-                      <th className="px-4 py-2 text-left font-medium">Location</th>
-                      <th className="px-4 py-2 text-left font-medium">Receipt</th>
-                      <th className="px-4 py-2 text-left font-medium">Vendor</th>
-                      <th className="px-4 py-2 text-left font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800/60">
-                    {visibleTotes.map(t => (
-                      <tr key={t.toteNo} className="hover:bg-gray-800/30 transition-colors">
-                        <td className="px-4 py-2.5 font-mono text-cyan-700 dark:text-cyan-300 font-semibold">{t.toteNo}</td>
-                        <td className="px-4 py-2.5 font-mono text-gray-600 dark:text-gray-400">{t.location ?? <span className="text-gray-700">—</span>}</td>
-                        <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400">{t.receiptNo ?? <span className="text-gray-700">—</span>}</td>
-                        <td className="px-4 py-2.5 text-gray-600 dark:text-gray-300">{t.vendorName ?? <span className="text-gray-700">—</span>}</td>
-                        <td className="px-4 py-2.5 text-gray-600 dark:text-gray-500">{t.status && t.status !== "No Reserve" ? t.status : <span className="text-gray-700">—</span>}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {totes.length > 150 && (
-                  <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-800 text-center bg-gray-100 dark:bg-gray-900">
-                    <button
-                      onClick={() => setShowAll(v => !v)}
-                      className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
-                    >
-                      {showAll ? "Show fewer" : `Show all ${totes.length.toLocaleString()} totes`}
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+          totes.length === 0 ? (
+            <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-6 text-center text-gray-600 dark:text-gray-400 text-sm">No active totes found</div>
+          ) : (
+            <FilterTable
+              className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
+              title="Active totes"
+              titleClassName="text-cyan-500"
+              columns={TOTE_RAW_COLUMNS}
+              rows={totes}
+              rowKey={t => t.toteNo}
+              initialRows={150}
+              pdfTitle="Tote report - active totes"
+              pdfSubtitle="Totes on active shelf locations"
+              pdfFilename="tote-report"
+            />
+          )
         )}
       </div>
     </div>
@@ -1799,12 +1790,24 @@ type UnsoldItem = {
   auctionCode: string
 }
 
+const UNSOLD_COLUMNS: FilterColumn<UnsoldItem>[] = [
+  { key: "location",    label: "Location",    value: it => it.location, className: "font-mono text-gray-600 dark:text-gray-300" },
+  { key: "barcode",     label: "Barcode",     value: it => it.barcode,  className: "font-mono text-gray-600 dark:text-gray-300" },
+  { key: "description", label: "Description", value: it => it.description, filterable: false, pdfWidth: 5, className: "text-gray-700 dark:text-gray-200" },
+  { key: "vendor",      label: "Vendor",      value: it => it.vendorName || it.vendorNo || "", pdfWidth: 2, className: "text-gray-600 dark:text-gray-300" },
+  { key: "auctionCode", label: "Auction",     value: it => it.auctionCode, className: "font-mono text-gray-600 dark:text-gray-500" },
+]
+
 function UnsoldItemsTab() {
   const [aislesText, setAislesText] = useState("A50, A51")
   const [items,      setItems]      = useState<UnsoldItem[] | null>(null)
   const [loading,    setLoading]    = useState(false)
   const [error,      setError]      = useState<string | null>(null)
   const [groupByVendor, setGroupByVendor] = useState(false)
+  const [searchedAisles, setSearchedAisles] = useState("")
+  // The rows currently visible in the table — the picking sheet prints these,
+  // so the column filters apply to it too.
+  const [visibleItems, setVisibleItems] = useState<UnsoldItem[]>([])
 
   async function search() {
     setLoading(true)
@@ -1819,6 +1822,8 @@ function UnsoldItemsTab() {
         return
       }
       setItems(data.items as UnsoldItem[])
+      setVisibleItems(data.items as UnsoldItem[])
+      setSearchedAisles(aislesText.trim())
     } catch {
       setError("Network error")
     } finally {
@@ -1826,14 +1831,20 @@ function UnsoldItemsTab() {
     }
   }
 
+  // Grouped view has no column filters, so it prints everything found.
+  const pdfItems = groupByVendor ? (items ?? []) : visibleItems
+
   const [downloadingPdf, setDownloadingPdf] = useState(false)
   async function downloadPdf() {
-    if (!items || items.length === 0) return
+    if (pdfItems.length === 0) return
     setDownloadingPdf(true)
     try {
       const aisles = aislesText.trim()
-      const url = `/api/warehouse/unsold-items/pdf?aisles=${encodeURIComponent(aisles)}`
-      const res = await fetch(url)
+      const res = await fetch("/api/warehouse/unsold-items/pdf", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ aisles, items: pdfItems }),
+      })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         alert(data.error ?? "PDF generation failed")
@@ -1936,43 +1947,31 @@ function UnsoldItemsTab() {
                 </>
               )}
             </p>
-            {items.length > 0 && (
+            {pdfItems.length > 0 && (
               <button
                 onClick={downloadPdf}
                 disabled={downloadingPdf}
                 className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-gray-900 dark:text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
-                title="Download a PDF with each aisle on its own report."
+                title="Picking sheet — each aisle on its own page with tickboxes. Prints the rows currently shown."
               >
-                {downloadingPdf ? "Generating PDF…" : "📄 Download PDF"}
+                {downloadingPdf ? "Generating PDF…" : `📄 Picking sheet (${pdfItems.length.toLocaleString()})`}
               </button>
             )}
           </div>
 
           {items.length > 0 && !groupByVendor && (
-            <div className="overflow-auto border border-gray-200 dark:border-gray-800 rounded-lg">
-              <table className="text-xs w-full">
-                <thead className="bg-white dark:bg-gray-800 sticky top-0">
-                  <tr className="text-left text-gray-600 dark:text-gray-400">
-                    <th className="px-3 py-2">Location</th>
-                    <th className="px-3 py-2">Barcode</th>
-                    <th className="px-3 py-2">Description</th>
-                    <th className="px-3 py-2">Vendor</th>
-                    <th className="px-3 py-2">Auction</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map(it => (
-                    <tr key={it.uniqueId} className="border-t border-gray-200 dark:border-gray-800 hover:bg-gray-900">
-                      <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-300">{it.location}</td>
-                      <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-300">{it.barcode}</td>
-                      <td className="px-3 py-2 text-gray-700 dark:text-gray-200">{it.description}</td>
-                      <td className="px-3 py-2 text-gray-600 dark:text-gray-300">{it.vendorName || it.vendorNo || "—"}</td>
-                      <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-500">{it.auctionCode || "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <FilterTable
+              className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
+              title="Unsold items"
+              columns={UNSOLD_COLUMNS}
+              rows={items}
+              rowKey={it => it.uniqueId}
+              resetKey={searchedAisles}
+              onVisibleChange={setVisibleItems}
+              pdfTitle="Unsold items"
+              pdfSubtitle={searchedAisles ? `Aisles: ${searchedAisles}` : undefined}
+              pdfFilename={`unsold-items-${searchedAisles}`}
+            />
           )}
 
           {items.length > 0 && groupByVendor && (

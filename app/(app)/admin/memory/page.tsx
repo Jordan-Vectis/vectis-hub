@@ -16,6 +16,46 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "warehouse_filter_table.md",
+    content: `---
+name: BC Warehouse — Excel filters + print what's on screen
+purpose: Every BC Warehouse results table uses the shared <FilterTable> (click-a-column Excel dropdown) with a PDF that prints the filtered rows. Read before touching those tables or adding a new one.
+last_updated: 2026-08-04
+---
+
+# BC Warehouse results tables — Excel-style filters + PDF (built 2026-08-04)
+
+The ask: make the \`/tools/bc-warehouse\` results filterable **"like Excel — you click on it and it tells you all the options"**, with a printable PDF. Applied to **every** results table, and **the PDF prints exactly what is on screen**.
+
+## The two shared pieces — use them, don't hand-roll another table
+
+- **\`components/filter-table.tsx\`** → \`<FilterTable>\` + \`FilterColumn<T>\`. Click a column heading and you get the Excel dropdown: **Sort A→Z / Z→A**, a **search box**, **(Select all)**, and a **tickbox per distinct value with counts**. The header bar shows \`Title · X of Y\` when filtered, plus **✕ Clear filters** and the **🖨 PDF** button.
+- **\`lib/warehouse-table-pdf.ts\`** + **\`POST /api/warehouse/table-pdf\`** — Vectis-branded A4 sheet (auto-landscape above 5 columns), repeating column header, banded rows, page numbers.
+
+## Four things that are deliberate — don't "simplify" them away
+
+1. **The client posts the finished strings.** \`<FilterTable>\` sends its visible rows, already filtered and sorted, as \`string[][]\`. The route does **no** lookup, filter or sort, so the sheet can never disagree with the screen. Don't make the route re-query BC "to be safe".
+2. **The dropdown is rendered in a \`createPortal\` at fixed position.** These tables sit inside \`overflow-y-auto\` panes that would clip an absolutely-positioned panel. It closes on outside click / Escape / any scroll that isn't inside the panel itself.
+3. **Options are computed under the OTHER columns' filters** (real Excel behaviour), so the values offered are ones that still exist in the rows you can see.
+4. **An empty selection is a real filter that matches nothing.** A key being *present* in \`filters\` means that column is filtered; untick everything and the table empties (with a "Clear filters" link in the body). Everything ticked deletes the key = no filter.
+
+Other props: \`resetKey\` (change it — e.g. to the search term — and the filters drop, so a stale filter can't silently empty a new search), \`initialRows\` (the "Show all N rows" button), \`rowClassName\` (kept Sale Checklist's red missing-item rows), \`onVisibleChange\` (lifts the visible rows for a caller's own export), and per column \`render\`, \`filterable: false\`, \`pdfWidth\` / \`pdfHide\`.
+
+⚠ Each column needs a **plain-text \`value(row)\`** — that string is what filtering, sorting AND the PDF all use. \`render\` is only for the on-screen cell (badges, colours).
+
+## Where it is wired in
+
+| Tab | Table |
+|---|---|
+| Search by Location | Totes **and** Items (Location column still only in aisle mode) |
+| Tote Data | Raw Data view (kept the 150-row "Show all" behaviour via \`initialRows\`) |
+| Unsold Items | the flat list (Group-by-vendor view unchanged, no filters there) |
+| Sale Checklist | the per-auction item table inside the accordion |
+
+⚠ **Unsold Items has TWO PDFs and both follow the filters.** The green button is the **picking sheet** (per-aisle pages with tickboxes) — \`app/api/warehouse/unsold-items/pdf/route.ts\` gained a **POST** handler that builds the same sheet from client-supplied rows, fed the visible rows via \`onVisibleChange\`. The old GET (re-queries BC for whole aisles) still exists; don't switch the button back to it or the sheet would print rows the user filtered out.
+`,
+  },
+  {
     filename: "departments.md",
     content: `---
 name: Departments — sale access + reports
