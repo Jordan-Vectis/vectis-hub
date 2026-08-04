@@ -39,6 +39,11 @@ export type AiRequest = {
   model:             string
   prompt:            string
   system?:           string
+  /** Big, repeated context that comes BEFORE the prompt — source files, a long
+   *  instruction, a document. On Claude this is sent as its own cached block
+   *  (see prompt caching below); on Gemini it is simply glued in front of the
+   *  prompt. Put the varying bit (the question) in `prompt`, never in here. */
+  cachePrefix?:      string
   images?:           AiImage[]
   history?:          AiTurn[]
   maxOutputTokens?:  number
@@ -78,7 +83,9 @@ async function generateGemini(req: AiRequest): Promise<string> {
     },
   })
 
-  const parts: any[] = [{ text: req.prompt }]
+  // Gemini has its own (separate, explicit) caching product we don't use, so the
+  // prefix is just text in front of the prompt here.
+  const parts: any[] = [{ text: req.cachePrefix ? `${req.cachePrefix}\n\n${req.prompt}` : req.prompt }]
   for (const img of req.images ?? []) {
     parts.push({ inlineData: { mimeType: img.mimeType, data: img.data } })
   }
@@ -110,6 +117,27 @@ async function generateAnthropic(req: AiRequest): Promise<string> {
   const client = new Anthropic({ apiKey })
 
   const content: Anthropic.ContentBlockParam[] = []
+
+  // ── Prompt caching ─────────────────────────────────────────────────────────
+  // Anthropic caches on an exact PREFIX match: the stable text has to come
+  // first, and the varying text after it. So the order here is deliberate —
+  // system prompt, then cachePrefix, then the images and the actual question.
+  // A cached block re-read costs ~10% of the normal input price; writing it
+  // costs 25% more, so it pays for itself from the second call that reuses the
+  // same prefix (a batch run over 300 lots reuses the same instruction 300
+  // times). A prefix under the model's minimum simply isn't cached — no error
+  // and no write charge — so marking a short one is harmless.
+  // ⚠ Never move anything that changes per call ABOVE a cache_control marker:
+  // that invalidates the cache on every request and you pay the write premium
+  // for nothing.
+  if (req.cachePrefix?.trim()) {
+    content.push({
+      type: "text",
+      text: req.cachePrefix,
+      cache_control: { type: "ephemeral" },
+    })
+  }
+
   for (const img of req.images ?? []) {
     content.push({
       type: "image",
@@ -138,10 +166,22 @@ async function generateAnthropic(req: AiRequest): Promise<string> {
   const stream = client.messages.stream({
     model:      req.model,
     max_tokens: maxTokens,
-    ...(req.system ? { system: req.system } : {}),
+    // Block form (not a bare string) so the system prompt can carry a cache
+    // marker — it is the same on every call a tool makes, so it is the single
+    // best thing to cache.
+    ...(req.system ? { system: [{ type: "text" as const, text: req.system, cache_control: { type: "ephemeral" as const } }] } : {}),
     messages,
   })
   const message = await stream.finalMessage()
+
+  // Cache effectiveness is invisible unless you look — log it so a silent
+  // invalidator (a timestamp or an id creeping into the prefix) shows up as
+  // "read 0" on every call instead of quietly costing full price.
+  const wrote = message.usage?.cache_creation_input_tokens ?? 0
+  const read  = message.usage?.cache_read_input_tokens ?? 0
+  if (wrote || read) {
+    console.log(`[ai-provider] ${req.model} cache: wrote ${wrote}, read ${read}, uncached ${message.usage?.input_tokens ?? 0}`)
+  }
 
   // Claude's safety classifiers can decline: a normal 200 with stop_reason
   // "refusal" and possibly empty content. Check BEFORE reading content.

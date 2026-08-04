@@ -16,6 +16,46 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "ai_cost.md",
+    content: `---
+name: AI cost — prompt caching + run price estimator
+purpose: Claude prompt caching in lib/ai-provider.ts (cachePrefix) and the "estimated cost" panel before Auction AI runs, priced from lib/ai-pricing.ts + the admin-editable AiModelRate table.
+last_updated: 2026-08-04
+---
+
+# AI cost — prompt caching + the run price estimator (built 2026-08-04)
+
+Prompted by an Anthropic Console showing **$4.73 spent for ~10 test messages**. Two things came out of it.
+
+## ⚠ First, the finding that matters: the Hub was NOT the spend
+
+Checked against production: there is **no \`ANTHROPIC_API_KEY\` in the environment** and the **\`ToolModel\` table has zero rows**, so every AI tool falls back to its Gemini default and the Hub cannot make a Claude call at all. If Claude API spend appears again, that is Claude Code or the Console Workbench on the same key — **Console → Usage** breaks it down. Don't go hunting in the Hub first.
+
+## 1. Prompt caching (Claude only)
+
+\`AiRequest\` gained **\`cachePrefix?: string\`** — big *repeated* context that goes BEFORE the prompt. On Claude it's sent as its own block with \`cache_control: {type:"ephemeral"}\`; the \`system\` prompt is now sent in block form with the same marker. Gemini has no equivalent here, so it just gets the text glued in front of the prompt.
+
+- **Caching is a prefix match.** The stable text must come first and the varying text after. ⚠ Anything that changes per call (a question, a timestamp, an id) above a marker invalidates the cache every time and you pay the +25% write premium for nothing.
+- Re-read costs ~10% of input price; the write costs 25% more, so it pays off from the **second** call reusing the prefix (a 300-lot batch reuses one instruction 300 times).
+- A prefix under the model's minimum (512 tokens on Opus 5, 1024 on Sonnet 5) simply isn't cached — no error, no write charge — so marking a short one is harmless.
+- **Wired up in BC Source "ask the code"** (\`app/api/it-tools/bc-source/chat/route.ts\`): instructions + source files → \`cachePrefix\`, **only the question** → \`prompt\`. That split is the whole point; putting the question back in the prefix caches nothing.
+- \`generateAnthropic\` logs \`cache: wrote N, read N\` — a permanent \`read 0\` means a silent invalidator crept into the prefix.
+
+## 2. The run price estimator
+
+**\`lib/ai-pricing.ts\`** (pure, importable client-side) holds \`DEFAULT_RATES\` in **USD per 1M tokens** plus the token maths. **\`components/run-cost-estimate.tsx\`** renders the panel; it appears above the Run button on **Auction AI → Batch Run** and **Auto Pipeline** (pipeline passes \`passes={3}\` — Batch, Key Points, Double Check).
+
+⚠ **Three deliberate honesty rules — don't "improve" them away:**
+1. **A model with no known price shows "Price not set", never $0.** Anthropic's rates are published and exact; Google's model *ids* (\`gemini-3-flash-preview\`) don't match the names on their price page, so those rows carry \`confident: false\` and the UI labels them **Assumed**. An invented number is worse than no number.
+2. Unknown Claude ids fall through to Opus pricing — an estimate must never **under**-quote.
+3. The panel says on screen it's a rough estimate. Lot counts and photo counts are real (read off the screen); **tokens-per-photo and reply length are assumptions** (\`TOKENS_PER_PHOTO\` = 1032 Gemini / 1600 Claude, ~4 chars per token).
+
+**Admin → AI Models** gained a *"What each model costs"* section: per-model In $ / Out $ boxes, tagged Published / Assumed / Yours. Saving writes **\`AiModelRate\`** (**NEEDS Run Migrations**) via \`PUT /api/ai-rates\` (admins only; \`GET\` is any signed-in user because the estimator needs it). Blanking a row drops back to the built-in default. Reads are try/caught so a missing table degrades to "no overrides" rather than breaking the run tabs.
+
+Sanity-checked on real shapes: 340 lots × 6 photos ≈ **$0.88** on Gemini 2.5 Flash, **$2.65** through the 3-stage pipeline, **$19.51** on Claude Opus 5.
+`,
+  },
+  {
     filename: "admin_centre.md",
     content: `---
 name: Admin Centre (/tools/lot-lookup) — two tabs, big UI

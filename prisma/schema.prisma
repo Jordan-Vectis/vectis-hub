@@ -1314,6 +1314,17 @@ model ToolModel {
   updatedAt DateTime @updatedAt
 }
 
+// Admin-editable price per model, USD per 1,000,000 tokens. Only rows an admin
+// has actually corrected live here — everything else falls back to the built-in
+// table in lib/ai-pricing.ts. Feeds the "what will this run cost" estimate on
+// the Auction AI run tabs.
+model AiModelRate {
+  modelId    String   @id
+  inputPerM  Float
+  outputPerM Float
+  updatedAt  DateTime @updatedAt
+}
+
 // Invoice file storage — flat list backed by Cloudflare R2.
 // Accessible from /admin/invoices.
 model InvoiceFile {

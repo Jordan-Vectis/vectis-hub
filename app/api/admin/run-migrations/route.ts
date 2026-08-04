@@ -1269,6 +1269,15 @@ const MIGRATIONS = [
     "updatedAt"   TIMESTAMP(3) NOT NULL DEFAULT NOW(),
     CONSTRAINT "BcSourceGuide_pkey" PRIMARY KEY ("extension")
   )`,
+
+  // Admin-corrected AI prices (USD per 1M tokens) for the run cost estimator.
+  `CREATE TABLE IF NOT EXISTS "AiModelRate" (
+    "modelId"    TEXT NOT NULL,
+    "inputPerM"  DOUBLE PRECISION NOT NULL,
+    "outputPerM" DOUBLE PRECISION NOT NULL,
+    "updatedAt"  TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "AiModelRate_pkey" PRIMARY KEY ("modelId")
+  )`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

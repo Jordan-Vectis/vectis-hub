@@ -9,6 +9,7 @@ import { showError } from "@/lib/error-modal"
 import { MacroTab } from "./macro-tab"
 import BcImportCheckTab from "./bc-import-check-tab"
 import { analyseKeyPoints, HighlightedDescription, kpColour } from "@/lib/kp-analysis"
+import RunCostEstimate from "@/components/run-cost-estimate"
 
 // ─── Show Instruction Toggle ──────────────────────────────────────────────────
 
@@ -1041,6 +1042,20 @@ function BatchTab({ model, fallbackModel }: { model: string; fallbackModel: stri
               {saveErrors.length > 0 && <span className="text-yellow-400 ml-2">· {saveErrors.length} failed — see errors above</span>}
             </p>
           )}
+        </div>
+      )}
+
+      {/* ── What it will cost, before committing ── */}
+      {!loading && total > 0 && (
+        <div className="flex-shrink-0">
+          <RunCostEstimate
+            model={model}
+            items={total}
+            photos={selectedNames.reduce((s, n) => s + (lots[n]?.length ?? 0), 0)}
+            promptText={instructions[preset] ?? ""}
+            outputCharsPerItem={700}
+            note="One pass per lot. Retries after a rate limit re-send the lot, so a heavily throttled run can cost more than this."
+          />
         </div>
       )}
 
@@ -4921,6 +4936,20 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           </div>
           {recheckMsg && <p className="text-xs text-gray-400">{recheckMsg}</p>}
         </div>
+      )}
+
+      {/* What it will cost, before committing. The pipeline runs Batch → Key
+          Points → Double Check, so each lot goes to the model three times. */}
+      {lots.length > 0 && stage !== "complete" && !running && (
+        <RunCostEstimate
+          model={localModel}
+          items={lots.length}
+          photos={lots.reduce((s, l) => s + Math.min(l.imageUrls?.length ?? 0, 24), 0)}
+          promptText={instructions[preset] ?? ""}
+          outputCharsPerItem={700}
+          passes={3}
+          note="Three stages per lot — Batch Run, Key Points, Double Check. Only the first stage sends the photos, so this is on the high side."
+        />
       )}
 
       {/* Run / control buttons */}

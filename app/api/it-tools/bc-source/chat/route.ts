@@ -160,7 +160,13 @@ export async function POST(req: NextRequest) {
       .slice(-8)
     while (cleanHistory.length > 0 && cleanHistory[0].role !== "user") cleanHistory.shift()
 
-    const prompt = `You are explaining Vectis Auctions' Business Central system to the staff member who administers it. They are NOT a programmer. British English.
+    // ⚠ Split deliberately: everything stable (instructions + the source files)
+    // goes in cachePrefix, and ONLY the question goes in the prompt. On Claude
+    // that makes the source files a cached block — ask a second question that
+    // picks the same files and they are re-read at ~10% of the input price
+    // instead of charged again in full. Putting the question in here would
+    // change the prefix every time and cache nothing.
+    const cachePrefix = `You are explaining Vectis Auctions' Business Central system to the staff member who administers it. They are NOT a programmer. British English.
 
 Answer the question using ONLY the source files below. Rules:
 - Explain plainly, step by step — what the user sees and what the system does. Keep technical detail to what's needed.
@@ -170,9 +176,9 @@ Answer the question using ONLY the source files below. Rules:
 - SCREENSHOTS ARE ATTACHED of the actual screen. Read what is filled in, then compare it against the code. Say plainly which it is: the values entered don't match what the code expects (say exactly what to change), or the code genuinely can't do what is being asked (say which object and why). If an error message is visible, find where the code raises that exact text and explain what triggers it. Don't guess at anything the screenshot doesn't show.` : ""}
 
 SOURCE FILES:
-${context}
+${context}`
 
-QUESTION: ${q}`
+    const prompt = `QUESTION: ${q}`
 
     // Gemini or Claude, per Admin → AI Models. ⚠ The empty-answer and
     // blank-history guards that stop one bad reply poisoning a conversation now
@@ -184,6 +190,7 @@ QUESTION: ${q}`
       answer = await generateAiText({
         model:   await getToolModel("bc_source_chat", modelId),
         prompt,
+        cachePrefix,
         history: cleanHistory,
         images:  pics,
         maxOutputTokens: 16384,
