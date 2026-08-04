@@ -443,11 +443,15 @@ function AskView({ onOpenFile }: { onOpenFile: (id: string, extension?: string) 
     const history = msgs
       .filter(m => !m.failed && m.text.trim().length > 0)
       .map(m => ({ role: m.role, text: m.text }))
+    // Files the last answer was built from. A follow-up ("and how do I…") is
+    // nearly always about the same objects, but its wording on its own rarely
+    // retrieves them — so hand them back to be included again.
+    const pinnedIds = [...msgs].reverse().find(m => m.role === "model" && m.sources?.length)?.sources?.map(s => s.id) ?? []
     setMsgs(prev => [...prev, { role: "user", text: q }])
     setBusy(true)
     fetch("/api/it-tools/bc-source/chat", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: q, history }),
+      body: JSON.stringify({ question: q, history, pinnedIds }),
     })
       .then(r => r.json())
       .then(d => {

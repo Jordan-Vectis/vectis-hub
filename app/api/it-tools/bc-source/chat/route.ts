@@ -47,10 +47,11 @@ export async function POST(req: NextRequest) {
     const session = await auth()
     if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
-    const { question, history, modelId } = await req.json() as {
+    const { question, history, modelId, pinnedIds } = await req.json() as {
       question?: string
       history?: { role: "user" | "model"; text: string }[]
       modelId?: string
+      pinnedIds?: string[]   // files the previous answer cited — see below
     }
     const q = String(question ?? "").trim()
     if (!q) return NextResponse.json({ error: "Question required" }, { status: 400 })
@@ -64,35 +65,59 @@ export async function POST(req: NextRequest) {
     const terms  = tokenise(`${q} ${recent}`)
     if (terms.length === 0) return NextResponse.json({ error: "Ask with a few more words" }, { status: 400 })
 
-    // ⚠ Narrow in SQL FIRST. The stored source is ~23 MB across ~3,000 files —
-    // pulling all of it into memory to score in JS would spike the container on
-    // every question. Only files containing at least one search term (or the
-    // term in their path) are loaded, capped, and scored properly below.
-    const probe = terms.slice(0, 8)
-    let files: { id: string; extension: string; path: string; kind: string; content: string }[] = []
+    // ── Shortlist in SQL, RANKED ────────────────────────────────────────────
+    // The stored source is ~23 MB across ~3,000 files, so pulling it all into
+    // memory to score in JS would spike the container on every question.
+    //
+    // ⚠ But the shortlist must be RANKED. A plain `OR contains … take: 400`
+    // hands back an arbitrary 400 rows, and on a question made of common words
+    // ("filter", "group", "start", "category") the genuinely relevant files
+    // don't make the cut — the model then answers "the source doesn't say",
+    // while naming the very files it should have been given. Score in Postgres
+    // and take the best, counting a path match for much more than a body hit.
+    const probe = terms.slice(0, 10)
+    const like  = probe.map(t => `%${t}%`)
+    const scoreExpr = probe
+      .map((_, i) => `(CASE WHEN "content" ILIKE $${i + 1} THEN 1 ELSE 0 END) + (CASE WHEN "path" ILIKE $${i + 1} THEN 5 ELSE 0 END)`)
+      .join(" + ")
+    const whereExpr = probe.map((_, i) => `("content" ILIKE $${i + 1} OR "path" ILIKE $${i + 1})`).join(" OR ")
+
+    let shortlist: { id: string }[] = []
     try {
-      files = await prisma.bcSourceFile.findMany({
-        where: {
-          OR: probe.flatMap(t => [
-            { content: { contains: t, mode: "insensitive" as const } },
-            { path:    { contains: t, mode: "insensitive" as const } },
-          ]),
-        },
-        select: { id: true, extension: true, path: true, kind: true, content: true },
-        take: 400,
-      })
+      shortlist = await prisma.$queryRawUnsafe<{ id: string }[]>(
+        `SELECT "id", (${scoreExpr}) AS score FROM "BcSourceFile" WHERE ${whereExpr} ORDER BY score DESC, length("content") ASC LIMIT 60`,
+        ...like,
+      )
     } catch {
       return NextResponse.json({ error: "No BC source has been uploaded yet." }, { status: 400 })
     }
-    if (files.length === 0) {
+
+    // Files the previous answer already cited. A follow-up ("and how do I…")
+    // is nearly always about the same objects, but its wording alone rarely
+    // retrieves them again — so carry them forward explicitly.
+    const carried = (pinnedIds ?? []).filter(id => typeof id === "string").slice(0, 12)
+    const ids = [...new Set([...carried, ...shortlist.map(s => s.id)])]
+
+    if (ids.length === 0) {
       return NextResponse.json({
         answer: "Nothing in the BC source mentions those words. Try the exact name off the screen — a page title, a field name, or a report name.",
         sources: [],
       })
     }
 
+    const files = await prisma.bcSourceFile.findMany({
+      where:  { id: { in: ids } },
+      select: { id: true, extension: true, path: true, kind: true, content: true },
+    })
+
+    // ⚠ Carried-forward files must NOT be dropped by the score filter — the
+    // whole point is that a follow-up's wording doesn't match them.
+    const carriedSet = new Set(carried)
     const scored = files
-      .map(f => ({ f, score: scoreText(f.content, terms) + scoreText(f.path, terms) * 4 }))
+      .map(f => ({
+        f,
+        score: scoreText(f.content, terms) + scoreText(f.path, terms) * 4 + (carriedSet.has(f.id) ? 1000 : 0),
+      }))
       .filter(s => s.score > 0)
       .sort((a, b) => b.score - a.score)
 
