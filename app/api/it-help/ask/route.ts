@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
+import { generateAiText, AiBlockedError } from "@/lib/ai-provider"
 
 export const maxDuration = 60
 
@@ -163,34 +164,26 @@ ${context}
 
 ANSWER:`
 
-    const genai = new GoogleGenerativeAI(apiKey)
-    const model = genai.getGenerativeModel({
-      model: await getToolModel("it_help", modelId),
-      generationConfig: { maxOutputTokens: 2048 },
-    })
-
-    const result   = await model.generateContent(prompt)
-    const response = result.response
-
-    const blocked = response.promptFeedback?.blockReason
-    if (blocked) {
-      return NextResponse.json({
-        answer:  `(Gemini blocked the request: ${blocked}) Here are the most relevant sources I found:\n\n` +
-                 top.map((s, i) => `${i + 1}. ${s.source.title} — ${s.source.snippet}`).join("\n\n"),
-        sources: top.map(s => s.source),
+    // Whichever provider this slot is set to in Admin → AI Models. A block or
+    // refusal still returns the sources rather than an error, so staff get
+    // something useful either way.
+    let answer: string
+    try {
+      answer = await generateAiText({
+        model:  await getToolModel("it_help", modelId),
+        prompt,
+        maxOutputTokens: 2048,
       })
+    } catch (err) {
+      if (err instanceof AiBlockedError) {
+        return NextResponse.json({
+          answer:  `(${err.message}) Here are the most relevant sources I found:\n\n` +
+                   top.map((s, i) => `${i + 1}. ${s.source.title} — ${s.source.snippet}`).join("\n\n"),
+          sources: top.map(s => s.source),
+        })
+      }
+      throw err
     }
-
-    const finishReason = response.candidates?.[0]?.finishReason
-    if (finishReason && finishReason !== "STOP" && finishReason !== "MAX_TOKENS") {
-      return NextResponse.json({
-        answer:  `Gemini stopped unexpectedly (${finishReason}). Sources:\n\n` +
-                 top.map((s, i) => `${i + 1}. ${s.source.title}`).join("\n"),
-        sources: top.map(s => s.source),
-      })
-    }
-
-    const answer = response.text().trim()
     return NextResponse.json({ answer, sources: top.map(s => s.source) })
   } catch (e: any) {
     console.error("it-help/ask error:", e)

@@ -9,7 +9,13 @@ type Tool = {
   default: string
   configured: string | null
   effective: string
+  // Whether this tool's route can talk to Claude at all — set in lib/ai-models.
+  // Tools without it still call the Gemini SDK directly (images, chat history,
+  // Google Search), so a Claude model would just fall back to their default.
+  claudeOk?: boolean
 }
+
+const isClaude = (id: string) => id.toLowerCase().startsWith("claude-")
 type ModelRow = {
   id: string
   displayName?: string
@@ -88,8 +94,11 @@ export default function AiModelsPage() {
   )
   const enabledCount = allModels.filter((m) => m.enabled).length
 
-  function optionsFor(current: string) {
-    const set = new Set(enabledModels)
+  // ⚠ Claude ids are only offered for slots whose route goes through
+  // generateAiText. Listing them everywhere would let an admin pick a model
+  // that silently falls back to Gemini — a dropdown that lies.
+  function optionsFor(current: string, claudeOk?: boolean) {
+    const set = new Set(enabledModels.filter((m) => claudeOk || !isClaude(m)))
     if (current) set.add(current) // keep a configured value visible even if since-disabled
     return [...set].sort()
   }
@@ -191,7 +200,8 @@ export default function AiModelsPage() {
               className="text-sm rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#0d0f1a] text-gray-800 dark:text-gray-200 px-2 py-1.5 max-w-[16rem]"
             >
               <option value="">Default (each tool's built-in)</option>
-              {enabledModels.map((m) => <option key={m} value={m}>{m}</option>)}
+              {/* Bulk-set never offers Claude — it would hit the Gemini-only tools. */}
+              {enabledModels.filter((m) => !isClaude(m)).map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
             <button
               onClick={applyToAll}
@@ -216,6 +226,12 @@ export default function AiModelsPage() {
                           <p className="text-sm text-gray-800 dark:text-gray-200 truncate">{t.label}</p>
                           <p className="text-[11px] text-gray-500 dark:text-gray-500">
                             Using: <span className="font-medium">{val || t.default}</span>{!val && <span> (default)</span>}
+                            {isClaude(val || t.default) && (
+                              <span className="ml-1.5 text-amber-600 dark:text-amber-500">· Anthropic — costs more per use than Gemini</span>
+                            )}
+                            {!t.claudeOk && (
+                              <span className="ml-1.5 text-gray-400 dark:text-gray-600">· Gemini only (this tool sends images or uses Google Search)</span>
+                            )}
                           </p>
                         </div>
                         <select
@@ -224,7 +240,7 @@ export default function AiModelsPage() {
                           className="text-sm rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#0d0f1a] text-gray-800 dark:text-gray-200 px-2 py-1.5 max-w-[18rem]"
                         >
                           <option value="">Default ({t.default})</option>
-                          {optionsFor(val).map((m) => <option key={m} value={m}>{m}</option>)}
+                          {optionsFor(val, t.claudeOk).map((m) => <option key={m} value={m}>{m}</option>)}
                         </select>
                       </div>
                     )

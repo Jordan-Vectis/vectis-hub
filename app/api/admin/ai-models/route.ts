@@ -31,6 +31,7 @@ export async function GET() {
 
     const config: Record<string, string> = Object.fromEntries(rows.map((r) => [r.slot, r.modelId]))
     const tools = AI_TOOLS.map((t) => ({
+      claudeOk: !!t.claudeOk,
       slot: t.slot,
       label: t.label,
       group: t.group,

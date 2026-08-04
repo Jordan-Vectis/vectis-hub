@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
-import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
+import { generateAiText, AiBlockedError } from "@/lib/ai-provider"
 
 export const maxDuration = 300
 
@@ -99,9 +99,6 @@ export async function POST(req: NextRequest) {
     const ext = extension?.trim()
     if (!ext) return NextResponse.json({ error: "Missing extension" }, { status: 400 })
 
-    const apiKey = process.env.GEMINI_API_KEY
-    if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
-
     const files = await prisma.bcSourceFile.findMany({
       where:  { extension: ext },
       select: { path: true, name: true, kind: true, content: true, size: true },
@@ -152,21 +149,17 @@ SOURCE CODE:
 
 ${included.join("\n\n")}${condensed.length > 0 ? `\n\n${condensed.join("\n\n")}` : ""}`
 
-    const genai = new GoogleGenerativeAI(apiKey)
+    // Runs on Gemini or Claude depending on Admin → AI Models. Claude Opus 5's
+    // 1M-token window swallows even Evo-auction - Base comfortably.
     const model = await getToolModel("bc_source_guide", modelId)
-    const gm = genai.getGenerativeModel({ model, generationConfig: { maxOutputTokens: 16384 } })
-
-    const result   = await gm.generateContent(prompt)
-    const response = result.response
-    const blocked  = response.promptFeedback?.blockReason
-    if (blocked) return NextResponse.json({ error: `Gemini blocked the request: ${blocked}` }, { status: 422 })
-    const finish = response.candidates?.[0]?.finishReason
-    if (finish && finish !== "STOP" && finish !== "MAX_TOKENS") {
-      return NextResponse.json({ error: `Gemini stopped: ${finish}` }, { status: 422 })
+    let content: string
+    try {
+      content = await generateAiText({ model, prompt, maxOutputTokens: 16384 })
+    } catch (err) {
+      if (err instanceof AiBlockedError) return NextResponse.json({ error: err.message }, { status: 422 })
+      throw err
     }
-
-    const content = response.text().trim()
-    if (!content) return NextResponse.json({ error: "Gemini returned an empty guide — try again" }, { status: 500 })
+    if (!content) return NextResponse.json({ error: "The model returned an empty guide — try again" }, { status: 500 })
 
     const guide = await prisma.bcSourceGuide.upsert({
       where:  { extension: ext },

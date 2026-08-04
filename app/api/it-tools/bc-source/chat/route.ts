@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
-import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
+import { generateAiText, AiBlockedError } from "@/lib/ai-provider"
 
 export const maxDuration = 120
 
@@ -55,9 +55,6 @@ export async function POST(req: NextRequest) {
     }
     const q = String(question ?? "").trim()
     if (!q) return NextResponse.json({ error: "Question required" }, { status: 400 })
-
-    const apiKey = process.env.GEMINI_API_KEY
-    if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
 
     // Score against the question plus the last couple of turns, so follow-ups
     // ("and what does the toggle do?") still retrieve the right files.
@@ -149,7 +146,6 @@ export async function POST(req: NextRequest) {
       .filter(h => h && typeof h.text === "string" && h.text.trim().length > 0)
       .slice(-8)
     while (cleanHistory.length > 0 && cleanHistory[0].role !== "user") cleanHistory.shift()
-    const convo = cleanHistory.map(h => ({ role: h.role, parts: [{ text: h.text }] }))
 
     const prompt = `You are explaining Vectis Auctions' Business Central system to the staff member who administers it. They are NOT a programmer. British English.
 
@@ -164,36 +160,22 @@ ${context}
 
 QUESTION: ${q}`
 
-    const genai = new GoogleGenerativeAI(apiKey)
-    const model = genai.getGenerativeModel({
-      model: await getToolModel("bc_source_chat", modelId),
-      // Roomy on purpose: a thinking-capable model can spend most of its output
-      // budget reasoning and return no text at all, which is what produced the
-      // blank reply that then poisoned the history.
-      generationConfig: { maxOutputTokens: 16384 },
-    })
-
-    const chat   = model.startChat({ history: convo })
-    const result = await chat.sendMessage(prompt)
-    const response = result.response
-    const blocked  = response.promptFeedback?.blockReason
-    if (blocked) return NextResponse.json({ error: `Gemini blocked the request: ${blocked}` }, { status: 422 })
-    const finish = response.candidates?.[0]?.finishReason
-    if (finish && finish !== "STOP" && finish !== "MAX_TOKENS") {
-      return NextResponse.json({ error: `Gemini stopped: ${finish}` }, { status: 422 })
-    }
-
-    // ⚠ Never hand back an empty answer. It renders as a blank bubble that
-    // looks like a hang, and worse, it goes back into the history on the next
-    // question and gets the whole conversation rejected.
-    const answer = response.text().trim()
-    if (!answer) {
-      return NextResponse.json(
-        { error: finish === "MAX_TOKENS"
-            ? "The model ran out of room before writing an answer. Ask it in a narrower way — name the screen or field you mean."
-            : "The model came back with nothing. Try asking again." },
-        { status: 502 },
-      )
+    // Gemini or Claude, per Admin → AI Models. ⚠ The empty-answer and
+    // blank-history guards that stop one bad reply poisoning a conversation now
+    // live in generateAiText — it raises AiBlockedError instead of ever
+    // returning "" (a thinking-capable model can spend its whole output budget
+    // reasoning and return no text). maxOutputTokens is roomy for that reason.
+    let answer: string
+    try {
+      answer = await generateAiText({
+        model:   await getToolModel("bc_source_chat", modelId),
+        prompt,
+        history: cleanHistory,
+        maxOutputTokens: 16384,
+      })
+    } catch (err) {
+      if (err instanceof AiBlockedError) return NextResponse.json({ error: err.message }, { status: 502 })
+      throw err
     }
 
     return NextResponse.json({
