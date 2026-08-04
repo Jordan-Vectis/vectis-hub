@@ -618,7 +618,7 @@ These photographs are what bidders bid on. An edit that removes a scratch, chip,
 
 ## The pieces
 
-- **lib/photo-edit-presets.ts** — 13 presets in 4 groups, shared by route and UI so buttons and prompts can't drift. Framing (extend / straighten / centre), Background (clean sweep / cut out to white / remove clutter / remove label), Light (even lighting / kill glare / fix colour cast), Quality (sharpen / reduce grain / upscale / remove dust specks). \`buildEditPrompt(key, {aspect, extra})\` assembles preset + aspect + free text + CONDITION_RULE. Only \`extend\` offers aspect ratios.
+- **lib/photo-edit-presets.ts** — 13 presets in 4 groups, shared by route and UI so buttons and prompts can't drift. Framing (extend / straighten / centre), Background (clean sweep / cut out to white / remove clutter / remove label), Light (even lighting / kill glare / fix colour cast), Quality (sharpen / reduce grain / upscale / remove dust specks). \`buildEditPrompt(key, {extra})\` assembles preset + free text + CONDITION_RULE. Only \`extend\` offers the shape/direction/amount controls — see the outpainting note below.
 - **app/api/photo-prep/edit/route.ts** — one photo per call; sharp applies EXIF rotation and caps the long edge at 2048px first. PHOTO_PREP app access required.
 - **app/(app)/tools/photo-prep/ai-edit-tab.tsx** — choose photos → filmstrip → preset grid → Edit → before/after side by side → Download (keeps the original name + "-edited") or Discard.
 
@@ -629,6 +629,15 @@ It is \`POST https://generativelanguage.googleapis.com/v1beta/interactions\` wit
 ✅ **Verified working end-to-end on staging (2026-08-04)** — "Extend the shot → Square" returned a real edited image and rendered before/after. ⚠ **The first attempt failed with "the model didn't return an image"** — that was our own fallback, because the doc's \`output_image.data\` path was hard-coded. **Don't hard-code one path**: \`extractImage()\` now walks the response for the first plausible base64 image (handles data / bytesBase64Encoded / imageBytes / b64_json and mime_type / mimeType, requiring >512 chars so an id isn't mistaken for an image), and \`extractText()\` surfaces the model's own words when it replies with a refusal. When there is genuinely no image the error names the response's top-level keys — otherwise it's undebuggable from outside. Google embeds **C2PA provenance metadata** in the result (a JUMBF block signed by Google C2PA Media Services) on top of the invisible SynthID watermark.
 
 Model slot **photo_prep_edit** (Admin → AI Models, group Other), default \`gemini-3.1-flash-image\`; gemini-3-pro-image, gemini-3.1-flash-lite-image and nano-banana-pro-preview are also available. **Not claudeOk** — Claude writes text, not pictures.
+
+## ⚠ “Extend the shot” is OUTPAINTING — asking alone did nothing (2026-08-04)
+
+v1 just told the model to “extend this photograph outwards” and **the result came back unchanged** — same framing, same shape. A model handed a 16:9 photo has no reason to return anything but a 16:9 photo, so “extend it much higher” had nowhere to go.
+
+**The fix: pad the real canvas BEFORE sending.** \`planPadding()\` in the route works out the new edges and \`sharp.extend()\` fills them with flat mid-grey (#808080, named in the prompt so the model can tell blank canvas from a genuinely grey backdrop); the prompt then says “paint into the grey only, leave every non-grey pixel exactly as it is”. That turns the job into *fill this gap* instead of *imagine a wider picture*, and it guarantees the original pixels survive — which asking never did. Padding happens **only** for \`extend\`; every other preset gets the photo as-is. The canvas is re-capped to 2048px after padding.
+
+Three controls, all shared from lib/photo-edit-presets.ts: **Direction** (all round / ↕ taller / ↔ wider / ↑ above only / ↓ below only — Jordan asked for vertical-vs-horizontal specifically), **How much** (a little / some / a lot = 0.25 / 0.5 / 1.0 × the long edge) and **Shape**. ⚠ A chosen shape now only ever **ADDS** space — it never crops the photo to hit a ratio — and “above only”/“below only” keep the whole of a shape's extra height on that side. \`buildEditPrompt\` no longer takes \`aspect\`: the canvas expresses it, not the wording.
+
 
 ## Privacy — the wording had to change
 
