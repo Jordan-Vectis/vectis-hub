@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import * as XLSX from "xlsx"
 
 type User   = { id: string; name: string; email: string }
 type Device = {
@@ -94,6 +95,25 @@ export default function DevicesClient({ devices: initial, users }: Props) {
     if (res.ok) setDevices(prev => prev.filter(d => d.id !== id))
   }
 
+  // Exports the list as shown on screen — same columns, same order.
+  function exportXlsx() {
+    const rows = devices.map(d => ({
+      "Name":          d.name,
+      "Type":          d.deviceType,
+      "Serial Number": d.serialNumber || "",
+      "MAC Address":   d.macAddress ?? "",
+      "Assigned To":   d.assignedTo?.name ?? "",
+      "Email":         d.assignedTo?.email ?? "",
+      "Notes":         d.notes ?? "",
+      "Added":         new Date(d.createdAt).toLocaleDateString("en-GB"),
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    ws["!cols"] = [{ wch: 26 }, { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 20 }, { wch: 28 }, { wch: 30 }, { wch: 11 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Devices")
+    XLSX.writeFile(wb, `vectis-devices-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
+
   return (
     <div className="p-8 max-w-6xl">
       <div className="mb-8 flex items-center justify-between">
@@ -101,12 +121,21 @@ export default function DevicesClient({ devices: initial, users }: Props) {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Devices</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Track tablets and other devices used by staff.</p>
         </div>
-        <button
-          onClick={openAdd}
-          className="bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-        >
-          + Add device
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={exportXlsx}
+            disabled={devices.length === 0}
+            className="bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            ⬇ Export to Excel
+          </button>
+          <button
+            onClick={openAdd}
+            className="bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            + Add device
+          </button>
+        </div>
       </div>
 
       {/* Add / Edit form */}

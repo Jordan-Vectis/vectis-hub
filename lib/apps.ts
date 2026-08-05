@@ -58,6 +58,7 @@ export const APP_SECTIONS: Partial<Record<AppKey, { key: string; label: string }
     { key: "TABLET_CATALOGUING", label: "Tablet Cataloguing" },
     { key: "LOTTING_UP",         label: "Lotting Up" },
     { key: "RESEARCH",           label: "Research" },
+    { key: "END_OF_DAY",         label: "End of Day → BC" },
   ],
   AUCTION_AI: [
     { key: "chat",         label: "Chat Window" },
@@ -68,6 +69,9 @@ export const APP_SECTIONS: Partial<Record<AppKey, { key: string; label: string }
     { key: "instructions", label: "Instructions" },
   ],
   MANAGER_PORTAL: [
+    // First, so a manager lands on the dashboard when they open the portal.
+    // Ticking it on a role is what decides who gets a dashboard at all.
+    { key: "dashboard",   label: "Dashboard" },
     { key: "sales",       label: "Sales" },
     { key: "departments", label: "Departments" },
   ],

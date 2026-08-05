@@ -13,6 +13,7 @@ import TermsGate from "@/components/terms-gate"
 import { getEffectiveSession } from "@/lib/impersonation"
 import { prisma } from "@/lib/prisma"
 import { TERMS_VERSION } from "@/lib/terms"
+import { hasAppAccess, getAllowedSections } from "@/lib/apps"
 
 export default async function AppLayout({
   children,
@@ -37,6 +38,22 @@ export default async function AppLayout({
     needsTerms = !accepted
   } catch { needsTerms = false }
 
+  // Whether to show the Hub ⇄ Dashboard switch in the top bar. Same two checks
+  // the Dashboard tab itself makes: the Manager Portal app, then the Dashboard
+  // section within it. Failing open here would only put a link in the header
+  // that bounces them, so it fails closed.
+  let hasDashboard = false
+  try {
+    const u = await prisma.user.findUnique({
+      where:  { id: session.user.id },
+      select: { role: true, allowedApps: true, appPermissions: true },
+    })
+    if (u && hasAppAccess(u.role, u.allowedApps, "MANAGER_PORTAL")) {
+      const sections = getAllowedSections(u.role, u.appPermissions as any, "MANAGER_PORTAL")
+      hasDashboard = !sections || sections.includes("dashboard")
+    }
+  } catch { hasDashboard = false }
+
   return (
     <div className="flex flex-col h-full min-h-screen">
       <CrtMode />
@@ -50,6 +67,7 @@ export default async function AppLayout({
       <TopBar
         userName={effective?.user.name ?? session.user.name}
         isAdmin={session.user.role === "ADMIN"}
+        hasDashboard={hasDashboard}
       />
       <div className="flex flex-1 overflow-hidden">
         <CrmSidebar />

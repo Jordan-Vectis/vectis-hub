@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import EnvSelector from "@/components/env-selector"
 import Logo from "@/components/logo"
 import ThemeToggle from "@/components/theme-toggle"
@@ -11,10 +11,14 @@ import { signOutAction } from "@/lib/actions/auth"
 interface TopBarProps {
   userName: string
   isAdmin?: boolean
+  /** Whether this person has Manager Portal → Dashboard. Hides the switch for everyone else. */
+  hasDashboard?: boolean
 }
 
-export default function TopBar({ userName, isAdmin }: TopBarProps) {
+export default function TopBar({ userName, isAdmin, hasDashboard }: TopBarProps) {
   const router = useRouter()
+  const pathname = usePathname()
+  const onDashboard = pathname.startsWith("/tools/manager-portal")
 
   return (
     <header className="relative h-12 bg-gray-900 border-b border-gray-700 flex items-center justify-between px-4 flex-shrink-0">
@@ -36,6 +40,29 @@ export default function TopBar({ userName, isAdmin }: TopBarProps) {
         <Link href="/hub" className="ml-1 hover:opacity-80 transition-opacity">
           <Logo variant="compact" />
         </Link>
+
+        {/* Hub ⇄ Dashboard. Only for people who have the Dashboard tab, so the
+            header is unchanged for everyone else. */}
+        {hasDashboard && (
+          <div className="ml-3 flex items-center rounded-md bg-gray-800 p-0.5 text-xs font-medium">
+            <Link
+              href="/hub"
+              className={`px-2.5 py-1 rounded transition-colors ${
+                onDashboard ? "text-gray-400 hover:text-white" : "bg-gray-700 text-white"
+              }`}
+            >
+              Hub
+            </Link>
+            <Link
+              href="/tools/manager-portal?tab=dashboard"
+              className={`px-2.5 py-1 rounded transition-colors ${
+                onDashboard ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"
+              }`}
+            >
+              Dashboard
+            </Link>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-4">
