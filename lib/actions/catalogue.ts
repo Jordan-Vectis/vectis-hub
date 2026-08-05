@@ -525,6 +525,36 @@ export async function autocorrectLotsFromTotes(auctionId: string): Promise<{
   }
 }
 
+// End of Day → BC "fix what BC can prove" button: the SAME correction as the
+// Tote Check tab's Match BC, run across every sale contributing lots to
+// tonight's sheet. Deliberately a loop over autocorrectLotsFromTotes — one fix
+// choke-point, so this button can never fix something different from what that
+// tab (and the End of Day checks, which share lib/tote-check.ts) report.
+// A BC-locked sale fails ITS OWN call for non-admins and is reported as
+// skipped; the rest still get fixed.
+export async function autocorrectLotsForAuctions(auctionIds: string[]): Promise<{
+  ok: boolean
+  error?: string
+  updated: number
+  corrections: number
+  skipped: number
+  lockedSales: number
+}> {
+  let updated = 0, corrections = 0, skipped = 0, lockedSales = 0
+  try {
+    for (const id of [...new Set(auctionIds)].filter(Boolean)) {
+      const res = await autocorrectLotsFromTotes(id)
+      if (!res.ok) { lockedSales++; continue }
+      updated     += res.updated     ?? 0
+      corrections += res.corrections ?? 0
+      skipped     += res.skipped     ?? 0
+    }
+    return { ok: true, updated, corrections, skipped, lockedSales }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Couldn't correct the lots", updated, corrections, skipped, lockedSales }
+  }
+}
+
 // Tick / untick one BC correction. Any signed-in cataloguer — this is a shared
 // worklist, not a per-user one.
 //

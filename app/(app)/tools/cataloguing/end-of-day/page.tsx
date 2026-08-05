@@ -7,9 +7,10 @@
 // a broken overnight run can be reconciled there and re-run.
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { autocorrectLotsForAuctions } from "@/lib/actions/catalogue"
 
 type ToteRow = { tote: string; count: number; barcodes: string[]; sales: string[] }
-type SaleRow = { code: string; name: string; complete: boolean; count: number }
+type SaleRow = { id: string; code: string; name: string; complete: boolean; count: number }
 type Problem = { id: string; barcode?: string; uniqueId: string; tote?: string; sale: string; title: string; cataloguedBy: string }
 type CheckLot = {
   id: string; barcode: string; uniqueId: string; tote: string; receipt: string
@@ -78,6 +79,8 @@ export default function EndOfDayPage() {
   const [includeComplete, setIncludeComplete] = useState(false)
   const [copied, setCopied]   = useState(false)
   const [openTote, setOpenTote] = useState<string | null>(null)
+  const [fixing, setFixing]   = useState(false)
+  const [fixResult, setFixResult] = useState<string | null>(null)
 
   const load = useCallback(async (withComplete: boolean) => {
     setLoading(true); setError(null)
@@ -113,6 +116,37 @@ export default function EndOfDayPage() {
 
   async function copy() {
     try { await navigator.clipboard.writeText(csv); setCopied(true); setTimeout(() => setCopied(false), 2500) } catch {}
+  }
+
+  // The same fix as Tote Check → Match BC, run over every sale on the sheet.
+  // Only corrects what BC can prove (a known tote's receipt/vendor) — unknown
+  // totes are never guessed at, so it can't fix everything the checks flag.
+  async function fixFromBc() {
+    if (!data) return
+    const ids = data.sales.map(s => s.id).filter(Boolean)
+    if (ids.length === 0) return
+    if (!confirm(
+      "Fix the flagged lots from the BC tote data?\n\n" +
+      "Where a lot's tote is known in BC, its receipt and vendor are corrected to what BC says (the same as Match BC on each sale's Tote Check tab). " +
+      "Unknown totes are left alone — they can't be fixed automatically. Every change is logged in the Lot Change Log."
+    )) return
+    setFixing(true); setFixResult(null)
+    try {
+      const res = await autocorrectLotsForAuctions(ids)
+      if (!res.ok && res.error) {
+        setFixResult(`Couldn't fix: ${res.error}`)
+      } else {
+        setFixResult(
+          `Fixed ${res.updated} lot${res.updated === 1 ? "" : "s"} from the BC tote data` +
+          (res.corrections ? ` · ${res.corrections} had already gone into BC wrong — they're on the BC Corrections list to put right in BC` : "") +
+          (res.skipped ? ` · ${res.skipped} couldn't be fixed (tote not in BC)` : "") +
+          (res.lockedSales ? ` · ${res.lockedSales} sale${res.lockedSales === 1 ? "" : "s"} skipped (BC-locked — admin only)` : "")
+        )
+        await load(includeComplete)
+      }
+    } finally {
+      setFixing(false)
+    }
   }
 
   return (
@@ -196,18 +230,40 @@ export default function EndOfDayPage() {
           {/* ── Checks — same engine as the Tote Check tab ── */}
           {data.checks.length > 0 && (
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                🔎 Checks — {data.checks.reduce((s, c) => s + c.count, 0)} thing{data.checks.reduce((s, c) => s + c.count, 0) === 1 ? "" : "s"} worth a look before tonight
-                {data.toteLastSync && (
-                  <span className="font-normal text-xs text-gray-500 ml-2">
-                    BC tote data last synced {new Date(data.toteLastSync).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                )}
-              </p>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  🔎 Checks — {data.checks.reduce((s, c) => s + c.count, 0)} thing{data.checks.reduce((s, c) => s + c.count, 0) === 1 ? "" : "s"} worth a look before tonight
+                  {data.toteLastSync && (
+                    <span className="font-normal text-xs text-gray-500 ml-2">
+                      BC tote data last synced {new Date(data.toteLastSync).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  )}
+                </p>
+                <button
+                  onClick={fixFromBc}
+                  disabled={fixing}
+                  title="The same fix as Match BC on each sale's Tote Check tab — corrects receipt and vendor from the BC tote data wherever the tote is known. Unknown totes are never guessed at."
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
+                >
+                  {fixing ? "Fixing from BC…" : "🔧 Fix what BC can prove"}
+                </button>
+              </div>
+              {fixResult && (
+                <p className={`px-4 py-3 rounded-xl border text-sm ${fixResult.startsWith("Couldn't")
+                  ? "bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-300"
+                  : "bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/30 text-green-700 dark:text-green-300"}`}>
+                  {fixResult}
+                </p>
+              )}
               {[...data.checks]
                 .sort((a, b) => (CHECK_META[a.key]?.order ?? 99) - (CHECK_META[b.key]?.order ?? 99))
                 .map(c => <CheckPanel key={c.key} check={c} />)}
             </div>
+          )}
+          {data.checks.length === 0 && fixResult && (
+            <p className="px-4 py-3 rounded-xl border text-sm bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/30 text-green-700 dark:text-green-300">
+              {fixResult}
+            </p>
           )}
           {data.checks.length === 0 && data.totes.length > 0 && (
             <p className="text-sm text-green-600 dark:text-green-400">

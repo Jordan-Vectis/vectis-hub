@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
       select: {
         id: true, barcode: true, receiptUniqueId: true, tote: true, receipt: true, vendor: true,
         title: true, createdAt: true, createdByName: true,
-        auction: { select: { code: true, name: true, complete: true } },
+        auction: { select: { id: true, code: true, name: true, complete: true } },
       },
       orderBy: { createdAt: "asc" },
     })
@@ -191,11 +191,11 @@ export async function GET(req: NextRequest) {
 
     // Per-sale summary so a surprise (an old sale suddenly contributing lots)
     // is visible before the sheet is run.
-    const bySale = new Map<string, { code: string; name: string; complete: boolean; count: number }>()
+    const bySale = new Map<string, { id: string; code: string; name: string; complete: boolean; count: number }>()
     for (const l of ready) {
       const code = l.auction?.code ?? "(no sale)"
       let s = bySale.get(code)
-      if (!s) { s = { code, name: l.auction?.name ?? "", complete: l.auction?.complete ?? false, count: 0 }; bySale.set(code, s) }
+      if (!s) { s = { id: l.auction?.id ?? "", code, name: l.auction?.name ?? "", complete: l.auction?.complete ?? false, count: 0 }; bySale.set(code, s) }
       s.count++
     }
 

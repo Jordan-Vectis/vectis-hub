@@ -82,6 +82,8 @@ Every lot on the sheet is verified before it's trusted overnight — **shared \`
 
 Everything else (tote_unknown / receipt_mismatch / vendor_mismatch / unique_id_mismatch / receipt_missing / vendor_missing) is **amber report-only** — checks never write, and the tote-sync time is shown so a stale sync reads as "sync first", not "93 mistakes". \`CHECK_META\` on the page reuses the Tote Check tab's wording.
 
+**🔧 "Fix what BC can prove"** (added 2026-08-05): \`autocorrectLotsForAuctions(ids)\` in \`lib/actions/catalogue.ts\` — ⚠ deliberately a LOOP over the existing per-sale \`autocorrectLotsFromTotes\`, ONE fix choke-point, so this button, Tote Check → Match BC and the checks (shared lib/tote-check.ts) can never disagree. Fixes receipt/vendor from a KNOWN BC tote only; unknown totes are never guessed; wrong values that already went to BC land on the BC Corrections list; all logged (\`tote_autocorrect\` + batchId); BC-locked sales fail their own call for non-admins and are reported as skipped while the rest proceed. Confirm dialog before running; result line + auto-reload after.
+
 Measured on production 2026-08-05: **5 unique_id_mismatch, 93 tote_unknown, 64 receipt_not_in_bc, 0 duplicates** — it catches real issues on day one.
 
 ## Registration
