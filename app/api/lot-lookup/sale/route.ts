@@ -93,8 +93,9 @@ export async function GET(req: NextRequest) {
     // ── Join each BC item back to its Hub lot ────────────────────────────────
     // Postgres `in` is case-sensitive and the two systems disagree on case, so
     // match on every casing — the same approach the receipt/tote lookup uses.
-    const upper    = (s: string) => s.toUpperCase()
-    const variants = (vals: string[]) => [...new Set(vals.flatMap(v => [v, v.toUpperCase(), v.toLowerCase()]))]
+    const upper    = (s: string) => s.trim().toUpperCase()
+    const variants = (vals: string[]) =>
+      [...new Set(vals.flatMap(v => [v, v.trim(), v.trim().toUpperCase(), v.trim().toLowerCase()]))]
     const barcodes  = items.map(i => i.barcode).filter((v): v is string => !!v)
     const uniqueIds = items.map(i => i.uniqueId).filter(Boolean)
 
@@ -120,9 +121,16 @@ export async function GET(req: NextRequest) {
     }
 
     const rows = items.map(w => {
-      // Barcode first — that is the label physically on the item.
-      const hub = (w.barcode && hubByBarcode.get(upper(w.barcode)))
-        || hubByUniqueId.get(upper(w.uniqueId))
+      // ⚠ UNIQUE ID FIRST, barcode only as a fallback — the opposite of the
+      // receipt/tote lookup. A barcode is scoped to the SALE the lot went into
+      // (unique ID R008771-1 carries barcode F069598 in sale F069), so the same
+      // physical item picks up a different barcode if it is re-entered into
+      // another sale. The unique ID is the stable identity, which is why
+      // RULES.md makes WarehouseItem.uniqueId the key for matching against
+      // CatalogueLot.receiptUniqueId. Matching barcode-first here attached the
+      // wrong Hub lot — and its cataloguer — to a re-sold item.
+      const hub = hubByUniqueId.get(upper(w.uniqueId))
+        || (w.barcode && hubByBarcode.get(upper(w.barcode)))
         || null
       // BC writes 0 until the sale is numbered — treat that as "no number yet".
       const lotNo = [w.currentLotNo, w.lotNo].find(v => v && v.trim() && v.trim() !== "0")?.trim() ?? ""
