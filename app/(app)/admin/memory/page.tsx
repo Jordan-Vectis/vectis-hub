@@ -2005,11 +2005,19 @@ Core sync rules (full detail on the reference card):
 - Lot start: catch the lower platform up — BID on Saleroom / SALEROOM button on Vectis.
 - Same-amount tie: ROOM on Saleroom = favour Vectis (default at lot start); ! on Vectis = favour Saleroom. The ! is the ONLY ! button and only drops the Vectis bidder.
 - Fair Warning after 15s inactivity (both, manual). Sell 20s after FW (both, manual): Vectis HAMMER then NEXT LOT; Saleroom SELL then NEXT.
-- Undo is a manual button only (no auto-detection). Saleroom buttons have NO exclamation marks.
+- Undo: **auto-detected in Scenario 1 only** (the rig clicks Undo when the Vectis amount drops below the last seen, until matched — card rule 6 updated 2026-08-04); manual on the shadow views and for clerk mistakes. Saleroom buttons have NO exclamation marks.
 
-## Recent work (2026-07-23/24) — reports + activity popup — ALL STAGING ONLY
+## Recent work (2026-08-04/05) — big session — ALL ON PRODUCTION (three merges to main, 2026-08-05)
 
-⚠ Nothing from this session is on production. Staging has all of it; main is behind. Don't assume any of it is live.
+- **End of Day → BC** — the headline: /tools/cataloguing/end-of-day generates the overnight hotkey sheet (every lot not yet in BC, barcode-matched vs the sync, grouped by tote, exact ToteNumber/LotCount/Barcodes format). Tote-check-powered **checks**, 🔧 **Fix what BC can prove** (loops the Tote Check autocorrect), **tick-and-move bar**, and 📝 **typed Mass re-map** (wrong → right lines, preview mandatory). ⚠ Run Data Sync first; only cross-tote duplicate barcodes ever come OFF the sheet (visibly).
+- **Hub workflow captured** — ⚠ unique IDs are **PROVISIONAL** until 🔗 BC Match imports BC's own IDs (runs after each overnight macro); Push to BC runs once at the END after the AI pipelines; invoicing/customer accounts live entirely in BC + the website provider. **Barcode is the stable ID — never flag mid-flow unique-ID mismatches as errors.**
+- **BC Warehouse Excel filters + PDFs** — shared FilterTable (Excel column dropdowns) on all 4 results tables; 🖨 PDF prints exactly what's on screen; totes columns gained Customer no, dropped Status/State.
+- **Admin Centre rebuilt** — merged one-row-per-item Hub→BC journey + "Who catalogued this lot?"; "In BC" = **barcode** match (never addedToBC); lot no = currentLotNo; STATUS removed (again — don't reintroduce); oversized UI is deliberate. Plus a "Who catalogued this sale?" tab.
+- **AI cost** — Claude prompt caching via cachePrefix (BC Source "ask the code" wired); run-cost estimate above Run on Batch/Pipeline; editable prices in Admin → AI Models (AiModelRate). ⚠ The Anthropic Console spend was NOT the Hub — check Console → Usage.
+- **Auto Clerk review fixes** — rig undo rolls back S.hi; downward undo sync (watchdog stays upward-only); onlineBidAt replica feed kills phantom ROOM bids; gap-relay classifies sold/passed BEFORE bid substrings ("Sold to internet bidder" trap).
+- **Devices** — ⬇ Export to Excel button.
+
+## Recent work (2026-07-23/24) — reports + activity popup — now ON PRODUCTION (swept up by the 2026-08-04/05 merges)
 
 - **Cataloguing Performance PDFs** — /tools/reports has **Summary (PDF)** (one-page team league table plus team-wide by-auction, by-reason and daily-output breakdowns) and **Export all (PDF)** (one clean page per cataloguer); clicking a name gives just that person. One route (/api/reports/pdf with ?summary=1 / ?range= / ?userId=) and one builder (lib/reports-pdf.ts). ⚠ Every figure is scoped to the selected period — Jordan rejected v1 for showing "Today" and "This week" columns inside a 30-day report.
 - **"idle" removed from user-facing URLs** — now /admin/activity-timer, /admin/unaccounted-time and /tools/reports/activity; the old paths are redirect stubs. Code identifiers, DB tables (IdleLog / IdleGateDecision) and API routes still say "idle" — leave those alone. Jordan flagged the URLs twice, so don't let them drift back.
