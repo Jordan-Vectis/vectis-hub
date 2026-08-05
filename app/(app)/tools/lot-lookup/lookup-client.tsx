@@ -1,8 +1,9 @@
 "use client"
 
-// Admin Centre shell. Two tabs, both aimed at non-technical admins:
+// Admin Centre shell. Three tabs, all aimed at non-technical admins:
 //   • Find a customer's lots — the original cross-system receipt/tote/customer lookup
 //   • Who catalogued this lot? — one barcode in, one name out
+//   • Who catalogued this sale? — BC's lot numbers with the Hub's cataloguer against each
 //
 // Deliberately full-width with large type and large hit targets; the house
 // 11px-table style is too small for the people using this.
@@ -11,12 +12,14 @@ import { useState } from "react"
 import Link from "next/link"
 import FindLotsTab from "./find-lots-tab"
 import WhoCataloguedTab from "./who-catalogued-tab"
+import BySaleTab from "./by-sale-tab"
 
-type Tab = "find" | "who"
+type Tab = "find" | "who" | "sale"
 
 const TABS: { key: Tab; icon: string; label: string; blurb: string }[] = [
   { key: "find", icon: "🔎", label: "Find a customer's lots", blurb: "By receipt, tote or customer number" },
   { key: "who",  icon: "👤", label: "Who catalogued this lot?", blurb: "By barcode or unique ID" },
+  { key: "sale", icon: "🔨", label: "Who catalogued this sale?", blurb: "By sale, listed by BC lot number" },
 ]
 
 export default function LookupClient() {
@@ -33,7 +36,7 @@ export default function LookupClient() {
       </p>
 
       {/* Tabs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8 max-w-3xl">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8 max-w-5xl">
         {TABS.map(t => (
           <button
             key={t.key}
@@ -56,7 +59,7 @@ export default function LookupClient() {
         ))}
       </div>
 
-      {tab === "find" ? <FindLotsTab /> : <WhoCataloguedTab />}
+      {tab === "find" ? <FindLotsTab /> : tab === "who" ? <WhoCataloguedTab /> : <BySaleTab />}
     </div>
   )
 }
