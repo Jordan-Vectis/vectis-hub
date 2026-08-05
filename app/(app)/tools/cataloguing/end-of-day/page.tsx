@@ -50,8 +50,8 @@ const CHECK_META: Record<string, { label: string; hint: string; tone: "bad" | "w
     hint: "The tote belongs to a different vendor in BC — often the previous batch's vendor left in place.",
   },
   unique_id_mismatch: {
-    label: "Unique ID against a different receipt", tone: "bad", order: 4,
-    hint: "The unique ID starts with one receipt but the lot's receipt field says another. One of the two is wrong.",
+    label: "Unique ID against a different receipt", tone: "warn", order: 4,
+    hint: "The unique ID starts with one receipt but the lot's receipt field says another — usually the receipt was corrected after the ID was minted. Harmless for tonight (the sheet runs on barcodes) and self-corrects when 🔗 BC Match imports BC's own IDs after the run; only investigate if it persists after that.",
   },
   invalid_barcode: {
     label: "Barcode looks malformed", tone: "warn", order: 5,
