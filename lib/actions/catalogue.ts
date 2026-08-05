@@ -373,7 +373,10 @@ export async function lookupToteOrReceipt(query: string): Promise<{
 export async function setLotsVendorReceipt(
   auctionId: string,
   lotIds: string[],
-  input: { vendor: string; receipt: string },
+  // `tote` (optional) also rewrites the lot's tote — used by End of Day → BC
+  // where the flagged problem IS a mistyped tote. Manage Lots doesn't pass it,
+  // so its behaviour is unchanged.
+  input: { vendor: string; receipt: string; tote?: string },
 ): Promise<{ ok: boolean; error?: string; updated?: number }> {
   try {
     const session = await requireCataloguer()
@@ -382,11 +385,12 @@ export async function setLotsVendorReceipt(
     if (lotIds.length === 0) return { ok: false, error: "Tick the lots you want to change first." }
     const vendor  = input.vendor.trim()
     const receipt = input.receipt.trim()
-    if (!vendor && !receipt) return { ok: false, error: "Nothing to set." }
+    const tote    = (input.tote ?? "").trim()
+    if (!vendor && !receipt && !tote) return { ok: false, error: "Nothing to set." }
 
     const lots = await prisma.catalogueLot.findMany({
       where:  { id: { in: lotIds }, auctionId },
-      select: { id: true, vendor: true, receipt: true, receiptUniqueId: true },
+      select: { id: true, vendor: true, receipt: true, receiptUniqueId: true, tote: true },
     })
     if (lots.length === 0) return { ok: false, error: "None of those lots are in this auction." }
 
@@ -401,12 +405,14 @@ export async function setLotsVendorReceipt(
       const data: Record<string, string> = {}
       if (vendor  && lot.vendor  !== vendor)  data.vendor  = vendor
       if (receipt && lot.receipt !== receipt) data.receipt = receipt
+      if (tote    && lot.tote    !== tote)    data.tote    = tote
       if (receipt && !lot.receiptUniqueId) data.receiptUniqueId = `${receipt}-${++offset}`
       if (Object.keys(data).length === 0) continue
 
       const fields: Record<string, { before: unknown; after: unknown }> = {}
       if (data.vendor          !== undefined) fields.vendor          = { before: lot.vendor,          after: data.vendor }
       if (data.receipt         !== undefined) fields.receipt         = { before: lot.receipt,         after: data.receipt }
+      if (data.tote            !== undefined) fields.tote            = { before: lot.tote,            after: data.tote }
       if (data.receiptUniqueId !== undefined) fields.receiptUniqueId = { before: lot.receiptUniqueId, after: data.receiptUniqueId }
 
       await updateLotLogged(lot.id, data, ctx)
@@ -419,6 +425,35 @@ export async function setLotsVendorReceipt(
     return { ok: true, updated }
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Couldn't change those lots" }
+  }
+}
+
+// End of Day → BC intervention: the SAME set as above, applied to a selection
+// that can span several sales. Groups by auction and loops the single-auction
+// action, so logging, per-sale Undo (Manage Lots → Undo), BC locking and the
+// unique-ID minting rule all behave exactly as they do from Manage Lots.
+export async function setLotsVendorReceiptAcrossAuctions(
+  lots: { auctionId: string; lotId: string }[],
+  input: { vendor: string; receipt: string; tote?: string },
+): Promise<{ ok: boolean; error?: string; updated: number; lockedSales: number }> {
+  let updated = 0, lockedSales = 0
+  try {
+    const byAuction = new Map<string, string[]>()
+    for (const l of lots) {
+      if (!l.auctionId || !l.lotId) continue
+      if (!byAuction.has(l.auctionId)) byAuction.set(l.auctionId, [])
+      byAuction.get(l.auctionId)!.push(l.lotId)
+    }
+    if (byAuction.size === 0) return { ok: false, error: "Tick the lots you want to change first.", updated, lockedSales }
+
+    for (const [auctionId, lotIds] of byAuction) {
+      const res = await setLotsVendorReceipt(auctionId, lotIds, input)
+      if (!res.ok) { lockedSales++; continue }
+      updated += res.updated ?? 0
+    }
+    return { ok: true, updated, lockedSales }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Couldn't change those lots", updated, lockedSales }
   }
 }
 
@@ -522,6 +557,145 @@ export async function autocorrectLotsFromTotes(auctionId: string): Promise<{
     // Returned, not thrown — production redacts a thrown server action's message
     // and the BC lock message is one the user needs to read (RULES).
     return { ok: false, error: e?.message ?? "Couldn't correct the lots" }
+  }
+}
+
+// End of Day → BC "Mass re-map": typed `wrong → right` pairs, e.g. a mistyped
+// tote that a whole batch of lots was catalogued under. Each line's RIGHT side
+// is verified against the BC tote data (same lookup as Change Vendor — an
+// unknown number can never be applied), and its WRONG side selects every
+// NOT-yet-in-BC lot in a non-complete sale whose tote OR receipt matches.
+// Lots already in BC are deliberately out of scope — their wrong values went
+// into BC and belong to the BC Corrections flow, not a Hub-side remap.
+//
+// preview=true only reports what each line would do; apply runs the SAME
+// setLotsVendorReceipt machinery as everywhere else (logged, per-sale Undo,
+// unique IDs preserved, BC-locked sales skipped). Lines run in order, so a
+// later line sees an earlier line's changes.
+export type RemapLineResult = {
+  from: string
+  to: string
+  ok: boolean
+  error?: string
+  kind?: "tote" | "receipt"
+  tote?: string | null
+  receipt?: string | null
+  vendor?: string | null
+  vendorName?: string | null
+  matched: number
+  updated?: number
+  lockedSales?: number
+}
+
+const MAX_REMAP_LINES = 100
+
+export async function massRemapPendingLots(
+  lines: { from: string; to: string }[],
+  apply: boolean,
+): Promise<{ ok: boolean; error?: string; results: RemapLineResult[] }> {
+  try {
+    await requireCataloguer()
+    if (lines.length === 0)               return { ok: false, error: "Type at least one change first.", results: [] }
+    if (lines.length > MAX_REMAP_LINES)   return { ok: false, error: `Too many lines — ${MAX_REMAP_LINES} at most per run.`, results: [] }
+
+    const caseVariants = (v: string) => [...new Set([v, v.toUpperCase(), v.toLowerCase()])]
+    const results: RemapLineResult[] = []
+
+    for (const raw of lines) {
+      const from = (raw.from ?? "").trim().toUpperCase()
+      const to   = (raw.to   ?? "").trim().toUpperCase()
+      const base: RemapLineResult = { from, to, ok: false, matched: 0 }
+      if (!from || !to) { results.push({ ...base, error: "Needs both a wrong value and a right one." }); continue }
+      if (from === to)  { results.push({ ...base, error: "Both sides are the same." }); continue }
+
+      // RIGHT side must exist in the BC data — same rule as everywhere else.
+      const looked = await lookupToteOrReceipt(to)
+      if (!looked.ok) { results.push({ ...base, error: looked.error ?? `"${to}" isn't in the BC data.` }); continue }
+
+      // WRONG side selects pending lots by tote OR receipt (a value lives in
+      // one of the two; matching both costs nothing and can't cross-match).
+      const candidates = await prisma.catalogueLot.findMany({
+        where: {
+          auction: { complete: false },
+          OR: [{ tote: { in: caseVariants(from) } }, { receipt: { in: caseVariants(from) } }],
+        },
+        select: { id: true, auctionId: true, barcode: true, receiptUniqueId: true },
+      })
+
+      // Not-yet-in-BC only (barcode first, unique ID fallback — the usual rule).
+      const bcs  = candidates.map(l => l.barcode).filter((v): v is string => !!v)
+      const uids = candidates.map(l => l.receiptUniqueId).filter((v): v is string => !!v)
+      const inBcRows = (bcs.length || uids.length)
+        ? await prisma.warehouseItem.findMany({
+            where: { OR: [
+              ...(bcs.length  ? [{ barcode:  { in: bcs.flatMap(caseVariants) } }]  : []),
+              ...(uids.length ? [{ uniqueId: { in: uids.flatMap(caseVariants) } }] : []),
+            ] },
+            select: { barcode: true, uniqueId: true },
+          })
+        : []
+      const inBcBarcode  = new Set(inBcRows.map(w => w.barcode?.toUpperCase()).filter(Boolean))
+      const inBcUniqueId = new Set(inBcRows.map(w => w.uniqueId.toUpperCase()))
+      const pending = candidates.filter(l =>
+        !((l.barcode && inBcBarcode.has(l.barcode.toUpperCase())) ||
+          (l.receiptUniqueId && inBcUniqueId.has(l.receiptUniqueId.toUpperCase()))))
+
+      const line: RemapLineResult = {
+        ...base, ok: true, matched: pending.length,
+        kind: looked.kind, tote: looked.tote, receipt: looked.receipt,
+        vendor: looked.vendor, vendorName: looked.vendorName,
+      }
+
+      if (apply && pending.length > 0) {
+        const res = await setLotsVendorReceiptAcrossAuctions(
+          pending.map(l => ({ auctionId: l.auctionId, lotId: l.id })),
+          {
+            vendor:  looked.vendor ?? "",
+            receipt: looked.receipt ?? "",
+            ...(looked.kind === "tote" && looked.tote ? { tote: looked.tote } : {}),
+          },
+        )
+        line.updated     = res.updated
+        line.lockedSales = res.lockedSales
+        if (!res.ok && res.error) { line.ok = false; line.error = res.error }
+      }
+
+      results.push(line)
+    }
+
+    return { ok: true, results }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Couldn't run the re-map", results: [] }
+  }
+}
+
+// End of Day → BC "fix what BC can prove" button: the SAME correction as the
+// Tote Check tab's Match BC, run across every sale contributing lots to
+// tonight's sheet. Deliberately a loop over autocorrectLotsFromTotes — one fix
+// choke-point, so this button can never fix something different from what that
+// tab (and the End of Day checks, which share lib/tote-check.ts) report.
+// A BC-locked sale fails ITS OWN call for non-admins and is reported as
+// skipped; the rest still get fixed.
+export async function autocorrectLotsForAuctions(auctionIds: string[]): Promise<{
+  ok: boolean
+  error?: string
+  updated: number
+  corrections: number
+  skipped: number
+  lockedSales: number
+}> {
+  let updated = 0, corrections = 0, skipped = 0, lockedSales = 0
+  try {
+    for (const id of [...new Set(auctionIds)].filter(Boolean)) {
+      const res = await autocorrectLotsFromTotes(id)
+      if (!res.ok) { lockedSales++; continue }
+      updated     += res.updated     ?? 0
+      corrections += res.corrections ?? 0
+      skipped     += res.skipped     ?? 0
+    }
+    return { ok: true, updated, corrections, skipped, lockedSales }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Couldn't correct the lots", updated, corrections, skipped, lockedSales }
   }
 }
 

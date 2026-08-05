@@ -82,7 +82,19 @@ Every lot on the sheet is verified before it's trusted overnight — **shared \`
 
 Everything else (tote_unknown / receipt_mismatch / vendor_mismatch / unique_id_mismatch / receipt_missing / vendor_missing) is **amber report-only** — checks never write, and the tote-sync time is shown so a stale sync reads as "sync first", not "93 mistakes". \`CHECK_META\` on the page reuses the Tote Check tab's wording.
 
+**🔧 "Fix what BC can prove"** (added 2026-08-05): \`autocorrectLotsForAuctions(ids)\` in \`lib/actions/catalogue.ts\` — ⚠ deliberately a LOOP over the existing per-sale \`autocorrectLotsFromTotes\`, ONE fix choke-point, so this button, Tote Check → Match BC and the checks (shared lib/tote-check.ts) can never disagree. Fixes receipt/vendor from a KNOWN BC tote only; unknown totes are never guessed; wrong values that already went to BC land on the BC Corrections list; all logged (\`tote_autocorrect\` + batchId); BC-locked sales fail their own call for non-admins and are reported as skipped while the rest proceed. Confirm dialog before running; result line + auto-reload after.
+
 Measured on production 2026-08-05: **5 unique_id_mismatch, 93 tote_unknown, 64 receipt_not_in_bc, 0 duplicates** — it catches real issues on day one.
+
+## Manual intervention — tick lots, move them (added 2026-08-05)
+
+Every check panel (and the no-tote list, now the same panel type) has **tickboxes + "Tick all"**; ticking anything floats a **fixed bottom bar**: type a tote or receipt → **Check in BC** (\`lookupToteOrReceipt\` — the same verify-first flow as Manage Lots → Change Vendor; a number not in the BC data can't be applied) → confirmation line states what it belongs to → **Apply to ticked lots**.
+
+- Apply = **\`setLotsVendorReceiptAcrossAuctions\`** → groups the selection by sale and loops the existing **\`setLotsVendorReceipt\`**, which gained an optional **\`tote\`** param (set only when the lookup was a tote; Manage Lots doesn't pass it — unchanged there). So: tote entered → tote + receipt + vendor all corrected; receipt entered → receipt + vendor only, totes left alone.
+- Same guarantees as Manage Lots: logged (\`vendor_change\` + batchId), **per-sale Undo** via CatalogueBulkUndo, existing unique IDs preserved (minted only for blanks), BC-locked sales skip for non-admins and are reported. Selection is cleared on every data refresh so stale lot ids can't be applied.
+- This is the fix for the **tote_unknown** pile the auto-fix can't touch: tick the batch with the mistyped tote, type the right one, apply.
+
+**📝 Mass re-map (typed, added 2026-08-05)** — collapsible panel above the intervention bar. Textarea, one change per line \`wrong → right\` (also accepts \`->\`, comma, tab, spaces). **Preview is mandatory before Apply** (button disabled until previewed): each line shows what the right side resolves to in BC and how many pending lots the left side hits — per-line red/grey/green results. \`massRemapPendingLots(lines, apply)\` in catalogue.ts (max 100 lines): LEFT matches tote OR receipt on **not-yet-in-BC lots in non-complete sales only** (in-BC wrongness belongs to BC Corrections, not a Hub remap); RIGHT must resolve via \`lookupToteOrReceipt\`; apply loops the same \`setLotsVendorReceiptAcrossAuctions\` (all the usual guarantees). Lines run in order, so a later line sees an earlier one's changes.
 
 ## Registration
 

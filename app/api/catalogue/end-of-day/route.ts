@@ -39,7 +39,7 @@ const isBarcode   = (s: string) => /^[A-Za-z]\d{6,7}$/.test(s) || isUniqueId(s)
 export type EodCheckKey = ToteCheckIssue | "receipt_not_in_bc" | "duplicate_barcode" | "invalid_barcode"
 
 type CheckLot = {
-  id: string; barcode: string; uniqueId: string; tote: string; receipt: string
+  id: string; auctionId: string; barcode: string; uniqueId: string; tote: string; receipt: string
   vendor: string; sale: string; cataloguedBy: string
   bcReceipt?: string; bcVendor?: string; totes?: string[]
 }
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
       select: {
         id: true, barcode: true, receiptUniqueId: true, tote: true, receipt: true, vendor: true,
         title: true, createdAt: true, createdByName: true,
-        auction: { select: { code: true, name: true, complete: true } },
+        auction: { select: { id: true, code: true, name: true, complete: true } },
       },
       orderBy: { createdAt: "asc" },
     })
@@ -101,7 +101,7 @@ export async function GET(req: NextRequest) {
 
     // ── Checks ───────────────────────────────────────────────────────────────
     const asCheckLot = (l: (typeof ready)[number], extra?: Partial<CheckLot>): CheckLot => ({
-      id: l.id, barcode: l.barcode ?? "", uniqueId: l.receiptUniqueId ?? "",
+      id: l.id, auctionId: l.auction?.id ?? "", barcode: l.barcode ?? "", uniqueId: l.receiptUniqueId ?? "",
       tote: l.tote?.trim() ?? "", receipt: l.receipt ?? "", vendor: l.vendor ?? "",
       sale: l.auction?.code ?? "", cataloguedBy: l.createdByName ?? "", ...extra,
     })
@@ -191,11 +191,11 @@ export async function GET(req: NextRequest) {
 
     // Per-sale summary so a surprise (an old sale suddenly contributing lots)
     // is visible before the sheet is run.
-    const bySale = new Map<string, { code: string; name: string; complete: boolean; count: number }>()
+    const bySale = new Map<string, { id: string; code: string; name: string; complete: boolean; count: number }>()
     for (const l of ready) {
       const code = l.auction?.code ?? "(no sale)"
       let s = bySale.get(code)
-      if (!s) { s = { code, name: l.auction?.name ?? "", complete: l.auction?.complete ?? false, count: 0 }; bySale.set(code, s) }
+      if (!s) { s = { id: l.auction?.id ?? "", code, name: l.auction?.name ?? "", complete: l.auction?.complete ?? false, count: 0 }; bySale.set(code, s) }
       s.count++
     }
 
@@ -209,11 +209,11 @@ export async function GET(req: NextRequest) {
       sales: [...bySale.values()].sort((a, b) => a.code.localeCompare(b.code)),
       checks: [...checkMap.entries()].map(([key, rows]) => ({ key, count: rows.length, lots: rows.slice(0, 300) })),
       noBarcode: noBarcode.map(l => ({
-        id: l.id, uniqueId: l.receiptUniqueId ?? "", tote: l.tote ?? "",
+        id: l.id, auctionId: l.auction?.id ?? "", uniqueId: l.receiptUniqueId ?? "", tote: l.tote ?? "",
         sale: l.auction?.code ?? "", title: l.title, cataloguedBy: l.createdByName ?? "",
       })),
       noTote: noTote.map(l => ({
-        id: l.id, barcode: l.barcode ?? "", uniqueId: l.receiptUniqueId ?? "",
+        id: l.id, auctionId: l.auction?.id ?? "", barcode: l.barcode ?? "", uniqueId: l.receiptUniqueId ?? "",
         sale: l.auction?.code ?? "", title: l.title, cataloguedBy: l.createdByName ?? "",
       })),
     })

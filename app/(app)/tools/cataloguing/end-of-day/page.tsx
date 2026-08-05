@@ -7,12 +7,13 @@
 // a broken overnight run can be reconciled there and re-run.
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { autocorrectLotsForAuctions, lookupToteOrReceipt, massRemapPendingLots, setLotsVendorReceiptAcrossAuctions, type RemapLineResult } from "@/lib/actions/catalogue"
 
 type ToteRow = { tote: string; count: number; barcodes: string[]; sales: string[] }
-type SaleRow = { code: string; name: string; complete: boolean; count: number }
-type Problem = { id: string; barcode?: string; uniqueId: string; tote?: string; sale: string; title: string; cataloguedBy: string }
+type SaleRow = { id: string; code: string; name: string; complete: boolean; count: number }
+type Problem = { id: string; auctionId: string; barcode?: string; uniqueId: string; tote?: string; sale: string; title: string; cataloguedBy: string }
 type CheckLot = {
-  id: string; barcode: string; uniqueId: string; tote: string; receipt: string
+  id: string; auctionId: string; barcode: string; uniqueId: string; tote: string; receipt: string
   vendor: string; sale: string; cataloguedBy: string
   bcReceipt?: string; bcVendor?: string; totes?: string[]
 }
@@ -69,6 +70,10 @@ const CHECK_META: Record<string, { label: string; hint: string; tone: "bad" | "w
     label: "No vendor on the lot", tone: "warn", order: 8,
     hint: "The tote has a vendor in BC but the lot doesn't.",
   },
+  no_tote: {
+    label: "No tote on the lot — off the sheet until one is set", tone: "warn", order: 9,
+    hint: "The sheet is grouped by tote, so these can't go on it. Tick them, type the right tote in the bar that appears, and apply.",
+  },
 }
 
 export default function EndOfDayPage() {
@@ -78,6 +83,25 @@ export default function EndOfDayPage() {
   const [includeComplete, setIncludeComplete] = useState(false)
   const [copied, setCopied]   = useState(false)
   const [openTote, setOpenTote] = useState<string | null>(null)
+  const [fixing, setFixing]   = useState(false)
+  const [fixResult, setFixResult] = useState<string | null>(null)
+
+  // ── Manual intervention: tick lots in the panels, look up the right tote /
+  //    receipt, apply. lotId → auctionId (the apply action groups by sale).
+  const [selected, setSelected] = useState<Map<string, string>>(new Map())
+  const [lookupQ, setLookupQ]   = useState("")
+  const [looking, setLooking]   = useState(false)
+  const [lookup, setLookup]     = useState<Awaited<ReturnType<typeof lookupToteOrReceipt>> | null>(null)
+  const [applying, setApplying] = useState(false)
+
+  const toggleLot = useCallback((lotId: string, auctionId: string) => {
+    setSelected(prev => {
+      const next = new Map(prev)
+      if (next.has(lotId)) next.delete(lotId)
+      else next.set(lotId, auctionId)
+      return next
+    })
+  }, [])
 
   const load = useCallback(async (withComplete: boolean) => {
     setLoading(true); setError(null)
@@ -86,6 +110,7 @@ export default function EndOfDayPage() {
       const d = await r.json()
       if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`)
       setData(d)
+      setSelected(new Map())   // stale lot ids must not survive a refresh
     } catch (e: any) { setError(e?.message ?? "Failed to load"); setData(null) }
     finally { setLoading(false) }
   }, [])
@@ -113,6 +138,81 @@ export default function EndOfDayPage() {
 
   async function copy() {
     try { await navigator.clipboard.writeText(csv); setCopied(true); setTimeout(() => setCopied(false), 2500) } catch {}
+  }
+
+  async function runLookup() {
+    const q = lookupQ.trim()
+    if (!q) return
+    setLooking(true); setLookup(null)
+    try { setLookup(await lookupToteOrReceipt(q)) }
+    finally { setLooking(false) }
+  }
+
+  async function applyToSelected() {
+    if (!lookup?.ok || selected.size === 0) return
+    const what = lookup.kind === "tote"
+      ? `tote ${lookup.tote} (receipt ${lookup.receipt ?? "—"}, ${lookup.vendorName ?? lookup.vendor ?? "unknown vendor"})`
+      : `receipt ${lookup.receipt} (${lookup.vendorName ?? lookup.vendor ?? "unknown vendor"})`
+    if (!confirm(
+      `Move the ${selected.size} ticked lot${selected.size === 1 ? "" : "s"} to ${what}?\n\n` +
+      "Vendor and receipt are set from the BC data" +
+      (lookup.kind === "tote" ? ", and the lot's tote is corrected too" : "") +
+      ". Existing unique IDs are kept. Every change is logged and can be undone per sale from Manage Lots → Undo."
+    )) return
+    setApplying(true); setFixResult(null)
+    try {
+      const res = await setLotsVendorReceiptAcrossAuctions(
+        [...selected.entries()].map(([lotId, auctionId]) => ({ lotId, auctionId })),
+        {
+          vendor:  lookup.vendor ?? "",
+          receipt: lookup.receipt ?? "",
+          ...(lookup.kind === "tote" && lookup.tote ? { tote: lookup.tote } : {}),
+        },
+      )
+      if (!res.ok && res.error) {
+        setFixResult(`Couldn't change the lots: ${res.error}`)
+      } else {
+        setFixResult(
+          `Moved ${res.updated} lot${res.updated === 1 ? "" : "s"} to ${what}` +
+          (res.lockedSales ? ` · ${res.lockedSales} sale${res.lockedSales === 1 ? "" : "s"} skipped (BC-locked — admin only)` : "")
+        )
+        setLookup(null); setLookupQ("")
+        await load(includeComplete)
+      }
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  // The same fix as Tote Check → Match BC, run over every sale on the sheet.
+  // Only corrects what BC can prove (a known tote's receipt/vendor) — unknown
+  // totes are never guessed at, so it can't fix everything the checks flag.
+  async function fixFromBc() {
+    if (!data) return
+    const ids = data.sales.map(s => s.id).filter(Boolean)
+    if (ids.length === 0) return
+    if (!confirm(
+      "Fix the flagged lots from the BC tote data?\n\n" +
+      "Where a lot's tote is known in BC, its receipt and vendor are corrected to what BC says (the same as Match BC on each sale's Tote Check tab). " +
+      "Unknown totes are left alone — they can't be fixed automatically. Every change is logged in the Lot Change Log."
+    )) return
+    setFixing(true); setFixResult(null)
+    try {
+      const res = await autocorrectLotsForAuctions(ids)
+      if (!res.ok && res.error) {
+        setFixResult(`Couldn't fix: ${res.error}`)
+      } else {
+        setFixResult(
+          `Fixed ${res.updated} lot${res.updated === 1 ? "" : "s"} from the BC tote data` +
+          (res.corrections ? ` · ${res.corrections} had already gone into BC wrong — they're on the BC Corrections list to put right in BC` : "") +
+          (res.skipped ? ` · ${res.skipped} couldn't be fixed (tote not in BC)` : "") +
+          (res.lockedSales ? ` · ${res.lockedSales} sale${res.lockedSales === 1 ? "" : "s"} skipped (BC-locked — admin only)` : "")
+        )
+        await load(includeComplete)
+      }
+    } finally {
+      setFixing(false)
+    }
   }
 
   return (
@@ -196,30 +296,60 @@ export default function EndOfDayPage() {
           {/* ── Checks — same engine as the Tote Check tab ── */}
           {data.checks.length > 0 && (
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                🔎 Checks — {data.checks.reduce((s, c) => s + c.count, 0)} thing{data.checks.reduce((s, c) => s + c.count, 0) === 1 ? "" : "s"} worth a look before tonight
-                {data.toteLastSync && (
-                  <span className="font-normal text-xs text-gray-500 ml-2">
-                    BC tote data last synced {new Date(data.toteLastSync).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                )}
-              </p>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  🔎 Checks — {data.checks.reduce((s, c) => s + c.count, 0)} thing{data.checks.reduce((s, c) => s + c.count, 0) === 1 ? "" : "s"} worth a look before tonight
+                  {data.toteLastSync && (
+                    <span className="font-normal text-xs text-gray-500 ml-2">
+                      BC tote data last synced {new Date(data.toteLastSync).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  )}
+                </p>
+                <button
+                  onClick={fixFromBc}
+                  disabled={fixing}
+                  title="The same fix as Match BC on each sale's Tote Check tab — corrects receipt and vendor from the BC tote data wherever the tote is known. Unknown totes are never guessed at."
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
+                >
+                  {fixing ? "Fixing from BC…" : "🔧 Fix what BC can prove"}
+                </button>
+              </div>
+              {fixResult && (
+                <p className={`px-4 py-3 rounded-xl border text-sm ${fixResult.startsWith("Couldn't")
+                  ? "bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-300"
+                  : "bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/30 text-green-700 dark:text-green-300"}`}>
+                  {fixResult}
+                </p>
+              )}
               {[...data.checks]
                 .sort((a, b) => (CHECK_META[a.key]?.order ?? 99) - (CHECK_META[b.key]?.order ?? 99))
-                .map(c => <CheckPanel key={c.key} check={c} />)}
+                .map(c => <CheckPanel key={c.key} check={c} selected={selected} onToggle={toggleLot} />)}
             </div>
+          )}
+          {data.checks.length === 0 && fixResult && (
+            <p className="px-4 py-3 rounded-xl border text-sm bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/30 text-green-700 dark:text-green-300">
+              {fixResult}
+            </p>
           )}
           {data.checks.length === 0 && data.totes.length > 0 && (
             <p className="text-sm text-green-600 dark:text-green-400">
-              ✅ All checks passed — every lot's tote, receipt and vendor agrees with the BC data.
+              ✅ All checks passed — every lot&apos;s tote, receipt and vendor agrees with the BC data.
             </p>
           )}
 
           {/* ── Problems that need fixing before tonight ── */}
           {data.noTote.length > 0 && (
-            <ProblemList
-              label={`⚠ ${data.noTote.length} lot${data.noTote.length === 1 ? "" : "s"} with no tote — fix the tote (Manage Lots → Change Vendor) or they stay off the sheet`}
-              rows={data.noTote.map(p => ({ id: p.id, main: p.barcode ?? "", extra: [p.uniqueId, p.sale, p.cataloguedBy].filter(Boolean).join(" · "), title: p.title }))}
+            <CheckPanel
+              check={{
+                key: "no_tote",
+                count: data.noTote.length,
+                lots: data.noTote.map(p => ({
+                  id: p.id, auctionId: p.auctionId, barcode: p.barcode ?? "", uniqueId: p.uniqueId,
+                  tote: "", receipt: "", vendor: "", sale: p.sale, cataloguedBy: p.cataloguedBy,
+                })),
+              }}
+              selected={selected}
+              onToggle={toggleLot}
             />
           )}
           {data.noBarcode.length > 0 && (
@@ -289,29 +419,242 @@ export default function EndOfDayPage() {
             if today&apos;s BC sync hasn&apos;t run recently, run Data Sync in BC Warehouse first or already-imported lots may reappear here.
             If the overnight run breaks part-way, reconcile with Auction AI → BC Import Check.
           </p>
+
+          {/* ── Mass re-map: type the corrections instead of ticking lots ── */}
+          <MassRemap onApplied={async (msg) => { setFixResult(msg); await load(includeComplete) }} />
+
+          {/* ── Intervention bar — appears when lots are ticked in any panel ── */}
+          {selected.size > 0 && (
+            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[min(60rem,calc(100vw-2rem))] rounded-2xl border-2 border-blue-400 dark:border-blue-500/60 bg-white dark:bg-[#15151a] shadow-2xl px-5 py-4 space-y-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="px-3 py-1.5 rounded-full bg-blue-600 text-white text-sm font-bold shrink-0">
+                  {selected.size} lot{selected.size === 1 ? "" : "s"} ticked
+                </span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">Move them to:</span>
+                <input
+                  value={lookupQ}
+                  onChange={e => { setLookupQ(e.target.value.toUpperCase()); setLookup(null) }}
+                  onKeyDown={e => { if (e.key === "Enter") runLookup() }}
+                  placeholder="Tote (T001234) or receipt (R000123)"
+                  className="flex-1 min-w-[14rem] bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm font-mono text-gray-900 dark:text-white placeholder:font-sans focus:outline-none focus:border-blue-500"
+                />
+                <button
+                  onClick={runLookup}
+                  disabled={looking || !lookupQ.trim()}
+                  className="px-4 py-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 disabled:opacity-40 text-gray-900 dark:text-white text-sm font-semibold rounded-lg transition-colors"
+                >
+                  {looking ? "Checking…" : "Check in BC"}
+                </button>
+                <button
+                  onClick={applyToSelected}
+                  disabled={applying || !lookup?.ok}
+                  title={lookup?.ok ? "" : "Check the tote or receipt in BC first"}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-bold rounded-lg transition-colors"
+                >
+                  {applying ? "Applying…" : "Apply to ticked lots"}
+                </button>
+                <button
+                  onClick={() => { setSelected(new Map()); setLookup(null); setLookupQ("") }}
+                  className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline"
+                >
+                  Clear
+                </button>
+              </div>
+              {/* The looked-up truth, before anything is applied — same confirm-first
+                  pattern as Manage Lots → Change Vendor. */}
+              {lookup && (
+                lookup.ok ? (
+                  <p className="text-sm text-green-700 dark:text-green-400">
+                    ✓ {lookup.kind === "tote"
+                      ? <>Tote <span className="font-mono font-bold">{lookup.tote}</span> belongs to receipt{" "}
+                          <span className="font-mono font-bold">{lookup.receipt ?? "—"}</span> — {lookup.vendorName ?? lookup.vendor ?? "unknown vendor"}.
+                          The ticked lots&apos; tote, receipt and vendor will all be set to match.</>
+                      : <>Receipt <span className="font-mono font-bold">{lookup.receipt}</span> — {lookup.vendorName ?? lookup.vendor ?? "unknown vendor"}
+                          {typeof lookup.toteCount === "number" ? ` (${lookup.toteCount} tote${lookup.toteCount === 1 ? "" : "s"} in BC)` : ""}.
+                          Receipt and vendor will be set; the lots&apos; totes are left as they are.</>}
+                  </p>
+                ) : (
+                  <p className="text-sm text-red-600 dark:text-red-400">{lookup.error}</p>
+                )
+              )}
+            </div>
+          )}
         </>
       )}
     </div>
   )
 }
 
-function CheckPanel({ check }: { check: Check }) {
+// Typed mass corrections: one change per line, "wrong → right". Preview shows
+// what every line would hit BEFORE anything is written; Apply reuses the same
+// verified Change Vendor machinery as the tick-and-move bar.
+function MassRemap({ onApplied }: { onApplied: (msg: string) => Promise<void> }) {
+  const [open, setOpen]       = useState(false)
+  const [text, setText]       = useState("")
+  const [busy, setBusy]       = useState<"preview" | "apply" | null>(null)
+  const [results, setResults] = useState<RemapLineResult[] | null>(null)
+  const [error, setError]     = useState<string | null>(null)
+
+  // Accepts →, ->, comma, tab or plain spaces between the two values.
+  function parse(): { from: string; to: string }[] {
+    return text
+      .split("\n")
+      .map(l => l.trim())
+      .filter(Boolean)
+      .map(l => {
+        const parts = l.split(/→|->|,|\t/).map(p => p.trim()).filter(Boolean)
+        const fallback = l.split(/\s+/).filter(Boolean)
+        const [from, to] = parts.length >= 2 ? parts : fallback
+        return { from: from ?? "", to: to ?? "" }
+      })
+  }
+
+  async function run(apply: boolean) {
+    const lines = parse()
+    if (lines.length === 0) return
+    if (apply) {
+      const total = (results ?? []).reduce((s, r) => s + (r.ok ? r.matched : 0), 0)
+      if (!confirm(
+        `Apply ${lines.length} change${lines.length === 1 ? "" : "s"}${total ? ` to ${total} lot${total === 1 ? "" : "s"}` : ""}?\n\n` +
+        "Each right-hand value has been checked against the BC data. Vendor and receipt are set from BC (and the tote too where a tote was given). " +
+        "Existing unique IDs are kept, everything is logged, and each sale can be undone from Manage Lots → Undo."
+      )) return
+    }
+    setBusy(apply ? "apply" : "preview"); setError(null)
+    try {
+      const res = await massRemapPendingLots(lines, apply)
+      if (!res.ok && res.error) { setError(res.error); return }
+      setResults(res.results)
+      if (apply) {
+        const updated = res.results.reduce((s, r) => s + (r.updated ?? 0), 0)
+        const failed  = res.results.filter(r => !r.ok).length
+        await onApplied(
+          `Re-map applied — ${updated} lot${updated === 1 ? "" : "s"} moved` +
+          (failed ? ` · ${failed} line${failed === 1 ? "" : "s"} couldn't run (see the re-map panel)` : "")
+        )
+      }
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E]">
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-2 px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white text-left">
+        <span className="text-xs">{open ? "▼" : "▶"}</span>
+        📝 Mass re-map — type the corrections
+        <span className="font-normal text-xs text-gray-500 ml-1">one per line: wrong tote or receipt → right one</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 space-y-3">
+          <textarea
+            value={text}
+            onChange={e => { setText(e.target.value); setResults(null) }}
+            rows={5}
+            placeholder={"P05696 → P005696\nR08414 → R008414\nT026394 → T026395"}
+            className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm font-mono text-gray-900 dark:text-white placeholder:text-gray-500 focus:outline-none focus:border-blue-500"
+          />
+          <p className="text-xs text-gray-500 dark:text-gray-500">
+            The left side finds every not-yet-in-BC lot carrying that tote or receipt; the right side must exist in the BC
+            data and is what they&apos;re moved to. Preview first — nothing is written until Apply.
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => run(false)}
+              disabled={busy !== null || !text.trim()}
+              className="px-4 py-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 disabled:opacity-40 text-gray-900 dark:text-white text-sm font-semibold rounded-lg transition-colors"
+            >
+              {busy === "preview" ? "Checking…" : "Preview"}
+            </button>
+            <button
+              onClick={() => run(true)}
+              disabled={busy !== null || !results || results.every(r => !r.ok || r.matched === 0)}
+              title={results ? "" : "Preview first so you can see what each line will hit"}
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-bold rounded-lg transition-colors"
+            >
+              {busy === "apply" ? "Applying…" : "Apply the changes"}
+            </button>
+          </div>
+          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+          {results && (
+            <div className="space-y-1">
+              {results.map((r, i) => (
+                <div key={i} className={`text-xs px-3 py-2 rounded-lg border flex flex-wrap items-center gap-x-2 ${
+                  !r.ok
+                    ? "border-red-200 dark:border-red-800/40 bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-300"
+                    : r.matched === 0
+                      ? "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-500"
+                      : "border-green-200 dark:border-green-800/40 bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-300"
+                }`}>
+                  <span className="font-mono font-semibold">{r.from || "?"} → {r.to || "?"}</span>
+                  {!r.ok ? (
+                    <span>{r.error}</span>
+                  ) : (
+                    <>
+                      <span>
+                        {r.kind === "tote"
+                          ? <>tote → receipt {r.receipt ?? "—"}, {r.vendorName ?? r.vendor ?? "unknown vendor"}</>
+                          : <>receipt — {r.vendorName ?? r.vendor ?? "unknown vendor"}</>}
+                      </span>
+                      <span className="font-semibold">
+                        {r.updated !== undefined
+                          ? `moved ${r.updated} lot${r.updated === 1 ? "" : "s"}`
+                          : r.matched === 0
+                            ? "matches no pending lots"
+                            : `will move ${r.matched} lot${r.matched === 1 ? "" : "s"}`}
+                      </span>
+                      {!!r.lockedSales && <span>· {r.lockedSales} sale{r.lockedSales === 1 ? "" : "s"} BC-locked</span>}
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CheckPanel({ check, selected, onToggle }: {
+  check: Check
+  selected: Map<string, string>
+  onToggle: (lotId: string, auctionId: string) => void
+}) {
   const [open, setOpen] = useState(false)
   const meta = CHECK_META[check.key] ?? { label: check.key, hint: "", tone: "warn" as const, order: 99 }
   const tone = meta.tone === "bad"
     ? "border-red-300 dark:border-red-800/40 bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-300"
     : "border-amber-300 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300"
+  const allTicked = check.lots.length > 0 && check.lots.every(l => selected.has(l.id))
   return (
     <div className={`rounded-xl border px-4 py-3 ${tone}`}>
-      <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2 text-sm font-medium w-full text-left">
-        <span className="text-xs">{open ? "▼" : "▶"}</span>
-        <span>{meta.tone === "bad" ? "⛔" : "⚠"} {meta.label} ({check.count})</span>
-      </button>
+      <div className="flex items-center gap-3">
+        <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2 text-sm font-medium flex-1 text-left">
+          <span className="text-xs">{open ? "▼" : "▶"}</span>
+          <span>{meta.tone === "bad" ? "⛔" : "⚠"} {meta.label} ({check.count})</span>
+        </button>
+        {open && (
+          <button
+            onClick={() => check.lots.forEach(l => { if (allTicked ? selected.has(l.id) : !selected.has(l.id)) onToggle(l.id, l.auctionId) })}
+            className="text-xs underline opacity-80 hover:opacity-100 shrink-0"
+          >
+            {allTicked ? "Untick all" : `Tick all ${check.lots.length}`}
+          </button>
+        )}
+      </div>
       <p className="text-xs opacity-80 mt-1 ml-5">{meta.hint}</p>
       {open && (
         <div className="mt-2 ml-5 space-y-1 max-h-64 overflow-y-auto">
           {check.lots.map(l => (
-            <div key={l.id} className="text-xs flex flex-wrap gap-x-2">
+            <div key={l.id} className="text-xs flex flex-wrap items-center gap-x-2">
+              <input
+                type="checkbox"
+                className="accent-blue-500"
+                checked={selected.has(l.id)}
+                onChange={() => onToggle(l.id, l.auctionId)}
+                disabled={!l.auctionId}
+              />
               <span className="font-mono font-semibold">{l.barcode || l.uniqueId || "—"}</span>
               {l.tote && <span className="opacity-80">tote {l.tote}</span>}
               {l.totes && l.totes.length > 1 && <span className="opacity-80">totes {l.totes.join(" + ")}</span>}
