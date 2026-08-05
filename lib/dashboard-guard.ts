@@ -14,6 +14,7 @@
 // that every other page listing sales already honours.
 
 import { NextResponse } from "next/server"
+import { headers } from "next/headers"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { hasAppAccess, getAllowedSections } from "@/lib/apps"
@@ -64,6 +65,36 @@ export async function requireWidget(key: string): Promise<WidgetGate> {
     ok: true,
     ctx: { userId: session.user.id, role, access, saleWhere: auctionWhere(access) },
   }
+}
+
+/**
+ * Call one of this app's own API routes, server-side, as the current user.
+ *
+ * Used by the widgets whose figures come from a big existing BC report route
+ * (warehouse stock, packing, despatch). Those routes are hundreds of lines of
+ * BC paging, staff-name merging and field detection; a widget that re-queried
+ * BC its own way would eventually disagree with the report it claims to
+ * summarise. Calling the same endpoint means there is exactly one set of
+ * figures, and the widget only reshapes them.
+ *
+ * ⚠ The caller's cookie is forwarded, so the endpoint applies that user's own
+ * auth — the widget never sees anything its viewer couldn't fetch themselves.
+ */
+export async function fetchInternal<T = any>(path: string): Promise<T> {
+  const h = await headers()
+  const host  = h.get("x-forwarded-host") ?? h.get("host")
+  const proto = h.get("x-forwarded-proto") ?? "http"
+  if (!host) throw new Error("Couldn't work out the app's own address")
+
+  const res = await fetch(`${proto}://${host}${path}`, {
+    headers: { cookie: h.get("cookie") ?? "" },
+    cache: "no-store",
+  })
+  const json = await res.json().catch(() => null)
+  if (!res.ok) {
+    throw new Error(json?.error === "BC_NOT_CONNECTED" ? "BC_NOT_CONNECTED" : (json?.error ?? `Request failed (${res.status})`))
+  }
+  return json as T
 }
 
 /** Wraps a widget handler in the gate and the standard try/catch. */

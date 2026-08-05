@@ -241,13 +241,24 @@ export type WidgetPayload = WidgetBody & { note?: string; empty?: string }
 
 /**
  * What a person sees before they have arranged anything themselves, and what an
- * admin has not set a role default for. Deliberately short — an empty dashboard
- * is confusing, a full one is noise.
+ * admin has not set a role default for.
+ *
+ * A full screen on purpose — the point is that it is useful the moment you open
+ * it, and removing a card you don't want is one click where finding a card you
+ * do want means knowing it exists. Anything the viewer has no access to is
+ * dropped by sanitiseLayout, so a cataloguer with only some of these apps still
+ * gets a sensible dashboard rather than a broken one.
  */
 export const STARTER_LAYOUT: DashboardWidgetPlacement[] = [
-  { key: "sale-progress",          size: "wide" },
   { key: "lots-today",             size: "small" },
+  { key: "sale-value",             size: "small" },
+  { key: "sell-through",           size: "small" },
+  { key: "condition-reports",      size: "small" },
+  { key: "sale-progress",          size: "wide" },
   { key: "cataloguer-leaderboard", size: "medium" },
+  { key: "sale-countdown",         size: "medium" },
+  { key: "recent-sale-results",    size: "wide" },
+  { key: "monthly-trend",          size: "medium" },
   { key: "time-per-lot",           size: "medium" },
 ]
 
