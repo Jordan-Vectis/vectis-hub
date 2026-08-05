@@ -11,15 +11,64 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 type ToteRow = { tote: string; count: number; barcodes: string[]; sales: string[] }
 type SaleRow = { code: string; name: string; complete: boolean; count: number }
 type Problem = { id: string; barcode?: string; uniqueId: string; tote?: string; sale: string; title: string; cataloguedBy: string }
+type CheckLot = {
+  id: string; barcode: string; uniqueId: string; tote: string; receipt: string
+  vendor: string; sale: string; cataloguedBy: string
+  bcReceipt?: string; bcVendor?: string; totes?: string[]
+}
+type Check = { key: string; count: number; lots: CheckLot[] }
 type Data = {
   generatedAt: string
+  toteLastSync: string | null
   totalLots: number
   alreadyInBc: number
   readyCount: number
   totes: ToteRow[]
   sales: SaleRow[]
+  checks: Check[]
   noBarcode: Problem[]
   noTote: Problem[]
+}
+
+// Same wording and severity as the Tote Check tab for the shared checks, plus
+// the three sheet-specific ones. Order = display order, worst first.
+const CHECK_META: Record<string, { label: string; hint: string; tone: "bad" | "warn"; order: number }> = {
+  duplicate_barcode: {
+    label: "Same barcode in two totes — taken OFF tonight's sheet", tone: "bad", order: 0,
+    hint: "One of the totes is wrong, and importing would put the BC line on the wrong receipt. Fix the tote on the wrong lot (Manage Lots → Change Vendor), then refresh — they go back on the sheet.",
+  },
+  receipt_not_in_bc: {
+    label: "Receipt doesn't exist in BC", tone: "bad", order: 1,
+    hint: "No synced BC tote or item carries this receipt number — likely a typo, or a receipt not booked into BC yet. Still on the sheet, but the overnight run will fail on it.",
+  },
+  receipt_mismatch: {
+    label: "Receipt doesn't match the tote", tone: "bad", order: 2,
+    hint: "The tote belongs to a different receipt in BC. Either the wrong receipt was typed, or the item is in the wrong tote.",
+  },
+  vendor_mismatch: {
+    label: "Vendor doesn't match the tote", tone: "bad", order: 3,
+    hint: "The tote belongs to a different vendor in BC — often the previous batch's vendor left in place.",
+  },
+  unique_id_mismatch: {
+    label: "Unique ID against a different receipt", tone: "bad", order: 4,
+    hint: "The unique ID starts with one receipt but the lot's receipt field says another. One of the two is wrong.",
+  },
+  invalid_barcode: {
+    label: "Barcode looks malformed", tone: "warn", order: 5,
+    hint: "Doesn't match the F066001 format. Still on the sheet, but check it before the run — the macro may not accept it.",
+  },
+  tote_unknown: {
+    label: "Tote not in the BC data", tone: "warn", order: 6,
+    hint: "No tote with this number came back from BC — either a typo, or the tote hasn't synced yet. Check the sync time before treating these as mistakes.",
+  },
+  receipt_missing: {
+    label: "No receipt on the lot", tone: "warn", order: 7,
+    hint: "The tote has a receipt in BC but the lot doesn't. Manage Lots → Change Vendor fills these.",
+  },
+  vendor_missing: {
+    label: "No vendor on the lot", tone: "warn", order: 8,
+    hint: "The tote has a vendor in BC but the lot doesn't.",
+  },
 }
 
 export default function EndOfDayPage() {
@@ -144,6 +193,28 @@ export default function EndOfDayPage() {
             </label>
           </div>
 
+          {/* ── Checks — same engine as the Tote Check tab ── */}
+          {data.checks.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                🔎 Checks — {data.checks.reduce((s, c) => s + c.count, 0)} thing{data.checks.reduce((s, c) => s + c.count, 0) === 1 ? "" : "s"} worth a look before tonight
+                {data.toteLastSync && (
+                  <span className="font-normal text-xs text-gray-500 ml-2">
+                    BC tote data last synced {new Date(data.toteLastSync).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                )}
+              </p>
+              {[...data.checks]
+                .sort((a, b) => (CHECK_META[a.key]?.order ?? 99) - (CHECK_META[b.key]?.order ?? 99))
+                .map(c => <CheckPanel key={c.key} check={c} />)}
+            </div>
+          )}
+          {data.checks.length === 0 && data.totes.length > 0 && (
+            <p className="text-sm text-green-600 dark:text-green-400">
+              ✅ All checks passed — every lot's tote, receipt and vendor agrees with the BC data.
+            </p>
+          )}
+
           {/* ── Problems that need fixing before tonight ── */}
           {data.noTote.length > 0 && (
             <ProblemList
@@ -219,6 +290,46 @@ export default function EndOfDayPage() {
             If the overnight run breaks part-way, reconcile with Auction AI → BC Import Check.
           </p>
         </>
+      )}
+    </div>
+  )
+}
+
+function CheckPanel({ check }: { check: Check }) {
+  const [open, setOpen] = useState(false)
+  const meta = CHECK_META[check.key] ?? { label: check.key, hint: "", tone: "warn" as const, order: 99 }
+  const tone = meta.tone === "bad"
+    ? "border-red-300 dark:border-red-800/40 bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-300"
+    : "border-amber-300 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300"
+  return (
+    <div className={`rounded-xl border px-4 py-3 ${tone}`}>
+      <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2 text-sm font-medium w-full text-left">
+        <span className="text-xs">{open ? "▼" : "▶"}</span>
+        <span>{meta.tone === "bad" ? "⛔" : "⚠"} {meta.label} ({check.count})</span>
+      </button>
+      <p className="text-xs opacity-80 mt-1 ml-5">{meta.hint}</p>
+      {open && (
+        <div className="mt-2 ml-5 space-y-1 max-h-64 overflow-y-auto">
+          {check.lots.map(l => (
+            <div key={l.id} className="text-xs flex flex-wrap gap-x-2">
+              <span className="font-mono font-semibold">{l.barcode || l.uniqueId || "—"}</span>
+              {l.tote && <span className="opacity-80">tote {l.tote}</span>}
+              {l.totes && l.totes.length > 1 && <span className="opacity-80">totes {l.totes.join(" + ")}</span>}
+              {l.receipt && <span className="opacity-80">receipt {l.receipt}</span>}
+              {l.bcReceipt && l.receipt && l.bcReceipt.toUpperCase() !== l.receipt.toUpperCase() && (
+                <span className="font-semibold">BC says {l.bcReceipt}</span>
+              )}
+              {l.bcVendor && l.vendor && l.bcVendor.toUpperCase() !== l.vendor.toUpperCase() && (
+                <span className="font-semibold">BC vendor {l.bcVendor}</span>
+              )}
+              {l.sale && <span className="opacity-70">{l.sale}</span>}
+              {l.cataloguedBy && <span className="opacity-70">{l.cataloguedBy}</span>}
+            </div>
+          ))}
+          {check.count > check.lots.length && (
+            <p className="text-xs opacity-70">…and {check.count - check.lots.length} more</p>
+          )}
+        </div>
       )}
     </div>
   )

@@ -35,6 +35,17 @@ At the end of each day, generate the sheet the overnight "add to BC" run works t
 - **Nothing is silently dropped**: lots with **no tote** or **no barcode** can't go on a tote/barcode sheet — they're listed in amber problem panels (fix via Manage Lots → Change Vendor). Per-sale chips show where lots come from; a completed sale contributing lots shows amber.
 - Page notes: run BC Warehouse **Data Sync** first or already-imported lots reappear (the check is against the sync cache); reconcile breakages in **Auction AI → BC Import Check**.
 
+## Checks (added same day)
+
+Every lot on the sheet is verified before it's trusted overnight — **shared \`lib/tote-check.ts\` \`checkLot()\`**, the same engine as the Tote Check tab, so the two can never disagree. Plus three sheet-specific checks:
+- **\`duplicate_barcode\`** — same barcode under two totes. ⚠ The ONLY check that pulls lots OFF the sheet (importing under the wrong tote puts the BC line on the wrong receipt) — shown in a red panel, never silent.
+- **\`receipt_not_in_bc\`** — the lot's receipt exists in neither \`WarehouseTote.receiptNo\` nor \`WarehouseItem.receiptNo\` (variants trick both). Flagged, stays on the sheet.
+- **\`invalid_barcode\`** — fails the RULES.md format regexes after non-ASCII strip. Flagged, stays on the sheet.
+
+Everything else (tote_unknown / receipt_mismatch / vendor_mismatch / unique_id_mismatch / receipt_missing / vendor_missing) is **amber report-only** — checks never write, and the tote-sync time is shown so a stale sync reads as "sync first", not "93 mistakes". \`CHECK_META\` on the page reuses the Tote Check tab's wording.
+
+Measured on production 2026-08-05: **5 unique_id_mismatch, 93 tote_unknown, 64 receipt_not_in_bc, 0 duplicates** — it catches real issues on day one.
+
 ## Registration
 
 Sidebar \`components/cataloguing-sidebar.tsx\` + \`APP_SECTIONS.CATALOGUING\` key **END_OF_DAY** ("End of Day → BC", 🌙). ⚠ Users with configured sidebar sections won't see it until an admin ticks it (the Photography lesson).
