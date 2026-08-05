@@ -373,7 +373,10 @@ export async function lookupToteOrReceipt(query: string): Promise<{
 export async function setLotsVendorReceipt(
   auctionId: string,
   lotIds: string[],
-  input: { vendor: string; receipt: string },
+  // `tote` (optional) also rewrites the lot's tote — used by End of Day → BC
+  // where the flagged problem IS a mistyped tote. Manage Lots doesn't pass it,
+  // so its behaviour is unchanged.
+  input: { vendor: string; receipt: string; tote?: string },
 ): Promise<{ ok: boolean; error?: string; updated?: number }> {
   try {
     const session = await requireCataloguer()
@@ -382,11 +385,12 @@ export async function setLotsVendorReceipt(
     if (lotIds.length === 0) return { ok: false, error: "Tick the lots you want to change first." }
     const vendor  = input.vendor.trim()
     const receipt = input.receipt.trim()
-    if (!vendor && !receipt) return { ok: false, error: "Nothing to set." }
+    const tote    = (input.tote ?? "").trim()
+    if (!vendor && !receipt && !tote) return { ok: false, error: "Nothing to set." }
 
     const lots = await prisma.catalogueLot.findMany({
       where:  { id: { in: lotIds }, auctionId },
-      select: { id: true, vendor: true, receipt: true, receiptUniqueId: true },
+      select: { id: true, vendor: true, receipt: true, receiptUniqueId: true, tote: true },
     })
     if (lots.length === 0) return { ok: false, error: "None of those lots are in this auction." }
 
@@ -401,12 +405,14 @@ export async function setLotsVendorReceipt(
       const data: Record<string, string> = {}
       if (vendor  && lot.vendor  !== vendor)  data.vendor  = vendor
       if (receipt && lot.receipt !== receipt) data.receipt = receipt
+      if (tote    && lot.tote    !== tote)    data.tote    = tote
       if (receipt && !lot.receiptUniqueId) data.receiptUniqueId = `${receipt}-${++offset}`
       if (Object.keys(data).length === 0) continue
 
       const fields: Record<string, { before: unknown; after: unknown }> = {}
       if (data.vendor          !== undefined) fields.vendor          = { before: lot.vendor,          after: data.vendor }
       if (data.receipt         !== undefined) fields.receipt         = { before: lot.receipt,         after: data.receipt }
+      if (data.tote            !== undefined) fields.tote            = { before: lot.tote,            after: data.tote }
       if (data.receiptUniqueId !== undefined) fields.receiptUniqueId = { before: lot.receiptUniqueId, after: data.receiptUniqueId }
 
       await updateLotLogged(lot.id, data, ctx)
@@ -419,6 +425,35 @@ export async function setLotsVendorReceipt(
     return { ok: true, updated }
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Couldn't change those lots" }
+  }
+}
+
+// End of Day → BC intervention: the SAME set as above, applied to a selection
+// that can span several sales. Groups by auction and loops the single-auction
+// action, so logging, per-sale Undo (Manage Lots → Undo), BC locking and the
+// unique-ID minting rule all behave exactly as they do from Manage Lots.
+export async function setLotsVendorReceiptAcrossAuctions(
+  lots: { auctionId: string; lotId: string }[],
+  input: { vendor: string; receipt: string; tote?: string },
+): Promise<{ ok: boolean; error?: string; updated: number; lockedSales: number }> {
+  let updated = 0, lockedSales = 0
+  try {
+    const byAuction = new Map<string, string[]>()
+    for (const l of lots) {
+      if (!l.auctionId || !l.lotId) continue
+      if (!byAuction.has(l.auctionId)) byAuction.set(l.auctionId, [])
+      byAuction.get(l.auctionId)!.push(l.lotId)
+    }
+    if (byAuction.size === 0) return { ok: false, error: "Tick the lots you want to change first.", updated, lockedSales }
+
+    for (const [auctionId, lotIds] of byAuction) {
+      const res = await setLotsVendorReceipt(auctionId, lotIds, input)
+      if (!res.ok) { lockedSales++; continue }
+      updated += res.updated ?? 0
+    }
+    return { ok: true, updated, lockedSales }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Couldn't change those lots", updated, lockedSales }
   }
 }
 

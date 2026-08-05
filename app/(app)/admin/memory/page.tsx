@@ -86,6 +86,14 @@ Everything else (tote_unknown / receipt_mismatch / vendor_mismatch / unique_id_m
 
 Measured on production 2026-08-05: **5 unique_id_mismatch, 93 tote_unknown, 64 receipt_not_in_bc, 0 duplicates** — it catches real issues on day one.
 
+## Manual intervention — tick lots, move them (added 2026-08-05)
+
+Every check panel (and the no-tote list, now the same panel type) has **tickboxes + "Tick all"**; ticking anything floats a **fixed bottom bar**: type a tote or receipt → **Check in BC** (\`lookupToteOrReceipt\` — the same verify-first flow as Manage Lots → Change Vendor; a number not in the BC data can't be applied) → confirmation line states what it belongs to → **Apply to ticked lots**.
+
+- Apply = **\`setLotsVendorReceiptAcrossAuctions\`** → groups the selection by sale and loops the existing **\`setLotsVendorReceipt\`**, which gained an optional **\`tote\`** param (set only when the lookup was a tote; Manage Lots doesn't pass it — unchanged there). So: tote entered → tote + receipt + vendor all corrected; receipt entered → receipt + vendor only, totes left alone.
+- Same guarantees as Manage Lots: logged (\`vendor_change\` + batchId), **per-sale Undo** via CatalogueBulkUndo, existing unique IDs preserved (minted only for blanks), BC-locked sales skip for non-admins and are reported. Selection is cleared on every data refresh so stale lot ids can't be applied.
+- This is the fix for the **tote_unknown** pile the auto-fix can't touch: tick the batch with the mistyped tote, type the right one, apply.
+
 ## Registration
 
 Sidebar \`components/cataloguing-sidebar.tsx\` + \`APP_SECTIONS.CATALOGUING\` key **END_OF_DAY** ("End of Day → BC", 🌙). ⚠ Users with configured sidebar sections won't see it until an admin ticks it (the Photography lesson).
