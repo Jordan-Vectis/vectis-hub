@@ -43,10 +43,14 @@ Confirmed with Jordan in conversation. The key insight that prompted it: unique-
 - A \`unique_id_mismatch\` (uid prefix vs lot receipt) mid-flow usually means the receipt was corrected after minting — harmless, self-corrects at step 5. The End of Day check hint was reworded to say so (amber, not red).
 - The reconciliation tools map to the steps: **End of Day → BC** feeds step 4; **BC Import Check** repairs a broken step 4; **🔗 BC Match** is step 5; **BC Check tab** verifies step 6 landed; **Tote Check / BC Corrections** police step 2's data quality.
 
-## Open questions (not yet confirmed)
+## What the Hub does NOT cover (confirmed 2026-08-05)
 
-- What the Hub deliberately does NOT cover (invoicing/settlement/customer accounts presumably stay in BC).
-- Whether steps 5/6 happen per-sale or per-day, and who besides Jordan runs them.
+**All invoicing and customer accounts are handled by BC and the website provider** (the live-auction platform). The Hub never touches money or customer billing — don't build features that assume it does.
+
+## Timing (confirmed 2026-08-05)
+
+- **🔗 BC Match runs right after each overnight macro run** — lots are macro'd into BC, then matched, so the IDs link up batch by batch.
+- **📤 Push to BC runs once at the END, after all AI pipelines have finished** — descriptions/estimates go across when they're final, not incrementally.
 `,
   },
   {
