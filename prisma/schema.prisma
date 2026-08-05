@@ -828,7 +828,24 @@ model RoleDefault {
   role           String   @id  // "COLLECTIONS" | "CATALOGUER"
   allowedApps    String[] @default([])
   appPermissions Json?
+  // Starting Manager Portal → Dashboard layout for this role. A person who has
+  // never arranged their own dashboard gets this, so a new manager doesn't land
+  // on an empty screen. Same shape as DashboardLayout.widgets.
+  dashboardWidgets Json?
   updatedAt      DateTime @updatedAt
+}
+
+// One row per person — how they have arranged Manager Portal → Dashboard.
+//
+// Only the CHOICE and ORDER live here; what a widget is and what it may show
+// are defined in code (lib/dashboard-widgets.ts) and re-checked against the
+// viewer's own permissions on every request. So a stored layout can never grant
+// access to anything, and a widget that is retired simply stops rendering
+// instead of breaking the saved layout.
+model DashboardLayout {
+  userId    String   @id
+  widgets   Json     @default("[]")   // DashboardWidgetPlacement[] in display order
+  updatedAt DateTime @updatedAt
 }
 
 model MarketingDraft {

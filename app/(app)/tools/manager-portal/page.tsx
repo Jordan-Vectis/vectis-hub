@@ -5,6 +5,7 @@ import { redirect } from "next/navigation"
 import { hasAppAccess, getAllowedSections, APP_SECTIONS } from "@/lib/apps"
 import SalesView from "./sales-view"
 import DepartmentsView from "./departments-view"
+import DashboardView from "./dashboard-view"
 
 export const dynamic = "force-dynamic"
 
@@ -40,7 +41,9 @@ export default async function ManagerPortalPage({
       <div className="mb-4">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Manager Portal</h1>
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-          {tab === "departments"
+          {tab === "dashboard"
+            ? "Your own view — add the reports you care about and drag them into the order you want."
+            : tab === "departments"
             ? "Active sales by department, with projected dates at the current pace, plus who worked on them."
             : "Lots in every sale across both systems, cataloguing pace and projected milestone dates. Click a sale for the full breakdown."}
         </p>
@@ -67,7 +70,11 @@ export default async function ManagerPortalPage({
         </div>
       )}
 
-      {tab === "departments" ? <DepartmentsView /> : <SalesView />}
+      {tab === "dashboard"
+        ? <DashboardView />
+        : tab === "departments"
+        ? <DepartmentsView />
+        : <SalesView />}
     </div>
   )
 }
