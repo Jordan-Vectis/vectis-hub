@@ -560,6 +560,115 @@ export async function autocorrectLotsFromTotes(auctionId: string): Promise<{
   }
 }
 
+// End of Day → BC "Mass re-map": typed `wrong → right` pairs, e.g. a mistyped
+// tote that a whole batch of lots was catalogued under. Each line's RIGHT side
+// is verified against the BC tote data (same lookup as Change Vendor — an
+// unknown number can never be applied), and its WRONG side selects every
+// NOT-yet-in-BC lot in a non-complete sale whose tote OR receipt matches.
+// Lots already in BC are deliberately out of scope — their wrong values went
+// into BC and belong to the BC Corrections flow, not a Hub-side remap.
+//
+// preview=true only reports what each line would do; apply runs the SAME
+// setLotsVendorReceipt machinery as everywhere else (logged, per-sale Undo,
+// unique IDs preserved, BC-locked sales skipped). Lines run in order, so a
+// later line sees an earlier line's changes.
+export type RemapLineResult = {
+  from: string
+  to: string
+  ok: boolean
+  error?: string
+  kind?: "tote" | "receipt"
+  tote?: string | null
+  receipt?: string | null
+  vendor?: string | null
+  vendorName?: string | null
+  matched: number
+  updated?: number
+  lockedSales?: number
+}
+
+const MAX_REMAP_LINES = 100
+
+export async function massRemapPendingLots(
+  lines: { from: string; to: string }[],
+  apply: boolean,
+): Promise<{ ok: boolean; error?: string; results: RemapLineResult[] }> {
+  try {
+    await requireCataloguer()
+    if (lines.length === 0)               return { ok: false, error: "Type at least one change first.", results: [] }
+    if (lines.length > MAX_REMAP_LINES)   return { ok: false, error: `Too many lines — ${MAX_REMAP_LINES} at most per run.`, results: [] }
+
+    const caseVariants = (v: string) => [...new Set([v, v.toUpperCase(), v.toLowerCase()])]
+    const results: RemapLineResult[] = []
+
+    for (const raw of lines) {
+      const from = (raw.from ?? "").trim().toUpperCase()
+      const to   = (raw.to   ?? "").trim().toUpperCase()
+      const base: RemapLineResult = { from, to, ok: false, matched: 0 }
+      if (!from || !to) { results.push({ ...base, error: "Needs both a wrong value and a right one." }); continue }
+      if (from === to)  { results.push({ ...base, error: "Both sides are the same." }); continue }
+
+      // RIGHT side must exist in the BC data — same rule as everywhere else.
+      const looked = await lookupToteOrReceipt(to)
+      if (!looked.ok) { results.push({ ...base, error: looked.error ?? `"${to}" isn't in the BC data.` }); continue }
+
+      // WRONG side selects pending lots by tote OR receipt (a value lives in
+      // one of the two; matching both costs nothing and can't cross-match).
+      const candidates = await prisma.catalogueLot.findMany({
+        where: {
+          auction: { complete: false },
+          OR: [{ tote: { in: caseVariants(from) } }, { receipt: { in: caseVariants(from) } }],
+        },
+        select: { id: true, auctionId: true, barcode: true, receiptUniqueId: true },
+      })
+
+      // Not-yet-in-BC only (barcode first, unique ID fallback — the usual rule).
+      const bcs  = candidates.map(l => l.barcode).filter((v): v is string => !!v)
+      const uids = candidates.map(l => l.receiptUniqueId).filter((v): v is string => !!v)
+      const inBcRows = (bcs.length || uids.length)
+        ? await prisma.warehouseItem.findMany({
+            where: { OR: [
+              ...(bcs.length  ? [{ barcode:  { in: bcs.flatMap(caseVariants) } }]  : []),
+              ...(uids.length ? [{ uniqueId: { in: uids.flatMap(caseVariants) } }] : []),
+            ] },
+            select: { barcode: true, uniqueId: true },
+          })
+        : []
+      const inBcBarcode  = new Set(inBcRows.map(w => w.barcode?.toUpperCase()).filter(Boolean))
+      const inBcUniqueId = new Set(inBcRows.map(w => w.uniqueId.toUpperCase()))
+      const pending = candidates.filter(l =>
+        !((l.barcode && inBcBarcode.has(l.barcode.toUpperCase())) ||
+          (l.receiptUniqueId && inBcUniqueId.has(l.receiptUniqueId.toUpperCase()))))
+
+      const line: RemapLineResult = {
+        ...base, ok: true, matched: pending.length,
+        kind: looked.kind, tote: looked.tote, receipt: looked.receipt,
+        vendor: looked.vendor, vendorName: looked.vendorName,
+      }
+
+      if (apply && pending.length > 0) {
+        const res = await setLotsVendorReceiptAcrossAuctions(
+          pending.map(l => ({ auctionId: l.auctionId, lotId: l.id })),
+          {
+            vendor:  looked.vendor ?? "",
+            receipt: looked.receipt ?? "",
+            ...(looked.kind === "tote" && looked.tote ? { tote: looked.tote } : {}),
+          },
+        )
+        line.updated     = res.updated
+        line.lockedSales = res.lockedSales
+        if (!res.ok && res.error) { line.ok = false; line.error = res.error }
+      }
+
+      results.push(line)
+    }
+
+    return { ok: true, results }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Couldn't run the re-map", results: [] }
+  }
+}
+
 // End of Day → BC "fix what BC can prove" button: the SAME correction as the
 // Tote Check tab's Match BC, run across every sale contributing lots to
 // tonight's sheet. Deliberately a loop over autocorrectLotsFromTotes — one fix

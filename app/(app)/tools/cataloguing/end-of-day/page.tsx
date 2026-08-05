@@ -7,7 +7,7 @@
 // a broken overnight run can be reconciled there and re-run.
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { autocorrectLotsForAuctions, lookupToteOrReceipt, setLotsVendorReceiptAcrossAuctions } from "@/lib/actions/catalogue"
+import { autocorrectLotsForAuctions, lookupToteOrReceipt, massRemapPendingLots, setLotsVendorReceiptAcrossAuctions, type RemapLineResult } from "@/lib/actions/catalogue"
 
 type ToteRow = { tote: string; count: number; barcodes: string[]; sales: string[] }
 type SaleRow = { id: string; code: string; name: string; complete: boolean; count: number }
@@ -420,6 +420,9 @@ export default function EndOfDayPage() {
             If the overnight run breaks part-way, reconcile with Auction AI → BC Import Check.
           </p>
 
+          {/* ── Mass re-map: type the corrections instead of ticking lots ── */}
+          <MassRemap onApplied={async (msg) => { setFixResult(msg); await load(includeComplete) }} />
+
           {/* ── Intervention bar — appears when lots are ticked in any panel ── */}
           {selected.size > 0 && (
             <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[min(60rem,calc(100vw-2rem))] rounded-2xl border-2 border-blue-400 dark:border-blue-500/60 bg-white dark:bg-[#15151a] shadow-2xl px-5 py-4 space-y-3">
@@ -477,6 +480,137 @@ export default function EndOfDayPage() {
             </div>
           )}
         </>
+      )}
+    </div>
+  )
+}
+
+// Typed mass corrections: one change per line, "wrong → right". Preview shows
+// what every line would hit BEFORE anything is written; Apply reuses the same
+// verified Change Vendor machinery as the tick-and-move bar.
+function MassRemap({ onApplied }: { onApplied: (msg: string) => Promise<void> }) {
+  const [open, setOpen]       = useState(false)
+  const [text, setText]       = useState("")
+  const [busy, setBusy]       = useState<"preview" | "apply" | null>(null)
+  const [results, setResults] = useState<RemapLineResult[] | null>(null)
+  const [error, setError]     = useState<string | null>(null)
+
+  // Accepts →, ->, comma, tab or plain spaces between the two values.
+  function parse(): { from: string; to: string }[] {
+    return text
+      .split("\n")
+      .map(l => l.trim())
+      .filter(Boolean)
+      .map(l => {
+        const parts = l.split(/→|->|,|\t/).map(p => p.trim()).filter(Boolean)
+        const fallback = l.split(/\s+/).filter(Boolean)
+        const [from, to] = parts.length >= 2 ? parts : fallback
+        return { from: from ?? "", to: to ?? "" }
+      })
+  }
+
+  async function run(apply: boolean) {
+    const lines = parse()
+    if (lines.length === 0) return
+    if (apply) {
+      const total = (results ?? []).reduce((s, r) => s + (r.ok ? r.matched : 0), 0)
+      if (!confirm(
+        `Apply ${lines.length} change${lines.length === 1 ? "" : "s"}${total ? ` to ${total} lot${total === 1 ? "" : "s"}` : ""}?\n\n` +
+        "Each right-hand value has been checked against the BC data. Vendor and receipt are set from BC (and the tote too where a tote was given). " +
+        "Existing unique IDs are kept, everything is logged, and each sale can be undone from Manage Lots → Undo."
+      )) return
+    }
+    setBusy(apply ? "apply" : "preview"); setError(null)
+    try {
+      const res = await massRemapPendingLots(lines, apply)
+      if (!res.ok && res.error) { setError(res.error); return }
+      setResults(res.results)
+      if (apply) {
+        const updated = res.results.reduce((s, r) => s + (r.updated ?? 0), 0)
+        const failed  = res.results.filter(r => !r.ok).length
+        await onApplied(
+          `Re-map applied — ${updated} lot${updated === 1 ? "" : "s"} moved` +
+          (failed ? ` · ${failed} line${failed === 1 ? "" : "s"} couldn't run (see the re-map panel)` : "")
+        )
+      }
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E]">
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-2 px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white text-left">
+        <span className="text-xs">{open ? "▼" : "▶"}</span>
+        📝 Mass re-map — type the corrections
+        <span className="font-normal text-xs text-gray-500 ml-1">one per line: wrong tote or receipt → right one</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 space-y-3">
+          <textarea
+            value={text}
+            onChange={e => { setText(e.target.value); setResults(null) }}
+            rows={5}
+            placeholder={"P05696 → P005696\nR08414 → R008414\nT026394 → T026395"}
+            className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm font-mono text-gray-900 dark:text-white placeholder:text-gray-500 focus:outline-none focus:border-blue-500"
+          />
+          <p className="text-xs text-gray-500 dark:text-gray-500">
+            The left side finds every not-yet-in-BC lot carrying that tote or receipt; the right side must exist in the BC
+            data and is what they&apos;re moved to. Preview first — nothing is written until Apply.
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => run(false)}
+              disabled={busy !== null || !text.trim()}
+              className="px-4 py-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 disabled:opacity-40 text-gray-900 dark:text-white text-sm font-semibold rounded-lg transition-colors"
+            >
+              {busy === "preview" ? "Checking…" : "Preview"}
+            </button>
+            <button
+              onClick={() => run(true)}
+              disabled={busy !== null || !results || results.every(r => !r.ok || r.matched === 0)}
+              title={results ? "" : "Preview first so you can see what each line will hit"}
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-bold rounded-lg transition-colors"
+            >
+              {busy === "apply" ? "Applying…" : "Apply the changes"}
+            </button>
+          </div>
+          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+          {results && (
+            <div className="space-y-1">
+              {results.map((r, i) => (
+                <div key={i} className={`text-xs px-3 py-2 rounded-lg border flex flex-wrap items-center gap-x-2 ${
+                  !r.ok
+                    ? "border-red-200 dark:border-red-800/40 bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-300"
+                    : r.matched === 0
+                      ? "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-500"
+                      : "border-green-200 dark:border-green-800/40 bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-300"
+                }`}>
+                  <span className="font-mono font-semibold">{r.from || "?"} → {r.to || "?"}</span>
+                  {!r.ok ? (
+                    <span>{r.error}</span>
+                  ) : (
+                    <>
+                      <span>
+                        {r.kind === "tote"
+                          ? <>tote → receipt {r.receipt ?? "—"}, {r.vendorName ?? r.vendor ?? "unknown vendor"}</>
+                          : <>receipt — {r.vendorName ?? r.vendor ?? "unknown vendor"}</>}
+                      </span>
+                      <span className="font-semibold">
+                        {r.updated !== undefined
+                          ? `moved ${r.updated} lot${r.updated === 1 ? "" : "s"}`
+                          : r.matched === 0
+                            ? "matches no pending lots"
+                            : `will move ${r.matched} lot${r.matched === 1 ? "" : "s"}`}
+                      </span>
+                      {!!r.lockedSales && <span>· {r.lockedSales} sale{r.lockedSales === 1 ? "" : "s"} BC-locked</span>}
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
     </div>
   )

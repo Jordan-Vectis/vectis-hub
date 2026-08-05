@@ -94,6 +94,8 @@ Every check panel (and the no-tote list, now the same panel type) has **tickboxe
 - Same guarantees as Manage Lots: logged (\`vendor_change\` + batchId), **per-sale Undo** via CatalogueBulkUndo, existing unique IDs preserved (minted only for blanks), BC-locked sales skip for non-admins and are reported. Selection is cleared on every data refresh so stale lot ids can't be applied.
 - This is the fix for the **tote_unknown** pile the auto-fix can't touch: tick the batch with the mistyped tote, type the right one, apply.
 
+**📝 Mass re-map (typed, added 2026-08-05)** — collapsible panel above the intervention bar. Textarea, one change per line \`wrong → right\` (also accepts \`->\`, comma, tab, spaces). **Preview is mandatory before Apply** (button disabled until previewed): each line shows what the right side resolves to in BC and how many pending lots the left side hits — per-line red/grey/green results. \`massRemapPendingLots(lines, apply)\` in catalogue.ts (max 100 lines): LEFT matches tote OR receipt on **not-yet-in-BC lots in non-complete sales only** (in-BC wrongness belongs to BC Corrections, not a Hub remap); RIGHT must resolve via \`lookupToteOrReceipt\`; apply loops the same \`setLotsVendorReceiptAcrossAuctions\` (all the usual guarantees). Lines run in order, so a later line sees an earlier one's changes.
+
 ## Registration
 
 Sidebar \`components/cataloguing-sidebar.tsx\` + \`APP_SECTIONS.CATALOGUING\` key **END_OF_DAY** ("End of Day → BC", 🌙). ⚠ Users with configured sidebar sections won't see it until an admin ticks it (the Photography lesson).
