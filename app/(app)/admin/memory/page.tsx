@@ -16,6 +16,39 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "end_of_day_bc.md",
+    content: `---
+name: End of Day → BC (/tools/cataloguing/end-of-day)
+purpose: One-click end-of-day hotkey sheet — every Hub lot not yet in BC, grouped by tote, in the exact ToteNumber/LotCount/Barcodes format the overnight macro runs. Read before touching it or the BC import flow.
+last_updated: 2026-08-05
+---
+
+# End of Day → BC — /tools/cataloguing/end-of-day (built 2026-08-05)
+
+At the end of each day, generate the sheet the overnight "add to BC" run works through, instead of compiling it by hand. Decisions: **the runner is the existing hotkey macro** (not BC's own per-receipt Import Template — though that exists, see below), scope is **everything not yet in BC** (not "today only" — stragglers get swept up), and it lives as **its own Cataloguing page**.
+
+## How it works
+
+- **API \`GET /api/catalogue/end-of-day\`** (CATALOGUING app access): all \`CatalogueLot\`s in **non-complete sales** (\`?includeComplete=1\` widens), checked against the synced \`WarehouseItem\` data — **barcode first, \`receiptUniqueId\` ↔ \`uniqueId\` fallback, case-insensitive via the variants trick** (Prisma \`in\` is case-sensitive). ⚠ Deliberately NOT \`CatalogueLot.addedToBC\` — same reasoning (and same measurement) as the Admin Centre.
+- **Output = the hotkey sheet, exactly**: CSV \`ToteNumber,LotCount,Barcodes\` (pipe-separated), CRLF — the same shape **BC Import Check** reads AND writes, so a broken overnight run reconciles there and re-runs. Filename \`bc-import-YYYY-MM-DD.csv\`. Download + copy-to-clipboard.
+- Barcodes **deduped within a tote** (a duplicate Hub lot must not create the BC line twice). Totes sorted numerically.
+- **Nothing is silently dropped**: lots with **no tote** or **no barcode** can't go on a tote/barcode sheet — they're listed in amber problem panels (fix via Manage Lots → Change Vendor). Per-sale chips show where lots come from; a completed sale contributing lots shows amber.
+- Page notes: run BC Warehouse **Data Sync** first or already-imported lots reappear (the check is against the sync cache); reconcile breakages in **Auction AI → BC Import Check**.
+
+## Registration
+
+Sidebar \`components/cataloguing-sidebar.tsx\` + \`APP_SECTIONS.CATALOGUING\` key **END_OF_DAY** ("End of Day → BC", 🌙). ⚠ Users with configured sidebar sections won't see it until an admin ticks it (the Photography lesson).
+
+## Measured on production 2026-08-05 (read-only)
+
+3,754 lots in active sales → 2,302 already in BC → **1,452 pending across 94 totes**; zero missing barcodes/totes. ⚠ The FIRST sheet is the whole backlog; after one overnight run it becomes each day's lots.
+
+## For later — BC's own receipt import exists
+
+\`EVA_ReceiptImportManagement\` (Evo-auction Base, codeunit 75725): Excel import **per receipt header**, column mapping defined by per-vendor \`EVA_ReceiptImportTemplateMap\` (headers matched by NAME in row 1; every sheet in the workbook imports into the ONE receipt you ran it from). If the overnight process ever moves off the macro onto this, the export must become one file per receipt and match the template's exact header names. Read the codeunit before building that.
+`,
+  },
+  {
     filename: "auto_clerk_review.md",
     content: `---
 name: Auto Clerk — 2026-08-04 review fixes
