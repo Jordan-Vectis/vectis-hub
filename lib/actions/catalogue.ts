@@ -757,6 +757,114 @@ export async function dismissEodChecks(pairs: { lotId: string; checkKey: string 
   }
 }
 
+// End of Day → BC "BC Match (all sales)": the overnight macro puts every Hub
+// sale's lots into ONE BC sale, so the morning's BC Lines export spans several
+// Hub sales at once. This matches the export's rows to Hub lots BY BARCODE
+// across every NON-COMPLETE sale, compares receipts (same rule as the per-sale
+// 🔗 BC Match in Auction Manager: only a row whose receipt AGREES imports), and
+// on apply loops the existing per-sale `bulkAssignUniqueIds` — the ONE
+// UniqueID-import choke-point — grouped by auction. BC-locked sales fail their
+// own call for non-admins and are counted, the rest proceed.
+export type EodMatchRow = {
+  barcode: string
+  bcReceipt: string
+  bcUniqueId: string
+  ourReceipt: string | null
+  ourUniqueId: string | null
+  sale: string
+  status: "match" | "mismatch" | "not_found"
+}
+
+const MAX_MATCH_ROWS = 10_000
+
+export async function matchBcLinesAcrossAuctions(
+  rows: { barcode: string; bcReceipt: string; bcUniqueId: string }[],
+  apply: boolean,
+): Promise<{
+  ok: boolean
+  error?: string
+  counts: { match: number; mismatch: number; notFound: number; pendingNotInExport: number }
+  rows: EodMatchRow[]            // capped for display — counts are the truth
+  pendingNotInExport: { barcode: string; sale: string }[]
+  updated: number
+  skipped: number
+  lockedSales: number
+}> {
+  const empty = { counts: { match: 0, mismatch: 0, notFound: 0, pendingNotInExport: 0 }, rows: [], pendingNotInExport: [], updated: 0, skipped: 0, lockedSales: 0 }
+  try {
+    await requireCataloguer()
+    if (!rows.length)                 return { ok: false, error: "The export has no rows.", ...empty }
+    if (rows.length > MAX_MATCH_ROWS) return { ok: false, error: `Too many rows — ${MAX_MATCH_ROWS.toLocaleString()} at most per upload.`, ...empty }
+
+    const lots = await prisma.catalogueLot.findMany({
+      where:  { auction: { complete: false }, barcode: { not: null } },
+      select: {
+        id: true, auctionId: true, barcode: true, receipt: true, receiptUniqueId: true,
+        auction: { select: { code: true } },
+      },
+    })
+    const byBarcode = new Map(lots.map(l => [l.barcode!.toLowerCase().trim(), l]))
+
+    const resultRows: EodMatchRow[] = []
+    const matchedBarcodes = new Set<string>()
+    const counts = { match: 0, mismatch: 0, notFound: 0, pendingNotInExport: 0 }
+    const toApply = new Map<string, { barcode: string; uniqueId: string }[]>()   // auctionId → pairs
+
+    for (const r of rows) {
+      const key = r.barcode.toLowerCase().trim()
+      if (!key) continue
+      const lot = byBarcode.get(key)
+      if (!lot) {
+        counts.notFound++
+        resultRows.push({ barcode: r.barcode, bcReceipt: r.bcReceipt, bcUniqueId: r.bcUniqueId, ourReceipt: null, ourUniqueId: null, sale: "", status: "not_found" })
+        continue
+      }
+      matchedBarcodes.add(key)
+      const receiptAgrees = (lot.receipt ?? "").trim().toUpperCase() === r.bcReceipt.trim().toUpperCase()
+      const status = receiptAgrees ? "match" as const : "mismatch" as const
+      counts[status]++
+      resultRows.push({
+        barcode: r.barcode, bcReceipt: r.bcReceipt, bcUniqueId: r.bcUniqueId,
+        ourReceipt: lot.receipt, ourUniqueId: lot.receiptUniqueId,
+        sale: lot.auction?.code ?? "", status,
+      })
+      if (status === "match" && r.bcUniqueId.trim()) {
+        if (!toApply.has(lot.auctionId)) toApply.set(lot.auctionId, [])
+        toApply.get(lot.auctionId)!.push({ barcode: r.barcode, uniqueId: r.bcUniqueId })
+      }
+    }
+
+    // The other direction: lots still waiting for a Unique ID whose barcode the
+    // export doesn't cover — i.e. what this run did NOT bring back from BC.
+    const pendingNotInExport = lots
+      .filter(l => !l.receiptUniqueId && !matchedBarcodes.has(l.barcode!.toLowerCase().trim()))
+      .map(l => ({ barcode: l.barcode!, sale: l.auction?.code ?? "" }))
+    counts.pendingNotInExport = pendingNotInExport.length
+
+    let updated = 0, skipped = 0, lockedSales = 0
+    if (apply) {
+      for (const [auctionId, pairs] of toApply) {
+        try {
+          const res = await bulkAssignUniqueIds(auctionId, pairs)
+          updated += res.updated
+          skipped += res.skipped
+        } catch {
+          lockedSales++
+        }
+      }
+    }
+
+    return {
+      ok: true, counts,
+      rows: resultRows.slice(0, 1000),
+      pendingNotInExport: pendingNotInExport.slice(0, 500),
+      updated, skipped, lockedSales,
+    }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Couldn't match the export", ...empty }
+  }
+}
+
 export async function restoreEodChecks(pairs: { lotId: string; checkKey: string }[]): Promise<{ ok: boolean; error?: string; count?: number }> {
   try {
     await requireCataloguer()

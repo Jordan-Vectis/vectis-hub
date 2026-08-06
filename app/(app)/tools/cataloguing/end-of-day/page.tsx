@@ -7,7 +7,8 @@
 // a broken overnight run can be reconciled there and re-run.
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
-import { autocorrectLotsForAuctions, dismissEodChecks, lookupToteOrReceipt, massRemapPendingLots, restoreEodChecks, setLotsVendorReceiptAcrossAuctions, type AutocorrectChange, type RemapLineResult } from "@/lib/actions/catalogue"
+import { autocorrectLotsForAuctions, dismissEodChecks, lookupToteOrReceipt, massRemapPendingLots, matchBcLinesAcrossAuctions, restoreEodChecks, setLotsVendorReceiptAcrossAuctions, type AutocorrectChange, type EodMatchRow, type RemapLineResult } from "@/lib/actions/catalogue"
+import { readSheet, parseBcLinesForMatch, parseHotkeySheet, parseBcLinesExport, reconcileImport, buildHotkeyCsv, type HotkeyToteRow, type BcLinesRow } from "@/lib/bc-import-sheets"
 
 type ToteRow = { tote: string; count: number; barcodes: string[]; sales: string[] }
 type SaleRow = { id: string; code: string; name: string; complete: boolean; count: number }
@@ -87,6 +88,10 @@ export default function EndOfDayPage() {
   const [fixing, setFixing]   = useState(false)
   const [fixResult, setFixResult] = useState<string | null>(null)
   const [fixPreview, setFixPreview] = useState<{ changes: AutocorrectChange[]; skipped: number; lockedSales: number } | null>(null)
+  // No auto-refresh (Jordan's call): after a change is applied the page keeps
+  // what's on screen and flags itself stale — the ⟳ Refresh button re-runs the
+  // heavy checks only when he's ready.
+  const [stale, setStale] = useState(false)
 
   // ── Manual intervention: tick lots in the panels, look up the right tote /
   //    receipt, apply. lotId → auctionId (the apply action groups by sale).
@@ -113,6 +118,7 @@ export default function EndOfDayPage() {
       if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`)
       setData(d)
       setSelected(new Map())   // stale lot ids must not survive a refresh
+      setStale(false)
     } catch (e: any) { setError(e?.message ?? "Failed to load"); setData(null) }
     finally { setLoading(false) }
   }, [])
@@ -178,8 +184,8 @@ export default function EndOfDayPage() {
           `Moved ${res.updated} lot${res.updated === 1 ? "" : "s"} to ${what}` +
           (res.lockedSales ? ` · ${res.lockedSales} sale${res.lockedSales === 1 ? "" : "s"} skipped (BC-locked — admin only)` : "")
         )
-        setLookup(null); setLookupQ("")
-        await load(includeComplete)
+        setLookup(null); setLookupQ(""); setSelected(new Map())
+        setStale(true)
       }
     } finally {
       setApplying(false)
@@ -224,7 +230,7 @@ export default function EndOfDayPage() {
           (res.skipped ? ` · ${res.skipped} couldn't be fixed (tote not in BC)` : "") +
           (res.lockedSales ? ` · ${res.lockedSales} sale${res.lockedSales === 1 ? "" : "s"} skipped (BC-locked — admin only)` : "")
         )
-        await load(includeComplete)
+        setStale(true)
       }
     } finally {
       setFixing(false)
@@ -233,15 +239,52 @@ export default function EndOfDayPage() {
 
   // Ignore / restore stale warnings (per lot + check type). The panels file
   // ignored rows separately — nothing on the lot changes, fully reversible.
+  // These move the rows locally instead of re-running the whole check suite —
+  // the page only does the heavy refresh on the ⟳ button (Jordan's call).
+  function moveIgnored(pairs: { lotId: string; checkKey: string }[], dir: "ignore" | "restore") {
+    const pairSet = new Set(pairs.map(p => `${p.lotId}::${p.checkKey}`))
+    setData(d => {
+      if (!d) return d
+      return {
+        ...d,
+        checks: d.checks.map(c => {
+          const inPanel = (l: CheckLot) => pairSet.has(`${l.id}::${c.key}`)
+          if (dir === "ignore") {
+            const moving = c.lots.filter(inPanel)
+            if (!moving.length) return c
+            return {
+              ...c,
+              lots: c.lots.filter(l => !inPanel(l)), count: c.count - moving.length,
+              ignored: [...(c.ignored ?? []), ...moving], ignoredCount: (c.ignoredCount ?? 0) + moving.length,
+            }
+          }
+          const moving = (c.ignored ?? []).filter(inPanel)
+          if (!moving.length) return c
+          return {
+            ...c,
+            ignored: (c.ignored ?? []).filter(l => !inPanel(l)), ignoredCount: (c.ignoredCount ?? 0) - moving.length,
+            lots: [...c.lots, ...moving], count: c.count + moving.length,
+          }
+        }),
+      }
+    })
+    if (dir === "ignore") {
+      setSelected(prev => {
+        const next = new Map(prev)
+        for (const p of pairs) next.delete(p.lotId)
+        return next
+      })
+    }
+  }
   async function ignorePairs(pairs: { lotId: string; checkKey: string }[]) {
     const res = await dismissEodChecks(pairs)
     if (!res.ok && res.error) setFixResult(`Couldn't ignore: ${res.error}`)
-    else await load(includeComplete)
+    else moveIgnored(pairs, "ignore")
   }
   async function restorePairs(pairs: { lotId: string; checkKey: string }[]) {
     const res = await restoreEodChecks(pairs)
     if (!res.ok && res.error) setFixResult(`Couldn't restore: ${res.error}`)
-    else await load(includeComplete)
+    else moveIgnored(pairs, "restore")
   }
 
   return (
@@ -257,11 +300,20 @@ export default function EndOfDayPage() {
         </div>
         <button
           onClick={() => load(includeComplete)}
-          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-medium transition-colors"
+          className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${stale
+            ? "bg-amber-500 hover:bg-amber-400 text-black font-semibold animate-pulse"
+            : "bg-blue-600 hover:bg-blue-500 text-white"}`}
         >
-          ⟳ Refresh
+          {stale ? "⟳ Refresh — changes made" : "⟳ Refresh"}
         </button>
       </div>
+
+      {stale && (
+        <p className="px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-800/40 text-sm text-amber-800 dark:text-amber-300">
+          Changes have been applied — the numbers, sheet and checks on screen are from before. Press <strong>⟳ Refresh</strong> when
+          you&apos;re ready to re-run them (nothing refreshes on its own).
+        </p>
+      )}
 
       {error && (
         <p className="px-4 py-3 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 text-sm text-red-700 dark:text-red-300">
@@ -450,7 +502,21 @@ export default function EndOfDayPage() {
           </p>
 
           {/* ── Mass re-map: type the corrections instead of ticking lots ── */}
-          <MassRemap onApplied={async (msg) => { setFixResult(msg); await load(includeComplete) }} />
+          <MassRemap onApplied={async (msg) => { setFixResult(msg); setStale(true) }} />
+
+          {/* ── The morning after — check the run, then link BC back up ── */}
+          <div className="pt-2 space-y-2">
+            <div>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">🌅 The morning after</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 max-w-3xl">
+                Once the overnight macro has run: check the run finished with <strong>Import Check</strong> (and get a re-run
+                sheet for anything it missed), then upload the BC Lines export to <strong>BC Match</strong> to link BC&apos;s
+                Unique IDs back onto the Hub lots — across every sale at once.
+              </p>
+            </div>
+            <ImportCheckPanel totes={data.totes} />
+            <BcMatchAllPanel onImported={msg => { setFixResult(msg); setStale(true) }} />
+          </div>
 
           {/* ── Intervention bar — appears when lots are ticked in any panel ── */}
           {selected.size > 0 && (
@@ -942,6 +1008,299 @@ function ProblemList({ label, rows }: { label: string; rows: { id: string; main:
               <span className="opacity-90 truncate max-w-md">{r.title}</span>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── The morning after: Import Check ─────────────────────────────────────────
+// Same engine as Auction AI → BC Import Check (lib/bc-import-sheets.ts, ONE
+// copy) restyled for this page: reconcile the hotkey sheet that ran overnight
+// against the BC Lines export, get a re-run sheet of only what's missing.
+function ImportCheckPanel({ totes }: { totes: ToteRow[] }) {
+  const [open, setOpen]             = useState(false)
+  const [hotkey, setHotkey]         = useState<HotkeyToteRow[] | null>(null)
+  const [hotkeyName, setHotkeyName] = useState<string | null>(null)
+  const [bc, setBc]                 = useState<{ barcodes: Set<string>; errors: { barcode: string; uniqueId: string; tote: string; error: string }[] } | null>(null)
+  const [bcName, setBcName]         = useState<string | null>(null)
+  const [err, setErr]               = useState<string | null>(null)
+  const [copied, setCopied]         = useState(false)
+
+  async function loadHotkey(file: File) {
+    setErr(null)
+    try { setHotkey(parseHotkeySheet(await readSheet(file))); setHotkeyName(file.name) }
+    catch (e: any) { setErr(e?.message ?? "Could not read the hotkey sheet."); setHotkey(null); setHotkeyName(null) }
+  }
+  function useCurrentSheet() {
+    setErr(null)
+    setHotkey(totes.map(t => ({ tote: t.tote, barcodes: t.barcodes })))
+    setHotkeyName("Tonight's sheet (as shown above)")
+  }
+  async function loadBc(file: File) {
+    setErr(null)
+    try { setBc(parseBcLinesExport(await readSheet(file))); setBcName(file.name) }
+    catch (e: any) { setErr(e?.message ?? "Could not read the BC export."); setBc(null); setBcName(null) }
+  }
+
+  const result = useMemo(() => (hotkey && bc ? reconcileImport(hotkey, bc) : null), [hotkey, bc])
+  const outputCsv = useMemo(() => (result ? buildHotkeyCsv(result.remainingTotes) : ""), [result])
+
+  async function copyOut() {
+    try { await navigator.clipboard.writeText(outputCsv); setCopied(true); setTimeout(() => setCopied(false), 2500) } catch {}
+  }
+  function downloadOut() {
+    const url = URL.createObjectURL(new Blob([outputCsv], { type: "text/csv" }))
+    const a = document.createElement("a"); a.href = url; a.download = "bc_import_remaining.csv"; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const drop = "flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-5 cursor-pointer hover:border-blue-500 transition-colors text-center"
+
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E]">
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-2 px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white text-left">
+        <span className="text-xs">{open ? "▼" : "▶"}</span>
+        🩹 Import Check — did the overnight run finish?
+        <span className="font-normal text-xs text-gray-500 ml-1">compares the sheet against the BC export, gives a re-run sheet for what&apos;s missing</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <label className={drop}>
+                <span className="text-xl">⌨️</span>
+                <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{hotkeyName ?? "Hotkey sheet that ran (the to-do list)"}</span>
+                <span className="text-xs text-gray-500">CSV/XLSX with ToteNumber · Barcodes</span>
+                <input type="file" accept=".csv,.xlsx,.xls" className="sr-only" onChange={e => { const f = e.target.files?.[0]; if (f) loadHotkey(f); e.target.value = "" }} />
+              </label>
+              <button
+                onClick={useCurrentSheet}
+                disabled={totes.length === 0}
+                className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-blue-500 disabled:opacity-40 transition-colors"
+                title="Uses the sheet shown above. If you've run a Data Sync since the overnight run, the sheet has changed — upload the file you actually ran instead."
+              >
+                📄 Use tonight&apos;s sheet shown above
+              </button>
+            </div>
+            <label className={drop}>
+              <span className="text-xl">📋</span>
+              <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{bcName ?? "BC export (Lines — what's in BC)"}</span>
+              <span className="text-xs text-gray-500">XLSX with Internal Barcode · Errors</span>
+              <input type="file" accept=".csv,.xlsx,.xls" className="sr-only" onChange={e => { const f = e.target.files?.[0]; if (f) loadBc(f); e.target.value = "" }} />
+            </label>
+          </div>
+
+          {err && <p className="text-sm text-red-600 dark:text-red-400">{err}</p>}
+
+          {result && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 text-center">
+                  <div className="text-xl font-bold text-gray-900 dark:text-white">{result.totalHotkey}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">On the sheet</div>
+                </div>
+                <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800/40 rounded-xl p-3 text-center">
+                  <div className="text-xl font-bold text-green-600 dark:text-green-400">{result.totalDone}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">Made it into BC</div>
+                </div>
+                <div className={`border rounded-xl p-3 text-center ${result.totalRemaining > 0 ? "bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800/40" : "bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700"}`}>
+                  <div className={`text-xl font-bold ${result.totalRemaining > 0 ? "text-amber-600 dark:text-amber-400" : "text-gray-900 dark:text-white"}`}>{result.totalRemaining}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">Still to do</div>
+                </div>
+                <div className={`border rounded-xl p-3 text-center ${result.errors.length > 0 ? "bg-red-50 dark:bg-red-950/20 border-red-300 dark:border-red-800/40" : "bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700"}`}>
+                  <div className={`text-xl font-bold ${result.errors.length > 0 ? "text-red-600 dark:text-red-400" : "text-gray-900 dark:text-white"}`}>{result.errors.length}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">In BC with errors</div>
+                </div>
+              </div>
+
+              {result.errors.length > 0 && (
+                <div className="rounded-xl border border-red-300 dark:border-red-700/50 bg-red-50 dark:bg-red-950/20 p-3">
+                  <p className="text-xs uppercase tracking-wider text-red-700 dark:text-red-400 font-semibold mb-2">
+                    ⚠ {result.errors.length} lot{result.errors.length === 1 ? "" : "s"} in BC with errors — fix in BC, then re-export and re-check
+                  </p>
+                  <div className="space-y-1 max-h-56 overflow-y-auto">
+                    {result.errors.map((e, i) => (
+                      <div key={`${e.barcode}-${i}`} className="text-xs text-red-800 dark:text-red-200 flex flex-wrap gap-x-2">
+                        <span className="font-mono font-semibold">{e.barcode}</span>
+                        {e.uniqueId && <span className="opacity-70">{e.uniqueId}</span>}
+                        {e.tote && <span className="opacity-60">tote {e.tote}</span>}
+                        <span>— {e.error}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {result.totalRemaining > 0 ? (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5 gap-3 flex-wrap">
+                    <span className="text-sm font-medium text-gray-800 dark:text-gray-300">
+                      Re-run sheet — {result.totalRemaining} lot{result.totalRemaining === 1 ? "" : "s"} across {result.remainingTotes.length} tote{result.remainingTotes.length === 1 ? "" : "s"}
+                    </span>
+                    <div className="flex gap-2">
+                      <button onClick={copyOut} className={`px-3 py-1.5 text-sm font-semibold rounded-lg transition-colors ${copied ? "bg-green-600 text-white" : "bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white"}`}>{copied ? "✓ Copied" : "Copy"}</button>
+                      <button onClick={downloadOut} className="px-3 py-1.5 text-sm font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors">⬇ Download CSV</button>
+                    </div>
+                  </div>
+                  <textarea readOnly value={outputCsv} spellCheck={false} onFocus={e => e.target.select()}
+                    className="w-full h-36 font-mono text-xs bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-blue-500 resize-y whitespace-pre overflow-x-auto" />
+                  <p className="text-xs text-gray-500 mt-1.5">Same hotkey-sheet format, finished totes removed, counts recomputed — feed it back to the macro.</p>
+                </div>
+              ) : (
+                <p className="text-sm text-green-600 dark:text-green-400">✓ Every lot on the sheet is in BC — nothing left to re-run.</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── The morning after: BC Match across every sale ───────────────────────────
+// The overnight macro puts all the Hub sales' lots into ONE BC sale, so the
+// morning's BC Lines export spans several Hub sales. Same rules as the 🔗 BC
+// Match modal in Auction Manager (barcode match, receipt must agree, BC's
+// UniqueID imported), applied across every non-complete sale server-side —
+// matchBcLinesAcrossAuctions loops the same bulkAssignUniqueIds choke-point.
+function BcMatchAllPanel({ onImported }: { onImported: (msg: string) => void }) {
+  const [open, setOpen]         = useState(false)
+  const [fileName, setFileName] = useState<string | null>(null)
+  const [parsed, setParsed]     = useState<BcLinesRow[] | null>(null)
+  const [res, setRes]           = useState<Awaited<ReturnType<typeof matchBcLinesAcrossAuctions>> | null>(null)
+  const [err, setErr]           = useState<string | null>(null)
+  const [busy, setBusy]         = useState(false)
+  const [done, setDone]         = useState<string | null>(null)
+  const [filter, setFilter]     = useState<"match" | "mismatch" | "not_found" | "pending">("match")
+
+  async function handleFile(f: File) {
+    setErr(null); setRes(null); setDone(null); setFilter("match")
+    try {
+      const rows = parseBcLinesForMatch(await readSheet(f))
+      setParsed(rows); setFileName(f.name)
+      setBusy(true)
+      const r = await matchBcLinesAcrossAuctions(rows, false)
+      if (!r.ok) { setErr(r.error ?? "Couldn't match the export"); setRes(null) }
+      else setRes(r)
+    } catch (e: any) {
+      setErr(e?.message ?? "Could not read the file"); setParsed(null); setFileName(null)
+    } finally { setBusy(false) }
+  }
+
+  async function doImport() {
+    if (!parsed || !res || res.counts.match === 0) return
+    setBusy(true)
+    try {
+      const r = await matchBcLinesAcrossAuctions(parsed, true)
+      if (!r.ok) { setErr(r.error ?? "Couldn't import"); return }
+      const msg =
+        `Imported ${r.updated} Unique ID${r.updated === 1 ? "" : "s"} from BC` +
+        (r.skipped ? ` · ${r.skipped} skipped` : "") +
+        (r.lockedSales ? ` · ${r.lockedSales} sale${r.lockedSales === 1 ? "" : "s"} skipped (BC-locked — admin only)` : "") +
+        (r.counts.mismatch ? ` · ${r.counts.mismatch} left alone (receipt disagrees)` : "")
+      setDone(msg)
+      setRes(r)
+      onImported(msg)
+    } finally { setBusy(false) }
+  }
+
+  const filterMeta: { key: typeof filter; label: string; count: number; tone: string }[] = res ? [
+    { key: "match",     label: "Ready to import",   count: res.counts.match,              tone: "text-green-700 dark:text-green-400" },
+    { key: "mismatch",  label: "Receipt disagrees", count: res.counts.mismatch,           tone: "text-red-700 dark:text-red-400" },
+    { key: "not_found", label: "Not in the Hub",    count: res.counts.notFound,           tone: "text-gray-600 dark:text-gray-400" },
+    { key: "pending",   label: "Didn't come back",  count: res.counts.pendingNotInExport, tone: "text-amber-700 dark:text-amber-400" },
+  ] : []
+
+  const shownRows: EodMatchRow[] = res && filter !== "pending" ? res.rows.filter(r => r.status === filter) : []
+
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E]">
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-2 px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white text-left">
+        <span className="text-xs">{open ? "▼" : "▶"}</span>
+        🔗 BC Match — link BC&apos;s Unique IDs back, all sales at once
+        <span className="font-normal text-xs text-gray-500 ml-1">upload the BC Lines export; same rules as the per-sale BC Match button</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 space-y-3">
+          <label className="flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-5 cursor-pointer hover:border-blue-500 transition-colors text-center">
+            <span className="text-xl">📋</span>
+            <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{fileName ?? "BC Lines export"}</span>
+            <span className="text-xs text-gray-500">XLSX/CSV with Internal Barcode · Receipt No. · UniqueID</span>
+            <input type="file" accept=".csv,.xlsx,.xls" className="sr-only" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = "" }} />
+          </label>
+
+          {busy && !res && <p className="text-sm text-gray-500">Matching against every open sale…</p>}
+          {err && <p className="text-sm text-red-600 dark:text-red-400">{err}</p>}
+          {done && (
+            <p className="px-4 py-3 rounded-xl border text-sm bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/30 text-green-700 dark:text-green-300">
+              ✓ {done}
+            </p>
+          )}
+
+          {res && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {filterMeta.map(f => (
+                  <button
+                    key={f.key}
+                    onClick={() => setFilter(f.key)}
+                    className={`rounded-xl border p-3 text-center transition-colors ${filter === f.key
+                      ? "border-blue-500 bg-blue-50 dark:bg-blue-500/10"
+                      : "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 hover:border-gray-400 dark:hover:border-gray-500"}`}
+                  >
+                    <div className={`text-xl font-bold ${f.tone}`}>{f.count.toLocaleString()}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">{f.label}</div>
+                  </button>
+                ))}
+              </div>
+
+              <div className="max-h-72 overflow-y-auto space-y-1 pr-1">
+                {filter !== "pending" && shownRows.map((r, i) => (
+                  <div key={`${r.barcode}-${i}`} className="text-xs flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-black/25 px-3 py-1.5">
+                    <span className="font-mono font-bold text-gray-900 dark:text-white">{r.barcode}</span>
+                    {r.status === "match" && (<>
+                      <span className="text-gray-500">receipt {r.bcReceipt} ✓</span>
+                      <span className="text-green-700 dark:text-green-400 font-mono">gets {r.bcUniqueId || "—"}</span>
+                    </>)}
+                    {r.status === "mismatch" && (<>
+                      <span className="text-red-700 dark:text-red-400">lot says {r.ourReceipt || "no receipt"} · BC says {r.bcReceipt || "—"}</span>
+                      <span className="text-gray-500">not imported until they agree</span>
+                    </>)}
+                    {r.status === "not_found" && <span className="text-gray-500">no Hub lot carries this barcode in an open sale</span>}
+                    {r.sale && <span className="ml-auto text-[11px] text-gray-500">{r.sale}</span>}
+                  </div>
+                ))}
+                {filter !== "pending" && shownRows.length === 0 && (
+                  <p className="text-xs text-gray-500">Nothing in this group.</p>
+                )}
+                {filter === "pending" && res.pendingNotInExport.map((p, i) => (
+                  <div key={`${p.barcode}-${i}`} className="text-xs flex flex-wrap items-center gap-x-2 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-black/25 px-3 py-1.5">
+                    <span className="font-mono font-bold text-gray-900 dark:text-white">{p.barcode}</span>
+                    <span className="text-gray-500">waiting for a Unique ID, but this export doesn&apos;t cover it</span>
+                    {p.sale && <span className="ml-auto text-[11px] text-gray-500">{p.sale}</span>}
+                  </div>
+                ))}
+                {filter === "pending" && res.counts.pendingNotInExport > res.pendingNotInExport.length && (
+                  <p className="text-xs text-gray-500">…and {res.counts.pendingNotInExport - res.pendingNotInExport.length} more</p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  onClick={doImport}
+                  disabled={busy || res.counts.match === 0 || !!done}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-bold rounded-lg transition-colors"
+                >
+                  {busy ? "Importing…" : `✓ Import ${res.counts.match.toLocaleString()} Unique ID${res.counts.match === 1 ? "" : "s"}`}
+                </button>
+                <span className="text-xs text-gray-500 max-w-md">
+                  Only the green rows import — a lot whose receipt disagrees with BC is never linked automatically.
+                  Fix those (checks above), then re-upload.
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
