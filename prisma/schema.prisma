@@ -1835,3 +1835,17 @@ model MigrationState {
   ranBy String?
   ranAt DateTime @updatedAt
 }
+
+// End of Day → BC check panels: a flagged warning the team KNOWS is stale
+// (e.g. the BC sync hasn't caught up with reality) can be ignored per
+// lot + check type. Report-only and reversible — the check still runs; the
+// row just files under "ignored" until someone restores it.
+model EodCheckDismissal {
+  id          String   @id @default(cuid())
+  lotId       String
+  checkKey    String
+  dismissedBy String?
+  dismissedAt DateTime @default(now())
+
+  @@unique([lotId, checkKey])
+}

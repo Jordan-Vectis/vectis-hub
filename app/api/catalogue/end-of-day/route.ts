@@ -197,6 +197,22 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Ignored warnings — stored dismissals (per lot + check type) file a row
+    // under "ignored" instead of the live panel, for flags the team knows are
+    // stale. Migration-safe: before the table exists, nothing is ignored.
+    // duplicate_barcode is never ignorable — it changes what goes on the sheet.
+    let dismissed = new Set<string>()
+    try {
+      const allIds = [...new Set([...checkMap.values()].flat().map(r => r.id))]
+      if (allIds.length) {
+        const rows = await prisma.eodCheckDismissal.findMany({
+          where:  { lotId: { in: allIds } },
+          select: { lotId: true, checkKey: true },
+        })
+        dismissed = new Set(rows.map(r => `${r.lotId}::${r.checkKey}`))
+      }
+    } catch { dismissed = new Set() }
+
     // When the tote table was last refreshed — an "unknown tote" pile with a
     // stale sync reads as "sync first", not "94 mistakes".
     const lastToteSync = await prisma.warehouseTote.aggregate({ _max: { syncedAt: true } })
@@ -235,7 +251,12 @@ export async function GET(req: NextRequest) {
       readyCount: ready.length,
       totes,
       sales: [...bySale.values()].sort((a, b) => a.code.localeCompare(b.code)),
-      checks: [...checkMap.entries()].map(([key, rows]) => ({ key, count: rows.length, lots: rows.slice(0, 300) })),
+      checks: [...checkMap.entries()].map(([key, rows]) => {
+        const ignorable = key !== "duplicate_barcode"
+        const active    = ignorable ? rows.filter(r => !dismissed.has(`${r.id}::${key}`)) : rows
+        const ignored   = ignorable ? rows.filter(r =>  dismissed.has(`${r.id}::${key}`)) : []
+        return { key, count: active.length, lots: active.slice(0, 300), ignored: ignored.slice(0, 300), ignoredCount: ignored.length }
+      }).filter(c => c.count > 0 || c.ignoredCount > 0),
       noBarcode: noBarcode.map(l => ({
         id: l.id, auctionId: l.auction?.id ?? "", uniqueId: l.receiptUniqueId ?? "", tote: l.tote ?? "",
         sale: l.auction?.code ?? "", title: l.title, cataloguedBy: l.createdByName ?? "",

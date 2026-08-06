@@ -7,7 +7,7 @@
 // a broken overnight run can be reconciled there and re-run.
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
-import { autocorrectLotsForAuctions, lookupToteOrReceipt, massRemapPendingLots, setLotsVendorReceiptAcrossAuctions, type RemapLineResult } from "@/lib/actions/catalogue"
+import { autocorrectLotsForAuctions, dismissEodChecks, lookupToteOrReceipt, massRemapPendingLots, restoreEodChecks, setLotsVendorReceiptAcrossAuctions, type AutocorrectChange, type RemapLineResult } from "@/lib/actions/catalogue"
 
 type ToteRow = { tote: string; count: number; barcodes: string[]; sales: string[] }
 type SaleRow = { id: string; code: string; name: string; complete: boolean; count: number }
@@ -18,7 +18,7 @@ type CheckLot = {
   bcReceipt?: string; bcVendor?: string; totes?: string[]
   vendorName?: string; bcVendorName?: string
 }
-type Check = { key: string; count: number; lots: CheckLot[] }
+type Check = { key: string; count: number; lots: CheckLot[]; ignored?: CheckLot[]; ignoredCount?: number }
 type Data = {
   generatedAt: string
   toteLastSync: string | null
@@ -86,6 +86,7 @@ export default function EndOfDayPage() {
   const [openTote, setOpenTote] = useState<string | null>(null)
   const [fixing, setFixing]   = useState(false)
   const [fixResult, setFixResult] = useState<string | null>(null)
+  const [fixPreview, setFixPreview] = useState<{ changes: AutocorrectChange[]; skipped: number; lockedSales: number } | null>(null)
 
   // ── Manual intervention: tick lots in the panels, look up the right tote /
   //    receipt, apply. lotId → auctionId (the apply action groups by sale).
@@ -188,18 +189,32 @@ export default function EndOfDayPage() {
   // The same fix as Tote Check → Match BC, run over every sale on the sheet.
   // Only corrects what BC can prove (a known tote's receipt/vendor) — unknown
   // totes are never guessed at, so it can't fix everything the checks flag.
+  // Two steps: the button runs a PREVIEW (nothing written) and shows every
+  // planned change in a modal; Apply then runs the same fix for real.
   async function fixFromBc() {
     if (!data) return
     const ids = data.sales.map(s => s.id).filter(Boolean)
     if (ids.length === 0) return
-    if (!confirm(
-      "Fix the flagged lots from the BC tote data?\n\n" +
-      "Where a lot's tote is known in BC, its receipt and vendor are corrected to what BC says (the same as Match BC on each sale's Tote Check tab). " +
-      "Unknown totes are left alone — they can't be fixed automatically. Every change is logged in the Lot Change Log."
-    )) return
     setFixing(true); setFixResult(null)
     try {
-      const res = await autocorrectLotsForAuctions(ids)
+      const res = await autocorrectLotsForAuctions(ids, false)
+      if (!res.ok && res.error) {
+        setFixResult(`Couldn't check what's fixable: ${res.error}`)
+      } else {
+        setFixPreview({ changes: res.changes, skipped: res.skipped, lockedSales: res.lockedSales })
+      }
+    } finally {
+      setFixing(false)
+    }
+  }
+
+  async function applyFixes() {
+    if (!data) return
+    const ids = data.sales.map(s => s.id).filter(Boolean)
+    setFixing(true)
+    try {
+      const res = await autocorrectLotsForAuctions(ids, true)
+      setFixPreview(null)
       if (!res.ok && res.error) {
         setFixResult(`Couldn't fix: ${res.error}`)
       } else {
@@ -214,6 +229,19 @@ export default function EndOfDayPage() {
     } finally {
       setFixing(false)
     }
+  }
+
+  // Ignore / restore stale warnings (per lot + check type). The panels file
+  // ignored rows separately — nothing on the lot changes, fully reversible.
+  async function ignorePairs(pairs: { lotId: string; checkKey: string }[]) {
+    const res = await dismissEodChecks(pairs)
+    if (!res.ok && res.error) setFixResult(`Couldn't ignore: ${res.error}`)
+    else await load(includeComplete)
+  }
+  async function restorePairs(pairs: { lotId: string; checkKey: string }[]) {
+    const res = await restoreEodChecks(pairs)
+    if (!res.ok && res.error) setFixResult(`Couldn't restore: ${res.error}`)
+    else await load(includeComplete)
   }
 
   return (
@@ -309,10 +337,10 @@ export default function EndOfDayPage() {
                 <button
                   onClick={fixFromBc}
                   disabled={fixing}
-                  title="The same fix as Match BC on each sale's Tote Check tab — corrects receipt and vendor from the BC tote data wherever the tote is known. Unknown totes are never guessed at."
+                  title="The same fix as Match BC on each sale's Tote Check tab — corrects receipt and vendor from the BC tote data wherever the tote is known. Unknown totes are never guessed at. Shows every planned change first — nothing happens until you Apply."
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
                 >
-                  {fixing ? "Fixing from BC…" : "🔧 Fix what BC can prove"}
+                  {fixing && !fixPreview ? "Checking what's fixable…" : "🔧 Fix what BC can prove"}
                 </button>
               </div>
               {fixResult && (
@@ -324,7 +352,7 @@ export default function EndOfDayPage() {
               )}
               {[...data.checks]
                 .sort((a, b) => (CHECK_META[a.key]?.order ?? 99) - (CHECK_META[b.key]?.order ?? 99))
-                .map(c => <CheckPanel key={c.key} check={c} selected={selected} onToggle={toggleLot} />)}
+                .map(c => <CheckPanel key={c.key} check={c} selected={selected} onToggle={toggleLot} onIgnore={ignorePairs} onRestore={restorePairs} />)}
             </div>
           )}
           {data.checks.length === 0 && fixResult && (
@@ -482,6 +510,75 @@ export default function EndOfDayPage() {
           )}
         </>
       )}
+
+      {/* ── 🔧 Fix preview — every planned change, shown BEFORE anything is written ── */}
+      {fixPreview && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setFixPreview(null)}>
+          <div
+            className="w-full max-w-3xl max-h-[85vh] flex flex-col rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#15151a] shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                🔧 Fix what BC can prove — {fixPreview.changes.length} lot{fixPreview.changes.length === 1 ? "" : "s"} would change
+              </h3>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                Nothing has been changed yet. Each line shows what will be corrected from the BC tote data — red is what&apos;s on the lot now, green is what BC says.
+                Every change is logged in the Lot Change Log, and anything already pushed to BC wrong lands on the BC Corrections list.
+              </p>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-1.5">
+              {fixPreview.changes.map((c, i) => (
+                <div key={i} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-black/25 px-3 py-2">
+                  <span className="font-mono font-bold text-sm text-gray-900 dark:text-white">{c.barcode || c.uniqueId || "—"}</span>
+                  <span className="flex flex-wrap items-center gap-1.5 text-xs text-gray-700 dark:text-gray-300">
+                    {c.newVendor && (<>
+                      <span className="opacity-70">vendor</span>
+                      <Chip tone="bad">{c.oldVendor || "blank"}</Chip>
+                      <span className="opacity-70">→</span>
+                      <Chip tone="good">{c.vendorName ? `${c.newVendor} · ${c.vendorName}` : c.newVendor}</Chip>
+                    </>)}
+                    {c.newReceipt && (<>
+                      <span className="opacity-70">receipt</span>
+                      <Chip tone="bad">{c.oldReceipt || "blank"}</Chip>
+                      <span className="opacity-70">→</span>
+                      <Chip tone="good">{c.newReceipt}</Chip>
+                    </>)}
+                    {c.tote && <Chip tone="plain" label="tote">{c.tote}</Chip>}
+                  </span>
+                  <span className="ml-auto text-[11px] text-gray-500 whitespace-nowrap">{c.sale}</span>
+                </div>
+              ))}
+              {fixPreview.changes.length === 0 && (
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Nothing to fix — none of the flagged lots have a tote BC can prove the right values from.
+                </p>
+              )}
+              {(fixPreview.skipped > 0 || fixPreview.lockedSales > 0) && (
+                <p className="text-xs text-gray-500 pt-1">
+                  {fixPreview.skipped > 0 && <>{fixPreview.skipped} flagged lot{fixPreview.skipped === 1 ? "" : "s"} can&apos;t be fixed automatically (tote not in the BC data). </>}
+                  {fixPreview.lockedSales > 0 && <>{fixPreview.lockedSales} sale{fixPreview.lockedSales === 1 ? "" : "s"} skipped (BC-locked — admin only).</>}
+                </p>
+              )}
+            </div>
+            <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-800 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setFixPreview(null)}
+                className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                Cancel — change nothing
+              </button>
+              <button
+                onClick={applyFixes}
+                disabled={fixing || fixPreview.changes.length === 0}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
+              >
+                {fixing ? "Fixing…" : `✓ Apply ${fixPreview.changes.length} fix${fixPreview.changes.length === 1 ? "" : "es"}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -617,25 +714,47 @@ function MassRemap({ onApplied }: { onApplied: (msg: string) => Promise<void> })
   )
 }
 
-function CheckPanel({ check, selected, onToggle }: {
+function CheckPanel({ check, selected, onToggle, onIgnore, onRestore }: {
   check: Check
   selected: Map<string, string>
   onToggle: (lotId: string, auctionId: string) => void
+  onIgnore?: (pairs: { lotId: string; checkKey: string }[]) => Promise<void>
+  onRestore?: (pairs: { lotId: string; checkKey: string }[]) => Promise<void>
 }) {
   const [open, setOpen] = useState(false)
+  const [showIgnored, setShowIgnored] = useState(false)
+  const [busy, setBusy] = useState(false)
   const meta = CHECK_META[check.key] ?? { label: check.key, hint: "", tone: "warn" as const, order: 99 }
   const tone = meta.tone === "bad"
     ? "border-red-300 dark:border-red-800/40 bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-300"
     : "border-amber-300 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300"
   const allTicked = check.lots.length > 0 && check.lots.every(l => selected.has(l.id))
+  // duplicate_barcode changes what goes on the sheet, so it can't be ignored
+  const ignorable = !!onIgnore && check.key !== "duplicate_barcode"
+  const tickedHere = check.lots.filter(l => selected.has(l.id))
+  const ignored = check.ignored ?? []
+  const run = async (fn: () => Promise<void>) => { setBusy(true); try { await fn() } finally { setBusy(false) } }
   return (
     <div className={`rounded-xl border px-4 py-3 ${tone}`}>
       <div className="flex items-center gap-3">
         <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2 text-sm font-medium flex-1 text-left">
           <span className="text-xs">{open ? "▼" : "▶"}</span>
-          <span>{meta.tone === "bad" ? "⛔" : "⚠"} {meta.label} ({check.count})</span>
+          <span>
+            {meta.tone === "bad" ? "⛔" : "⚠"} {meta.label} ({check.count})
+            {ignored.length > 0 && <span className="font-normal opacity-70"> · {ignored.length} ignored</span>}
+          </span>
         </button>
-        {open && (
+        {open && ignorable && tickedHere.length > 0 && (
+          <button
+            disabled={busy}
+            onClick={() => run(() => onIgnore!(tickedHere.map(l => ({ lotId: l.id, checkKey: check.key }))))}
+            title="Hide these warnings — for flags you know are wrong (e.g. the BC sync hasn't caught up). Nothing on the lot changes, and they can be restored below at any time."
+            className="text-xs underline opacity-80 hover:opacity-100 shrink-0 disabled:opacity-40"
+          >
+            🔕 Ignore ticked ({tickedHere.length})
+          </button>
+        )}
+        {open && check.lots.length > 0 && (
           <button
             onClick={() => check.lots.forEach(l => { if (allTicked ? selected.has(l.id) : !selected.has(l.id)) onToggle(l.id, l.auctionId) })}
             className="text-xs underline opacity-80 hover:opacity-100 shrink-0"
@@ -670,6 +789,47 @@ function CheckPanel({ check, selected, onToggle }: {
           ))}
           {check.count > check.lots.length && (
             <p className="text-xs opacity-70">…and {check.count - check.lots.length} more</p>
+          )}
+        </div>
+      )}
+      {ignored.length > 0 && (
+        <div className="mt-2 ml-5">
+          <button onClick={() => setShowIgnored(v => !v)} className="text-xs underline opacity-70 hover:opacity-100">
+            🔕 {ignored.length} ignored warning{ignored.length === 1 ? "" : "s"} {showIgnored ? "— hide" : "— show"}
+          </button>
+          {showIgnored && (
+            <div className="mt-1.5 space-y-1.5 max-h-64 overflow-y-auto pr-1">
+              <div className="flex justify-end">
+                <button
+                  disabled={busy}
+                  onClick={() => run(() => onRestore!(ignored.map(l => ({ lotId: l.id, checkKey: check.key }))))}
+                  className="text-xs underline opacity-70 hover:opacity-100 disabled:opacity-40"
+                >
+                  Restore all
+                </button>
+              </div>
+              {ignored.map(l => (
+                <div key={l.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-black/5 dark:border-white/10 bg-white/40 dark:bg-black/10 px-3 py-2 opacity-60">
+                  <span className="font-mono font-bold text-sm text-gray-900 dark:text-white">{l.barcode || l.uniqueId || "—"}</span>
+                  <span className="flex flex-wrap items-center gap-1.5 text-xs">
+                    <IssueLine checkKey={check.key} l={l} />
+                  </span>
+                  <span className="ml-auto flex items-center gap-3">
+                    <span className="text-[11px] opacity-70 whitespace-nowrap">{[l.sale, l.cataloguedBy].filter(Boolean).join(" · ")}</span>
+                    <button
+                      disabled={busy}
+                      onClick={() => run(() => onRestore!([{ lotId: l.id, checkKey: check.key }]))}
+                      className="text-xs underline disabled:opacity-40"
+                    >
+                      Restore
+                    </button>
+                  </span>
+                </div>
+              ))}
+              {(check.ignoredCount ?? 0) > ignored.length && (
+                <p className="text-xs opacity-70">…and {(check.ignoredCount ?? 0) - ignored.length} more</p>
+              )}
+            </div>
           )}
         </div>
       )}
