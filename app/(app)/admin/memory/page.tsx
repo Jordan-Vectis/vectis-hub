@@ -189,12 +189,12 @@ Sanity-checked on real shapes: 340 lots × 6 photos ≈ **$0.88** on Gemini 2.5 
   {
     filename: "admin_centre.md",
     content: `---
-name: Admin Centre (/tools/lot-lookup) — two tabs, big UI
-purpose: The Admin Centre is tabbed (Find a customer's lots + Who catalogued this lot?) and deliberately oversized for non-technical admins. Read before touching it.
-last_updated: 2026-08-04
+name: Admin Centre (/tools/lot-lookup) — three tabs, big UI
+purpose: The Admin Centre is tabbed (Find a customer's lots + Who catalogued this lot? + Who catalogued this sale?) and deliberately oversized for non-technical admins. Read before touching it.
+last_updated: 2026-08-06
 ---
 
-# Admin Centre — /tools/lot-lookup (rebuilt 2026-08-04)
+# Admin Centre — /tools/lot-lookup (rebuilt 2026-08-04, third tab 2026-08-06)
 
 Gated on the **\`ADMIN_CENTRE\`** app key via \`hasAppAccess\` — the page redirect **and** both API routes check it.
 
@@ -208,10 +208,12 @@ The brief: *"this is getting used by non technical admins so really make everyth
 |---|---|
 | \`lookup-client.tsx\` | shell + the two big tab buttons (\`useState\`, no URL param) |
 | \`find-lots-tab.tsx\` | the original receipt / tote / customer lookup, redesigned |
-| \`who-catalogued-tab.tsx\` | the new tab |
+| \`who-catalogued-tab.tsx\` | one lot in, one name out |
+| \`by-sale-tab.tsx\` | pick a sale, search it by BC lot number (2026-08-06) |
 | \`ui.ts\` | shared classes + the plain-English label maps + date formatting |
 | \`app/api/lot-lookup/route.ts\` | the cross-system search (behaviour unchanged) |
-| \`app/api/lot-lookup/who/route.ts\` | new — one lot in, who catalogued it out |
+| \`app/api/lot-lookup/who/route.ts\` | one lot in, who catalogued it out |
+| \`app/api/lot-lookup/sale/route.ts\` | new — a whole sale by BC lot number (2026-08-06) |
 
 ## Tab 2 — "Who catalogued this lot?"
 
@@ -223,6 +225,22 @@ Three layers of answer, in this order:
 3. **Everyone who has changed it since** — grouped from **\`CatalogueLotEvent\`** (the Lot Change Log audit trail) with a "Show the full history" table. ⚠ That log only covers lots edited **since 1 July 2026**, so "no changes recorded" is normal for older lots and the UI says so.
 
 An item found in BC with **no** matching Hub lot gets its own orange "Found in Business Central only" card.
+
+## Tab 3 — "Who catalogued this sale?" (2026-08-06)
+
+Jack's ask: *"I need to look at the sale with the lot number in from BC then see who catalogued it on our system."* Pick a sale (dropdown built from BC's own \`auctionCode\` values, newest first, with lot counts — or type the code), then a **lot number** box filters the loaded sale as you type. A single match shows the big one-answer card; otherwise the whole sale, ordered by lot number with unnumbered lots last. Plus a per-cataloguer tally you can click to filter.
+
+### ⚠⚠ BC's \`cataloguedBy\` is the IMPORT STAMP, not the cataloguer
+
+**This is the entire reason the tab exists.** Jack: *"because we import the lots in they all say they are catalogued by me and Jordan."* Lots are pushed into BC in bulk, so \`WarehouseItem.cataloguedBy\` records **whoever ran the import** on every lot in the sale. The real cataloguer is **\`CatalogueLot.createdByName\`** — the same field Manage Lots shows as its **"Added By"** column. So the tab reads the **lot number from BC** (which only exists there) and the **cataloguer from the Hub**. BC's stamp appears only on rows with no Hub match, explicitly labelled as the import stamp. **Never present BC's \`cataloguedBy\` as the cataloguer.**
+
+### ⚠ Match on the UNIQUE ID first here, barcode only as fallback
+
+The opposite order to Tab 1. A barcode is **scoped to the sale the lot went into** — measured 2026-08-05, receipt R008771's items carry \`F069598\` in sale F069, \`F078380\` in F078, \`F080575\` in F080, \`F083155-60\` in F083. So an item re-entered into a later sale picks up a **different** barcode, and matching barcode-first can attach the wrong lot — and the wrong cataloguer — to a re-sold item. Measured on F103: 585 matched by unique ID, only 16 needed the barcode fallback. Both sides are \`trim()\`ed before comparing.
+
+### ⚠ On STAGING this tab looks broken, and isn't
+
+Staging's Hub has ~3.9k lots across ~8 sales; its BC cache has **212k items across hundreds of sales**. So almost any sale you pick from the dropdown has no Hub lots at all and every row reads "Not in the Hub". Test on a sale staging actually holds — **F064, F103, F106, F091, F104**. It cost a debugging cycle on 2026-08-05.
 
 ## Tab 1 — Find lots: ONE merged row per item (reworked 2026-08-04)
 
@@ -249,6 +267,51 @@ A **"Catalogued by"** column shows the Hub's \`createdByName\`, falling back to 
 ## Sale date
 
 Every sale is shown with its **date** — a 📅 chip on each sale group in Find lots, and part of the Sale line in the Who-catalogued cards. ⚠ Two different sources: the Hub sends \`CatalogueAuction.auctionDate\` (a real DateTime → ISO), BC sends \`WarehouseItem.auctionDate\` as a **plain string** and uses **\`0001-01-01\` for "no date"**. \`formatSaleDate\` in \`ui.ts\` handles both and blanks anything before 1990 — don't format these dates inline anywhere else. BC also leaves the date off some rows of a sale, so the grouping takes the first non-empty one.
+`,
+  },
+  {
+    filename: "item_valuations.md",
+    content: `---
+name: Item Valuations (/tools/cataloguing/research) — price a customer's photos
+purpose: Drag customer photos in, get a priced list to quote from. Explains WHY every figure leans low and where the safety margin lives. Read before touching the valuation maths or lib/comparables.ts.
+last_updated: 2026-08-06
+---
+
+# Item Valuations (built 2026-08-06)
+
+Jack's ask: *"our cataloguers get sent photos and they want to value the items… we usually estimate between 30-40% lower than they would actually sell for to be safe… if it's just a bunch of loose shit just give a very rough guess."*
+
+The page is **tabbed — Valuations (default) / Search**. Search is the original quick-launch screen, moved to \`search-tab.tsx\` unchanged.
+
+## ⚠ Called "Research" until 2026-08-06 — the ROUTE did not change
+
+Jack renamed it to **Item Valuations** (sidebar label and heading, icon 🔍 → 💷) once valuations became the point of the page. The folder is still \`/tools/cataloguing/research\` **on purpose**: the URL is bookmarked, and **\`/api/research/log\`** feeds \`ResearchLog\` → the cataloguing reports. Renaming the folder breaks both for no gain. Expect the old name in URLs, API paths and the \`RESEARCH\` sidebar key.
+
+## ⚠ The figures must come in UNDER what things really make
+
+Quoting high and selling low is the failure that matters, so every choice leans low. Don't "improve" any of these into a higher number:
+
+1. **Anchored on OUR OWN sold archive**, not the model's memory of prices. \`WarehouseItem\` holds **193,004 rows with a real \`hammerPrice\`** (checked 2026-08-06). Retail/asking/eBay-BIN prices all run materially above auction hammer, and that is what a model recalls.
+2. **MEDIAN of single-item sales, never a mean.** Measured: Steiff bears span £30–£2,300 — a mean is dragged far above what a normal example makes. The "usual range" is the interquartile band.
+3. **Group lots are EXCLUDED from every figure** and counted separately. A *"group of six to include…"* price is for the six; averaging it into a per-item valuation inflates it. Corgi 261: 159 matches, 24 of them group lots.
+4. **A mixed lot gets ONE low-confidence row**, not invented detail, and is **not** looked up in the archive — a vague "assorted diecast" match would make the figure look better-founded than it is.
+
+## ⚠ The safety margin is applied in the CLIENT, not the prompt
+
+Default **35%**, adjustable 0–50% on a slider. \`/api/research/valuation\` returns **honest market figures** and \`valuations-tab.tsx\` takes the percentage off, rounded to the nearest £5. This is deliberate: in the AI prompt it would be invisible and would silently drift away from what the business actually quotes. **Don't move it into the prompt to "save a step".**
+
+Every price and item name is **editable**, and rows deletable, before Export to Excel — the cataloguer has the customer's email and the experience; the AI only has a photo.
+
+## \`lib/comparables.ts\` — SHARED, don't fork it
+
+The archive search was lifted out of \`/api/catalogue/lens\` so Lens and Valuations use **one** copy. The scoring is scored-not-all-or-nothing and was arrived at by measurement (see the ⚠ comments in the file — requiring every search term returned 0 matches where dropping one returned 436). A second copy will drift. Lens re-exports the \`Comparable\` type because \`lens-button.tsx\` imports it from the route.
+
+## Wiring
+
+- **\`research_valuation\`** slot in \`AI_TOOLS\` — model set in Admin → AI Models, never hardcoded. Uses Google Search grounding, so the configured model must support it (the route says so if it doesn't).
+- Up to **20 photos** a request; \`maxDuration\` 300s.
+- **Nothing is saved.** Export to Excel and it's gone — no schema change, no Run Migrations. Persisting valuations would be a new table and a deliberate decision.
+- ⚠ **The invisible research timer must stay mounted on \`page.tsx\`, not inside a tab.** It feeds \`ResearchLog\` → the cataloguing reports and their PDFs; inside a tab, switching tabs would restart the clock and lose the time.
 `,
   },
   {

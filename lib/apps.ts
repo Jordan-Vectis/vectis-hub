@@ -57,7 +57,9 @@ export const APP_SECTIONS: Partial<Record<AppKey, { key: string; label: string }
     { key: "PHOTOGRAPHY",        label: "Photography" },
     { key: "TABLET_CATALOGUING", label: "Tablet Cataloguing" },
     { key: "LOTTING_UP",         label: "Lotting Up" },
-    { key: "RESEARCH",           label: "Research" },
+    // Key stays RESEARCH — it's stored in User.appPermissions, so changing it
+    // would revoke the section for everyone who has it. Label only.
+    { key: "RESEARCH",           label: "Item Valuations" },
     { key: "END_OF_DAY",         label: "End of Day → BC" },
   ],
   AUCTION_AI: [

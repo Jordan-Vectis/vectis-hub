@@ -1,8 +1,12 @@
 "use client"
 
-// Cataloguing → Research. Two tabs:
+// Cataloguing → Item Valuations. Two tabs:
+//   • Valuations — price a customer's photos and export the list (the default)
 //   • Search     — quick-launch the research sites (the original screen)
-//   • Valuations — price a customer's photos and export the list
+//
+// ⚠ Named "Research" until 2026-08-06 and the ROUTE is still /research — it is
+// bookmarked, and /api/research/log feeds the cataloguing reports. Renaming the
+// folder would break both for no gain.
 //
 // ⚠ The research TIMER below is load-bearing and easy to destroy by accident.
 // It counts visible time on this page and beacons it to /api/research/log, which
@@ -87,20 +91,21 @@ function useResearchTimer() {
 type Tab = "search" | "valuations"
 
 const TABS: { key: Tab; icon: string; label: string }[] = [
-  { key: "search",     icon: "🔍", label: "Search" },
   { key: "valuations", icon: "💷", label: "Valuations" },
+  { key: "search",     icon: "🔍", label: "Search" },
 ]
 
 export default function ResearchPage() {
   useResearchTimer()
-  const [tab, setTab] = useState<Tab>("search")
+  // Valuations first — it's what the page is named after now.
+  const [tab, setTab] = useState<Tab>("valuations")
 
   return (
     <div className="min-h-full bg-[#141416] px-6 py-12">
 
       {/* Heading */}
       <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold text-white mb-1">Research</h1>
+        <h1 className="text-2xl font-bold text-white mb-1">Item Valuations</h1>
       </div>
 
       {/* Tabs */}

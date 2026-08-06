@@ -7,7 +7,10 @@ const links = [
   { key: "PHOTOGRAPHY",        href: "/tools/cataloguing/photography",     label: "Photography",        icon: "📷" },
   { key: "TABLET_CATALOGUING", href: "/tools/cataloguing/tablet/auctions", label: "Tablet Cataloguing", icon: "📱" },
   { key: "LOTTING_UP",         href: "/tools/cataloguing/lotting-up",      label: "Lotting Up",         icon: "🔢" },
-  { key: "RESEARCH",           href: "/tools/cataloguing/research",         label: "Research",           icon: "🔍" },
+  // Renamed to "Item Valuations" 2026-08-06 (Jack) — the valuation tool is now
+  // the point of the page. The ROUTE stays /research: it's bookmarked, and
+  // /api/research/log feeds the research time in the cataloguing reports.
+  { key: "RESEARCH",           href: "/tools/cataloguing/research",         label: "Item Valuations",    icon: "💷" },
   { key: "END_OF_DAY",         href: "/tools/cataloguing/end-of-day",      label: "End of Day → BC",    icon: "🌙" },
 ]
 
