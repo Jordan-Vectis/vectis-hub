@@ -6,7 +6,7 @@
 // macro works through. Same file shape as BC Import Check reads and writes, so
 // a broken overnight run can be reconciled there and re-run.
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import { autocorrectLotsForAuctions, lookupToteOrReceipt, massRemapPendingLots, setLotsVendorReceiptAcrossAuctions, type RemapLineResult } from "@/lib/actions/catalogue"
 
 type ToteRow = { tote: string; count: number; barcodes: string[]; sales: string[] }
@@ -16,6 +16,7 @@ type CheckLot = {
   id: string; auctionId: string; barcode: string; uniqueId: string; tote: string; receipt: string
   vendor: string; sale: string; cataloguedBy: string
   bcReceipt?: string; bcVendor?: string; totes?: string[]
+  vendorName?: string; bcVendorName?: string
 }
 type Check = { key: string; count: number; lots: CheckLot[] }
 type Data = {
@@ -44,11 +45,11 @@ const CHECK_META: Record<string, { label: string; hint: string; tone: "bad" | "w
   },
   receipt_mismatch: {
     label: "Receipt doesn't match the tote", tone: "bad", order: 2,
-    hint: "The tote belongs to a different receipt in BC. Either the wrong receipt was typed, or the item is in the wrong tote.",
+    hint: "The receipt saved on the lot isn't the one this tote belongs to in BC. Either the wrong receipt was typed, or the item is in the wrong tote. If the tote is right: tick them, type the tote in the bar below, Apply — the receipt is corrected from BC.",
   },
   vendor_mismatch: {
     label: "Vendor doesn't match the tote", tone: "bad", order: 3,
-    hint: "The tote belongs to a different vendor in BC — often the previous batch's vendor left in place.",
+    hint: "The vendor saved on the lot isn't the tote's owner in BC — often the previous batch's vendor left in place. If the tote is right: tick them, type the tote in the bar below, Apply — the vendor is corrected from BC.",
   },
   unique_id_mismatch: {
     label: "Unique ID against a different receipt", tone: "warn", order: 4,
@@ -645,29 +646,27 @@ function CheckPanel({ check, selected, onToggle }: {
       </div>
       <p className="text-xs opacity-80 mt-1 ml-5">{meta.hint}</p>
       {open && (
-        <div className="mt-2 ml-5 space-y-1 max-h-64 overflow-y-auto">
+        <div className="mt-2 ml-5 space-y-1.5 max-h-96 overflow-y-auto pr-1">
           {check.lots.map(l => (
-            <div key={l.id} className="text-xs flex flex-wrap items-center gap-x-2">
+            <label
+              key={l.id}
+              className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-black/5 dark:border-white/10 bg-white/70 dark:bg-black/25 px-3 py-2 ${l.auctionId ? "cursor-pointer" : ""}`}
+            >
               <input
                 type="checkbox"
-                className="accent-blue-500"
+                className="accent-blue-500 h-4 w-4"
                 checked={selected.has(l.id)}
                 onChange={() => onToggle(l.id, l.auctionId)}
                 disabled={!l.auctionId}
               />
-              <span className="font-mono font-semibold">{l.barcode || l.uniqueId || "—"}</span>
-              {l.tote && <span className="opacity-80">tote {l.tote}</span>}
-              {l.totes && l.totes.length > 1 && <span className="opacity-80">totes {l.totes.join(" + ")}</span>}
-              {l.receipt && <span className="opacity-80">receipt {l.receipt}</span>}
-              {l.bcReceipt && l.receipt && l.bcReceipt.toUpperCase() !== l.receipt.toUpperCase() && (
-                <span className="font-semibold">BC says {l.bcReceipt}</span>
-              )}
-              {l.bcVendor && l.vendor && l.bcVendor.toUpperCase() !== l.vendor.toUpperCase() && (
-                <span className="font-semibold">BC vendor {l.bcVendor}</span>
-              )}
-              {l.sale && <span className="opacity-70">{l.sale}</span>}
-              {l.cataloguedBy && <span className="opacity-70">{l.cataloguedBy}</span>}
-            </div>
+              <span className="font-mono font-bold text-sm text-gray-900 dark:text-white">{l.barcode || l.uniqueId || "—"}</span>
+              <span className="flex flex-wrap items-center gap-1.5 text-xs">
+                <IssueLine checkKey={check.key} l={l} />
+              </span>
+              <span className="ml-auto text-[11px] opacity-60 whitespace-nowrap">
+                {[l.sale, l.cataloguedBy].filter(Boolean).join(" · ")}
+              </span>
+            </label>
           ))}
           {check.count > check.lots.length && (
             <p className="text-xs opacity-70">…and {check.count - check.lots.length} more</p>
@@ -676,6 +675,94 @@ function CheckPanel({ check, selected, onToggle }: {
       )}
     </div>
   )
+}
+
+// One coloured value pill inside a check row — a tiny caption saying WHERE the
+// value comes from, then the value itself. Red = the wrong side, green = what
+// BC says it should be, grey = context.
+function Chip({ tone, label, children }: { tone: "bad" | "good" | "plain"; label?: string; children: ReactNode }) {
+  const cls = tone === "bad"
+    ? "border-red-300 dark:border-red-500/40 bg-red-100 dark:bg-red-500/15 text-red-900 dark:text-red-200"
+    : tone === "good"
+    ? "border-green-300 dark:border-green-500/40 bg-green-100 dark:bg-green-500/15 text-green-900 dark:text-green-200"
+    : "border-gray-300 dark:border-white/15 bg-gray-100 dark:bg-white/10 text-gray-800 dark:text-gray-200"
+  return (
+    <span className={`inline-flex items-baseline gap-1.5 rounded-md border px-2 py-0.5 ${cls}`}>
+      {label && <span className="text-[10px] font-semibold uppercase tracking-wide opacity-70 whitespace-nowrap">{label}</span>}
+      <span className="font-mono font-semibold whitespace-nowrap">{children}</span>
+    </span>
+  )
+}
+
+// The plain-words explanation of ONE issue row: what the lot says, what BC
+// says, which side is wrong. Vendor chips carry the vendor's name so nobody
+// has to decode C-numbers.
+function IssueLine({ checkKey, l }: { checkKey: string; l: CheckLot }) {
+  const vend = (no?: string, name?: string) => (no ? (name ? `${no} · ${name}` : no) : "—")
+  switch (checkKey) {
+    case "vendor_mismatch":
+      return (<>
+        <Chip tone="bad" label="on the lot">{vend(l.vendor, l.vendorName)}</Chip>
+        <span className="opacity-70">should be</span>
+        <Chip tone="good" label={`tote ${l.tote} in BC`}>{vend(l.bcVendor, l.bcVendorName)}</Chip>
+      </>)
+    case "vendor_missing":
+      return (<>
+        <Chip tone="bad" label="on the lot">no vendor</Chip>
+        <span className="opacity-70">BC says</span>
+        <Chip tone="good" label={`tote ${l.tote} in BC`}>{vend(l.bcVendor, l.bcVendorName)}</Chip>
+      </>)
+    case "receipt_mismatch":
+      return (<>
+        <Chip tone="bad" label="on the lot">{l.receipt || "—"}</Chip>
+        <span className="opacity-70">should be</span>
+        <Chip tone="good" label={`tote ${l.tote} in BC`}>{l.bcReceipt || "—"}</Chip>
+      </>)
+    case "receipt_missing":
+      return (<>
+        <Chip tone="bad" label="on the lot">no receipt</Chip>
+        <span className="opacity-70">BC says</span>
+        <Chip tone="good" label={`tote ${l.tote} in BC`}>{l.bcReceipt || "—"}</Chip>
+      </>)
+    case "receipt_not_in_bc":
+      return (<>
+        <Chip tone="bad" label="receipt on the lot">{l.receipt || "—"}</Chip>
+        <span className="opacity-70">isn&apos;t on any synced BC tote or item</span>
+        {l.tote && <Chip tone="plain" label="tote">{l.tote}</Chip>}
+      </>)
+    case "tote_unknown":
+      return (<>
+        <Chip tone="bad" label="tote on the lot">{l.tote || "—"}</Chip>
+        <span className="opacity-70">isn&apos;t in the synced BC tote list</span>
+        {l.receipt && <Chip tone="plain" label="receipt">{l.receipt}</Chip>}
+      </>)
+    case "unique_id_mismatch":
+      return (<>
+        <Chip tone="plain" label="unique id">{l.uniqueId || "—"}</Chip>
+        <span className="opacity-70">points at receipt {(l.uniqueId.split("-")[0] ?? "").toUpperCase()}, but the lot&apos;s receipt is</span>
+        <Chip tone="plain" label="on the lot">{l.receipt || "—"}</Chip>
+      </>)
+    case "duplicate_barcode":
+      return (<>
+        <span className="opacity-70">same barcode saved under</span>
+        <Chip tone="bad" label="totes">{(l.totes ?? [l.tote]).filter(Boolean).join(" + ")}</Chip>
+      </>)
+    case "invalid_barcode":
+      return (<>
+        <span className="opacity-70">doesn&apos;t match the F066001 format</span>
+        {l.tote && <Chip tone="plain" label="tote">{l.tote}</Chip>}
+      </>)
+    case "no_tote":
+      return (<>
+        <Chip tone="bad" label="tote">none</Chip>
+        <span className="opacity-70">tick, type the right tote below, apply</span>
+      </>)
+    default:
+      return (<>
+        {l.tote && <Chip tone="plain" label="tote">{l.tote}</Chip>}
+        {l.receipt && <Chip tone="plain" label="receipt">{l.receipt}</Chip>}
+      </>)
+  }
 }
 
 function ProblemList({ label, rows }: { label: string; rows: { id: string; main: string; extra: string; title: string }[] }) {

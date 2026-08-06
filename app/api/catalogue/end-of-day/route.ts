@@ -42,6 +42,9 @@ type CheckLot = {
   id: string; auctionId: string; barcode: string; uniqueId: string; tote: string; receipt: string
   vendor: string; sale: string; cataloguedBy: string
   bcReceipt?: string; bcVendor?: string; totes?: string[]
+  // Vendor NAMES for both sides of a mismatch — non-technical readers
+  // shouldn't have to decode C-numbers to see who disagrees with whom.
+  vendorName?: string; bcVendorName?: string
 }
 
 export async function GET(req: NextRequest) {
@@ -143,7 +146,10 @@ export async function GET(req: NextRequest) {
       const { issues, tote } = checkLot(l, toteMap)
       for (const issue of issues) {
         if (issue === "no_tote") continue
-        addCheck(issue, asCheckLot(l, { bcReceipt: tote?.receiptNo ?? "", bcVendor: tote?.vendorNo ?? "" }))
+        addCheck(issue, asCheckLot(l, {
+          bcReceipt: tote?.receiptNo ?? "", bcVendor: tote?.vendorNo ?? "",
+          bcVendorName: tote?.vendorName ?? "",
+        }))
       }
     }
 
@@ -167,6 +173,28 @@ export async function GET(req: NextRequest) {
     //    unlikely to accept it. Flagged, kept on the sheet (BC oddities exist).
     for (const l of ready) {
       if (!isBarcode(clean(l.barcode!))) addCheck("invalid_barcode", asCheckLot(l))
+    }
+
+    // Fill in vendor NAMES on the check rows (both the lot's vendor and BC's)
+    // from the synced items — the tote side usually arrived with its name
+    // above; this covers the lot side and any gaps. Best-effort: an unnamed
+    // vendor just shows as its C-number.
+    const checkVendorNos = new Set<string>()
+    for (const rows of checkMap.values()) for (const r of rows) {
+      if (r.vendor) checkVendorNos.add(r.vendor)
+      if (r.bcVendor && !r.bcVendorName) checkVendorNos.add(r.bcVendor)
+    }
+    if (checkVendorNos.size) {
+      const named = await prisma.warehouseItem.findMany({
+        where:    { vendorNo: { in: variants([...checkVendorNos]) }, vendorName: { not: null } },
+        select:   { vendorNo: true, vendorName: true },
+        distinct: ["vendorNo"],
+      })
+      const nameByNo = new Map(named.map(v => [norm(v.vendorNo), v.vendorName!]))
+      for (const rows of checkMap.values()) for (const r of rows) {
+        if (r.vendor && !r.vendorName)     r.vendorName   = nameByNo.get(norm(r.vendor))   ?? ""
+        if (r.bcVendor && !r.bcVendorName) r.bcVendorName = nameByNo.get(norm(r.bcVendor)) ?? ""
+      }
     }
 
     // When the tote table was last refreshed — an "unknown tote" pile with a
