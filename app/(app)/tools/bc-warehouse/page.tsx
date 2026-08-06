@@ -18,6 +18,7 @@ type SyncStatus = {
     changelog:      { completedAt: string; itemsProcessed: number } | null
     totes:          { completedAt: string; itemsProcessed: number } | null
     "totes-active": { completedAt: string; itemsProcessed: number } | null
+    "totes-all":    { completedAt: string; itemsProcessed: number } | null
   }
 }
 
@@ -2316,7 +2317,7 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
   // Each returns { items, batches } and logs both human-readable and raw BC info
 
   async function runStage(
-    endpoint: "receipt-lines" | "auction-lines" | "changelog" | "totes" | "totes-active",
+    endpoint: "receipt-lines" | "auction-lines" | "changelog" | "totes" | "totes-active" | "totes-all",
     label: string,
     full: boolean,
   ): Promise<{ items: number; batches: number }> {
@@ -2371,7 +2372,7 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
   }
 
   async function runOneStage(
-    endpoint: "receipt-lines" | "auction-lines" | "changelog" | "totes" | "totes-active",
+    endpoint: "receipt-lines" | "auction-lines" | "changelog" | "totes" | "totes-active" | "totes-all",
     label: string,
     full: boolean,
   ) {
@@ -2424,14 +2425,14 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
       // BC's $skip cap (~38k). The server returns nextLink in each response;
       // we pass it back on the next call until it becomes null.
       setPhase("Receipt Lines")
-      addLog("info", `Stage 1/6 · Receipt Lines (the main item list)${full ? " — FULL re-sync" : " — incremental"}`)
+      addLog("info", `Stage 1/7 · Receipt Lines (the main item list)${full ? " — FULL re-sync" : " — incremental"}`)
       const r1 = await runStage("receipt-lines", "Receipt Lines", full)
       addLog("ok", `Stage 1 complete — ${r1.items.toLocaleString()} items processed`)
 
       // ── Stage 2: Auction Lines ──────────────────────────────────────────────
       if (!cancelRef.current) {
         setPhase("Auction Lines")
-        addLog("info", `Stage 2/6 · Auction Lines (current lot numbers, vendor emails)${full ? " — FULL re-sync" : " — incremental"}`)
+        addLog("info", `Stage 2/7 · Auction Lines (current lot numbers, vendor emails)${full ? " — FULL re-sync" : " — incremental"}`)
         const r2 = await runStage("auction-lines", "Auction Lines", full)
         addLog("ok", `Stage 2 complete — ${r2.items.toLocaleString()} items processed`)
       }
@@ -2439,7 +2440,7 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
       // ── Stage 3: Change Log ─────────────────────────────────────────────────
       if (!cancelRef.current) {
         setPhase("Change Log")
-        addLog("info", `Stage 3/6 · Change Log (latest location scans)${full ? " — FULL re-sync" : " — incremental"}`)
+        addLog("info", `Stage 3/7 · Change Log (latest location scans)${full ? " — FULL re-sync" : " — incremental"}`)
         try {
           const r3 = await runStage("changelog", "Change Log", full)
           addLog("ok", `Stage 3 complete — ${r3.items.toLocaleString()} entries processed`)
@@ -2452,7 +2453,7 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
       // ── Stage 4: Totes (all) ────────────────────────────────────────────────
       if (!cancelRef.current) {
         setPhase("Totes")
-        addLog("info", `Stage 4/6 · Totes — all T/P-prefixed totes from Totes_Excel${full ? " — FULL re-sync" : ""}`)
+        addLog("info", `Stage 4/7 · Totes — all T/P-prefixed totes from Totes_Excel${full ? " — FULL re-sync" : ""}`)
         try {
           const r4 = await runStage("totes", "Totes", full)
           addLog("ok", `Stage 4 complete — ${r4.items.toLocaleString()} totes processed`)
@@ -2464,7 +2465,7 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
       // ── Stage 5: Active Totes (enrichment) ─────────────────────────────────
       if (!cancelRef.current) {
         setPhase("Active Totes")
-        addLog("info", "Stage 5/6 · Active Totes — enriching from Receipt_Totes_Excel (vendor, location, status)")
+        addLog("info", "Stage 5/7 · Active Totes — enriching from Receipt_Totes_Excel (vendor, location, status)")
         try {
           const r5 = await runStage("totes-active", "Active Totes", false)
           addLog("ok", `Stage 5 complete — ${r5.items.toLocaleString()} active totes enriched`)
@@ -2473,14 +2474,31 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
         }
       }
 
-      // ── Stage 6: Auction Names ──────────────────────────────────────────────
+      // ── Stage 6: All Receipt Totes (catalogued included) ───────────────────
+      // Receipt_Totes_Excel drops a tote the moment it's ticked Catalogued, so
+      // stage 5 can never enrich already-catalogued totes. This stage walks the
+      // eva/tot custom API (same BC table, no filter) to fill receipt/vendor/
+      // catalogued for every receipt-linked tote — End of Day's receipt checks
+      // depend on it.
+      if (!cancelRef.current) {
+        setPhase("All Receipt Totes")
+        addLog("info", "Stage 6/7 · All Receipt Totes — full receipt/vendor/catalogued data via the BC API (catalogued totes included)")
+        try {
+          const r6 = await runStage("totes-all", "All Receipt Totes", false)
+          addLog("ok", `Stage 6 complete — ${r6.items.toLocaleString()} receipt-tote links processed`)
+        } catch (e: any) {
+          addLog("warn", `Stage 6 failed (non-fatal): ${e.message ?? e}`)
+        }
+      }
+
+      // ── Stage 7: Auction Names ──────────────────────────────────────────────
       if (!cancelRef.current) {
         setPhase("Auction Names")
-        addLog("info", "Stage 6/6 · Auction Names — storing sale names from Auction_Lines_Excel")
+        addLog("info", "Stage 7/7 · Auction Names — storing sale names from Auction_Lines_Excel")
         try {
           const res = await fetch("/api/warehouse/sync/auction-names", { method: "POST" })
           const data = await res.json()
-          addLog("ok", `Stage 6 complete — ${data.namesWritten ?? 0} names written for ${data.codesFound ?? 0} codes`)
+          addLog("ok", `Stage 7 complete — ${data.namesWritten ?? 0} names written for ${data.codesFound ?? 0} codes`)
         } catch (e: any) {
           addLog("warn", `Stage 6 failed (non-fatal): ${e.message ?? e}`)
         }
@@ -2527,7 +2545,7 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
       </p>
 
       {/* Stats grid — each table card has its own re-sync buttons */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 mb-6">
         <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3">
           <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">Items in DB</div>
           <div className="text-2xl font-mono text-gray-900 dark:text-white">{liveCount.toLocaleString()}</div>
@@ -2652,6 +2670,23 @@ function DataSyncTab({ status, onComplete }: { status: SyncStatus | null; onComp
               onClick={() => runOneStage("totes-active", "Active Totes", false)}
               className="flex-1 text-[11px] px-2 py-1 rounded bg-blue-900/40 hover:bg-blue-800/60 text-blue-700 dark:text-blue-300 disabled:opacity-30 transition-colors"
               title="Enrich active totes with location and vendor data from Receipt_Totes_Excel"
+            >
+              ⟳ Sync
+            </button>
+          </div>
+        </div>
+
+        {/* All Receipt Totes — eva/tot API (catalogued included) */}
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3 flex flex-col">
+          <div className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1">All Receipt Totes</div>
+          <div className="text-sm text-gray-700 dark:text-gray-200">{fmtAge(status?.sources["totes-all"]?.completedAt)}</div>
+          <div className="text-xs text-gray-600 dark:text-gray-500">{status?.sources["totes-all"]?.itemsProcessed?.toLocaleString() ?? 0} last run</div>
+          <div className="mt-2 flex gap-1">
+            <button
+              disabled={running}
+              onClick={() => runOneStage("totes-all", "All Receipt Totes", false)}
+              className="flex-1 text-[11px] px-2 py-1 rounded bg-blue-900/40 hover:bg-blue-800/60 text-blue-700 dark:text-blue-300 disabled:opacity-30 transition-colors"
+              title="Full receipt/vendor/catalogued data for every receipt-linked tote — includes totes already ticked Catalogued, which Active Totes can't see"
             >
               ⟳ Sync
             </button>

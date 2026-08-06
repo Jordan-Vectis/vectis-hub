@@ -197,21 +197,23 @@ are **unrelated** and must be left alone:
   field name only**, populated from `barcode || receiptUniqueId || id`. It is not a DB column.
 - `lot_number` from the Bidpath WebSocket feed in Auction Monitor / Auto Clerk — third-party data.
 
-`receiptUniqueId` assignment (`{receipt}-N`) is **never count-based**: `createLot` allocates it
-inside a `prisma.$transaction` holding a per-receipt advisory lock (`pg_advisory_xact_lock`) and uses
-`MAX(existing suffix) + 1` via the shared `maxReceiptSuffix` helper (also used by `importLots` /
-`massCreateLots` / `fillLotsFromTotes`). The earlier count-based, non-atomic scheme caused recurring
-skipped/duplicate/blank IDs from concurrent tablet saves. There is no DB unique constraint (existing
-duplicates would block it), so the fix is forward-only.
-
-⚠ Blanks are backfilled from the **Change Vendor** button (Manage Lots → Tools): tick the lots,
-type the tote or receipt, and it sets vendor/receipt from the **BC-synced** tote data and mints a
-`{receipt}-N` unique ID for any lot that hasn't got one (existing ones are always preserved).
-It replaced "Pull Vendor/Receipt from Totes" on 2026-08-03 — that button only ever filled BLANKS
-(so it could never correct a wrong vendor) and read the **internal** warehouse tables
-(`WarehouseContainer`/`WarehouseReceipt`), not the BC tote data the wizard actually uses.
-`fillLotsFromTotes` still exists in `lib/actions/catalogue.ts` but **nothing calls it** — don't
-reach for it, and don't wire it back up without deciding which of the two tote sources is meant.
+⚠ **The Hub NEVER mints unique IDs (changed 2026-08-06 — Jordan's decision after the workflow
+review).** A lot is created with `receiptUniqueId = NULL` everywhere (`createLot` / wizard,
+`importLots`, `massCreateLots`, Photo Only), and the **only** population path is **🔗 BC Match &
+Import** on the sale page (`bulkAssignUniqueIds` — upload the BC Lines export, matched by barcode,
+writes **BC's own UniqueID** onto the lot). Rationale: the Hub used to mint a provisional
+`{receipt}-N` under a per-receipt advisory lock, but the real workflow always overwrote those with
+BC's numbering at the BC Match step — two racing numbering systems for no benefit.
+- **The BARCODE is a lot's identifier until BC Match runs.** Every matching path already checks
+  barcode first. Do not add code that assumes a new lot has a unique ID, and do NOT "fix" blank
+  unique IDs by re-adding minting anywhere.
+- **Change Vendor** (Manage Lots → Tools) and the End of Day intervention tools set vendor/receipt
+  (and tote) from the BC tote data but **no longer mint IDs** — blanks stay blank until BC Match;
+  existing IDs are never touched by them.
+- Manual entry via the lot editor still works, but is for corrections — the value should be BC's.
+- The old advisory-lock + `maxReceiptSuffix` scheme survives only inside `fillLotsFromTotes`,
+  which **nothing calls** — don't reach for it, and don't wire it back up.
+- There is still no DB unique constraint on `receiptUniqueId` (historic duplicates would block it).
 
 Detection regex:
 ```

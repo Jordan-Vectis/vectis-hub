@@ -21,13 +21,15 @@ export async function GET() {
 // Syncs Totes_Excel — all T/P-prefixed totes (catalogued + uncatalogued) with basic location data.
 //
 // ⚠⚠ A FULL RE-SYNC MUST NOT WIPE THE TABLE (fixed 2026-07-30). It used to run
-// `warehouseTote.deleteMany({})` on the first batch, which destroyed data that
-// CANNOT be re-fetched:
-//   • `bcCreatedAt` (the tote's check-in date) and `receiptNo` — written only by
-//     `sync/totes-active` from `Receipt_Totes_Excel`, and that feed publishes ONLY
-//     totes NOT ticked Catalogued. Once a tote is ticked, its date is gone from
-//     there forever, so our row is the only copy.
-//   • vendor / status / catalogued, same story.
+// `warehouseTote.deleteMany({})` on the first batch, which destroyed enriched
+// data this feed can't restore:
+//   • `receiptNo` / `vendorNo` / `catalogued` / `bcCreatedAt` — written by
+//     `sync/totes-active` (Receipt_Totes_Excel, active totes only) and since
+//     2026-08-06 by `sync/totes-all` (eva/tot custom API, the WHOLE receipt-tote
+//     table, catalogued included — see that route for why both exist).
+//   • `vendorName` / `status` — written only by `sync/totes-active`, and
+//     Receipt_Totes_Excel drops a tote once it's ticked Catalogued, so for
+//     catalogued totes our row is still the only copy of those two.
 // Totes_Excel carries none of it — confirmed 2026-07-30, its only fields are
 // EVA_No, EVA_Description, EVA_Location, EVA_Bin, EVA_ParentToteNo,
 // EVA_ParentCount, EVA_Contents and the three estimate/reserve totals.

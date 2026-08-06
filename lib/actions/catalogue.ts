@@ -394,9 +394,9 @@ export async function setLotsVendorReceipt(
     })
     if (lots.length === 0) return { ok: false, error: "None of those lots are in this auction." }
 
-    // One running suffix per receipt for the lots that need a unique ID.
-    let offset = receipt ? await maxReceiptSuffix(receipt) : 0
-
+    // ⚠ NO unique IDs minted here any more (2026-08-06) — a blank stays blank
+    // until 🔗 BC Match imports BC's own ID by barcode. Existing IDs are still
+    // never touched.
     const ctx: LotLogCtx = { changedBy: changedByOf(session), source: "vendor_change", batchId: newBatchId() }
     const undo: { lotId: string; fields: Record<string, { before: unknown; after: unknown }> }[] = []
     let updated = 0
@@ -406,14 +406,12 @@ export async function setLotsVendorReceipt(
       if (vendor  && lot.vendor  !== vendor)  data.vendor  = vendor
       if (receipt && lot.receipt !== receipt) data.receipt = receipt
       if (tote    && lot.tote    !== tote)    data.tote    = tote
-      if (receipt && !lot.receiptUniqueId) data.receiptUniqueId = `${receipt}-${++offset}`
       if (Object.keys(data).length === 0) continue
 
       const fields: Record<string, { before: unknown; after: unknown }> = {}
-      if (data.vendor          !== undefined) fields.vendor          = { before: lot.vendor,          after: data.vendor }
-      if (data.receipt         !== undefined) fields.receipt         = { before: lot.receipt,         after: data.receipt }
-      if (data.tote            !== undefined) fields.tote            = { before: lot.tote,            after: data.tote }
-      if (data.receiptUniqueId !== undefined) fields.receiptUniqueId = { before: lot.receiptUniqueId, after: data.receiptUniqueId }
+      if (data.vendor  !== undefined) fields.vendor  = { before: lot.vendor,  after: data.vendor }
+      if (data.receipt !== undefined) fields.receipt = { before: lot.receipt, after: data.receipt }
+      if (data.tote    !== undefined) fields.tote    = { before: lot.tote,    after: data.tote }
 
       await updateLotLogged(lot.id, data, ctx)
       undo.push({ lotId: lot.id, fields })
@@ -993,31 +991,16 @@ export async function createLot(auctionId: string, formData: FormData) {
     }
   }
 
-  // Assign the receipt unique ID and create the lot atomically. A per-receipt
-  // Postgres advisory lock serialises concurrent saves — rapid tablet
-  // cataloguing fires these in parallel, and a plain count-then-create let two
-  // saves read the same number and collide (the cause of skipped / duplicated
-  // unique IDs). MAX(existing suffix)+1 — never COUNT — so a deleted lot or a
-  // gap in the sequence never causes a number to be reused or skipped.
-  const lot = await prisma.$transaction(async (tx) => {
-    let receiptUniqueId: string | null = null
-    if (data.receipt) {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('vectis_receipt_uid'), hashtext(${data.receipt}))`
-      const existing = await tx.catalogueLot.findMany({
-        where:  { receiptUniqueId: { startsWith: data.receipt + "-" } },
-        select: { receiptUniqueId: true },
-      })
-      let max = 0
-      for (const e of existing) {
-        const m = e.receiptUniqueId?.match(/-(\d+)$/)
-        if (m) { const n = parseInt(m[1], 10); if (!isNaN(n) && n > max) max = n }
-      }
-      receiptUniqueId = `${data.receipt}-${max + 1}`
-    }
-    return tx.catalogueLot.create({
-      data: { ...data, auctionId, createdByName, imageUrls, receiptUniqueId },
-      include: { auction: { select: { code: true } } },
-    })
+  // ⚠ NO unique ID is minted at creation (changed 2026-08-06, Jordan's call).
+  // The Hub used to mint a provisional {receipt}-N here under an advisory lock,
+  // but per the real workflow those IDs were placeholders that 🔗 BC Match
+  // overwrote with BC's OWN UniqueIDs after the overnight import anyway — two
+  // numbering systems racing each other for no benefit. receiptUniqueId now
+  // stays NULL until BC Match imports BC's value (bulkAssignUniqueIds, matched
+  // by barcode). The BARCODE is the lot's identifier until then.
+  const lot = await prisma.catalogueLot.create({
+    data: { ...data, auctionId, createdByName, imageUrls, receiptUniqueId: null },
+    include: { auction: { select: { code: true } } },
   })
 
   await logLotCreated(lot, lot.auction?.code ?? "", { changedBy: createdByName, source: "lot_create" })
@@ -1547,21 +1530,10 @@ export async function importLots(auctionId: string, rows: {
   const auctionCode = (await prisma.catalogueAuction.findUnique({ where: { id: auctionId }, select: { code: true } }))?.code ?? ""
   const ctx: LotLogCtx = { changedBy: createdByName, source: "import", batchId: newBatchId() }
 
-  // Seed each receipt base from its highest existing suffix (MAX, not COUNT),
-  // then track in-batch additions. Keyed by UPPERCASE base to match the
-  // per-row receiptBase below — otherwise the lookup misses and restarts at 0.
-  const receiptOffset: Record<string, number> = {}
-  for (const base of [...new Set(rows.map(r => r.receipt?.toUpperCase()).filter(Boolean) as string[])]) {
-    receiptOffset[base] = await maxReceiptSuffix(base)
-  }
-
+  // ⚠ NO unique IDs minted on import (2026-08-06) — they come from 🔗 BC Match
+  // after the lots reach BC, matched by barcode. See createLot.
   for (const r of rows) {
-    const receiptBase = r.receipt ? r.receipt.toUpperCase() : null
-    let receiptUniqueId: string | null = null
-    if (receiptBase) {
-      receiptOffset[receiptBase] = (receiptOffset[receiptBase] ?? 0) + 1
-      receiptUniqueId = `${receiptBase}-${receiptOffset[receiptBase]}`
-    }
+    const receiptUniqueId: string | null = null
 
     const lot = await prisma.catalogueLot.create({
       data: {
@@ -1579,7 +1551,7 @@ export async function importLots(auctionId: string, rows: {
         status:         r.status       || "ENTERED",
         vendor:         r.vendor       || null,
         tote:           r.tote?.toUpperCase() || null,
-        receipt:        receiptBase,
+        receipt:        r.receipt ? r.receipt.toUpperCase() : null,
         receiptUniqueId,
         category:       r.category    || null,
         subCategory:    r.subCategory || null,
@@ -1908,8 +1880,9 @@ export async function massCreateLots(
   }, 0)
 
   const receiptBase = opts.receipt ? opts.receipt.toUpperCase() : null
-  const receiptStart = receiptBase ? await maxReceiptSuffix(receiptBase) : 0
 
+  // ⚠ NO unique IDs minted on mass-create (2026-08-06) — they come from
+  // 🔗 BC Match after the lots reach BC, matched by barcode. See createLot.
   const data = Array.from({ length: opts.count }, (_, i) => ({
     auctionId,
     createdByName,
@@ -1921,7 +1894,7 @@ export async function massCreateLots(
     vendor:          opts.vendor      || null,
     tote:            opts.tote        ? opts.tote.toUpperCase() : null,
     receipt:         receiptBase,
-    receiptUniqueId: receiptBase ? `${receiptBase}-${receiptStart + i + 1}` : null,
+    receiptUniqueId: null as string | null,
     category:        opts.category    || null,
     subCategory:     opts.subCategory || null,
   }))

@@ -28,6 +28,13 @@ function bcBool(v: unknown): boolean {
 // precise location, vendor info, reserve status, catalogued flag.
 // Upserts into WarehouseTote so records created by the totes sync get enriched,
 // and any active totes not yet in the DB are created.
+//
+// ⚠ Receipt_Totes_Excel DROPS a tote the moment it's ticked Catalogued (and a
+// $filter on EVA_TOT_Catalogued is silently ignored — confirmed live
+// 2026-08-06), so this route can never enrich already-catalogued totes.
+// `sync/totes-all` covers those via the eva/tot custom API; this route stays
+// because it's the only source of vendorName and status (the API page carries
+// neither).
 export async function POST(req: NextRequest) {
   if (!await isAuthedOrCron(req)) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 

@@ -319,3 +319,36 @@ export async function bcFetchAllWithProgress(
   }
   return all
 }
+
+// ── Custom API (eva/tot v1.0 — page 76804 EVA_TOT_ReceiptToteAPI) ───────────
+// The Receipt_Totes_Excel ODataV4 web service only publishes totes NOT ticked
+// Catalogued (~1,800 of ~20,500 rows) — BC drops a tote from that feed the
+// moment it's ticked, and a $filter on EVA_TOT_Catalogued is silently ignored
+// (confirmed live 2026-08-06). This custom API page is bound to the SAME
+// EVA_TOT_ReceiptTote table with no filter, so it serves the WHOLE list,
+// catalogued included. Field names are camelCase (toteNo, receiptNo, …), not
+// EVA_TOT_*, and it carries no vendorName — only vendorNo.
+// Company must be addressed by GUID here, not by name like ODataV4.
+const BC_TOT_API_BASE =
+  "https://api.businesscentral.dynamics.com/v2.0/{tenantId}/{environment}/api/eva/tot/v1.0/"
+
+let cachedTotCompanyId: string | null = null
+
+export async function bcTotApiUrl(token: string, entitySet: string): Promise<string> {
+  const root = BC_TOT_API_BASE
+    .replace("{tenantId}",    process.env.BC_TENANT_ID ?? "")
+    .replace("{environment}", process.env.BC_ENVIRONMENT ?? "production")
+  if (!cachedTotCompanyId) {
+    const res = await fetch(`${root}companies`, {
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+      signal:  AbortSignal.timeout(30_000),
+    })
+    if (!res.ok) throw new Error(`BC API companies ${res.status}: ${await res.text()}`)
+    const companies: { id: string; name: string }[] = (await res.json()).value ?? []
+    const wanted  = process.env.BC_COMPANY ?? "Vectis"
+    const company = companies.find(c => c.name === wanted)
+    if (!company) throw new Error(`BC company "${wanted}" not found in API companies list`)
+    cachedTotCompanyId = company.id
+  }
+  return `${root}companies(${cachedTotCompanyId})/${entitySet}`
+}

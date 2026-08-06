@@ -31,6 +31,7 @@ export const AI_TOOLS: AiTool[] = [
   { slot: "catalogue_smart_scan",   group: "Cataloguing",  label: "Smart scan (label detection fallback)", default: "gemini-3-flash-preview" },
   { slot: "catalogue_lot_history",  group: "Cataloguing",  label: "Lot History summary",                  default: "gemini-2.5-flash-preview-04-17", claudeOk: true },
   { slot: "catalogue_lens",         group: "Cataloguing",  label: "Lens (identify an item from a photo)", default: "gemini-3-flash-preview" },
+  { slot: "research_valuation",     group: "Cataloguing",  label: "Valuations (price a customer's photos)", default: "gemini-3-flash-preview" },
   { slot: "catalogue_chat",         group: "Auction AI",   label: "Chat",                                 default: "gemini-3-flash-preview" },
   { slot: "catalogue_chat_grounded",group: "Auction AI",   label: "Chat with Google Search",              default: "gemini-3-flash-preview" },
   // ── BC Marketing ──

@@ -5,7 +5,7 @@ export const maxDuration = 300
 // POST /api/cron/bc-warehouse
 // Called by the server's setInterval scheduler to keep warehouse data fresh.
 // Protected by CRON_SECRET. Runs a full incremental sync sequence:
-// receipt-lines (loop) → auction-lines → changelog → totes → totes-active → auction-names
+// receipt-lines (loop) → auction-lines → changelog → totes → totes-active → totes-all → auction-names
 
 export async function POST(req: NextRequest) {
   const secret = process.env.CRON_SECRET
@@ -86,6 +86,36 @@ export async function POST(req: NextRequest) {
       }
     }
     if (!results.totesActive) results.totesActive = { items: taItems, passes: taPasses }
+  }
+
+  // ── All Receipt Totes (loop until more === false) ───────────────────────────
+  // Receipt_Totes_Excel drops totes once ticked Catalogued, so totes-active can
+  // never enrich them — totes-all walks the eva/tot custom API (same table, no
+  // filter) to keep receipt/vendor/catalogued populated for EVERY tote. Same
+  // cursor threading as totes-active: pass nextLink back in each pass.
+  {
+    let tlMore   = true
+    let tlPasses = 0
+    let tlItems  = 0
+    let tlNext: string | null = null
+    while (tlMore && tlPasses < 200) {
+      try {
+        const res: Response = await fetch(`${base}/api/warehouse/sync/totes-all`, {
+          method: "POST", headers,
+          body:   JSON.stringify({ nextLink: tlNext, maxItems: 5000 }),
+        })
+        const data: any = await res.json().catch(() => ({}))
+        if (!res.ok) { results.totesAll = { error: data.error ?? `HTTP ${res.status}` }; break }
+        tlItems += data.itemsProcessed ?? 0
+        tlMore   = data.more === true
+        tlNext   = data.nextLink ?? null
+        tlPasses++
+      } catch (e: any) {
+        results.totesAll = { error: e.message }
+        break
+      }
+    }
+    if (!results.totesAll) results.totesAll = { items: tlItems, passes: tlPasses }
   }
 
   // ── Auction Names ───────────────────────────────────────────────────────────

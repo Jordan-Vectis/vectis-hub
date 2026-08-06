@@ -8,7 +8,7 @@ export async function GET() {
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
-  const sources = ["receipt_lines", "auction_lines", "changelog", "totes", "totes-active"] as const
+  const sources = ["receipt_lines", "auction_lines", "changelog", "totes", "totes-active", "totes-all"] as const
 
   const [logs, itemCount, toteCount, withCollectionNo, withSizeClassification] = await Promise.all([
     Promise.all(
