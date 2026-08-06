@@ -469,16 +469,32 @@ export async function setLotsVendorReceiptAcrossAuctions(
 // as a side effect of a tidy-up is a separate, deliberate decision — see RULES →
 // Lot Identifiers. Corrected lots will therefore still report "unique_id_mismatch"
 // on the Tote Check tab; that is honest, not a bug.
-export async function autocorrectLotsFromTotes(auctionId: string): Promise<{
+// One planned (or applied) fix from the tote autocorrect — what changes on
+// which lot, so the End of Day button can SHOW the work before doing it.
+export type AutocorrectChange = {
+  barcode: string | null
+  uniqueId: string | null
+  tote: string | null
+  sale?: string
+  oldReceipt?: string | null; newReceipt?: string | null
+  oldVendor?: string | null;  newVendor?: string | null
+  vendorName?: string | null   // the tote's vendor name, for readable previews
+  wasWrong: boolean            // true = a value changes (BC correction); false = a blank being filled
+}
+
+export async function autocorrectLotsFromTotes(auctionId: string, apply: boolean = true): Promise<{
   ok: boolean
   error?: string
   updated?: number
   corrections?: number
   skipped?: number
+  changes?: AutocorrectChange[]
 }> {
   try {
     const session = await requireCataloguer()
     // Same rule as everywhere else: an auction that's gone to BC is admin-only.
+    // Checked in preview mode too — a preview promising fixes that apply would
+    // then refuse is worse than reporting the sale as locked up front.
     await requireNotBCLocked(auctionId, session)
 
     const lots = await prisma.catalogueLot.findMany({
@@ -501,6 +517,7 @@ export async function autocorrectLotsFromTotes(auctionId: string): Promise<{
 
     const ctx: LotLogCtx = { changedBy: changedByOf(session), source: "tote_autocorrect", batchId: newBatchId() }
     let updated = 0, corrections = 0, skipped = 0
+    const changes: AutocorrectChange[] = []
 
     for (const lot of lots) {
       const { issues, tote } = checkLot(lot, toteMap)
@@ -520,6 +537,16 @@ export async function autocorrectLotsFromTotes(auctionId: string): Promise<{
       // Only a WRONG value means BC needs putting right. A blank one was never
       // pushed as anything, so filling it in isn't a BC correction.
       const wasWrong = issues.includes("receipt_mismatch") || issues.includes("vendor_mismatch")
+
+      changes.push({
+        barcode: lot.barcode, uniqueId: lot.receiptUniqueId, tote: lot.tote,
+        ...(data.receipt ? { oldReceipt: lot.receipt, newReceipt: data.receipt } : {}),
+        ...(data.vendor  ? { oldVendor:  lot.vendor,  newVendor:  data.vendor  } : {}),
+        vendorName: tote.vendorName, wasWrong,
+      })
+
+      // Preview mode stops here — same plan, nothing written.
+      if (!apply) { updated++; if (wasWrong) corrections++; continue }
 
       await updateLotLogged(lot.id, data, ctx)
       updated++
@@ -549,8 +576,8 @@ export async function autocorrectLotsFromTotes(auctionId: string): Promise<{
       }
     }
 
-    revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
-    return { ok: true, updated, corrections, skipped }
+    if (apply) revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+    return { ok: true, updated, corrections, skipped, changes }
   } catch (e: any) {
     // Returned, not thrown — production redacts a thrown server action's message
     // and the BC lock message is one the user needs to read (RULES).
@@ -674,26 +701,181 @@ export async function massRemapPendingLots(
 // tab (and the End of Day checks, which share lib/tote-check.ts) report.
 // A BC-locked sale fails ITS OWN call for non-admins and is reported as
 // skipped; the rest still get fixed.
-export async function autocorrectLotsForAuctions(auctionIds: string[]): Promise<{
+export async function autocorrectLotsForAuctions(auctionIds: string[], apply: boolean = true): Promise<{
   ok: boolean
   error?: string
   updated: number
   corrections: number
   skipped: number
   lockedSales: number
+  changes: AutocorrectChange[]
 }> {
   let updated = 0, corrections = 0, skipped = 0, lockedSales = 0
+  const changes: AutocorrectChange[] = []
   try {
-    for (const id of [...new Set(auctionIds)].filter(Boolean)) {
-      const res = await autocorrectLotsFromTotes(id)
+    const ids = [...new Set(auctionIds)].filter(Boolean)
+    const codes = ids.length
+      ? new Map((await prisma.catalogueAuction.findMany({
+          where: { id: { in: ids } }, select: { id: true, code: true },
+        })).map(a => [a.id, a.code]))
+      : new Map<string, string>()
+    for (const id of ids) {
+      const res = await autocorrectLotsFromTotes(id, apply)
       if (!res.ok) { lockedSales++; continue }
       updated     += res.updated     ?? 0
       corrections += res.corrections ?? 0
       skipped     += res.skipped     ?? 0
+      for (const c of res.changes ?? []) changes.push({ ...c, sale: codes.get(id) ?? "" })
     }
-    return { ok: true, updated, corrections, skipped, lockedSales }
+    return { ok: true, updated, corrections, skipped, lockedSales, changes }
   } catch (e: any) {
-    return { ok: false, error: e?.message ?? "Couldn't correct the lots", updated, corrections, skipped, lockedSales }
+    return { ok: false, error: e?.message ?? "Couldn't correct the lots", updated, corrections, skipped, lockedSales, changes }
+  }
+}
+
+// End of Day check panels — "Ignore this warning". For flags the team KNOWS
+// are stale (usually the BC sync hasn't caught up), a lot + check-type pair
+// can be filed under "ignored" so the panels show live problems only. The
+// check itself still runs and nothing on the lot changes; fully reversible
+// via restoreEodChecks. Stored in the DB so it survives refreshes and every
+// admin sees the same picture. duplicate_barcode is never ignorable (it
+// changes what goes on the sheet) — the page doesn't offer it and the API
+// keeps enforcing it server-side when building the panels.
+export async function dismissEodChecks(pairs: { lotId: string; checkKey: string }[]): Promise<{ ok: boolean; error?: string; count?: number }> {
+  try {
+    const session = await requireCataloguer()
+    const clean = pairs.filter(p => p.lotId && p.checkKey && p.checkKey !== "duplicate_barcode").slice(0, 400)
+    if (!clean.length) return { ok: false, error: "Nothing ticked to ignore." }
+    await prisma.$transaction(clean.map(p => prisma.eodCheckDismissal.upsert({
+      where:  { lotId_checkKey: { lotId: p.lotId, checkKey: p.checkKey } },
+      create: { lotId: p.lotId, checkKey: p.checkKey, dismissedBy: changedByOf(session) },
+      update: {},
+    })))
+    return { ok: true, count: clean.length }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Couldn't ignore those warnings" }
+  }
+}
+
+// End of Day → BC "BC Match (all sales)": the overnight macro puts every Hub
+// sale's lots into ONE BC sale, so the morning's BC Lines export spans several
+// Hub sales at once. This matches the export's rows to Hub lots BY BARCODE
+// across every NON-COMPLETE sale, compares receipts (same rule as the per-sale
+// 🔗 BC Match in Auction Manager: only a row whose receipt AGREES imports), and
+// on apply loops the existing per-sale `bulkAssignUniqueIds` — the ONE
+// UniqueID-import choke-point — grouped by auction. BC-locked sales fail their
+// own call for non-admins and are counted, the rest proceed.
+export type EodMatchRow = {
+  barcode: string
+  bcReceipt: string
+  bcUniqueId: string
+  ourReceipt: string | null
+  ourUniqueId: string | null
+  sale: string
+  status: "match" | "mismatch" | "not_found"
+}
+
+const MAX_MATCH_ROWS = 10_000
+
+export async function matchBcLinesAcrossAuctions(
+  rows: { barcode: string; bcReceipt: string; bcUniqueId: string }[],
+  apply: boolean,
+): Promise<{
+  ok: boolean
+  error?: string
+  counts: { match: number; mismatch: number; notFound: number; pendingNotInExport: number }
+  rows: EodMatchRow[]            // capped for display — counts are the truth
+  pendingNotInExport: { barcode: string; sale: string }[]
+  updated: number
+  skipped: number
+  lockedSales: number
+}> {
+  const empty = { counts: { match: 0, mismatch: 0, notFound: 0, pendingNotInExport: 0 }, rows: [], pendingNotInExport: [], updated: 0, skipped: 0, lockedSales: 0 }
+  try {
+    await requireCataloguer()
+    if (!rows.length)                 return { ok: false, error: "The export has no rows.", ...empty }
+    if (rows.length > MAX_MATCH_ROWS) return { ok: false, error: `Too many rows — ${MAX_MATCH_ROWS.toLocaleString()} at most per upload.`, ...empty }
+
+    const lots = await prisma.catalogueLot.findMany({
+      where:  { auction: { complete: false }, barcode: { not: null } },
+      select: {
+        id: true, auctionId: true, barcode: true, receipt: true, receiptUniqueId: true,
+        auction: { select: { code: true } },
+      },
+    })
+    const byBarcode = new Map(lots.map(l => [l.barcode!.toLowerCase().trim(), l]))
+
+    const resultRows: EodMatchRow[] = []
+    const matchedBarcodes = new Set<string>()
+    const counts = { match: 0, mismatch: 0, notFound: 0, pendingNotInExport: 0 }
+    const toApply = new Map<string, { barcode: string; uniqueId: string }[]>()   // auctionId → pairs
+
+    for (const r of rows) {
+      const key = r.barcode.toLowerCase().trim()
+      if (!key) continue
+      const lot = byBarcode.get(key)
+      if (!lot) {
+        counts.notFound++
+        resultRows.push({ barcode: r.barcode, bcReceipt: r.bcReceipt, bcUniqueId: r.bcUniqueId, ourReceipt: null, ourUniqueId: null, sale: "", status: "not_found" })
+        continue
+      }
+      matchedBarcodes.add(key)
+      const receiptAgrees = (lot.receipt ?? "").trim().toUpperCase() === r.bcReceipt.trim().toUpperCase()
+      const status = receiptAgrees ? "match" as const : "mismatch" as const
+      counts[status]++
+      resultRows.push({
+        barcode: r.barcode, bcReceipt: r.bcReceipt, bcUniqueId: r.bcUniqueId,
+        ourReceipt: lot.receipt, ourUniqueId: lot.receiptUniqueId,
+        sale: lot.auction?.code ?? "", status,
+      })
+      if (status === "match" && r.bcUniqueId.trim()) {
+        if (!toApply.has(lot.auctionId)) toApply.set(lot.auctionId, [])
+        toApply.get(lot.auctionId)!.push({ barcode: r.barcode, uniqueId: r.bcUniqueId })
+      }
+    }
+
+    // The other direction: lots still waiting for a Unique ID whose barcode the
+    // export doesn't cover — i.e. what this run did NOT bring back from BC.
+    const pendingNotInExport = lots
+      .filter(l => !l.receiptUniqueId && !matchedBarcodes.has(l.barcode!.toLowerCase().trim()))
+      .map(l => ({ barcode: l.barcode!, sale: l.auction?.code ?? "" }))
+    counts.pendingNotInExport = pendingNotInExport.length
+
+    let updated = 0, skipped = 0, lockedSales = 0
+    if (apply) {
+      for (const [auctionId, pairs] of toApply) {
+        try {
+          const res = await bulkAssignUniqueIds(auctionId, pairs)
+          updated += res.updated
+          skipped += res.skipped
+        } catch {
+          lockedSales++
+        }
+      }
+    }
+
+    return {
+      ok: true, counts,
+      rows: resultRows.slice(0, 1000),
+      pendingNotInExport: pendingNotInExport.slice(0, 500),
+      updated, skipped, lockedSales,
+    }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Couldn't match the export", ...empty }
+  }
+}
+
+export async function restoreEodChecks(pairs: { lotId: string; checkKey: string }[]): Promise<{ ok: boolean; error?: string; count?: number }> {
+  try {
+    await requireCataloguer()
+    const clean = pairs.filter(p => p.lotId && p.checkKey).slice(0, 400)
+    if (!clean.length) return { ok: false, error: "Nothing to restore." }
+    const res = await prisma.eodCheckDismissal.deleteMany({
+      where: { OR: clean.map(p => ({ lotId: p.lotId, checkKey: p.checkKey })) },
+    })
+    return { ok: true, count: res.count }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Couldn't restore those warnings" }
   }
 }
 

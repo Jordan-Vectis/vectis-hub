@@ -1278,6 +1278,17 @@ const MIGRATIONS = [
     "updatedAt"  TIMESTAMP(3) NOT NULL DEFAULT NOW(),
     CONSTRAINT "AiModelRate_pkey" PRIMARY KEY ("modelId")
   )`,
+  // End of Day → BC: per-lot, per-check "ignore this warning" (stale-sync
+  // false flags). Report-only and reversible from the page.
+  `CREATE TABLE IF NOT EXISTS "EodCheckDismissal" (
+    "id"          TEXT NOT NULL,
+    "lotId"       TEXT NOT NULL,
+    "checkKey"    TEXT NOT NULL,
+    "dismissedBy" TEXT,
+    "dismissedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "EodCheckDismissal_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "EodCheckDismissal_lotId_checkKey_key" ON "EodCheckDismissal"("lotId", "checkKey")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

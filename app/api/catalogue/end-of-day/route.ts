@@ -42,6 +42,9 @@ type CheckLot = {
   id: string; auctionId: string; barcode: string; uniqueId: string; tote: string; receipt: string
   vendor: string; sale: string; cataloguedBy: string
   bcReceipt?: string; bcVendor?: string; totes?: string[]
+  // Vendor NAMES for both sides of a mismatch — non-technical readers
+  // shouldn't have to decode C-numbers to see who disagrees with whom.
+  vendorName?: string; bcVendorName?: string
 }
 
 export async function GET(req: NextRequest) {
@@ -143,7 +146,10 @@ export async function GET(req: NextRequest) {
       const { issues, tote } = checkLot(l, toteMap)
       for (const issue of issues) {
         if (issue === "no_tote") continue
-        addCheck(issue, asCheckLot(l, { bcReceipt: tote?.receiptNo ?? "", bcVendor: tote?.vendorNo ?? "" }))
+        addCheck(issue, asCheckLot(l, {
+          bcReceipt: tote?.receiptNo ?? "", bcVendor: tote?.vendorNo ?? "",
+          bcVendorName: tote?.vendorName ?? "",
+        }))
       }
     }
 
@@ -168,6 +174,44 @@ export async function GET(req: NextRequest) {
     for (const l of ready) {
       if (!isBarcode(clean(l.barcode!))) addCheck("invalid_barcode", asCheckLot(l))
     }
+
+    // Fill in vendor NAMES on the check rows (both the lot's vendor and BC's)
+    // from the synced items — the tote side usually arrived with its name
+    // above; this covers the lot side and any gaps. Best-effort: an unnamed
+    // vendor just shows as its C-number.
+    const checkVendorNos = new Set<string>()
+    for (const rows of checkMap.values()) for (const r of rows) {
+      if (r.vendor) checkVendorNos.add(r.vendor)
+      if (r.bcVendor && !r.bcVendorName) checkVendorNos.add(r.bcVendor)
+    }
+    if (checkVendorNos.size) {
+      const named = await prisma.warehouseItem.findMany({
+        where:    { vendorNo: { in: variants([...checkVendorNos]) }, vendorName: { not: null } },
+        select:   { vendorNo: true, vendorName: true },
+        distinct: ["vendorNo"],
+      })
+      const nameByNo = new Map(named.map(v => [norm(v.vendorNo), v.vendorName!]))
+      for (const rows of checkMap.values()) for (const r of rows) {
+        if (r.vendor && !r.vendorName)     r.vendorName   = nameByNo.get(norm(r.vendor))   ?? ""
+        if (r.bcVendor && !r.bcVendorName) r.bcVendorName = nameByNo.get(norm(r.bcVendor)) ?? ""
+      }
+    }
+
+    // Ignored warnings — stored dismissals (per lot + check type) file a row
+    // under "ignored" instead of the live panel, for flags the team knows are
+    // stale. Migration-safe: before the table exists, nothing is ignored.
+    // duplicate_barcode is never ignorable — it changes what goes on the sheet.
+    let dismissed = new Set<string>()
+    try {
+      const allIds = [...new Set([...checkMap.values()].flat().map(r => r.id))]
+      if (allIds.length) {
+        const rows = await prisma.eodCheckDismissal.findMany({
+          where:  { lotId: { in: allIds } },
+          select: { lotId: true, checkKey: true },
+        })
+        dismissed = new Set(rows.map(r => `${r.lotId}::${r.checkKey}`))
+      }
+    } catch { dismissed = new Set() }
 
     // When the tote table was last refreshed — an "unknown tote" pile with a
     // stale sync reads as "sync first", not "94 mistakes".
@@ -207,7 +251,12 @@ export async function GET(req: NextRequest) {
       readyCount: ready.length,
       totes,
       sales: [...bySale.values()].sort((a, b) => a.code.localeCompare(b.code)),
-      checks: [...checkMap.entries()].map(([key, rows]) => ({ key, count: rows.length, lots: rows.slice(0, 300) })),
+      checks: [...checkMap.entries()].map(([key, rows]) => {
+        const ignorable = key !== "duplicate_barcode"
+        const active    = ignorable ? rows.filter(r => !dismissed.has(`${r.id}::${key}`)) : rows
+        const ignored   = ignorable ? rows.filter(r =>  dismissed.has(`${r.id}::${key}`)) : []
+        return { key, count: active.length, lots: active.slice(0, 300), ignored: ignored.slice(0, 300), ignoredCount: ignored.length }
+      }).filter(c => c.count > 0 || c.ignoredCount > 0),
       noBarcode: noBarcode.map(l => ({
         id: l.id, auctionId: l.auction?.id ?? "", uniqueId: l.receiptUniqueId ?? "", tote: l.tote ?? "",
         sale: l.auction?.code ?? "", title: l.title, cataloguedBy: l.createdByName ?? "",
