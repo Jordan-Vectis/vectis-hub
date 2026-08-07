@@ -67,7 +67,7 @@ At the end of each day, generate the sheet the overnight "add to BC" run works t
 
 ## How it works
 
-- **API \`GET /api/catalogue/end-of-day\`** (CATALOGUING app access): all \`CatalogueLot\`s in **non-complete sales** (\`?includeComplete=1\` widens), checked against the synced \`WarehouseItem\` data — **barcode first, \`receiptUniqueId\` ↔ \`uniqueId\` fallback, case-insensitive via the variants trick** (Prisma \`in\` is case-sensitive). ⚠ Deliberately NOT \`CatalogueLot.addedToBC\` — same reasoning (and same measurement) as the Admin Centre.
+- **API \`GET /api/catalogue/end-of-day\`** (CATALOGUING app access): all \`CatalogueLot\`s in **non-complete sales** (\`?includeComplete=1\` widens), checked against the synced \`WarehouseItem\` data, case-insensitive via the variants trick (Prisma \`in\` is case-sensitive). ⚠ Deliberately NOT \`CatalogueLot.addedToBC\` — same reasoning (and same measurement) as the Admin Centre. ⚠⚠ **In-BC = BARCODE ONLY (Jordan's explicit rule, 2026-08-07: "unique ids shouldn't be used for any sort of matching")** — the uniqueId fallback was removed entirely, not just narrowed. It used to be an OR across both fields, and **legacy Hub-minted provisional IDs ({receipt}-N, pre-2026-08-06) collide with BC's own numbering for OTHER items** (F121276 carried R009332-1 = BC's F114104), so **292 pending lots across 10 sales were silently counted "already in BC" and kept off the sheet** (F121 read 132 of 184). Never re-add any uniqueId matching here (rule also in RULES.md Lot Identifiers); the stale minted uids stay on the lots until 🔗 BC Match overwrites them. A barcode-less lot lands in the no-barcode problem panel regardless.
 - **Output = the hotkey sheet, exactly**: CSV \`ToteNumber,LotCount,Barcodes\` (pipe-separated), CRLF — the same shape **BC Import Check** reads AND writes, so a broken overnight run reconciles there and re-runs. Filename \`bc-import-YYYY-MM-DD.csv\`. Download + copy-to-clipboard.
 - Barcodes **deduped within a tote** (a duplicate Hub lot must not create the BC line twice). Totes sorted numerically.
 - **Nothing is silently dropped**: lots with **no tote** or **no barcode** can't go on a tote/barcode sheet — they're listed in amber problem panels (fix via Manage Lots → Change Vendor). Per-sale chips show where lots come from; a completed sale contributing lots shows amber.
@@ -109,6 +109,7 @@ Two collapsible panels at the bottom of the page, plus a refresh-behaviour chang
 - **🩹 Import Check** — the SAME engine as Auction AI → BC Import Check, extracted to **\`lib/bc-import-sheets.ts\`** (readSheet/parseHotkeySheet/parseBcLinesExport/reconcileImport/buildHotkeyCsv — ⚠ ONE copy, both UIs import it; the Auction AI tab kept its dark styling, the End of Day panel is dual-theme). Extra convenience: "📄 Use tonight's sheet shown above" feeds \`data.totes\` as the hotkey side (tooltip warns: if a Data Sync ran since, upload the file that actually ran).
 - **🔗 BC Match (all sales)** — the BC Lines export spans several Hub sales, so the per-sale AM modal can't take it. Action **\`matchBcLinesAcrossAuctions(rows, apply)\`**: client parses via \`parseBcLinesForMatch\` (Internal Barcode / Receipt No. / UniqueID), server matches by barcode across every NON-complete sale, **same rule as the AM modal: only a row whose receipt AGREES imports**; apply groups by auction and loops the per-sale **\`bulkAssignUniqueIds\`** (the ONE UniqueID-import choke-point — never import IDs any other way). Cap 10,000 rows; display lists capped (1,000 / 500), counts are the truth. Filter tiles: Ready to import / Receipt disagrees / Not in the Hub / **Didn't come back** (pending lots the export doesn't cover). BC-locked sales fail their own call and are counted.
 - **⚠ NO auto-refresh (Jordan's explicit call)** — after any apply/import/remap the page does NOT reload; it sets \`stale\`: amber banner + the ⟳ Refresh button turns amber/pulses. The heavy check suite re-runs only on the button. **Exception:** Ignore/Restore move rows locally (\`moveIgnored\`) — instant. Don't re-add auto \`load()\` calls after actions.
+- **Refresh feedback (2026-08-07)** — button shows "⟳ Pulling the lots in…" while loading, flashes green "✓ Refreshed" 2.5s; live readout underneath: "📥 Lots last pulled: 16:42 · 5m ago" (\`generatedAt\` via \`fmtPulled\`) + "🔄 BC data last synced" (\`toteLastSync\`), re-rendered each minute by an age tick.
 
 ## Registration
 
@@ -736,7 +737,13 @@ The on-screen popup works out "is it 9–5" from the PHONE's clock. He's believe
 - Gate hardening: a covering idle log must cover ≥ half the gap to clear; the ">=8h day off" skip only applies across a real day boundary.
 - (Earlier same-day pass, still valid: createLot always writes the timing log; timer starts on barcode onFocus; reports ignore durationMs=0 for speed.)
 
-The decision log is the point: once on production it will show exactly what his phone reports at each save.`,
+The decision log is the point: once on production it will show exactly what his phone reports at each save.
+
+## ⚠ Within-lot checks are server-confirmed too (added 2026-08-07 — the Kathy false "2h away" popup)
+
+Kathy Taylor got a "2h+ away" popup at 16:52 on 2026-08-06 while saving lots every few minutes. Production data proved no server involvement (no IdleGateDecision block, no IdleLog at that time) — the popup came from a **stale page instance** (second device/tab with the sale open mid-lot): the two WITHIN-LOT checks in lot-wizard-tab.tsx (\`checkWithinLotIdle\`, \`maybePromptIdleBeforeSave\`) measured "how long since THIS PAGE was touched" from in-memory refs, blind to work in another tab (the wizard stays **mounted-hidden** on tab switch in both auction-tabs and tablet-tabs), another device, or the native camera. Refresh clears it because the refs die with the page — **a popup with no matching IdleGateDecision/IdleLog row is a device-local false positive.**
+
+Fix: same pattern checkIdleOnLotStart always had — the local measure only decides WHEN to ask; \`confirmIdleWithServer()\` hits /api/catalogue/last-activity (→ evaluateIdleGate) and the popup opens only on "prompt", using the SERVER's figures. "fine" → re-baseline (the save path clears pendingSaveRef and resumes performSave itself). Offline → old device-local behaviour (create-lot gate still backstops). **Never raise the within-lot popup from local refs alone again.** The Resume (draft) button is safe by design — timing starts fresh + it runs the server-based lot-start check. ⚠ Jack owns this file's idle code — fix made on Jordan's instruction; coordinate on conflicts.`,
   },
   {
     filename: "report_day_exclusion.md",
@@ -1154,34 +1161,18 @@ Adding "🧾 Vendor / Tote Check" tipped the strip into overflow and drew a scro
   {
     filename: "lot_wizard_resume.md",
     content: `---
-name: Lot Wizard — Resume an unfinished lot
-purpose: The server-side draft that lets a cataloguer pick up a lot they were kicked out of. Read before touching wizard state or the draft.
-last_updated: 2026-07-31
+name: Lot Wizard — Resume an unfinished lot (REMOVED)
+purpose: Record that the Resume/draft feature was deliberately removed. Read before considering anything draft-shaped in the wizard.
+last_updated: 2026-08-07
 ---
 
-# Resume an unfinished lot (built 2026-07-31)
+# Resume an unfinished lot — REMOVED (2026-08-07)
 
-Everything typed into the Lot Wizard lived in React state, so being kicked out or closing the page lost the whole lot. Only Vendor / Tote / Receipt survived (already saved on the user's account by \`saveLastLotFields\`). The in-progress lot is now **autosaved to the server** and offered back with an amber **"↩ You have an unfinished lot"** banner.
+**Jordan had the whole feature removed** ("it seems very buggy") on 2026-08-07, a week after it was built (2026-07-31). Stripped out of \`lot-wizard-tab.tsx\`: the \`draftOffer\` state + amber "↩ You have an unfinished lot" banner, the debounced autosave, \`resumeDraft\`/\`discardDraft\`, and the post-save clear; the three server actions (\`saveLotDraft\`/\`getLotDraft\`/\`clearLotDraft\` + \`LotDraftFields\`) were deleted from \`lib/actions/catalogue.ts\`. Removal comments mark both sites.
 
-**Server-side rather than localStorage (Jordan's choice):** it has to survive picking up a *different* iPad, a sign-out, or a wiped browser.
+**What remains:** the \`CatalogueLotDraft\` table and its migration SQL (migrations are append-only; the table sits inert with old rows). The wizard is back to pre-2026-07-31 behaviour: a crash or closed page loses the in-progress lot; only Tote/Vendor/Receipt survive (per-account \`saveLastLotFields\`).
 
-- **Table \`CatalogueLotDraft\`** — one row per **user per sale** (\`@@unique([auctionId, userId])\`), **NEEDS Run Migrations**. Holds the step plus every wizard field. Estimates are stored as **TEXT** so a half-typed "1,2" comes back exactly as typed.
-- **Actions in \`lib/actions/catalogue.ts\`:** \`saveLotDraft\` / \`getLotDraft\` / \`clearLotDraft\`. ⚠ All three **swallow their errors** (silent no-op / null) — a draft is a convenience and must never interrupt cataloguing, and the table only exists once Run Migrations has been clicked while the code reaches Railway instantly (same reasoning as departments). \`userId\` always comes from the session, never a parameter.
-- **Autosave** is debounced 1200ms in \`lot-wizard-tab.tsx\`, held back until the initial load finishes so an empty wizard can't overwrite the draft it is about to offer. Emptying the wizard deletes the row; a successful save clears it.
-
-## ⚠ Photos are NOT saved
-
-They're camera \`File\` objects and can't go in the row. Only \`photoCount\` is stored, so the banner can say "The 3 photos you had taken were not saved — you'll need to take them again." Jordan asked for that wording specifically. Restoring photos would mean uploading each to R2 as an orphan plus a cleanup job — deliberately not built.
-
-## ⚠ Timing starts fresh on resume
-
-\`resumeDraft()\` calls \`startLotTiming()\` / \`startLotTimerDisplay()\` — it does **not** restore the draft's original start time. Restoring it would report a lot that took all night and poison the performance reports. The gap itself isn't lost: the server-side idle gate still measures from the last **saved** lot.
-
-## Why a banner, not a blocking modal
-
-Ignoring it leaves the draft untouched, so nothing is lost by accident — a modal would force Resume/Discard even when someone opens the sale on a desktop while their real work sits on an iPad. While the banner is up, **autosave is suppressed** so the offer can't be overwritten; it clears on Resume, Discard, or saving a lot.
-
-Desktop and tablet share the same \`LotWizardTab\`, and both parents keep it **mounted** (\`className="hidden"\`), so switching tabs mid-lot does not re-trigger the banner — it only appears on a genuine page load.`,
+**Do not rebuild this without discussing it with Jordan.** The removed design, for the record: one draft row per user per sale, server-side (survives switching iPads), photos deliberately excluded (count only + "you'll need to take them again" warning), banner-not-modal, timing restarted fresh on resume.`,
   },
   {
     filename: "lot_wizard_warnings.md",
