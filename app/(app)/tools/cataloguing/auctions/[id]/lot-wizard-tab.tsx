@@ -1052,13 +1052,23 @@ export default function LotWizardTab({
     if (short) { setStep1LengthWarning(true); return }   // its "Continue anyway" resumes via afterStartChecks
     afterStartChecks()
   }
-  // "Change Tote / Vendor" — wipe the tote/vendor/receipt for a clean re-entry, then
-  // go back to step 1. `locked` is kept so switching still asks for confirmation and
-  // the modal can show what you're moving away from.
-  function changeVendor() {
+  // Empty the tote/vendor/receipt trio and everything derived from them (the BC
+  // tote match, the vendor name hint, the "use anyway" override, the warnings).
+  // ⚠ Shared by the step-1 "Clear vendor details" button and "Change Tote /
+  // Vendor" so the two can't drift — a half-cleared form is how a lot ends up
+  // saved against the previous vendor.
+  // `locked` is deliberately NOT cleared: switching batch must still go through
+  // the confirmation, which needs to show what you're moving away from.
+  function clearVendorFields() {
     setTote(""); setVendor(""); setReceipt("")
     setToteInfo(null); setToteResults([]); setToteOpen(false); setToteIgnored(false); setVendorHint(null)
     setStep1LengthWarning(false); setValidErr("")
+  }
+
+  // "Change Tote / Vendor" — wipe the trio for a clean re-entry, then go back to
+  // step 1.
+  function changeVendor() {
+    clearVendorFields()
     // Stop the blue lot timer while back on the Vendor & Tote step — there's no
     // barcode being catalogued here, so it shouldn't be counting.
     lotTimerStartedAt.current = null
@@ -1638,7 +1648,22 @@ export default function LotWizardTab({
 
         {step === 1 && (
           <div className="max-w-lg space-y-4">
-            <p className="text-xs text-gray-600 dark:text-gray-500">Type or scan the tote — the vendor &amp; receipt fill in automatically. Press <span className="font-semibold" style={{ color: CAT_ACCENT }}>Start cataloguing</span> to lock them in for the batch (they&apos;re remembered next time too).</p>
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-xs text-gray-600 dark:text-gray-500">Type or scan the tote — the vendor &amp; receipt fill in automatically. Press <span className="font-semibold" style={{ color: CAT_ACCENT }}>Start cataloguing</span> to lock them in for the batch (they&apos;re remembered next time too).</p>
+              {/* One button to empty all three boxes — the tablet cataloguers change
+                  vendor often and were clearing each field on its own. */}
+              {(tote || vendor || receipt) && (
+                <button
+                  type="button"
+                  onClick={clearVendorFields}
+                  title="Empty the tote, vendor and receipt boxes"
+                  className={`flex-shrink-0 font-semibold rounded border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-[#2C2C2E] text-gray-600 dark:text-gray-400 hover:border-red-500 hover:text-red-400 transition-colors ${tablet ? "px-5 py-3 text-base" : "px-3 py-1.5 text-xs"}`}
+                  style={{ touchAction: tablet ? "manipulation" : undefined }}
+                >
+                  ✕ Clear vendor details
+                </button>
+              )}
+            </div>
             <div>
               <label className={`${lbl} block mb-1`}>Tote Number <span className="text-red-500">*</span></label>
               <div className="relative">

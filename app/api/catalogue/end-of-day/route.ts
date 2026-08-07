@@ -41,7 +41,9 @@ export type EodCheckKey = ToteCheckIssue | "receipt_not_in_bc" | "duplicate_barc
 type CheckLot = {
   id: string; auctionId: string; barcode: string; uniqueId: string; tote: string; receipt: string
   vendor: string; sale: string; cataloguedBy: string
-  bcReceipt?: string; bcVendor?: string; totes?: string[]
+  bcReceipt?: string; bcVendor?: string
+  // duplicate_barcode only: the conflicting receipts the barcode appears under
+  dupGroups?: string[]
   // Vendor NAMES for both sides of a mismatch — non-technical readers
   // shouldn't have to decode C-numbers to see who disagrees with whom.
   vendorName?: string; bcVendorName?: string
@@ -96,12 +98,15 @@ export async function GET(req: NextRequest) {
 
     const pending = lots.filter(l => !inBc(l))
 
-    // The macro's sheet is keyed on tote and driven by barcode — a lot missing
-    // either can't go on it and is reported separately for fixing, never
-    // silently dropped.
+    // The macro's sheet is keyed on RECEIPT and driven by barcode (corrected
+    // 2026-08-07 — Jordan: the macro works receipt-by-receipt in BC; the tote
+    // grouping was inherited from the old Import Check sheets and was wrong).
+    // A lot missing either can't go on it and is reported separately for
+    // fixing, never silently dropped. A missing TOTE no longer blocks the
+    // sheet — it only limits what the tote checks can verify.
     const noBarcode = pending.filter(l => !l.barcode)
-    const noTote    = pending.filter(l => l.barcode && !l.tote?.trim())
-    let   ready     = pending.filter(l => l.barcode && l.tote?.trim())
+    const noReceipt = pending.filter(l => l.barcode && !l.receipt?.trim())
+    let   ready     = pending.filter(l => l.barcode && l.receipt?.trim())
 
     // ── Checks ───────────────────────────────────────────────────────────────
     const asCheckLot = (l: (typeof ready)[number], extra?: Partial<CheckLot>): CheckLot => ({
@@ -115,27 +120,28 @@ export async function GET(req: NextRequest) {
       checkMap.get(key)!.push(lot)
     }
 
-    // 1. One barcode in two different totes — one of them is wrong, and running
-    //    it would create the BC line on the wrong receipt. The ONLY check that
-    //    pulls lots off the sheet (visibly, never silently).
-    const toteByBarcode = new Map<string, Set<string>>()
+    // 1. One barcode under two different RECEIPTS — one of them is wrong, and
+    //    running it would create the BC line on the wrong receipt. The ONLY
+    //    check that pulls lots off the sheet (visibly, never silently).
+    const receiptsByBarcode = new Map<string, Set<string>>()
     for (const l of ready) {
       const b = l.barcode!.trim().toUpperCase()
-      if (!toteByBarcode.has(b)) toteByBarcode.set(b, new Set())
-      toteByBarcode.get(b)!.add(l.tote!.trim().toUpperCase())
+      if (!receiptsByBarcode.has(b)) receiptsByBarcode.set(b, new Set())
+      receiptsByBarcode.get(b)!.add(l.receipt!.trim().toUpperCase())
     }
-    const dupBarcodes = new Set([...toteByBarcode.entries()].filter(([, t]) => t.size > 1).map(([b]) => b))
+    const dupBarcodes = new Set([...receiptsByBarcode.entries()].filter(([, r]) => r.size > 1).map(([b]) => b))
     if (dupBarcodes.size > 0) {
       for (const l of ready) {
         const b = l.barcode!.trim().toUpperCase()
-        if (dupBarcodes.has(b)) addCheck("duplicate_barcode", asCheckLot(l, { totes: [...toteByBarcode.get(b)!] }))
+        if (dupBarcodes.has(b)) addCheck("duplicate_barcode", asCheckLot(l, { dupGroups: [...receiptsByBarcode.get(b)!] }))
       }
       ready = ready.filter(l => !dupBarcodes.has(l.barcode!.trim().toUpperCase()))
     }
 
     // 2. Same verification as the Tote Check tab — shared checkLot(), so this
-    //    page can never disagree with it. (no_tote can't fire here — ready
-    //    lots all have totes — and stays handled by the noTote list above.)
+    //    page can never disagree with it. no_tote is a real (amber) check now
+    //    the sheet is receipt-keyed: a tote-less lot still goes on the sheet,
+    //    it just can't be verified against the BC tote data.
     const bcTotes = ready.length
       ? await prisma.warehouseTote.findMany({
           where:  { toteNo: { in: toteLookupVariants(ready) } },
@@ -146,7 +152,6 @@ export async function GET(req: NextRequest) {
     for (const l of ready) {
       const { issues, tote } = checkLot(l, toteMap)
       for (const issue of issues) {
-        if (issue === "no_tote") continue
         addCheck(issue, asCheckLot(l, {
           bcReceipt: tote?.receiptNo ?? "", bcVendor: tote?.vendorNo ?? "",
           bcVendorName: tote?.vendorName ?? "",
@@ -218,21 +223,23 @@ export async function GET(req: NextRequest) {
     // stale sync reads as "sync first", not "94 mistakes".
     const lastToteSync = await prisma.warehouseTote.aggregate({ _max: { syncedAt: true } })
 
-    // ── Group by tote ────────────────────────────────────────────────────────
-    // Barcodes deduped within a tote (a duplicate Hub lot must not make the
+    // ── Group by RECEIPT ─────────────────────────────────────────────────────
+    // One row per receipt — the macro opens each receipt in BC once and works
+    // through its barcodes (a receipt spanning several totes is ONE row).
+    // Barcodes deduped within a receipt (a duplicate Hub lot must not make the
     // macro create the line twice).
-    const byTote = new Map<string, { tote: string; barcodes: string[]; seen: Set<string>; sales: Set<string> }>()
+    const byReceipt = new Map<string, { receipt: string; barcodes: string[]; seen: Set<string>; sales: Set<string> }>()
     for (const l of ready) {
-      const tote = l.tote!.trim().toUpperCase()
-      let g = byTote.get(tote)
-      if (!g) { g = { tote, barcodes: [], seen: new Set(), sales: new Set() }; byTote.set(tote, g) }
+      const receipt = l.receipt!.trim().toUpperCase()
+      let g = byReceipt.get(receipt)
+      if (!g) { g = { receipt, barcodes: [], seen: new Set(), sales: new Set() }; byReceipt.set(receipt, g) }
       const bc = l.barcode!.trim()
       if (!g.seen.has(bc.toUpperCase())) { g.seen.add(bc.toUpperCase()); g.barcodes.push(bc) }
       if (l.auction?.code) g.sales.add(l.auction.code)
     }
-    const totes = [...byTote.values()]
-      .sort((a, b) => a.tote.localeCompare(b.tote, "en-GB", { numeric: true }))
-      .map(g => ({ tote: g.tote, count: g.barcodes.length, barcodes: g.barcodes, sales: [...g.sales].sort() }))
+    const receipts = [...byReceipt.values()]
+      .sort((a, b) => a.receipt.localeCompare(b.receipt, "en-GB", { numeric: true }))
+      .map(g => ({ receipt: g.receipt, count: g.barcodes.length, barcodes: g.barcodes, sales: [...g.sales].sort() }))
 
     // Per-sale summary so a surprise (an old sale suddenly contributing lots)
     // is visible before the sheet is run.
@@ -250,7 +257,7 @@ export async function GET(req: NextRequest) {
       totalLots: lots.length,
       alreadyInBc: lots.length - pending.length,
       readyCount: ready.length,
-      totes,
+      receipts,
       sales: [...bySale.values()].sort((a, b) => a.code.localeCompare(b.code)),
       checks: [...checkMap.entries()].map(([key, rows]) => {
         const ignorable = key !== "duplicate_barcode"
@@ -262,9 +269,9 @@ export async function GET(req: NextRequest) {
         id: l.id, auctionId: l.auction?.id ?? "", uniqueId: l.receiptUniqueId ?? "", tote: l.tote ?? "",
         sale: l.auction?.code ?? "", title: l.title, cataloguedBy: l.createdByName ?? "",
       })),
-      noTote: noTote.map(l => ({
+      noReceipt: noReceipt.map(l => ({
         id: l.id, auctionId: l.auction?.id ?? "", barcode: l.barcode ?? "", uniqueId: l.receiptUniqueId ?? "",
-        sale: l.auction?.code ?? "", title: l.title, cataloguedBy: l.createdByName ?? "",
+        tote: l.tote ?? "", sale: l.auction?.code ?? "", title: l.title, cataloguedBy: l.createdByName ?? "",
       })),
     })
   } catch (e: any) {

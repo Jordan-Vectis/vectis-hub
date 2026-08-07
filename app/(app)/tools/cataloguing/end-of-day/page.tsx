@@ -1,7 +1,7 @@
 "use client"
 
 // End of Day → BC. One click at the end of the day: every lot catalogued in
-// the Hub that hasn't yet reached Business Central, grouped by tote, exported
+// the Hub that hasn't yet reached Business Central, grouped by receipt, exported
 // as the hotkey sheet (ToteNumber,LotCount,Barcodes) the overnight "add to BC"
 // macro works through. Same file shape as BC Import Check reads and writes, so
 // a broken overnight run can be reconciled there and re-run.
@@ -10,13 +10,13 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { autocorrectLotsForAuctions, dismissEodChecks, lookupToteOrReceipt, massRemapPendingLots, matchBcLinesAcrossAuctions, restoreEodChecks, setLotsVendorReceiptAcrossAuctions, type AutocorrectChange, type EodMatchRow, type RemapLineResult } from "@/lib/actions/catalogue"
 import { readSheet, parseBcLinesForMatch, parseHotkeySheet, parseBcLinesExport, reconcileImport, buildHotkeyCsv, type HotkeyToteRow, type BcLinesRow } from "@/lib/bc-import-sheets"
 
-type ToteRow = { tote: string; count: number; barcodes: string[]; sales: string[] }
+type ReceiptRow = { receipt: string; count: number; barcodes: string[]; sales: string[] }
 type SaleRow = { id: string; code: string; name: string; complete: boolean; count: number }
 type Problem = { id: string; auctionId: string; barcode?: string; uniqueId: string; tote?: string; sale: string; title: string; cataloguedBy: string }
 type CheckLot = {
   id: string; auctionId: string; barcode: string; uniqueId: string; tote: string; receipt: string
   vendor: string; sale: string; cataloguedBy: string
-  bcReceipt?: string; bcVendor?: string; totes?: string[]
+  bcReceipt?: string; bcVendor?: string; dupGroups?: string[]
   vendorName?: string; bcVendorName?: string
 }
 type Check = { key: string; count: number; lots: CheckLot[]; ignored?: CheckLot[]; ignoredCount?: number }
@@ -26,19 +26,19 @@ type Data = {
   totalLots: number
   alreadyInBc: number
   readyCount: number
-  totes: ToteRow[]
+  receipts: ReceiptRow[]
   sales: SaleRow[]
   checks: Check[]
   noBarcode: Problem[]
-  noTote: Problem[]
+  noReceipt: Problem[]
 }
 
 // Same wording and severity as the Tote Check tab for the shared checks, plus
 // the three sheet-specific ones. Order = display order, worst first.
 const CHECK_META: Record<string, { label: string; hint: string; tone: "bad" | "warn"; order: number }> = {
   duplicate_barcode: {
-    label: "Same barcode in two totes — taken OFF tonight's sheet", tone: "bad", order: 0,
-    hint: "One of the totes is wrong, and importing would put the BC line on the wrong receipt. Fix the tote on the wrong lot (Manage Lots → Change Vendor), then refresh — they go back on the sheet.",
+    label: "Same barcode under two receipts — taken OFF tonight's sheet", tone: "bad", order: 0,
+    hint: "One of the receipts is wrong, and importing would create the BC line on the wrong receipt. Fix the wrong lot (tick + apply, or Manage Lots → Change Vendor), then refresh — they go back on the sheet.",
   },
   receipt_not_in_bc: {
     label: "Receipt doesn't exist in BC", tone: "bad", order: 1,
@@ -73,8 +73,12 @@ const CHECK_META: Record<string, { label: string; hint: string; tone: "bad" | "w
     hint: "The tote has a vendor in BC but the lot doesn't.",
   },
   no_tote: {
-    label: "No tote on the lot — off the sheet until one is set", tone: "warn", order: 9,
-    hint: "The sheet is grouped by tote, so these can't go on it. Tick them, type the right tote in the bar that appears, and apply.",
+    label: "No tote on the lot", tone: "warn", order: 9,
+    hint: "Still on the sheet (it runs on receipts), but without a tote the lot can't be verified against the BC tote data. Tick them, type the right tote in the bar below, apply.",
+  },
+  no_receipt: {
+    label: "No receipt on the lot — off the sheet until one is set", tone: "bad", order: 10,
+    hint: "The sheet is grouped by receipt, so these can't go on it. Tick them, type the tote or receipt in the bar that appears, and apply.",
   },
 }
 
@@ -103,7 +107,7 @@ export default function EndOfDayPage() {
   const [error, setError]     = useState<string | null>(null)
   const [includeComplete, setIncludeComplete] = useState(false)
   const [copied, setCopied]   = useState(false)
-  const [openTote, setOpenTote] = useState<string | null>(null)
+  const [openReceipt, setOpenReceipt] = useState<string | null>(null)
   const [fixing, setFixing]   = useState(false)
   const [fixResult, setFixResult] = useState<string | null>(null)
   const [fixPreview, setFixPreview] = useState<{ changes: AutocorrectChange[]; skipped: number; lockedSales: number } | null>(null)
@@ -155,21 +159,23 @@ export default function EndOfDayPage() {
 
   useEffect(() => { load(includeComplete) }, [load, includeComplete])
 
-  // Exactly the hotkey-sheet format the macro consumes (and BC Import Check
-  // round-trips): header row + one line per tote, barcodes pipe-separated.
+  // Exactly the sheet the macro consumes (and BC Import Check round-trips):
+  // header row + ONE line per RECEIPT, barcodes pipe-separated. Receipt-keyed
+  // since 2026-08-07 (Jordan: the macro works receipt-by-receipt in BC — the
+  // old tote grouping was wrong), and the filename must be BC_Import.csv
+  // exactly, because that's the name the macro looks for.
   const csv = useMemo(() => {
-    if (!data || data.totes.length === 0) return ""
-    const lines = ["ToteNumber,LotCount,Barcodes"]
-    for (const t of data.totes) lines.push(`${t.tote},${t.count},${t.barcodes.join("|")}`)
+    if (!data || data.receipts.length === 0) return ""
+    const lines = ["ReceiptNumber,LotCount,Barcodes"]
+    for (const r of data.receipts) lines.push(`${r.receipt},${r.count},${r.barcodes.join("|")}`)
     return lines.join("\r\n")
   }, [data])
 
   function download() {
-    const stamp = new Date().toISOString().slice(0, 10)
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }))
     const a = document.createElement("a")
     a.href = url
-    a.download = `bc-import-${stamp}.csv`
+    a.download = "BC_Import.csv"
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -323,7 +329,7 @@ export default function EndOfDayPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">🌙 End of Day → BC</h1>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-2xl">
-            Every lot catalogued in the Hub that hasn&apos;t yet reached Business Central, grouped by tote and ready to
+            Every lot catalogued in the Hub that hasn&apos;t yet reached Business Central, grouped by receipt and ready to
             download as the hotkey sheet the overnight import runs through. Checked against the synced BC data by
             barcode — so lots missed on a previous day are swept up automatically.
           </p>
@@ -377,12 +383,12 @@ export default function EndOfDayPage() {
               <div className="text-xs text-gray-500 mt-0.5">Lots ready for tonight&apos;s sheet</div>
             </div>
             <div className="bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-gray-800 rounded-xl p-4 text-center">
-              <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">{data.totes.length.toLocaleString()}</div>
-              <div className="text-xs text-gray-500 mt-0.5">Totes</div>
+              <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">{data.receipts.length.toLocaleString()}</div>
+              <div className="text-xs text-gray-500 mt-0.5">Receipts</div>
             </div>
-            <div className={`border rounded-xl p-4 text-center ${data.noTote.length || data.noBarcode.length ? "bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800/40" : "bg-white dark:bg-[#1C1C1E] border-gray-200 dark:border-gray-800"}`}>
-              <div className={`text-2xl font-bold ${data.noTote.length || data.noBarcode.length ? "text-amber-600 dark:text-amber-400" : "text-gray-900 dark:text-white"}`}>
-                {(data.noTote.length + data.noBarcode.length).toLocaleString()}
+            <div className={`border rounded-xl p-4 text-center ${data.noReceipt.length || data.noBarcode.length ? "bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800/40" : "bg-white dark:bg-[#1C1C1E] border-gray-200 dark:border-gray-800"}`}>
+              <div className={`text-2xl font-bold ${data.noReceipt.length || data.noBarcode.length ? "text-amber-600 dark:text-amber-400" : "text-gray-900 dark:text-white"}`}>
+                {(data.noReceipt.length + data.noBarcode.length).toLocaleString()}
               </div>
               <div className="text-xs text-gray-500 mt-0.5">Can&apos;t go on the sheet</div>
             </div>
@@ -399,7 +405,7 @@ export default function EndOfDayPage() {
               disabled={!csv}
               className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors"
             >
-              ⬇ Download tonight&apos;s hotkey sheet{data.totes.length ? ` (${data.totes.length} totes)` : ""}
+              ⬇ Download BC_Import.csv{data.receipts.length ? ` (${data.receipts.length} receipts)` : ""}
             </button>
             <button
               onClick={copy}
@@ -457,21 +463,21 @@ export default function EndOfDayPage() {
               {fixResult}
             </p>
           )}
-          {data.checks.length === 0 && data.totes.length > 0 && (
+          {data.checks.length === 0 && data.receipts.length > 0 && (
             <p className="text-sm text-green-600 dark:text-green-400">
               ✅ All checks passed — every lot&apos;s tote, receipt and vendor agrees with the BC data.
             </p>
           )}
 
           {/* ── Problems that need fixing before tonight ── */}
-          {data.noTote.length > 0 && (
+          {data.noReceipt.length > 0 && (
             <CheckPanel
               check={{
-                key: "no_tote",
-                count: data.noTote.length,
-                lots: data.noTote.map(p => ({
+                key: "no_receipt",
+                count: data.noReceipt.length,
+                lots: data.noReceipt.map(p => ({
                   id: p.id, auctionId: p.auctionId, barcode: p.barcode ?? "", uniqueId: p.uniqueId,
-                  tote: "", receipt: "", vendor: "", sale: p.sale, cataloguedBy: p.cataloguedBy,
+                  tote: p.tote ?? "", receipt: "", vendor: "", sale: p.sale, cataloguedBy: p.cataloguedBy,
                 })),
               }}
               selected={selected}
@@ -501,32 +507,32 @@ export default function EndOfDayPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-400 text-xs uppercase tracking-wide">
                 <tr>
-                  <th className="text-left px-4 py-2.5 font-semibold">Tote</th>
+                  <th className="text-left px-4 py-2.5 font-semibold">Receipt</th>
                   <th className="text-left px-4 py-2.5 font-semibold">Lots</th>
                   <th className="text-left px-4 py-2.5 font-semibold">Sale</th>
                   <th className="text-left px-4 py-2.5 font-semibold">Barcodes</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800/60">
-                {data.totes.length === 0 && (
+                {data.receipts.length === 0 && (
                   <tr>
                     <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
                       🎉 Nothing waiting — every catalogued lot is already in BC.
                     </td>
                   </tr>
                 )}
-                {data.totes.map(t => {
-                  const open = openTote === t.tote
+                {data.receipts.map(t => {
+                  const open = openReceipt === t.receipt
                   return (
-                    <tr key={t.tote} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 align-top">
-                      <td className="px-4 py-2.5 font-mono font-semibold text-cyan-700 dark:text-cyan-300 whitespace-nowrap">{t.tote}</td>
+                    <tr key={t.receipt} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 align-top">
+                      <td className="px-4 py-2.5 font-mono font-semibold text-cyan-700 dark:text-cyan-300 whitespace-nowrap">{t.receipt}</td>
                       <td className="px-4 py-2.5 text-gray-700 dark:text-gray-300">{t.count}</td>
                       <td className="px-4 py-2.5 font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap">{t.sales.join(", ") || "—"}</td>
                       <td className="px-4 py-2.5 font-mono text-xs text-gray-600 dark:text-gray-400">
                         {open ? t.barcodes.join(" | ") : `${t.barcodes.slice(0, 6).join(" | ")}${t.barcodes.length > 6 ? " …" : ""}`}
                         {t.barcodes.length > 6 && (
                           <button
-                            onClick={() => setOpenTote(open ? null : t.tote)}
+                            onClick={() => setOpenReceipt(open ? null : t.receipt)}
                             className="ml-2 text-blue-500 hover:text-blue-400"
                           >
                             {open ? "less" : `all ${t.barcodes.length}`}
@@ -559,7 +565,7 @@ export default function EndOfDayPage() {
                 Unique IDs back onto the Hub lots — across every sale at once.
               </p>
             </div>
-            <ImportCheckPanel totes={data.totes} />
+            <ImportCheckPanel receipts={data.receipts} />
             <BcMatchAllPanel onImported={msg => { setFixResult(msg); setStale(true) }} />
           </div>
 
@@ -840,8 +846,9 @@ function CheckPanel({ check, selected, onToggle, onIgnore, onRestore }: {
     ? "border-red-300 dark:border-red-800/40 bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-300"
     : "border-amber-300 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300"
   const allTicked = check.lots.length > 0 && check.lots.every(l => selected.has(l.id))
-  // duplicate_barcode changes what goes on the sheet, so it can't be ignored
-  const ignorable = !!onIgnore && check.key !== "duplicate_barcode"
+  // duplicate_barcode changes what goes on the sheet, so it can't be ignored;
+  // a missing tote/receipt is something to FIX, not hide.
+  const ignorable = !!onIgnore && check.key !== "duplicate_barcode" && check.key !== "no_tote" && check.key !== "no_receipt"
   const tickedHere = check.lots.filter(l => selected.has(l.id))
   const ignored = check.ignored ?? []
   const run = async (fn: () => Promise<void>) => { setBusy(true); try { await fn() } finally { setBusy(false) } }
@@ -1016,7 +1023,7 @@ function IssueLine({ checkKey, l }: { checkKey: string; l: CheckLot }) {
     case "duplicate_barcode":
       return (<>
         <span className="opacity-70">same barcode saved under</span>
-        <Chip tone="bad" label="totes">{(l.totes ?? [l.tote]).filter(Boolean).join(" + ")}</Chip>
+        <Chip tone="bad" label="receipts">{(l.dupGroups ?? [l.receipt]).filter(Boolean).join(" + ")}</Chip>
       </>)
     case "invalid_barcode":
       return (<>
@@ -1026,7 +1033,14 @@ function IssueLine({ checkKey, l }: { checkKey: string; l: CheckLot }) {
     case "no_tote":
       return (<>
         <Chip tone="bad" label="tote">none</Chip>
-        <span className="opacity-70">tick, type the right tote below, apply</span>
+        <span className="opacity-70">still on the sheet, but can&apos;t be checked against BC — tick, type the tote, apply</span>
+        {l.receipt && <Chip tone="plain" label="receipt">{l.receipt}</Chip>}
+      </>)
+    case "no_receipt":
+      return (<>
+        <Chip tone="bad" label="receipt">none</Chip>
+        <span className="opacity-70">off the sheet — tick, type the tote or receipt below, apply</span>
+        {l.tote && <Chip tone="plain" label="tote">{l.tote}</Chip>}
       </>)
     default:
       return (<>
@@ -1063,7 +1077,7 @@ function ProblemList({ label, rows }: { label: string; rows: { id: string; main:
 // Same engine as Auction AI → BC Import Check (lib/bc-import-sheets.ts, ONE
 // copy) restyled for this page: reconcile the hotkey sheet that ran overnight
 // against the BC Lines export, get a re-run sheet of only what's missing.
-function ImportCheckPanel({ totes }: { totes: ToteRow[] }) {
+function ImportCheckPanel({ receipts }: { receipts: ReceiptRow[] }) {
   const [open, setOpen]             = useState(false)
   const [hotkey, setHotkey]         = useState<HotkeyToteRow[] | null>(null)
   const [hotkeyName, setHotkeyName] = useState<string | null>(null)
@@ -1079,7 +1093,7 @@ function ImportCheckPanel({ totes }: { totes: ToteRow[] }) {
   }
   function useCurrentSheet() {
     setErr(null)
-    setHotkey(totes.map(t => ({ tote: t.tote, barcodes: t.barcodes })))
+    setHotkey(receipts.map(r => ({ tote: r.receipt, barcodes: r.barcodes })))
     setHotkeyName("Tonight's sheet (as shown above)")
   }
   async function loadBc(file: File) {
@@ -1096,7 +1110,7 @@ function ImportCheckPanel({ totes }: { totes: ToteRow[] }) {
   }
   function downloadOut() {
     const url = URL.createObjectURL(new Blob([outputCsv], { type: "text/csv" }))
-    const a = document.createElement("a"); a.href = url; a.download = "bc_import_remaining.csv"; a.click()
+    const a = document.createElement("a"); a.href = url; a.download = "BC_Import.csv"; a.click()
     URL.revokeObjectURL(url)
   }
 
@@ -1121,7 +1135,7 @@ function ImportCheckPanel({ totes }: { totes: ToteRow[] }) {
               </label>
               <button
                 onClick={useCurrentSheet}
-                disabled={totes.length === 0}
+                disabled={receipts.length === 0}
                 className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-blue-500 disabled:opacity-40 transition-colors"
                 title="Uses the sheet shown above. If you've run a Data Sync since the overnight run, the sheet has changed — upload the file you actually ran instead."
               >
@@ -1190,7 +1204,7 @@ function ImportCheckPanel({ totes }: { totes: ToteRow[] }) {
                   </div>
                   <textarea readOnly value={outputCsv} spellCheck={false} onFocus={e => e.target.select()}
                     className="w-full h-36 font-mono text-xs bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2 text-gray-700 dark:text-gray-300 focus:outline-none focus:border-blue-500 resize-y whitespace-pre overflow-x-auto" />
-                  <p className="text-xs text-gray-500 mt-1.5">Same hotkey-sheet format, finished totes removed, counts recomputed — feed it back to the macro.</p>
+                  <p className="text-xs text-gray-500 mt-1.5">Same sheet format, finished receipts removed, counts recomputed — feed it back to the macro as BC_Import.csv.</p>
                 </div>
               ) : (
                 <p className="text-sm text-green-600 dark:text-green-400">✓ Every lot on the sheet is in BC — nothing left to re-run.</p>

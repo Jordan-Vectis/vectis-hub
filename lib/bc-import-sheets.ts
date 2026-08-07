@@ -48,7 +48,10 @@ export type BcLinesRow    = { barcode: string; bcReceipt: string; bcUniqueId: st
 export function parseHotkeySheet(rows: unknown[][]): HotkeyToteRow[] {
   if (rows.length < 2) throw new Error("The hotkey sheet looks empty.")
   const headers = rows[0]
-  const toteCol     = findCol(headers, "ToteNumber", "Tote No.", "Tote", "Receipt No.")
+  // Sheets are RECEIPT-keyed since 2026-08-07 (ReceiptNumber first column);
+  // the tote aliases keep old sheets readable. The reconcile only cares about
+  // the barcodes, so either vintage works.
+  const toteCol     = findCol(headers, "ReceiptNumber", "Receipt No.", "ReceiptNo", "Receipt", "ToteNumber", "Tote No.", "Tote")
   const barcodesCol = findCol(headers, "Barcodes", "Barcode")
   if (barcodesCol < 0) throw new Error('Could not find a "Barcodes" column in the hotkey sheet.')
   const out: HotkeyToteRow[] = []
@@ -131,8 +134,10 @@ export function reconcileImport(hotkey: HotkeyToteRow[], bc: { barcodes: Set<str
   return { remainingTotes, totalHotkey, totalRemaining, totalDone: totalHotkey - totalRemaining, errors: bc.errors }
 }
 
-export function buildHotkeyCsv(totes: HotkeyToteRow[]): string {
-  const lines = ["ToteNumber,LotCount,Barcodes"]
-  for (const t of totes) lines.push(`${t.tote},${t.barcodes.length},${t.barcodes.join("|")}`)
+export function buildHotkeyCsv(rows: HotkeyToteRow[]): string {
+  // Receipt-keyed since 2026-08-07 — the macro works receipt-by-receipt and
+  // expects the file to be named BC_Import.csv.
+  const lines = ["ReceiptNumber,LotCount,Barcodes"]
+  for (const t of rows) lines.push(`${t.tote},${t.barcodes.length},${t.barcodes.join("|")}`)
   return lines.join("\r\n")
 }
