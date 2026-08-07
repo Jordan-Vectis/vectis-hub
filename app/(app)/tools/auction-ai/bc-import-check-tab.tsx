@@ -46,7 +46,7 @@ export default function BcImportCheckTab() {
   }
   function download() {
     const url = URL.createObjectURL(new Blob([outputCsv], { type: "text/csv" }))
-    const a = document.createElement("a"); a.href = url; a.download = "bc_import_remaining.csv"; a.click()
+    const a = document.createElement("a"); a.href = url; a.download = "BC_Import.csv"; a.click()
     URL.revokeObjectURL(url)
   }
 
