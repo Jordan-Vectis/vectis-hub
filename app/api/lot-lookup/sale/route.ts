@@ -96,42 +96,38 @@ export async function GET(req: NextRequest) {
     const upper    = (s: string) => s.trim().toUpperCase()
     const variants = (vals: string[]) =>
       [...new Set(vals.flatMap(v => [v, v.trim(), v.trim().toUpperCase(), v.trim().toLowerCase()]))]
-    const barcodes  = items.map(i => i.barcode).filter((v): v is string => !!v)
-    const uniqueIds = items.map(i => i.uniqueId).filter(Boolean)
+    const barcodes = items.map(i => i.barcode).filter((v): v is string => !!v)
 
-    const hubLots = barcodes.length || uniqueIds.length
+    // ⚠⚠ BARCODE ONLY — do NOT add `receiptUniqueId` back into this OR.
+    // RULES.md (Jordan, 2026-08-07): legacy Hub-minted `{receipt}-N` IDs collide
+    // with BC's own numbering for OTHER items, so a uniqueId "match" can point at
+    // a different lot entirely. The same OR in the End of Day pending check
+    // silently kept 292 lots across 10 sales off the overnight sheet. Here the
+    // cost of a collision is worse than a missing row: it would put the WRONG
+    // cataloguer's name against a lot, which is the one thing this tab exists to
+    // get right. A barcode is scoped to the sale it went into, and this query is
+    // already scoped to a single sale, so it is the correct key.
+    const hubLots = barcodes.length
       ? await prisma.catalogueLot.findMany({
-          where: { OR: [
-            ...(barcodes.length  ? [{ barcode:         { in: variants(barcodes) } }]  : []),
-            ...(uniqueIds.length ? [{ receiptUniqueId: { in: variants(uniqueIds) } }] : []),
-          ] },
+          where: { barcode: { in: variants(barcodes) } },
           select: {
-            id: true, title: true, barcode: true, receiptUniqueId: true, tote: true,
+            id: true, title: true, barcode: true, tote: true,
             createdByName: true, createdAt: true, imageUrls: true,
             auction: { select: { code: true, name: true } },
           },
         })
       : []
 
-    const hubByBarcode  = new Map<string, (typeof hubLots)[number]>()
-    const hubByUniqueId = new Map<string, (typeof hubLots)[number]>()
+    const hubByBarcode = new Map<string, (typeof hubLots)[number]>()
     for (const l of hubLots) {
-      if (l.barcode)         hubByBarcode.set(upper(l.barcode), l)
-      if (l.receiptUniqueId) hubByUniqueId.set(upper(l.receiptUniqueId), l)
+      if (l.barcode) hubByBarcode.set(upper(l.barcode), l)
     }
 
     const rows = items.map(w => {
-      // ⚠ UNIQUE ID FIRST, barcode only as a fallback — the opposite of the
-      // receipt/tote lookup. A barcode is scoped to the SALE the lot went into
-      // (unique ID R008771-1 carries barcode F069598 in sale F069), so the same
-      // physical item picks up a different barcode if it is re-entered into
-      // another sale. The unique ID is the stable identity, which is why
-      // RULES.md makes WarehouseItem.uniqueId the key for matching against
-      // CatalogueLot.receiptUniqueId. Matching barcode-first here attached the
-      // wrong Hub lot — and its cataloguer — to a re-sold item.
-      const hub = hubByUniqueId.get(upper(w.uniqueId))
-        || (w.barcode && hubByBarcode.get(upper(w.barcode)))
-        || null
+      // Barcode only — see the ⚠⚠ note on the query above. A BC item whose
+      // barcode we don't hold reads "Not in the Hub", which is honest; guessing
+      // via a colliding unique ID would name the wrong cataloguer.
+      const hub = (w.barcode && hubByBarcode.get(upper(w.barcode))) || null
       // BC writes 0 until the sale is numbered — treat that as "no number yet".
       const lotNo = [w.currentLotNo, w.lotNo].find(v => v && v.trim() && v.trim() !== "0")?.trim() ?? ""
       return {

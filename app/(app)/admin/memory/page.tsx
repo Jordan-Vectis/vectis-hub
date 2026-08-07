@@ -246,9 +246,21 @@ Jack's ask: *"I need to look at the sale with the lot number in from BC then see
 
 **This is the entire reason the tab exists.** Jack: *"because we import the lots in they all say they are catalogued by me and Jordan."* Lots are pushed into BC in bulk, so \`WarehouseItem.cataloguedBy\` records **whoever ran the import** on every lot in the sale. The real cataloguer is **\`CatalogueLot.createdByName\`** — the same field Manage Lots shows as its **"Added By"** column. So the tab reads the **lot number from BC** (which only exists there) and the **cataloguer from the Hub**. BC's stamp appears only on rows with no Hub match, explicitly labelled as the import stamp. **Never present BC's \`cataloguedBy\` as the cataloguer.**
 
-### ⚠ Match on the UNIQUE ID first here, barcode only as fallback
+### ⚠⚠ BARCODE ONLY — \`receiptUniqueId\` is never used to match here
 
-The opposite order to Tab 1. A barcode is **scoped to the sale the lot went into** — measured 2026-08-05, receipt R008771's items carry \`F069598\` in sale F069, \`F078380\` in F078, \`F080575\` in F080, \`F083155-60\` in F083. So an item re-entered into a later sale picks up a **different** barcode, and matching barcode-first can attach the wrong lot — and the wrong cataloguer — to a re-sold item. Measured on F103: 585 matched by unique ID, only 16 needed the barcode fallback. Both sides are \`trim()\`ed before comparing.
+Built unique-ID-first on 2026-08-05, **corrected to barcode-only on 2026-08-07** to comply with Jordan's rule (RULES → Lot Identifiers): legacy Hub-minted \`{receipt}-N\` IDs **collide with BC's own numbering for OTHER items**, so a uniqueId "match" can point at a different lot entirely.
+
+Measured across five sales before the change — **the unique ID added nothing and was actively wrong**:
+
+| Sale | BC items | Barcode match | uniqueId would ADD | ⚠ pointed at a DIFFERENT lot |
+|---|---|---|---|---|
+| F064 | 644 | 644 (100%) | 0 | 0 |
+| F103 | 601 | 601 (100%) | 0 | **2** |
+| F106 | 866 | 861 (99%) | 0 | 0 |
+| F091 | 675 | 516 (76%) | 0 | 0 |
+| F104 | 650 | 448 (69%) | 5 | 0 |
+
+Those 2 lots on F103 would have shown **the wrong cataloguer's name** — the one thing this tab exists to get right. The F091/F104 shortfall is staging's thin Hub data, not a matching failure. A BC item whose barcode we don't hold reads "Not in the Hub", which is honest. **Do not add \`receiptUniqueId\` back into that query.** Both sides are \`trim()\`ed before comparing, and Prisma \`in\` is case-sensitive so it queries case variants.
 
 ### ⚠ On STAGING this tab looks broken, and isn't
 
