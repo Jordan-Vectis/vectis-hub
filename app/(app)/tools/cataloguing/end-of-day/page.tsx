@@ -78,6 +78,25 @@ const CHECK_META: Record<string, { label: string; hint: string; tone: "bad" | "w
   },
 }
 
+// "16:42 · just now" / "16:42 · 25m ago" / "yesterday 16:42" — how fresh the
+// data on screen is, shown under the ⟳ Refresh button (re-rendered each minute
+// by the age tick so the relative part stays honest).
+function fmtPulled(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return "—"
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+  const sameDay = d.toDateString() === new Date().toDateString()
+  if (!sameDay) {
+    const yesterday = new Date(Date.now() - 86_400_000).toDateString() === d.toDateString()
+    const day = yesterday ? "yesterday" : d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })
+    return `${day} ${time}`
+  }
+  const m = Math.floor((Date.now() - d.getTime()) / 60_000)
+  if (m < 1) return `${time} · just now`
+  if (m < 60) return `${time} · ${m}m ago`
+  return `${time} · ${Math.floor(m / 60)}h ${m % 60}m ago`
+}
+
 export default function EndOfDayPage() {
   const [data, setData]       = useState<Data | null>(null)
   const [loading, setLoading] = useState(true)
@@ -92,6 +111,15 @@ export default function EndOfDayPage() {
   // what's on screen and flags itself stale — the ⟳ Refresh button re-runs the
   // heavy checks only when he's ready.
   const [stale, setStale] = useState(false)
+  // Visible refresh feedback (Jordan: "the refresh button is not very clear
+  // its done anything"): a ✓ flash on completion + a live "pulled Xm ago"
+  // readout under the button, re-rendered each minute so the age stays honest.
+  const [justRefreshed, setJustRefreshed] = useState(false)
+  const [, setAgeTick] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setAgeTick(x => x + 1), 60_000)
+    return () => clearInterval(t)
+  }, [])
 
   // ── Manual intervention: tick lots in the panels, look up the right tote /
   //    receipt, apply. lotId → auctionId (the apply action groups by sale).
@@ -119,6 +147,8 @@ export default function EndOfDayPage() {
       setData(d)
       setSelected(new Map())   // stale lot ids must not survive a refresh
       setStale(false)
+      setJustRefreshed(true)
+      setTimeout(() => setJustRefreshed(false), 2500)
     } catch (e: any) { setError(e?.message ?? "Failed to load"); setData(null) }
     finally { setLoading(false) }
   }, [])
@@ -298,14 +328,29 @@ export default function EndOfDayPage() {
             barcode — so lots missed on a previous day are swept up automatically.
           </p>
         </div>
-        <button
-          onClick={() => load(includeComplete)}
-          className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${stale
-            ? "bg-amber-500 hover:bg-amber-400 text-black font-semibold animate-pulse"
-            : "bg-blue-600 hover:bg-blue-500 text-white"}`}
-        >
-          {stale ? "⟳ Refresh — changes made" : "⟳ Refresh"}
-        </button>
+        <div className="flex flex-col items-end gap-1.5">
+          <button
+            onClick={() => load(includeComplete)}
+            disabled={loading}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${loading
+              ? "bg-blue-600 text-white opacity-70"
+              : justRefreshed
+                ? "bg-green-600 text-white"
+                : stale
+                  ? "bg-amber-500 hover:bg-amber-400 text-black animate-pulse"
+                  : "bg-blue-600 hover:bg-blue-500 text-white"}`}
+          >
+            {loading ? "⟳ Pulling the lots in…" : justRefreshed ? "✓ Refreshed" : stale ? "⟳ Refresh — changes made" : "⟳ Refresh"}
+          </button>
+          {data && (
+            <div className="text-right text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+              <div>📥 Lots last pulled: <strong className="text-gray-800 dark:text-gray-200">{fmtPulled(data.generatedAt)}</strong></div>
+              {data.toteLastSync && (
+                <div>🔄 BC data last synced: <strong className="text-gray-800 dark:text-gray-200">{fmtPulled(data.toteLastSync)}</strong></div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {stale && (
