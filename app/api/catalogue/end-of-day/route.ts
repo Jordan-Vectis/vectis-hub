@@ -89,9 +89,17 @@ export async function GET(req: NextRequest) {
     const inBcBarcode  = new Set(bcRows.map(w => w.barcode?.toUpperCase()).filter(Boolean))
     const inBcUniqueId = new Set(bcRows.map(w => w.uniqueId.toUpperCase()))
 
+    // A lot WITH a barcode is judged by its barcode alone (the Admin Centre
+    // rule). The uniqueId fallback exists ONLY for barcode-less lots: legacy
+    // Hub-minted provisional IDs ({receipt}-N, pre-2026-08-06) collide with
+    // BC's own numbering for OTHER items, so an OR across both fields counted
+    // pending lots as "already in BC" and silently kept them off the sheet —
+    // 51 of F121's 184 lots, found 2026-08-07 (F121276 carried R009332-1,
+    // which in BC is F114104, a different item entirely).
     const inBc = (l: { barcode: string | null; receiptUniqueId: string | null }) =>
-      (l.barcode && inBcBarcode.has(l.barcode.toUpperCase())) ||
-      (l.receiptUniqueId && inBcUniqueId.has(l.receiptUniqueId.toUpperCase()))
+      l.barcode
+        ? inBcBarcode.has(l.barcode.toUpperCase())
+        : !!(l.receiptUniqueId && inBcUniqueId.has(l.receiptUniqueId.toUpperCase()))
 
     const pending = lots.filter(l => !inBc(l))
 
