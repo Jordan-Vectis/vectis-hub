@@ -118,9 +118,13 @@ Sidebar \`components/cataloguing-sidebar.tsx\` + \`APP_SECTIONS.CATALOGUING\` ke
 
 3,754 lots in active sales → 2,302 already in BC → **1,452 pending across 94 totes**; zero missing barcodes/totes. ⚠ The FIRST sheet is the whole backlog; after one overnight run it becomes each day's lots.
 
+## The macro itself — AutoHotkey v2 on Jordan's PC (v3, 2026-08-07)
+
+"Make BC Lots from Receipt Number.ahk" — AutoHotkey v2, drives the **BC Cataloguing page in Chrome by fixed screen coordinates**, reads \`bc_import.csv\` (= the End of Day BC_Import.csv) from the script's folder. Per receipt: type receipt → Enter → per barcode: Create Line → barcode → close/save → confirm. BC must be **pre-positioned on the Cataloguing page** before F9. **v3 (2026-08-07, written by Claude, lives on Jordan's PC not in git)** fixed the misclicks-when-BC-is-slow problem: \`WaitSettled\` pixel-stability waits replaced every fixed sleep (fast when BC is fast, up to 30s when slow); \`TypeVerified\` copy-back verification on the receipt field BEFORE Enter (a missed receipt used to dump the batch onto the PREVIOUS receipt) and on every barcode; resume via \`bc_import_progress.log\` (no duplicate lines after a crash — ⚠ clear it before a NEW sheet); failures skipped + logged for Import Check to sweep; F10 pause. ⚠ Jordan declined the watchdog/PC-companion idea ("doesn't really do what I need") — don't re-pitch monitoring unprompted.
+
 ## For later — BC's own receipt import exists
 
-\`EVA_ReceiptImportManagement\` (Evo-auction Base, codeunit 75725): Excel import **per receipt header**, column mapping defined by per-vendor \`EVA_ReceiptImportTemplateMap\` (headers matched by NAME in row 1; every sheet in the workbook imports into the ONE receipt you ran it from). If the overnight process ever moves off the macro onto this, the export must become one file per receipt and match the template's exact header names. Read the codeunit before building that.
+\`EVA_ReceiptImportManagement\` (Evo-auction Base, codeunit 75725): Excel import **per receipt header**, column mapping defined by per-vendor \`EVA_ReceiptImportTemplateMap\` (headers matched by NAME in row 1; every sheet in the workbook imports into the ONE receipt you ran it from). If the overnight process ever moves off the macro onto this, the export must become one file per receipt and match the template's exact header names. The TRUE endgame for macro pain is a small BC-side AL extension creating lines server-side from the whole sheet — model it on this codeunit. Read the codeunit before building that.
 `,
   },
   {
