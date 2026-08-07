@@ -74,32 +74,25 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: "asc" },
     })
 
-    // What does BC already have? One query over both identifier fields.
-    const barcodes  = lots.map(l => l.barcode).filter((v): v is string => !!v)
-    const uniqueIds = lots.map(l => l.receiptUniqueId).filter((v): v is string => !!v)
-    const bcRows = (barcodes.length || uniqueIds.length)
+    // What does BC already have? BARCODE ONLY — Jordan's explicit rule
+    // (2026-08-07): unique IDs are never used for matching. Legacy Hub-minted
+    // provisional IDs ({receipt}-N, pre-2026-08-06) collide with BC's own
+    // numbering for OTHER items, so the old barcode-OR-uniqueId test counted
+    // 292 pending lots across 10 sales as "already in BC" and silently kept
+    // them off the sheet (F121276 carried R009332-1, which in BC is F114104 —
+    // a different item entirely). A barcode-less lot is simply not on the
+    // sheet — it lands in the no-barcode problem panel either way.
+    const barcodes = lots.map(l => l.barcode).filter((v): v is string => !!v)
+    const bcRows = barcodes.length
       ? await prisma.warehouseItem.findMany({
-          where: { OR: [
-            ...(barcodes.length  ? [{ barcode:  { in: variants(barcodes) } }]  : []),
-            ...(uniqueIds.length ? [{ uniqueId: { in: variants(uniqueIds) } }] : []),
-          ] },
-          select: { barcode: true, uniqueId: true },
+          where:  { barcode: { in: variants(barcodes) } },
+          select: { barcode: true },
         })
       : []
-    const inBcBarcode  = new Set(bcRows.map(w => w.barcode?.toUpperCase()).filter(Boolean))
-    const inBcUniqueId = new Set(bcRows.map(w => w.uniqueId.toUpperCase()))
+    const inBcBarcode = new Set(bcRows.map(w => w.barcode?.toUpperCase()).filter(Boolean))
 
-    // A lot WITH a barcode is judged by its barcode alone (the Admin Centre
-    // rule). The uniqueId fallback exists ONLY for barcode-less lots: legacy
-    // Hub-minted provisional IDs ({receipt}-N, pre-2026-08-06) collide with
-    // BC's own numbering for OTHER items, so an OR across both fields counted
-    // pending lots as "already in BC" and silently kept them off the sheet —
-    // 51 of F121's 184 lots, found 2026-08-07 (F121276 carried R009332-1,
-    // which in BC is F114104, a different item entirely).
-    const inBc = (l: { barcode: string | null; receiptUniqueId: string | null }) =>
-      l.barcode
-        ? inBcBarcode.has(l.barcode.toUpperCase())
-        : !!(l.receiptUniqueId && inBcUniqueId.has(l.receiptUniqueId.toUpperCase()))
+    const inBc = (l: { barcode: string | null }) =>
+      !!(l.barcode && inBcBarcode.has(l.barcode.toUpperCase()))
 
     const pending = lots.filter(l => !inBc(l))
 

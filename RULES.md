@@ -207,6 +207,12 @@ BC's numbering at the BC Match step — two racing numbering systems for no bene
 - **The BARCODE is a lot's identifier until BC Match runs.** Every matching path already checks
   barcode first. Do not add code that assumes a new lot has a unique ID, and do NOT "fix" blank
   unique IDs by re-adding minting anywhere.
+- **⚠ Never use `receiptUniqueId` to decide whether a lot exists in BC — BARCODE ONLY** (Jordan's
+  explicit rule, 2026-08-07). Legacy Hub-minted `{receipt}-N` IDs collide with BC's own numbering
+  for OTHER items, so a uniqueId "match" can point at a different lot entirely. An OR across
+  barcode + uniqueId in the End of Day pending check silently kept **292 lots across 10 sales**
+  off the overnight sheet this way. (Matching **by** BC's own imported IDs — Push to BC, AI
+  apply within a sale — is fine; those IDs came FROM BC via BC Match.)
 - **Change Vendor** (Manage Lots → Tools) and the End of Day intervention tools set vendor/receipt
   (and tote) from the BC tote data but **no longer mint IDs** — blanks stay blank until BC Match;
   existing IDs are never touched by them.
