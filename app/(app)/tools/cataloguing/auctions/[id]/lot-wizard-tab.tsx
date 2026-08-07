@@ -613,6 +613,39 @@ export default function LotWizardTab({
     setIdlePopup(true)
   }
 
+  // ⚠ The two WITHIN-LOT checks below measure "how long since THIS PAGE was
+  // last touched" — which is blind to the same person working in another tab
+  // of the sale (the wizard stays mounted-hidden on tab switch), on another
+  // device, or in the native camera. That produced a false "2h+ away" popup on
+  // a second screen while the cataloguer was saving lots every few minutes on
+  // her main one (Kathy, 2026-08-06 16:52 — no gate block, no idle log, and a
+  // refresh cleared it because the measure lived in page memory). So, like
+  // checkIdleOnLotStart already does, the local measure is now only a cheap
+  // pre-filter for WHEN to ask — the SERVER decides whether the person was
+  // genuinely away (working-hours gap since their last save on ANY device,
+  // server clock, London hours) and the popup uses the server's figures.
+  // Offline, the old device-local behaviour stands (better to over-ask than
+  // let a gap slip; the create-lot gate still backstops the save).
+  const idleConfirmRef = useRef(false)
+  const serverGapRef   = useRef<{ sinceMs: number; idleMs: number } | null>(null)
+
+  async function confirmIdleWithServer(): Promise<"prompt" | "fine" | "offline"> {
+    try {
+      const r = await fetch("/api/catalogue/last-activity")
+      if (r.ok) {
+        const j = await r.json()
+        const serverMs = Number(j?.lastMs) || 0
+        if (serverMs > lastActivityRef.current) lastActivityRef.current = serverMs
+        if (j?.shouldPrompt && Number(j?.idleMs) > 0 && Number(j?.sinceMs) > 0) {
+          serverGapRef.current = { sinceMs: Number(j.sinceMs), idleMs: Number(j.idleMs) }
+          return "prompt"
+        }
+        return "fine"
+      }
+    } catch { /* offline */ }
+    return "offline"
+  }
+
   // Second idle check, added 2026-07-20 — runs when a lot is SAVED.
   //
   // checkIdleOnLotStart only fires on the first keystroke of a new barcode, and
@@ -625,8 +658,10 @@ export default function LotWizardTab({
   // Measures the same way as the other check — working hours only, and a full
   // working day or more is left alone.
   //
-  // Returns true if the popup was raised, meaning the save must WAIT and will be
-  // resumed by submitIdleLog.
+  // Returns true if the save must WAIT: either the popup opens (resumed by
+  // submitIdleLog) or the server confirm comes back "fine" and resumes the
+  // save itself. Since 2026-08-07 the popup only opens when the SERVER agrees
+  // there's an unaccounted gap — see the note above confirmIdleWithServer.
   function maybePromptIdleBeforeSave(): boolean {
     if (!showScanTimer || idlePopup) return false
     if (!barcodeStartedAt.current) return false
@@ -636,7 +671,22 @@ export default function LotWizardTab({
     if (idleMs >= EIGHT_WORK_HOURS_MS) return false
     pendingSaveRef.current  = true
     idleWithinLotRef.current = true
-    raiseIdlePopup(since, idleMs)
+    void (async () => {
+      const verdict = await confirmIdleWithServer()
+      if (verdict === "fine") {
+        // Active somewhere (another tab / device) — not away. Carry on saving.
+        pendingSaveRef.current   = false
+        idleWithinLotRef.current = false
+        lastInteractionRef.current = Date.now()
+        performSave()
+        return
+      }
+      if (verdict === "prompt" && serverGapRef.current) {
+        raiseIdlePopup(serverGapRef.current.sinceMs, serverGapRef.current.idleMs)
+        return
+      }
+      raiseIdlePopup(since, idleMs)   // offline — device-local figures
+    })()
     return true
   }
 
@@ -654,14 +704,41 @@ export default function LotWizardTab({
   // Deliberately NOT run on taps: a tap can be the Save button, and raising the
   // popup from under a save would swallow it. The save path does its own check
   // (maybePromptIdleBeforeSave), which pauses and resumes the save properly.
+  //
+  // Since 2026-08-07 the local measure only decides when to ASK — the popup
+  // opens solely on the server's say-so (see the note above
+  // confirmIdleWithServer), so photos in the camera, a spell in another tab or
+  // saves on another device no longer read as being away.
   function checkWithinLotIdle() {
     if (!showScanTimer || idlePopup) return
     if (!barcodeStartedAt.current || !lastInteractionRef.current) return
-    const idleMs = workingMsBetween(lastInteractionRef.current, Date.now())
+    const since  = lastInteractionRef.current
+    const idleMs = workingMsBetween(since, Date.now())
     if (idleMs < timerRedSecs * 1000) return
     if (idleMs >= EIGHT_WORK_HOURS_MS) { lastInteractionRef.current = Date.now(); return }
-    idleWithinLotRef.current = true
-    raiseIdlePopup(lastInteractionRef.current, idleMs)
+    if (idleConfirmRef.current) return
+    idleConfirmRef.current = true
+    void (async () => {
+      try {
+        const verdict = await confirmIdleWithServer()
+        // A save may have started or the popup opened while we awaited — bail
+        // rather than raise over the top of either.
+        if (idlePopup || pendingSaveRef.current) return
+        if (verdict === "fine") {
+          // Active somewhere (another tab / device / the camera) — not away.
+          lastInteractionRef.current = Date.now()
+          return
+        }
+        idleWithinLotRef.current = true
+        if (verdict === "prompt" && serverGapRef.current) {
+          raiseIdlePopup(serverGapRef.current.sinceMs, serverGapRef.current.idleMs)
+        } else {
+          raiseIdlePopup(since, idleMs)   // offline — device-local figures
+        }
+      } finally {
+        idleConfirmRef.current = false
+      }
+    })()
   }
 
   // Coming back to the app after it was backgrounded / the screen was locked.

@@ -736,7 +736,13 @@ The on-screen popup works out "is it 9–5" from the PHONE's clock. He's believe
 - Gate hardening: a covering idle log must cover ≥ half the gap to clear; the ">=8h day off" skip only applies across a real day boundary.
 - (Earlier same-day pass, still valid: createLot always writes the timing log; timer starts on barcode onFocus; reports ignore durationMs=0 for speed.)
 
-The decision log is the point: once on production it will show exactly what his phone reports at each save.`,
+The decision log is the point: once on production it will show exactly what his phone reports at each save.
+
+## ⚠ Within-lot checks are server-confirmed too (added 2026-08-07 — the Kathy false "2h away" popup)
+
+Kathy Taylor got a "2h+ away" popup at 16:52 on 2026-08-06 while saving lots every few minutes. Production data proved no server involvement (no IdleGateDecision block, no IdleLog at that time) — the popup came from a **stale page instance** (second device/tab with the sale open mid-lot): the two WITHIN-LOT checks in lot-wizard-tab.tsx (\`checkWithinLotIdle\`, \`maybePromptIdleBeforeSave\`) measured "how long since THIS PAGE was touched" from in-memory refs, blind to work in another tab (the wizard stays **mounted-hidden** on tab switch in both auction-tabs and tablet-tabs), another device, or the native camera. Refresh clears it because the refs die with the page — **a popup with no matching IdleGateDecision/IdleLog row is a device-local false positive.**
+
+Fix: same pattern checkIdleOnLotStart always had — the local measure only decides WHEN to ask; \`confirmIdleWithServer()\` hits /api/catalogue/last-activity (→ evaluateIdleGate) and the popup opens only on "prompt", using the SERVER's figures. "fine" → re-baseline (the save path clears pendingSaveRef and resumes performSave itself). Offline → old device-local behaviour (create-lot gate still backstops). **Never raise the within-lot popup from local refs alone again.** The Resume (draft) button is safe by design — timing starts fresh + it runs the server-based lot-start check. ⚠ Jack owns this file's idle code — fix made on Jordan's instruction; coordinate on conflicts.`,
   },
   {
     filename: "report_day_exclusion.md",
