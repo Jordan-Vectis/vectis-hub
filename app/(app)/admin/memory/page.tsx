@@ -1161,34 +1161,18 @@ Adding "🧾 Vendor / Tote Check" tipped the strip into overflow and drew a scro
   {
     filename: "lot_wizard_resume.md",
     content: `---
-name: Lot Wizard — Resume an unfinished lot
-purpose: The server-side draft that lets a cataloguer pick up a lot they were kicked out of. Read before touching wizard state or the draft.
-last_updated: 2026-07-31
+name: Lot Wizard — Resume an unfinished lot (REMOVED)
+purpose: Record that the Resume/draft feature was deliberately removed. Read before considering anything draft-shaped in the wizard.
+last_updated: 2026-08-07
 ---
 
-# Resume an unfinished lot (built 2026-07-31)
+# Resume an unfinished lot — REMOVED (2026-08-07)
 
-Everything typed into the Lot Wizard lived in React state, so being kicked out or closing the page lost the whole lot. Only Vendor / Tote / Receipt survived (already saved on the user's account by \`saveLastLotFields\`). The in-progress lot is now **autosaved to the server** and offered back with an amber **"↩ You have an unfinished lot"** banner.
+**Jordan had the whole feature removed** ("it seems very buggy") on 2026-08-07, a week after it was built (2026-07-31). Stripped out of \`lot-wizard-tab.tsx\`: the \`draftOffer\` state + amber "↩ You have an unfinished lot" banner, the debounced autosave, \`resumeDraft\`/\`discardDraft\`, and the post-save clear; the three server actions (\`saveLotDraft\`/\`getLotDraft\`/\`clearLotDraft\` + \`LotDraftFields\`) were deleted from \`lib/actions/catalogue.ts\`. Removal comments mark both sites.
 
-**Server-side rather than localStorage (Jordan's choice):** it has to survive picking up a *different* iPad, a sign-out, or a wiped browser.
+**What remains:** the \`CatalogueLotDraft\` table and its migration SQL (migrations are append-only; the table sits inert with old rows). The wizard is back to pre-2026-07-31 behaviour: a crash or closed page loses the in-progress lot; only Tote/Vendor/Receipt survive (per-account \`saveLastLotFields\`).
 
-- **Table \`CatalogueLotDraft\`** — one row per **user per sale** (\`@@unique([auctionId, userId])\`), **NEEDS Run Migrations**. Holds the step plus every wizard field. Estimates are stored as **TEXT** so a half-typed "1,2" comes back exactly as typed.
-- **Actions in \`lib/actions/catalogue.ts\`:** \`saveLotDraft\` / \`getLotDraft\` / \`clearLotDraft\`. ⚠ All three **swallow their errors** (silent no-op / null) — a draft is a convenience and must never interrupt cataloguing, and the table only exists once Run Migrations has been clicked while the code reaches Railway instantly (same reasoning as departments). \`userId\` always comes from the session, never a parameter.
-- **Autosave** is debounced 1200ms in \`lot-wizard-tab.tsx\`, held back until the initial load finishes so an empty wizard can't overwrite the draft it is about to offer. Emptying the wizard deletes the row; a successful save clears it.
-
-## ⚠ Photos are NOT saved
-
-They're camera \`File\` objects and can't go in the row. Only \`photoCount\` is stored, so the banner can say "The 3 photos you had taken were not saved — you'll need to take them again." Jordan asked for that wording specifically. Restoring photos would mean uploading each to R2 as an orphan plus a cleanup job — deliberately not built.
-
-## ⚠ Timing starts fresh on resume
-
-\`resumeDraft()\` calls \`startLotTiming()\` / \`startLotTimerDisplay()\` — it does **not** restore the draft's original start time. Restoring it would report a lot that took all night and poison the performance reports. The gap itself isn't lost: the server-side idle gate still measures from the last **saved** lot.
-
-## Why a banner, not a blocking modal
-
-Ignoring it leaves the draft untouched, so nothing is lost by accident — a modal would force Resume/Discard even when someone opens the sale on a desktop while their real work sits on an iPad. While the banner is up, **autosave is suppressed** so the offer can't be overwritten; it clears on Resume, Discard, or saving a lot.
-
-Desktop and tablet share the same \`LotWizardTab\`, and both parents keep it **mounted** (\`className="hidden"\`), so switching tabs mid-lot does not re-trigger the banner — it only appears on a genuine page load.`,
+**Do not rebuild this without discussing it with Jordan.** The removed design, for the record: one draft row per user per sale, server-side (survives switching iPads), photos deliberately excluded (count only + "you'll need to take them again" warning), banner-not-modal, timing restarted fresh on resume.`,
   },
   {
     filename: "lot_wizard_warnings.md",
