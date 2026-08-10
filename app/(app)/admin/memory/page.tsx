@@ -64,6 +64,15 @@ The non-DC lots demanding a manual apply all had \`dcStatus='ok'\`, \`kpStatus='
 
 Told that DC held every \`issues\` lot by design — a large share (F104 323/448, F103 239/601) — Jordan reversed it: **"It may sound stupid but I just want auto apply to mean auto apply."** So \`runDoubleCheckStage\`'s \`issues\` branch now applies \`revised\` when \`autoApply\` is on, sets \`currentDesc\`/\`appliedDesc\`, and persists \`description\` + \`appliedDesc\`; the log reads "DC cleaned up & applied" vs "held for review". The on-page help text and the ⚡ Auto-apply tooltip were rewritten to match — **keep all three in step if this ever changes again.**
 
+## 🖼 Resuming the lots that missed the run (2026-08-10)
+
+Jordan's real workflow: ~500 lots, ~10 with no photos yet, run the 490, photograph the rest, come back. **That comeback was a dead end** — once \`PipelineRun.stage\` is \`complete\`, all three stage guards in \`handleRun\` are false, so pressing Start does *nothing*. There were banner buttons to re-run Key Points and Double Check but **none for Batch**, so the only routes were ↻ on each lot one at a time, or Reset Progress, which deletes the whole run's results for all 500.
+
+Fix (he asked for exactly this: "detects those 10 didnt get ran last time and lets me resume just those 10"): a **🖼 banner + "↻ Resume these N"** button in the \`stage === "complete"\` block, beside the existing two.
+- **\`notRunYet(l) = l.imageUrls.length > 0 && !l.currentDesc?.trim()\`** — has photos now, never got a description. ⚠ Keyed on the description, **not \`batchSkipReason\`** — that reason is state-only (\`saveLot\` persists just \`batchStatus: "skipped"\`), so after a reload nothing records *why* a lot was skipped.
+- **\`resumeNotRun()\`** clears those lots' \`batchStatus\`/\`kpStatus\`/\`dcStatus\` (state + DB) then calls \`runBatchStage\` → \`runKPStage\` → \`runDoubleCheckStage\` **directly**. ⚠ It deliberately does NOT rewind \`stage\` and lean on Start — \`setStage\` is async, so \`handleRun\` would still read the old value. Same trick \`rerunLot\` already uses. Every other lot keeps its status, so all three stage filters skip it and only the stragglers run.
+- Known and accepted: a lot that keeps getting **content-blocked** has photos and no description, so it sits in this banner permanently and re-fails on each press — same as ↻ on a single lot.
+
 ## Still open — not changed without asking
 
 - **Existing runs are not repaired.** The fix only covers runs from here; F103/F106 etc. still have null \`appliedDesc\` and will still show a large Review & Apply list. A one-off backfill (mark applied where the pipeline text already matches the catalogue) was offered and **not built — awaiting Jordan's word.**

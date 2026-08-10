@@ -4521,6 +4521,46 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     }
   }
 
+  // Catch up the lots that never got a description last time — typically the ones that had
+  // no photos when the run went through and have been photographed since. Runs just those
+  // through all three stages; every other lot already has a stage status, so each stage's
+  // own filter skips it. Calls the stages directly rather than rewinding `stage` and leaning
+  // on Start, because setStage is async and handleRun would still read the old value.
+  async function resumeNotRun() {
+    if (running || upgrading || !auctionId) return
+    const targets = lots.filter(notRunYet)
+    if (!targets.length) return
+    const aid = auctionId
+    cancelRef.current = false
+    pauseRef.current  = false
+    setPaused(false)
+    setRunning(true); setError(null)
+    addLog(`↻ Resuming ${targets.length} lot${targets.length === 1 ? "" : "s"} that didn't run last time`)
+
+    // Clear the stale "skipped" status so each stage's filter picks exactly these up.
+    const ids = new Set(targets.map(t => t.id))
+    const cleared = lots.map(l => ids.has(l.id) ? {
+      ...l,
+      batchStatus: undefined, batchSkipReason: undefined,
+      kpStatus: undefined, kpSkipReason: undefined,
+      dcStatus: undefined, dcSkipReason: undefined,
+    } : l)
+    setLots(cleared)
+    await Promise.all(targets.map(t => saveLot(t.id, { batchStatus: null, kpStatus: null, dcStatus: null })))
+
+    try {
+      let current = cleared
+      current = await runBatchStage(current)
+      if (!cancelRef.current) current = await runKPStage(current, aid)
+      if (!cancelRef.current) current = await runDoubleCheckStage(current, aid)
+      if (!cancelRef.current) addLog(`✓ Caught up — ${targets.length} lot${targets.length === 1 ? "" : "s"} now done`)
+    } catch (e: any) {
+      if (!cancelRef.current) { addLog(`✗ Resume error: ${e?.message ?? "unknown"}`); setError(e?.message ?? "Resume failed") }
+    } finally {
+      setRunning(false); setProgress(null)
+    }
+  }
+
   function handleStop() {
     cancelRef.current = true
     pauseRef.current  = false
@@ -4692,6 +4732,14 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   // description to check against. A lot with no key points (or no description) can never be
   // KP-checked — the KP stage's toRun excludes it — so it must NOT count as incomplete, or
   // the warning never clears and re-running is a permanent no-op for that lot.
+  // "Didn't get run last time" — the lot has photos now but the pipeline never produced a
+  // description for it. Catches the lots that were photo-less when the run went through and
+  // have since been photographed, and any that were never loaded into the run at all. Keyed
+  // on the description rather than batchSkipReason because that reason is state-only — a
+  // reload leaves a skipped lot with no clue as to WHY it was skipped.
+  const notRunYet = (l: PLot) => l.imageUrls.length > 0 && !(l.currentDesc ?? "").trim()
+  const notRunCount = lots.filter(notRunYet).length
+
   const kpUnchecked = (l: PLot) => l.batchStatus === "ok" && !l.kpStatus && !!l.keyPoints?.trim() && !!l.currentDesc?.trim()
   const kpIncomplete  = stageIndex > stageOrder.indexOf("kpcheck")  && lots.some(kpUnchecked)
   const dcIncomplete  = stageIndex > stageOrder.indexOf("doublecheck") && batchOkLots.some(l => !l.dcStatus)
@@ -5014,6 +5062,22 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
             <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-green-950/30 border border-green-700/50 text-green-300 text-sm">
               <span className="text-xl">🎉</span>
               <span>Pipeline complete — all descriptions applied for <span className="font-mono font-bold">{code.trim().toUpperCase()}</span></span>
+            </div>
+          )}
+          {notRunCount > 0 && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-sky-950/30 border border-sky-700/50 text-sky-300 text-sm">
+              <span className="text-xl">🖼</span>
+              <div className="flex-1">
+                <p>{notRunCount} lot{notRunCount === 1 ? "" : "s"} {notRunCount === 1 ? "has photos but never got a description" : "have photos but never got a description"} — usually photographed after this run went through.</p>
+                <p className="text-xs opacity-75 mt-0.5">Runs just {notRunCount === 1 ? "it" : "these"} through all three stages. The rest of the sale keeps its results and is left alone.</p>
+              </div>
+              <button
+                onClick={resumeNotRun}
+                disabled={running || upgrading}
+                className="px-3 py-1.5 bg-sky-700 hover:bg-sky-600 disabled:opacity-40 text-white text-xs font-semibold rounded-lg transition-colors whitespace-nowrap"
+              >
+                ↻ Resume {notRunCount === 1 ? "this lot" : `these ${notRunCount}`}
+              </button>
             </div>
           )}
           {lots.some(kpUnchecked) && (
