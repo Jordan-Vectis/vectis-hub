@@ -16,6 +16,55 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "auto_pipeline_apply.md",
+    content: `---
+name: Auto Pipeline — what "applied" means (appliedDesc)
+purpose: Why lots reappear in Review & Apply after an auto-apply run. PipelineLot.appliedDesc is the ONLY record that a lot was applied — persist it on every auto-apply path. Read before touching the pipeline stages or needsReview.
+last_updated: 2026-08-10
+---
+
+# Auto Pipeline — the apply model (/tools/auction-ai, Auto Pipeline tab)
+
+Stage order is **Batch → Key Points → Double Check** (\`page.tsx\`: \`runBatchStage\` → \`runKPStage\` → \`runDoubleCheckStage\`). Batch and Key Points auto-apply when the **⚡ Auto-apply** toggle is on; **Double Check is deliberately the final MANUAL gate** and never writes — it stages its cleaned text into \`kpRevised\` for Review & Apply. That part is design, not a bug.
+
+## The one invariant
+
+**\`PipelineLot.appliedDesc\` is the only record that a lot's text reached the catalogue.** The entire Review & Apply list is one comparison:
+
+\`needsReview(l) = !!l.kpRevised && l.kpRevised.trim() !== l.appliedDesc.trim()\`
+
+and on load \`appliedDesc = saved.appliedDesc || catalogueLot.description\`.
+
+⚠ **Every path that applies MUST persist \`appliedDesc\` via \`saveLot\`, and only after the write succeeded.** Otherwise the fallback silently re-derives "was this applied?" from the **live catalogue text** — so any *later* edit to that description (a cataloguer fixing wording, the Review tab, anything) makes them differ and the lot **reappears in Review & Apply as if it had never been applied**. That is the "auto-apply is ticked but I still have to press Apply all" bug (Jordan, 2026-08-10).
+
+⚠⚠ **Worse than noise:** pressing **Apply all** on those resurrected lots writes the older pipeline text back over the newer catalogue text — silent loss of human edits.
+
+## Measured on the live DB, 2026-08-10 (read-only, before the fix)
+
+\`appliedDesc\` was written by **\`acceptKP\` only** (the manual apply), never by the Batch/KP auto-apply path:
+
+| run | lots | appliedDesc persisted | DC issues | would need review on a fresh load |
+|---|---|---|---|---|
+| F103 | 601 | 239 (= exactly its DC-issue count) | 239 | **362 — none of them DC** |
+| F106 | 377 | 7 | 112 | **365 (260 non-DC)** |
+| F104 | 448 | 335 | 323 | 113 |
+| F096 | 542 | 540 (Apply all pressed 10 Aug) | 105 | 0 |
+
+The non-DC lots demanding a manual apply all had \`dcStatus='ok'\`, \`kpStatus='ok'\`, \`appliedDesc IS NULL\`, and a catalogue description **systematically longer** than the pipeline's stored text (145 vs 187, 66 vs 108, 116 vs 148…) — the catalogue had moved on after the pipeline wrote it, exactly the fallback failure above.
+
+## Fixed 2026-08-10
+
+- **Batch stage**: applies *first*, records \`appliedDesc\` only when the write succeeded, and persists it in \`saveLot\`. It previously set \`appliedDesc\` optimistically in the same state update as the result — **before** the \`applyAiDescriptionOne\` call and regardless of whether it threw — so a failed apply looked applied for the rest of the session.
+- **Key Points stage**: \`applied\` hoisted so \`saveLot\` persists \`appliedDesc\` (its own write, or the value Batch already put on the lot).
+- Stage log numbering corrected — Double Check and Key Points **both** announced "Stage 2", which makes the run log useless for diagnosing exactly this.
+
+## Still open — not changed without asking
+
+- **The ⚡ Auto-apply tooltip oversells it** ("Descriptions apply to the catalogue as each lot completes"). Double Check holds every \`issues\` lot by design, and that is a large share — F104 had 323/448, F103 239/601. A manual Apply all is still expected for those; only the *non-DC* lots reappearing was the bug.
+- \`POST /api/auction-ai/pipeline/lot\` spreads arbitrary client-supplied fields straight into \`prisma.pipelineLot.upsert\` (mass assignment). Session-gated and the model is innocuous, so a smell rather than a live hole.
+`,
+  },
+  {
     filename: "hub_workflow.md",
     content: `---
 name: Hub workflow — how Vectis actually uses it, end to end

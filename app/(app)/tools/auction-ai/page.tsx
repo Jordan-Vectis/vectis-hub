@@ -4146,13 +4146,20 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       if (result) {
         const desc = result.description ?? ""
         const { low, high } = parseEstimate(result.estimate ?? "")
+        // Apply BEFORE recording appliedDesc, so it only ever reflects a write the
+        // catalogue actually accepted — the Key Points stage already works this way.
+        // Marking it applied up-front hid failed applies for the rest of the session.
+        // In "Review all before applying" mode nothing is written, so appliedDesc stays
+        // as the original description and the lot stays in Review & Apply.
+        let applied = false
+        if (autoApply && auctionId && desc) {
+          try {
+            await applyAiDescriptionOne(auctionId, { id: lot.id, description: desc })
+            applied = true
+          } catch (e: any) { addLog(`  ⚠ ${lot.label} — failed to apply to catalogue: ${e?.message ?? "unknown error"}`) }
+        }
         updated[idx] = { ...updated[idx], batchStatus: "ok", currentDesc: desc, estimate: result.estimate ?? "", batchDesc: desc, kpRevised: desc,
-          // Only mark as on-the-catalogue when we're actually going to apply it below
-          // (see the autoApply-gated apply). In "Review all before applying" mode the
-          // catalogue is left untouched, so appliedDesc must stay as the original
-          // description — otherwise the lot looks already-applied and wrongly drops
-          // out of Review & Apply.
-          ...(autoApply && auctionId ? { appliedDesc: desc } : {}),
+          ...(applied ? { appliedDesc: desc } : {}),
           cataloguerFlag: result.flag || undefined,
           debug: { ...updated[idx].debug, batch: result.debug } }
         setLots([...updated])
@@ -4166,14 +4173,12 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
             await applyAiEstimateOne(auctionId, { id: lot.id, aiEstimateLow: low, aiEstimateHigh: high })
           } catch (e: any) { addLog(`  ⚠ ${lot.label} — failed to save AI estimate: ${e?.message ?? "unknown error"}`) }
         }
-        // Apply the generated description straight to the catalogue lot (skipped in review mode)
-        if (autoApply && auctionId && desc) {
-          try {
-            await applyAiDescriptionOne(auctionId, { id: lot.id, description: desc })
-          } catch (e: any) { addLog(`  ⚠ ${lot.label} — failed to apply to catalogue: ${e?.message ?? "unknown error"}`) }
-        }
-        // Save to pipeline + existing saved runs
-        await saveLot(lot.id, { batchStatus: "ok", description: desc, batchDesc: desc, estimate: result.estimate ?? "" })
+        // Save to pipeline + existing saved runs. appliedDesc MUST be persisted here:
+        // the load re-derives "already applied?" from it, and when it is missing it falls
+        // back to comparing against the LIVE catalogue text — so any later edit to the
+        // description resurrects the lot in Review & Apply as if it had never been applied.
+        await saveLot(lot.id, { batchStatus: "ok", description: desc, batchDesc: desc, estimate: result.estimate ?? "",
+          ...(applied ? { appliedDesc: desc } : {}) })
         if (result.flag) saveAiFlagNote(lot.id, result.flag).catch(() => {})
         fetch("/api/auction-ai/runs", {
           method: "POST", headers: { "Content-Type": "application/json" },
@@ -4197,10 +4202,10 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     return updated
   }
 
-  // ── Stage 2: Double Check (auto-apply fixes) ────────────────────────────────
+  // ── Stage 3: Double Check (final MANUAL Review & Apply gate — never auto-applies) ──
   async function runDoubleCheckStage(currentLots: PLot[], aid: string): Promise<PLot[]> {
     const toRun = currentLots.filter(l => !l.dcStatus && (l.batchStatus === "ok" || l.currentDesc))
-    addLog(`── Stage 2: Double Check — ${toRun.length} to process`)
+    addLog(`── Stage 3: Double Check — ${toRun.length} to process`)
     let done = 0
     const updated = [...currentLots]
 
@@ -4279,7 +4284,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     return updated
   }
 
-  // ── Stage 3: Key Points Check (auto-apply) ──────────────────────────────────
+  // ── Stage 2: Key Points Check (auto-applies, then feeds Double Check) ───────
   async function runKPStage(currentLots: PLot[], aid: string): Promise<PLot[]> {
     const toRun = currentLots.filter(l => !l.kpStatus && l.currentDesc && l.keyPoints)
     const alreadyDone  = currentLots.filter(l => l.kpStatus).length
@@ -4322,6 +4327,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       if (result) {
         const { revised, changed, missing, added, found } = result
         let newDesc = lot.currentDesc
+        let applied = false
         if (changed && revised) {
           newDesc = revised
           // Double Check reads the in-memory currentDesc (not the catalogue), so it sees
@@ -4329,7 +4335,6 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           // catalogue in auto-apply mode — in "Review all before applying" mode we must
           // hold it for Review & Apply and leave appliedDesc (the on-catalogue text)
           // untouched, so all reviewed lots surface below.
-          let applied = false
           if (autoApply) {
             try {
               await applyAiDescriptionOne(aid, { id: lot.id, description: revised })
@@ -4349,7 +4354,12 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           addLog(`  ✓ ${lot.label} — all key points present`)
         }
         setLots([...updated])
-        await saveLot(lot.id, { kpStatus: updated[idx].kpStatus, kpMissing: missing, kpAdded: added, description: newDesc, revised: newDesc })
+        // Carry appliedDesc through — either this stage just applied, or the Batch stage
+        // did and the value is already on the lot. Persisting it is what stops a reload
+        // re-deriving "applied?" from the live catalogue text (see the Batch stage note).
+        const appliedNow = applied ? newDesc : updated[idx].appliedDesc
+        await saveLot(lot.id, { kpStatus: updated[idx].kpStatus, kpMissing: missing, kpAdded: added, description: newDesc, revised: newDesc,
+          ...(appliedNow ? { appliedDesc: appliedNow } : {}) })
       } else if (!cancelRef.current) {
         updated[idx] = { ...updated[idx], kpStatus: "skipped", kpSkipReason: blockReasonLabel(lastBlockRef.current) }
         setLots([...updated])
