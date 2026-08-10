@@ -25,7 +25,9 @@ last_updated: 2026-08-10
 
 # Auto Pipeline — the apply model (/tools/auction-ai, Auto Pipeline tab)
 
-Stage order is **Batch → Key Points → Double Check** (\`page.tsx\`: \`runBatchStage\` → \`runKPStage\` → \`runDoubleCheckStage\`). Batch and Key Points auto-apply when the **⚡ Auto-apply** toggle is on; **Double Check is deliberately the final MANUAL gate** and never writes — it stages its cleaned text into \`kpRevised\` for Review & Apply. That part is design, not a bug.
+Stage order is **Batch → Key Points → Double Check** (\`page.tsx\`: \`runBatchStage\` → \`runKPStage\` → \`runDoubleCheckStage\`).
+
+⚠⚠ **"Auto-apply" means ALL THREE stages write to the catalogue — including Double Check (Jordan, 2026-08-10: "I just want auto apply to mean auto apply").** This **REVERSES** the earlier "DC is the final MANUAL Review & Apply gate" decision — do not restore it. On **⚡ Auto-apply** a finished run leaves nothing to press; on **👁 Review all before applying** every stage holds its text for the manual gate. \`kpRevised\` drives the review UI in both modes, so the review path still exists and still catches anything whose apply failed.
 
 ## The one invariant
 
@@ -58,9 +60,13 @@ The non-DC lots demanding a manual apply all had \`dcStatus='ok'\`, \`kpStatus='
 - **Key Points stage**: \`applied\` hoisted so \`saveLot\` persists \`appliedDesc\` (its own write, or the value Batch already put on the lot).
 - Stage log numbering corrected — Double Check and Key Points **both** announced "Stage 2", which makes the run log useless for diagnosing exactly this.
 
+## Double Check now auto-applies too (2026-08-10, same session)
+
+Told that DC held every \`issues\` lot by design — a large share (F104 323/448, F103 239/601) — Jordan reversed it: **"It may sound stupid but I just want auto apply to mean auto apply."** So \`runDoubleCheckStage\`'s \`issues\` branch now applies \`revised\` when \`autoApply\` is on, sets \`currentDesc\`/\`appliedDesc\`, and persists \`description\` + \`appliedDesc\`; the log reads "DC cleaned up & applied" vs "held for review". The on-page help text and the ⚡ Auto-apply tooltip were rewritten to match — **keep all three in step if this ever changes again.**
+
 ## Still open — not changed without asking
 
-- **The ⚡ Auto-apply tooltip oversells it** ("Descriptions apply to the catalogue as each lot completes"). Double Check holds every \`issues\` lot by design, and that is a large share — F104 had 323/448, F103 239/601. A manual Apply all is still expected for those; only the *non-DC* lots reappearing was the bug.
+- **Existing runs are not repaired.** The fix only covers runs from here; F103/F106 etc. still have null \`appliedDesc\` and will still show a large Review & Apply list. A one-off backfill (mark applied where the pipeline text already matches the catalogue) was offered and **not built — awaiting Jordan's word.**
 - \`POST /api/auction-ai/pipeline/lot\` spreads arbitrary client-supplied fields straight into \`prisma.pipelineLot.upsert\` (mass assignment). Session-gated and the model is innocuous, so a smell rather than a live hole.
 `,
   },

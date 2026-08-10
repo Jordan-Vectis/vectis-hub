@@ -4254,12 +4254,24 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       if (result) {
         const { verdict, contradictions, unsupported, revised } = result
 
-        // DC is now the LAST stage and the manual gate — hold its cleaned result for
-        // Review & Apply rather than auto-applying. kpRevised drives the review UI.
+        // DC is the LAST stage. Auto-apply means auto-apply (Jordan, 2026-08-10): its
+        // cleaned text goes straight onto the catalogue like Batch and Key Points, so a
+        // finished run leaves nothing to press. In "Review all before applying" mode it
+        // is still held for the manual gate — kpRevised drives the review UI either way.
         if (verdict === "issues" && revised) {
-          updated[idx] = { ...updated[idx], dcStatus: verdict, contradictions, unsupported, kpRevised: revised, dcDesc: revised, debug: { ...updated[idx].debug, dc: result.debug } }
-          addLog(`  ⚑ ${lot.label} — DC cleaned up, ready for review`)
-          await saveLot(lot.id, { dcStatus: verdict, contradictions, unsupported, revised })
+          let applied = false
+          if (autoApply && aid) {
+            try {
+              await applyAiDescriptionOne(aid, { id: lot.id, description: revised })
+              applied = true
+            } catch (e: any) { addLog(`  ⚠ ${lot.label} — DC fix failed to apply: ${e?.message ?? "unknown error"}`) }
+          }
+          updated[idx] = { ...updated[idx], dcStatus: verdict, contradictions, unsupported, kpRevised: revised, dcDesc: revised,
+            ...(applied ? { currentDesc: revised, appliedDesc: revised } : {}),
+            debug: { ...updated[idx].debug, dc: result.debug } }
+          addLog(applied ? `  ⚑ ${lot.label} — DC cleaned up & applied` : `  ⚑ ${lot.label} — DC cleaned up, held for review`)
+          await saveLot(lot.id, { dcStatus: verdict, contradictions, unsupported, revised,
+            ...(applied ? { description: revised, appliedDesc: revised } : {}) })
         } else {
           updated[idx] = { ...updated[idx], dcStatus: verdict, contradictions, unsupported, dcDesc: lot.currentDesc, debug: { ...updated[idx].debug, dc: result.debug } }
           addLog(`  ✓ ${lot.label} — clean`)
@@ -4695,8 +4707,9 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       <div>
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-1">Auto Pipeline</h2>
         <p className="text-sm text-gray-600 dark:text-gray-400">
-          Runs Batch → Key Points → Double Check. Batch & Key Points auto-apply; Double Check holds its
-          cleaned-up result for you to Review & Apply. Progress is saved — close the browser and resume any time.
+          Runs Batch → Key Points → Double Check. On <strong>⚡ Auto-apply</strong> all three stages write straight
+          to the catalogue, so a finished run leaves nothing to press; on <strong>👁 Review all before applying</strong>
+          every description is held for Review &amp; Apply. Progress is saved — close the browser and resume any time.
         </p>
         <div className="mt-2 space-y-1">
           <p className="text-[11px] text-gray-600 dark:text-gray-500">Stage 1 (Batch) uses the Batch Preset selected below.</p>
@@ -4800,7 +4813,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
             return (
               <div className="inline-flex rounded-lg border border-gray-300 dark:border-gray-700 overflow-hidden text-xs font-medium">
                 <button type="button" onClick={() => setMode(true)} aria-pressed={autoApply}
-                  title="Descriptions apply to the catalogue as each lot completes"
+                  title="Every stage writes to the catalogue as each lot completes — Batch, Key Points AND Double Check. Nothing is left waiting for you to apply."
                   className={`px-3 py-1.5 transition-colors ${autoApply ? "bg-green-600 text-white" : "bg-gray-100 dark:bg-[#2C2C2E] text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"}`}>
                   ⚡ Auto-apply
                 </button>
