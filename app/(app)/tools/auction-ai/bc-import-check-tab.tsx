@@ -50,7 +50,10 @@ export default function BcImportCheckTab() {
     URL.revokeObjectURL(url)
   }
 
-  const drop = "flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-600 rounded-xl p-6 cursor-pointer hover:border-[#C8A96E] transition-colors text-center"
+  // `relative` contains the sr-only (position:absolute) file input — without a
+  // positioned ancestor it resolves against the document and drags the window's
+  // scroll height down with it, giving the page a second scrollbar.
+  const drop = "relative flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-600 rounded-xl p-6 cursor-pointer hover:border-[#C8A96E] transition-colors text-center"
 
   return (
     <div className="space-y-5 max-w-4xl">

@@ -1114,7 +1114,10 @@ function ImportCheckPanel({ receipts }: { receipts: ReceiptRow[] }) {
     URL.revokeObjectURL(url)
   }
 
-  const drop = "flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-5 cursor-pointer hover:border-blue-500 transition-colors text-center"
+  // `relative` contains the sr-only (position:absolute) file input — without a
+  // positioned ancestor it resolves against the document and drags the window's
+  // scroll height down with it.
+  const drop = "relative flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-5 cursor-pointer hover:border-blue-500 transition-colors text-center"
 
   return (
     <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E]">
@@ -1285,7 +1288,7 @@ function BcMatchAllPanel({ onImported }: { onImported: (msg: string) => void }) 
       </button>
       {open && (
         <div className="px-4 pb-4 space-y-3">
-          <label className="flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-5 cursor-pointer hover:border-blue-500 transition-colors text-center">
+          <label className="relative flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-5 cursor-pointer hover:border-blue-500 transition-colors text-center">
             <span className="text-xl">📋</span>
             <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{fileName ?? "BC Lines export"}</span>
             <span className="text-xs text-gray-500">XLSX/CSV with Internal Barcode · Receipt No. · UniqueID</span>

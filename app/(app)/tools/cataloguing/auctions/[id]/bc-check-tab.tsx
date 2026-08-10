@@ -145,7 +145,8 @@ export default function BcCheckTab({ lots }: Props) {
       </div>
 
       {/* Upload */}
-      <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 cursor-pointer hover:border-[#C8A96E] transition-colors">
+      {/* `relative` contains the sr-only (position:absolute) input — see cataloguing-shell */}
+      <label className="relative flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 cursor-pointer hover:border-[#C8A96E] transition-colors">
         <span className="text-3xl">📂</span>
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
           {fileName ? fileName : "Click to upload BC Lines export (.xlsx)"}
