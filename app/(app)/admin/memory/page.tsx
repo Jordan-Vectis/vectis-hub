@@ -118,9 +118,17 @@ Sidebar \`components/cataloguing-sidebar.tsx\` + \`APP_SECTIONS.CATALOGUING\` ke
 
 3,754 lots in active sales → 2,302 already in BC → **1,452 pending across 94 totes**; zero missing barcodes/totes. ⚠ The FIRST sheet is the whole backlog; after one overnight run it becomes each day's lots.
 
-## The macro itself — AutoHotkey v2 on Jordan's PC (v3, 2026-08-07)
+## The macro itself — AutoHotkey v2 on Jordan's PC (v5, 2026-08-07)
 
-"Make BC Lots from Receipt Number.ahk" — AutoHotkey v2, drives the **BC Cataloguing page in Chrome by fixed screen coordinates**, reads \`bc_import.csv\` (= the End of Day BC_Import.csv) from the script's folder. Per receipt: type receipt → Enter → per barcode: Create Line → barcode → close/save → confirm. BC must be **pre-positioned on the Cataloguing page** before F9. **v3 (2026-08-07, written by Claude, lives on Jordan's PC not in git)** fixed the misclicks-when-BC-is-slow problem: \`WaitSettled\` pixel-stability waits replaced every fixed sleep (fast when BC is fast, up to 30s when slow); \`TypeVerified\` copy-back verification on the receipt field BEFORE Enter (a missed receipt used to dump the batch onto the PREVIOUS receipt) and on every barcode; resume via \`bc_import_progress.log\` (no duplicate lines after a crash — ⚠ clear it before a NEW sheet); failures skipped + logged for Import Check to sweep; F10 pause. ⚠ Jordan declined the watchdog/PC-companion idea ("doesn't really do what I need") — don't re-pitch monitoring unprompted.
+"Make BC Lots from Receipt Number.ahk" — AutoHotkey v2, drives the **BC Cataloguing page in Chrome by fixed screen coordinates**, reads \`bc_import.csv\` (= the End of Day BC_Import.csv) from the script's folder. Per receipt: type receipt → Enter → per barcode: Create Line → barcode → close/save → confirm. BC must be **pre-positioned on the Cataloguing page** before F9. **v3→v5 rework (2026-08-07, written by Claude, lives on Jordan's PC not in git)** fixed the misclicks-when-BC-is-slow problem. Hard-won lessons baked into v5:
+
+- ⚠ **"Screen settled" is ALSO true right after a click, before BC starts loading** — v3 typed early on slow card-opens (whole-page Ctrl+A highlight, barcodes into the wrong place). Every wait is **CHANGE-then-settle**: fingerprint the target area, require it to visibly CHANGE (card/popup actually appeared), then hold still.
+- **Look-before-typing** (\`SafeType\`): after clicking a field, select+copy+inspect first — a page-sized clipboard blob = not in the field → back off and re-click. Type only into a small verified field; copy-back compare after. Receipt verified BEFORE Enter (a missed receipt used to dump the whole batch onto the PREVIOUS receipt).
+- **The close-confirm popup lags** — clicking its coordinates blind navigated BC to a different page (Jordan hit this live). v5's \`CloseCard\` requires PROOF: the popup's spot must visibly change before Yes is clicked; no popup after 3 Close attempts = lot logged UNCONFIRMED.
+- **Circuit breaker**: 3 consecutive failures = assume the script is lost on a wrong page → STOP with instructions, never churn unattended. Resume via \`bc_import_progress.log\` (⚠ clear it before a NEW sheet); failures logged to \`bc_import_failures.log\` for Import Check to sweep; F10 pause.
+- **AutoHotkey v2 is installed on Jordan's PC** — ALWAYS validate a script before handing it over (\`AutoHotkey64.exe /ErrorStdOut /Validate\` via PowerShell Start-Process with redirect+wait; git-bash mangles /switches into paths), and deliver by writing the file to his Downloads — chat copy-paste lost 14 lines once ("Missing }").
+
+⚠ Jordan declined the watchdog/PC-companion idea ("doesn't really do what I need") — don't re-pitch monitoring unprompted.
 
 ## For later — BC's own receipt import exists
 
