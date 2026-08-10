@@ -8,7 +8,13 @@ export default function CataloguingShell({ children, allowedSidebarItems }: { ch
   const [open, setOpen] = useState(false)
 
   return (
-    <div className="flex h-full">
+    // overflow-hidden is load-bearing. This shell is h-full — exactly the height
+    // of the app layout's <main>, which is itself overflow-auto. Anything too WIDE
+    // spills out and gives main a horizontal bar, which eats ~15px of its height,
+    // so the h-full shell no longer fits and main grows a second VERTICAL bar
+    // beside the one below. Cataloguing is the only section that nests a scroll
+    // container, so contain it here rather than loosening main for every page.
+    <div className="flex h-full overflow-hidden">
       {/* Desktop sidebar */}
       <div className="hidden md:block flex-shrink-0">
         <CataloguingSidebar allowedItems={allowedSidebarItems} />
@@ -28,7 +34,7 @@ export default function CataloguingShell({ children, allowedSidebarItems }: { ch
       )}
 
       {/* Main content */}
-      <div className="flex-1 min-h-0 overflow-y-auto bg-gray-50 dark:bg-[#141416]">
+      <div className="flex-1 min-h-0 min-w-0 overflow-y-auto bg-gray-50 dark:bg-[#141416]">
         {/* Mobile top bar */}
         <div className="md:hidden sticky top-0 z-30 flex items-center gap-3 bg-white dark:bg-[#1C1C1E] border-b border-gray-200 dark:border-gray-800 px-4 py-3">
           <button

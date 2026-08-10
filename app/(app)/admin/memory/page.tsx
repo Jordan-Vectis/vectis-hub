@@ -130,6 +130,12 @@ Sidebar \`components/cataloguing-sidebar.tsx\` + \`APP_SECTIONS.CATALOGUING\` ke
 
 ⚠ Jordan declined the watchdog/PC-companion idea ("doesn't really do what I need") — don't re-pitch monitoring unprompted.
 
+## ⚠ Layout — two scrollbars on cataloguing pages (fixed 2026-08-10)
+
+Jordan reported "multiple sliders and white space" on this page. **Cataloguing is the only section that nests a scroll container**: the app layout gives every page a scrolling \`<main className="flex-1 overflow-auto">\`, and every other tool layout (bc-warehouse, auction-ai, bc-reports…) is a plain \`<>{children}</>\` pass-through — but \`components/cataloguing-shell.tsx\` adds its own \`overflow-y-auto\` column so the sidebar stays put while the content scrolls. That shell is \`h-full\` = **exactly** main's height, so one too-wide child (a long barcode row, a wide table) escaping the shell gives main a horizontal scrollbar, which eats ~15px of main's content height, so the h-full shell no longer fits and main grows a **second vertical scrollbar right beside the first**. Fix = \`overflow-hidden\` on the shell wrapper (contain it in cataloguing rather than loosening \`<main>\` for every page in the app) + \`min-w-0\` on the flex-1 content column. ⚠ Don't remove either, and don't "simplify" the shell by dropping its own scroller — that scroller is what pins the sidebar.
+
+Same report: the **Import Check** drop-zone grid is \`grid sm:grid-cols-2\` with a button under the LEFT drop zone only, so the stretched right \`<label>\` came out taller than the left with its contents out of line — \`items-start\` on the grid.
+
 ## For later — BC's own receipt import exists
 
 \`EVA_ReceiptImportManagement\` (Evo-auction Base, codeunit 75725): Excel import **per receipt header**, column mapping defined by per-vendor \`EVA_ReceiptImportTemplateMap\` (headers matched by NAME in row 1; every sheet in the workbook imports into the ONE receipt you ran it from). If the overnight process ever moves off the macro onto this, the export must become one file per receipt and match the template's exact header names. The TRUE endgame for macro pain is a small BC-side AL extension creating lines server-side from the whole sheet — model it on this codeunit. Read the codeunit before building that.

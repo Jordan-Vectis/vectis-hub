@@ -1125,7 +1125,10 @@ function ImportCheckPanel({ receipts }: { receipts: ReceiptRow[] }) {
       </button>
       {open && (
         <div className="px-4 pb-4 space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* items-start: the left column carries a button under its drop zone, so a
+              stretched right column would make the two dashed boxes different heights
+              and their contents sit out of line. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
             <div className="space-y-2">
               <label className={drop}>
                 <span className="text-xl">⌨️</span>
