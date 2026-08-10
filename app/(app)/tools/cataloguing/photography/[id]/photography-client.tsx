@@ -44,7 +44,9 @@ export default function PhotographyClient({ auctionId, lots }: Props) {
       {tab === "upload" ? (
         <PhotoUploadTab
           auctionId={auctionId}
-          lots={lots.map(l => ({ id: l.id, barcode: l.barcode, receiptUniqueId: l.receiptUniqueId }))}
+          // imageUrls feeds the "don't add a photo the lot already has" check — the stored
+          // R2 key ends in the original filename, so no extra lookup is needed.
+          lots={lots.map(l => ({ id: l.id, barcode: l.barcode, receiptUniqueId: l.receiptUniqueId, imageUrls: l.imageUrls }))}
           onUploaded={() => router.refresh()}
         />
       ) : (

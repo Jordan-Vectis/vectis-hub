@@ -1,14 +1,25 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { uploadLotPhoto, uploadLotLabelPhoto } from "@/lib/actions/catalogue"
 
 interface Props {
   auctionId: string
-  lots: { id: string; barcode: string | null; receiptUniqueId?: string | null }[]
+  // imageUrls is what the "already on this lot" check reads — see nameFromKey below.
+  lots: { id: string; barcode: string | null; receiptUniqueId?: string | null; imageUrls?: string[] }[]
   onUploaded: () => void
 }
+
+// uploadLotPhoto stores every photo at lot-photos/{auctionId}/{lotId}/{Date.now()}-{safeName},
+// where safeName is the original filename with anything outside [A-Za-z0-9._-] replaced by "_".
+// The original name is therefore recoverable from the stored key, which is what lets the
+// "skip photos already on the lot" tickbox work with no schema change and no extra lookups.
+// Compare on the basename only — an endsWith() test on the whole key would match
+// "IMG_1.jpg" against a stored "X-IMG_1.jpg".
+const safeName    = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, "_")
+const nameFromKey = (key: string)  => (key.split("/").pop() ?? "").replace(/^\d+-/, "")
+const DEDUPE_LS_KEY = "photo_upload_skip_duplicates"
 
 interface LotGroup {
   lotId:    string | null
@@ -119,6 +130,7 @@ interface UploadResult {
   label:    string
   uploaded: number
   failed:   number
+  already:  number   // skipped — this filename is already on the lot
   errors:   string[]
 }
 
@@ -346,6 +358,25 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const [error, setError]          = useState<string | null>(null)
   const [skipped, setSkipped]      = useState<string[]>([])
   const [okLotCount, setOkLotCount] = useState(0)              // lots that actually received ≥1 photo
+  const [alreadyCount, setAlreadyCount] = useState(0)          // photos skipped as already on the lot
+
+  // Re-uploading the whole folder after a few more photos is the normal way of working,
+  // so default to skipping what is already there rather than duplicating it.
+  const [skipDuplicates, setSkipDuplicates] = useState(true)
+  useEffect(() => {
+    try { setSkipDuplicates(localStorage.getItem(DEDUPE_LS_KEY) !== "false") } catch {}
+  }, [])
+  function toggleSkipDuplicates(v: boolean) {
+    setSkipDuplicates(v)
+    try { localStorage.setItem(DEDUPE_LS_KEY, String(v)) } catch {}
+  }
+
+  // lotId → the filenames already stored against that lot, lower-cased. Case-insensitive
+  // because Windows treats IMG_1.JPG and img_1.jpg as the same file, so re-picking a folder
+  // must not smuggle a duplicate back in on a case change alone.
+  const existingNames = useMemo(() => new Map<string, Set<string>>(
+    lots.map(l => [l.id, new Set((l.imageUrls ?? []).map(k => nameFromKey(k).toLowerCase()))])
+  ), [lots])
 
   // Object URLs for preview thumbnails — created once per file when groups are
   // built, revoked on reset/unmount.
@@ -852,23 +883,39 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     const total = uploadable.reduce((sum, g) => sum + g.photos.length, 0)
     setUploadProgress({ done: 0, total })
     setUploadLog([])
+    setAlreadyCount(0)
     setPhase("uploading")
 
     const failedList: string[] = []
     const perLot: UploadResult[] = []
     const okLotIds = new Set<string>()
     let done = 0
+    let alreadyTotal = 0
+
+    // A mutable copy so a successful upload immediately counts as "already there" — that
+    // also catches the same filename appearing twice within one folder (e.g. two subfolders).
+    const seen = new Map<string, Set<string>>()
+    for (const [id, names] of existingNames) seen.set(id, new Set(names))
 
     for (const group of uploadable) {
       let ok = 0
+      let already = 0
       const errs: string[] = []
       setUploadingLabel(group.label)
       for (const photo of group.photos) {
+        const fileName = safeName(photo.name).toLowerCase()
+        const have = seen.get(group.lotId!) ?? new Set<string>()
+        if (skipDuplicates && have.has(fileName)) {
+          already++; alreadyTotal++
+          done++
+          setUploadProgress({ done, total })
+          continue
+        }
         try {
           const fd = new FormData()
           fd.set("photo", photo)
           const res = await uploadLotPhoto(group.lotId!, auctionId, fd)
-          if (res.ok) { ok++; okLotIds.add(group.lotId!) }
+          if (res.ok) { ok++; okLotIds.add(group.lotId!); have.add(fileName); seen.set(group.lotId!, have) }
           else { errs.push(`${photo.name} — ${res.error}`); failedList.push(`${group.label}/${photo.name} — ${res.error}`) }
         } catch (e: any) {
           const msg = e?.message ?? "unknown error"
@@ -890,7 +937,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
         } catch { /* ignore — the lot's photos matter, the label is a bonus */ }
       }
 
-      const row: UploadResult = { label: group.label, uploaded: ok, failed: errs.length, errors: errs }
+      const row: UploadResult = { label: group.label, uploaded: ok, failed: errs.length, already, errors: errs }
       perLot.push(row)
       setUploadLog(prev => [...prev, row])
     }
@@ -899,6 +946,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     setSkipped(failedList)
     setUploadResults(perLot)
     setOkLotCount(okLotIds.size)
+    setAlreadyCount(alreadyTotal)
     setPhase("done")
     onUploaded()
   }
@@ -909,7 +957,9 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const emptyGroups     = groups.filter(g => g.lotId && g.photos.length === 0)
   const editedCount     = groups.filter(g => g.edited).length
   const totalPhotos     = matchedGroups.reduce((sum, g) => sum + g.photos.length, 0)
-  const uploadedCount   = uploadProgress.done - skipped.length
+  // done counts every photo we walked past, including the ones skipped as already on the
+  // lot — take those off as well as the failures or "saved" over-reports.
+  const uploadedCount   = uploadProgress.done - skipped.length - alreadyCount
 
   // Flag groups with far more photos than typical — the classic sign that the
   // next lot's label failed to scan and two lots ran together. LOWER median on
@@ -1123,6 +1173,25 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
               </span>
             </button>
           </div>
+
+          {/* Duplicate guard — applies to BOTH modes */}
+          <label className="mt-5 flex items-start gap-3 cursor-pointer bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3">
+            <input
+              type="checkbox"
+              checked={skipDuplicates}
+              onChange={e => toggleSkipDuplicates(e.target.checked)}
+              className="mt-0.5 w-4 h-4 accent-[#2AB4A6]"
+            />
+            <span>
+              <span className="block text-sm font-semibold text-gray-900 dark:text-white">
+                Don&apos;t add a photo the lot already has
+              </span>
+              <span className="block text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                Matches on filename, so you can re-pick the whole folder after taking a few more photos and only
+                the new ones are saved. Untick to save everything again, duplicates included.
+              </span>
+            </span>
+          </label>
 
           {/* Model picker */}
           <div className="mt-5 flex items-center gap-2 flex-wrap bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3">
@@ -1524,7 +1593,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
                   </span>
                   <span className="font-mono text-gray-700 dark:text-gray-300">{r.label}</span>
                   <span className="text-gray-600 dark:text-gray-400">
-                    {r.uploaded} saved{r.failed > 0 ? `, ${r.failed} failed` : ""}
+                    {r.uploaded} saved{r.already > 0 ? `, ${r.already} already there` : ""}{r.failed > 0 ? `, ${r.failed} failed` : ""}
                   </span>
                 </div>
               ))}
@@ -1536,7 +1605,18 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
       {/* ══ Done — the results screen ══ */}
       {phase === "done" && (
         <div className="space-y-4">
-          {uploadedCount === 0 ? (
+          {/* Re-picking a folder with nothing new in it is a normal, successful outcome —
+              it must not read as the red "everything failed" banner. */}
+          {uploadedCount === 0 && skipped.length === 0 && alreadyCount > 0 ? (
+            <div className="rounded-xl border bg-sky-50 border-sky-300 dark:bg-sky-900/15 dark:border-sky-700/60 px-6 py-6 text-center">
+              <p className="text-4xl mb-1">✓</p>
+              <p className="text-base font-bold text-sky-800 dark:text-sky-300">Nothing new to save</p>
+              <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                All {alreadyCount} photo{alreadyCount !== 1 ? "s" : ""} {alreadyCount !== 1 ? "were" : "was"} already
+                on the {alreadyCount !== 1 ? "lots" : "lot"} — nothing was duplicated.
+              </p>
+            </div>
+          ) : uploadedCount === 0 ? (
             <div className="rounded-xl border bg-red-50 border-red-300 dark:bg-red-900/15 dark:border-red-700/60 px-6 py-6 text-center">
               <p className="text-4xl mb-1">✗</p>
               <p className="text-base font-bold text-red-800 dark:text-red-300">Nothing was saved</p>
@@ -1556,14 +1636,16 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
               </p>
               <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
                 {uploadedCount} of {uploadProgress.total} photo{uploadProgress.total !== 1 ? "s" : ""} saved
-                to {okLotCount} lot{okLotCount !== 1 ? "s" : ""}.
+                to {okLotCount} lot{okLotCount !== 1 ? "s" : ""}
+                {alreadyCount > 0 ? ` · ${alreadyCount} already there, left alone` : ""}.
               </p>
             </div>
           )}
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <Stat label="Photos saved" value={uploadedCount} tone={uploadedCount > 0 ? "good" : "bad"} />
             <Stat label="Lots updated" value={okLotCount} />
+            <Stat label="Already there" value={alreadyCount} sub={alreadyCount > 0 ? "same filename, not duplicated" : undefined} />
             <Stat label="Photos failed" value={skipped.length} tone={skipped.length > 0 ? "bad" : "plain"} />
             <Stat label="Not saved (unmatched)" value={unmatchedGroups.length} tone={unmatchedGroups.length > 0 ? "warn" : "plain"}
               sub={unmatchedGroups.length > 0 ? "labels not on a lot in this sale" : undefined} />
