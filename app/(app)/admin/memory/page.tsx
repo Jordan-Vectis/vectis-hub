@@ -664,11 +664,21 @@ Verified with a temp tsx suite (10 cases incl. token-reasons+huge-unallocated = 
 
 **Admin preview:** Admin → Cataloguer Activity Timer (**/admin/activity-timer**) has a "👁 Preview the popup" button — read-only replica driven by the configured reasons (✕ + amber "Preview" badge; nothing saved). Component: components/idle-prompt-preview.tsx.
 
-⚠ **The popup markup exists in TWO places — keep them in sync:**
+⚠ **The popup markup lives in TWO places:**
 1. The REAL popup — inline in app/(app)/tools/cataloguing/auctions/[id]/lot-wizard-tab.tsx (search "How was this time spent?"). Wired to idle detection + the save flow. ⚠ Jack owns/actively works in this file's idle logic — coordinate before touching it.
 2. The preview REPLICA — components/idle-prompt-preview.tsx.
 
-Not extracted into a shared component because the real popup is tightly coupled to the wizard's idle refs / save flow — safer to replicate than refactor the critical cataloguing path.`,
+The **chrome** (heading, split sliders, notes) is still duplicated — the real popup is tightly coupled to the wizard's idle refs and save flow, so it was safer to replicate than to refactor the critical cataloguing path. **The reason BUTTONS are no longer duplicated** (2026-08-10): they and the message banner come from **components/idle-reason-picker.tsx**, which both render — don't inline them back.
+
+## ⚠⚠ 2026-08-10 — grouped, colour-coded, with an optional message
+
+Jordan: "the UI for this activity timer needs some improving… we also need better symbols for each option… I'd also like an optional message on the top". Shown three layouts, he picked **grouped and colour-coded**.
+
+- **Grouping**: \`IdleReason.group?: string\` (inside the \`reasons\` JSON — **no migration**). The popup groups by that string **in the order groups first appear in the reasons array**, so the admin controls running order by reordering reasons — deliberately no second ordering setting. **Ungrouped reasons render last in one unheaded bucket**, so a config predating the field still shows every button.
+- **Colour is finally used.** Each unselected chip wears its own \`colour\` — already stored per reason and previously ignored (the popup drew plain white cards). Selected overrides with the app teal + ring so "picked" reads across a dozen colours. Safe because \`COLOUR_PRESETS\` is a fixed list in source, so Tailwind generates every class — ⚠ **never let an admin free-type a Tailwind class here**, it would be purged.
+- **Why every reason showed 📝**: the admin reason form pre-filled \`useState(initial?.icon ?? "📝")\` and nobody changed it. It now **starts blank** with a grouped emoji **picker** (\`ICON_CHOICES\`) plus a free-type box.
+- **✨ One-click fill**: \`suggestReasonMeta(label)\` maps Vectis's real labels (lunch break, palletising, lot corrections/alterations, telephone bidding…) → symbol + group. The button only touches reasons with **no symbol / the old \`PLACEHOLDER_ICON\` / no group** and never overwrites a hand-set value — 16 reasons would otherwise be 16 manual edits.
+- **Optional message**: \`IdleTimerConfig.message\` (**new TEXT column**), edited on /admin/activity-timer, shown in an amber banner above the reasons; **blank = no banner**. ⚠ Every read/write is **migration-safe** (try/catch + fallback) because the code deploys before the column exists.`,
   },
   {
     filename: "terms_aup.md",

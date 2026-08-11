@@ -28,6 +28,8 @@ export async function GET(req: NextRequest) {
       yellowMins: config.yellowMins,
       redMins:    config.redMins,
       reasons:    config.reasons ?? [],
+      // Undefined until the column exists — the popup treats a missing message as "no banner".
+      message:    config.message ?? "",
     })
   } catch (e: any) {
     console.error("idle-timer-config GET error:", e)
@@ -43,7 +45,7 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { reasons } = body
+    const { reasons, message } = body
 
     // Timing is a single per-user threshold (User.timerRedMins) — this config
     // only manages the reasons list. The legacy yellow/red columns are kept in
@@ -52,16 +54,31 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "Invalid payload — reasons required" }, { status: 400 })
     }
 
-    const config = await (prisma as any).idleTimerConfig.upsert({
-      where:  { id: "global" },
-      create: { id: "global", yellowMins: DEFAULT_CONFIG.yellowMins, redMins: DEFAULT_CONFIG.redMins, reasons },
-      update: { reasons },
-    })
+    // `message` is newer than the deploy that reads it, so a save must still work before
+    // the column exists — write it, and on failure fall back to saving the reasons alone
+    // rather than 500ing the whole settings page. Same migration-safe pattern as
+    // getAllInstructions (RULES.md).
+    const msg = typeof message === "string" ? message.trim() : undefined
+    let config
+    try {
+      config = await (prisma as any).idleTimerConfig.upsert({
+        where:  { id: "global" },
+        create: { id: "global", yellowMins: DEFAULT_CONFIG.yellowMins, redMins: DEFAULT_CONFIG.redMins, reasons, ...(msg !== undefined ? { message: msg } : {}) },
+        update: { reasons, ...(msg !== undefined ? { message: msg } : {}) },
+      })
+    } catch {
+      config = await (prisma as any).idleTimerConfig.upsert({
+        where:  { id: "global" },
+        create: { id: "global", yellowMins: DEFAULT_CONFIG.yellowMins, redMins: DEFAULT_CONFIG.redMins, reasons },
+        update: { reasons },
+      })
+    }
 
     return NextResponse.json({
       yellowMins: config.yellowMins,
       redMins:    config.redMins,
       reasons:    config.reasons ?? [],
+      message:    config.message ?? "",
     })
   } catch (e: any) {
     console.error("idle-timer-config PUT error:", e)

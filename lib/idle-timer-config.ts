@@ -45,20 +45,37 @@ export interface IdleReason {
   colour:        string   // Tailwind badge classes
   idleColour:    string   // hex for charts / timeline
   notePrompt?:   string   // optional follow-up question shown as the note label (e.g. "Who for?")
+  group?:        string   // heading the popup files this reason under (blank = ungrouped, shown last)
 }
 
 export interface IdleTimerConfig {
   yellowMins: number
   redMins:    number
   reasons:    IdleReason[]
+  message?:   string      // optional note shown at the top of the popup; blank = no banner
 }
 
+// Group headings offered in the admin editor. Free text is still allowed — the popup groups by
+// whatever string is on each reason, in the order the groups first appear in the reasons list,
+// so admins control the running order by reordering reasons. Anything ungrouped renders last.
+export const GROUP_SUGGESTIONS = ["Breaks", "Warehouse", "Cataloguing", "Saleroom", "Away from the desk"]
+
+// Grouped, deduped for the picker. Skin tones and gendered variants deliberately left out —
+// this is a symbol for a button, not a person.
+export const ICON_CHOICES: { group: string; icons: string[] }[] = [
+  { group: "Breaks & away",  icons: ["🍽️", "☕", "🥪", "🚬", "🌴", "🏖️", "🛌", "🚗", "🏥", "📅"] },
+  { group: "Warehouse",      icons: ["📦", "📐", "🪵", "📬", "🗄️", "🏷️", "🧹", "🚛", "🪜", "⚖️"] },
+  { group: "Cataloguing",    icons: ["🔍", "✏️", "📋", "📝", "🖊️", "📖", "🔎", "💻", "📸", "🖨️"] },
+  { group: "Saleroom & sales", icons: ["🔨", "☎️", "💰", "🤝", "👥", "🎓", "📣", "🎥", "💷", "🧾"] },
+  { group: "General",        icons: ["⭐", "❔", "⚙️", "🔔", "🚩", "⏱️", "🧰", "🗂️", "✅", "❗"] },
+]
+
 export const DEFAULT_REASONS: IdleReason[] = [
-  { key: "LUNCH_BREAK",            label: "Lunch Break",       icon: "🍽️", requiresNotes: false, colour: "bg-amber-100 text-amber-700 border-amber-200",   idleColour: "#f59e0b" },
-  { key: "LOTTING_UP",             label: "Lotting Up",        icon: "📦", requiresNotes: false, colour: "bg-blue-100 text-blue-700 border-blue-200",       idleColour: "#3b82f6" },
-  { key: "CLERKING",               label: "Clerking",          icon: "🔨", requiresNotes: false, colour: "bg-purple-100 text-purple-700 border-purple-200", idleColour: "#9333ea" },
-  { key: "DEALING_WITH_CUSTOMERS", label: "With Customers",    icon: "🤝", requiresNotes: false, colour: "bg-green-100 text-green-700 border-green-200",    idleColour: "#22c55e" },
-  { key: "VALUATIONS",             label: "Valuations",        icon: "💰", requiresNotes: false, colour: "bg-rose-100 text-rose-700 border-rose-200",        idleColour: "#f43f5e" },
+  { key: "LUNCH_BREAK",            label: "Lunch Break",       icon: "🍽️", requiresNotes: false, colour: "bg-amber-100 text-amber-700 border-amber-200",   idleColour: "#f59e0b", group: "Breaks" },
+  { key: "LOTTING_UP",             label: "Lotting Up",        icon: "📦", requiresNotes: false, colour: "bg-blue-100 text-blue-700 border-blue-200",       idleColour: "#3b82f6", group: "Warehouse" },
+  { key: "CLERKING",               label: "Clerking",          icon: "🔨", requiresNotes: false, colour: "bg-purple-100 text-purple-700 border-purple-200", idleColour: "#9333ea", group: "Saleroom" },
+  { key: "DEALING_WITH_CUSTOMERS", label: "With Customers",    icon: "🤝", requiresNotes: false, colour: "bg-green-100 text-green-700 border-green-200",    idleColour: "#22c55e", group: "Saleroom" },
+  { key: "VALUATIONS",             label: "Valuations",        icon: "💰", requiresNotes: false, colour: "bg-rose-100 text-rose-700 border-rose-200",        idleColour: "#f43f5e", group: "Saleroom" },
   { key: "OTHER",                  label: "Other",             icon: "✏️", requiresNotes: true,  colour: "bg-gray-100 text-gray-600 border-gray-200",       idleColour: "#9ca3af" },
 ]
 
@@ -108,6 +125,44 @@ export const DEFAULT_CONFIG: IdleTimerConfig = {
   redMins:    10,
   reasons:    DEFAULT_REASONS,
 }
+
+// Sensible symbol + group for the reasons Vectis actually uses, keyed by a loosened label
+// (lower case, letters and digits only) so "Lot Corrections/Alterations" and "lot corrections"
+// both hit. Drives the admin's one-click fill — every reason added before symbols mattered
+// carries the old "📝" default, and setting a dozen of them by hand is nobody's afternoon.
+const normLabel = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
+
+const SUGGESTED: Record<string, { icon: string; group: string }> = {
+  lunchbreak:            { icon: "🍽️", group: "Breaks" },
+  lunch:                 { icon: "🍽️", group: "Breaks" },
+  otherbreak:            { icon: "☕",  group: "Breaks" },
+  break:                 { icon: "☕",  group: "Breaks" },
+  holiday:               { icon: "🌴", group: "Breaks" },
+  layingout:             { icon: "📐", group: "Warehouse" },
+  lottingup:             { icon: "📦", group: "Warehouse" },
+  palletising:           { icon: "🪵", group: "Warehouse" },
+  palletizing:           { icon: "🪵", group: "Warehouse" },
+  boxingup:              { icon: "📬", group: "Warehouse" },
+  research:              { icon: "🔍", group: "Cataloguing" },
+  lotcorrectionsalterations: { icon: "✏️", group: "Cataloguing" },
+  lotcorrections:        { icon: "✏️", group: "Cataloguing" },
+  conditionreports:      { icon: "📋", group: "Cataloguing" },
+  valuations:            { icon: "💰", group: "Saleroom" },
+  clerking:              { icon: "🔨", group: "Saleroom" },
+  telephonebidding:      { icon: "☎️", group: "Saleroom" },
+  dealingwithcustomers:  { icon: "🤝", group: "Saleroom" },
+  withcustomers:         { icon: "🤝", group: "Saleroom" },
+  meeting:               { icon: "👥", group: "Away from the desk" },
+  meetings:              { icon: "👥", group: "Away from the desk" },
+  training:              { icon: "🎓", group: "Away from the desk" },
+}
+
+export function suggestReasonMeta(label: string): { icon?: string; group?: string } {
+  return SUGGESTED[normLabel(label)] ?? {}
+}
+
+// The icon every reason got before there was a picker — treated as "not chosen yet".
+export const PLACEHOLDER_ICON = "📝"
 
 // Preset colour options shown in the admin UI
 export const COLOUR_PRESETS: { label: string; colour: string; idleColour: string }[] = [

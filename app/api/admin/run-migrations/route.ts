@@ -1289,6 +1289,8 @@ const MIGRATIONS = [
     CONSTRAINT "EodCheckDismissal_pkey" PRIMARY KEY ("id")
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "EodCheckDismissal_lotId_checkKey_key" ON "EodCheckDismissal"("lotId", "checkKey")`,
+  // Activity timer: an optional note shown above the reasons in the popup.
+  `ALTER TABLE "IdleTimerConfig" ADD COLUMN IF NOT EXISTS "message" TEXT`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

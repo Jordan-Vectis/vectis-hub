@@ -6,6 +6,7 @@ import { createLot, getLastLotFields, saveLastLotFields, checkBarcodeAssigned, g
 import { loadSpellDict, findMisspellings } from "@/lib/spellcheck"
 import { DEFAULT_REASONS, workingMsBetween } from "@/lib/idle-timer-config"
 import type { IdleReason } from "@/lib/idle-timer-config"
+import { IdleReasonPicker, IdleMessageBanner } from "@/components/idle-reason-picker"
 import { DEFAULT_CATEGORY_MAP } from "@/lib/lot-categories"
 import { useCategoryMap } from "@/lib/use-category-map"
 import { buildCondition as buildConditionStr, type BoxPrefixMode } from "@/lib/condition"
@@ -470,6 +471,8 @@ export default function LotWizardTab({
   const [idleUnallocWarn,  setIdleUnallocWarn] = useState(false)
   const [idleSubmitting,   setIdleSubmitting] = useState(false)
   const [idleReasons,      setIdleReasons]    = useState<IdleReason[]>(DEFAULT_REASONS)
+  // Optional note from Admin → Activity Timer, shown above the reasons. Blank = no banner.
+  const [idleMessage,      setIdleMessage]    = useState<string>("")
   // The idle log failed to save — shown in the popup. We do NOT wave the user
   // through on a failure: an unrecorded gap is the whole problem this exists to
   // stop. Nothing is lost by blocking, because saving the lot needs the same
@@ -509,7 +512,10 @@ export default function LotWizardTab({
   useEffect(() => {
     fetch("/api/admin/idle-timer-config")
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.reasons?.length) setIdleReasons(d.reasons) })
+      .then(d => {
+        if (d?.reasons?.length) setIdleReasons(d.reasons)
+        if (typeof d?.message === "string") setIdleMessage(d.message)
+      })
       .catch(() => { /* stay on defaults */ })
   }, [])
 
@@ -1364,27 +1370,20 @@ export default function LotWizardTab({
               </p>
             </div>
 
-            {/* Reason buttons — loaded from admin config. Tap all that apply. */}
-            <div className="grid grid-cols-3 gap-2 mb-1.5">
-              {idleReasons.map(opt => {
-                const on = idleSelected.includes(opt.key)
-                return (
-                  <button key={opt.key}
-                    onClick={() => {
-                      // Selecting "Other" goes via the reminder first; deselecting is instant.
-                      if (!on && opt.key === "OTHER") { setIdleOtherWarn(true); return }
-                      setIdleSelected(sel => on ? sel.filter(k => k !== opt.key) : [...sel, opt.key])
-                    }}
-                    className={`py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
-                      on
-                        ? "border-[#2AB4A6] bg-[#2AB4A6]/10 text-[#1a8a80]"
-                        : "border-gray-200 text-gray-600 hover:border-gray-300"
-                    }`}>
-                    {opt.icon} {opt.label}
-                  </button>
-                )
-              })}
-            </div>
+            {/* Optional note from Admin → Activity Timer. Blank = nothing rendered. */}
+            <IdleMessageBanner message={idleMessage} />
+
+            {/* Reason buttons — loaded from admin config, grouped and colour-coded by the
+                SHARED picker so this and the admin preview can never drift apart again. */}
+            <IdleReasonPicker
+              reasons={idleReasons}
+              selected={idleSelected}
+              onToggle={(key, on) => {
+                // Selecting "Other" goes via the reminder first; deselecting is instant.
+                if (!on && key === "OTHER") { setIdleOtherWarn(true); return }
+                setIdleSelected(sel => on ? sel.filter(k => k !== key) : [...sel, key])
+              }}
+            />
             <p className="text-[11px] text-gray-400 text-center mb-3">Doing more than one thing? Tap all that apply.</p>
 
             {/* Split sliders — only when more than one reason is picked */}

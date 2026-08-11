@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import type { IdleReason } from "@/lib/idle-timer-config"
+import { IdleReasonPicker, IdleMessageBanner } from "@/components/idle-reason-picker"
 
 // Admin → Cataloguer Activity Timer: a faithful, read-only PREVIEW of the
 // activity/away popup cataloguers get (the "How was this time spent?" modal),
@@ -9,11 +10,11 @@ import type { IdleReason } from "@/lib/idle-timer-config"
 // admins to see how their reasons, icons, labels and note prompts appear,
 // including the multi-select time-split sliders.
 //
-// ⚠ This mirrors the REAL popup, whose markup lives inline in the lot wizard
-// (app/(app)/tools/cataloguing/auctions/[id]/lot-wizard-tab.tsx — search
-// "How was this time spent?"). If you restyle one, restyle the other. The popup
-// card is always white (even in dark mode), so this uses light text throughout.
-export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }) {
+// The reason buttons and the message banner come from components/idle-reason-picker,
+// which the REAL popup (lot-wizard-tab.tsx) renders too — so those can no longer drift.
+// The surrounding chrome is still a replica: restyle the wizard's and this one together.
+// The popup card is always white (even in dark mode), so this uses light text throughout.
+export default function IdlePromptPreview({ reasons, message }: { reasons: IdleReason[]; message?: string }) {
   const [open, setOpen]             = useState(false)
   const [selected, setSelected]     = useState<string[]>([])
   const [alloc, setAlloc]           = useState<Record<string, number>>({})
@@ -119,29 +120,20 @@ export default function IdlePromptPreview({ reasons }: { reasons: IdleReason[] }
               <p className="text-xs text-gray-500 mt-1">since your last saved lot — working hours (Mon–Fri, 9–5) only</p>
             </div>
 
-            {/* Reason buttons — exactly the reasons configured on this page */}
-            <div className="grid grid-cols-3 gap-2 mb-1.5">
-              {reasons.map(opt => {
-                const on = selected.includes(opt.key)
-                return (
-                  <button
-                    key={opt.key}
-                    onClick={() => {
-                      // Selecting "Other" goes via the reminder first; deselecting is instant.
-                      if (!on && opt.key === "OTHER") { setOtherWarn(true); return }
-                      setSelected(sel => on ? sel.filter(k => k !== opt.key) : [...sel, opt.key])
-                    }}
-                    className={`py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
-                      on
-                        ? "border-[#2AB4A6] bg-[#2AB4A6]/10 text-[#1a8a80]"
-                        : "border-gray-200 text-gray-600 hover:border-gray-300"
-                    }`}
-                  >
-                    {opt.icon} {opt.label}
-                  </button>
-                )
-              })}
-            </div>
+            {/* The optional note, exactly as cataloguers get it */}
+            <IdleMessageBanner message={message} />
+
+            {/* Reason buttons — exactly the reasons configured on this page, through the
+                SHARED picker, so this preview cannot drift from the real popup. */}
+            <IdleReasonPicker
+              reasons={reasons}
+              selected={selected}
+              onToggle={(key, on) => {
+                // Selecting "Other" goes via the reminder first; deselecting is instant.
+                if (!on && key === "OTHER") { setOtherWarn(true); return }
+                setSelected(sel => on ? sel.filter(k => k !== key) : [...sel, key])
+              }}
+            />
             <p className="text-[11px] text-gray-400 text-center mb-3">Doing more than one thing? Tap all that apply.</p>
 
             {/* Split sliders — only when more than one reason is picked */}

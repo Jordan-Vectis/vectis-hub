@@ -6,13 +6,18 @@ import IdleTimerSettingsClient from "./idle-timer-settings-client"
 import IdlePromptPreview from "@/components/idle-prompt-preview"
 import Link from "next/link"
 
-async function getReasons() {
+// Migration-safe: `message` is newer than the deploy that reads it, so a missing column must
+// leave the page working with no banner rather than 500 it (RULES.md pattern).
+async function getConfig(): Promise<{ reasons: any[]; message: string }> {
   try {
     const row = await (prisma as any).idleTimerConfig.findUnique({ where: { id: "global" } })
-    if (!row) return DEFAULT_CONFIG.reasons
-    return Array.isArray(row.reasons) && row.reasons.length ? row.reasons : DEFAULT_CONFIG.reasons
+    if (!row) return { reasons: DEFAULT_CONFIG.reasons, message: "" }
+    return {
+      reasons: Array.isArray(row.reasons) && row.reasons.length ? row.reasons : DEFAULT_CONFIG.reasons,
+      message: typeof row.message === "string" ? row.message : "",
+    }
   } catch {
-    return DEFAULT_CONFIG.reasons
+    return { reasons: DEFAULT_CONFIG.reasons, message: "" }
   }
 }
 
@@ -20,7 +25,7 @@ export default async function IdleTimerAdminPage() {
   const session = await auth()
   if (!session || session.user.role !== "ADMIN") redirect("/hub")
 
-  const reasons = await getReasons()
+  const { reasons, message } = await getConfig()
 
   return (
     <div className="p-8 max-w-3xl">
@@ -35,7 +40,7 @@ export default async function IdleTimerAdminPage() {
           Timing thresholds are set per user in Admin → Users. Changes take effect on the next page load.
         </p>
         <div className="mt-4">
-          <IdlePromptPreview reasons={reasons} />
+          <IdlePromptPreview reasons={reasons} message={message} />
         </div>
       </div>
 
@@ -47,7 +52,7 @@ export default async function IdleTimerAdminPage() {
         </span>
       </Link>
 
-      <IdleTimerSettingsClient initialReasons={reasons} />
+      <IdleTimerSettingsClient initialReasons={reasons} initialMessage={message} />
     </div>
   )
 }

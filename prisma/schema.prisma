@@ -821,6 +821,7 @@ model IdleTimerConfig {
   yellowMins  Int      @default(4)
   redMins     Int      @default(10)
   reasons     Json     @default("[]")   // IdleReason[]
+  message     String?  @db.Text         // optional note shown at the top of the activity popup
   updatedAt   DateTime @updatedAt
 }
 

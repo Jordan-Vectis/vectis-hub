@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react"
 import type { IdleReason } from "@/lib/idle-timer-config"
-import { COLOUR_PRESETS } from "@/lib/idle-timer-config"
+import { COLOUR_PRESETS, GROUP_SUGGESTIONS, ICON_CHOICES, PLACEHOLDER_ICON, suggestReasonMeta } from "@/lib/idle-timer-config"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -23,7 +23,11 @@ function ReasonModal({
   onSave: (r: IdleReason) => void
   onClose: () => void
 }) {
-  const [icon,         setIcon]         = useState(initial?.icon         ?? "📝")
+  // No default emoji. Every reason added before this used the old "📝" pre-fill and nobody
+  // changed it, so a dozen reasons ended up identical in the popup — starting blank forces
+  // a choice, and the picker below makes choosing quicker than typing.
+  const [icon,         setIcon]         = useState(initial?.icon         ?? "")
+  const [group,        setGroup]        = useState(initial?.group        ?? "")
   const [label,        setLabel]        = useState(initial?.label        ?? "")
   const [requiresNotes,setRequiresNotes]= useState(initial?.requiresNotes ?? false)
   const [notePrompt,   setNotePrompt]   = useState(initial?.notePrompt    ?? "")
@@ -45,7 +49,8 @@ function ReasonModal({
 
   function save() {
     if (!canSave) return
-    onSave({ key: derivedKey, label: label.trim(), icon, requiresNotes, colour, idleColour, notePrompt: notePrompt.trim() || undefined })
+    onSave({ key: derivedKey, label: label.trim(), icon: icon.trim() || "•", requiresNotes, colour, idleColour,
+             notePrompt: notePrompt.trim() || undefined, group: group.trim() || undefined })
   }
 
   return (
@@ -55,10 +60,44 @@ function ReasonModal({
           {initial ? "Edit Reason" : "Add Reason"}
         </h3>
 
-        {/* Icon */}
-        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Icon (emoji)</label>
-        <input value={icon} onChange={e => setIcon(e.target.value)} maxLength={4}
-          className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-2xl bg-gray-50 dark:bg-gray-800 mb-4 text-center focus:outline-none focus:border-[#2AB4A6]" />
+        {/* Icon — pick one, or type your own */}
+        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Symbol</label>
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-14 h-14 shrink-0 flex items-center justify-center text-3xl rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+            {icon || <span className="text-xs text-gray-400 font-normal">none</span>}
+          </div>
+          <input value={icon} onChange={e => setIcon(e.target.value)} maxLength={4}
+            placeholder="or paste any emoji"
+            className="flex-1 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-lg bg-gray-50 dark:bg-gray-800 text-center focus:outline-none focus:border-[#2AB4A6]" />
+        </div>
+        <div className="mb-4 max-h-40 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 p-2 space-y-2">
+          {ICON_CHOICES.map(row => (
+            <div key={row.group}>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">{row.group}</p>
+              <div className="flex flex-wrap gap-1">
+                {row.icons.map(ic => (
+                  <button key={ic} type="button" onClick={() => setIcon(ic)} title={ic}
+                    className={`w-9 h-9 rounded-lg text-xl flex items-center justify-center transition-all ${
+                      icon === ic ? "ring-2 ring-[#2AB4A6] bg-[#2AB4A6]/10" : "hover:bg-gray-100 dark:hover:bg-gray-800"
+                    }`}>{ic}</button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Group — the heading this reason sits under in the popup */}
+        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Group</label>
+        <input value={group} onChange={e => setGroup(e.target.value)} list="idle-group-suggestions"
+          placeholder="e.g. Breaks — leave blank to sit on its own at the bottom"
+          className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white mb-1 focus:outline-none focus:border-[#2AB4A6]" />
+        <datalist id="idle-group-suggestions">
+          {GROUP_SUGGESTIONS.map(g => <option key={g} value={g} />)}
+        </datalist>
+        <p className="text-xs text-gray-400 mb-4">
+          Reasons sharing a group appear together under that heading. Groups run in the order they
+          first appear in the list below, so drag a reason to move its whole group.
+        </p>
 
         {/* Label */}
         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Label</label>
@@ -130,8 +169,10 @@ function ReasonModal({
 
 // ─── Main settings component ──────────────────────────────────────────────────
 
-export default function IdleTimerSettingsClient({ initialReasons }: { initialReasons: IdleReason[] }) {
+export default function IdleTimerSettingsClient({ initialReasons, initialMessage }: { initialReasons: IdleReason[]; initialMessage?: string }) {
   const [reasons,    setReasons]    = useState<IdleReason[]>(initialReasons)
+  // Optional note shown above the reasons in the popup. Empty = no banner at all.
+  const [message,    setMessage]    = useState<string>(initialMessage ?? "")
 
   const [editTarget, setEditTarget] = useState<IdleReason | null | "new">(null)
   const [saveMsg,    setSaveMsg]    = useState<{ ok: boolean; text: string } | null>(null)
@@ -174,6 +215,26 @@ export default function IdleTimerSettingsClient({ initialReasons }: { initialRea
     })
   }
 
+  // Fill in what was never chosen: a reason still on the old "📝" default (or with no symbol)
+  // gets a suggested one, and a reason with no group gets a suggested group. Anything already
+  // set by hand is left completely alone, and nothing saves until Save is pressed.
+  const fillable = reasons.filter(r => {
+    const s = suggestReasonMeta(r.label)
+    const needsIcon  = (!r.icon?.trim() || r.icon === PLACEHOLDER_ICON) && !!s.icon
+    const needsGroup = !r.group?.trim() && !!s.group
+    return needsIcon || needsGroup
+  }).length
+
+  function fillSuggestions() {
+    setReasons(prev => prev.map(r => {
+      const s = suggestReasonMeta(r.label)
+      const icon  = (!r.icon?.trim() || r.icon === PLACEHOLDER_ICON) && s.icon ? s.icon : r.icon
+      const group = !r.group?.trim() && s.group ? s.group : r.group
+      return { ...r, icon, group }
+    }))
+    setSaveMsg(null)
+  }
+
   // ── Save to DB ──
   function save() {
     setSaveMsg(null)
@@ -181,7 +242,7 @@ export default function IdleTimerSettingsClient({ initialReasons }: { initialRea
       const res = await fetch("/api/admin/idle-timer-config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reasons }),
+        body: JSON.stringify({ reasons, message }),
       })
       if (res.ok) {
         setSaveMsg({ ok: true, text: "Settings saved." })
@@ -220,14 +281,42 @@ export default function IdleTimerSettingsClient({ initialReasons }: { initialRea
           </p>
         </section>
 
+        {/* ── Optional message shown at the top of the popup ── */}
+        <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
+          <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-1">Message to cataloguers</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            Shown in an amber banner above the reasons, every time the popup appears. Leave it empty
+            and no banner is shown at all. Use it for something that applies this week — a deadline, a
+            reminder to log a particular job — and clear it when it no longer applies.
+          </p>
+          <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3} maxLength={400}
+            placeholder="e.g. Stocktake this week — please log time under Laying Out."
+            className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-[#2AB4A6]" />
+          <div className="flex items-center justify-between mt-1">
+            <p className="text-xs text-gray-400">{message.trim() ? `${message.trim().length}/400` : "No banner will be shown."}</p>
+            {message.trim() && (
+              <button onClick={() => setMessage("")} className="text-xs text-gray-500 hover:text-red-500">Clear message</button>
+            )}
+          </div>
+        </section>
+
         {/* ── Reasons ── */}
         <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-1">
             <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Activity Reasons</h2>
-            <button onClick={openAdd}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2AB4A6] hover:bg-[#22a090] text-white text-xs font-bold rounded-lg transition-colors">
-              + Add Reason
-            </button>
+            <div className="flex items-center gap-2">
+              {fillable > 0 && (
+                <button onClick={fillSuggestions}
+                  title="Only fills reasons with no symbol or no group — anything you have set yourself is left alone"
+                  className="px-3 py-1.5 border border-[#2AB4A6] text-[#2AB4A6] hover:bg-[#2AB4A6]/10 text-xs font-bold rounded-lg transition-colors">
+                  ✨ Fill in {fillable} missing symbol{fillable === 1 ? "" : "s"} / group{fillable === 1 ? "" : "s"}
+                </button>
+              )}
+              <button onClick={openAdd}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2AB4A6] hover:bg-[#22a090] text-white text-xs font-bold rounded-lg transition-colors">
+                + Add Reason
+              </button>
+            </div>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-5">
             These appear in the activity popup. Drag the arrows to reorder. &ldquo;Requires note&rdquo; forces staff to explain before submitting.
@@ -256,6 +345,11 @@ export default function IdleTimerSettingsClient({ initialReasons }: { initialRea
                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border shrink-0 ${r.colour}`}>
                   {r.icon} {r.label}
                 </span>
+
+                {/* Group — blank means it sits ungrouped at the bottom of the popup */}
+                {r.group?.trim()
+                  ? <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">{r.group}</span>
+                  : <span className="text-xs text-amber-600 dark:text-amber-500 shrink-0">no group</span>}
 
                 {/* Key */}
                 <code className="text-xs text-gray-400 dark:text-gray-500 hidden sm:block">{r.key}</code>

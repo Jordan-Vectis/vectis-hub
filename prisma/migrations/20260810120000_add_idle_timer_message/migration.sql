@@ -1,0 +1,1 @@
+ALTER TABLE "IdleTimerConfig" ADD COLUMN IF NOT EXISTS "message" TEXT;
