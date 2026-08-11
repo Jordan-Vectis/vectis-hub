@@ -206,6 +206,21 @@ Fix = **\`relative\` on the shell's content column** (\`components/cataloguing-s
 
 Same report: the **Import Check** drop-zone grid is \`grid sm:grid-cols-2\` with a button under the LEFT drop zone only, so the stretched right \`<label>\` came out taller than the left with its contents out of line — \`items-start\` on the grid.
 
+## 📄 Catch-up sheet — PER SALE, upload-driven (2026-08-10)
+
+⚠ **This one is NOT on the End of Day page — it is a tab on the SALE** (/tools/cataloguing/auctions/[id] → **📄 Catch-up sheet**, between BC Check and Push to BC). Jordan chose that placement when asked; he is already inside the sale.
+
+Jordan's case: a sale goes into BC **in stages** over several days ("my last lego sale needs the lots in now and I have already partially uploaded them via the end of day"). Neither existing tool covers it — the **End of Day sheet** derives "already in BC" from the *synced* cache and spans every non-complete sale (no per-sale option), and **Import Check** needs the original hotkey sheet that ran, which does not exist for a staggered sale.
+
+\`catchup-sheet-tab.tsx\`: upload the **BC export** → get a fresh \`BC_Import.csv\` of everything in THIS sale that is not in it.
+- ⚠⚠ **The uploaded export is the ONLY source of truth for "what's in BC" — the sync is not consulted at all.** That is the entire point: it is correct mid-sale when the sync is behind, which is exactly the trap the main sheet has.
+- ⚠ **Barcode-only matching** (RULES.md) — never \`receiptUniqueId\`.
+- **Entirely client-side**: the sale page's \`lots\` already carry \`barcode\` + \`receipt\`, so there is **no API route, no server action and no migration**. Reuses \`lib/bc-import-sheets.ts\` (readSheet / parseBcLinesExport / buildHotkeyCsv / normSheetVal) so the CSV cannot drift from the End of Day one.
+- Mirrors the End of Day sheet exactly: one row per receipt, barcodes deduped within a receipt, receipts sorted localeCompare(…, "en-GB", {numeric:true}), filename always \`BC_Import.csv\`.
+- **Cross-receipt duplicate barcodes are held back**, visibly, same rule and same reason as End of Day. Lots with no barcode / no receipt get their own panels — nothing is silently dropped.
+- Export rows **not** in this sale are counted and stated as **normal, never flagged** — the overnight macro puts several Hub sales into one BC sale, so an export legitimately spans them. Do not "fix" that into a warning.
+- BC's own \`Errors\` column from the export is surfaced (rows BC took but disliked).
+
 ## For later — BC's own receipt import exists
 
 \`EVA_ReceiptImportManagement\` (Evo-auction Base, codeunit 75725): Excel import **per receipt header**, column mapping defined by per-vendor \`EVA_ReceiptImportTemplateMap\` (headers matched by NAME in row 1; every sheet in the workbook imports into the ONE receipt you ran it from). If the overnight process ever moves off the macro onto this, the export must become one file per receipt and match the template's exact header names. The TRUE endgame for macro pain is a small BC-side AL extension creating lines server-side from the whole sheet — model it on this codeunit. Read the codeunit before building that.

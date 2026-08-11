@@ -18,13 +18,14 @@ import LockingCheckTab from "./locking-check-tab"
 import ToteCheckTab from "./tote-check-tab"
 import BcCorrectionsTab from "./bc-corrections-tab"
 import BcCheckTab from "./bc-check-tab"
+import CatchupSheetTab from "./catchup-sheet-tab"
 import BcFillTab from "./bc-fill-tab"
 import * as XLSX from "xlsx"
 import JSZip from "jszip"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "settings" | "add-lot" | "manage-lots" | "photo-only" | "import" | "ai-upgrade" | "stats" | "lot-history" | "review" | "locking-check" | "tote-check" | "bc-corrections" | "bc-check" | "bc-fill"
+type Tab = "settings" | "add-lot" | "manage-lots" | "photo-only" | "import" | "ai-upgrade" | "stats" | "lot-history" | "review" | "locking-check" | "tote-check" | "bc-corrections" | "bc-check" | "bc-fill" | "catchup-sheet"
 
 interface Auction {
   id: string; code: string; name: string; auctionDate: Date | null
@@ -586,6 +587,7 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
     { id: "tote-check",    label: "🧾 Tote Check" },
     { id: "bc-corrections", label: "🔧 BC Corrections" },
     { id: "bc-check",      label: "📋 BC Check" },
+    { id: "catchup-sheet", label: "📄 Catch-up sheet" },
     { id: "bc-fill",       label: "📤 Push to BC" },
     { id: "settings",      label: "Auction Settings" },
   ]
@@ -770,6 +772,19 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
         )}
 
         {tab === "bc-corrections" && <BcCorrectionsTab auctionId={auction.id} />}
+
+        {tab === "catchup-sheet" && (
+          <CatchupSheetTab
+            auctionCode={auction.code}
+            lots={lots.map(l => ({
+              id:              l.id,
+              barcode:         l.barcode,
+              receipt:         l.receipt,
+              receiptUniqueId: l.receiptUniqueId,
+              title:           l.title,
+            }))}
+          />
+        )}
 
         {tab === "bc-check" && (
           <BcCheckTab
