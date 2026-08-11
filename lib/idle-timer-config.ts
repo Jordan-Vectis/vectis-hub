@@ -164,6 +164,41 @@ export function suggestReasonMeta(label: string): { icon?: string; group?: strin
 // The icon every reason got before there was a picker — treated as "not chosen yet".
 export const PLACEHOLDER_ICON = "📝"
 
+// The full set Vectis actually runs, with symbols and groups filled in. DEFAULT_REASONS only
+// ever seeds a brand-new EMPTY table, and staging/production are separate databases — so a
+// fresh environment sits on the six starter reasons and can't be tested properly against the
+// real thing. Admin → Activity Timer has a button to load this list in one click.
+// ⚠ A starting point, not a live mirror of production — once an environment is set up, edit it
+// there. Don't wire this into seeding or a sync.
+const C = {
+  amber:  { colour: "bg-amber-100 text-amber-700 border-amber-200",   idleColour: "#f59e0b" },
+  blue:   { colour: "bg-blue-100 text-blue-700 border-blue-200",      idleColour: "#3b82f6" },
+  teal:   { colour: "bg-teal-100 text-teal-700 border-teal-200",      idleColour: "#14b8a6" },
+  purple: { colour: "bg-purple-100 text-purple-700 border-purple-200", idleColour: "#9333ea" },
+  green:  { colour: "bg-green-100 text-green-700 border-green-200",   idleColour: "#22c55e" },
+  gray:   { colour: "bg-gray-100 text-gray-600 border-gray-200",      idleColour: "#9ca3af" },
+}
+
+export const VECTIS_REASONS: IdleReason[] = [
+  { key: "LUNCH_BREAK",             label: "Lunch Break",                icon: "🍽️", group: "Breaks",             requiresNotes: false, ...C.amber },
+  { key: "OTHER_BREAK",             label: "Other Break",                icon: "☕",  group: "Breaks",             requiresNotes: false, ...C.amber },
+  { key: "HOLIDAY",                 label: "Holiday",                    icon: "🌴", group: "Breaks",             requiresNotes: false, ...C.amber },
+  { key: "LAYING_OUT",              label: "Laying Out",                 icon: "📐", group: "Warehouse",          requiresNotes: false, ...C.blue },
+  { key: "LOTTING_UP",              label: "Lotting Up",                 icon: "📦", group: "Warehouse",          requiresNotes: false, ...C.blue },
+  { key: "PALLETISING",             label: "Palletising",                icon: "🪵", group: "Warehouse",          requiresNotes: false, ...C.blue },
+  { key: "BOXING_UP",               label: "Boxing Up",                  icon: "📬", group: "Warehouse",          requiresNotes: false, ...C.blue },
+  { key: "RESEARCH",                label: "Research",                   icon: "🔍", group: "Cataloguing",        requiresNotes: false, ...C.teal },
+  { key: "CORRECTIONS_ALTERATIONS", label: "Lot Corrections/Alterations", icon: "✏️", group: "Cataloguing",        requiresNotes: false, ...C.teal },
+  { key: "CONDITION_REPORTS",       label: "Condition Reports",          icon: "📋", group: "Cataloguing",        requiresNotes: false, ...C.teal },
+  { key: "CLERKING",                label: "Clerking",                   icon: "🔨", group: "Saleroom",           requiresNotes: false, ...C.purple },
+  { key: "TELEPHONE_BIDDING",       label: "Telephone Bidding",          icon: "☎️", group: "Saleroom",           requiresNotes: false, ...C.purple },
+  { key: "VALUATIONS",              label: "Valuations",                 icon: "💰", group: "Saleroom",           requiresNotes: false, ...C.purple },
+  { key: "DEALING_WITH_CUSTOMERS",  label: "With Customers",             icon: "🤝", group: "Saleroom",           requiresNotes: false, ...C.purple },
+  { key: "MEETING",                 label: "Meeting",                    icon: "👥", group: "Away from the desk", requiresNotes: false, ...C.green },
+  { key: "TRAINING",                label: "Training",                   icon: "🎓", group: "Away from the desk", requiresNotes: false, ...C.green },
+  { key: "OTHER",                   label: "Other",                      icon: "❔", requiresNotes: true,  ...C.gray },
+]
+
 // Preset colour options shown in the admin UI
 export const COLOUR_PRESETS: { label: string; colour: string; idleColour: string }[] = [
   { label: "Amber",  colour: "bg-amber-100 text-amber-700 border-amber-200",   idleColour: "#f59e0b" },

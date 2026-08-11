@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react"
 import type { IdleReason } from "@/lib/idle-timer-config"
-import { COLOUR_PRESETS, GROUP_SUGGESTIONS, ICON_CHOICES, PLACEHOLDER_ICON, suggestReasonMeta } from "@/lib/idle-timer-config"
+import { COLOUR_PRESETS, GROUP_SUGGESTIONS, ICON_CHOICES, PLACEHOLDER_ICON, VECTIS_REASONS, suggestReasonMeta } from "@/lib/idle-timer-config"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -235,6 +235,15 @@ export default function IdleTimerSettingsClient({ initialReasons, initialMessage
     setSaveMsg(null)
   }
 
+  // Replace the list with the full set Vectis actually runs, symbols and groups already set.
+  // Staging and production are separate databases, so a fresh environment starts on the six
+  // starter reasons — this makes it match the real thing in one click for testing. Nothing is
+  // written until Save, so it is always reversible by reloading the page.
+  function loadFullList() {
+    setReasons(VECTIS_REASONS.map(r => ({ ...r })))
+    setSaveMsg({ ok: true, text: `Loaded all ${VECTIS_REASONS.length} activity reasons — press Save to apply them.` })
+  }
+
   // ── Save to DB ──
   function save() {
     setSaveMsg(null)
@@ -305,6 +314,13 @@ export default function IdleTimerSettingsClient({ initialReasons, initialMessage
           <div className="flex items-center justify-between mb-1">
             <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Activity Reasons</h2>
             <div className="flex items-center gap-2">
+              {reasons.length < VECTIS_REASONS.length && (
+                <button onClick={loadFullList}
+                  title="Replaces the list below with the full set Vectis runs, symbols and groups already set. Nothing is written until you press Save."
+                  className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-[#2AB4A6] hover:text-[#2AB4A6] text-xs font-bold rounded-lg transition-colors">
+                  ⬇ Load the full list ({VECTIS_REASONS.length})
+                </button>
+              )}
               {fillable > 0 && (
                 <button onClick={fillSuggestions}
                   title="Only fills reasons with no symbol or no group — anything you have set yourself is left alone"
