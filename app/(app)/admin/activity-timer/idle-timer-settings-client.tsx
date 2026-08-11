@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import type { IdleReason } from "@/lib/idle-timer-config"
 import { COLOUR_PRESETS, GROUP_SUGGESTIONS, ICON_CHOICES, PLACEHOLDER_ICON, VECTIS_REASONS, suggestReasonMeta } from "@/lib/idle-timer-config"
 
@@ -10,16 +10,58 @@ function toKey(label: string): string {
   return label.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "")
 }
 
+// ─── One row of the Groups panel ──────────────────────────────────────────────
+// The name is edited in a draft and only committed on blur or Enter — renaming live on every
+// keystroke would rewrite every reason in the group as you type, and two groups would merge
+// the moment one name passed through the other's spelling.
+function GroupRow({
+  name, count, isFirst, isLast, onUp, onDown, onRename,
+}: {
+  name: string; count: number; isFirst: boolean; isLast: boolean
+  onUp: () => void; onDown: () => void; onRename: (next: string) => void
+}) {
+  const [draft, setDraft] = useState(name)
+  useEffect(() => { setDraft(name) }, [name])
+
+  function commit() {
+    const next = draft.trim()
+    if (!next) { setDraft(name); return }   // blank would silently ungroup the lot — undo instead
+    onRename(next)
+  }
+
+  return (
+    <div className="flex items-center gap-2 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2">
+      <div className="flex flex-col shrink-0">
+        <button onClick={onUp} disabled={isFirst} aria-label={`Move ${name} up`}
+          className="text-xs leading-none text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-25">▲</button>
+        <button onClick={onDown} disabled={isLast} aria-label={`Move ${name} down`}
+          className="text-xs leading-none text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-25">▼</button>
+      </div>
+      <input
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key === "Enter") { e.currentTarget.blur() } if (e.key === "Escape") setDraft(name) }}
+        aria-label={`Group name: ${name}`}
+        className="flex-1 min-w-0 bg-transparent border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-[#2AB4A6] rounded-lg px-2 py-1 text-sm font-semibold text-gray-900 dark:text-white focus:outline-none"
+      />
+      <span className="text-xs text-gray-400 shrink-0">{count} reason{count === 1 ? "" : "s"}</span>
+    </div>
+  )
+}
+
 // ─── Reason editor modal ──────────────────────────────────────────────────────
 
 function ReasonModal({
   initial,
   existingKeys,
+  existingGroups,
   onSave,
   onClose,
 }: {
   initial?: IdleReason
   existingKeys: string[]
+  existingGroups: string[]
   onSave: (r: IdleReason) => void
   onClose: () => void
 }) {
@@ -91,12 +133,15 @@ function ReasonModal({
         <input value={group} onChange={e => setGroup(e.target.value)} list="idle-group-suggestions"
           placeholder="e.g. Breaks — leave blank to sit on its own at the bottom"
           className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white mb-1 focus:outline-none focus:border-[#2AB4A6]" />
+        {/* Groups already in use come FIRST, so picking an existing one is the easy path —
+            a typo here would otherwise quietly create a near-duplicate group. */}
         <datalist id="idle-group-suggestions">
-          {GROUP_SUGGESTIONS.map(g => <option key={g} value={g} />)}
+          {[...existingGroups, ...GROUP_SUGGESTIONS.filter(g => !existingGroups.includes(g))]
+            .map(g => <option key={g} value={g} />)}
         </datalist>
         <p className="text-xs text-gray-400 mb-4">
-          Reasons sharing a group appear together under that heading. Groups run in the order they
-          first appear in the list below, so drag a reason to move its whole group.
+          Reasons sharing a group appear together under that heading. Rename groups or change their
+          order in the Groups panel on the settings page.
         </p>
 
         {/* Label */}
@@ -235,6 +280,49 @@ export default function IdleTimerSettingsClient({ initialReasons, initialMessage
     setSaveMsg(null)
   }
 
+  // ── Groups ──
+  // There is no separate list of groups in the DB, on purpose: a group is just the string on
+  // each reason, so the two can never disagree about which groups exist. This panel manages
+  // them by editing the reasons underneath — rename writes to every reason in the group, and
+  // reordering rebuilds the reasons array so the admin list matches the popup exactly.
+  const groupsInUse: { name: string; count: number }[] = []
+  for (const r of reasons) {
+    const g = (r.group ?? "").trim()
+    if (!g) continue
+    const hit = groupsInUse.find(x => x.name === g)
+    if (hit) hit.count++
+    else groupsInUse.push({ name: g, count: 1 })
+  }
+  const ungrouped = reasons.filter(r => !(r.group ?? "").trim()).length
+
+  // Rebuild the reasons array so groups run in `order`, each group's reasons keeping their
+  // relative order, ungrouped last. Also un-interleaves a list where a group was split up.
+  function applyGroupOrder(order: string[]) {
+    setReasons(prev => {
+      const out: IdleReason[] = []
+      for (const g of order) out.push(...prev.filter(r => (r.group ?? "").trim() === g))
+      out.push(...prev.filter(r => !(r.group ?? "").trim()))
+      return out
+    })
+  }
+
+  function moveGroup(i: number, dir: -1 | 1) {
+    const order = groupsInUse.map(g => g.name)
+    const j = i + dir
+    if (j < 0 || j >= order.length) return
+    ;[order[i], order[j]] = [order[j], order[i]]
+    applyGroupOrder(order)
+    setSaveMsg(null)
+  }
+
+  function renameGroup(from: string, to: string) {
+    const next = to.trim()
+    if (next === from) return
+    // Blank clears the group, dropping those reasons to the ungrouped bucket at the bottom.
+    setReasons(prev => prev.map(r => (r.group ?? "").trim() === from ? { ...r, group: next || undefined } : r))
+    setSaveMsg(null)
+  }
+
   // Replace the list with the full set Vectis actually runs, symbols and groups already set.
   // Staging and production are separate databases, so a fresh environment starts on the six
   // starter reasons — this makes it match the real thing in one click for testing. Nothing is
@@ -271,6 +359,7 @@ export default function IdleTimerSettingsClient({ initialReasons, initialMessage
         <ReasonModal
           initial={editTarget === "new" ? undefined : editTarget}
           existingKeys={existingKeys}
+          existingGroups={groupsInUse.map(g => g.name)}
           onSave={handleSaveReason}
           onClose={closeModal}
         />
@@ -307,6 +396,44 @@ export default function IdleTimerSettingsClient({ initialReasons, initialMessage
               <button onClick={() => setMessage("")} className="text-xs text-gray-500 hover:text-red-500">Clear message</button>
             )}
           </div>
+        </section>
+
+        {/* ── Groups ── */}
+        <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
+          <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-1">Groups</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+            The headings the reasons sit under in the popup, in the order they appear. Rename one here
+            and every reason in it follows. A group only exists while a reason uses it — put a reason
+            into a new group from its own Edit screen.
+          </p>
+
+          {groupsInUse.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-4 text-center">
+              No groups yet — every reason shows in one plain list.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {groupsInUse.map((g, i) => (
+                <GroupRow
+                  key={g.name}
+                  name={g.name}
+                  count={g.count}
+                  isFirst={i === 0}
+                  isLast={i === groupsInUse.length - 1}
+                  onUp={() => moveGroup(i, -1)}
+                  onDown={() => moveGroup(i, 1)}
+                  onRename={next => renameGroup(g.name, next)}
+                />
+              ))}
+            </div>
+          )}
+
+          {ungrouped > 0 && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+              {ungrouped} reason{ungrouped === 1 ? "" : "s"} {ungrouped === 1 ? "has" : "have"} no group —
+              {ungrouped === 1 ? " it appears" : " they appear"} last, with no heading above{ungrouped === 1 ? " it" : " them"}.
+            </p>
+          )}
         </section>
 
         {/* ── Reasons ── */}
