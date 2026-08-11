@@ -323,6 +323,55 @@ export default function IdleTimerSettingsClient({ initialReasons, initialMessage
     setSaveMsg(null)
   }
 
+  // ── Copy the setup between environments ──
+  // Staging and production are SEPARATE databases, so a setup built on one never reaches the
+  // other. Same problem and same answer as the AI Instructions page. Import only fills in the
+  // editor — nothing is written until Save, so a wrong file is undone by reloading the page.
+  function exportSetup() {
+    const blob = new Blob([JSON.stringify({ version: 1, reasons, message }, null, 2)], { type: "application/json" })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement("a")
+    a.href = url
+    a.download = `vectis-activity-timer-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function importSetup(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ""   // so re-picking the same file fires onChange again
+    if (!file) return
+    setSaveMsg(null)
+    try {
+      const data = JSON.parse(await file.text())
+      const list = Array.isArray(data?.reasons) ? data.reasons : null
+      if (!list?.length) throw new Error("No reasons in that file — is it an activity timer setup?")
+      // Rebuild each reason field by field. A file is user-supplied, so nothing is spread in
+      // wholesale: an unknown key would be written straight to the reasons JSON and then fed to
+      // the popup. Colour falls back to a real preset, never to whatever the file said.
+      const clean: IdleReason[] = list.map((r: any) => ({
+        key:           String(r.key ?? toKey(String(r.label ?? ""))).trim(),
+        label:         String(r.label ?? "").trim(),
+        icon:          String(r.icon ?? "").trim().slice(0, 4) || "•",
+        requiresNotes: !!r.requiresNotes,
+        colour:        COLOUR_PRESETS.some(p => p.colour === r.colour) ? String(r.colour) : COLOUR_PRESETS[7].colour,
+        idleColour:    /^#[0-9a-fA-F]{6}$/.test(String(r.idleColour ?? "")) ? String(r.idleColour) : COLOUR_PRESETS[7].idleColour,
+        notePrompt:    r.notePrompt ? String(r.notePrompt).slice(0, 200) : undefined,
+        group:         r.group ? String(r.group).trim().slice(0, 60) : undefined,
+      })).filter((r: IdleReason) => r.key && r.label)
+      if (!clean.length) throw new Error("Every reason in that file was missing a label.")
+      // Two reasons sharing a key would collide on save — keep the first.
+      const seen = new Set<string>()
+      const deduped = clean.filter(r => !seen.has(r.key) && seen.add(r.key))
+      setReasons(deduped)
+      if (typeof data.message === "string") setMessage(data.message.slice(0, 400))
+      const dropped = clean.length - deduped.length
+      setSaveMsg({ ok: true, text: `Loaded ${deduped.length} reasons${dropped ? ` (${dropped} duplicate key${dropped === 1 ? "" : "s"} skipped)` : ""} — check them over, then press Save.` })
+    } catch (err: any) {
+      setSaveMsg({ ok: false, text: err?.message ?? "Could not read that file." })
+    }
+  }
+
   // Replace the list with the full set Vectis actually runs, symbols and groups already set.
   // Staging and production are separate databases, so a fresh environment starts on the six
   // starter reasons — this makes it match the real thing in one click for testing. Nothing is
@@ -521,6 +570,27 @@ export default function IdleTimerSettingsClient({ initialReasons, initialMessage
                 </div>
               </div>
             ))}
+          </div>
+        </section>
+
+        {/* ── Move this setup to the other environment ── */}
+        <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
+          <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-1">Copy this setup elsewhere</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+            Staging and production keep their own settings, so a setup built on one never reaches the
+            other. Download the file here, then upload it there instead of building it again. It carries
+            every reason — symbol, group, colour, note prompt — and the message.
+          </p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <button onClick={exportSetup}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:border-[#2AB4A6] hover:text-[#2AB4A6] text-xs font-bold rounded-lg transition-colors">
+              ⬇ Download this setup
+            </button>
+            <label className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:border-[#2AB4A6] hover:text-[#2AB4A6] text-xs font-bold rounded-lg transition-colors cursor-pointer">
+              ⬆ Upload a setup file
+              <input type="file" accept=".json,application/json" onChange={importSetup} className="hidden" />
+            </label>
+            <span className="text-xs text-gray-400">Uploading only fills in the page — nothing changes until you Save.</span>
           </div>
         </section>
 
