@@ -142,3 +142,33 @@ export async function setAccidentReportStatus(id: string, status: "NEW" | "REVIE
     return { ok: true }
   } catch (e) { return fail(e) }
 }
+
+// Part 4 of the accident book — EMPLOYER ONLY. Never on the public form; only reachable here,
+// behind the login and the FIRST_AID permission, exactly as the paper book reserves that
+// section to the employer. `recordedBy` defaults to whoever signs it off.
+export async function saveAccidentReportEmployer(id: string, fd: FormData): Promise<Res> {
+  try {
+    const who = await requireFirstAid()
+    const reported = s(fd.get("reportedOn"), 40)
+    const when = reported ? new Date(reported) : null
+    const riddor = s(fd.get("riddorReportable"), 10)
+    await prisma.accidentReport.update({
+      where: { id },
+      data: {
+        reportedOn:       when && !Number.isNaN(when.getTime()) ? when : null,
+        recordedBy:       s(fd.get("recordedBy"), 100) || who.name,
+        // Three states on purpose: yes, no, and "not decided yet" (null) — an undecided RIDDOR
+        // question must not look like a considered "no".
+        riddorReportable: riddor === "yes" ? true : riddor === "no" ? false : null,
+        riddorRef:        s(fd.get("riddorRef"), 100) || null,
+        employerNotes:    s(fd.get("employerNotes"), 4000) || null,
+        // Completing the employer part IS the sign-off.
+        status:           "REVIEWED",
+        handledBy:        who.name,
+        handledAt:        new Date(),
+      },
+    })
+    revalidatePath("/tools/first-aid")
+    return { ok: true }
+  } catch (e) { return fail(e) }
+}

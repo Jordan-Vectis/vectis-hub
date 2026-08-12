@@ -1890,19 +1890,39 @@ model FirstAidInfo {
 
 // Submitted from the public page by anyone, so it is an UNAUTHENTICATED write:
 // rate limited per ipHash, every field length-capped, and never read back publicly.
+// Laid out to follow the UK statutory accident book (BI 510): who was hurt, who is filling it
+// in, what happened — then an EMPLOYER-ONLY section only the Hub can reach.
+// ⚠ NOT certified as legally compliant — that is for Vectis's H&S people to confirm.
 model AccidentReport {
-  id            String    @id @default(cuid())
+  id            String  @id @default(cuid())
   reporterName  String
   reporterPhone String?
   injuredName   String?
   happenedAt    String?
   location      String?
-  description   String    @db.Text
-  status        String    @default("NEW") // NEW | REVIEWED
-  handledBy     String?
-  handledAt     DateTime?
-  ipHash        String?
-  createdAt     DateTime  @default(now())
+  description   String  @db.Text
+
+  // Part 1 — about the injured person
+  injuredAddress     String?   @db.Text
+  injuredOccupation  String?
+  // Part 2 — about the person filling this in, when that is someone else
+  reporterAddress    String?   @db.Text
+  reporterOccupation String?
+  // Part 3 — about the accident
+  happenedOn         DateTime?
+  injuryDetails      String?   @db.Text
+
+  // Part 4 — EMPLOYER ONLY. Never on the public form, only editable in the Hub.
+  reportedOn       DateTime?
+  recordedBy       String?
+  riddorReportable Boolean?
+  riddorRef        String?
+  employerNotes    String?   @db.Text
+  status           String    @default("NEW") // NEW | REVIEWED
+  handledBy        String?
+  handledAt        DateTime?
+  ipHash           String?
+  createdAt        DateTime  @default(now())
 
   @@index([createdAt])
   @@index([ipHash, createdAt])

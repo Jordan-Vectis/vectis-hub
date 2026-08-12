@@ -1318,6 +1318,18 @@ const MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS "AccidentReport_createdAt_idx" ON "AccidentReport"("createdAt")`,
   `CREATE INDEX IF NOT EXISTS "AccidentReport_ipHash_createdAt_idx" ON "AccidentReport"("ipHash", "createdAt")`,
+  // Accident book (BI 510) fields — parts 1-3 public, part 4 employer-only.
+  `ALTER TABLE "AccidentReport" ADD COLUMN IF NOT EXISTS "injuredAddress" TEXT`,
+  `ALTER TABLE "AccidentReport" ADD COLUMN IF NOT EXISTS "injuredOccupation" TEXT`,
+  `ALTER TABLE "AccidentReport" ADD COLUMN IF NOT EXISTS "reporterAddress" TEXT`,
+  `ALTER TABLE "AccidentReport" ADD COLUMN IF NOT EXISTS "reporterOccupation" TEXT`,
+  `ALTER TABLE "AccidentReport" ADD COLUMN IF NOT EXISTS "happenedOn" TIMESTAMP(3)`,
+  `ALTER TABLE "AccidentReport" ADD COLUMN IF NOT EXISTS "injuryDetails" TEXT`,
+  `ALTER TABLE "AccidentReport" ADD COLUMN IF NOT EXISTS "reportedOn" TIMESTAMP(3)`,
+  `ALTER TABLE "AccidentReport" ADD COLUMN IF NOT EXISTS "recordedBy" TEXT`,
+  `ALTER TABLE "AccidentReport" ADD COLUMN IF NOT EXISTS "riddorReportable" BOOLEAN`,
+  `ALTER TABLE "AccidentReport" ADD COLUMN IF NOT EXISTS "riddorRef" TEXT`,
+  `ALTER TABLE "AccidentReport" ADD COLUMN IF NOT EXISTS "employerNotes" TEXT`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

@@ -74,14 +74,28 @@ export async function POST(req: NextRequest) {
     const honeypot = !!str(body.hp_ref, 20)
     const suspect  = honeypot || recentFromIp >= SUSPECT_PER_IP_PER_HOUR
 
+    // datetime-local arrives as "2026-08-12T14:30" — keep it only if it really parses, and
+    // never let a bad string throw: losing an accident report to a date typo is unacceptable.
+    const rawWhen = str(body.happenedOn, 40)
+    const when    = rawWhen ? new Date(rawWhen) : null
+    const happenedOn = when && !Number.isNaN(when.getTime()) ? when : null
+
     await prisma.accidentReport.create({
       data: {
         reporterName,
-        reporterPhone: str(body.reporterPhone, 40)  || null,
-        injuredName:   str(body.injuredName, 100)   || null,
-        happenedAt:    str(body.happenedAt, 100)    || null,
-        location:      str(body.location, 150)      || null,
+        reporterPhone:      str(body.reporterPhone, 40)       || null,
+        reporterAddress:    str(body.reporterAddress, 300)    || null,
+        reporterOccupation: str(body.reporterOccupation, 100) || null,
+        injuredName:        str(body.injuredName, 100)        || null,
+        injuredAddress:     str(body.injuredAddress, 300)     || null,
+        injuredOccupation:  str(body.injuredOccupation, 100)  || null,
+        happenedOn,
+        // Kept as free text too, so a date that would not parse is still on the record rather
+        // than silently dropped.
+        happenedAt:    rawWhen || str(body.happenedAt, 100)   || null,
+        location:      str(body.location, 150)                || null,
         description,
+        injuryDetails: str(body.injuryDetails, 1000)          || null,
         ipHash,
         status: suspect ? "SUSPECT" : "NEW",
       },

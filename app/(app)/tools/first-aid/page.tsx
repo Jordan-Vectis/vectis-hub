@@ -49,6 +49,13 @@ export default async function FirstAidAdminPage() {
           id: r.id, reporterName: r.reporterName, reporterPhone: r.reporterPhone, injuredName: r.injuredName,
           happenedAt: r.happenedAt, location: r.location, description: r.description, status: r.status,
           handledBy: r.handledBy, createdAt: r.createdAt.toISOString(),
+          reporterAddress: r.reporterAddress, reporterOccupation: r.reporterOccupation,
+          injuredAddress: r.injuredAddress, injuredOccupation: r.injuredOccupation,
+          happenedOn: r.happenedOn ? r.happenedOn.toISOString() : null,
+          injuryDetails: r.injuryDetails,
+          reportedOn: r.reportedOn ? r.reportedOn.toISOString() : null,
+          recordedBy: r.recordedBy, riddorReportable: r.riddorReportable,
+          riddorRef: r.riddorRef, employerNotes: r.employerNotes,
         }))}
       />
     </div>

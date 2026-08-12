@@ -78,6 +78,18 @@ POST /api/public/first-aid-report - under the **already-public** /api/public pre
 
 AccidentReport rows are read **only** in the Hub app. Reports can contain **health data about a named person** - recorded in the STORES arrays on **both** /admin/compliance and /admin/dpia, per the standing rule.
 
+## The accident book (BI 510) — 2026-08-12
+
+Jordan: "the report an incident needs to be based off an official workplace first aid book." The form follows the UK statutory accident book (BI 510) structure.
+
+**Part 1 injured person, Part 2 who reported it, Part 3 the accident** are on the PUBLIC form, with a "was it you or someone else?" toggle so the reporter's details are not asked twice. **Part 4 is EMPLOYER ONLY**: date reported, recorded by, RIDDOR reportable (yes / no / not decided yet — an undecided question must never look like a considered "no"), HSE reference, notes. WARNING: Part 4 exists ONLY in the Hub (saveAccidentReportEmployer, behind the FIRST_AID permission) and must never be added to the public form — the paper book reserves that section to the employer for the same reason. Completing Part 4 is the sign-off.
+
+WARNING — asked and answered: Jordan confirmed the form must stay submittable WITHOUT logging in, with results reaching only /tools/first-aid behind login and permission. Do not move the form behind the login: agency staff, contractors and visitors have no account and are exactly who needs it.
+
+Address fields are optional and say so — it is a public form and nobody should be blocked from reporting an injury because they will not type their home address into it. happenedOn is a real DateTime but the raw string is also kept in happenedAt, so a date that will not parse does not silently vanish from an accident record. Retention is stated as three years and recorded on /admin/compliance and /admin/dpia, which now note this is ROUTINE special-category health data, not merely possible.
+
+WARNING: NOT certified as legally compliant. The structure follows BI 510 and RIDDOR as understood, but sign-off is for Vectis's H&S people — Jordan was told this plainly. Do not claim otherwise.
+
 ## Colour scheme: GREEN, not red (2026-08-12)
 
 Jordan, on seeing the first build: "the colour scheme being red and not green is not a good idea haha" — right beyond taste. **First aid signage is green and white (ISO 7010); red means fire equipment or prohibition.** A red first aid page signals the wrong thing to exactly the people most likely to need it. Everything identifying the feature is now green: the public page header, the emergency panel, the 999 button, the avatars and address box, the Hub card, and the management tabs and Save buttons.

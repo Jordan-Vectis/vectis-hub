@@ -1,12 +1,21 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { saveFirstAider, deleteFirstAider, saveFirstAidKit, deleteFirstAidKit, saveFirstAidInfo, setAccidentReportStatus } from "@/lib/actions/first-aid"
+import { saveFirstAider, deleteFirstAider, saveFirstAidKit, deleteFirstAidKit, saveFirstAidInfo, setAccidentReportStatus, saveAccidentReportEmployer } from "@/lib/actions/first-aid"
 
 type Aider  = { id: string; name: string; roleTitle: string | null; location: string | null; phone: string | null; photoKey: string | null; sortOrder: number; active: boolean }
 type Kit    = { id: string; kind: string; label: string; whereText: string | null; photoKey: string | null; sortOrder: number; active: boolean }
 type Info   = { emergencySteps: string | null; siteAddress: string | null; assemblyPoint: string | null; extraNotes: string | null } | null
-type Report = { id: string; reporterName: string; reporterPhone: string | null; injuredName: string | null; happenedAt: string | null; location: string | null; description: string; status: string; handledBy: string | null; createdAt: string }
+type Report = {
+  id: string; reporterName: string; reporterPhone: string | null; injuredName: string | null
+  happenedAt: string | null; location: string | null; description: string; status: string
+  handledBy: string | null; createdAt: string
+  reporterAddress: string | null; reporterOccupation: string | null
+  injuredAddress: string | null; injuredOccupation: string | null
+  happenedOn: string | null; injuryDetails: string | null
+  reportedOn: string | null; recordedBy: string | null
+  riddorReportable: boolean | null; riddorRef: string | null; employerNotes: string | null
+}
 
 const TABS = [["emergency", "Emergency info"], ["aiders", "First aiders"], ["kits", "Kits & equipment"], ["reports", "Accident reports"]] as const
 const KINDS = [["KIT", "🧰 First aid kit"], ["DEFIB", "⚡ Defibrillator"], ["EYEWASH", "💧 Eyewash"], ["OTHER", "📍 Other"]] as const
@@ -154,36 +163,124 @@ export default function FirstAidClient({ aiders, kits, info, reports }: { aiders
       {tab === "reports" && (
         <div className="space-y-3">
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Sent from the public page. These are never shown publicly — only here.
+            The accident book. Entries arrive from the public page; <strong>Part 4 is yours</strong> — it never
+            appears there. Records are normally kept for three years.
           </p>
-          {reports.length === 0 && <p className={card + " text-sm text-gray-500 dark:text-gray-400"}>No accident reports yet.</p>}
-          {reports.map(r => (
-            <div key={r.id} className={`${card} ${r.status === "NEW" ? "border-amber-400 dark:border-amber-600" : ""}`}>
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div>
-                  <p className="font-bold text-gray-900 dark:text-white">
-                    {r.reporterName}{r.reporterPhone ? ` · ${r.reporterPhone}` : ""}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Sent {new Date(r.createdAt).toLocaleString("en-GB")}
-                    {r.happenedAt ? ` · happened ${r.happenedAt}` : ""}
-                    {r.location ? ` · ${r.location}` : ""}
-                    {r.injuredName ? ` · hurt: ${r.injuredName}` : ""}
-                  </p>
-                </div>
-                {r.status === "NEW" ? (
-                  <button onClick={() => run(() => setAccidentReportStatus(r.id, "REVIEWED"), "Marked as looked at.")}
-                    className="px-3 py-1.5 bg-green-700 hover:bg-green-600 text-white text-xs font-bold rounded-lg">Mark as looked at</button>
-                ) : (
-                  <button onClick={() => run(() => setAccidentReportStatus(r.id, "NEW"), "Reopened.")}
-                    className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-500 text-xs font-bold rounded-lg">
-                    ✓ {r.handledBy ?? "Done"} — reopen
-                  </button>
-                )}
-              </div>
-              <p className="mt-3 text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">{r.description}</p>
+          {reports.length === 0 && <p className={card + " text-sm text-gray-500 dark:text-gray-400"}>No entries yet.</p>}
+          {reports.map(r => <ReportCard key={r.id} r={r} card={card} input={input} run={run} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// One accident book entry. Parts 1-3 come from the public form and are read-only here; Part 4 is
+// the EMPLOYER-ONLY section, which exists nowhere else — the public page never sees it.
+function ReportCard({ r, card, input, run }: {
+  r: Report; card: string; input: string
+  run: (fn: () => Promise<{ ok: boolean; error?: string }>, okText: string) => void
+}) {
+  const [open, setOpen] = useState(r.status === "NEW")
+  const dt = (v: string | null) => v ? new Date(v).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" }) : "—"
+  // datetime-local needs "YYYY-MM-DDTHH:mm" — an ISO string with the seconds and zone trimmed.
+  const forInput = (v: string | null) => v ? new Date(v).toISOString().slice(0, 16) : ""
+  const when = dt(r.happenedOn) !== "—" ? dt(r.happenedOn) : (r.happenedAt || "—")
+  const Row = ({ label, value }: { label: string; value: string | null }) => (
+    <div className="py-1">
+      <p className="text-[11px] uppercase tracking-wider text-gray-400">{label}</p>
+      <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{value?.trim() || "—"}</p>
+    </div>
+  )
+  const head = "text-xs font-bold uppercase tracking-wider text-green-700 dark:text-green-500 border-b border-gray-200 dark:border-gray-700 pb-1 mb-1"
+
+  return (
+    <div className={`${card} ${r.status === "NEW" ? "border-amber-400 dark:border-amber-600" : ""}`}>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <p className="font-bold text-gray-900 dark:text-white">
+            {r.injuredName?.trim() || r.reporterName}
+            {r.status === "SUSPECT" && (
+              <span className="ml-2 text-xs font-semibold text-amber-700 dark:text-amber-400">⚠ flagged — check this is genuine</span>
+            )}
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Happened {when}{r.location ? ` · ${r.location}` : ""} · reported by {r.reporterName} on {dt(r.createdAt)}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {r.status === "REVIEWED" && (
+            <span className="text-xs text-green-600">✓ completed{r.handledBy ? ` by ${r.handledBy}` : ""}</span>
+          )}
+          <button onClick={() => setOpen(o => !o)}
+            className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 text-xs font-bold rounded-lg">
+            {open ? "Hide" : "Open"}
+          </button>
+        </div>
+      </div>
+
+      {open && (
+        <div className="mt-4 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
+            <div>
+              <p className={head}>Part 1 — injured person</p>
+              <Row label="Name" value={r.injuredName || r.reporterName} />
+              <Row label="Job" value={r.injuredOccupation || r.reporterOccupation} />
+              <Row label="Address" value={r.injuredAddress || r.reporterAddress} />
             </div>
-          ))}
+            <div>
+              <p className={head}>Part 2 — reported by</p>
+              <Row label="Name" value={r.reporterName} />
+              <Row label="Job" value={r.reporterOccupation} />
+              <Row label="Phone" value={r.reporterPhone} />
+            </div>
+          </div>
+
+          <div>
+            <p className={head}>Part 3 — the accident</p>
+            <Row label="When" value={when} />
+            <Row label="Where" value={r.location} />
+            <Row label="How it happened" value={r.description} />
+            <Row label="The injury" value={r.injuryDetails} />
+          </div>
+
+          <form action={fd => run(() => saveAccidentReportEmployer(r.id, fd), "Part 4 saved — entry completed.")}
+            className="rounded-xl border-2 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10 p-4 space-y-3">
+            <p className="text-xs font-bold uppercase tracking-wider text-green-800 dark:text-green-400">
+              Part 4 — for the employer only
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="text-xs text-gray-600 dark:text-gray-300">Date reported
+                <input type="datetime-local" name="reportedOn" defaultValue={forInput(r.reportedOn)} className={input + " mt-1"} />
+              </label>
+              <label className="text-xs text-gray-600 dark:text-gray-300">Recorded by
+                <input name="recordedBy" defaultValue={r.recordedBy ?? ""} placeholder="your name" maxLength={100} className={input + " mt-1"} />
+              </label>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="text-xs text-gray-600 dark:text-gray-300">Reportable under RIDDOR?
+                <select name="riddorReportable"
+                  defaultValue={r.riddorReportable === true ? "yes" : r.riddorReportable === false ? "no" : ""}
+                  className={input + " mt-1"}>
+                  <option value="">Not decided yet</option>
+                  <option value="yes">Yes — reported to HSE</option>
+                  <option value="no">No</option>
+                </select>
+              </label>
+              <label className="text-xs text-gray-600 dark:text-gray-300">HSE reference
+                <input name="riddorRef" defaultValue={r.riddorRef ?? ""} maxLength={100} className={input + " mt-1"} />
+              </label>
+            </div>
+            <label className="block text-xs text-gray-600 dark:text-gray-300">Notes / action taken
+              <textarea name="employerNotes" rows={3} defaultValue={r.employerNotes ?? ""} maxLength={4000} className={input + " mt-1"} />
+            </label>
+            <div className="flex items-center gap-2">
+              <button className="px-4 py-2 bg-green-700 hover:bg-green-600 text-white text-xs font-bold rounded-lg">Save Part 4</button>
+              {r.status === "REVIEWED" && (
+                <button type="button" onClick={() => run(() => setAccidentReportStatus(r.id, "NEW"), "Reopened.")}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 text-gray-500 text-xs font-bold rounded-lg">Reopen</button>
+              )}
+            </div>
+          </form>
         </div>
       )}
     </div>
