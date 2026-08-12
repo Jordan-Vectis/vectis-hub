@@ -126,7 +126,7 @@ export default async function FirstAidPage() {
           prose at max-w-2xl, but a 1:1250 site drawing squeezed into 672px is unreadable — which
           was the whole point of putting it here. Wide, with a key underneath. */}
       {plan && pinned.length > 0 && (
-        <div className="max-w-6xl mx-auto px-5 pb-6">
+        <div className="w-full px-4 sm:px-6 pb-6">
           <section className="rounded-2xl border border-gray-200 bg-white p-5">
             <h2 className="text-lg font-bold">Where to find it</h2>
             <p className="text-sm text-gray-600 mt-1 mb-3">{plan.name}</p>

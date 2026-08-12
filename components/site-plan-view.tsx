@@ -37,12 +37,16 @@ export function PlanImage({
   // the nearest defibrillator is. So the drawing keeps a usable minimum width and the box
   // SCROLLS, and there is always a way to open it full size and pinch-zoom natively.
   // The click maths measures the <img>'s own rect, so it stays correct while scrolled or zoomed.
+  // ⚠ On a real screen the plan should simply FILL the space — no scrollbars, no artificial
+  // height cap. Scrolling is only for phones, where the drawing has to stay wide enough to read
+  // and the box pans instead. An earlier version forced a 900px box and a 70vh cap on every
+  // screen, so a 1900px window still showed a cropped, scrolling plan with margins either side.
   return (
     <div className="space-y-2">
-      <div className="overflow-auto rounded-xl border border-gray-200 dark:border-gray-700 max-h-[70vh]">
+      <div className="overflow-auto sm:overflow-visible rounded-xl border border-gray-200 dark:border-gray-700">
         <div
           onClick={handleClick}
-          className={`relative inline-block min-w-[900px] ${onPick ? "cursor-crosshair" : ""}`}
+          className={`relative block w-full min-w-[900px] sm:min-w-0 ${onPick ? "cursor-crosshair" : ""}`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={src} alt={alt} className="block w-full h-auto bg-white" />

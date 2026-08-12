@@ -78,6 +78,10 @@ POST /api/public/first-aid-report - under the **already-public** /api/public pre
 
 AccidentReport rows are read **only** in the Hub app. Reports can contain **health data about a named person** - recorded in the STORES arrays on **both** /admin/compliance and /admin/dpia, per the standing rule.
 
+## The plan FILLS the screen — no scrollbar when there is room (2026-08-12)
+
+Jordan: "Its still not fullscreen. No need for a scrollbar when there is plenty of room here." Two causes: the plan section was max-w-6xl (1152px) — still a centred column, just a wider one, now w-full with modest padding while the prose sections around it stay max-w-2xl; and PlanImage forced min-w-[900px] AND max-h-[70vh] on EVERY screen, so even a 1900px window got a cropped scrolling box. Now min-w-[900px] applies only below sm (a phone needs the drawing wide enough to read and pans instead), with sm:min-w-0, sm:overflow-visible and NO height cap. Desktop shows the whole drawing at full width with no scrollbars; a phone still pans. Do not reintroduce a fixed height or an unconditional min-width — that is what made it look "not fullscreen" twice.
+
 ## Symbols blank on the public page — a SERVER/CLIENT boundary bug (2026-08-12)
 
 WARNING: this supersedes the note below, which was a WRONG diagnosis. The kit was not simply typed "Other" — the symbol was blank for EVERY kit whatever its type.
