@@ -1607,13 +1607,33 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
         <div className="space-y-4">
           {/* Re-picking a folder with nothing new in it is a normal, successful outcome —
               it must not read as the red "everything failed" banner. */}
-          {uploadedCount === 0 && skipped.length === 0 && alreadyCount > 0 ? (
+          {uploadedCount === 0 && alreadyCount > 0 && skipped.length === 0 ? (
             <div className="rounded-xl border bg-sky-50 border-sky-300 dark:bg-sky-900/15 dark:border-sky-700/60 px-6 py-6 text-center">
               <p className="text-4xl mb-1">✓</p>
               <p className="text-base font-bold text-sky-800 dark:text-sky-300">Nothing new to save</p>
               <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
                 All {alreadyCount} photo{alreadyCount !== 1 ? "s" : ""} {alreadyCount !== 1 ? "were" : "was"} already
                 on the {alreadyCount !== 1 ? "lots" : "lot"} — nothing was duplicated.
+              </p>
+              {/* Matching is on FILENAME only (Jordan's call). So a re-shoot whose camera
+                  restarted its numbering looks identical to a re-upload — say so loudly here
+                  rather than let a whole folder disappear quietly. */}
+              <p className="text-sm text-amber-800 dark:text-amber-300 mt-3 border-t border-sky-200 dark:border-sky-800 pt-3">
+                Expecting new photos? Photos are matched by filename, so a re-shoot that starts
+                numbering again (DSC_0001 and so on) looks like one you have already sent.
+                Untick <span className="font-semibold">&quot;Don&apos;t add a photo the lot already has&quot;</span> and
+                send them again.
+              </p>
+            </div>
+          ) : uploadedCount === 0 && alreadyCount > 0 ? (
+            // Some were already there AND something failed — the old code fell through to the
+            // red "all failed" banner, which was simply untrue.
+            <div className="rounded-xl border bg-amber-50 border-amber-300 dark:bg-amber-900/15 dark:border-amber-700/60 px-6 py-6 text-center">
+              <p className="text-4xl mb-1">⚠</p>
+              <p className="text-base font-bold text-amber-800 dark:text-amber-300">Nothing new was saved</p>
+              <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                {alreadyCount} photo{alreadyCount !== 1 ? "s were" : " was"} already on the {alreadyCount !== 1 ? "lots" : "lot"},
+                and {skipped.length} failed — the reasons are listed below.
               </p>
             </div>
           ) : uploadedCount === 0 ? (

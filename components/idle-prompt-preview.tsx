@@ -157,7 +157,7 @@ export default function IdlePromptPreview({ reasons, message }: { reasons: IdleR
                         <input type="range" min={0} max={totalMs} step={sliderStep}
                           value={segMs.get(key) ?? 0}
                           onChange={e => setSplit(key, Number(e.target.value))}
-                          className="w-full accent-[#2AB4A6]" />
+                          className="idle-slider" />
                       </div>
                     )
                   })}

@@ -244,3 +244,48 @@ html.crt-mode body {
     display: none;
   }
 }
+
+/* Activity popup time-split sliders.
+   Reported on a tablet as "really unresponsive": a default range input's thumb is ~16px, well
+   under the ~44px a finger needs, and because the popup itself scrolls, a touch that misses the
+   thumb scrolls the modal instead of dragging. Hence a big thumb, a tall invisible hit area,
+   and touch-action:none so the drag always wins over the scroll. */
+.idle-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 44px;              /* hit area, not the visible bar */
+  background: transparent;
+  touch-action: none;        /* the drag beats the modal's scroll */
+  cursor: pointer;
+}
+.idle-slider::-webkit-slider-runnable-track {
+  height: 10px;
+  border-radius: 9999px;
+  background: #e5e7eb;
+}
+.idle-slider::-moz-range-track {
+  height: 10px;
+  border-radius: 9999px;
+  background: #e5e7eb;
+}
+.idle-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 30px;
+  height: 30px;
+  margin-top: -10px;         /* centre the thumb on the 10px track */
+  border-radius: 9999px;
+  background: #2AB4A6;
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.3);
+}
+.idle-slider::-moz-range-thumb {
+  width: 30px;
+  height: 30px;
+  border-radius: 9999px;
+  background: #2AB4A6;
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.3);
+}
+.idle-slider:active::-webkit-slider-thumb { transform: scale(1.1); }

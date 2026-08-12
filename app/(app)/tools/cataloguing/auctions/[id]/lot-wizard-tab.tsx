@@ -448,6 +448,9 @@ export default function LotWizardTab({
   // NOT treated as activity, so a fresh browser never accuses anyone.
   const lastActivityRef    = useRef<number>(0)
   const idleStartedAtRef   = useRef<number>(0)
+  // The gap the cataloguer has already answered for. The server gate can still say "not
+  // enough", but we do not ask twice about the same gap — see the needsIdle branch in the save.
+  const answeredGapRef     = useRef<number>(0)
   // When the popup was raised (≈ the end of the gap) — shown as the "from … to …"
   // window so the cataloguer can see exactly which period they're accounting for.
   const idleEndedAtRef     = useRef<number>(0)
@@ -834,6 +837,7 @@ export default function LotWizardTab({
     }
 
     bumpActivity(Date.now())
+    answeredGapRef.current = idleStartedAtRef.current
     const wasPendingSave = pendingSaveRef.current
     const wasWithinLot   = idleWithinLotRef.current
     pendingSaveRef.current   = false
@@ -1275,10 +1279,18 @@ export default function LotWizardTab({
       // Enforced server-side so it survives closing the app / signing out.
       if (res && typeof res === "object" && (res as { needsIdle?: boolean }).needsIdle) {
         const g = res as { idleMs: number; sinceMs: number }
-        pendingSaveRef.current   = true
-        idleWithinLotRef.current = false
-        raiseIdlePopup(g.sinceMs, g.idleMs)
-        return
+        // ⚠ Only ask ONCE per gap. The server gate excludes UNALLOCATED rows and wants half the
+        // gap covered, so someone who honestly leaves time unallocated used to get the same
+        // popup again — and each pass wrote another set of rows starting at the same instant,
+        // overlapping the first and inflating their figures. Allocating only the minimum never
+        // converged, so the lot could not be saved at all. Their answer now stands; unallocated
+        // time still shows in the reports, so nothing is hidden.
+        if (answeredGapRef.current !== g.sinceMs) {
+          pendingSaveRef.current   = true
+          idleWithinLotRef.current = false
+          raiseIdlePopup(g.sinceMs, g.idleMs)
+          return
+        }
       }
       barcodeStartedAt.current = null
       lotTimerStartedAt.current = null
@@ -1350,9 +1362,14 @@ export default function LotWizardTab({
         // A note is missing when a selected reason requires one (or lunch ran over
         // an hour of ITS OWN allocated time) and nothing has been typed for it.
         const missingNote = (k: string) => {
-          if (k === "LUNCH_BREAK") return (segMs.get(k) ?? 0) > 65 * 60 * 1000 && !idleNotesMap[k]?.trim()
           const cfg = idleReasons.find(r => r.key === k)
-          return !!cfg?.requiresNotes && !idleNotesMap[k]?.trim()
+          // Lunch has an EXTRA rule — over an hour of its own allocated time always needs
+          // explaining. It used to REPLACE the admin's "requires a note" tick, which meant
+          // ticking that box on Lunch Break silently did nothing (Jordan: "why is lunch
+          // special it should just work the same as the rest"). Both now apply.
+          const longLunch = k === "LUNCH_BREAK" && (segMs.get(k) ?? 0) > 65 * 60 * 1000
+          const needed    = longLunch || !!cfg?.requiresNotes
+          return needed && !idleNotesMap[k]?.trim()
         }
         const anyMissing = idleSelected.some(missingNote)
         const setNote = (k: string, v: string) => setIdleNotesMap(m => ({ ...m, [k]: v }))
@@ -1413,7 +1430,7 @@ export default function LotWizardTab({
                         <input type="range" min={0} max={totalGapMs} step={sliderStep}
                           value={idleAlloc[key] ?? 0}
                           onChange={e => setIdleSplit(key, Number(e.target.value))}
-                          className="w-full accent-[#2AB4A6]" />
+                          className="idle-slider" />
                       </div>
                     )
                   })}
