@@ -27,8 +27,14 @@ export const authConfig: NextAuthConfig = {
       // ⚠ EXACT match, not startsWith like the list above: a prefix entry would also open
       // /first-aid-anything, so a future page could go public by accident. The page reads its
       // own tables server-side and posts to /api/public, so nothing else needed opening.
+      // Belt and braces on the trailing slash. Next's own "/:path+/" redirect is applied
+      // BEFORE middleware (fsChecker.redirects precedes the middleware step in
+      // resolve-routes.js), so "/first-aid/" normally arrives here already trimmed — except
+      // in minimalMode, where those redirects are skipped. Cheap to be certain: a QR code
+      // ending in a slash must never bounce someone to /login mid-emergency.
       const publicExact = ["/first-aid"]
-      if (publicExact.includes(pathname)) return true
+      const bare = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname
+      if (publicExact.includes(bare)) return true
 
       if (!isLoggedIn) return false
       if (isLoggedIn && pathname === "/login") {

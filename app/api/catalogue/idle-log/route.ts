@@ -35,7 +35,10 @@ export async function POST(req: NextRequest) {
     if (Array.isArray(segments)) {
       const clean = segments
         .filter((s: any) => s && typeof s.reason === "string" && s.reason && Number.isFinite(Number(s.durationMs)) && Number(s.durationMs) > 0)
-        .slice(0, 12)   // the reasons list is small — anything more is a bad payload
+        // ⚠ Must exceed the configured reason count PLUS the UNALLOCATED leftover, which is
+        // appended last and would otherwise be the first thing dropped — silently binning the
+        // very time the user was warned about and chose to record.
+        .slice(0, 40)
       if (clean.length === 0) return NextResponse.json({ error: "No valid segments" }, { status: 400 })
 
       let offset = 0

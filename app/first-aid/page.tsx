@@ -27,16 +27,17 @@ type Kit   = { id: string; kind: string; label: string; whereText: string | null
 type Info  = { emergencySteps: string | null; siteAddress: string | null; assemblyPoint: string | null; extraNotes: string | null } | null
 
 async function load(): Promise<{ aiders: Aider[]; kits: Kit[]; info: Info }> {
-  const empty = { aiders: [] as Aider[], kits: [] as Kit[], info: null as Info }
-  try {
-    const [aiders, kits, info] = await Promise.all([
-      prisma.firstAider.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
-      prisma.firstAidKit.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { label: "asc" }] }),
-      prisma.firstAidInfo.findUnique({ where: { id: "global" } }),
-    ])
-    return { aiders, kits, info }
-  } catch {
-    return empty
+  // ⚠ allSettled, NOT all: one failing query (a table not yet migrated, say) must not blank the
+  // emergency steps and the first aiders too. Each section stands or falls on its own.
+  const [aiders, kits, info] = await Promise.allSettled([
+    prisma.firstAider.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+    prisma.firstAidKit.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { label: "asc" }] }),
+    prisma.firstAidInfo.findUnique({ where: { id: "global" } }),
+  ])
+  return {
+    aiders: aiders.status === "fulfilled" ? aiders.value : ([] as Aider[]),
+    kits:   kits.status   === "fulfilled" ? kits.value   : ([] as Kit[]),
+    info:   info.status   === "fulfilled" ? (info.value as Info) : null,
   }
 }
 

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { hasAppAccess } from "@/lib/apps"
 import { getEffectiveSession } from "@/lib/impersonation"
-import { uploadBufferToR2 } from "@/lib/r2"
+import { uploadBufferToR2, deleteObjectsFromR2 } from "@/lib/r2"
 
 // Everything a first aider or kit row holds is shown on the PUBLIC page, so every write here
 // needs the FIRST_AID app permission. Actions RETURN their error rather than throwing —
@@ -25,11 +25,21 @@ const s = (v: FormDataEntryValue | null, max: number) => String(v ?? "").trim().
 
 // Photos land under first-aid/, the prefix /api/public/photo is allowed to serve — anything
 // else would 404 on the public page.
+const PHOTO_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif", "image/heic", "image/heif"]
+const MAX_PHOTO_BYTES = 8 * 1024 * 1024
+
 async function savePhoto(file: File | null, folder: string): Promise<string | undefined> {
   if (!file || file.size === 0) return undefined
+  // ⚠ These photos are served by the PUBLIC proxy, same origin as the Hub. An SVG or HTML file
+  // picked here would execute for whoever opened it, so the type is checked on the way IN as
+  // well as on the way out. accept="image/*" in the form lets SVG through — this does not.
+  if (!PHOTO_TYPES.includes((file.type || "").toLowerCase())) {
+    throw new Error("That file type is not allowed — use a JPEG, PNG, WEBP or HEIC photo.")
+  }
+  if (file.size > MAX_PHOTO_BYTES) throw new Error("That photo is too big — 8MB is the limit.")
   const buf = Buffer.from(await file.arrayBuffer())
   const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
-  return uploadBufferToR2(buf, `first-aid/${folder}/${Date.now()}-${safe}`, file.type || "image/jpeg")
+  return uploadBufferToR2(buf, `first-aid/${folder}/${Date.now()}-${safe}`, file.type)
 }
 
 export async function saveFirstAider(fd: FormData): Promise<Res> {
@@ -57,6 +67,10 @@ export async function saveFirstAider(fd: FormData): Promise<Res> {
 export async function deleteFirstAider(id: string): Promise<Res> {
   try {
     await requireFirstAid()
+    // ⚠ Remove the photo from R2 as well. It is served by the PUBLIC proxy, so leaving it
+    // behind means a former employee's face stays fetchable by anyone, for ever.
+    const row = await prisma.firstAider.findUnique({ where: { id }, select: { photoKey: true } })
+    if (row?.photoKey) await deleteObjectsFromR2([row.photoKey]).catch(() => {})
     await prisma.firstAider.delete({ where: { id } })
     revalidatePath("/tools/first-aid"); revalidatePath("/first-aid")
     return { ok: true }
@@ -88,6 +102,8 @@ export async function saveFirstAidKit(fd: FormData): Promise<Res> {
 export async function deleteFirstAidKit(id: string): Promise<Res> {
   try {
     await requireFirstAid()
+    const row = await prisma.firstAidKit.findUnique({ where: { id }, select: { photoKey: true } })
+    if (row?.photoKey) await deleteObjectsFromR2([row.photoKey]).catch(() => {})
     await prisma.firstAidKit.delete({ where: { id } })
     revalidatePath("/tools/first-aid"); revalidatePath("/first-aid")
     return { ok: true }
@@ -113,6 +129,9 @@ export async function saveFirstAidInfo(fd: FormData): Promise<Res> {
 export async function setAccidentReportStatus(id: string, status: "NEW" | "REVIEWED"): Promise<Res> {
   try {
     const who = await requireFirstAid()
+    // TypeScript does not survive the network boundary — a crafted call could write any string,
+    // and the row would then be neither "not yet looked at" nor handled.
+    if (status !== "NEW" && status !== "REVIEWED") return { ok: false, error: "Unknown status" }
     await prisma.accidentReport.update({
       where: { id },
       data: status === "REVIEWED"

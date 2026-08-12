@@ -82,7 +82,12 @@ function ReasonModal({
 
   const derivedKey = initial?.key ?? toKey(label)
   const keyClash   = !initial && existingKeys.includes(derivedKey) && label.trim() !== ""
-  const canSave    = label.trim().length > 0 && !keyClash
+  // ⚠ UNALLOCATED is the pseudo-reason the popup uses for leftover time, and the save gate
+  // filters those rows out when deciding whether a gap was accounted for. A real reason with
+  // that key would be filtered out too, so picking it could never satisfy the gate and the
+  // popup would reopen for ever. Labelling a reason "Unallocated" derives exactly that key.
+  const reservedKey = derivedKey === "UNALLOCATED"
+  const canSave    = label.trim().length > 0 && !keyClash && !reservedKey
 
   function handleColourPreset(preset: typeof COLOUR_PRESETS[number]) {
     setColour(preset.colour)
@@ -151,6 +156,11 @@ function ReasonModal({
           className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white mb-1 focus:outline-none focus:border-[#2AB4A6]" />
         {keyClash && (
           <p className="text-xs text-red-500 mb-3">A reason with this key already exists.</p>
+        )}
+        {reservedKey && (
+          <p className="text-xs text-red-500 mb-3">
+            &quot;Unallocated&quot; is reserved — the popup uses it for leftover time. Pick another name.
+          </p>
         )}
         {!keyClash && (
           <p className="text-xs text-gray-400 mb-4">Key: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{derivedKey || "—"}</code></p>
@@ -350,7 +360,7 @@ export default function IdleTimerSettingsClient({ initialReasons, initialMessage
       // wholesale: an unknown key would be written straight to the reasons JSON and then fed to
       // the popup. Colour falls back to a real preset, never to whatever the file said.
       const clean: IdleReason[] = list.map((r: any) => ({
-        key:           String(r.key ?? toKey(String(r.label ?? ""))).trim(),
+        key:           String(r.key ?? toKey(String(r.label ?? ""))).trim().slice(0, 60),
         label:         String(r.label ?? "").trim(),
         icon:          String(r.icon ?? "").trim().slice(0, 4) || "•",
         requiresNotes: !!r.requiresNotes,
@@ -362,7 +372,8 @@ export default function IdleTimerSettingsClient({ initialReasons, initialMessage
       if (!clean.length) throw new Error("Every reason in that file was missing a label.")
       // Two reasons sharing a key would collide on save — keep the first.
       const seen = new Set<string>()
-      const deduped = clean.filter(r => !seen.has(r.key) && seen.add(r.key))
+      // Reserved key dropped here too — the editor blocks it, but a file goes straight to save.
+      const deduped = clean.filter(r => r.key !== "UNALLOCATED" && !seen.has(r.key) && seen.add(r.key))
       setReasons(deduped)
       if (typeof data.message === "string") setMessage(data.message.slice(0, 400))
       const dropped = clean.length - deduped.length

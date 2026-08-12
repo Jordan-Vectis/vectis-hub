@@ -4085,8 +4085,11 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   }
 
   // ── Stage 1: Batch ──────────────────────────────────────────────────────────
-  async function runBatchStage(currentLots: PLot[]): Promise<PLot[]> {
-    const toRun = currentLots.filter(l => !l.batchStatus)
+  // onlyIds scopes a run to specific lots. ⚠ resumeNotRun MUST pass it: "no batchStatus" is
+  // also true of any lot added to the sale since the run, so without it a catch-up would
+  // regenerate hand-written descriptions and, on auto-apply, overwrite them on the catalogue.
+  async function runBatchStage(currentLots: PLot[], onlyIds?: Set<string>): Promise<PLot[]> {
+    const toRun = currentLots.filter(l => !l.batchStatus && (!onlyIds || onlyIds.has(l.id)))
     addLog(`── Stage 1: Batch Run — ${toRun.length} to process`)
     let done = 0
     const updated = [...currentLots]
@@ -4203,8 +4206,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   }
 
   // ── Stage 3: Double Check (final MANUAL Review & Apply gate — never auto-applies) ──
-  async function runDoubleCheckStage(currentLots: PLot[], aid: string): Promise<PLot[]> {
-    const toRun = currentLots.filter(l => !l.dcStatus && (l.batchStatus === "ok" || l.currentDesc))
+  async function runDoubleCheckStage(currentLots: PLot[], aid: string, onlyIds?: Set<string>): Promise<PLot[]> {
+    const toRun = currentLots.filter(l => !l.dcStatus && (l.batchStatus === "ok" || l.currentDesc) && (!onlyIds || onlyIds.has(l.id)))
     addLog(`── Stage 3: Double Check — ${toRun.length} to process`)
     let done = 0
     const updated = [...currentLots]
@@ -4297,8 +4300,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   }
 
   // ── Stage 2: Key Points Check (auto-applies, then feeds Double Check) ───────
-  async function runKPStage(currentLots: PLot[], aid: string): Promise<PLot[]> {
-    const toRun = currentLots.filter(l => !l.kpStatus && l.currentDesc && l.keyPoints)
+  async function runKPStage(currentLots: PLot[], aid: string, onlyIds?: Set<string>): Promise<PLot[]> {
+    const toRun = currentLots.filter(l => !l.kpStatus && l.currentDesc && l.keyPoints && (!onlyIds || onlyIds.has(l.id)))
     const alreadyDone  = currentLots.filter(l => l.kpStatus).length
     const noDesc       = currentLots.filter(l => !l.kpStatus && !l.currentDesc?.trim()).length
     const noKpField    = currentLots.filter(l => !l.kpStatus && l.currentDesc?.trim() && !l.keyPoints?.trim()).length
@@ -4550,9 +4553,9 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
 
     try {
       let current = cleared
-      current = await runBatchStage(current)
-      if (!cancelRef.current) current = await runKPStage(current, aid)
-      if (!cancelRef.current) current = await runDoubleCheckStage(current, aid)
+      current = await runBatchStage(current, ids)
+      if (!cancelRef.current) current = await runKPStage(current, aid, ids)
+      if (!cancelRef.current) current = await runDoubleCheckStage(current, aid, ids)
       if (!cancelRef.current) addLog(`✓ Caught up — ${targets.length} lot${targets.length === 1 ? "" : "s"} now done`)
     } catch (e: any) {
       if (!cancelRef.current) { addLog(`✗ Resume error: ${e?.message ?? "unknown"}`); setError(e?.message ?? "Resume failed") }

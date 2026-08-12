@@ -27,7 +27,7 @@ export default function ReportForm() {
           happenedAt:    fd.get("happenedAt"),
           location:      fd.get("location"),
           description:   fd.get("description"),
-          website:       fd.get("website"),   // honeypot — real people never see this
+          hp_ref:        fd.get("hp_ref"),   // honeypot — see the route
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -79,10 +79,12 @@ export default function ReportForm() {
               className="w-full rounded-xl border border-gray-300 px-3 py-2 text-[15px] focus:outline-none focus:border-red-500" />
           </div>
 
-          {/* Honeypot: hidden from people, irresistible to bots. Filled in = silently rejected. */}
-          <div aria-hidden className="absolute left-[-9999px] w-px h-px overflow-hidden">
-            <label htmlFor="website">Website</label>
-            <input id="website" name="website" type="text" tabIndex={-1} autoComplete="off" />
+          {/* Honeypot. display:none (not off-screen) and a meaningless name, because the old
+              off-screen field called "website" was exactly what a password manager fills in —
+              and a filled honeypot used to bin the report silently. It now only FLAGS it for a
+              human to check; nothing is ever discarded. */}
+          <div hidden aria-hidden>
+            <input id="hp_ref" name="hp_ref" type="text" tabIndex={-1} autoComplete="off" />
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}

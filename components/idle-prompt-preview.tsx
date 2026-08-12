@@ -56,7 +56,10 @@ export default function IdlePromptPreview({ reasons, message }: { reasons: IdleR
   // Whole-minute total so the header, per-reason labels and the split sliders all
   // agree — the real popup rounds the gap UP to whole minutes, so mirror that here
   // (otherwise a 2m-of-"3m" slice would sit at the wrong fraction of the bar).
-  const totalMs = gapSecs * 1000   // raw, exactly as the real popup does it
+  // ⚠ Ceil to the whole minute — the real popup does this too (setIdleSecs in lot-wizard-tab),
+  // because the header shows whole minutes and a raw sub-minute total made the slider domain
+  // disagree with the label. An earlier "fix" set this to the raw value and broke that match.
+  const totalMs = Math.ceil(gapSecs / 60) * 60 * 1000
   const segMs = new Map<string, number>(selected.map(k => [k, selected.length <= 1 ? totalMs : (alloc[k] ?? 0)]))
   const multi = selected.length > 1
   const sliderStep = splitStepMs(totalMs, selected.length)

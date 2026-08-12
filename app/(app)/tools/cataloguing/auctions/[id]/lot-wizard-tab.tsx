@@ -1386,6 +1386,12 @@ export default function LotWizardTab({
                 // Selecting "Other" goes via the reminder first; deselecting is instant.
                 if (!on && key === "OTHER") { setIdleOtherWarn(true); return }
                 setIdleSelected(sel => on ? sel.filter(k => k !== key) : [...sel, key])
+                // ⚠ Drop the allocation too. Without this a deselected reason keeps its minutes
+                // and hands them back if it is re-selected, so the segments can total MORE than
+                // the gap — and the leftover guard below (left >= 1000) hides the overflow, so
+                // "Not allocated" reads 0m and Save stays enabled. The extra minutes are then
+                // written past the end of the gap, over time actually spent working.
+                if (on) setIdleAlloc(a => { const { [key]: _drop, ...rest } = a; return rest })
               }}
             />
             <p className="text-[11px] text-gray-400 text-center mb-3">Doing more than one thing? Tap all that apply.</p>
