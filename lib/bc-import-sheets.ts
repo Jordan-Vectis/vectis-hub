@@ -67,7 +67,10 @@ export function parseHotkeySheet(rows: unknown[][]): HotkeyToteRow[] {
 // The done-so-far side of the reconcile: which barcodes are in BC, and which
 // of them BC flagged with an error.
 export function parseBcLinesExport(rows: unknown[][]): { barcodes: Set<string>; errors: BcErrorFlag[] } {
-  if (rows.length < 2) throw new Error("The BC export looks empty.")
+  // ⚠ A header row with NO data rows is a legitimate export — on day one of a staged import
+  // nothing is in BC yet, and the right answer is "none of it is in", not "bad file".
+  // Only a genuinely empty sheet, or one with no barcode column, is an error.
+  if (rows.length === 0) throw new Error("That file has nothing in it at all.")
   const headers = rows[0]
   const bcCol   = findCol(headers, "Internal Barcode", "Barcode")
   const errCol  = findCol(headers, "Errors", "Error")

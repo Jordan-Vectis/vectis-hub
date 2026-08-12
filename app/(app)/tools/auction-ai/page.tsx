@@ -4398,7 +4398,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   // detail/polish. Key points are passed through so nothing factual is dropped.
   // Result is staged into kpRevised → appears in Review & Apply (never auto-applied).
   async function runUpgrade() {
-    if (upgrading || !auctionId) return
+    if (upgrading || running || !auctionId) return
     const modes = [...upgradeModes]
     if (!modes.length) { setError("Pick at least one upgrade option first"); return }
     cancelRef.current = false
@@ -4498,7 +4498,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   // Resets just that lot's stage state so the stage functions reprocess only it — useful
   // when a lot was skipped (e.g. content blocked) and you want to give it another go.
   async function rerunLot(lot: PLot) {
-    if (running || !auctionId) return
+    if (running || upgrading || !auctionId) return
     const aid = auctionId
     cancelRef.current = false
     setRunning(true); setError(null)
@@ -4508,7 +4508,10 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       batchStatus: undefined, estimate: undefined, batchDesc: undefined,
       dcStatus: undefined, dcSkipReason: undefined, contradictions: undefined, unsupported: undefined, dcDesc: undefined,
       kpStatus: undefined, kpSkipReason: undefined, kpMissing: undefined, kpAdded: undefined, kpFound: undefined, kpRevised: undefined, kpDesc: undefined,
-      cataloguerFlag: undefined, currentDesc: "",
+      cataloguerFlag: undefined,
+      // ⚠ currentDesc is deliberately NOT blanked. Blanking it only to have Batch come back
+      // content-blocked left the lot with no description in state while the catalogue still had
+      // one — so it rejoined the "has photos but never got a description" banner until reload.
     } : l)
     setLots(reset)
     try {
@@ -5026,8 +5029,12 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         />
       )}
 
-      {/* Run / control buttons */}
-      {lots.length > 0 && stage !== "complete" && (
+      {/* Run / control buttons.
+          ⚠ The `running` clause matters: a catch-up (resumeNotRun) only ever runs when the stage
+          IS "complete", so hiding this block on that condition alone left it with no Pause, no
+          Stop and no progress — and withRetry loops for ever on a rate limit, so closing the tab
+          was the only way out. */}
+      {lots.length > 0 && (stage !== "complete" || running) && (
         <div className="flex items-center gap-3 flex-wrap">
           {!running ? (
             <button onClick={handleRun} disabled={!auctionId}
@@ -5138,7 +5145,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
               )
             })}
           </div>
-          <button onClick={runUpgrade} disabled={upgrading || upgradeModes.size === 0}
+          <button onClick={runUpgrade} disabled={upgrading || running || upgradeModes.size === 0}
             className="px-5 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors">
             {upgrading ? `Upgrading… ${progress ? `${progress.done}/${progress.total}` : ""}` : `✨ Run AI Upgrade on ${lots.filter(l => l.batchStatus === "ok").length} lots`}
           </button>
@@ -5344,7 +5351,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
                       <td className="px-3 py-2">{dcCell}</td>
                       <td className="px-3 py-2">{kpCell}</td>
                       <td className="px-3 py-2 text-right whitespace-nowrap">
-                        <button onClick={e => { e.stopPropagation(); rerunLot(lot) }} disabled={running}
+                        <button onClick={e => { e.stopPropagation(); rerunLot(lot) }} disabled={running || upgrading}
                           className="text-xs text-[#C8A96E] hover:text-[#d4b87a] disabled:opacity-30 transition-colors mr-3"
                           title="Re-run this lot through Batch → Key Points → Double Check">
                           ↻ Re-run

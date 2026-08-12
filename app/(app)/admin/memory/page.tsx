@@ -718,6 +718,10 @@ Verified with a temp tsx suite (10 cases incl. token-reasons+huge-unallocated = 
 
 The **chrome** (heading, split sliders, notes) is still duplicated — the real popup is tightly coupled to the wizard's idle refs and save flow, so it was safer to replicate than to refactor the critical cataloguing path. **The reason BUTTONS are no longer duplicated** (2026-08-10): they and the message banner come from **components/idle-reason-picker.tsx**, which both render — don't inline them back.
 
+## ✅ 2026-08-12 — every review finding is now fixed
+
+Last leftovers: catch-up runs are stoppable (the Pause/Stop/progress block was hidden on stage !== "complete", but a catch-up only runs WHEN complete, so it had no controls and withRetry loops for ever on a rate limit — now `(stage !== "complete" || running)`, keep the `|| running`); AI Upgrade and per-lot re-run can no longer overlap (each held its own snapshot of lots and the last to finish wiped the other's results — both functions and both buttons now carry the guard); rerunLot no longer blanks currentDesc (a content-blocked re-run left the lot description-less in state while the catalogue still had one, so it rejoined the "never got a description" banner until reload); and three catch-up sheet fixes — "is it in BC?" is asked before the receipt check, two lots sharing a barcode on the SAME receipt get their own panel instead of vanishing, and a headers-only BC export is accepted (day one of a staged import has nothing in BC).
+
 ## ✅ 2026-08-11/12 — decisions taken on the review findings
 
 - **"Continue anyway" is now FINAL** — answeredGapRef records the gap once the log is written and the save no longer re-raises the popup for it. Jordan: accept the answer, unallocated time still shows in the reports. Do NOT restore the re-ask: each pass wrote another set of rows overlapping the first, and allocating the bare minimum never converged, so the lot could not be saved at all.

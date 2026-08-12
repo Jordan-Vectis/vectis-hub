@@ -54,11 +54,16 @@ export default function CatchupSheetTab({ lots, auctionCode }: Props) {
 
     const noBarcode = lots.filter(l => !l.barcode?.trim())
     const withCode  = lots.filter(l => l.barcode?.trim())
-    const noReceipt = withCode.filter(l => !l.receipt?.trim())
-    const sheetable = withCode.filter(l => l.receipt?.trim())
 
-    const alreadyIn = sheetable.filter(l => bc.barcodes.has(normSheetVal(l.barcode)))
-    let   missing   = sheetable.filter(l => !bc.barcodes.has(normSheetVal(l.barcode)))
+    // ⚠ Ask "is it in BC?" FIRST. Checking the receipt first reported a lot that is already
+    // safely in BC as a problem to go and fix, and left it out of the Already in BC count.
+    const inBc      = (l: Lot) => bc.barcodes.has(normSheetVal(l.barcode))
+    const alreadyIn = withCode.filter(inBc)
+    const pending   = withCode.filter(l => !inBc(l))
+
+    const noReceipt = pending.filter(l => !l.receipt?.trim())
+    const sheetable = pending.filter(l => l.receipt?.trim())
+    let   missing   = sheetable
 
     // Same rule as the End of Day sheet: a barcode sitting under two different receipts must
     // come OFF the sheet, visibly. Importing it would create the BC line on the wrong receipt.
@@ -74,6 +79,10 @@ export default function CatchupSheetTab({ lots, auctionCode }: Props) {
 
     // One row per receipt, barcodes deduped within it, receipts sorted numerically — the exact
     // shape the macro expects, identical to the End of Day sheet.
+    // ⚠ Dedup within a receipt drops the SECOND lot sharing a barcode. That is right for the
+    // sheet — one label, one BC line — but it used to happen silently: the lot appeared in no
+    // panel and no tile, so the counts didn't add up and there was no way to find it.
+    const sameReceiptDupes: Lot[] = []
     const byReceipt = new Map<string, { receipt: string; barcodes: string[]; seen: Set<string> }>()
     for (const l of missing) {
       const receipt = normSheetVal(l.receipt)
@@ -81,6 +90,7 @@ export default function CatchupSheetTab({ lots, auctionCode }: Props) {
       if (!g) { g = { receipt, barcodes: [], seen: new Set() }; byReceipt.set(receipt, g) }
       const b = l.barcode!.trim()
       if (!g.seen.has(b.toUpperCase())) { g.seen.add(b.toUpperCase()); g.barcodes.push(b) }
+      else sameReceiptDupes.push(l)
     }
     const rows: HotkeyToteRow[] = [...byReceipt.values()]
       .sort((a, b) => a.receipt.localeCompare(b.receipt, "en-GB", { numeric: true }))
@@ -92,7 +102,7 @@ export default function CatchupSheetTab({ lots, auctionCode }: Props) {
     let otherSales = 0
     for (const b of bc.barcodes) if (!ourCodes.has(b)) otherSales++
 
-    return { noBarcode, noReceipt, alreadyIn, missing, duplicates, rows, otherSales,
+    return { noBarcode, noReceipt, alreadyIn, missing, duplicates, sameReceiptDupes, rows, otherSales,
              sheetLots: rows.reduce((n, r) => n + r.barcodes.length, 0) }
   }, [bc, lots])
 
@@ -144,9 +154,9 @@ export default function CatchupSheetTab({ lots, auctionCode }: Props) {
             <Tile label="Lots in this sale" value={lots.length} />
             <Tile label="Already in BC" value={result.alreadyIn.length} sub="per your upload" tone="good" />
             <Tile label="Still missing" value={result.sheetLots} sub={`${result.rows.length} receipt${result.rows.length === 1 ? "" : "s"}`} tone={result.sheetLots > 0 ? "warn" : "plain"} />
-            <Tile label="Can't go on a sheet" value={result.noBarcode.length + result.noReceipt.length + result.duplicates.length}
-              sub={result.noBarcode.length + result.noReceipt.length + result.duplicates.length > 0 ? "listed below" : undefined}
-              tone={result.noBarcode.length + result.noReceipt.length + result.duplicates.length > 0 ? "bad" : "plain"} />
+            <Tile label="Can't go on a sheet" value={result.noBarcode.length + result.noReceipt.length + result.duplicates.length + result.sameReceiptDupes.length}
+              sub={result.noBarcode.length + result.noReceipt.length + result.duplicates.length + result.sameReceiptDupes.length > 0 ? "listed below" : undefined}
+              tone={result.noBarcode.length + result.noReceipt.length + result.duplicates.length + result.sameReceiptDupes.length > 0 ? "bad" : "plain"} />
           </div>
 
           {result.sheetLots > 0 ? (
@@ -171,6 +181,11 @@ export default function CatchupSheetTab({ lots, auctionCode }: Props) {
             <Problem tone="bad" title={`${result.duplicates.length} lot${result.duplicates.length === 1 ? "" : "s"} held back — same barcode under two receipts`}
               note="Left off the sheet on purpose: importing one would put the BC line on the wrong receipt. Fix the receipt on these lots, then take the sheet again."
               lots={result.duplicates} />
+          )}
+          {result.sameReceiptDupes.length > 0 && (
+            <Problem tone="warn" title={`${result.sameReceiptDupes.length} lot${result.sameReceiptDupes.length === 1 ? "" : "s"} share a barcode with another lot on the same receipt`}
+              note="Only one of each barcode goes on the sheet — one label, one line in BC. These are the extras. If they are genuinely separate items they need their own barcodes."
+              lots={result.sameReceiptDupes} />
           )}
           {result.noReceipt.length > 0 && (
             <Problem tone="warn" title={`${result.noReceipt.length} lot${result.noReceipt.length === 1 ? "" : "s"} have no receipt`}
