@@ -5,17 +5,11 @@
 // never pixels — the plan is shown at wildly different widths on a phone, a monitor and a
 // printout, and a pixel offset would drift on every one of them.
 
-// ⚠ THE one icon map. The public page used to keep its own identical copy — the classic pair
-// that drifts. Everything that draws a first aid symbol imports these.
-// 📍 is genuinely the "Other" symbol, not a fallback for a broken type: a kit shows 📍 because
-// its TYPE is Other, which is why the key names the type alongside it.
-export const PIN_ICON: Record<string, string> = {
-  KIT: "🧰", DEFIB: "⚡", EYEWASH: "💧", OTHER: "📍",
-}
-
-export const KIND_LABEL: Record<string, string> = {
-  KIT: "First aid kit", DEFIB: "Defibrillator", EYEWASH: "Eyewash", OTHER: "Other",
-}
+// ⚠ The symbol maps deliberately live in lib/first-aid-icons.ts, NOT here. This file is
+// "use client", and a Server Component importing a plain object from a client module gets a
+// client-reference stub instead of the data — the public page's pins rendered blank because of
+// exactly that. Re-exported so existing imports keep working.
+export { PIN_ICON, KIND_LABEL, pinIcon, kindName } from "@/lib/first-aid-icons"
 
 export function PlanImage({
   imageKey, alt, children, onPick,

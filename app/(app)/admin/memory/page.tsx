@@ -78,7 +78,17 @@ POST /api/public/first-aid-report - under the **already-public** /api/public pre
 
 AccidentReport rows are read **only** in the Hub app. Reports can contain **health data about a named person** - recorded in the STORES arrays on **both** /admin/compliance and /admin/dpia, per the standing rule.
 
-## 📍 is the "Other" symbol, not a fallback (2026-08-12)
+## Symbols blank on the public page — a SERVER/CLIENT boundary bug (2026-08-12)
+
+WARNING: this supersedes the note below, which was a WRONG diagnosis. The kit was not simply typed "Other" — the symbol was blank for EVERY kit whatever its type.
+
+Real cause: components/site-plan-view.tsx is "use client", and the public page app/first-aid/page.tsx is a SERVER Component. A Server Component importing a PLAIN OBJECT from a "use client" module gets a client-reference stub, not the data — components still render, data comes back empty. So PIN_ICON[...] was always undefined there. The original literal fallback ?? "📍" silently masked it, which is why every pin looked like "the default pin"; removing the literal made it render nothing, which is how it surfaced. Isolation that proved it: the identical map renders correctly in the admin pin editor (client) and blank on the public page (server) — same kit, same data, only the boundary differs.
+
+Fix: the maps live in lib/first-aid-icons.ts, a PLAIN module with NO "use client", plus pinIcon()/kindName() helpers. The server page imports from there DIRECTLY; site-plan-view re-exports them for client callers. WARNING: never move shared constants back inside a "use client" file, and never import them THROUGH one from a Server Component — you get the stub back.
+
+WARNING, generalisable: a hardcoded fallback next to a lookup can hide the lookup being broken entirely. "?? 📍" looked defensive and cost a day.
+
+## (superseded, kept for the reasoning) 📍 is the "Other" symbol
 
 Jordan: "why it is a default pin and not an actual symbol like on the other page" — a kit named "Reception Defib Kit" drawing 📍. NOT a bug in the drawing: the symbol follows the kit's TYPE, never its name, and that kit was saved as type Other — 📍 IS Other. Three changes so the answer is visible rather than needing explaining: ONE icon map (app/first-aid/page.tsx kept its own KIND_ICON alongside the imported PIN_ICON, identical and guaranteed to drift — deleted, everything imports PIN_ICON/KIND_LABEL from components/site-plan-view, do not reintroduce a local copy); the key now names the type ("Reception Defib Kit · Other — Reception") so 📍 explains itself; and the admin kits list labels the dropdown "Type — this is what draws the symbol", with the name field showing the symbol and type it will appear as. The dropdown defaults to First aid kit and is easy to leave alone, which is exactly how a defib ends up typed as Other.
 

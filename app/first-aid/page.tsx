@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma"
 import ReportForm from "./report-form"
-import { PIN_ICON, KIND_LABEL, PlanImage } from "@/components/site-plan-view"
+import { PlanImage } from "@/components/site-plan-view"
+// ⚠ Straight from the plain module: importing these THROUGH the client component gives a
+// client-reference stub in a Server Component, and every symbol renders blank.
+import { pinIcon, kindName } from "@/lib/first-aid-icons"
 
 // PUBLIC — no login. Deliberately a TOP-LEVEL route, not inside app/(app): that group's layout
 // renders the Hub shell and reads the session, so putting this page there would drag the nav
@@ -131,7 +134,7 @@ export default async function FirstAidPage() {
               {pinned.map(k => (
                 <span key={k.id} style={{ left: `${k.pinX}%`, top: `${k.pinY}%` }} title={k.label}
                   className="absolute -translate-x-1/2 -translate-y-1/2 text-2xl drop-shadow">
-                  {PIN_ICON[k.kind] ?? PIN_ICON.OTHER}
+                  {pinIcon(k.kind)}
                 </span>
               ))}
             </PlanImage>
@@ -143,10 +146,10 @@ export default async function FirstAidPage() {
               <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
                 {pinned.map(k => (
                   <li key={k.id} className="flex items-start gap-2 text-sm">
-                    <span className="text-lg leading-none shrink-0">{PIN_ICON[k.kind] ?? PIN_ICON.OTHER}</span>
+                    <span className="text-lg leading-none shrink-0">{pinIcon(k.kind)}</span>
                     <span className="min-w-0">
                       <span className="font-semibold">{k.label}</span>
-                      <span className="text-gray-500"> · {KIND_LABEL[k.kind] ?? KIND_LABEL.OTHER}</span>
+                      <span className="text-gray-500"> · {kindName(k.kind)}</span>
                       {k.whereText && <span className="text-gray-600"> — {k.whereText}</span>}
                     </span>
                   </li>
@@ -166,7 +169,7 @@ export default async function FirstAidPage() {
             <ul className="mt-3 space-y-3">
               {kits.map(k => (
                 <li key={k.id} className="flex items-start gap-3">
-                  <span className="text-2xl shrink-0" aria-hidden>{PIN_ICON[k.kind] ?? PIN_ICON.OTHER}</span>
+                  <span className="text-2xl shrink-0" aria-hidden>{pinIcon(k.kind)}</span>
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold">{k.label}</p>
                     {k.whereText && <p className="text-sm text-gray-600">{k.whereText}</p>}
