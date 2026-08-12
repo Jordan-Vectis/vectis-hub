@@ -289,3 +289,32 @@ html.crt-mode body {
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.3);
 }
 .idle-slider:active::-webkit-slider-thumb { transform: scale(1.1); }
+
+/* Native file inputs render "No file chosen" in the BROWSER's own colour — black — which is
+   invisible on this app's dark theme (dark is the default here, not the exception). The button
+   half needs styling too, or it stays a grey system chip. */
+.file-input {
+  font-size: 0.75rem;
+  color: #374151;                     /* light mode */
+  max-width: 100%;
+}
+.file-input::file-selector-button {
+  margin-right: 0.5rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  background: #f9fafb;
+  color: #374151;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.file-input::file-selector-button:hover { border-color: #9ca3af; }
+
+.dark .file-input { color: #d1d5db; }
+.dark .file-input::file-selector-button {
+  border-color: #4b5563;
+  background: #1f2937;
+  color: #e5e7eb;
+}
+.dark .file-input::file-selector-button:hover { border-color: #6b7280; }

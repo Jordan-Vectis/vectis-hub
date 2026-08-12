@@ -38,7 +38,7 @@ export default function SitePlanClient({ plans, kits }: { plans: Plan[]; kits: K
                 <label className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1.5"><input type="checkbox" name="active" defaultChecked={p.active} className="accent-sky-600" /> In use</label>
               </div>
               <div className="flex items-center gap-3 flex-wrap">
-                <label className="text-xs text-gray-500 dark:text-gray-400">Replace the drawing <input type="file" name="image" accept="image/png,image/jpeg,image/webp" className="ml-1 text-xs" /></label>
+                <label className="text-xs text-gray-500 dark:text-gray-400">Replace the drawing <input type="file" name="image" accept="image/png,image/jpeg,image/webp" className="ml-1 file-input" /></label>
                 <div className="ml-auto flex gap-2">
                   <button className="px-4 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-lg">Save</button>
                   <button type="button"
@@ -75,7 +75,7 @@ export default function SitePlanClient({ plans, kits }: { plans: Plan[]; kits: K
           phone, so export the page from the PDF first.
         </p>
         <div className="flex items-center gap-3 flex-wrap">
-          <input type="file" name="image" accept="image/png,image/jpeg,image/webp" required className="text-xs" />
+          <input type="file" name="image" accept="image/png,image/jpeg,image/webp" required className="file-input" />
           <label className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1.5"><input type="checkbox" name="active" defaultChecked className="accent-sky-600" /> In use</label>
           <button className="ml-auto px-4 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-lg">Add</button>
         </div>

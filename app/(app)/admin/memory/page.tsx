@@ -78,6 +78,14 @@ POST /api/public/first-aid-report - under the **already-public** /api/public pre
 
 AccidentReport rows are read **only** in the Hub app. Reports can contain **health data about a named person** - recorded in the STORES arrays on **both** /admin/compliance and /admin/dpia, per the standing rule.
 
+## Layout: the plan breaks OUT of the reading column, and it has a KEY (2026-08-12)
+
+Jordan: "we are doing this thing where we dont use the full screen again so the plan is all squashed and there is no key. Its very poorly laid out." Both fair — the first is the standing full-width rule being broken again.
+
+The public first aid page is deliberately a narrow phone-first reading column (max-w-2xl) for the emergency steps, first aiders and the form. The PLAN SECTION IS NOT: it breaks out to max-w-6xl in its own block between them, because a 1:1250 site drawing squeezed into 672px is unreadable, which defeats the point of putting it there. Do not tidy the plan back inside the reading column. A KEY sits under it listing every pinned item with its symbol and its whereText — emoji on a drawing mean nothing on their own, and the key doubles as the list of what is marked. The page uses plain divs rather than main for these blocks, since the plan splits the column in two and two main elements would be invalid.
+
+Native file inputs render "No file chosen" in the BROWSER's own colour (black), invisible on this app's dark theme — dark is the DEFAULT here, not the exception. Fixed with a shared .file-input class in globals.css styling both the text and ::file-selector-button in light and dark. Use it on any new visible file input; the ones in photo-upload-tab are sr-only so they do not need it.
+
 ## Site Plan — shared, in Facilities (2026-08-12)
 
 Jordan: "I also have this building plan id like the ability to have it in the app so I can mark on it where the equipment is." Asked where it should live, he chose a SHARED Facilities plan, not a First-Aid-only one — so fire extinguishers, stopcocks etc. can mark up the same drawing later without a second copy to keep in step.

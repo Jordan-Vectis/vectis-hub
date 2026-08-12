@@ -48,6 +48,7 @@ async function load(): Promise<{ aiders: Aider[]; kits: Kit[]; info: Info; plan:
 export default async function FirstAidPage() {
   const { aiders, kits, info, plan } = await load()
   const steps = (info?.emergencySteps ?? "").split("\n").map(s => s.trim()).filter(Boolean)
+  const pinned = plan ? kits.filter(k => k.planId === plan.id && k.pinX !== null && k.pinY !== null) : []
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
@@ -56,7 +57,7 @@ export default async function FirstAidPage() {
         <p className="text-sm text-green-100 mt-1">Vectis Auctions — anyone on site can use this page.</p>
       </header>
 
-      <main className="max-w-2xl mx-auto px-5 py-6 space-y-6">
+      <div className="max-w-2xl mx-auto px-5 py-6 space-y-6">
         {/* Emergency first — this is the bit someone needs in a hurry */}
         <section className="rounded-2xl border-2 border-green-300 bg-white p-5">
           <h2 className="text-lg font-bold text-green-800">In an emergency</h2>
@@ -117,21 +118,46 @@ export default async function FirstAidPage() {
           )}
         </section>
 
-        {plan && kits.some(k => k.planId === plan.id && k.pinX !== null) && (
+      </div>
+
+      {/* ⚠ The plan breaks OUT of the reading column. Everything else on this page is phone-first
+          prose at max-w-2xl, but a 1:1250 site drawing squeezed into 672px is unreadable — which
+          was the whole point of putting it here. Wide, with a key underneath. */}
+      {plan && pinned.length > 0 && (
+        <div className="max-w-6xl mx-auto px-5 pb-6">
           <section className="rounded-2xl border border-gray-200 bg-white p-5">
             <h2 className="text-lg font-bold">Where to find it</h2>
             <p className="text-sm text-gray-600 mt-1 mb-3">{plan.name}</p>
             <PlanImage imageKey={plan.imageKey} alt={plan.name}>
-              {kits.filter(k => k.planId === plan.id && k.pinX !== null && k.pinY !== null).map(k => (
+              {pinned.map(k => (
                 <span key={k.id} style={{ left: `${k.pinX}%`, top: `${k.pinY}%` }} title={k.label}
                   className="absolute -translate-x-1/2 -translate-y-1/2 text-2xl drop-shadow">
                   {PIN_ICON[k.kind] ?? "📍"}
                 </span>
               ))}
             </PlanImage>
-          </section>
-        )}
 
+            {/* A key. Emoji on a drawing mean nothing on their own, and this doubles as the list
+                of what is actually marked. */}
+            <div className="mt-4 border-t border-gray-200 pt-3">
+              <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">Key</p>
+              <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
+                {pinned.map(k => (
+                  <li key={k.id} className="flex items-start gap-2 text-sm">
+                    <span className="text-lg leading-none shrink-0">{PIN_ICON[k.kind] ?? "📍"}</span>
+                    <span className="min-w-0">
+                      <span className="font-semibold">{k.label}</span>
+                      {k.whereText && <span className="text-gray-600"> — {k.whereText}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
+        </div>
+      )}
+
+      <div className="max-w-2xl mx-auto px-5 pb-6 space-y-6">
         <section className="rounded-2xl border border-gray-200 bg-white p-5">
           <h2 className="text-lg font-bold">Kits and equipment</h2>
           {kits.length === 0 ? (
@@ -168,7 +194,7 @@ export default async function FirstAidPage() {
         <p className="text-center text-xs text-gray-400 pb-8">
           Vectis Auctions · this page is for first aid only
         </p>
-      </main>
+      </div>
     </div>
   )
 }

@@ -96,7 +96,7 @@ export default function FirstAidClient({ aiders, kits, info, reports, plans }: {
               <div className="flex items-center gap-4 flex-wrap">
                 <label className="text-xs text-gray-500 dark:text-gray-400">Order <input type="number" name="sortOrder" defaultValue={a.sortOrder} className="ml-1 w-16 rounded border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1 text-sm" /></label>
                 <label className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1.5"><input type="checkbox" name="active" defaultChecked={a.active} className="accent-green-700" /> Show on the public page</label>
-                <label className="text-xs text-gray-500 dark:text-gray-400">Photo <input type="file" name="photo" accept="image/*" className="ml-1 text-xs" /></label>
+                <label className="text-xs text-gray-500 dark:text-gray-400">Photo <input type="file" name="photo" accept="image/*" className="ml-1 file-input" /></label>
                 <div className="ml-auto flex gap-2">
                   <button className="px-4 py-1.5 bg-green-700 hover:bg-green-600 text-white text-xs font-bold rounded-lg">Save</button>
                   <button type="button" onClick={() => { if (confirm(`Remove ${a.name}?`)) run(() => deleteFirstAider(a.id), "Removed.") }}
@@ -116,7 +116,7 @@ export default function FirstAidClient({ aiders, kits, info, reports, plans }: {
             <div className="flex items-center gap-4 flex-wrap">
               <label className="text-xs text-gray-500 dark:text-gray-400">Order <input type="number" name="sortOrder" defaultValue={0} className="ml-1 w-16 rounded border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1 text-sm" /></label>
               <label className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1.5"><input type="checkbox" name="active" defaultChecked className="accent-green-700" /> Show on the public page</label>
-              <label className="text-xs text-gray-500 dark:text-gray-400">Photo <input type="file" name="photo" accept="image/*" className="ml-1 text-xs" /></label>
+              <label className="text-xs text-gray-500 dark:text-gray-400">Photo <input type="file" name="photo" accept="image/*" className="ml-1 file-input" /></label>
               <button className="ml-auto px-4 py-1.5 bg-green-700 hover:bg-green-600 text-white text-xs font-bold rounded-lg">Add</button>
             </div>
           </form>
@@ -138,7 +138,7 @@ export default function FirstAidClient({ aiders, kits, info, reports, plans }: {
               <div className="flex items-center gap-4 flex-wrap">
                 <label className="text-xs text-gray-500 dark:text-gray-400">Order <input type="number" name="sortOrder" defaultValue={k.sortOrder} className="ml-1 w-16 rounded border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1 text-sm" /></label>
                 <label className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1.5"><input type="checkbox" name="active" defaultChecked={k.active} className="accent-green-700" /> Show on the public page</label>
-                <label className="text-xs text-gray-500 dark:text-gray-400">Photo <input type="file" name="photo" accept="image/*" className="ml-1 text-xs" /></label>
+                <label className="text-xs text-gray-500 dark:text-gray-400">Photo <input type="file" name="photo" accept="image/*" className="ml-1 file-input" /></label>
                 <div className="ml-auto flex gap-2">
                   <button className="px-4 py-1.5 bg-green-700 hover:bg-green-600 text-white text-xs font-bold rounded-lg">Save</button>
                   <button type="button" onClick={() => { if (confirm(`Remove ${k.label}?`)) run(() => deleteFirstAidKit(k.id), "Removed.") }}
@@ -157,7 +157,7 @@ export default function FirstAidClient({ aiders, kits, info, reports, plans }: {
             <div className="flex items-center gap-4 flex-wrap">
               <label className="text-xs text-gray-500 dark:text-gray-400">Order <input type="number" name="sortOrder" defaultValue={0} className="ml-1 w-16 rounded border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1 text-sm" /></label>
               <label className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1.5"><input type="checkbox" name="active" defaultChecked className="accent-green-700" /> Show on the public page</label>
-              <label className="text-xs text-gray-500 dark:text-gray-400">Photo <input type="file" name="photo" accept="image/*" className="ml-1 text-xs" /></label>
+              <label className="text-xs text-gray-500 dark:text-gray-400">Photo <input type="file" name="photo" accept="image/*" className="ml-1 file-input" /></label>
               <button className="ml-auto px-4 py-1.5 bg-green-700 hover:bg-green-600 text-white text-xs font-bold rounded-lg">Add</button>
             </div>
           </form>
