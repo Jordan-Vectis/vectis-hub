@@ -144,7 +144,7 @@ function ValueEditor({ low, high, onChange }: {
       <button
         onClick={e => { e.stopPropagation(); setEditing(true) }}
         title="Click to edit this item's value"
-        className="text-xs text-gray-300 tabular-nums hover:text-[#2AB4A6] transition-colors flex-shrink-0"
+        className="text-xs text-gray-300 tabular-nums hover:text-[#2AB4A6] transition-colors flex-shrink-0 px-2 py-2 -my-1 rounded hover:bg-[#2C2C2E]"
       >
         {money(low)}–{money(high).replace("£", "")}
       </button>
@@ -435,7 +435,7 @@ function PhotoPanel({ run, targetLow, targetHigh, onResult, onAnalyse }: {
                         <button
                           onClick={() => setPinnedId(isPinned ? null : g.id)}
                           title={isPinned ? "Unpin from photo" : "Pin on photo"}
-                          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 transition-transform hover:scale-110 ${isPinned ? "ring-2 ring-white/60" : ""}`}
+                          className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 transition-transform hover:scale-110 ${isPinned ? "ring-2 ring-white/60" : ""}`}
                           style={{ backgroundColor: g.colour }}>
                           {g.id}
                         </button>
@@ -470,14 +470,14 @@ function PhotoPanel({ run, targetLow, targetHigh, onResult, onAnalyse }: {
                         <div className="ml-auto flex items-center gap-1">
                           <button
                             onClick={() => setSelected(new Set(g.items.map(i => i.uid)))}
-                            className="text-[11px] text-gray-500 hover:text-white px-1.5 py-0.5 rounded hover:bg-[#2C2C2E]">
+                            className="text-[11px] text-gray-500 hover:text-white px-2 py-2 rounded hover:bg-[#2C2C2E]">
                             Select all
                           </button>
                           {g.items.length > 1 && (
                             <button
                               onClick={() => splitEachItem(g.id)}
                               title="Turn every item in this lot into its own lot"
-                              className="text-[11px] text-gray-500 hover:text-white px-1.5 py-0.5 rounded hover:bg-[#2C2C2E]">
+                              className="text-[11px] text-gray-500 hover:text-white px-2 py-2 rounded hover:bg-[#2C2C2E]">
                               Split all
                             </button>
                           )}
@@ -485,7 +485,7 @@ function PhotoPanel({ run, targetLow, targetHigh, onResult, onAnalyse }: {
                             <select
                               value=""
                               onChange={e => { if (e.target.value) mergeInto(g.id, Number(e.target.value)) }}
-                              className="text-[11px] bg-transparent text-gray-500 hover:text-white border border-transparent hover:border-gray-700 rounded px-1 py-0.5 focus:outline-none cursor-pointer">
+                              className="text-[11px] bg-transparent text-gray-500 hover:text-white border border-transparent hover:border-gray-700 rounded px-1 py-2 focus:outline-none cursor-pointer">
                               <option value="">Merge into…</option>
                               {groups.filter(o => o.id !== g.id).map(o => (
                                 <option key={o.id} value={o.id} className="bg-[#1C1C1E]">
@@ -497,7 +497,7 @@ function PhotoPanel({ run, targetLow, targetHigh, onResult, onAnalyse }: {
                           <button
                             onClick={() => deleteGroup(g.id)}
                             title="Remove this lot and its items from the plan"
-                            className="text-[11px] text-gray-600 hover:text-red-400 px-1.5 py-0.5 rounded hover:bg-[#2C2C2E]">
+                            className="text-[11px] text-gray-600 hover:text-red-400 px-2.5 py-2 rounded hover:bg-[#2C2C2E]">
                             ✕
                           </button>
                         </div>
@@ -514,11 +514,11 @@ function PhotoPanel({ run, targetLow, targetHigh, onResult, onAnalyse }: {
                             onMouseEnter={() => setHoverItem(it.uid)}
                             onMouseLeave={() => setHoverItem(null)}
                             onClick={() => toggleItem(it.uid)}
-                            className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors ${
+                            className={`flex items-center gap-2.5 px-2 py-2 min-h-[44px] rounded-lg cursor-pointer transition-colors ${
                               isSel ? "bg-[#2AB4A6]/15 ring-1 ring-[#2AB4A6]/40" : "hover:bg-[#2C2C2E]"
                             }`}
                           >
-                            <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center text-[9px] flex-shrink-0 ${
+                            <span className={`w-[18px] h-[18px] rounded border flex items-center justify-center text-[11px] flex-shrink-0 ${
                               isSel ? "bg-[#2AB4A6] border-[#2AB4A6] text-black" : "border-gray-600 text-transparent"
                             }`}>✓</span>
                             {it.qty > 1 && (
@@ -556,7 +556,7 @@ function PhotoPanel({ run, targetLow, targetHigh, onResult, onAnalyse }: {
                 <select
                   value=""
                   onChange={e => { if (e.target.value) moveSelectedTo(Number(e.target.value)) }}
-                  className="bg-[#1C1C1E] border border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-[#2AB4A6]">
+                  className="bg-[#1C1C1E] border border-gray-700 rounded-lg px-2 py-2.5 text-xs text-gray-200 focus:outline-none focus:border-[#2AB4A6]">
                   <option value="">Move into lot…</option>
                   {groups.map(o => (
                     <option key={o.id} value={o.id}>
@@ -566,12 +566,12 @@ function PhotoPanel({ run, targetLow, targetHigh, onResult, onAnalyse }: {
                 </select>
                 <button
                   onClick={() => moveSelectedTo("new")}
-                  className="text-xs bg-[#2AB4A6] hover:bg-[#24a090] text-black font-semibold px-3 py-1.5 rounded-lg transition-colors">
+                  className="text-xs bg-[#2AB4A6] hover:bg-[#24a090] text-black font-semibold px-4 py-2.5 rounded-lg transition-colors">
                   Make a new lot
                 </button>
                 <button
                   onClick={() => setSelected(new Set())}
-                  className="text-xs text-gray-400 hover:text-white ml-auto">
+                  className="text-xs text-gray-400 hover:text-white ml-auto px-3 py-2.5 rounded hover:bg-[#1C1C1E]">
                   Clear
                 </button>
               </div>
