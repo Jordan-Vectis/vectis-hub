@@ -47,15 +47,15 @@ export default async function FirstAidPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
-      <header className="bg-red-700 text-white px-5 py-6">
+      <header className="bg-green-700 text-white px-5 py-6">
         <h1 className="text-2xl font-bold">🩹 First aid</h1>
-        <p className="text-sm text-red-100 mt-1">Vectis Auctions — anyone on site can use this page.</p>
+        <p className="text-sm text-green-100 mt-1">Vectis Auctions — anyone on site can use this page.</p>
       </header>
 
       <main className="max-w-2xl mx-auto px-5 py-6 space-y-6">
         {/* Emergency first — this is the bit someone needs in a hurry */}
-        <section className="rounded-2xl border-2 border-red-300 bg-white p-5">
-          <h2 className="text-lg font-bold text-red-800">In an emergency</h2>
+        <section className="rounded-2xl border-2 border-green-300 bg-white p-5">
+          <h2 className="text-lg font-bold text-green-800">In an emergency</h2>
           {steps.length > 0 ? (
             <ol className="mt-3 space-y-2 list-decimal list-inside text-[15px] leading-relaxed">
               {steps.map((s, i) => <li key={i}>{s}</li>)}
@@ -64,12 +64,12 @@ export default async function FirstAidPage() {
             <p className="mt-2 text-[15px]">Find a first aider from the list below. If it is serious, ring 999.</p>
           )}
           <a href="tel:999"
-            className="mt-4 block text-center bg-red-700 hover:bg-red-800 text-white font-bold text-lg rounded-xl py-3">
+            className="mt-4 block text-center bg-green-700 hover:bg-green-800 text-white font-bold text-lg rounded-xl py-3">
             📞 Call 999
           </a>
           {info?.siteAddress && (
-            <div className="mt-4 rounded-xl bg-red-50 border border-red-200 p-3">
-              <p className="text-xs font-bold uppercase tracking-wider text-red-700">Address to give the ambulance</p>
+            <div className="mt-4 rounded-xl bg-green-50 border border-green-200 p-3">
+              <p className="text-xs font-bold uppercase tracking-wider text-green-700">Address to give the ambulance</p>
               <p className="text-[15px] font-semibold whitespace-pre-wrap mt-1">{info.siteAddress}</p>
             </div>
           )}
@@ -91,7 +91,7 @@ export default async function FirstAidPage() {
                     <img src={`/api/public/photo?key=${encodeURIComponent(a.photoKey)}`} alt=""
                       className="w-12 h-12 rounded-full object-cover bg-gray-100 shrink-0" />
                   ) : (
-                    <div className="w-12 h-12 rounded-full bg-red-100 text-red-700 flex items-center justify-center font-bold shrink-0">
+                    <div className="w-12 h-12 rounded-full bg-green-100 text-green-700 flex items-center justify-center font-bold shrink-0">
                       {a.name.trim().charAt(0).toUpperCase()}
                     </div>
                   )}
@@ -103,7 +103,7 @@ export default async function FirstAidPage() {
                   </div>
                   {a.phone && (
                     <a href={`tel:${a.phone.replace(/\s/g, "")}`}
-                      className="shrink-0 px-3 py-2 rounded-lg bg-red-50 text-red-700 font-bold text-sm">
+                      className="shrink-0 px-3 py-2 rounded-lg bg-green-50 text-green-700 font-bold text-sm">
                       {a.phone}
                     </a>
                   )}

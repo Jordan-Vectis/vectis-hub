@@ -57,6 +57,12 @@ POST /api/public/first-aid-report - under the **already-public** /api/public pre
 
 AccidentReport rows are read **only** in the Hub app. Reports can contain **health data about a named person** - recorded in the STORES arrays on **both** /admin/compliance and /admin/dpia, per the standing rule.
 
+## Colour scheme: GREEN, not red (2026-08-12)
+
+Jordan, on seeing the first build: "the colour scheme being red and not green is not a good idea haha" — right beyond taste. **First aid signage is green and white (ISO 7010); red means fire equipment or prohibition.** A red first aid page signals the wrong thing to exactly the people most likely to need it. Everything identifying the feature is now green: the public page header, the emergency panel, the 999 button, the avatars and address box, the Hub card, and the management tabs and Save buttons.
+
+WARNING: reds that remain are deliberate and correct — do NOT sweep them green: the submit-error line on the public form and the message line in the Hub app (errors ARE red), and the Remove button hover on first aiders and kits (a destructive action). The 999 button is green like the rest rather than red — mixing red back in for urgency would undo the very signal the standard relies on, and it is already the largest element on the page.
+
 ## Still open
 
 - **Nobody is notified** when a report arrives - it just appears on the Reports tab with a count badge. If that matters, an email/ntfy hook is the obvious next step (not built, not discussed).

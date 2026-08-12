@@ -25,7 +25,7 @@ export default function FirstAidClient({ aiders, kits, info, reports }: { aiders
     })
   }
 
-  const input = "w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-red-500"
+  const input = "w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-green-600"
   const card  = "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl p-5"
 
   return (
@@ -34,7 +34,7 @@ export default function FirstAidClient({ aiders, kits, info, reports }: { aiders
         {TABS.map(([k, label]) => (
           <button key={k} onClick={() => { setTab(k); setMsg(null) }}
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-              tab === k ? "bg-red-600 text-white" : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+              tab === k ? "bg-green-700 text-white" : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
             }`}>
             {label}{k === "reports" && newCount > 0 ? ` (${newCount})` : ""}
           </button>
@@ -63,7 +63,7 @@ export default function FirstAidClient({ aiders, kits, info, reports }: { aiders
             <label className="block text-sm font-semibold mb-1 text-gray-900 dark:text-white">Anything else worth knowing</label>
             <textarea name="extraNotes" rows={4} defaultValue={info?.extraNotes ?? ""} maxLength={4000} className={input} />
           </div>
-          <button className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-sm">Save</button>
+          <button className="px-5 py-2.5 bg-green-700 hover:bg-green-600 text-white font-bold rounded-xl text-sm">Save</button>
         </form>
       )}
 
@@ -83,10 +83,10 @@ export default function FirstAidClient({ aiders, kits, info, reports }: { aiders
               </div>
               <div className="flex items-center gap-4 flex-wrap">
                 <label className="text-xs text-gray-500 dark:text-gray-400">Order <input type="number" name="sortOrder" defaultValue={a.sortOrder} className="ml-1 w-16 rounded border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1 text-sm" /></label>
-                <label className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1.5"><input type="checkbox" name="active" defaultChecked={a.active} className="accent-red-600" /> Show on the public page</label>
+                <label className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1.5"><input type="checkbox" name="active" defaultChecked={a.active} className="accent-green-700" /> Show on the public page</label>
                 <label className="text-xs text-gray-500 dark:text-gray-400">Photo <input type="file" name="photo" accept="image/*" className="ml-1 text-xs" /></label>
                 <div className="ml-auto flex gap-2">
-                  <button className="px-4 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-lg">Save</button>
+                  <button className="px-4 py-1.5 bg-green-700 hover:bg-green-600 text-white text-xs font-bold rounded-lg">Save</button>
                   <button type="button" onClick={() => { if (confirm(`Remove ${a.name}?`)) run(() => deleteFirstAider(a.id), "Removed.") }}
                     className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-500 hover:text-red-500 hover:border-red-400 text-xs font-bold rounded-lg">Remove</button>
                 </div>
@@ -103,9 +103,9 @@ export default function FirstAidClient({ aiders, kits, info, reports }: { aiders
             </div>
             <div className="flex items-center gap-4 flex-wrap">
               <label className="text-xs text-gray-500 dark:text-gray-400">Order <input type="number" name="sortOrder" defaultValue={0} className="ml-1 w-16 rounded border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1 text-sm" /></label>
-              <label className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1.5"><input type="checkbox" name="active" defaultChecked className="accent-red-600" /> Show on the public page</label>
+              <label className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1.5"><input type="checkbox" name="active" defaultChecked className="accent-green-700" /> Show on the public page</label>
               <label className="text-xs text-gray-500 dark:text-gray-400">Photo <input type="file" name="photo" accept="image/*" className="ml-1 text-xs" /></label>
-              <button className="ml-auto px-4 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-lg">Add</button>
+              <button className="ml-auto px-4 py-1.5 bg-green-700 hover:bg-green-600 text-white text-xs font-bold rounded-lg">Add</button>
             </div>
           </form>
         </div>
@@ -124,10 +124,10 @@ export default function FirstAidClient({ aiders, kits, info, reports }: { aiders
               {k.photoKey && <img src={`/api/public/photo?key=${encodeURIComponent(k.photoKey)}`} alt="" className="max-h-32 rounded-lg" />}
               <div className="flex items-center gap-4 flex-wrap">
                 <label className="text-xs text-gray-500 dark:text-gray-400">Order <input type="number" name="sortOrder" defaultValue={k.sortOrder} className="ml-1 w-16 rounded border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1 text-sm" /></label>
-                <label className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1.5"><input type="checkbox" name="active" defaultChecked={k.active} className="accent-red-600" /> Show on the public page</label>
+                <label className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1.5"><input type="checkbox" name="active" defaultChecked={k.active} className="accent-green-700" /> Show on the public page</label>
                 <label className="text-xs text-gray-500 dark:text-gray-400">Photo <input type="file" name="photo" accept="image/*" className="ml-1 text-xs" /></label>
                 <div className="ml-auto flex gap-2">
-                  <button className="px-4 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-lg">Save</button>
+                  <button className="px-4 py-1.5 bg-green-700 hover:bg-green-600 text-white text-xs font-bold rounded-lg">Save</button>
                   <button type="button" onClick={() => { if (confirm(`Remove ${k.label}?`)) run(() => deleteFirstAidKit(k.id), "Removed.") }}
                     className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-500 hover:text-red-500 hover:border-red-400 text-xs font-bold rounded-lg">Remove</button>
                 </div>
@@ -143,9 +143,9 @@ export default function FirstAidClient({ aiders, kits, info, reports }: { aiders
             <input name="whereText" placeholder="Exactly where it is" maxLength={300} className={input} />
             <div className="flex items-center gap-4 flex-wrap">
               <label className="text-xs text-gray-500 dark:text-gray-400">Order <input type="number" name="sortOrder" defaultValue={0} className="ml-1 w-16 rounded border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1 text-sm" /></label>
-              <label className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1.5"><input type="checkbox" name="active" defaultChecked className="accent-red-600" /> Show on the public page</label>
+              <label className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1.5"><input type="checkbox" name="active" defaultChecked className="accent-green-700" /> Show on the public page</label>
               <label className="text-xs text-gray-500 dark:text-gray-400">Photo <input type="file" name="photo" accept="image/*" className="ml-1 text-xs" /></label>
-              <button className="ml-auto px-4 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-lg">Add</button>
+              <button className="ml-auto px-4 py-1.5 bg-green-700 hover:bg-green-600 text-white text-xs font-bold rounded-lg">Add</button>
             </div>
           </form>
         </div>
@@ -173,7 +173,7 @@ export default function FirstAidClient({ aiders, kits, info, reports }: { aiders
                 </div>
                 {r.status === "NEW" ? (
                   <button onClick={() => run(() => setAccidentReportStatus(r.id, "REVIEWED"), "Marked as looked at.")}
-                    className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-lg">Mark as looked at</button>
+                    className="px-3 py-1.5 bg-green-700 hover:bg-green-600 text-white text-xs font-bold rounded-lg">Mark as looked at</button>
                 ) : (
                   <button onClick={() => run(() => setAccidentReportStatus(r.id, "NEW"), "Reopened.")}
                     className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-500 text-xs font-bold rounded-lg">

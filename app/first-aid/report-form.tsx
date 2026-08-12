@@ -63,7 +63,7 @@ export default function ReportForm() {
 
       {!open ? (
         <button onClick={() => setOpen(true)}
-          className="mt-4 w-full rounded-xl border-2 border-gray-300 hover:border-red-400 py-3 font-semibold">
+          className="mt-4 w-full rounded-xl border-2 border-gray-300 hover:border-green-500 py-3 font-semibold">
           Report an accident
         </button>
       ) : (
@@ -76,7 +76,7 @@ export default function ReportForm() {
           <div>
             <label htmlFor="description" className="block text-sm font-semibold mb-1">What happened</label>
             <textarea id="description" name="description" required rows={5} maxLength={4000}
-              className="w-full rounded-xl border border-gray-300 px-3 py-2 text-[15px] focus:outline-none focus:border-red-500" />
+              className="w-full rounded-xl border border-gray-300 px-3 py-2 text-[15px] focus:outline-none focus:border-green-600" />
           </div>
 
           {/* Honeypot. display:none (not off-screen) and a meaningless name, because the old
@@ -90,7 +90,7 @@ export default function ReportForm() {
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           <button type="submit" disabled={busy}
-            className="w-full rounded-xl bg-red-700 hover:bg-red-800 disabled:opacity-50 text-white font-bold py-3">
+            className="w-full rounded-xl bg-green-700 hover:bg-green-800 disabled:opacity-50 text-white font-bold py-3">
             {busy ? "Sending…" : "Send report"}
           </button>
           <p className="text-xs text-gray-500">
@@ -109,7 +109,7 @@ function Field({ name, label, required, placeholder, maxLength }: {
     <div>
       <label htmlFor={name} className="block text-sm font-semibold mb-1">{label}</label>
       <input id={name} name={name} required={required} placeholder={placeholder} maxLength={maxLength}
-        className="w-full rounded-xl border border-gray-300 px-3 py-2 text-[15px] focus:outline-none focus:border-red-500" />
+        className="w-full rounded-xl border border-gray-300 px-3 py-2 text-[15px] focus:outline-none focus:border-green-600" />
     </div>
   )
 }

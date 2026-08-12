@@ -31,7 +31,7 @@ export default async function FirstAidAdminPage() {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">🩹 First Aid</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-3xl leading-relaxed">
           Everything here except the accident reports appears on the public page at{" "}
-          <Link href="/first-aid" className="text-red-500 hover:underline font-mono">/first-aid</Link>, which
+          <Link href="/first-aid" className="text-green-600 hover:underline font-mono">/first-aid</Link>, which
           anyone can open without logging in — so keep it to information you are happy for anyone on site to read.
         </p>
         {newCount > 0 && (
