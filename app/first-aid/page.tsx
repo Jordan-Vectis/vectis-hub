@@ -120,6 +120,40 @@ export default async function FirstAidPage() {
           )}
         </section>
 
+
+        <ReportForm />
+        <section className="rounded-2xl border border-gray-200 bg-white p-5">
+          <h2 className="text-lg font-bold">Kits and equipment</h2>
+          {kits.length === 0 ? (
+            <p className="mt-2 text-sm text-gray-600">No locations listed yet.</p>
+          ) : (
+            <ul className="mt-3 space-y-3">
+              {kits.map(k => (
+                <li key={k.id} className="flex items-start gap-3">
+                  <span className="text-2xl shrink-0" aria-hidden>{pinIcon(k.kind)}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold">{k.label}</p>
+                    {k.whereText && <p className="text-sm text-gray-600">{k.whereText}</p>}
+                    {k.photoKey && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={`/api/public/photo?key=${encodeURIComponent(k.photoKey)}`} alt=""
+                        className="mt-2 rounded-xl border border-gray-200 max-h-56 object-cover w-full" />
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {info?.extraNotes && (
+          <section className="rounded-2xl border border-gray-200 bg-white p-5">
+            <h2 className="text-lg font-bold">Also worth knowing</h2>
+            <p className="mt-2 text-[15px] whitespace-pre-wrap leading-relaxed">{info.extraNotes}</p>
+          </section>
+        )}
+
+
       </div>
 
       {/* ⚠ The plan breaks OUT of the reading column. Everything else on this page is phone-first
@@ -160,40 +194,7 @@ export default async function FirstAidPage() {
         </div>
       )}
 
-      <div className="max-w-2xl mx-auto px-5 pb-6 space-y-6">
-        <section className="rounded-2xl border border-gray-200 bg-white p-5">
-          <h2 className="text-lg font-bold">Kits and equipment</h2>
-          {kits.length === 0 ? (
-            <p className="mt-2 text-sm text-gray-600">No locations listed yet.</p>
-          ) : (
-            <ul className="mt-3 space-y-3">
-              {kits.map(k => (
-                <li key={k.id} className="flex items-start gap-3">
-                  <span className="text-2xl shrink-0" aria-hidden>{pinIcon(k.kind)}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold">{k.label}</p>
-                    {k.whereText && <p className="text-sm text-gray-600">{k.whereText}</p>}
-                    {k.photoKey && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={`/api/public/photo?key=${encodeURIComponent(k.photoKey)}`} alt=""
-                        className="mt-2 rounded-xl border border-gray-200 max-h-56 object-cover w-full" />
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {info?.extraNotes && (
-          <section className="rounded-2xl border border-gray-200 bg-white p-5">
-            <h2 className="text-lg font-bold">Also worth knowing</h2>
-            <p className="mt-2 text-[15px] whitespace-pre-wrap leading-relaxed">{info.extraNotes}</p>
-          </section>
-        )}
-
-        <ReportForm />
-
+      <div className="max-w-2xl mx-auto px-5 pb-8">
         <p className="text-center text-xs text-gray-400 pb-8">
           Vectis Auctions · this page is for first aid only
         </p>

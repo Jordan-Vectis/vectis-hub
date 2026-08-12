@@ -78,6 +78,10 @@ POST /api/public/first-aid-report - under the **already-public** /api/public pre
 
 AccidentReport rows are read **only** in the Hub app. Reports can contain **health data about a named person** - recorded in the STORES arrays on **both** /admin/compliance and /admin/dpia, per the standing rule.
 
+## Page order on /first-aid (2026-08-12, Jordan's call)
+
+Emergency info -> First aiders -> Report an accident -> Kits & equipment -> Also worth knowing -> the site plan -> footer. Jordan: "order wise the map should be at the bottom of the page the report an accident should be much more near the top." The reasoning, so it is not tidied back: emergency info stays FIRST (nothing outranks the steps, the 999 button and the ambulance address); first aiders second, the next thing needed when someone is hurt; report an accident THIRD, not last — it is the second most common reason to open the page and was buried under everything else; and the plan LAST, because it is the biggest and slowest thing on the page and the least urgent, useful when already hunting for a kit and useless while someone is on the floor. The plan is also the only full-width block, so it splits the narrow reading column and the footer sits in its own narrow block after it.
+
 ## The plan FILLS the screen — no scrollbar when there is room (2026-08-12)
 
 Jordan: "Its still not fullscreen. No need for a scrollbar when there is plenty of room here." Two causes: the plan section was max-w-6xl (1152px) — still a centred column, just a wider one, now w-full with modest padding while the prose sections around it stay max-w-2xl; and PlanImage forced min-w-[900px] AND max-h-[70vh] on EVERY screen, so even a 1900px window got a cropped scrolling box. Now min-w-[900px] applies only below sm (a phone needs the drawing wide enough to read and pans instead), with sm:min-w-0, sm:overflow-visible and NO height cap. Desktop shows the whole drawing at full width with no scrollbars; a phone still pans. Do not reintroduce a fixed height or an unconditional min-width — that is what made it look "not fullscreen" twice.
