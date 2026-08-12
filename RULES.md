@@ -48,6 +48,33 @@ the staff **Hub login**, same as the internal Hub. A logged-out visitor to any o
   to discuss, not a silent edit.
 - Applies to **both** staging and production (no env flag).
 
+## Public First Aid page — the ONE deliberate exception (2026-08-11)
+
+`/first-aid` (Facilities → First Aid) is reachable **without logging in**, on purpose: anyone on
+site — agency staff, contractors, visitors, none of whom have a Hub account — must be able to find
+a first aider in an emergency. This is a deliberate reversal of "only `/login`, `/setup` and the
+API relays stay reachable", agreed with Jordan when the app was commissioned.
+
+It is allowed to stay public **only because of these constraints. Keep every one of them:**
+
+- **EXACT-match allowlist entry, not a prefix.** `auth.config.ts` keeps two lists: `publicPaths`
+  (prefix, `startsWith`) and `publicExact` (`includes`). `/first-aid` is in the **exact** one, so
+  `/first-aid-anything` stays gated. ⚠ Never move it into the prefix list.
+- **Top-level route, never inside `app/(app)`.** That group's layout renders the Hub shell and
+  reads the session — putting the page there would drag nav and a session lookup onto a page
+  anyone can open. There are **no links from it into the Hub**.
+- **No public GET endpoint.** The page reads its own tables server-side. Photos go through the
+  pre-existing `/api/public/photo` prefix allowlist (`first-aid/` added to it).
+- **Everything in `FirstAider` / `FirstAidKit` / `FirstAidInfo` is world-readable** — treat those
+  models as public. Never put anything confidential in them.
+- **One unauthenticated write**: `POST /api/public/first-aid-report` (already-public prefix, so it
+  opened nothing new). It is write-only — it returns no record, not even an id — and is protected
+  by a honeypot field, per-field length caps, and two rate limits (per `ipHash` per hour, plus an
+  overall hourly cap so a spread-out botnet still cannot fill the table). The IP is **hashed with
+  `AUTH_SECRET`, never stored raw** — it exists only to compare against other hashes.
+- `AccidentReport` rows are **only ever read inside the Hub** (`/tools/first-aid`, behind the
+  `FIRST_AID` app permission). Never surface them publicly.
+
 ## ⚠ Claude memory sync (multi-developer) — check freshness before trusting local memory
 
 The in-app memory page — the `ENTRIES` array in `app/(app)/admin/memory/page.tsx`, shown at

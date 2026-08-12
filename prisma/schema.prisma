@@ -37,30 +37,30 @@ enum LogisticsType {
 }
 
 model User {
-  id             String      @id @default(cuid())
-  name           String
-  email          String      @unique
-  username       String?     @unique
-  password       String
-  role           String      @default("COLLECTIONS")  // "ADMIN" or any custom role name from RoleDefault
-  allowedApps    String[]    @default([])
-  appPermissions Json?
-  showScanTimer  Boolean     @default(true)   // the "away / activity" prompt (long-gap check)
-  showLotTimer   Boolean     @default(false)  // the little blue count-up timer shown while cataloguing a lot
-  timerYellowMins Int       @default(4)
-  timerRedMins    Int       @default(30)   // "warn after" mins — house default
-  isITStaff      Boolean     @default(false)  // can be assigned IT Job Board jobs
+  id              String      @id @default(cuid())
+  name            String
+  email           String      @unique
+  username        String?     @unique
+  password        String
+  role            String      @default("COLLECTIONS") // "ADMIN" or any custom role name from RoleDefault
+  allowedApps     String[]    @default([])
+  appPermissions  Json?
+  showScanTimer   Boolean     @default(true) // the "away / activity" prompt (long-gap check)
+  showLotTimer    Boolean     @default(false) // the little blue count-up timer shown while cataloguing a lot
+  timerYellowMins Int         @default(4)
+  timerRedMins    Int         @default(30) // "warn after" mins — house default
+  isITStaff       Boolean     @default(false) // can be assigned IT Job Board jobs
   // Lot Wizard "remember last" fields — follow the user across devices (e.g. shared iPads)
-  lastTote       String?
-  lastVendor     String?
-  lastReceipt    String?
-  departmentId   String?
-  department     Department? @relation(fields: [departmentId], references: [id])
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  lastTote        String?
+  lastVendor      String?
+  lastReceipt     String?
+  departmentId    String?
+  department      Department? @relation(fields: [departmentId], references: [id])
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
-  assignedSubmissions Submission[] @relation("AssignedCataloguer")
-  createdSubmissions  Submission[] @relation("CreatedBy")
+  assignedSubmissions Submission[]             @relation("AssignedCataloguer")
+  createdSubmissions  Submission[]             @relation("CreatedBy")
   valuations          Valuation[]
   contactLogs         ContactLog[]
   bcToken             BCToken?
@@ -82,15 +82,15 @@ model BCToken {
 }
 
 model Department {
-  id        String   @id @default(cuid())
-  name      String   @unique
+  id           String   @id @default(cuid())
+  name         String   @unique
   // Which CatalogueAuction.auctionType values this department covers — this is
   // the link between a sale and the people allowed to work on it. A department
   // can cover several types (a Dolls & Bears department holds DOLLS + BEARS);
   // a type should only be claimed by one department.
   auctionTypes String[] @default([])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   users       User[]
   submissions Submission[]
@@ -133,52 +133,52 @@ model Contact {
 }
 
 model CustomerAccount {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  password     String
-  firstName    String
-  lastName     String
-  phone        String?
-  sessionToken String?  @unique
-  contactId    String?  @unique
-  contact      Contact? @relation(fields: [contactId], references: [id])
+  id                  String               @id @default(cuid())
+  email               String               @unique
+  password            String
+  firstName           String
+  lastName            String
+  phone               String?
+  sessionToken        String?              @unique
+  contactId           String?              @unique
+  contact             Contact?             @relation(fields: [contactId], references: [id])
   bidderRegistrations BidderRegistration[]
   commissionBids      CommissionBid[]
   parcels             Parcel[]
 
   // Shipping address
-  shippingLine1   String?
-  shippingLine2   String?
-  shippingCity    String?
-  shippingCounty  String?
+  shippingLine1    String?
+  shippingLine2    String?
+  shippingCity     String?
+  shippingCounty   String?
   shippingPostcode String?
 
   // Billing address
-  billingLine1    String?
-  billingLine2    String?
-  billingCity     String?
-  billingCounty   String?
-  billingPostcode String?
+  billingLine1          String?
+  billingLine2          String?
+  billingCity           String?
+  billingCounty         String?
+  billingPostcode       String?
   billingSameAsShipping Boolean @default(true)
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Submission {
-  id             String            @id @default(cuid())
-  reference      String            @unique @default(cuid())
-  channel        SubmissionChannel
-  status         SubmissionStatus  @default(PENDING_ASSIGNMENT)
-  notes            String?
-  followUpCount    Int               @default(0)
-  lastFollowUpAt   DateTime?
-  photoUploadToken     String?  @unique
-  valuationToken       String?  @unique
+  id                   String            @id @default(cuid())
+  reference            String            @unique @default(cuid())
+  channel              SubmissionChannel
+  status               SubmissionStatus  @default(PENDING_ASSIGNMENT)
+  notes                String?
+  followUpCount        Int               @default(0)
+  lastFollowUpAt       DateTime?
+  photoUploadToken     String?           @unique
+  valuationToken       String?           @unique
   valuationNotes       String?
   valuationSubmittedAt DateTime?
   valuationSentTo      String?
-  needsFollowUp        Boolean  @default(false)
+  needsFollowUp        Boolean           @default(false)
 
   contactId    String
   contact      Contact     @relation("ContactSubmissions", fields: [contactId], references: [id])
@@ -213,14 +213,14 @@ model SubmissionNote {
 }
 
 model Item {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  imageUrls   String[]
-  externalEstimate    Int?
-  externalNotes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String   @id @default(cuid())
+  name             String
+  description      String?
+  imageUrls        String[]
+  externalEstimate Int?
+  externalNotes    String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   submissionId String
   submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
@@ -241,12 +241,12 @@ model Valuation {
 }
 
 model ContactLog {
-  id      String   @id @default(cuid())
-  method  String
-  notes   String?
-  outcome String?
-  isFollowUp Boolean @default(false)
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  method     String
+  notes      String?
+  outcome    String?
+  isFollowUp Boolean  @default(false)
+  createdAt  DateTime @default(now())
 
   submissionId String
   submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
@@ -264,15 +264,15 @@ model AuctionRun {
 }
 
 model AuctionLot {
-  id                  String     @id @default(cuid())
+  id                  String   @id @default(cuid())
   lot                 String
-  description         String     @db.Text
+  description         String   @db.Text
   estimate            String
-  originalDescription String?    @db.Text
-  keyPoints           String?    @db.Text
-  missing             String?    @db.Text
-  added               String?    @db.Text
-  createdAt           DateTime   @default(now())
+  originalDescription String?  @db.Text
+  keyPoints           String?  @db.Text
+  missing             String?  @db.Text
+  added               String?  @db.Text
+  createdAt           DateTime @default(now())
 
   runId String
   run   AuctionRun @relation(fields: [runId], references: [id], onDelete: Cascade)
@@ -282,8 +282,8 @@ model AiPreset {
   key         String   @id
   instruction String   @db.Text
   favourite   Boolean  @default(false)
-  category    String?                    // header the instruction sits under (null = Uncategorised)
-  sortOrder   Int      @default(0)       // order within its category (drag-to-reorder)
+  category    String? // header the instruction sits under (null = Uncategorised)
+  sortOrder   Int      @default(0) // order within its category (drag-to-reorder)
   updatedAt   DateTime @updatedAt
 }
 
@@ -300,39 +300,39 @@ model PipelineRun {
   code      String        @unique
   preset    String        @default("")
   model     String        @default("")
-  stage     String        @default("batch")  // "batch" | "doublecheck" | "kpcheck" | "complete"
+  stage     String        @default("batch") // "batch" | "doublecheck" | "kpcheck" | "complete"
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
   lots      PipelineLot[]
 }
 
 model PipelineLot {
-  id          String      @id @default(cuid())
-  runId       String
-  run         PipelineRun @relation(fields: [runId], references: [id], onDelete: Cascade)
-  lotId       String
-  label       String
+  id    String      @id @default(cuid())
+  runId String
+  run   PipelineRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  lotId String
+  label String
 
   // Stage 1 — Batch Run
-  batchStatus  String?    // "ok" | "failed" | "skipped"
-  description  String?    @db.Text   // running latest text (overwritten by DC)
-  batchDesc    String?    @db.Text   // original raw batch text, preserved for DC before/after
-  estimate     String?
+  batchStatus String? // "ok" | "failed" | "skipped"
+  description String? @db.Text // running latest text (overwritten by DC)
+  batchDesc   String? @db.Text // original raw batch text, preserved for DC before/after
+  estimate    String?
 
   // Stage 2 — Double Check
-  dcStatus       String?  // "ok" | "issues" | "error" | "skipped"
-  contradictions String?  @db.Text
-  unsupported    String?  @db.Text
+  dcStatus       String? // "ok" | "issues" | "error" | "skipped"
+  contradictions String? @db.Text
+  unsupported    String? @db.Text
 
   // Stage 3 — Key Points Check
-  kpStatus   String?      // "ok" | "fixed" | "error" | "skipped"
-  revised    String?      @db.Text
-  kpMissing  String?      @db.Text
-  kpAdded    String?      @db.Text
+  kpStatus  String? // "ok" | "fixed" | "error" | "skipped"
+  revised   String? @db.Text
+  kpMissing String? @db.Text
+  kpAdded   String? @db.Text
 
   // The description actually applied to the catalogue (Review & Apply). Persisted so a
   // reload knows the lot was applied without re-deriving it from the catalogue text.
-  appliedDesc String?     @db.Text
+  appliedDesc String? @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -341,9 +341,9 @@ model PipelineLot {
 }
 
 model Logistics {
-  id      String        @id @default(cuid())
-  type    LogisticsType
-  arrived Boolean       @default(false)
+  id        String        @id @default(cuid())
+  type      LogisticsType
+  arrived   Boolean       @default(false)
   arrivedAt DateTime?
 
   collectionAddress String?
@@ -360,37 +360,37 @@ model Logistics {
 }
 
 model CatalogueAuction {
-  id          String         @id @default(cuid())
-  code        String         @unique
-  name        String
-  auctionDate DateTime?
-  auctionType String         @default("GENERAL")
-  eventName   String?
-  locked      Boolean        @default(false)
-  finished    Boolean        @default(false)
-  complete    Boolean        @default(false)
-  catalogued  Boolean        @default(false)
-  addedToBC   Boolean        @default(false)
-  photography Boolean        @default(false)
-  aiRan       Boolean        @default(false)
-  published   Boolean        @default(false)
+  id                  String                   @id @default(cuid())
+  code                String                   @unique
+  name                String
+  auctionDate         DateTime?
+  auctionType         String                   @default("GENERAL")
+  eventName           String?
+  locked              Boolean                  @default(false)
+  finished            Boolean                  @default(false)
+  complete            Boolean                  @default(false)
+  catalogued          Boolean                  @default(false)
+  addedToBC           Boolean                  @default(false)
+  photography         Boolean                  @default(false)
+  aiRan               Boolean                  @default(false)
+  published           Boolean                  @default(false)
   // Review tab key point matching: "strict" (exact wording) or "relaxed"
   // (reworded facts allowed — hard tokens still exact). Set in Auction Settings.
-  reviewKpMode String        @default("strict")
-  notes       String?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  lots        CatalogueLot[]
-  photoSessions CataloguePhotoSession[]
-  timingLogs  CatalogueTimingLog[]
-  idleLogs    IdleLog[]
-  liveAuction LiveAuction?
+  reviewKpMode        String                   @default("strict")
+  notes               String?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  lots                CatalogueLot[]
+  photoSessions       CataloguePhotoSession[]
+  timingLogs          CatalogueTimingLog[]
+  idleLogs            IdleLog[]
+  liveAuction         LiveAuction?
   bidderRegistrations BidderRegistration[]
-  webDescriptions WebDescription[]
-  conditionReports ConditionReport[]
-  extraAccess CatalogueAuctionAccess[]
-  lotDrafts   CatalogueLotDraft[]
-  bcCorrections CatalogueBcCorrection[]
+  webDescriptions     WebDescription[]
+  conditionReports    ConditionReport[]
+  extraAccess         CatalogueAuctionAccess[]
+  lotDrafts           CatalogueLotDraft[]
+  bcCorrections       CatalogueBcCorrection[]
 }
 
 // One-off access to a single sale for someone outside its department — the
@@ -412,10 +412,10 @@ model CatalogueAuctionAccess {
 
 // Managed cataloguing categories (was a hardcoded CATEGORY_MAP) — editable at /admin/categories.
 model LotCategory {
-  id            String            @id @default(cuid())
-  name          String            @unique
-  sortOrder     Int               @default(0)
-  createdAt     DateTime          @default(now())
+  id            String           @id @default(cuid())
+  name          String           @unique
+  sortOrder     Int              @default(0)
+  createdAt     DateTime         @default(now())
   subcategories LotSubcategory[]
 }
 
@@ -442,8 +442,8 @@ model ConditionWording {
 // Single manual app-wide announcement banner (one "current" row). Set at /admin/announcements,
 // shown to everyone via the announcement banner in the app layout.
 model Announcement {
-  id            String   @id            // always "current"
-  message       String   @db.Text @default("")
+  id            String   @id // always "current"
+  message       String   @default("") @db.Text
   level         String   @default("warning") // info | warning | success
   active        Boolean  @default(false)
   updatedAt     DateTime @updatedAt
@@ -461,8 +461,8 @@ model Announcement {
 // this token and treat the socket as the fast path. Don't "simplify" it to an
 // emit-only design.
 model AppReload {
-  id              String   @id            // always "current"
-  token           String   @default("")   // changes on every forced refresh
+  id              String   @id // always "current"
+  token           String   @default("") // changes on every forced refresh
   requestedAt     DateTime @updatedAt
   requestedByName String?
 }
@@ -473,12 +473,12 @@ model AppReload {
 // something happening now; these are a dated history you add to per release.
 // Nothing reaches staff until an admin presses Push (published stays false on save).
 model PatchNote {
-  id            String   @id @default(cuid())
-  title         String   @default("")
-  body          String   @db.Text @default("")   // one change per line
-  published     Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id            String          @id @default(cuid())
+  title         String          @default("")
+  body          String          @default("") @db.Text // one change per line
+  published     Boolean         @default(false)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
   createdByName String?
   seenBy        PatchNoteSeen[]
 
@@ -507,7 +507,7 @@ model BidderRegistration {
   auction           CatalogueAuction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
   customerAccountId String
   customerAccount   CustomerAccount  @relation(fields: [customerAccountId], references: [id], onDelete: Cascade)
-  contactId         String?          // C number e.g. C000001
+  contactId         String? // C number e.g. C000001
   acceptedTerms     Boolean          @default(true)
   registeredAt      DateTime         @default(now())
 
@@ -525,50 +525,50 @@ model LiveAuction {
 }
 
 model CatalogueLot {
-  id           String           @id @default(cuid())
-  title        String
-  keyPoints    String           @db.Text @default("")
-  description  String           @db.Text @default("")
-  barcode      String?
-  estimateLow    Int?
-  estimateHigh   Int?
-  aiEstimateLow  Int?
-  aiEstimateHigh Int?
-  startingBid  Int?
-  reserve      Int?
-  currentBid   Int?
-  hammerPrice  Int?
-  condition    String?
+  id              String    @id @default(cuid())
+  title           String
+  keyPoints       String    @default("") @db.Text
+  description     String    @default("") @db.Text
+  barcode         String?
+  estimateLow     Int?
+  estimateHigh    Int?
+  aiEstimateLow   Int?
+  aiEstimateHigh  Int?
+  startingBid     Int?
+  reserve         Int?
+  currentBid      Int?
+  hammerPrice     Int?
+  condition       String?
   vendor          String?
   tote            String?
   receipt         String?
   receiptUniqueId String?
-  category     String?
-  subCategory  String?
-  brand        String?
-  notes        String?
-  extraDetails String?  @db.Text
-  imageUrls    String[]         @default([])
+  category        String?
+  subCategory     String?
+  brand           String?
+  notes           String?
+  extraDetails    String?   @db.Text
+  imageUrls       String[]  @default([])
   // R2 key of the barcode label photo that assigned this lot's photos during a
   // smart scan. Deliberately NOT in imageUrls — it is an internal audit aid for
   // the Photography lot viewer and must never reach the website, BC or AI.
-  labelPhotoUrl String?
-  status        String           @default("ENTERED")
-  aiExcluded    Boolean          @default(false)  // Lot description was typed manually — exclude from all AI runs
-  aiUpgraded    Boolean          @default(false)
-  addedToBC     Boolean          @default(false)  // Manually ticked by cataloguers once a lot has been pushed into Business Central
-  reviewFlag      String?        @db.Text         // set from the Review tab when a checker spots an error — the reason text
+  labelPhotoUrl   String?
+  status          String    @default("ENTERED")
+  aiExcluded      Boolean   @default(false) // Lot description was typed manually — exclude from all AI runs
+  aiUpgraded      Boolean   @default(false)
+  addedToBC       Boolean   @default(false) // Manually ticked by cataloguers once a lot has been pushed into Business Central
+  reviewFlag      String?   @db.Text // set from the Review tab when a checker spots an error — the reason text
   reviewFlaggedBy String?
   reviewFlaggedAt DateTime?
-  aiFlagNote      String?        @db.Text         // AI-flagged potential cataloguer mistake from the batch pipeline run
-  createdByName String?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  aiFlagNote      String?   @db.Text // AI-flagged potential cataloguer mistake from the batch pipeline run
+  createdByName   String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  auctionId    String
-  auction      CatalogueAuction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  auctionId      String
+  auction        CatalogueAuction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
   commissionBids CommissionBid[]
-  parcelLots   ParcelLot[]
+  parcelLots     ParcelLot[]
 }
 
 // ── BC source code browser (IT Tools → BC Source) ───────────────────────────
@@ -577,10 +577,10 @@ model CatalogueLot {
 // code and must stay out of GitHub). Re-upload replaces everything.
 model BcSourceFile {
   id         String   @id @default(cuid())
-  extension  String   // top-level folder = one BC extension, e.g. "Evo-auction - Base"
+  extension  String // top-level folder = one BC extension, e.g. "Evo-auction - Base"
   path       String   @unique // path within Source, e.g. "Evo-auction - Base/src/Table/…"
-  name       String   // file name alone
-  kind       String   // Table / Page / Codeunit / Report / … (from the AL naming), else the file type
+  name       String // file name alone
+  kind       String // Table / Page / Codeunit / Report / … (from the AL naming), else the file type
   content    String   @db.Text
   size       Int
   uploadedAt DateTime @default(now())
@@ -651,30 +651,30 @@ model CatalogueLotDraft {
   auction   CatalogueAuction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  step            Int      @default(2)
-  vendor          String   @default("")
-  tote            String   @default("")
-  receipt         String   @default("")
-  barcode         String   @default("")
-  keyPoints       String   @default("") @db.Text
-  aiExcluded      Boolean  @default(false)
-  manualDesc      String   @default("") @db.Text
-  category        String   @default("")
-  subCategory     String   @default("")
-  brand           String   @default("")
+  step            Int     @default(2)
+  vendor          String  @default("")
+  tote            String  @default("")
+  receipt         String  @default("")
+  barcode         String  @default("")
+  keyPoints       String  @default("") @db.Text
+  aiExcluded      Boolean @default(false)
+  manualDesc      String  @default("") @db.Text
+  category        String  @default("")
+  subCategory     String  @default("")
+  brand           String  @default("")
   // Estimates stay as TEXT — the draft restores exactly what was typed
   // ("1,200", a half-finished number), not a parsed value.
-  estimateLow     String   @default("")
-  estimateHigh    String   @default("")
-  cond1           String   @default("")
-  cond2           String   @default("")
-  boxOn           Boolean  @default(false)
-  boxPrefixMode   String   @default("Box is")
-  boxCustomPrefix String   @default("")
-  boxCond1        String   @default("")
-  boxCond2        String   @default("")
-  parcel          String   @default("")
-  photoCount      Int      @default(0)
+  estimateLow     String  @default("")
+  estimateHigh    String  @default("")
+  cond1           String  @default("")
+  cond2           String  @default("")
+  boxOn           Boolean @default(false)
+  boxPrefixMode   String  @default("Box is")
+  boxCustomPrefix String  @default("")
+  boxCond1        String  @default("")
+  boxCond2        String  @default("")
+  parcel          String  @default("")
+  photoCount      Int     @default(0)
 
   startedAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -706,23 +706,23 @@ model IdleLog {
   auction        CatalogueAuction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
   idleStartedAt  DateTime
   idleDurationMs Int
-  reason         String           // LUNCH_BREAK | LOTTING_UP | OTHER
+  reason         String // LUNCH_BREAK | LOTTING_UP | OTHER
   toteNumbers    String?
   notes          String?
   createdAt      DateTime         @default(now())
 }
 
 model CatalogueTimingLog {
-  id           String           @id @default(cuid())
-  auctionId    String
-  auction      CatalogueAuction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
-  lotId        String?          // ID of the lot that was created
-  userId       String           // Internal user ID
-  userName     String           // Display name of cataloguer
-  method       String           // "WIZARD" | "PHOTO_ONLY"
-  durationMs   Int              // Total ms from barcode entry to save
-  keyPointsMs  Int?             // Ms spent on the Key Points step (wizard only)
-  savedAt      DateTime         @default(now())
+  id          String           @id @default(cuid())
+  auctionId   String
+  auction     CatalogueAuction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  lotId       String? // ID of the lot that was created
+  userId      String // Internal user ID
+  userName    String // Display name of cataloguer
+  method      String // "WIZARD" | "PHOTO_ONLY"
+  durationMs  Int // Total ms from barcode entry to save
+  keyPointsMs Int? // Ms spent on the Key Points step (wizard only)
+  savedAt     DateTime         @default(now())
 }
 
 // Tamper-proof audit of the idle GATE's decision on every meaningful lot save.
@@ -733,18 +733,18 @@ model CatalogueTimingLog {
 // `reason` ∈ TIMER_OFF | NO_HISTORY | UNDER_THRESHOLD | NEW_DAY_GRACE | DAY_OFF |
 // CLEARED_BY_REASON | BLOCKED. Diagnostic only — safe to prune.
 model IdleGateDecision {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())   // server time of the save
+  id          String    @id @default(cuid())
+  createdAt   DateTime  @default(now()) // server time of the save
   userId      String
   userName    String
   auctionId   String?
   reason      String
-  blocked     Boolean  @default(false)
-  idleMs      Int      @default(0)       // server-computed working-hours gap since last save
-  since       DateTime?                  // the last save the gap is measured from
-  thresholdMs Int      @default(0)
-  clientNow   DateTime?                  // what the device clock claimed at save
-  clientTz    String?                    // device timezone (e.g. America/New_York)
+  blocked     Boolean   @default(false)
+  idleMs      Int       @default(0) // server-computed working-hours gap since last save
+  since       DateTime? // the last save the gap is measured from
+  thresholdMs Int       @default(0)
+  clientNow   DateTime? // what the device clock claimed at save
+  clientTz    String? // device timezone (e.g. America/New_York)
   userAgent   String?
 
   @@index([userId, createdAt])
@@ -780,9 +780,9 @@ model ReportExcludedUser {
 
 model ReportExcludedDay {
   id             String   @id @default(cuid())
-  userId         String   // the cataloguer whose report the day is hidden from
-  day            String   // London day key "YYYY-MM-DD"
-  excludedById   String   // admin who excluded it
+  userId         String // the cataloguer whose report the day is hidden from
+  day            String // London day key "YYYY-MM-DD"
+  excludedById   String // admin who excluded it
   excludedByName String
   excludedAt     DateTime @default(now())
 
@@ -817,23 +817,23 @@ model AppCard {
 // Singleton (id = "global") — stores idle-timer global defaults and the
 // admin-managed reasons list. Created on first GET if absent.
 model IdleTimerConfig {
-  id          String   @id @default("global")
-  yellowMins  Int      @default(4)
-  redMins     Int      @default(10)
-  reasons     Json     @default("[]")   // IdleReason[]
-  message     String?  @db.Text         // optional note shown at the top of the activity popup
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default("global")
+  yellowMins Int      @default(4)
+  redMins    Int      @default(10)
+  reasons    Json     @default("[]") // IdleReason[]
+  message    String?  @db.Text // optional note shown at the top of the activity popup
+  updatedAt  DateTime @updatedAt
 }
 
 model RoleDefault {
-  role           String   @id  // "COLLECTIONS" | "CATALOGUER"
-  allowedApps    String[] @default([])
-  appPermissions Json?
+  role             String   @id // "COLLECTIONS" | "CATALOGUER"
+  allowedApps      String[] @default([])
+  appPermissions   Json?
   // Starting Manager Portal → Dashboard layout for this role. A person who has
   // never arranged their own dashboard gets this, so a new manager doesn't land
   // on an empty screen. Same shape as DashboardLayout.widgets.
   dashboardWidgets Json?
-  updatedAt      DateTime @updatedAt
+  updatedAt        DateTime @updatedAt
 }
 
 // One row per person — how they have arranged Manager Portal → Dashboard.
@@ -845,34 +845,34 @@ model RoleDefault {
 // instead of breaking the saved layout.
 model DashboardLayout {
   userId    String   @id
-  widgets   Json     @default("[]")   // DashboardWidgetPlacement[] in display order
+  widgets   Json     @default("[]") // DashboardWidgetPlacement[] in display order
   updatedAt DateTime @updatedAt
 }
 
 model MarketingDraft {
-  id           String   @id @default(cuid())
-  title        String
-  contentType  String   // "sale_highlight" | "news_story" | "email_newsletter" | "social_instagram" | etc.
-  content      String   // HTML or plain text
-  status       String   @default("DRAFT")  // DRAFT | APPROVED | PUBLISHED
-  publishedUrl String?
-  createdById  String?
+  id            String   @id @default(cuid())
+  title         String
+  contentType   String // "sale_highlight" | "news_story" | "email_newsletter" | "social_instagram" | etc.
+  content       String // HTML or plain text
+  status        String   @default("DRAFT") // DRAFT | APPROVED | PUBLISHED
+  publishedUrl  String?
+  createdById   String?
   createdByName String?
-  lotsSnapshot Json?    // The lots used to generate, kept for re-generation
-  notes        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  lotsSnapshot  Json? // The lots used to generate, kept for re-generation
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model MarketingHashtag {
-  id         String   @id @default(cuid())
-  category   String   // "Diecast" | "Star Wars" | "Trains" | "General" etc.
-  hashtags   String[] @default([])
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(cuid())
+  category  String // "Diecast" | "Star Wars" | "Trains" | "General" etc.
+  hashtags  String[] @default([])
+  updatedAt DateTime @updatedAt
 }
 
 model BCCatalogueDay {
-  date      String                       // "YYYY-MM-DD" — marks this date was fully fetched from BC
+  date      String // "YYYY-MM-DD" — marks this date was fully fetched from BC
   mode      String   @default("barcode") // "barcode" (Internal Barcode mods) | "uniqueid" (Auction Line UniqueID inserts)
   fetchedAt DateTime @default(now())
 
@@ -951,44 +951,44 @@ model WarehouseMovement {
 }
 
 model Parcel {
-  id                  String           @id @default(cuid())
-  reference           String           @unique @default(cuid())
-  status              String           @default("PENDING") // PENDING | LABEL_CREATED | DISPATCHED | CANCELLED
+  id        String @id @default(cuid())
+  reference String @unique @default(cuid())
+  status    String @default("PENDING") // PENDING | LABEL_CREATED | DISPATCHED | CANCELLED
 
   // Recipient
-  recipientName       String
-  recipientCompany    String?
-  recipientLine1      String
-  recipientLine2      String?
-  recipientCity       String
-  recipientCounty     String?
-  recipientPostcode   String
-  recipientCountry    String           @default("GB")
-  recipientEmail      String?
-  recipientPhone      String?
+  recipientName     String
+  recipientCompany  String?
+  recipientLine1    String
+  recipientLine2    String?
+  recipientCity     String
+  recipientCounty   String?
+  recipientPostcode String
+  recipientCountry  String  @default("GB")
+  recipientEmail    String?
+  recipientPhone    String?
 
   // Package
-  weightInGrams       Int              @default(500)
-  packageFormat       String           @default("Parcel")
-  serviceCode         String           @default("TPP48")
+  weightInGrams       Int     @default(500)
+  packageFormat       String  @default("Parcel")
+  serviceCode         String  @default("TPP48")
   specialInstructions String?
   notes               String?
 
   // Royal Mail Click & Drop
-  rmOrderIdentifier   String?
-  trackingNumber      String?
-  labelPdf            String?          @db.Text
-  manifestId          String?
-  despatchedAt        DateTime?
+  rmOrderIdentifier String?
+  trackingNumber    String?
+  labelPdf          String?   @db.Text
+  manifestId        String?
+  despatchedAt      DateTime?
 
   // Relations
-  customerAccountId   String?
-  customerAccount     CustomerAccount? @relation(fields: [customerAccountId], references: [id])
-  lots                ParcelLot[]
+  customerAccountId String?
+  customerAccount   CustomerAccount? @relation(fields: [customerAccountId], references: [id])
+  lots              ParcelLot[]
 
-  createdByName       String?
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
+  createdByName String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model ParcelLot {
@@ -1029,7 +1029,7 @@ model ResearchLog {
   id         String   @id @default(cuid())
   userId     String
   userName   String
-  durationMs Int      // active milliseconds spent on the Research page
+  durationMs Int // active milliseconds spent on the Research page
   startedAt  DateTime // when the session began
   savedAt    DateTime @default(now())
 
@@ -1040,62 +1040,62 @@ model ResearchLog {
 // ─── Warehouse Sync ────────────────────────────────────────────────────────────
 
 model WarehouseItem {
-  id           String  @id @default(cuid())
-  uniqueId     String  @unique  // EVA_UniqueID e.g. R000006-1
+  id       String @id @default(cuid())
+  uniqueId String @unique // EVA_UniqueID e.g. R000006-1
 
   // Identity
-  receiptNo    String?           // EVA_ReceiptNo
-  articleNo    String?           // EVA_ArticleNo
-  stockNo      String?           // EVA_StockNo
-  barcode      String?           // PTE_InternalBarcode
+  receiptNo String? // EVA_ReceiptNo
+  articleNo String? // EVA_ArticleNo
+  stockNo   String? // EVA_StockNo
+  barcode   String? // PTE_InternalBarcode
 
   // Description
-  description  String?           // EVA_ShortDescription
-  artist       String?           // EVA_Artist
-  category     String?           // EVA_ArticleCategoryCode
-  subcategory  String?           // EVA_ArticleSubcategoryCode
+  description String? // EVA_ShortDescription
+  artist      String? // EVA_Artist
+  category    String? // EVA_ArticleCategoryCode
+  subcategory String? // EVA_ArticleSubcategoryCode
 
   // Vendor
-  vendorNo     String?           // EVA_VendorNo
-  vendorName   String?           // EVA_VendorName
-  vendorEmail  String?           // EVA_VendorEmail (auction lines)
+  vendorNo    String? // EVA_VendorNo
+  vendorName  String? // EVA_VendorName
+  vendorEmail String? // EVA_VendorEmail (auction lines)
 
   // Sale / Auction
-  auctionCode  String?           // EVA_SalesAllocation
-  auctionName  String?           // EVA_AuctionName (from Auction_Lines_Excel)
-  auctionDate  String?           // EVA_AuctionDate
-  lotNo        String?           // EVA_LotNo
-  currentLotNo String?           // EVA_CurrentLotNo (auction lines)
-  lowEstimate  Float?            // EVA_LowEstimate
-  highEstimate Float?            // EVA_HighEstimate
-  hammerPrice  Float?            // EVA_HammerPrice
-  reservePrice Float?            // EVA_ReservePrice
+  auctionCode  String? // EVA_SalesAllocation
+  auctionName  String? // EVA_AuctionName (from Auction_Lines_Excel)
+  auctionDate  String? // EVA_AuctionDate
+  lotNo        String? // EVA_LotNo
+  currentLotNo String? // EVA_CurrentLotNo (auction lines)
+  lowEstimate  Float? // EVA_LowEstimate
+  highEstimate Float? // EVA_HighEstimate
+  hammerPrice  Float? // EVA_HammerPrice
+  reservePrice Float? // EVA_ReservePrice
 
   // Physical location
-  location     String?           // EVA_ArticleLocationCode
-  binCode      String?           // EVA_ArticleBinCode
-  toteNo       String?           // EVA_CFA_TOT_CreatedFromToteNo (source tote; EVA_ArticleToteNo fallback — that one is ~always empty)
-  locationScannedAt DateTime?    // from ChangeLogEntries — when location was last scanned
+  location          String? // EVA_ArticleLocationCode
+  binCode           String? // EVA_ArticleBinCode
+  toteNo            String? // EVA_CFA_TOT_CreatedFromToteNo (source tote; EVA_ArticleToteNo fallback — that one is ~always empty)
+  locationScannedAt DateTime? // from ChangeLogEntries — when location was last scanned
 
   // Shipping (used by the BC Reports → Shipping report)
-  collectionNo       String?     // EVA_CollectionNo — joins to ShipmentRequestAPI.EVA_DocumentNo
-  sizeClassification String?     // EVA_SHIP_EVA_SizeClassification — parcel size band (Small/Medium/Large/…)
+  collectionNo       String? // EVA_CollectionNo — joins to ShipmentRequestAPI.EVA_DocumentNo
+  sizeClassification String? // EVA_SHIP_EVA_SizeClassification — parcel size band (Small/Medium/Large/…)
 
   // Status
-  catalogued        Boolean?     // EVA_Catalogued
-  cataloguedBy      String?      // EVA_CataloguedBy
-  cataloguedAt      DateTime?    // EVA_CataloguedDateTime
-  noOfPhotos        Int?         // EVA_NoOfPhotos
-  goodsReceived     Boolean?     // EVA_GoodsReceived
-  goodsReceivedDate DateTime?    // EVA_GoodsReceivedDate
-  collected         Boolean?     // EVA_Collected
-  withdrawLot       Boolean?     // EVA_WithdrawLot (auction lines)
+  catalogued        Boolean? // EVA_Catalogued
+  cataloguedBy      String? // EVA_CataloguedBy
+  cataloguedAt      DateTime? // EVA_CataloguedDateTime
+  noOfPhotos        Int? // EVA_NoOfPhotos
+  goodsReceived     Boolean? // EVA_GoodsReceived
+  goodsReceivedDate DateTime? // EVA_GoodsReceivedDate
+  collected         Boolean? // EVA_Collected
+  withdrawLot       Boolean? // EVA_WithdrawLot (auction lines)
 
   // Sync metadata
-  bcModifiedAt DateTime?         // EVA_SystemModifiedAt — used for incremental sync
+  bcModifiedAt DateTime? // EVA_SystemModifiedAt — used for incremental sync
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([auctionCode])
   @@index([location])
@@ -1106,12 +1106,12 @@ model WarehouseItem {
 
 model WarehouseSyncLog {
   id             String    @id @default(cuid())
-  source         String    // "receipt_lines" | "auction_lines" | "changelog" | "totes"
+  source         String // "receipt_lines" | "auction_lines" | "changelog" | "totes"
   startedAt      DateTime  @default(now())
   completedAt    DateTime?
   status         String    @default("running") // "running" | "complete" | "failed"
   itemsProcessed Int       @default(0)
-  lastTimestamp  String?   // ISO string — resume point for incremental syncs
+  lastTimestamp  String? // ISO string — resume point for incremental syncs
   error          String?
 }
 
@@ -1135,17 +1135,17 @@ model Device {
 // up at the packing benches — each packer scans their barcode to identify
 // who's doing the packing in BC.
 model Packer {
-  id        String   @id @default(cuid())
-  name      String
-  staffGroup String   @default("FULL_TIME")  // "FULL_TIME" | "AGENCY"
-  active    Boolean  @default(true)
-  sortOrder Int      @default(0)
+  id         String   @id @default(cuid())
+  name       String
+  staffGroup String   @default("FULL_TIME") // "FULL_TIME" | "AGENCY"
+  active     Boolean  @default(true)
+  sortOrder  Int      @default(0)
   // Manually-curated alternative spellings, nicknames, initials etc. that
   // should roll up into this packer in reports. Used by the matcher as an
   // exact-match overlay before the fuzzy logic runs.
-  aliases   String[] @default([])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  aliases    String[] @default([])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([staffGroup])
 }
@@ -1168,15 +1168,15 @@ model DocumentFolder {
 }
 
 model DocumentFile {
-  id           String          @id @default(cuid())
-  name         String
-  key          String
-  size         Int
-  mimeType     String
-  folderId     String?
-  folder       DocumentFolder? @relation(fields: [folderId], references: [id])
-  uploadedBy   String
-  createdAt    DateTime        @default(now())
+  id         String          @id @default(cuid())
+  name       String
+  key        String
+  size       Int
+  mimeType   String
+  folderId   String?
+  folder     DocumentFolder? @relation(fields: [folderId], references: [id])
+  uploadedBy String
+  createdAt  DateTime        @default(now())
 }
 
 // Pre-typed email reply snippets staff can copy into customer responses.
@@ -1199,9 +1199,9 @@ model EmailTemplate {
 model KnowledgeArticle {
   id            String   @id @default(cuid())
   title         String
-  body          String                          // markdown
+  body          String // markdown
   tags          String[] @default([])
-  category      String   @default("GENERAL")    // GENERAL | HARDWARE | SOFTWARE | NETWORK | APP | HOW_TO
+  category      String   @default("GENERAL") // GENERAL | HARDWARE | SOFTWARE | NETWORK | APP | HOW_TO
   createdById   String?
   createdByName String
   updatedById   String?
@@ -1235,9 +1235,9 @@ model Ticket {
   id             String          @id @default(cuid())
   title          String
   description    String
-  status         String          @default("OPEN")    // OPEN | IN_PROGRESS | AWAITING_RESPONSE | RESOLVED | CLOSED
-  priority       String          @default("MEDIUM")  // LOW | MEDIUM | HIGH | URGENT
-  category       String          @default("OTHER")   // HARDWARE | SOFTWARE | NETWORK | APP_BUG | FEATURE_REQUEST | OTHER
+  status         String          @default("OPEN") // OPEN | IN_PROGRESS | AWAITING_RESPONSE | RESOLVED | CLOSED
+  priority       String          @default("MEDIUM") // LOW | MEDIUM | HIGH | URGENT
+  category       String          @default("OTHER") // HARDWARE | SOFTWARE | NETWORK | APP_BUG | FEATURE_REQUEST | OTHER
   createdById    String?
   createdByName  String
   assignedToId   String?
@@ -1266,19 +1266,19 @@ model TicketComment {
 }
 
 model WarehouseTote {
-  id           String   @id @default(cuid())
-  toteNo       String   @unique
-  location     String?
-  receiptNo    String?
-  vendorNo     String?
-  vendorName   String?
-  status       String?
-  catalogued   Boolean?
+  id          String    @id @default(cuid())
+  toteNo      String    @unique
+  location    String?
+  receiptNo   String?
+  vendorNo    String?
+  vendorName  String?
+  status      String?
+  catalogued  Boolean?
   // SystemCreatedAt from Receipt_Totes_Excel — when the tote was created in BC.
   // This is the date the Manager Portal's "Stock from" reads to work out how far
   // behind cataloguing is running. NOT syncedAt, which is just our sync stamp.
-  bcCreatedAt  DateTime?
-  syncedAt     DateTime @default(now())
+  bcCreatedAt DateTime?
+  syncedAt    DateTime  @default(now())
 
   @@index([location])
   @@index([toteNo])
@@ -1300,8 +1300,8 @@ model WebDescription {
 
 model SocialPost {
   id             String    @id @default(cuid())
-  platform       String    @default("FACEBOOK")   // FACEBOOK | INSTAGRAM
-  status         String    @default("DRAFT")       // DRAFT | SCHEDULED | POSTED | FAILED
+  platform       String    @default("FACEBOOK") // FACEBOOK | INSTAGRAM
+  status         String    @default("DRAFT") // DRAFT | SCHEDULED | POSTED | FAILED
   copy           String    @db.Text
   imageUrl       String?
   hashtags       String?
@@ -1358,17 +1358,16 @@ model InvoiceFile {
 }
 
 model SocialImage {
-  id           String   @id @default(cuid())
-  key          String   @unique   // R2 object key
-  filename     String
-  label        String?            // user-friendly name/caption
-  tags         String?            // comma-separated tags
-  uploadedBy   String?
-  createdAt    DateTime @default(now())
+  id         String   @id @default(cuid())
+  key        String   @unique // R2 object key
+  filename   String
+  label      String? // user-friendly name/caption
+  tags       String? // comma-separated tags
+  uploadedBy String?
+  createdAt  DateTime @default(now())
 
   @@index([createdAt])
 }
-
 
 // Lot change log — every field change made via updateLot, with old/new values.
 // Used by /admin/lot-log to audit edits and track down data issues.
@@ -1379,9 +1378,9 @@ model CatalogueLotEvent {
   auctionCode String
   lotBarcode  String?
   lotTitle    String?
-  action      String   @default("updated")  // created | updated | deleted | photo_added | photo_removed | photo_reordered
-  source      String?                        // which tool made the change: lot_wizard, lot_editor, review_tab, photo_tab, ai_pipeline, ai_batch, bulk, import, admin_db, warehouse_fill, restore
-  batchId     String?                        // groups one user action that touched many lots (e.g. a bulk toggle)
+  action      String   @default("updated") // created | updated | deleted | photo_added | photo_removed | photo_reordered
+  source      String? // which tool made the change: lot_wizard, lot_editor, review_tab, photo_tab, ai_pipeline, ai_batch, bulk, import, admin_db, warehouse_fill, restore
+  batchId     String? // groups one user action that touched many lots (e.g. a bulk toggle)
   field       String
   oldValue    String?  @db.Text
   newValue    String?  @db.Text
@@ -1407,11 +1406,11 @@ model CatalogueLotEvent {
 // returned a DIFFERENT user's row (idMismatch). This table captures which,
 // at the moment it happens.
 model AccessDenialLog {
-  id            String   @id @default(cuid())
-  createdAt     DateTime @default(now())
-  appKey        String   // which app gate denied — e.g. CATALOGUING
-  source        String   // which gate ran — e.g. cataloguing_layout
-  referer       String?  // the page they were on when they got bounced
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  appKey    String // which app gate denied — e.g. CATALOGUING
+  source    String // which gate ran — e.g. cataloguing_layout
+  referer   String? // the page they were on when they got bounced
 
   // What the session claimed. NOTE: these are the EFFECTIVE user — when an admin
   // is impersonating, getEffectiveSession() returns the TARGET, so sessionUserId
@@ -1434,8 +1433,8 @@ model AccessDenialLog {
   dbAllowedApps String[]
 
   // dbUserId !== sessionUserId — would mean the render read someone else's row
-  idMismatch    Boolean  @default(false)
-  note          String?
+  idMismatch Boolean @default(false)
+  note       String?
 
   @@index([createdAt])
   @@index([sessionUserId])
@@ -1447,27 +1446,27 @@ model AccessDenialLog {
 model ITJob {
   id             String    @id @default(cuid())
   title          String
-  body           String    @db.Text @default("")
-  bodyHtml       String?   @db.Text                  // sanitised HTML of the original email (if sent)
+  body           String    @default("") @db.Text
+  bodyHtml       String?   @db.Text // sanitised HTML of the original email (if sent)
   fromName       String?
   fromEmail      String?
-  status         String    @default("NEW")   // NEW | IN_PROGRESS | WAITING | DONE
+  status         String    @default("NEW") // NEW | IN_PROGRESS | WAITING | DONE
   source         String    @default("EMAIL") // EMAIL | MANUAL
-  graphMessageId String?   @unique            // email Message-ID
-  conversationId String?                      // Office 365 Conversation Id — precise reply matching
-  threadKey      String?                      // normalised subject — reply matching fallback
-  webLink        String?                      // Outlook deep link to the original email
+  graphMessageId String?   @unique // email Message-ID
+  conversationId String? // Office 365 Conversation Id — precise reply matching
+  threadKey      String? // normalised subject — reply matching fallback
+  webLink        String? // Outlook deep link to the original email
   assignedToId   String?
   assignedToName String?
-  hasNewReply    Boolean   @default(false)    // a customer reply arrived that IT hasn't seen
-  dueDate        DateTime?                     // optional target date for the job (date only)
+  hasNewReply    Boolean   @default(false) // a customer reply arrived that IT hasn't seen
+  dueDate        DateTime? // optional target date for the job (date only)
   receivedAt     DateTime?
   createdByName  String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  messages       ITJobMessage[]
-  attachments    ITJobAttachment[]
+  messages    ITJobMessage[]
+  attachments ITJobAttachment[]
 
   @@index([status])
   @@index([receivedAt])
@@ -1482,11 +1481,11 @@ model ITJobMessage {
   id          String   @id @default(cuid())
   jobId       String
   job         ITJob    @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  kind        String   @default("NOTE")  // NOTE | REPLY
+  kind        String   @default("NOTE") // NOTE | REPLY
   authorName  String?
   authorEmail String?
   body        String   @db.Text
-  bodyHtml    String?  @db.Text   // sanitised HTML of the reply (if sent)
+  bodyHtml    String?  @db.Text // sanitised HTML of the reply (if sent)
   createdAt   DateTime @default(now())
 
   attachments ITJobAttachment[]
@@ -1506,7 +1505,7 @@ model ITJobAttachment {
   mimeType  String
   size      Int
   r2Key     String
-  contentId String?       // email Content-ID (set => inline image, e.g. signature; rendered in the HTML, not as a thumbnail)
+  contentId String? // email Content-ID (set => inline image, e.g. signature; rendered in the HTML, not as a thumbnail)
   createdAt DateTime      @default(now())
 
   @@index([jobId])
@@ -1518,7 +1517,7 @@ model ITJobAttachment {
 model MarketingLayout {
   id        String   @id @default(cuid())
   name      String
-  sections  String[] @default([])   // ordered report-section ids
+  sections  String[] @default([]) // ordered report-section ids
   isDefault Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1535,42 +1534,42 @@ model MarketingFavourite {
 // A month is a workspace (e.g. "April 26"); each scanned/manual document becomes
 // one categorised line that exports to the April-26-style spreadsheet.
 model AccountingMonth {
-  id        String   @id @default(cuid())
-  label     String   @unique          // e.g. "April 26"
-  favourite Boolean  @default(false)  // the month currently being worked on (pinned to top)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  documents AccountingDocument[]
+  id         String               @id @default(cuid())
+  label      String               @unique // e.g. "April 26"
+  favourite  Boolean              @default(false) // the month currently being worked on (pinned to top)
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+  documents  AccountingDocument[]
   statements BankStatement[]
 }
 
 model AccountingDocument {
-  id         String          @id @default(cuid())
-  monthId    String
-  month      AccountingMonth @relation(fields: [monthId], references: [id], onDelete: Cascade)
-  cardholder String                              // "B Goodall" | "J Goodall" | "James" | "Michael" | "Vectis"
-  source     String          @default("SCAN")    // SCAN | MANUAL
-  imageKey   String?                             // legacy single-image key (superseded by images[])
-  images     String[]        @default([])         // R2 keys of every page of this document (multi-page invoices)
-  supplier   String          @default("")        // description / who it was paid to
-  item       String          @default("")        // item/service purchased — only if clearly stated on the doc
-  website    String          @default("")        // supplier website/URL — only if shown on the doc
-  docDate    DateTime?
-  vatCode    Int             @default(1)          // 1 = 20% reclaimable, 2 = none/zero, 7 = personal
-  gross      Float           @default(0)          // Value (inc VAT)
-  vat        Float           @default(0)          // VAT amount
-  net        Float           @default(0)          // gross - vat
-  column     String          @default("vectis")   // nominal allocation column key (see lib/accounting.ts)
-  reviewed   Boolean         @default(false)
-  aiRun      Boolean         @default(false)      // has AI been run on this scan yet? (blank scans wait for a batch Run AI)
-  aiNotes    String?                             // anything the AI flagged for attention
-  splitGroupId String?                           // lines split from one invoice share this id (grouped together in the UI)
-  currency       String?  @default("GBP")        // ISO currency shown on the invoice (GBP unless foreign)
-  originalAmount Float?                           // gross in that foreign currency (e.g. 99 for €99) — stable key for reconciling foreign card charges
-  cardLast4  String?                              // last 4 digits of the PAYING card read off the receipt — drives the Auto match / Unknown card option
-  reserved   Boolean         @default(false)      // parked in the shared reconcile reserve (belongs to another check) — out of month table/export/matching until pulled in
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  id             String          @id @default(cuid())
+  monthId        String
+  month          AccountingMonth @relation(fields: [monthId], references: [id], onDelete: Cascade)
+  cardholder     String // "B Goodall" | "J Goodall" | "James" | "Michael" | "Vectis"
+  source         String          @default("SCAN") // SCAN | MANUAL
+  imageKey       String? // legacy single-image key (superseded by images[])
+  images         String[]        @default([]) // R2 keys of every page of this document (multi-page invoices)
+  supplier       String          @default("") // description / who it was paid to
+  item           String          @default("") // item/service purchased — only if clearly stated on the doc
+  website        String          @default("") // supplier website/URL — only if shown on the doc
+  docDate        DateTime?
+  vatCode        Int             @default(1) // 1 = 20% reclaimable, 2 = none/zero, 7 = personal
+  gross          Float           @default(0) // Value (inc VAT)
+  vat            Float           @default(0) // VAT amount
+  net            Float           @default(0) // gross - vat
+  column         String          @default("vectis") // nominal allocation column key (see lib/accounting.ts)
+  reviewed       Boolean         @default(false)
+  aiRun          Boolean         @default(false) // has AI been run on this scan yet? (blank scans wait for a batch Run AI)
+  aiNotes        String? // anything the AI flagged for attention
+  splitGroupId   String? // lines split from one invoice share this id (grouped together in the UI)
+  currency       String?         @default("GBP") // ISO currency shown on the invoice (GBP unless foreign)
+  originalAmount Float? // gross in that foreign currency (e.g. 99 for €99) — stable key for reconciling foreign card charges
+  cardLast4      String? // last 4 digits of the PAYING card read off the receipt — drives the Auto match / Unknown card option
+  reserved       Boolean         @default(false) // parked in the shared reconcile reserve (belongs to another check) — out of month table/export/matching until pulled in
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@index([monthId])
 }
@@ -1578,7 +1577,7 @@ model AccountingDocument {
 // Learned categorisation memory — once a supplier is confirmed, reuse it next time.
 model AccountingSupplierRule {
   id        String   @id @default(cuid())
-  match     String   @unique          // normalised supplier text
+  match     String   @unique // normalised supplier text
   vatCode   Int
   column    String
   createdAt DateTime @default(now())
@@ -1595,14 +1594,14 @@ model AccountingCardholder {
 
 // A bank/card statement uploaded for a month, to reconcile entered lines against.
 model BankStatement {
-  id           String          @id @default(cuid())
+  id           String            @id @default(cuid())
   monthId      String
-  month        AccountingMonth @relation(fields: [monthId], references: [id], onDelete: Cascade)
-  label        String          @default("")     // e.g. "OneCard May 2026"
-  cardholder   String          @default("")     // which card/account this statement belongs to — matching is scoped to it
-  source       String          @default("SCAN") // SCAN (photo/PDF + AI) | CSV
-  images       String[]        @default([])      // R2 keys of the statement pages (photo/PDF)
-  createdAt    DateTime        @default(now())
+  month        AccountingMonth   @relation(fields: [monthId], references: [id], onDelete: Cascade)
+  label        String            @default("") // e.g. "OneCard May 2026"
+  cardholder   String            @default("") // which card/account this statement belongs to — matching is scoped to it
+  source       String            @default("SCAN") // SCAN (photo/PDF + AI) | CSV
+  images       String[]          @default([]) // R2 keys of the statement pages (photo/PDF)
+  createdAt    DateTime          @default(now())
   transactions BankTransaction[]
 
   @@index([monthId])
@@ -1613,19 +1612,19 @@ model BankTransaction {
   id             String        @id @default(cuid())
   statementId    String
   statement      BankStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
-  monthId        String                          // denormalised for month-wide queries
+  monthId        String // denormalised for month-wide queries
   postDate       DateTime?
   tranDate       DateTime?
   description    String        @default("")
-  reference      String        @default("")      // "Your Ref" / bank reference
-  amount         Float         @default(0)        // GBP settled amount
-  currency       String        @default("GBP")    // original currency if a foreign charge
-  originalAmount Float?                            // foreign amount (e.g. 99 for €99)
-  feeAmount      Float?                            // non-sterling transaction fee if shown
-  direction      String        @default("DEBIT")  // DEBIT | CREDIT (payment/refund)
-  matchedDocIds  String[]      @default([])        // entered AccountingDocument id(s) this reconciles to (N = split invoice)
-  ignored        Boolean       @default(false)     // marked as not needing a match (e.g. a card payment)
-  receiptMissing Boolean       @default(false)     // real payment but no invoice/receipt exists (chase the paperwork)
+  reference      String        @default("") // "Your Ref" / bank reference
+  amount         Float         @default(0) // GBP settled amount
+  currency       String        @default("GBP") // original currency if a foreign charge
+  originalAmount Float? // foreign amount (e.g. 99 for €99)
+  feeAmount      Float? // non-sterling transaction fee if shown
+  direction      String        @default("DEBIT") // DEBIT | CREDIT (payment/refund)
+  matchedDocIds  String[]      @default([]) // entered AccountingDocument id(s) this reconciles to (N = split invoice)
+  ignored        Boolean       @default(false) // marked as not needing a match (e.g. a card payment)
+  receiptMissing Boolean       @default(false) // real payment but no invoice/receipt exists (chase the paperwork)
   createdAt      DateTime      @default(now())
 
   @@index([statementId])
@@ -1635,13 +1634,13 @@ model BankTransaction {
 // Singleton (id = "global") — stores the delegated OAuth tokens for the shared
 // IT mailbox connection. Connected once by an admin via the sign-in flow.
 model ITMailboxAuth {
-  id           String   @id @default("global")
-  accessToken  String   @db.Text
-  refreshToken String   @db.Text
+  id           String    @id @default("global")
+  accessToken  String    @db.Text
+  refreshToken String    @db.Text
   expiresAt    DateTime
   connectedBy  String?
   lastSyncAt   DateTime?
-  updatedAt    DateTime @updatedAt
+  updatedAt    DateTime  @updatedAt
 }
 
 // A customer condition-report request that arrived by email (or was added
@@ -1650,40 +1649,40 @@ model ITMailboxAuth {
 // then get assigned to a person and ticked done.
 model ConditionReport {
   id             String    @id @default(cuid())
-  subject        String                                  // email subject / short title
-  body           String    @db.Text @default("")         // the customer's actual request text
-  fromName       String?                                  // requester (parsed from body, not envelope)
+  subject        String // email subject / short title
+  body           String    @default("") @db.Text // the customer's actual request text
+  fromName       String? // requester (parsed from body, not envelope)
   fromEmail      String?
-  fromPhone      String?                                  // requester phone
-  navId          String?                                  // NAV / contact id e.g. C125476
-  status         String    @default("NEW")               // NEW | IN_PROGRESS | DONE
-  source         String    @default("EMAIL")             // EMAIL | MANUAL
-  graphMessageId String?   @unique                        // Office 365 message id — dedupe key
-  webLink        String?                                  // Outlook deep link to the original email
-  lotUrl         String?                                  // public "view the lot" link from the email
+  fromPhone      String? // requester phone
+  navId          String? // NAV / contact id e.g. C125476
+  status         String    @default("NEW") // NEW | IN_PROGRESS | DONE
+  source         String    @default("EMAIL") // EMAIL | MANUAL
+  graphMessageId String?   @unique // Office 365 message id — dedupe key
+  webLink        String? // Outlook deep link to the original email
+  lotUrl         String? // public "view the lot" link from the email
   receivedAt     DateTime?
 
   // Captured details
-  lotNumber      String?                                  // lot number referenced in the request
-  auctionCode    String?                                  // BC auction code e.g. "F093" (from the lot link) — used to find the lot in BC
-  auctionId      String?                                  // linked auction (preferred)
-  auction        CatalogueAuction? @relation(fields: [auctionId], references: [id], onDelete: SetNull)
-  auctionLabel   String?                                  // free-text auction name (AI guess / fallback)
-  auctionDate    DateTime?                                // sale date for grouping/sorting
+  lotNumber    String? // lot number referenced in the request
+  auctionCode  String? // BC auction code e.g. "F093" (from the lot link) — used to find the lot in BC
+  auctionId    String? // linked auction (preferred)
+  auction      CatalogueAuction? @relation(fields: [auctionId], references: [id], onDelete: SetNull)
+  auctionLabel String? // free-text auction name (AI guess / fallback)
+  auctionDate  DateTime? // sale date for grouping/sorting
 
   // Cataloguer (resolved from Business Central by auctionCode + lotNumber)
-  cataloguerCode  String?                                 // BC initials e.g. "AR2"
+  cataloguerCode  String? // BC initials e.g. "AR2"
   cataloguerName  String?
   cataloguerEmail String?
-  notifiedAt      DateTime?                               // when the cataloguer was emailed
+  notifiedAt      DateTime? // when the cataloguer was emailed
 
   // Assignment
   assignedToId   String?
   assignedToName String?
 
-  createdByName  String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdByName String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([status])
   @@index([auctionId])
@@ -1693,15 +1692,15 @@ model ConditionReport {
 // OAuth tokens for the shared mailbox that condition-report emails arrive in.
 // Singleton (id = "global"), same delegated-Graph pattern as ITMailboxAuth.
 model ConditionMailboxAuth {
-  id           String   @id @default("global")
-  accessToken  String   @db.Text
-  refreshToken String   @db.Text
+  id           String    @id @default("global")
+  accessToken  String    @db.Text
+  refreshToken String    @db.Text
   expiresAt    DateTime
   connectedBy  String?
   lastSyncAt   DateTime?
-  folderId     String?                       // Graph mail-folder id to read from (null = inbox)
-  folderName   String?                       // display name of that folder, for the UI
-  updatedAt    DateTime @updatedAt
+  folderId     String? // Graph mail-folder id to read from (null = inbox)
+  folderName   String? // display name of that folder, for the UI
+  updatedAt    DateTime  @updatedAt
 }
 
 // ── MCOC (Jordan's secret-menu Marvel Contest of Champions tools) ────────────
@@ -1712,11 +1711,11 @@ model McocChampion {
   id        String   @id @default(cuid())
   ownerId   String
   name      String
-  class     String   @default("")   // Cosmic | Tech | Mutant | Skill | Science | Mystic
-  stars     Int      @default(7)     // 6 or 7
-  rank      Int      @default(1)     // 1–5
+  class     String   @default("") // Cosmic | Tech | Mutant | Skill | Science | Mystic
+  stars     Int      @default(7) // 6 or 7
+  rank      Int      @default(1) // 1–5
   bgsDeck   Boolean  @default(false)
-  imageKey  String?                  // R2 key of the portrait cropped from a roster screenshot
+  imageKey  String? // R2 key of the portrait cropped from a roster screenshot
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1730,17 +1729,17 @@ model McocChampion {
 // been built yet. Rebuilt/refreshed via the Champion DB tab.
 model McocChampionProfile {
   id            String    @id @default(cuid())
-  name          String                        // display name
-  nameNorm      String    @unique             // normalised name (matching + dedupe)
-  class         String    @default("")        // Cosmic | Tech | Mutant | Skill | Science | Mystic
-  immunities    String[]  @default([])        // e.g. Bleed, Poison, Incinerate…
-  tags          String[]  @default([])        // counter-relevant capabilities (fixed vocab)
+  name          String // display name
+  nameNorm      String    @unique // normalised name (matching + dedupe)
+  class         String    @default("") // Cosmic | Tech | Mutant | Skill | Science | Mystic
+  immunities    String[]  @default([]) // e.g. Bleed, Poison, Incinerate…
+  tags          String[]  @default([]) // counter-relevant capabilities (fixed vocab)
   summary       String    @default("") @db.Text
-  abilities     Json?                          // full kit breakdown: [{ name, details[] }]
-  counters      String[]  @default([])        // AI-computed: best attackers INTO this champ as a defender
-  myCounters    String[]  @default([])        // Jordan's own counters — NEVER touched by profile rebuilds
+  abilities     Json? // full kit breakdown: [{ name, details[] }]
+  counters      String[]  @default([]) // AI-computed: best attackers INTO this champ as a defender
+  myCounters    String[]  @default([]) // Jordan's own counters — NEVER touched by profile rebuilds
   defenderNotes String    @default("") @db.Text // why it's dangerous on defence + what a counter needs
-  profileAt     DateTime?                      // when the full profile was last computed
+  profileAt     DateTime? // when the full profile was last computed
   updatedAt     DateTime  @updatedAt
 }
 
@@ -1753,10 +1752,10 @@ model McocChampionProfile {
 model CatalogueBulkUndo {
   id        String   @id @default(cuid())
   auctionId String
-  actorId   String                    // only this user sees/undoes it
+  actorId   String // only this user sees/undoes it
   actorName String   @default("")
-  label     String   @default("")     // human summary shown on the Undo button
-  entries   Json                       // [{ lotId, fields: { <col>: { before, after } } }]
+  label     String   @default("") // human summary shown on the Undo button
+  entries   Json // [{ lotId, fields: { <col>: { before, after } } }]
   undone    Boolean  @default(false)
   createdAt DateTime @default(now())
 
@@ -1769,9 +1768,9 @@ model CatalogueBulkUndo {
 model McocWarFight {
   id            String   @id @default(cuid())
   ownerId       String
-  order         Int      @default(0)   // position on the path, 0-based
-  defender      String   @default("")  // who's on this node this war (overtyped each week)
-  nodesImageKey String?                // R2 key of the nodes photo for this fight
+  order         Int      @default(0) // position on the path, 0-based
+  defender      String   @default("") // who's on this node this war (overtyped each week)
+  nodesImageKey String? // R2 key of the nodes photo for this fight
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -1784,12 +1783,12 @@ model McocWarFight {
 model McocMiniNode {
   id            String   @id @default(cuid())
   ownerId       String
-  order         Int      @default(0)   // legacy list order (map position lives in slot)
-  slot          String?                // fixed map position key (boss_top, pb_l, pa_c…) — null = unplaced
-  label         String   @default("")  // e.g. "Node 33"
-  defender      String   @default("")  // who's on it this war (overtyped each week)
+  order         Int      @default(0) // legacy list order (map position lives in slot)
+  slot          String? // fixed map position key (boss_top, pb_l, pa_c…) — null = unplaced
+  label         String   @default("") // e.g. "Node 33"
+  defender      String   @default("") // who's on it this war (overtyped each week)
   taking        Boolean  @default(false) // selected for this war
-  nodesImageKey String?                // R2 key of the node photo (uploaded once)
+  nodesImageKey String? // R2 key of the node photo (uploaded once)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -1802,9 +1801,9 @@ model McocMiniNode {
 model JordanSavedChat {
   id        String   @id @default(cuid())
   ownerId   String
-  mode      String   @default("chat")  // "chat" | "cooking"
+  mode      String   @default("chat") // "chat" | "cooking"
   title     String   @default("")
-  messages  Json                       // [{ role, text, queries?, imgs? }]
+  messages  Json // [{ role, text, queries?, imgs? }]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1819,8 +1818,8 @@ model TermsAcceptance {
   userId     String
   userName   String   @default("")
   userEmail  String   @default("")
-  version    String                      // the TERMS_VERSION accepted
-  signature  String   @db.Text           // drawn signature, PNG data URL
+  version    String // the TERMS_VERSION accepted
+  signature  String   @db.Text // drawn signature, PNG data URL
   acceptedAt DateTime @default(now())
 
   @@unique([userId, version])
@@ -1831,8 +1830,8 @@ model TermsAcceptance {
 // in-app "migrations pending" banner instead of being told to run them.
 // Single row, id = "current". See app/api/admin/run-migrations/route.ts.
 model MigrationState {
-  id    String   @id                  // always "current"
-  hash  String                        // sha256 of the MIGRATIONS array when last run clean
+  id    String   @id // always "current"
+  hash  String // sha256 of the MIGRATIONS array when last run clean
   ranBy String?
   ranAt DateTime @updatedAt
 }
@@ -1849,4 +1848,62 @@ model EodCheckDismissal {
   dismissedAt DateTime @default(now())
 
   @@unique([lotId, checkKey])
+}
+
+// ─── Facilities → First Aid ──────────────────────────────────────────────────
+// Everything here is shown on the PUBLIC /first-aid page (no login), so treat every
+// field as world-readable. Never add anything confidential to these models.
+
+model FirstAider {
+  id        String   @id @default(cuid())
+  name      String
+  roleTitle String?
+  location  String?
+  phone     String?
+  photoKey  String?
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FirstAidKit {
+  id        String   @id @default(cuid())
+  kind      String   @default("KIT") // KIT | DEFIB | EYEWASH | OTHER
+  label     String
+  whereText String?
+  photoKey  String?
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FirstAidInfo {
+  id             String   @id @default("global")
+  emergencySteps String?  @db.Text
+  siteAddress    String?  @db.Text
+  assemblyPoint  String?
+  extraNotes     String?  @db.Text
+  updatedAt      DateTime @updatedAt
+}
+
+// Submitted from the public page by anyone, so it is an UNAUTHENTICATED write:
+// rate limited per ipHash, every field length-capped, and never read back publicly.
+model AccidentReport {
+  id            String    @id @default(cuid())
+  reporterName  String
+  reporterPhone String?
+  injuredName   String?
+  happenedAt    String?
+  location      String?
+  description   String    @db.Text
+  status        String    @default("NEW") // NEW | REVIEWED
+  handledBy     String?
+  handledAt     DateTime?
+  ipHash        String?
+  createdAt     DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([ipHash, createdAt])
 }

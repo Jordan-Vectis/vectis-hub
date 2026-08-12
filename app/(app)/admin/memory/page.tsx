@@ -16,6 +16,54 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "first_aid_public.md",
+    content: `---
+name: Facilities -> First Aid (the ONE public page)
+purpose: The public /first-aid page and its Hub app. The only route outside the login gate besides /login, /setup and the API relays - and the exact constraints that make that safe. Read before touching auth.config.ts publicPaths or anything under /first-aid.
+last_updated: 2026-08-11
+---
+
+# Facilities -> First Aid (built 2026-08-11)
+
+Jordan's ask: a new **Facilities** home-page section, with **First Aid** as its first app, and "the link for the first aid page needs to be able to bypass the login screen so anyone can use it but it needs to be secure and not a backdoor into the app". Asked what it should hold, he answered **all four** options - first aiders, kit/defib locations, emergency steps, and an accident-report form.
+
+## Two surfaces, deliberately separate
+
+| | Path | Who |
+|---|---|---|
+| Public page | **/first-aid** - top-level route | **Anyone, no login** |
+| Management app | **/tools/first-aid** | Hub login + FIRST_AID app permission |
+
+Registry wiring: SECTION_DEFS gained FACILITIES (lib/app-cards.ts), AppKey/ALL_APPS gained FIRST_AID (lib/apps.ts), plus the card def. WARNING: a card with **no appKey never appears on the permissions page** - this one has one.
+
+## Why the public page is not a backdoor - keep ALL of these
+
+Written up as its own section in **RULES.md -> "Public First Aid page"**; that is the authority.
+
+- **EXACT-match allowlist.** auth.config.ts now has publicPaths (prefix, startsWith) **and** publicExact (includes). /first-aid is in the **exact** list - a prefix entry would also open /first-aid-anything, so a future page could go public by accident. Never move it.
+- **Top-level route, NOT app/(app)** - that group's layout renders the Hub shell and reads the session. No links into the Hub from the page.
+- **No public GET endpoint** - the page reads its tables server-side. Photos reuse the pre-existing /api/public/photo prefix allowlist (first-aid/ added to it).
+- FirstAider / FirstAidKit / FirstAidInfo are **world-readable models**. Never put anything confidential in them.
+- Every read is wrapped so a **missing table cannot 500 the page** - people may be reading it in an emergency.
+
+## The one unauthenticated WRITE
+
+POST /api/public/first-aid-report - under the **already-public** /api/public prefix, so it opened nothing new. Protections, all in the route (client checks are cosmetic):
+- **Write-only**: returns {ok:true} and nothing else - no record, not even an id. It cannot be used to read or probe.
+- **Honeypot** website field -> answers 200 so a bot learns nothing.
+- **Two rate limits**: MAX_PER_IP_PER_HOUR (5) and MAX_PER_HOUR_TOTAL (60) - the second matters because a botnet spread across addresses defeats a per-IP limit alone.
+- **IP is hashed with AUTH_SECRET, never stored raw** (ipHash) - only ever compared to other hashes.
+- Every field length-capped server-side.
+
+AccidentReport rows are read **only** in the Hub app. Reports can contain **health data about a named person** - recorded in the STORES arrays on **both** /admin/compliance and /admin/dpia, per the standing rule.
+
+## Still open
+
+- **Nobody is notified** when a report arrives - it just appears on the Reports tab with a count badge. If that matters, an email/ntfy hook is the obvious next step (not built, not discussed).
+- The public page is robots: noindex but is genuinely public - anyone with the URL can read the first aiders' names and phone extensions. That was the point, but it is worth knowing.
+`,
+  },
+  {
     filename: "auto_pipeline_apply.md",
     content: `---
 name: Auto Pipeline — what "applied" means (appliedDesc)

@@ -35,6 +35,7 @@ const STORES: { name: string; what: string; location: string }[] = [
   { name: "Neon (PostgreSQL)", what: "The main database — customer contacts & submissions, bidder registrations, staff accounts, catalogue lots, activity/monitoring logs, accounting records, and a copy of the Business Central extension source code (vendor code — no personal data).", location: "Confirm the Neon region. If US/non-UK, an international-transfer safeguard is needed." },
   { name: "Cloudflare R2", what: "File storage — lot photos, uploaded documents, invoices, and the nightly database backups.", location: "Confirm the R2 bucket region / jurisdiction." },
   { name: "Railway", what: "Hosting — runs the app servers (production and staging). The database itself is on Neon, not Railway.", location: "Confirm the Railway deployment region." },
+  { name: "Accident reports (First Aid)", what: "Submitted from the PUBLIC /first-aid page with no login. Reporter name, optional phone, optional name of the injured person, and free text describing the incident — so SPECIAL CATEGORY health data about a named person is possible. A salted hash of the sender IP is retained solely to rate-limit the form; the raw address is never stored. Read only inside the Hub under the First Aid app permission.", location: "Neon (same database)." },
 ]
 
 const PROCESSORS: { name: string; what: string; data: string; transfer: string }[] = [

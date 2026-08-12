@@ -21,6 +21,15 @@ export const authConfig: NextAuthConfig = {
       const publicPaths = ["/login", "/setup", "/api/public", "/api/gap-relay"]
       if (publicPaths.some((p) => pathname.startsWith(p))) return true
 
+      // Facilities → First Aid. Deliberately reachable without logging in so anyone on site
+      // (including agency staff and visitors, who have no Hub account) can find a first aider
+      // in an emergency. See RULES.md → "Public First Aid page".
+      // ⚠ EXACT match, not startsWith like the list above: a prefix entry would also open
+      // /first-aid-anything, so a future page could go public by accident. The page reads its
+      // own tables server-side and posts to /api/public, so nothing else needed opening.
+      const publicExact = ["/first-aid"]
+      if (publicExact.includes(pathname)) return true
+
       if (!isLoggedIn) return false
       if (isLoggedIn && pathname === "/login") {
         return Response.redirect(new URL("/submissions", nextUrl))

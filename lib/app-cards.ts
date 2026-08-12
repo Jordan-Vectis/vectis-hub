@@ -6,6 +6,7 @@ export const SECTION_DEFS = [
   { key: "REPORTS",          label: "Reports" },
   { key: "BUSINESS_CENTRAL", label: "Business Central" },
   { key: "OPERATIONS",       label: "Operations" },
+  { key: "FACILITIES",       label: "Facilities" },
   { key: "AUCTION",          label: "Auction" },
   { key: "IT_ADMIN",         label: "IT & Admin" },
 ] as const
@@ -440,5 +441,18 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     glow:               "hover:shadow-pink-900/40",
     group:              "BUSINESS_CENTRAL",
     appKey:             "BC_MARKETING",
+  },
+  {
+    key:                "FIRST_AID",
+    href:               "/tools/first-aid",
+    defaultLabel:       "First Aid",
+    defaultDescription: "First aiders, kit locations and what to do in an emergency — plus the accident reports people send in.",
+    icon:               "🩹",
+    border:             "border-red-500",
+    iconBg:             "text-red-400",
+    btnBg:              "bg-red-600 hover:bg-red-500",
+    glow:               "hover:shadow-red-900/40",
+    group:              "FACILITIES",
+    appKey:             "FIRST_AID",
   },
 ]

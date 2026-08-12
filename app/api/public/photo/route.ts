@@ -6,7 +6,10 @@ import { GetObjectCommand } from "@aws-sdk/client-s3"
 export async function GET(req: NextRequest) {
   const key = req.nextUrl.searchParams.get("key") ?? ""
 
-  if (!key || (!key.startsWith("lot-photos/") && !key.startsWith("catalogue-photos/"))) {
+  // Prefix allowlist — this route is public, so it must only ever serve buckets meant to be
+  // world-readable. first-aid/ holds the first aider and kit photos shown on /first-aid.
+  const allowed = ["lot-photos/", "catalogue-photos/", "first-aid/"]
+  if (!key || !allowed.some(p => key.startsWith(p))) {
     return new NextResponse("Not found", { status: 404 })
   }
 
