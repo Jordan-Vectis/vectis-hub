@@ -75,6 +75,55 @@ It is allowed to stay public **only because of these constraints. Keep every one
 - `AccidentReport` rows are **only ever read inside the Hub** (`/tools/first-aid`, behind the
   `FIRST_AID` app permission). Never surface them publicly.
 
+## Design philosophy — read before building ANY screen
+
+Every rule here exists because it was got wrong, more than once. Each one names the failure.
+
+### 1. Use the width you have
+**Never put data, tables, diagrams, plans or side-by-side comparisons in a narrow centred column.**
+A narrow column (`max-w-2xl`) is only right for **prose read on a phone** — instructions, a form,
+a paragraph of guidance. Everything else gets the screen.
+- *The failure:* the site plan on `/first-aid` was rendered inside the page's phone-width reading
+  column. A 1:1250 architectural drawing squeezed into 672px is unreadable — which defeated the
+  entire point of putting a plan there. Jordan: "we are doing this thing where we dont use the
+  full screen again". It had been raised before that.
+- If one part of a page is data and the rest is prose, **break that part out** into its own wider
+  block rather than narrowing the data or widening the prose.
+
+### 2. Dark mode is the DEFAULT here, not the exception
+`<html>` ships with `class="dark"`; light is an explicit user toggle. So **check every new screen
+in dark first**, and remember that `dark:` must be the *lighter* value, not the darker one.
+- *The failure:* `text-gray-500 dark:text-gray-600` — backwards, and unreadable.
+- ⚠ **Native controls inherit the BROWSER's colours, not yours.** A bare `<input type="file">`
+  renders "No file chosen" in black and vanishes on the dark theme. Use the shared **`.file-input`**
+  class (`app/globals.css`). The same trap applies to `<select>`, `<input type="date">` and
+  `datetime-local` — always look at them on the dark theme before shipping.
+
+### 3. If a symbol or colour means something, there must be a key
+Icons and colour coding are not self-explanatory.
+- *The failure:* the site plan shipped with 🧰 ⚡ 💧 pins and nothing anywhere saying what they
+  meant. A key that lists the actual marked items doubles as useful content, so prefer that to an
+  abstract legend.
+
+### 4. Borrow the convention the real world already uses
+Where a domain has an established visual language, follow it — people are trained on it and a
+wrong colour actively misinforms.
+- *The failure:* First Aid was built in red. First aid signage is **green and white** (ISO 7010);
+  red means fire equipment or prohibition. Jordan: "the colour scheme being red and not green is
+  not a good idea haha".
+- Keep red for genuine errors and destructive actions. Don't sweep those green for consistency.
+
+### 5. Build for the iPads, not just the desktop
+Much of this app is used on shared tablets, standing up.
+- **Touch targets ~44px.** *The failure:* the activity popup's sliders used a default range input
+  with a ~16px thumb; on a tablet they read as simply broken.
+- **A drag inside a scrolling panel needs `touch-action: none`**, or the panel scrolls instead and
+  the control feels dead.
+
+### 6. Never let "nothing happened" look like success
+- *The failure:* Change Vendor reported "✓ Changed 0 lots" when it had changed nothing, so a real
+  problem read as done. If a count is zero, say so plainly and say why.
+
 ## ⚠ Claude memory sync (multi-developer) — check freshness before trusting local memory
 
 The in-app memory page — the `ENTRIES` array in `app/(app)/admin/memory/page.tsx`, shown at

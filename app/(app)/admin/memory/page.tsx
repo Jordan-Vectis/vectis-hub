@@ -78,6 +78,10 @@ POST /api/public/first-aid-report - under the **already-public** /api/public pre
 
 AccidentReport rows are read **only** in the Hub app. Reports can contain **health data about a named person** - recorded in the STORES arrays on **both** /admin/compliance and /admin/dpia, per the standing rule.
 
+## Design philosophy is now a RULE (2026-08-12)
+
+Jordan: "Can we make sure there is a rule on that for design philosophys going forward." RULES.md gained a **Design philosophy** section — read it before building any screen. Six rules, each naming the failure that produced it: (1) use the width you have, narrow columns are for phone-read PROSE only, break data out into its own wider block; (2) dark mode is the DEFAULT here so check dark first, dark: must be the LIGHTER value, and native controls (file, select, date) inherit the browser's black text and vanish — use the shared .file-input class; (3) if a symbol or colour means something there must be a key, and a key listing the real items beats an abstract legend; (4) borrow the real world's convention (first aid is green, ISO 7010 — red means fire), keeping red for errors and destructive actions; (5) build for the iPads — ~44px touch targets, and touch-action: none on any drag inside a scrolling panel; (6) never let "nothing happened" look like success.
+
 ## Layout: the plan breaks OUT of the reading column, and it has a KEY (2026-08-12)
 
 Jordan: "we are doing this thing where we dont use the full screen again so the plan is all squashed and there is no key. Its very poorly laid out." Both fair — the first is the standing full-width rule being broken again.
