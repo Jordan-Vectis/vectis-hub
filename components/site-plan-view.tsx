@@ -5,8 +5,16 @@
 // never pixels — the plan is shown at wildly different widths on a phone, a monitor and a
 // printout, and a pixel offset would drift on every one of them.
 
+// ⚠ THE one icon map. The public page used to keep its own identical copy — the classic pair
+// that drifts. Everything that draws a first aid symbol imports these.
+// 📍 is genuinely the "Other" symbol, not a fallback for a broken type: a kit shows 📍 because
+// its TYPE is Other, which is why the key names the type alongside it.
 export const PIN_ICON: Record<string, string> = {
   KIT: "🧰", DEFIB: "⚡", EYEWASH: "💧", OTHER: "📍",
+}
+
+export const KIND_LABEL: Record<string, string> = {
+  KIT: "First aid kit", DEFIB: "Defibrillator", EYEWASH: "Eyewash", OTHER: "Other",
 }
 
 export function PlanImage({

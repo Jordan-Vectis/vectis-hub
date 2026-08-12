@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react"
 import { saveFirstAider, deleteFirstAider, saveFirstAidKit, deleteFirstAidKit, saveFirstAidInfo, setAccidentReportStatus, saveAccidentReportEmployer } from "@/lib/actions/first-aid"
 import { setFirstAidKitPin } from "@/lib/actions/site-plan"
-import { PIN_ICON, PlanImage } from "@/components/site-plan-view"
+import { PIN_ICON, KIND_LABEL, PlanImage } from "@/components/site-plan-view"
 
 type Aider  = { id: string; name: string; roleTitle: string | null; location: string | null; phone: string | null; photoKey: string | null; sortOrder: number; active: boolean }
 type Kit    = { id: string; kind: string; label: string; whereText: string | null; photoKey: string | null; sortOrder: number; active: boolean; planId: string | null; pinX: number | null; pinY: number | null }
@@ -130,8 +130,18 @@ export default function FirstAidClient({ aiders, kits, info, reports, plans }: {
             <form key={k.id} action={fd => run(() => saveFirstAidKit(fd), "Location saved.")} className={card + " space-y-3"}>
               <input type="hidden" name="id" value={k.id} />
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <select name="kind" defaultValue={k.kind} className={input}>{KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
-                <input name="label" defaultValue={k.label} maxLength={120} className={input + " sm:col-span-2"} />
+                <div>
+                  <label className="block text-[11px] uppercase tracking-wider text-gray-400 mb-1">
+                    Type — this is what draws the symbol
+                  </label>
+                  <select name="kind" defaultValue={k.kind} className={input}>{KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] uppercase tracking-wider text-gray-400 mb-1">
+                    Name — shows as {PIN_ICON[k.kind] ?? PIN_ICON.OTHER} {KIND_LABEL[k.kind] ?? KIND_LABEL.OTHER}
+                  </label>
+                  <input name="label" defaultValue={k.label} maxLength={120} className={input} />
+                </div>
               </div>
               <input name="whereText" defaultValue={k.whereText ?? ""} placeholder="Exactly where it is" maxLength={300} className={input} />
               {k.photoKey && <img src={`/api/public/photo?key=${encodeURIComponent(k.photoKey)}`} alt="" className="max-h-32 rounded-lg" />}
