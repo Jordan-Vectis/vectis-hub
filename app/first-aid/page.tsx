@@ -60,7 +60,11 @@ export default async function FirstAidPage() {
       </header>
 
       <div className="max-w-2xl mx-auto px-5 py-6 space-y-6">
-        {/* Emergency first — this is the bit someone needs in a hurry */}
+        {/* Reporting sits FIRST — Jordan's call, asked for twice. Filing the accident book is
+            what most people open this page to do; the emergency panel with the 999 button is
+            immediately beneath it and still the first thing on screen if they scroll a line. */}
+        <ReportForm />
+
         <section className="rounded-2xl border-2 border-green-300 bg-white p-5">
           <h2 className="text-lg font-bold text-green-800">In an emergency</h2>
           {steps.length > 0 ? (
@@ -121,7 +125,6 @@ export default async function FirstAidPage() {
         </section>
 
 
-        <ReportForm />
         <section className="rounded-2xl border border-gray-200 bg-white p-5">
           <h2 className="text-lg font-bold">Kits and equipment</h2>
           {kits.length === 0 ? (
