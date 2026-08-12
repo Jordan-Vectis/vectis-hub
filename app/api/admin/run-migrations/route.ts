@@ -1330,6 +1330,16 @@ const MIGRATIONS = [
   `ALTER TABLE "AccidentReport" ADD COLUMN IF NOT EXISTS "riddorReportable" BOOLEAN`,
   `ALTER TABLE "AccidentReport" ADD COLUMN IF NOT EXISTS "riddorRef" TEXT`,
   `ALTER TABLE "AccidentReport" ADD COLUMN IF NOT EXISTS "employerNotes" TEXT`,
+  // Facilities → Site Plan: one drawing any app can mark up.
+  `CREATE TABLE IF NOT EXISTS "SitePlan" (
+    "id" TEXT NOT NULL, "name" TEXT NOT NULL, "imageKey" TEXT NOT NULL,
+    "active" BOOLEAN NOT NULL DEFAULT true, "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "SitePlan_pkey" PRIMARY KEY ("id")
+  )`,
+  `ALTER TABLE "FirstAidKit" ADD COLUMN IF NOT EXISTS "planId" TEXT`,
+  `ALTER TABLE "FirstAidKit" ADD COLUMN IF NOT EXISTS "pinX" DOUBLE PRECISION`,
+  `ALTER TABLE "FirstAidKit" ADD COLUMN IF NOT EXISTS "pinY" DOUBLE PRECISION`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

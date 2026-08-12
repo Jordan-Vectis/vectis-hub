@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import ReportForm from "./report-form"
+import { PIN_ICON, PlanImage } from "@/components/site-plan-view"
 
 // PUBLIC — no login. Deliberately a TOP-LEVEL route, not inside app/(app): that group's layout
 // renders the Hub shell and reads the session, so putting this page there would drag the nav
@@ -23,26 +24,29 @@ const KIND_ICON: Record<string, string> = { KIT: "🧰", DEFIB: "⚡", EYEWASH: 
 // Every table is newer than the deploy that reads it, so a missing table must leave the page
 // standing (people may be looking at it in an emergency) rather than 500 it.
 type Aider = { id: string; name: string; roleTitle: string | null; location: string | null; phone: string | null; photoKey: string | null }
-type Kit   = { id: string; kind: string; label: string; whereText: string | null; photoKey: string | null }
+type Kit   = { id: string; kind: string; label: string; whereText: string | null; photoKey: string | null; planId: string | null; pinX: number | null; pinY: number | null }
+type Plan  = { id: string; name: string; imageKey: string } | null
 type Info  = { emergencySteps: string | null; siteAddress: string | null; assemblyPoint: string | null; extraNotes: string | null } | null
 
-async function load(): Promise<{ aiders: Aider[]; kits: Kit[]; info: Info }> {
+async function load(): Promise<{ aiders: Aider[]; kits: Kit[]; info: Info; plan: Plan }> {
   // ⚠ allSettled, NOT all: one failing query (a table not yet migrated, say) must not blank the
   // emergency steps and the first aiders too. Each section stands or falls on its own.
-  const [aiders, kits, info] = await Promise.allSettled([
+  const [aiders, kits, info, plan] = await Promise.allSettled([
     prisma.firstAider.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     prisma.firstAidKit.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { label: "asc" }] }),
     prisma.firstAidInfo.findUnique({ where: { id: "global" } }),
+    prisma.sitePlan.findFirst({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
   ])
   return {
     aiders: aiders.status === "fulfilled" ? aiders.value : ([] as Aider[]),
     kits:   kits.status   === "fulfilled" ? kits.value   : ([] as Kit[]),
     info:   info.status   === "fulfilled" ? (info.value as Info) : null,
+    plan:   plan.status   === "fulfilled" ? (plan.value as Plan) : null,
   }
 }
 
 export default async function FirstAidPage() {
-  const { aiders, kits, info } = await load()
+  const { aiders, kits, info, plan } = await load()
   const steps = (info?.emergencySteps ?? "").split("\n").map(s => s.trim()).filter(Boolean)
 
   return (
@@ -112,6 +116,21 @@ export default async function FirstAidPage() {
             </ul>
           )}
         </section>
+
+        {plan && kits.some(k => k.planId === plan.id && k.pinX !== null) && (
+          <section className="rounded-2xl border border-gray-200 bg-white p-5">
+            <h2 className="text-lg font-bold">Where to find it</h2>
+            <p className="text-sm text-gray-600 mt-1 mb-3">{plan.name}</p>
+            <PlanImage imageKey={plan.imageKey} alt={plan.name}>
+              {kits.filter(k => k.planId === plan.id && k.pinX !== null && k.pinY !== null).map(k => (
+                <span key={k.id} style={{ left: `${k.pinX}%`, top: `${k.pinY}%` }} title={k.label}
+                  className="absolute -translate-x-1/2 -translate-y-1/2 text-2xl drop-shadow">
+                  {PIN_ICON[k.kind] ?? "📍"}
+                </span>
+              ))}
+            </PlanImage>
+          </section>
+        )}
 
         <section className="rounded-2xl border border-gray-200 bg-white p-5">
           <h2 className="text-lg font-bold">Kits and equipment</h2>

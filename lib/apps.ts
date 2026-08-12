@@ -1,4 +1,4 @@
-export type AppKey = "CRM" | "AUCTION_AI" | "CATALOGUING" | "REPORTS" | "MARKETING_REPORTS" | "BC_REPORTS" | "SALEROOM_TRAINER" | "WAREHOUSE" | "AUCTION_CONTROLLER" | "BC_WAREHOUSE" | "AI_PRESENTER" | "BC_MARKETING" | "AUTO_CLERK" | "MANAGER_PORTAL" | "SALE_STATISTICS" | "ACCOUNTS" | "DESCRIPTION_FINDER" | "PHOTO_PREP" | "ADMIN_CENTRE" | "FIRST_AID"
+export type AppKey = "CRM" | "AUCTION_AI" | "CATALOGUING" | "REPORTS" | "MARKETING_REPORTS" | "BC_REPORTS" | "SALEROOM_TRAINER" | "WAREHOUSE" | "AUCTION_CONTROLLER" | "BC_WAREHOUSE" | "AI_PRESENTER" | "BC_MARKETING" | "AUTO_CLERK" | "MANAGER_PORTAL" | "SALE_STATISTICS" | "ACCOUNTS" | "DESCRIPTION_FINDER" | "PHOTO_PREP" | "ADMIN_CENTRE" | "FIRST_AID" | "SITE_PLAN"
 
 export const ALL_APPS: { key: AppKey; label: string }[] = [
   { key: "CRM",                label: "CRM" },
@@ -21,6 +21,7 @@ export const ALL_APPS: { key: AppKey; label: string }[] = [
   { key: "PHOTO_PREP",         label: "Photo Prep" },
   { key: "ADMIN_CENTRE",       label: "Admin Centre" },
   { key: "FIRST_AID",          label: "First Aid" },
+  { key: "SITE_PLAN",          label: "Site Plan" },
 ]
 
 export function hasAppAccess(role: string, allowedApps: string[], appKey: AppKey): boolean {

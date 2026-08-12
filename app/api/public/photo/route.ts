@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
 
   // Prefix allowlist — this route is public, so it must only ever serve buckets meant to be
   // world-readable. first-aid/ holds the first aider and kit photos shown on /first-aid.
-  const allowed = ["lot-photos/", "catalogue-photos/", "first-aid/"]
+  const allowed = ["lot-photos/", "catalogue-photos/", "first-aid/", "site-plans/"]
   // ".." can't escape an S3/R2 key (they are literal, not paths), but the prefix check runs on
   // the raw string, so refuse it rather than rely on that staying true.
   if (!key || key.includes("..") || !allowed.some(p => key.startsWith(p))) {

@@ -8,20 +8,21 @@ export const dynamic = "force-dynamic"
 // a 500 while the migration catches up.
 async function load() {
   try {
-    const [aiders, kits, info, reports] = await Promise.all([
+    const [aiders, kits, info, reports, plans] = await Promise.all([
       prisma.firstAider.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
       prisma.firstAidKit.findMany({ orderBy: [{ sortOrder: "asc" }, { label: "asc" }] }),
       prisma.firstAidInfo.findUnique({ where: { id: "global" } }),
       prisma.accidentReport.findMany({ orderBy: { createdAt: "desc" }, take: 200 }),
+      prisma.sitePlan.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     ])
-    return { aiders, kits, info, reports }
+    return { aiders, kits, info, reports, plans }
   } catch {
-    return { aiders: [], kits: [], info: null, reports: [] }
+    return { aiders: [], kits: [], info: null, reports: [], plans: [] }
   }
 }
 
 export default async function FirstAidAdminPage() {
-  const { aiders, kits, info, reports } = await load()
+  const { aiders, kits, info, reports, plans } = await load()
   const newCount = reports.filter(r => r.status === "NEW").length
 
   return (
@@ -44,6 +45,7 @@ export default async function FirstAidAdminPage() {
       <FirstAidClient
         aiders={aiders.map(a => ({ ...a, createdAt: a.createdAt.toISOString(), updatedAt: a.updatedAt.toISOString() }))}
         kits={kits.map(k => ({ ...k, createdAt: k.createdAt.toISOString(), updatedAt: k.updatedAt.toISOString() }))}
+        plans={plans.map(p => ({ id: p.id, name: p.name, imageKey: p.imageKey }))}
         info={info ? { emergencySteps: info.emergencySteps, siteAddress: info.siteAddress, assemblyPoint: info.assemblyPoint, extraNotes: info.extraNotes } : null}
         reports={reports.map(r => ({
           id: r.id, reporterName: r.reporterName, reporterPhone: r.reporterPhone, injuredName: r.injuredName,

@@ -78,6 +78,20 @@ POST /api/public/first-aid-report - under the **already-public** /api/public pre
 
 AccidentReport rows are read **only** in the Hub app. Reports can contain **health data about a named person** - recorded in the STORES arrays on **both** /admin/compliance and /admin/dpia, per the standing rule.
 
+## Site Plan — shared, in Facilities (2026-08-12)
+
+Jordan: "I also have this building plan id like the ability to have it in the app so I can mark on it where the equipment is." Asked where it should live, he chose a SHARED Facilities plan, not a First-Aid-only one — so fire extinguishers, stopcocks etc. can mark up the same drawing later without a second copy to keep in step.
+
+/tools/site-plan (app key SITE_PLAN, Facilities section) owns the drawing: upload, rename, reorder, replace, delete. Deleting a plan CLEARS the pins that pointed at it, or kits keep a position on a plan that no longer exists. Pins live on the owning record, not in a shared pin table — FirstAidKit.planId/pinX/pinY — because a shared table would let a deleted kit leave an orphan pin; a future app adds the same three fields to its own model.
+
+WARNING: x/y are PERCENTAGES of the image, never pixels — the plan renders at wildly different widths on a phone, a monitor and a printout. components/site-plan-view.tsx is shared by the Site Plan app, the First Aid pin editor and the PUBLIC page so a pin sits in the same spot in all three, and the click maths measures the img's own rect, not the wrapper (a wrapper can be wider than the picture and the pin would land off-target).
+
+Marking up needs the FIRST_AID permission, not SITE_PLAN — a first aider should not need the plan app to say where a defibrillator is. Uploading the drawing needs SITE_PLAN.
+
+WARNING: the plan is shown on the PUBLIC first aid page — the image and its name are world-readable, so never upload a drawing with anything confidential on it. site-plans/ was added to the public photo proxy's prefix allowlist. Images only; PDFs are refused with the reason given, because pins must sit on a plain image and the server cannot rasterise a PDF.
+
+WARNING: the drawing is fine line work on a mostly-white sheet (1:1250 at A4). Scaled to a phone it is unreadable, which would make the pins pointless — so the viewer keeps a 900px minimum width and SCROLLS, capped at 70vh, with an "Open the plan full size" link for native pinch-zoom. Do not tidy that into a plain fit-to-width image.
+
 ## The accident book (BI 510) — 2026-08-12
 
 Jordan: "the report an incident needs to be based off an official workplace first aid book." The form follows the UK statutory accident book (BI 510) structure.

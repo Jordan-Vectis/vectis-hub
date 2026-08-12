@@ -455,4 +455,17 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     group:              "FACILITIES",
     appKey:             "FIRST_AID",
   },
+  {
+    key:                "SITE_PLAN",
+    href:               "/tools/site-plan",
+    defaultLabel:       "Site Plan",
+    defaultDescription: "The building plan, marked up with where things are. First Aid pins its kits and defibrillators onto it; other equipment can follow.",
+    icon:               "🗺️",
+    border:             "border-sky-500",
+    iconBg:             "text-sky-400",
+    btnBg:              "bg-sky-600 hover:bg-sky-500",
+    glow:               "hover:shadow-sky-900/40",
+    group:              "FACILITIES",
+    appKey:             "SITE_PLAN",
+  },
 ]

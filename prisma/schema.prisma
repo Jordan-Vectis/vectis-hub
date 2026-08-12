@@ -1873,6 +1873,12 @@ model FirstAidKit {
   label     String
   whereText String?
   photoKey  String?
+  // Where this sits on a SitePlan. Held on the kit rather than in a shared pin table so a
+  // deleted kit cannot leave an orphan pin behind; a future app (fire, stopcocks) adds the
+  // same three fields to its own model and marks up the same plan.
+  planId    String?
+  pinX      Float? // 0-100, % across the image — a percentage so it survives any screen size
+  pinY      Float? // 0-100, % down the image
   sortOrder Int      @default(0)
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -1926,4 +1932,17 @@ model AccidentReport {
 
   @@index([createdAt])
   @@index([ipHash, createdAt])
+}
+
+// ─── Facilities → Site Plan ──────────────────────────────────────────────────
+// One uploaded drawing of the site that ANY app can mark up. Shown on the PUBLIC first aid
+// page, so treat the image and the plan name as world-readable.
+model SitePlan {
+  id        String   @id @default(cuid())
+  name      String
+  imageKey  String
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

@@ -2,9 +2,12 @@
 
 import { useState, useTransition } from "react"
 import { saveFirstAider, deleteFirstAider, saveFirstAidKit, deleteFirstAidKit, saveFirstAidInfo, setAccidentReportStatus, saveAccidentReportEmployer } from "@/lib/actions/first-aid"
+import { setFirstAidKitPin } from "@/lib/actions/site-plan"
+import { PIN_ICON, PlanImage } from "@/components/site-plan-view"
 
 type Aider  = { id: string; name: string; roleTitle: string | null; location: string | null; phone: string | null; photoKey: string | null; sortOrder: number; active: boolean }
-type Kit    = { id: string; kind: string; label: string; whereText: string | null; photoKey: string | null; sortOrder: number; active: boolean }
+type Kit    = { id: string; kind: string; label: string; whereText: string | null; photoKey: string | null; sortOrder: number; active: boolean; planId: string | null; pinX: number | null; pinY: number | null }
+type Plan   = { id: string; name: string; imageKey: string }
 type Info   = { emergencySteps: string | null; siteAddress: string | null; assemblyPoint: string | null; extraNotes: string | null } | null
 type Report = {
   id: string; reporterName: string; reporterPhone: string | null; injuredName: string | null
@@ -20,7 +23,7 @@ type Report = {
 const TABS = [["emergency", "Emergency info"], ["aiders", "First aiders"], ["kits", "Kits & equipment"], ["reports", "Accident reports"]] as const
 const KINDS = [["KIT", "🧰 First aid kit"], ["DEFIB", "⚡ Defibrillator"], ["EYEWASH", "💧 Eyewash"], ["OTHER", "📍 Other"]] as const
 
-export default function FirstAidClient({ aiders, kits, info, reports }: { aiders: Aider[]; kits: Kit[]; info: Info; reports: Report[] }) {
+export default function FirstAidClient({ aiders, kits, info, reports, plans }: { aiders: Aider[]; kits: Kit[]; info: Info; reports: Report[]; plans: Plan[] }) {
   const [tab, setTab]   = useState<typeof TABS[number][0]>("emergency")
   const [msg, setMsg]   = useState<{ ok: boolean; text: string } | null>(null)
   const [, start]       = useTransition()
@@ -122,6 +125,7 @@ export default function FirstAidClient({ aiders, kits, info, reports }: { aiders
 
       {tab === "kits" && (
         <div className="space-y-4">
+          <PinEditor plans={plans} kits={kits} card={card} run={run} />
           {kits.map(k => (
             <form key={k.id} action={fd => run(() => saveFirstAidKit(fd), "Location saved.")} className={card + " space-y-3"}>
               <input type="hidden" name="id" value={k.id} />
@@ -282,6 +286,92 @@ function ReportCard({ r, card, input, run }: {
             </div>
           </form>
         </div>
+      )}
+    </div>
+  )
+}
+
+// Marking kits onto the shared site plan. Positions are percentages, so a pin lands in the same
+// place whatever the plan is displayed at — see components/site-plan-view.
+function PinEditor({ plans, kits, card, run }: {
+  plans: Plan[]; kits: Kit[]; card: string
+  run: (fn: () => Promise<{ ok: boolean; error?: string }>, okText: string) => void
+}) {
+  const [planId, setPlanId] = useState(plans[0]?.id ?? "")
+  const [placing, setPlacing] = useState<string | null>(null)
+  const plan = plans.find(p => p.id === planId)
+
+  if (plans.length === 0) {
+    return (
+      <div className={card + " text-sm text-gray-500 dark:text-gray-400"}>
+        No site plan uploaded yet — add one in <a href="/tools/site-plan" className="text-sky-600 hover:underline">Site Plan</a>,
+        then come back to mark where each kit is.
+      </div>
+    )
+  }
+
+  const onPlan = kits.filter(k => k.planId === planId && k.pinX !== null && k.pinY !== null)
+  const off    = kits.filter(k => k.planId !== planId || k.pinX === null)
+
+  return (
+    <div className={card + " space-y-3"}>
+      <div className="flex items-center gap-3 flex-wrap">
+        <p className="text-sm font-bold text-gray-900 dark:text-white">🗺️ Where things are</p>
+        {plans.length > 1 && (
+          <select value={planId} onChange={e => { setPlanId(e.target.value); setPlacing(null) }}
+            className="rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1 text-xs">
+            {plans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        )}
+        {placing
+          ? <span className="text-xs font-semibold text-sky-600">Click the plan to place &quot;{kits.find(k => k.id === placing)?.label}&quot; — or press Escape</span>
+          : <span className="text-xs text-gray-500 dark:text-gray-400">Pick an item below, then click the plan.</span>}
+        {placing && (
+          <button onClick={() => setPlacing(null)} className="text-xs text-gray-500 hover:text-gray-800 dark:hover:text-gray-200">Cancel</button>
+        )}
+      </div>
+
+      {plan && (
+        <PlanImage
+          imageKey={plan.imageKey}
+          alt={plan.name}
+          onPick={placing ? (x, y) => {
+            const id = placing
+            setPlacing(null)
+            run(() => setFirstAidKitPin(id, planId, x, y), "Marked on the plan.")
+          } : undefined}
+        >
+          {onPlan.map(k => (
+            <span key={k.id} style={{ left: `${k.pinX}%`, top: `${k.pinY}%` }} title={k.label}
+              className="absolute -translate-x-1/2 -translate-y-1/2 text-2xl drop-shadow">
+              {PIN_ICON[k.kind] ?? "📍"}
+            </span>
+          ))}
+        </PlanImage>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        {kits.map(k => {
+          const isOn = onPlan.some(o => o.id === k.id)
+          return (
+            <span key={k.id} className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs ${
+              isOn ? "border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20" : "border-gray-300 dark:border-gray-600"
+            }`}>
+              <span>{PIN_ICON[k.kind] ?? "📍"}</span>
+              <span className="text-gray-800 dark:text-gray-200">{k.label}</span>
+              <button onClick={() => setPlacing(k.id)} className="text-sky-600 hover:underline font-semibold">
+                {isOn ? "move" : "place"}
+              </button>
+              {isOn && (
+                <button onClick={() => run(() => setFirstAidKitPin(k.id, null, null, null), "Taken off the plan.")}
+                  className="text-gray-400 hover:text-red-500">✕</button>
+              )}
+            </span>
+          )
+        })}
+      </div>
+      {off.length > 0 && (
+        <p className="text-xs text-gray-500 dark:text-gray-400">{off.length} not on this plan yet.</p>
       )}
     </div>
   )
