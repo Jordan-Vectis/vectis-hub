@@ -12,17 +12,20 @@ export const metadata = { title: "Cataloguer Activity" }
 
 function hourLabel(h: number): string { return h === 12 ? "12pm" : h < 12 ? `${h}am` : `${h - 12}pm` }
 
-export default async function IdleReportPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
+export default async function IdleReportPage({ searchParams }: { searchParams: Promise<{ range?: string; lunch?: string }> }) {
   const session = await getEffectiveSession()
   if (!session) redirect("/login")
   const dbUser = await prisma.user.findUnique({ where: { id: session.user.id }, select: { role: true, allowedApps: true } })
   if (!hasAppAccess(dbUser?.role ?? "", dbUser?.allowedApps ?? [], "REPORTS")) redirect("/hub")
   const isAdmin = dbUser?.role === "ADMIN"
 
-  const { range } = await searchParams
+  const { range, lunch } = await searchParams
   const activeRange = resolveRange(range)
+  // Opt-IN: the report shows everything unless asked otherwise, so a link someone shares
+  // cannot quietly hide a chunk of the day from whoever opens it.
+  const excludeLunch = lunch === "off"
 
-  const data = await computeIdleReport(activeRange, isAdmin)
+  const data = await computeIdleReport(activeRange, isAdmin, excludeLunch)
 
   const labelOf  = (key: string) => data.reasonMeta.get(key)?.label ?? key
   const colourOf = (key: string) => data.reasonMeta.get(key)?.idleColour ?? "#9ca3af"
@@ -74,19 +77,36 @@ export default async function IdleReportPage({ searchParams }: { searchParams: P
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <h1 className="text-xl font-bold text-gray-900 dark:text-white">Cataloguer Activity Report</h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">How much time the team spends away from cataloguing, and what they&apos;re doing. Only counts Monday–Friday, 9am–5pm.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                How much time the team spends away from cataloguing, and what they&apos;re doing. Only counts Monday–Friday, 9am–5pm.
+                {excludeLunch && <span className="text-[#1a8a80] font-semibold"> Lunch breaks are excluded from every figure below.</span>}
+              </p>
             </div>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1 bg-gray-100 dark:bg-[#141416] border border-gray-200 dark:border-gray-800 rounded-lg p-1">
                 {RANGES.map(r => (
-                  <Link key={r.key} href={`/tools/reports/activity?range=${r.key}`}
+                  <Link key={r.key} href={`/tools/reports/activity?range=${r.key}${excludeLunch ? "&lunch=off" : ""}`}
                     className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap ${activeRange === r.key ? "bg-[#2AB4A6] text-white" : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"}`}>
                     {r.label}
                   </Link>
                 ))}
               </div>
+              {/* A link, not a real checkbox — this page is server-rendered from the URL, so the
+                  state lives there and the view can be shared or bookmarked as seen. */}
+              <Link href={`/tools/reports/activity?range=${activeRange}${excludeLunch ? "" : "&lunch=off"}`}
+                className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border transition-colors whitespace-nowrap ${
+                  excludeLunch
+                    ? "bg-[#2AB4A6]/10 border-[#2AB4A6] text-[#1a8a80]"
+                    : "bg-gray-100 dark:bg-[#141416] border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                }`}
+                title="Lunch is normally the biggest slice of time away — hide it to see where the rest of the time goes">
+                <span aria-hidden className={`inline-flex items-center justify-center w-4 h-4 rounded border ${
+                  excludeLunch ? "bg-[#2AB4A6] border-[#2AB4A6] text-white" : "border-gray-400 dark:border-gray-600"
+                }`}>{excludeLunch ? "✓" : ""}</span>
+                Exclude lunch breaks
+              </Link>
               {hasData && (
-                <a href={`/api/reports/idle/pdf?range=${activeRange}`}
+                <a href={`/api/reports/idle/pdf?range=${activeRange}${excludeLunch ? "&lunch=off" : ""}`}
                   className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-red-600 hover:bg-red-500 text-white transition-colors whitespace-nowrap"
                   title="Download this report as a PDF">
                   <span aria-hidden>⬇</span> Export PDF

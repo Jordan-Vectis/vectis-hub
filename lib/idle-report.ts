@@ -90,12 +90,21 @@ export type IdleReportData = {
 
 // Computes every figure the report shows. `includeTamper` gates the admin-only
 // clock-tamper list (non-admins never receive those rows).
-export async function computeIdleReport(activeRange: RangeKey, includeTamper: boolean): Promise<IdleReportData> {
+// excludeLunch drops LUNCH_BREAK rows from THIS REPORT only. Lunch is legitimately the
+// biggest slice of "time away" and swamps everything else, so the question "where does the
+// rest of the time go?" is hard to answer with it in. It is filtered in the QUERY, so it
+// affects every figure consistently — totals, per-person, the chart and the reason table.
+// ⚠ It does NOT touch the save-gate or the Unaccounted Time report: lunch still accounts for
+// a gap exactly as before. This is a lens on the report, never a change to what was logged.
+export async function computeIdleReport(activeRange: RangeKey, includeTamper: boolean, excludeLunch = false): Promise<IdleReportData> {
   const since = rangeStart(activeRange)
 
   const [idleLogs, rawSaves, users, cfg, decisionRows] = await Promise.all([
     prisma.idleLog.findMany({
-      where: since ? { idleStartedAt: { gte: since } } : {},
+      where: {
+        ...(since ? { idleStartedAt: { gte: since } } : {}),
+        ...(excludeLunch ? { reason: { not: "LUNCH_BREAK" } } : {}),
+      },
       select: { userId: true, userName: true, idleStartedAt: true, idleDurationMs: true, reason: true },
       orderBy: { idleStartedAt: "desc" },
     }),

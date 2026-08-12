@@ -16,6 +16,27 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "activity_report_lunch_toggle.md",
+    content: `---
+name: Cataloguer Activity Report - exclude lunch breaks
+purpose: The lunch toggle on /tools/reports/activity, and why it is a lens on the report and never a change to what was logged.
+last_updated: 2026-08-12
+---
+
+# "Exclude lunch breaks" toggle
+
+Jordan: "On this report can we have lunch breaks excluded as a tick box." Lunch was 23% of time away and swamped everything else, so "where does the rest of the time go?" was hard to answer.
+
+ONE place does the work: computeIdleReport(range, includeTamper, excludeLunch) filters reason != "LUNCH_BREAK" IN THE QUERY, so every figure moves together - totals, away-share-of-day, per-person, the chart and the reason table. No figure can disagree with another.
+
+State lives in the URL (?lunch=off), not React state: the page is server-rendered, so a URL means the view can be shared or bookmarked exactly as seen. The range links carry the lunch choice and vice versa, so switching one does not silently reset the other. It is OPT-IN - the report shows everything unless asked, because a shared link must not quietly hide a chunk of someone's day from whoever opens it.
+
+WARNING: the exclusion is STATED on screen and PRINTED ON THE PDF, appended to the period label ("30 days (excluding lunch breaks)"). A report with lunch quietly removed could be read as the full picture in a conversation about somebody's working day, so the scope has to travel with the file. Do not remove that label.
+
+WARNING: this is a LENS ON THE REPORT ONLY. It does not touch the save-gate, evaluateIdleGate, or the Unaccounted Time report - lunch still accounts for a gap exactly as before. It changes what is shown, never what was logged or whether a gap counts as explained.
+`,
+  },
+  {
     filename: "change_vendor_tote_fix.md",
     content: `---
 name: Change Vendor sets tote, receipt AND vendor
