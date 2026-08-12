@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import type { IdleReason } from "@/lib/idle-timer-config"
+import { splitStepMs } from "@/lib/idle-timer-config"
 import { IdleReasonPicker, IdleMessageBanner } from "@/components/idle-reason-picker"
 
 // Admin → Cataloguer Activity Timer: a faithful, read-only PREVIEW of the
@@ -55,17 +56,17 @@ export default function IdlePromptPreview({ reasons, message }: { reasons: IdleR
   // Whole-minute total so the header, per-reason labels and the split sliders all
   // agree — the real popup rounds the gap UP to whole minutes, so mirror that here
   // (otherwise a 2m-of-"3m" slice would sit at the wrong fraction of the bar).
-  const totalMs = Math.ceil(gapSecs / 60) * 60 * 1000
+  const totalMs = gapSecs * 1000   // raw, exactly as the real popup does it
   const segMs = new Map<string, number>(selected.map(k => [k, selected.length <= 1 ? totalMs : (alloc[k] ?? 0)]))
   const multi = selected.length > 1
-  const sliderStep = 60_000   // whole minutes — the popup shows no seconds
+  const sliderStep = splitStepMs(totalMs, selected.length)
   const unallocMs  = multi ? Math.max(0, totalMs - selected.reduce((s, k) => s + (alloc[k] ?? 0), 0)) : 0
 
   // A slider was dragged: snap to whole minutes, hard-stop at what's still
   // unallocated (the final drag may take the exact sub-minute remainder).
   function setSplit(key: string, rawMs: number) {
     const others = selected.reduce((s, k) => (k === key ? s : s + (alloc[k] ?? 0)), 0)
-    const v = Math.max(0, Math.min(Math.round(rawMs / 60_000) * 60_000, totalMs - others))
+    const v = Math.max(0, Math.min(Math.round(rawMs / sliderStep) * sliderStep, totalMs - others))
     setAlloc(a => ({ ...a, [key]: v }))
   }
 

@@ -37,6 +37,26 @@ export function workingMsBetween(startMs: number, endMs: number): number {
   return total
 }
 
+/**
+ * Step size for the activity popup's time-split sliders.
+ *
+ * ⚠ Whole minutes are the intended granularity, but they create a DEAD END: the popup refuses
+ * to submit until every selected reason has some time, and four reasons cannot each take a whole
+ * minute out of a three-minute gap. The fourth slider can only ever be 0, so Save stays disabled
+ * for ever and its not-allowed cursor shows as a red circle. Reported live 2026-08-11.
+ *
+ * So: whole minutes whenever they actually fit, otherwise the largest whole-second step that
+ * still lets every selected reason take a share.
+ *
+ * ⚠ The slider's `step` and the snapping inside setIdleSplit MUST both come from here — if they
+ * disagree the thumb snaps to a value the slider cannot represent and it looks frozen again.
+ */
+export function splitStepMs(totalMs: number, count: number): number {
+  if (count <= 1) return 60_000
+  if (totalMs >= count * 60_000) return 60_000
+  return Math.max(1_000, Math.floor(totalMs / count / 1_000) * 1_000)
+}
+
 export interface IdleReason {
   key:           string   // e.g. "LUNCH_BREAK"
   label:         string   // e.g. "Lunch Break"

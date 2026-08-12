@@ -718,6 +718,14 @@ Verified with a temp tsx suite (10 cases incl. token-reasons+huge-unallocated = 
 
 The **chrome** (heading, split sliders, notes) is still duplicated — the real popup is tightly coupled to the wizard's idle refs and save flow, so it was safer to replicate than to refactor the critical cataloguing path. **The reason BUTTONS are no longer duplicated** (2026-08-10): they and the message banner come from **components/idle-reason-picker.tsx**, which both render — don't inline them back.
 
+## 🐛 2026-08-11 — "the sliders aren't working and there's a red circle"
+
+Reported live by a cataloguer on production. **Not a touch/UI fault — the popup was mathematically unsubmittable.** The sliders stepped in whole minutes (step = 60_000) while allocMissing blocks Save until **every** selected reason has at least 1s. Four reasons against a three-minute gap = no fourth whole minute to give, so that slider could only ever be 0, Save stayed disabled, and its disabled:cursor-not-allowed is the **red circle** the user described. Any gap shorter than (reasons x 1 minute) hit it; a sub-minute gap broke with just two reasons, because step > max leaves a range input with only one reachable value.
+
+Fix: **splitStepMs(totalMs, count) in lib/idle-timer-config.ts** - whole minutes when they fit, otherwise the largest whole-second step that still lets everyone take a share (floor(total/count), floor of 1s). WARNING: **the slider's step and the snap inside setIdleSplit MUST both come from it** - they were independent before, and if they disagree the thumb snaps to a value the slider cannot represent and looks frozen all over again.
+
+WARNING: also fixed a **preview/real divergence that hid this**: the preview used Math.ceil(gapSecs/60)*60*1000 (rounded UP to a whole minute) while the real popup used the raw idleSecs * 1000. The admin preview therefore always had tidy whole minutes and could never reproduce it. The preview now uses the raw value like the popup. Do not let those drift again.
+
 ## ⚠⚠ 2026-08-10 — grouped, colour-coded, with an optional message
 
 Jordan: "the UI for this activity timer needs some improving… we also need better symbols for each option… I'd also like an optional message on the top". Shown three layouts, he picked **grouped and colour-coded**.

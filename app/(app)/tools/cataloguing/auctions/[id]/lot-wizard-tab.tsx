@@ -4,7 +4,7 @@ import { useState, useTransition, useRef, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { createLot, getLastLotFields, saveLastLotFields, checkBarcodeAssigned, getMyLotsToday } from "@/lib/actions/catalogue"
 import { loadSpellDict, findMisspellings } from "@/lib/spellcheck"
-import { DEFAULT_REASONS, workingMsBetween } from "@/lib/idle-timer-config"
+import { DEFAULT_REASONS, workingMsBetween, splitStepMs } from "@/lib/idle-timer-config"
 import type { IdleReason } from "@/lib/idle-timer-config"
 import { IdleReasonPicker, IdleMessageBanner } from "@/components/idle-reason-picker"
 import { DEFAULT_CATEGORY_MAP } from "@/lib/lot-categories"
@@ -792,7 +792,10 @@ export default function LotWizardTab({
   function setIdleSplit(key: string, rawMs: number) {
     const totalMs = idleSecs * 1000
     const others  = idleSelected.reduce((s, k) => (k === key ? s : s + (idleAlloc[k] ?? 0)), 0)
-    const v = Math.max(0, Math.min(Math.round(rawMs / 60_000) * 60_000, totalMs - others))
+    // Same step the slider itself uses — see splitStepMs. Snapping to whole minutes here while
+    // the slider stepped in seconds (or the reverse) would freeze the thumb.
+    const step = splitStepMs(totalMs, idleSelected.length)
+    const v = Math.max(0, Math.min(Math.round(rawMs / step) * step, totalMs - others))
     setIdleAlloc(a => ({ ...a, [key]: v }))
   }
 
@@ -1339,7 +1342,8 @@ export default function LotWizardTab({
         const segMs  = new Map(segs.map(s => [s.reason, s.durationMs]))
         const multi  = idleSelected.length > 1
         const totalGapMs = idleSecs * 1000
-        const sliderStep = 60_000   // whole minutes — the popup shows no seconds
+        // Whole minutes when they fit, finer when they can't go round — see splitStepMs.
+        const sliderStep = splitStepMs(totalGapMs, idleSelected.length)
         const unallocMs  = multi ? (segMs.get("UNALLOCATED") ?? 0) : 0
         // Every selected reason needs SOME time on its slider before submitting.
         const allocMissing = multi && idleSelected.some(k => (idleAlloc[k] ?? 0) < 1000)
