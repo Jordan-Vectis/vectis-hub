@@ -16,6 +16,27 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "change_vendor_tote_fix.md",
+    content: `---
+name: Change Vendor sets tote, receipt AND vendor
+purpose: Why Change Vendor said "complete" without changing anything, and the two faults behind it. Read before touching the Manage Lots Change Vendor panel.
+last_updated: 2026-08-12
+---
+
+# Change Vendor — tote included, and 0 updated is no longer "success"
+
+Jordan, on production 2026-08-12: "The change vendor button in here isnt working its saying complete but not changing them it needs to change tote receipt and vendor number."
+
+Two faults, one symptom:
+
+1. **Manage Lots never passed the tote.** setLotsVendorReceipt has taken an optional tote since the End of Day work, but Manage Lots deliberately did not send it ("so its behaviour is unchanged"). Typing a TOTE therefore moved the receipt and vendor and left the lot on its old tote. It now sends the tote whenever the lookup was a tote (vendorHit.kind === "tote"). WARNING: do not restore the old scoping — Jordan asked for all three explicitly.
+
+2. **updated === 0 was reported as success.** "Changed 0 lots" with a tick reads as done. That is exactly what he saw: the ticked lots already had the right receipt and vendor, only the tote was wrong, so nothing differed and nothing was written — while the message said it worked. Zero updated now shows an amber "Nothing changed — already on …".
+
+WARNING: the server action was always correct — it writes only fields that differ, logs through updateLotLogged with source vendor_change, and supports the per-sale Undo. The bug was entirely in the caller. Check the caller before suspecting setLotsVendorReceipt.
+`,
+  },
+  {
     filename: "first_aid_public.md",
     content: `---
 name: Facilities -> First Aid (the ONE public page)

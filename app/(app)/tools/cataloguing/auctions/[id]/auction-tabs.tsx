@@ -1186,15 +1186,26 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
 
   function applyVendorChange() {
     if (!vendorHit?.ok || selected.size === 0) return
-    const who = `${vendorHit.receipt ?? "—"} / ${vendorHit.vendor ?? "—"}${vendorHit.vendorName ? ` (${vendorHit.vendorName})` : ""}`
+    // Include the TOTE when a tote was looked up. It used to be left out, so typing a tote
+    // moved the receipt and vendor but left the lot on its old tote — and if the receipt and
+    // vendor were already right, nothing changed at all while the message still said "✓".
+    const newTote = vendorHit.kind === "tote" ? (vendorHit.tote ?? "") : ""
+    const who = `${newTote ? `tote ${newTote} · ` : ""}${vendorHit.receipt ?? "—"} / ${vendorHit.vendor ?? "—"}${vendorHit.vendorName ? ` (${vendorHit.vendorName})` : ""}`
     if (!confirm(`Put ${scopeWord()} onto ${who}?`)) return
     setFillMsg(null)
     startFill(async () => {
       const res = await setLotsVendorReceipt(auctionId, Array.from(selected), {
         vendor:  vendorHit.vendor  ?? "",
         receipt: vendorHit.receipt ?? "",
+        tote:    newTote,
       })
       if (!res.ok) { setFillMsg(`⚠ ${res.error}`); return }
+      // ⚠ 0 updated is NOT success — it means every ticked lot already held these values.
+      // Saying "✓ Changed 0 lots" read as "done" and hid the fact nothing had happened.
+      if (!res.updated) {
+        setFillMsg(`⚠ Nothing changed — ${scopeWord()} already on ${who}.`)
+        return
+      }
       setFillMsg(`✓ Changed ${res.updated} lot${res.updated === 1 ? "" : "s"} to ${who}`)
       setShowVendorChange(false)
       setVendorHit(null)
