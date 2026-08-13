@@ -1340,6 +1340,41 @@ const MIGRATIONS = [
   `ALTER TABLE "FirstAidKit" ADD COLUMN IF NOT EXISTS "planId" TEXT`,
   `ALTER TABLE "FirstAidKit" ADD COLUMN IF NOT EXISTS "pinX" DOUBLE PRECISION`,
   `ALTER TABLE "FirstAidKit" ADD COLUMN IF NOT EXISTS "pinY" DOUBLE PRECISION`,
+  // Marketing Reports → Business Plan tab: saved plans, their objectives and actions.
+  `CREATE TABLE IF NOT EXISTS "MarketingPlan" (
+    "id" TEXT NOT NULL, "name" TEXT NOT NULL, "periodLabel" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'DRAFT', "rangeKey" TEXT NOT NULL DEFAULT '28d',
+    "ukOnly" BOOLEAN NOT NULL DEFAULT false, "excludeBots" BOOLEAN NOT NULL DEFAULT false,
+    "summary" TEXT, "audience" TEXT, "competitors" TEXT,
+    "snapshot" JSONB, "snapshotAt" TIMESTAMP(3), "createdBy" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "MarketingPlan_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE TABLE IF NOT EXISTS "MarketingPlanObjective" (
+    "id" TEXT NOT NULL, "planId" TEXT NOT NULL, "title" TEXT NOT NULL,
+    "metric" TEXT, "baseline" TEXT, "target" TEXT, "dueBy" TEXT, "notes" TEXT,
+    "source" TEXT NOT NULL DEFAULT 'manual', "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "MarketingPlanObjective_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE TABLE IF NOT EXISTS "MarketingPlanAction" (
+    "id" TEXT NOT NULL, "planId" TEXT NOT NULL, "channel" TEXT NOT NULL DEFAULT 'other',
+    "title" TEXT NOT NULL, "detail" TEXT, "owner" TEXT, "dueBy" TEXT,
+    "effort" TEXT, "impact" TEXT, "status" TEXT NOT NULL DEFAULT 'TODO',
+    "source" TEXT NOT NULL DEFAULT 'manual', "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "MarketingPlanAction_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "MarketingPlanObjective_planId_idx" ON "MarketingPlanObjective"("planId")`,
+  `CREATE INDEX IF NOT EXISTS "MarketingPlanAction_planId_idx" ON "MarketingPlanAction"("planId")`,
+  `DO $$ BEGIN
+    ALTER TABLE "MarketingPlanObjective" ADD CONSTRAINT "MarketingPlanObjective_planId_fkey"
+      FOREIGN KEY ("planId") REFERENCES "MarketingPlan"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  `DO $$ BEGIN
+    ALTER TABLE "MarketingPlanAction" ADD CONSTRAINT "MarketingPlanAction_planId_fkey"
+      FOREIGN KEY ("planId") REFERENCES "MarketingPlan"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

@@ -39,6 +39,8 @@ export const AI_TOOLS: AiTool[] = [
   { slot: "marketing_article_text", group: "BC Marketing", label: "Paste & Generate",                     default: "gemini-2.5-flash-preview-04-17" },
   { slot: "marketing_web",          group: "BC Marketing", label: "Web descriptions",                     default: "gemini-2.5-flash-preview-04-17" },
   { slot: "marketing_social",       group: "BC Marketing", label: "Social posts",                         default: "gemini-2.5-flash-preview-04-17" },
+  // ── Marketing Reports ──
+  { slot: "marketing_plan",         group: "Marketing Reports", label: "Business plan suggestions",       default: "gemini-3-flash-preview", claudeOk: true },
   // ── IT ──
   { slot: "it_help",                group: "IT",           label: "IT Help assistant",                    default: "gemini-3-flash-preview", claudeOk: true },
   { slot: "it_draft_reply",         group: "IT",           label: "Draft reply (IT Tools)",               default: "gemini-3-flash-preview", claudeOk: true },

@@ -16,6 +16,40 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "marketing_plan.md",
+    content: `---
+name: Marketing Reports -> Business Plan tab
+purpose: The saved marketing business plans, their frozen analytics snapshot, the AI suggestions and the PDF. Read before touching anything under /tools/marketing-reports/plan.
+last_updated: 2026-08-13
+---
+
+# Marketing Reports -> Business Plan (built 2026-08-13)
+
+Jordan's ask: "another tab that lets me create a marketing business plan using data from our analytics for auto suggestions and letting me add them in manually so I can then create a pdf report". He chose saved plans in the database, AI suggestions read from the analytics figures, and all four sections (Where we are now / Objectives & KPIs / Channel plan / Audience & competitors).
+
+/tools/marketing-reports gained a TAB BAR (tabs.tsx, a server component - each page passes which tab it is, so there is no client-side pathname read). Analytics is the old page, unchanged. Business Plan is a new sub-route at /tools/marketing-reports/plan.
+
+WARNING: THE SNAPSHOT IS FROZEN, AND THAT IS THE WHOLE POINT. MarketingPlan.snapshot (JSONB) holds the Google Analytics figures the plan was written against, stamped with snapshotAt. It is written ONLY when the plan is created and when the user presses the Refresh figures button. Nothing else reads live GA - not the page, not the AI route, not the PDF. A plan that re-read GA every time it was opened would restate today's traffic underneath yesterday's targets, and a target like "sessions 12,430 -> 15,000" would stop meaning anything. Do not "helpfully" make any of those three paths read live analytics.
+
+A plan still works with NO snapshot: creation catches a GA failure and leaves it empty, the page says so and offers Refresh figures, and the PDF prints "No analytics figures were attached to this plan" rather than a blank section.
+
+WARNING: TWO LIBS, DELIBERATELY SPLIT.
+- lib/marketing-plan.ts is PURE - channels, statuses, formatters, asSnapshot, snapshotToText, STAT_DEFS. It is IMPORTED BY THE CLIENT EDITOR, so it may only ever "import type" from lib/ga. A value import would drag the @google-analytics/data client into the browser bundle.
+- lib/marketing-plan-snapshot.ts holds the ONLY GA read (buildPlanSnapshot) and is server-only. Never import it from a "use client" file.
+Same reasoning keeps lib/marketing-plan-pdf.ts (pdf-lib + sharp) out of the page.
+
+The pieces:
+- Tables MarketingPlan / MarketingPlanObjective / MarketingPlanAction, objectives and actions cascade-deleted with the plan. NEEDS Run Migrations.
+- Server actions in lib/actions/marketing-plans.ts. Every one RETURNS { ok, error } and never throws - a thrown server action is redacted to "An error occurred..." in a production build.
+- AI: POST /api/marketing/plan-suggest, using the marketing_plan slot in AI_TOOLS (claudeOk, so it can be pointed at Claude from Admin -> AI Models). The long system prompt is the stable half and goes in "system", which generateAiText already cache-marks for Claude. Never move the figures up there - they change per plan and would invalidate the cache on every call.
+- PDF: GET /api/marketing/plan-pdf?id= building lib/marketing-plan-pdf.ts. A4 PORTRAIT, unlike the landscape cataloguing reports, because a plan reads as a document. Its table() takes a measure() callback per row: wrapped detail lines have variable height and a fixed row height would overprint the row beneath.
+
+What the AI prompt enforces: every suggestion grounded in a supplied figure and quoting it; no invented Vectis facts, budgets, tools or platforms; British English; no use of the word CRM; no internal auction codes (a letter followed by digits); vectis.co.uk as the only URL.
+
+Suggestions are DRAFTS. Nothing is written until the user ticks it and presses Add, each added row is stamped source "ai" and badged AI on screen and in the PDF, and suggested free text is APPENDED to the summary/audience rather than replacing it - accepting a suggestion must never wipe something a person typed.
+`,
+  },
+  {
     filename: "activity_report_lunch_toggle.md",
     content: `---
 name: Cataloguer Activity Report - exclude lunch breaks

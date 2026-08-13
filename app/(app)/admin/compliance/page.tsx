@@ -21,7 +21,7 @@ const PROCESSORS: { name: string; what: string; data: string }[] = [
   { name: "Microsoft — Business Central", what: "Syncs warehouse, auction and receipt data (BC Warehouse / Reports / Marketing).", data: "Item, location and sale data. Governed by your existing Microsoft agreement." },
   { name: "Royal Mail — Click & Drop", what: "Dispatch and packing labels.", data: "Customer names and delivery addresses for parcels." },
   { name: "D-ID", what: "The AI Presenter avatar.", data: "Whatever script/likeness is sent to generate the avatar — take extra care if a real person's likeness is used." },
-  { name: "Google Analytics 4", what: "Website visitor analytics (for the customer site when it goes live).", data: "Visitor/usage data. Brings cookie-consent duties once the public site launches." },
+  { name: "Google Analytics 4", what: "Website visitor analytics (for the customer site when it goes live), and the figures behind Marketing Reports → Business Plan.", data: "Visitor/usage data. Brings cookie-consent duties once the public site launches. A marketing plan stores a copy of the aggregated figures (totals and top-10 tables — no individual visitors), and sends that copy to the chosen AI provider when suggestions are asked for." },
   { name: "ntfy.sh", what: "Push notifications for the live Auction Monitor alerts.", data: "Alert text only — keep customer personal data out of alert bodies." },
 ]
 

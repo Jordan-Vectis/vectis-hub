@@ -1530,6 +1530,70 @@ model MarketingFavourite {
   createdAt DateTime @default(now())
 }
 
+// ─── Marketing Business Plan (Marketing Reports → Business Plan tab) ──────────
+// A named, saved plan for a period (e.g. "Q4 2026"). The analytics figures it
+// was written against are frozen into `snapshot` when the plan is created or
+// refreshed, so the PDF always shows the numbers the plan was actually based on
+// rather than whatever GA says on the day it is printed.
+model MarketingPlan {
+  id          String   @id @default(cuid())
+  name        String
+  periodLabel String? // free text, e.g. "Q4 2026" or "Oct–Dec"
+  status      String   @default("DRAFT") // DRAFT | ACTIVE | ARCHIVED
+  rangeKey    String   @default("28d") // GaRange the snapshot was taken over
+  ukOnly      Boolean  @default(false)
+  excludeBots Boolean  @default(false)
+  summary     String? // exec summary / where we are now, in words
+  audience    String? // who we're targeting
+  competitors String? // competitor notes
+  snapshot    Json? // PlanSnapshot — the GA figures frozen at snapshotAt
+  snapshotAt  DateTime?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  objectives MarketingPlanObjective[]
+  actions    MarketingPlanAction[]
+}
+
+// One goal for the period, with the analytics figure it is measured on.
+model MarketingPlanObjective {
+  id        String        @id @default(cuid())
+  planId    String
+  plan      MarketingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  title     String
+  metric    String? // label of the figure it's measured on, e.g. "Sessions"
+  baseline  String? // where we are now
+  target    String? // where we want to be
+  dueBy     String?
+  notes     String?
+  source    String        @default("manual") // manual | ai
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+
+  @@index([planId])
+}
+
+// One thing we're going to do, filed under a channel.
+model MarketingPlanAction {
+  id        String        @id @default(cuid())
+  planId    String
+  plan      MarketingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  channel   String        @default("other") // see PLAN_CHANNELS in lib/marketing-plan.ts
+  title     String
+  detail    String?
+  owner     String?
+  dueBy     String?
+  effort    String? // Low | Medium | High
+  impact    String? // Low | Medium | High
+  status    String        @default("TODO") // TODO | DOING | DONE
+  source    String        @default("manual") // manual | ai
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+
+  @@index([planId])
+}
+
 // ─── Accounts (monthly bookkeeping from scanned invoices/receipts) ───────────
 // A month is a workspace (e.g. "April 26"); each scanned/manual document becomes
 // one categorised line that exports to the April-26-style spreadsheet.

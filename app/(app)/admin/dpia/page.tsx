@@ -44,7 +44,7 @@ const PROCESSORS: { name: string; what: string; data: string; transfer: string }
   { name: "Microsoft — Business Central", what: "Syncs warehouse, auction and receipt data.", data: "Item, location, receipt and sale data — includes consignor names/addresses.", transfer: "Governed by your existing Microsoft agreement." },
   { name: "Royal Mail — Click & Drop", what: "Dispatch and packing labels.", data: "Customer names and delivery addresses for parcels.", transfer: "UK-based; covered by Royal Mail's terms." },
   { name: "D-ID", what: "The AI Presenter avatar.", data: "Whatever script/likeness is sent to generate the avatar.", transfer: "Take extra care if a real person's likeness is used — likely needs its own basis/consent." },
-  { name: "Google Analytics 4", what: "Website visitor analytics (for the customer site).", data: "Visitor/usage data.", transfer: "US processor — brings cookie-consent and transfer duties once the public site launches." },
+  { name: "Google Analytics 4", what: "Website visitor analytics (for the customer site), and the figures behind Marketing Reports → Business Plan.", data: "Visitor/usage data. A saved marketing plan keeps a copy of the aggregated figures only — totals and top-10 tables, no individual visitors.", transfer: "US processor — brings cookie-consent and transfer duties once the public site launches." },
   { name: "ntfy.sh", what: "Push notifications for live Auction Monitor alerts.", data: "Alert text only.", transfer: "Keep customer personal data out of alert bodies." },
 ]
 

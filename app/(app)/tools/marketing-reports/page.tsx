@@ -7,6 +7,7 @@ import { isGaConfigured, getMarketingReport, realtimeActiveUsers, rangeDays, SEC
 import MarketingCharts from "./marketing-charts"
 import InfoTip from "./info-tip"
 import LayoutBar from "./layout-bar"
+import MarketingTabs from "./tabs"
 
 const BOT_TIP = "When on, hides traffic from countries that are mostly automated bots/scrapers (currently China, Hong Kong, Taiwan, Singapore, India, Vietnam, Indonesia, Philippines, Thailand, Pakistan and Bangladesh) so the figures better reflect real visitors. Japan and Korea are deliberately kept in (likely genuine collectors). Ask IT to adjust the list if needed."
 const UK_TIP = "When on, shows only visitors based in the United Kingdom — every figure and report on the page is restricted to UK traffic. This is stricter than 'Hide bot traffic' (it already excludes everywhere else), so you don't need both on at once."
@@ -105,6 +106,8 @@ export default async function MarketingReportsPage({
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      <MarketingTabs active="analytics" />
+
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
         <div>
