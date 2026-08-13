@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { uploadLotPhoto, uploadLotLabelPhoto } from "@/lib/actions/catalogue"
+import { describeActionError } from "@/lib/action-error"
 
 interface Props {
   auctionId: string
@@ -357,6 +358,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const [uploadResults, setUploadResults]   = useState<UploadResult[]>([])   // final per-lot outcome
   const [error, setError]          = useState<string | null>(null)
   const [skipped, setSkipped]      = useState<string[]>([])
+  const [staleDeployHit, setStaleDeployHit] = useState(false)
   const [okLotCount, setOkLotCount] = useState(0)              // lots that actually received ≥1 photo
   const [alreadyCount, setAlreadyCount] = useState(0)          // photos skipped as already on the lot
 
@@ -430,6 +432,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     setTroubleSince(null)
     troubleRef.current = null
     setSkipped([])
+    setStaleDeployHit(false)
     setOkLotCount(0)
     setUploadLog([])
     setUploadResults([])
@@ -891,6 +894,10 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     const okLotIds = new Set<string>()
     let done = 0
     let alreadyTotal = 0
+    // Set when a failure turns out to be the app having been redeployed under
+    // the upload. Worth calling out on its own: re-running the same folder fixes
+    // it completely, and nothing is duplicated because saved photos are skipped.
+    let staleDeploy = false
 
     // A mutable copy so a successful upload immediately counts as "already there" — that
     // also catches the same filename appearing twice within one folder (e.g. two subfolders).
@@ -918,9 +925,16 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
           if (res.ok) { ok++; okLotIds.add(group.lotId!); have.add(fileName); seen.set(group.lotId!, have) }
           else { errs.push(`${photo.name} — ${res.error}`); failedList.push(`${group.label}/${photo.name} — ${res.error}`) }
         } catch (e: any) {
-          const msg = e?.message ?? "unknown error"
-          errs.push(`${photo.name} — ${msg}`)
-          failedList.push(`${group.label}/${photo.name} — ${msg}`)
+          // A THROW here is not the action's own error — uploadLotPhoto catches
+          // its own and returns { ok: false, error }. This is the framework
+          // level: a stale deploy, a dropped connection, or an error Next has
+          // redacted. describeActionError says which, and carries the digest so
+          // the failure can be matched to the server log instead of showing the
+          // "omitted in production builds" boilerplate.
+          const info = describeActionError(e)
+          if (info.staleDeploy) staleDeploy = true
+          errs.push(`${photo.name} — ${info.message}`)
+          failedList.push(`${group.label}/${photo.name} — ${info.message}`)
         }
         done++
         setUploadProgress({ done, total })
@@ -944,6 +958,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
 
     setUploadingLabel(null)
     setSkipped(failedList)
+    setStaleDeployHit(staleDeploy)
     setUploadResults(perLot)
     setOkLotCount(okLotIds.size)
     setAlreadyCount(alreadyTotal)
@@ -1695,12 +1710,21 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
 
           {skipped.length > 0 && (
             <div className="rounded-lg px-3 py-2 border bg-red-100 border-red-300 dark:bg-red-900/20 dark:border-red-700/50">
-              <p className="text-xs text-red-800 dark:text-red-300 font-medium mb-1">Why photos failed:</p>
+              <p className="text-xs text-red-800 dark:text-red-300 font-medium mb-1">
+                Why {skipped.length === 1 ? "a photo" : `${skipped.length} photos`} failed:
+              </p>
               <ul className="space-y-0.5 max-h-40 overflow-y-auto">
                 {skipped.map((s, i) => (
                   <li key={i} className="text-xs text-red-700 dark:text-red-400 font-mono">{s}</li>
                 ))}
               </ul>
+              {/* Nothing here is lost work — say what to do about it, since the
+                  reason on its own is rarely actionable for a cataloguer. */}
+              <p className="text-xs text-red-800 dark:text-red-300 mt-2">
+                {staleDeployHit
+                  ? "Reload this page, then upload the same folder again — everything already saved is skipped, so only the missing photos go up."
+                  : "Upload the same folder again — everything already saved is skipped, so only the missing photos go up. If it fails a second time, send this list to IT."}
+              </p>
             </div>
           )}
 

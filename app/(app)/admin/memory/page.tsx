@@ -2701,10 +2701,16 @@ Admin-only cards vs grantable apps (2026-07-15): a card in APP_CARD_DEFS with NO
     filename: "reference_smart_scan_photo_upload.md",
     content: `---
 name: Smart Scan Photo Upload
-description: How the cataloguing Upload Photos smart scan works — sequential barcode grouping, its failure modes, and the 2026-07-15 rework
+description: How the cataloguing Upload Photos smart scan works — sequential barcode grouping, its failure modes, the 2026-07-15 rework, and how a failed photo's reason is reported
 metadata:
   type: reference
 ---
+
+FAILED-PHOTO REASON WHEN THE ACTION THROWS (2026-08-13). uploadLotPhoto catches its own errors and RETURNS { ok:false, error }, so anything that reaches the client's catch is FRAMEWORK level — a stale deploy, a dropped connection, or an error Next has redacted. Jordan hit this on an 860-photo upload: one photo failed and the reason shown was the four-line "An error occurred in the Server Components render... omitted in production builds..." boilerplate, which tells nobody anything.
+
+lib/action-error.ts -> describeActionError(e) now translates it into { message, digest?, staleDeploy }. A redacted error reads "the server hit an error it won't spell out on a live build. Reference <digest> — IT can look that up in the logs" (the digest is what matches it to the Railway log line, the same reference app/error.tsx shows). A stale-deploy miss says so and sets staleDeploy, which switches the panel's advice to "reload first". The failure box also now tells the cataloguer WHAT TO DO — upload the same folder again, since photos already saved are skipped — instead of only listing reasons.
+
+WARNING: isSkewError is a TYPE PREDICATE. Do not alias its result: doing so narrows error to never in the later branches and .digest silently disappears (the same trap recorded in the deploy-skew entry). Reuse describeActionError for any other client catch around a server action rather than printing e.message raw.
 
 The Upload Photos tab (photo-upload-tab.tsx) has two modes: Match by filename (barcode parsed from filename, _N suffix stripped) and Smart scan folder. Read this before touching either.
 
