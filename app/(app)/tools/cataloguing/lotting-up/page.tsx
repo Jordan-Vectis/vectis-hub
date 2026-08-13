@@ -142,6 +142,53 @@ function PhotoWithOverlay({ url, index, total, boxes, dim }: {
   )
 }
 
+// ── Target band slider ────────────────────────────────────────────────────────
+//
+// Two plain sliders rather than an overlaid dual-range: overlapping range inputs
+// are fiddly on a tablet, and these are used standing at a bench.
+
+const BAND_MIN  = 10
+const BAND_MAX  = 500
+const BAND_STEP = 5
+
+function BandSlider({ low, high, onChange }: {
+  low: number; high: number; onChange: (low: number, high: number) => void
+}) {
+  return (
+    <div className="flex items-center gap-5 flex-wrap">
+      <div className="min-w-[13rem] flex-1">
+        <label className="flex items-baseline justify-between text-xs text-gray-500 uppercase tracking-wider mb-1">
+          <span>Lot worth at least</span>
+          <span className="text-[#2AB4A6] text-base font-bold tabular-nums normal-case">£{low}</span>
+        </label>
+        <input
+          type="range" min={BAND_MIN} max={BAND_MAX} step={BAND_STEP} value={low}
+          onChange={e => {
+            const v = Number(e.target.value)
+            onChange(v, Math.max(v, high))
+          }}
+          className="w-full accent-[#2AB4A6] h-6"
+        />
+      </div>
+
+      <div className="min-w-[13rem] flex-1">
+        <label className="flex items-baseline justify-between text-xs text-gray-500 uppercase tracking-wider mb-1">
+          <span>…and no more than</span>
+          <span className="text-[#2AB4A6] text-base font-bold tabular-nums normal-case">£{high}</span>
+        </label>
+        <input
+          type="range" min={BAND_MIN} max={BAND_MAX} step={BAND_STEP} value={high}
+          onChange={e => {
+            const v = Number(e.target.value)
+            onChange(Math.min(v, low), v)
+          }}
+          className="w-full accent-[#2AB4A6] h-6"
+        />
+      </div>
+    </div>
+  )
+}
+
 // ── Band meter ────────────────────────────────────────────────────────────────
 
 function BandMeter({ low, high, targetLow, targetHigh }: {
@@ -355,6 +402,10 @@ export default function LottingUpPage() {
   const [targetLow,  setTargetLow]  = useState(DEFAULT_LOW)
   const [targetHigh, setTargetHigh] = useState(DEFAULT_HIGH)
   const [margin,     setMargin]     = useState(DEFAULT_MARGIN)
+  // The band the current plan was actually GROUPED for. Sliding the band
+  // re-judges the lots instantly, but only a re-analysis rebuilds them — so the
+  // page has to be honest about which band the grouping came from.
+  const [analysedBand, setAnalysedBand] = useState<{ low: number; high: number } | null>(null)
 
   const [model,        setModel]        = useState(DEFAULT_MODEL)
   const [modelList,    setModelList]    = useState<string[]>([DEFAULT_MODEL])
@@ -475,6 +526,7 @@ export default function LottingUpPage() {
       if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`)
       setResult(j)
       setOriginal(j)
+      setAnalysedBand({ low: targetLow, high: targetHigh })
       setStale(false)
       setAdded({})
       setBarcodes({})
@@ -538,6 +590,9 @@ export default function LottingUpPage() {
   const selHigh = selectedItems.reduce((s, i) => s + i.valueHigh, 0)
 
   const edited = !!result && !!original && JSON.stringify(result.groups) !== JSON.stringify(original.groups)
+
+  const bandMoved = !!result && !!analysedBand &&
+    (analysedBand.low !== targetLow || analysedBand.high !== targetHigh)
 
   const ready   = targetReady(target)
   const pending = groups.filter(g => !added[g.gid])
@@ -702,21 +757,6 @@ export default function LottingUpPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
-          <label className="text-xs text-gray-500">Target lot</label>
-          <div className="flex items-center gap-1 bg-[#2C2C2E] border border-gray-700 rounded-lg px-2 py-1">
-            <span className="text-gray-500 text-xs">£</span>
-            <input type="number" min={1} value={targetLow}
-              onChange={e => setTargetLow(Math.max(1, parseInt(e.target.value) || 0))}
-              className="bg-transparent text-xs text-gray-200 w-10 focus:outline-none tabular-nums" />
-            <span className="text-gray-600 text-xs">–</span>
-            <span className="text-gray-500 text-xs">£</span>
-            <input type="number" min={1} value={targetHigh}
-              onChange={e => setTargetHigh(Math.max(1, parseInt(e.target.value) || 0))}
-              className="bg-transparent text-xs text-gray-200 w-10 focus:outline-none tabular-nums" />
-          </div>
-
-          <span className="text-gray-700">|</span>
-
           <label className="text-xs text-gray-500">Model</label>
           <select value={model} onChange={e => setModel(e.target.value)}
             className="bg-[#2C2C2E] border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-[#2AB4A6]">
@@ -745,6 +785,47 @@ export default function LottingUpPage() {
             </button>
           )}
         </div>
+      </div>
+
+      {/* Target band — slide it and every lot re-bands live */}
+      <div className="bg-[#1C1C1E] border border-[#2AB4A6]/25 rounded-xl px-5 py-4 space-y-3">
+        <BandSlider
+          low={targetLow} high={targetHigh}
+          onChange={(lo, hi) => { setTargetLow(lo); setTargetHigh(hi) }}
+        />
+
+        {result ? (
+          <div className="flex items-center gap-2 flex-wrap border-t border-gray-800 pt-3">
+            {(["in", "single", "over", "under"] as Band[]).filter(b => counts[b] > 0).map(b => (
+              <span key={b} title={BAND_META[b].hint}
+                className={`text-[11px] px-2 py-0.5 rounded-full border ${BAND_META[b].ring}`}>
+                {counts[b]} {BAND_META[b].label.toLowerCase()}
+              </span>
+            ))}
+            {bandMoved ? (
+              <div className="ml-auto flex items-center gap-3">
+                <span className="text-[11px] text-amber-300">
+                  Judged at £{targetLow}–£{targetHigh}, but grouped for £{analysedBand!.low}–£{analysedBand!.high}
+                </span>
+                <button
+                  onClick={analyse}
+                  disabled={analysing}
+                  className="text-xs bg-[#2AB4A6] hover:bg-[#24a090] disabled:opacity-40 text-black font-semibold px-4 py-2.5 rounded-lg transition-colors">
+                  {analysing ? "Regrouping…" : `Regroup at £${targetLow}–£${targetHigh}`}
+                </button>
+              </div>
+            ) : (
+              <span className="ml-auto text-[11px] text-gray-600">
+                Slide the band to re-judge these lots. Regroup to have the AI rebuild them around a new band.
+              </span>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-600 border-t border-gray-800 pt-3">
+            Items are grouped up until a lot is worth this much. Anything already worth more than
+            £{targetHigh} on its own is left as a single lot.
+          </p>
+        )}
       </div>
 
       <SaleTargetBar target={target} onChange={setTarget} />
@@ -853,12 +934,6 @@ export default function LottingUpPage() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap border-t border-gray-800 pt-3">
-            {(["in", "single", "over", "under"] as Band[]).filter(b => counts[b] > 0).map(b => (
-              <span key={b} title={BAND_META[b].hint}
-                className={`text-[11px] px-2 py-0.5 rounded-full border ${BAND_META[b].ring}`}>
-                {counts[b]} {BAND_META[b].label.toLowerCase()}
-              </span>
-            ))}
             {uncertainItems.length > 0 && (
               <span className="text-[11px] px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300">
                 {uncertainItems.length} item{uncertainItems.length === 1 ? "" : "s"} to check
