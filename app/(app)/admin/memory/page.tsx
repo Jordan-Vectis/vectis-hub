@@ -29,6 +29,10 @@ Jordan's ask: "another tab that lets me create a marketing business plan using d
 
 /tools/marketing-reports gained a TAB BAR (tabs.tsx, a server component - each page passes which tab it is, so there is no client-side pathname read). Analytics is the old page, unchanged. Business Plan is a new sub-route at /tools/marketing-reports/plan.
 
+ACCESS: app/(app)/tools/marketing-reports/layout.tsx gates BOTH tabs on the MARKETING_REPORTS app permission (hasAppAccess, otherwise redirect to /hub), the same as every other tool. Added 2026-08-13 - before that the pages checked only for a login, so the permission tickbox did nothing here and any logged-in Hub user could open them. hasAppAccess is a strict allowlist (ADMIN always in, everyone else needs the tick), so anyone not ticked in Users & Permissions is bounced.
+
+PLANS ARE SHARED DOCUMENTS (Jordan's decision, 2026-08-13): anyone with access can create and edit any plan and tick off actions; only the creator or an admin can DELETE a whole plan. Do not tighten editing to the owner.
+
 WARNING: THE SNAPSHOT IS FROZEN, AND THAT IS THE WHOLE POINT. MarketingPlan.snapshot (JSONB) holds the Google Analytics figures the plan was written against, stamped with snapshotAt. It is written ONLY when the plan is created and when the user presses the Refresh figures button. Nothing else reads live GA - not the page, not the AI route, not the PDF. A plan that re-read GA every time it was opened would restate today's traffic underneath yesterday's targets, and a target like "sessions 12,430 -> 15,000" would stop meaning anything. Do not "helpfully" make any of those three paths read live analytics.
 
 A plan still works with NO snapshot: creation catches a GA failure and leaves it empty, the page says so and offers Refresh figures, and the PDF prints "No analytics figures were attached to this plan" rather than a blank section.
