@@ -11,6 +11,7 @@ import { headers } from "next/headers"
 import { evaluateIdleGate, logIdleDecision, clockLooksTampered } from "@/lib/idle-gate"
 import { buildToteMap, checkLot, toteLookupVariants } from "@/lib/tote-check"
 import { ukDayStartUtc } from "@/lib/cataloguing-reports"
+import { getDepartmentAccessForSession, canSeeAuction } from "@/lib/departments"
 
 // First 83 characters of the description — no sentence splitting, full stops do not break title
 function titleFromDescription(desc: string): string {
@@ -2014,6 +2015,160 @@ export async function massCreateLots(
 
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
   return data.length
+}
+
+// ── Lotting Up → real lots ────────────────────────────────────────────────────
+
+export type LottingUpLotInput = {
+  gid:          string          // the plan's group id, echoed back so the page can mark it added
+  barcode:      string
+  title:        string
+  keyPoints:    string
+  estimateLow:  number | null
+  estimateHigh: number | null
+}
+
+export type LottingUpCreateResult = {
+  ok:      boolean
+  error?:  string
+  created: { gid: string; barcode: string }[]
+  skipped: { gid: string; barcode: string; reason: string }[]
+}
+
+/**
+ * Create lots in THIS app from a Lotting Up plan. Nothing is sent to Business
+ * Central — vendor/tote/receipt are copied from the BC-synced WarehouseTote
+ * lookup the page already did, exactly as the lot wizard does.
+ *
+ * Deliberately NOT routed through createLot: that path carries the wizard's idle
+ * gate, photo upload and a CatalogueTimingLog row with method "WIZARD". Lotting
+ * up is not a wizard save, and writing those rows would put phantom saves into
+ * the cataloguing speed stats and the idle-gate baseline. The lot change log
+ * still records every creation, under source "lotting_up".
+ *
+ * ⚠ No unique ID is minted (receiptUniqueId stays NULL) — BC Match writes BC's
+ * own value later, matched by barcode. The barcode is the identifier until then.
+ */
+export async function createLotsFromLottingUp(
+  auctionId: string,
+  details: { vendor: string; tote: string; receipt: string },
+  lots: LottingUpLotInput[],
+): Promise<LottingUpCreateResult> {
+  const empty = { created: [], skipped: [] }
+  try {
+    const session = await requireCataloguer()
+    await requireNotBCLocked(auctionId, session)
+    const createdByName = changedByOf(session)
+
+    const auction = await prisma.catalogueAuction.findUnique({
+      where:  { id: auctionId },
+      select: { code: true, auctionType: true, id: true },
+    })
+    if (!auction) return { ok: false, error: "That sale no longer exists.", ...empty }
+
+    // A sale hidden from this user's departments must not be writable either —
+    // hiding it from a list is not a restriction on its own.
+    const access = await getDepartmentAccessForSession(session.user.id)
+    if (!canSeeAuction(access, auction)) {
+      return { ok: false, error: "You do not have access to that sale.", ...empty }
+    }
+
+    // Barcodes are the identifier here, so normalise them the same way every
+    // other path does (strip non-ASCII, trim, upper) before any comparison.
+    const clean = lots.map(l => ({
+      ...l,
+      barcode: (l.barcode ?? "").replace(/[^\x20-\x7E]/g, "").trim().toUpperCase(),
+    }))
+
+    const skipped: LottingUpCreateResult["skipped"] = []
+    const queue:   typeof clean = []
+    const seen     = new Set<string>()
+
+    for (const l of clean) {
+      if (!l.barcode) {
+        skipped.push({ gid: l.gid, barcode: "", reason: "No barcode entered" })
+      } else if (seen.has(l.barcode)) {
+        skipped.push({ gid: l.gid, barcode: l.barcode, reason: "Same barcode used twice in this batch" })
+      } else {
+        seen.add(l.barcode)
+        queue.push(l)
+      }
+    }
+
+    // Barcode already on a lot ANYWHERE in the app — the same check the wizard
+    // makes before saving. Skip those rather than minting a duplicate.
+    if (queue.length) {
+      const taken = await prisma.catalogueLot.findMany({
+        where:  { barcode: { in: queue.map(l => l.barcode) } },
+        select: { barcode: true, auction: { select: { code: true } } },
+      })
+      const takenMap = new Map(taken.map(t => [(t.barcode ?? "").toUpperCase(), t.auction?.code ?? ""]))
+      for (let i = queue.length - 1; i >= 0; i--) {
+        const code = takenMap.get(queue[i].barcode)
+        if (code !== undefined) {
+          skipped.push({
+            gid:     queue[i].gid,
+            barcode: queue[i].barcode,
+            reason:  code ? `Already assigned to a lot in ${code.toUpperCase()}` : "Already assigned to a lot",
+          })
+          queue.splice(i, 1)
+        }
+      }
+    }
+
+    if (!queue.length) {
+      return { ok: false, error: "Nothing was created — every lot was skipped.", created: [], skipped }
+    }
+
+    const vendor  = details.vendor.trim()             || null
+    const tote    = details.tote.trim().toUpperCase() || null
+    const receipt = details.receipt.trim().toUpperCase() || null
+
+    await prisma.catalogueLot.createMany({
+      data: queue.map(l => ({
+        auctionId,
+        createdByName,
+        barcode:         l.barcode,
+        title:           (l.title ?? "").slice(0, 83),
+        keyPoints:       l.keyPoints ?? "",
+        description:     "",                 // filled later by the AI run from real photos
+        imageUrls:       [] as string[],
+        vendor,
+        tote,
+        receipt,
+        receiptUniqueId: null as string | null,
+        estimateLow:     l.estimateLow,
+        estimateHigh:    l.estimateHigh,
+        aiEstimateLow:   l.estimateLow,
+        aiEstimateHigh:  l.estimateHigh,
+      })),
+    })
+
+    // createMany returns no ids — read them back by barcode so every creation
+    // reaches the lot change log.
+    const created = await prisma.catalogueLot.findMany({
+      where:  { auctionId, barcode: { in: queue.map(l => l.barcode) } },
+      select: LOGGABLE_SELECT,
+    })
+    await logLotsCreated(created as any, auction.code, {
+      changedBy: createdByName,
+      source:    "lotting_up",
+      batchId:   newBatchId(),
+    })
+
+    revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+
+    return {
+      ok:      true,
+      created: queue.map(l => ({ gid: l.gid, barcode: l.barcode })),
+      skipped,
+    }
+  } catch (e: any) {
+    // Returned, never thrown — a thrown server action is redacted in production,
+    // and the BC lock message is exactly what the user needs to read.
+    console.error("createLotsFromLottingUp error:", e)
+    return { ok: false, error: e?.message ?? "Could not create the lots.", ...empty }
+  }
 }
 
 function extractLotData(formData: FormData) {

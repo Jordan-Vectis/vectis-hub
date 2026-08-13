@@ -3,7 +3,7 @@ import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
 
-export const maxDuration = 120
+export const maxDuration = 300
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -13,27 +13,30 @@ export type LotItem = {
   qty:       number
   valueLow:  number
   valueHigh: number
-  bounds:    { y: number; h: number }   // % of image height
+  photo:     number   // 0-based index of the photo this item is in
+  bounds:    { y: number; h: number }   // % of that photo's height
+  /** Empty when the model is confident. Otherwise what it is unsure about. */
+  uncertain: string
 }
 
 export type LotKind = "single" | "grouped" | "joblot"
 
 export type LotGroup = {
+  gid:          string   // stable across edits/renumbering — tracks "already added to a sale"
   id:           number
   title:        string
   kind:         LotKind
   items:        LotItem[]
   estimateLow:  number
   estimateHigh: number
-  bounds:       { y: number; h: number } // % of image height, derived from items
   notes:        string
-  confidence:   "high" | "medium" | "low"
   colour:       string
 }
 
 export type LottingUpResult = {
   targetLow:         number
   targetHigh:        number
+  photoCount:        number
   sceneNotes:        string
   totalEstimateLow:  number
   totalEstimateHigh: number
@@ -55,14 +58,33 @@ const COLOURS = [
 
 export const DEFAULT_TARGET_LOW  = 60
 export const DEFAULT_TARGET_HIGH = 80
+export const MAX_PHOTOS          = 10
 
 // ── Prompt ────────────────────────────────────────────────────────────────────
 
-function buildPrompt(lo: number, hi: number) {
+function buildPrompt(lo: number, hi: number, photoCount: number) {
+  const multi = photoCount > 1
+
+  const photoRules = multi
+    ? `════════════════════════════════════════════════════════════════
+YOU HAVE ${photoCount} PHOTOS OF THE SAME LAYOUT
+════════════════════════════════════════════════════════════════
+These are ${photoCount} photos of ONE lot of stock — the same bench, shelving or table,
+photographed in sections because it does not fit in a single frame.
+
+• Treat them as ONE pile of stock, not ${photoCount} separate jobs.
+• A lot MAY combine items from different photos — that is expected and often correct.
+  Four cheap Star Wars sets spread across photos 1 and 3 are still one £${lo}–£${hi} lot.
+• Watch for the SAME item appearing in two photos where they overlap. Count it ONCE.
+  If you are not certain whether two things are the same item, say so in "uncertain".
+• Every item entry must say which photo it is in, with "photo": 1 to ${photoCount}.`
+    : `Every item entry must set "photo": 1.`
+
   return `You are a senior auction cataloguer at Vectis, a specialist toy and collectible auction house.
 
-You are looking at a photograph of stock laid out for cataloguing — usually shelving, a table, or totes.
-Your job is to split EVERYTHING in that photo into saleable auction lots.
+You are looking at ${multi ? `${photoCount} photographs` : "a photograph"} of stock laid out for cataloguing —
+usually shelving, a bench, a table, or totes. Your job is to split EVERYTHING you can see into
+saleable auction lots.
 
 ════════════════════════════════════════════════════════════════
 THE RULE THAT MATTERS — THE LOT VALUE BAND: £${lo}–£${hi}
@@ -106,6 +128,27 @@ Do not group by tidiness or by shelf — group by value.
    Every visible item must appear in exactly ONE lot. Do not skip items. Do not invent items you
    cannot actually see. If a shelf holds twelve near-identical cars, that is one entry with qty 12.
 
+${photoRules}
+
+════════════════════════════════════════════════════════════════
+SAY WHEN YOU ARE NOT SURE — this matters as much as the grouping
+════════════════════════════════════════════════════════════════
+Every item has an "uncertain" field.
+
+• Confident about what it is and roughly what it is worth → "uncertain": ""
+• ANY real doubt → put the doubt in "uncertain", in one short plain sentence.
+
+Do NOT quietly guess. A cataloguer would far rather be told "I think this is a Corgi Batmobile but
+the box number isn't readable" than be handed a confident wrong answer. Flag it when:
+  • the item is blurred, in shadow, behind something, or only part-visible
+  • you can read the maker but not the model, or the model but not the variant
+  • it could be a reproduction, a repaint, or an empty box
+  • you cannot tell whether it is boxed, complete, or in playworn condition
+  • the value could reasonably be double or half what you have put
+
+Keep valuing it anyway — give your best estimate AND the doubt. An uncertain item is still placed
+in a lot; the cataloguer will check it in the hand.
+
 ════════════════════════════════════════════════════════════════
 VALUES
 ════════════════════════════════════════════════════════════════
@@ -117,8 +160,8 @@ VALUES
 ════════════════════════════════════════════════════════════════
 VERTICAL POSITION — per item, so the photo can be marked up
 ════════════════════════════════════════════════════════════════
-Every item entry carries yTop and yBottom: where that item sits vertically in the image.
-  • 0 = the very top of the image, 100 = the very bottom
+Every item carries yTop and yBottom: where that item sits vertically in ITS OWN photo.
+  • 0 = the very top of that photo, 100 = the very bottom
   • yBottom must always be greater than yTop
   • For shelving: count the visible shelves from the top. With 12 shelves, an item on shelf 4 sits at
     roughly yTop=25, yBottom=33.
@@ -130,25 +173,26 @@ OUTPUT
 Return ONLY valid JSON — no markdown, no commentary:
 
 {
-  "sceneNotes": "<one short line on what this photo shows>",
+  "sceneNotes": "<one short line on what this stock is>",
   "groups": [
     {
       "id": 1,
       "title": "<lot title, under 60 characters>",
       "kind": "single" | "grouped" | "joblot",
       "items": [
-        { "name": "<item>", "qty": 1, "valueLow": 20, "valueHigh": 30, "yTop": 10, "yBottom": 22 }
+        {
+          "name": "<item>", "qty": 1,
+          "valueLow": 20, "valueHigh": 30,
+          "photo": 1, "yTop": 10, "yBottom": 22,
+          "uncertain": ""
+        }
       ],
       "estimateLow": 60,
       "estimateHigh": 80,
-      "notes": "<condition notes, or why this lot breaks the band>",
-      "confidence": "high" | "medium" | "low"
+      "notes": "<condition notes, or why this lot breaks the band>"
     }
   ]
-}
-
-Use "confidence": "low" when you cannot make out the item clearly enough to price it properly —
-the cataloguer will check those first.`
+}`
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -160,11 +204,14 @@ const num = (v: unknown, fallback = 0) => {
 
 const clampPct = (v: number) => Math.max(0, Math.min(100, v))
 
-type RawItem = { name?: string; qty?: number; valueLow?: number; valueHigh?: number; yTop?: number; yBottom?: number }
+type RawItem = {
+  name?: string; qty?: number; valueLow?: number; valueHigh?: number
+  photo?: number; yTop?: number; yBottom?: number; uncertain?: string
+}
 type RawGroup = {
-  id?: number; title?: string; kind?: string; notes?: string; confidence?: string
+  id?: number; title?: string; kind?: string; notes?: string
   items?: (RawItem | string)[]
-  estimateLow?: number; estimateHigh?: number; yTop?: number; yBottom?: number
+  estimateLow?: number; estimateHigh?: number
 }
 
 /**
@@ -172,27 +219,33 @@ type RawGroup = {
  * source of truth for a lot's estimate — the page recalculates the same way as
  * the cataloguer moves items about, so the two can never disagree.
  */
-function normalise(parsed: { sceneNotes?: string; groups?: RawGroup[] }, lo: number, hi: number): LottingUpResult {
+function normalise(
+  parsed: { sceneNotes?: string; groups?: RawGroup[] },
+  lo: number,
+  hi: number,
+  photoCount: number,
+): LottingUpResult {
   let uid = 0
 
   const groups: LotGroup[] = (parsed.groups ?? []).map((g, gi) => {
-    // Fall back to the group's own vertical range when an item has none.
-    const gTop    = clampPct(num(g.yTop, 0))
-    const gBottom = clampPct(num(g.yBottom, 100))
-
     const items: LotItem[] = (g.items ?? []).map(raw => {
       const it: RawItem = typeof raw === "string" ? { name: raw } : (raw ?? {})
-      const yTop    = clampPct(num(it.yTop, gTop))
-      const yBottom = Math.max(yTop + 1, clampPct(num(it.yBottom, gBottom)))
+      const yTop    = clampPct(num(it.yTop, 0))
+      const yBottom = Math.max(yTop + 1, clampPct(num(it.yBottom, 100)))
       const vLow    = Math.max(0, Math.round(num(it.valueLow)))
       const vHigh   = Math.max(vLow, Math.round(num(it.valueHigh, vLow)))
+      // Model counts photos from 1; clamp into range so a bad index can never
+      // point the overlay at a photo that isn't there.
+      const photo   = Math.max(0, Math.min(photoCount - 1, Math.round(num(it.photo, 1)) - 1))
       return {
         uid:       `i${uid++}`,
         name:      String(it.name ?? "Unidentified item").trim() || "Unidentified item",
         qty:       Math.max(1, Math.round(num(it.qty, 1))),
         valueLow:  vLow,
         valueHigh: vHigh,
+        photo,
         bounds:    { y: yTop, h: yBottom - yTop },
+        uncertain: String(it.uncertain ?? "").trim(),
       }
     }).filter(it => it.name)
 
@@ -210,42 +263,34 @@ function normalise(parsed: { sceneNotes?: string; groups?: RawGroup[] }, lo: num
         ? g.kind
         : items.length === 1 ? "single" : "grouped"
 
-    const conf: LotGroup["confidence"] =
-      g.confidence === "low" ? "low" : g.confidence === "medium" ? "medium" : "high"
-
     return {
+      gid:          crypto.randomUUID(),
       id:           gi + 1,
       title:        String(g.title ?? `Lot ${gi + 1}`).trim().slice(0, 60) || `Lot ${gi + 1}`,
       kind,
       items,
       estimateLow:  items.reduce((s, i) => s + i.valueLow,  0),
       estimateHigh: items.reduce((s, i) => s + i.valueHigh, 0),
-      bounds:       boundsOf(items),
       notes:        String(g.notes ?? "").trim(),
-      confidence:   conf,
       colour:       "",
     }
   }).filter(g => g.items.length > 0)
 
-  // Top of the photo first — matches the order a cataloguer works a shelving unit.
-  groups.sort((a, b) => a.bounds.y - b.bounds.y)
+  // Photo order, then top of the photo down — the order a cataloguer works a bench.
+  const firstOf = (g: LotGroup) => Math.min(...g.items.map(i => i.photo))
+  const topOf   = (g: LotGroup) => Math.min(...g.items.filter(i => i.photo === firstOf(g)).map(i => i.bounds.y))
+  groups.sort((a, b) => (firstOf(a) - firstOf(b)) || (topOf(a) - topOf(b)))
   groups.forEach((g, i) => { g.id = i + 1; g.colour = COLOURS[i % COLOURS.length] })
 
   return {
     targetLow:         lo,
     targetHigh:        hi,
+    photoCount,
     sceneNotes:        String(parsed.sceneNotes ?? "").trim(),
     totalEstimateLow:  groups.reduce((s, g) => s + g.estimateLow,  0),
     totalEstimateHigh: groups.reduce((s, g) => s + g.estimateHigh, 0),
     groups,
   }
-}
-
-function boundsOf(items: LotItem[]): { y: number; h: number } {
-  if (!items.length) return { y: 0, h: 100 }
-  const top    = Math.min(...items.map(i => i.bounds.y))
-  const bottom = Math.max(...items.map(i => i.bounds.y + i.bounds.h))
-  return { y: top, h: Math.max(1, bottom - top) }
 }
 
 // ── Route ─────────────────────────────────────────────────────────────────────
@@ -259,8 +304,8 @@ export async function POST(req: NextRequest) {
     if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
 
     const formData = await req.formData()
-    const file = formData.get("photo") as File | null
-    if (!file) return NextResponse.json({ error: "No photo provided" }, { status: 400 })
+    const files = (formData.getAll("photo") as File[]).filter(f => f && f.size > 0).slice(0, MAX_PHOTOS)
+    if (!files.length) return NextResponse.json({ error: "No photo provided" }, { status: 400 })
 
     const clientModel = (formData.get("model") as string | null) ?? null
 
@@ -268,9 +313,12 @@ export async function POST(req: NextRequest) {
     let hi = Math.max(1, Math.round(num(formData.get("targetHigh"), DEFAULT_TARGET_HIGH)))
     if (hi < lo) [lo, hi] = [hi, lo]
 
-    const buffer   = await file.arrayBuffer()
-    const base64   = Buffer.from(buffer).toString("base64")
-    const mimeType = file.type || "image/jpeg"
+    const parts = await Promise.all(files.map(async f => ({
+      inlineData: {
+        data:     Buffer.from(await f.arrayBuffer()).toString("base64"),
+        mimeType: f.type || "image/jpeg",
+      },
+    })))
 
     const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
@@ -278,16 +326,13 @@ export async function POST(req: NextRequest) {
       generationConfig: { responseMimeType: "application/json" },
     })
 
-    const result = await model.generateContent([
-      buildPrompt(lo, hi),
-      { inlineData: { data: base64, mimeType } },
-    ])
+    const result = await model.generateContent([buildPrompt(lo, hi, files.length), ...parts])
 
     // Never call .text() before checking — it throws and loses the block reason.
     const response = result.response
     const blockReason = response.promptFeedback?.blockReason
     if (blockReason) {
-      return NextResponse.json({ error: `Photo blocked by Gemini (${blockReason})` }, { status: 422 })
+      return NextResponse.json({ error: `Photos blocked by Gemini (${blockReason})` }, { status: 422 })
     }
     const finish = response.candidates?.[0]?.finishReason
     if (finish && finish !== "STOP" && finish !== "MAX_TOKENS") {
@@ -305,9 +350,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "The model did not return usable JSON — try again." }, { status: 502 })
     }
 
-    const out = normalise(parsed, lo, hi)
+    const out = normalise(parsed, lo, hi, files.length)
     if (!out.groups.length) {
-      return NextResponse.json({ error: "No items could be identified in that photo." }, { status: 422 })
+      return NextResponse.json({ error: "No items could be identified in those photos." }, { status: 422 })
     }
 
     return NextResponse.json(out)
