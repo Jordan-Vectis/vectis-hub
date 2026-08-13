@@ -45,6 +45,7 @@ export default function PipelineQueuePanel({
   const [items, setItems]   = useState<QueueItem[]>([])
   const [ready, setReady]   = useState(false)
   const [runnerOk, setRunnerOk] = useState(true)
+  const [notMigrated, setNotMigrated] = useState(false)
   const [busy, setBusy]     = useState(false)
   const [error, setError]   = useState<string | null>(null)
   const [note, setNote]     = useState<string | null>(null)
@@ -58,6 +59,7 @@ export default function PipelineQueuePanel({
       if (json.error) { setError(json.error); return }
       setItems(json.items ?? [])
       setRunnerOk(json.runnerConfigured !== false)
+      setNotMigrated(!!json.notMigrated)
     } catch { /* a dropped poll is not worth shouting about — the next one retries */ }
     finally { setReady(true) }
   }, [])
@@ -100,8 +102,8 @@ export default function PipelineQueuePanel({
         <div className="flex items-center gap-2">
           <button
             className={`${btn} bg-[#C8A96E] hover:bg-[#b9995c] text-black`}
-            disabled={busy || !canAdd}
-            title={canAdd ? `Queue ${code} with the settings above` : "Load a sale above first"}
+            disabled={busy || !canAdd || notMigrated}
+            title={notMigrated ? "The queue isn't set up on this environment yet" : canAdd ? `Queue ${code} with the settings above` : "Load a sale above first"}
             onClick={() => run(() => addToPipelineQueue(code, settings), `${code.toUpperCase()} added to the queue.`)}
           >
             + Add {code ? code.toUpperCase() : "this sale"}
@@ -114,7 +116,11 @@ export default function PipelineQueuePanel({
         </div>
       </div>
 
-      {!runnerOk && (
+      {notMigrated ? (
+        <div className="rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-700 dark:text-amber-300 mt-2">
+          The queue isn&apos;t switched on yet on this environment — an admin needs to finish setting it up before sales can be added. It won&apos;t lose anything; there just isn&apos;t anywhere to put it yet.
+        </div>
+      ) : !runnerOk && (
         <div className="rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-700 dark:text-amber-300 mt-2">
           The overnight runner isn&apos;t switched on for this environment (CRON_SECRET isn&apos;t set), so anything added here will just sit and wait. Ask IT before relying on it tonight.
         </div>
@@ -129,9 +135,11 @@ export default function PipelineQueuePanel({
       {!ready ? (
         <p className="text-sm text-gray-400 mt-3">Loading the queue…</p>
       ) : items.length === 0 ? (
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">
-          Nothing queued. Load a sale above, set it up how you want it, then press <strong>Add</strong> — repeat for each sale and they&apos;ll run in order.
-        </p>
+        notMigrated ? null : (
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">
+            Nothing queued. Load a sale above, set it up how you want it, then press <strong>Add</strong> — repeat for each sale and they&apos;ll run in order.
+          </p>
+        )
       ) : (
         <div className="space-y-2 mt-3">
           {[...active, ...finished].map((i, idx) => (

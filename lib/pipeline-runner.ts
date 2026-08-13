@@ -138,6 +138,13 @@ export type SliceResult =
   | { ran: false; reason: string }
   | { ran: true; code: string; status: string; done: number; total: number; stage: string; message: string }
 
+/** Code deploys instantly; migrations are applied by hand afterwards. This loop
+ *  ticks every 30 seconds, so without this the gap between the two would fill
+ *  the production logs with the same Prisma error twice a minute. */
+function isMissingTable(e: any): boolean {
+  return e?.code === "P2021" || /does not exist in the current database/i.test(e?.message ?? "")
+}
+
 export async function runQueueSlice(): Promise<SliceResult> {
   if (!process.env.CRON_SECRET) return { ran: false, reason: "CRON_SECRET not set" }
 
@@ -146,7 +153,13 @@ export async function runQueueSlice(): Promise<SliceResult> {
   // Someone else is already on it. A RUNNING item with a fresh heartbeat means a
   // slice is in flight; a stale one means the server restarted mid-sale and this
   // tick should take it over.
-  const running = await prisma.pipelineQueueItem.findFirst({ where: { status: "RUNNING" }, orderBy: { position: "asc" } })
+  let running: Item
+  try {
+    running = await prisma.pipelineQueueItem.findFirst({ where: { status: "RUNNING" }, orderBy: { position: "asc" } })
+  } catch (e: any) {
+    if (isMissingTable(e)) return { ran: false, reason: "queue table not created yet" }
+    throw e
+  }
   if (running && running.heartbeatAt && now.getTime() - running.heartbeatAt.getTime() < HEARTBEAT_STALE_MS) {
     return { ran: false, reason: `already running ${running.code}` }
   }

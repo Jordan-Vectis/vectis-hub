@@ -11,9 +11,18 @@ export async function GET(_req: NextRequest) {
     const session = await auth()
     if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
-    const items = await prisma.pipelineQueueItem.findMany({
-      orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-    })
+    // The table arrives with the migrations, which are run by hand after the
+    // deploy. Until then say so plainly — a raw Prisma error in the panel would
+    // read as the queue being broken rather than not switched on yet.
+    let items
+    try {
+      items = await prisma.pipelineQueueItem.findMany({ orderBy: [{ position: "asc" }, { createdAt: "asc" }] })
+    } catch (e: any) {
+      if (e?.code === "P2021" || /does not exist in the current database/i.test(e?.message ?? "")) {
+        return NextResponse.json({ runnerConfigured: false, notMigrated: true, items: [] })
+      }
+      throw e
+    }
 
     return NextResponse.json({
       // Whether the background loop can actually run. Without CRON_SECRET the
