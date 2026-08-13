@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
+import { isCronRequest } from "@/lib/cron-auth"
 import { r2 } from "@/lib/r2"
 import { GetObjectCommand } from "@aws-sdk/client-s3"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
-  if (!session) return new NextResponse("Unauthorized", { status: 401 })
+  if (!session && !isCronRequest(req)) return new NextResponse("Unauthorized", { status: 401 })
 
   const key = req.nextUrl.searchParams.get("key")
   if (!key) return new NextResponse("Missing key", { status: 400 })

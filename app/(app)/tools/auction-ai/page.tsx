@@ -10,6 +10,7 @@ import { MacroTab } from "./macro-tab"
 import BcImportCheckTab from "./bc-import-check-tab"
 import { analyseKeyPoints, HighlightedDescription, kpColour } from "@/lib/kp-analysis"
 import RunCostEstimate from "@/components/run-cost-estimate"
+import PipelineQueuePanel from "./pipeline-queue-panel"
 
 // ─── Show Instruction Toggle ──────────────────────────────────────────────────
 
@@ -5029,8 +5030,10 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         />
       )}
 
-      {/* Run / control buttons.
-          ⚠ The `running` clause matters: a catch-up (resumeNotRun) only ever runs when the stage
+      {/* Run / control buttons. These run the pipeline HERE, in this tab — it only
+          continues while the tab is open and the PC is awake. To run several sales
+          back to back without anyone here, use the overnight queue further down. */}
+      {/* ⚠ The `running` clause matters: a catch-up (resumeNotRun) only ever runs when the stage
           IS "complete", so hiding this block on that condition alone left it with no Pause, no
           Stop and no progress — and withRetry loops for ever on a rate limit, so closing the tab
           was the only way out. */}
@@ -5055,6 +5058,18 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           )}
         </div>
       )}
+
+      {/* Run it later instead — on the server, with nothing left open. The
+          settings above are captured onto the queued sale, so each sale keeps
+          the instruction and toggles it was queued with. */}
+      <PipelineQueuePanel
+        code={code.trim().toUpperCase()}
+        canAdd={!!code.trim()}
+        settings={{
+          preset, model: localModel, fallbackModel,
+          grounded, autoApply, onlyWithPhotos, skipHasDesc, kpRelaxed,
+        }}
+      />
 
       {stage === "complete" && (
         <>

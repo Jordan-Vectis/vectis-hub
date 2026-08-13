@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
+import { isCronRequest } from "@/lib/cron-auth"
 import { prisma } from "@/lib/prisma"
 
 // POST /api/auction-ai/pipeline/lot
@@ -8,7 +9,7 @@ import { prisma } from "@/lib/prisma"
 export async function POST(req: NextRequest) {
   try {
     const session = await auth()
-    if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+    if (!session && !isCronRequest(req)) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
     const body = await req.json()
     const { code, lotId, label, ...fields } = body

@@ -306,6 +306,52 @@ model PipelineRun {
   lots      PipelineLot[]
 }
 
+// ─── Auto Pipeline queue (overnight, server-side) ────────────────────────────
+// One sale waiting its turn, with its OWN settings — so a Bears sale can run on
+// the bears instruction and, when it finishes, a Trains sale starts on a
+// different one without anybody being there. Worked through by the background
+// loop in server.js → /api/cron/pipeline-queue, NOT by the browser tab, so it
+// keeps going after everyone has gone home.
+//
+// Per-lot progress still lives in PipelineRun / PipelineLot (keyed by auction
+// code), which is what makes a slice resumable: a tick processes what it can,
+// saves, and the next tick carries on from the same place.
+model PipelineQueueItem {
+  id        String @id @default(cuid())
+  code      String // auction code, e.g. "BE0126"
+  auctionId String?
+  position  Int    @default(0)
+  status    String @default("QUEUED") // QUEUED | RUNNING | PAUSED | DONE | CANCELLED
+
+  // Settings, per sale — these mirror the Auto Pipeline tab's own controls.
+  preset         String  @default("")
+  model          String  @default("")
+  fallbackModel  String  @default("")
+  grounded       Boolean @default(false)
+  autoApply      Boolean @default(true)
+  onlyWithPhotos Boolean @default(false)
+  skipHasDesc    Boolean @default(false)
+  kpRelaxed      Boolean @default(false)
+
+  // Progress + the morning report.
+  stage       String    @default("batch") // batch | kpcheck | doublecheck | complete
+  done        Int       @default(0)
+  total       Int       @default(0)
+  skipped     Int       @default(0) // lots the AI refused (content blocks) — never retried
+  retryAfter  DateTime? // set when the whole sale is backing off (rate limits)
+  lastMessage String?   @db.Text
+  logText     String?   @db.Text
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  heartbeatAt DateTime? // a stale heartbeat is how a restart reclaims a RUNNING item
+
+  addedBy   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, position])
+}
+
 model PipelineLot {
   id    String      @id @default(cuid())
   runId String

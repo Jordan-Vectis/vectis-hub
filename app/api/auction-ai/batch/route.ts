@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
+import { isCronRequest } from "@/lib/cron-auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { parseModelJson } from "@/lib/model-json"
 import { getToolModel } from "@/lib/ai-models"
@@ -21,7 +22,7 @@ const LANGUAGE_RULE =
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+  if (!session && !isCronRequest(req)) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })

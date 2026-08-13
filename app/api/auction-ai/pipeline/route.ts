@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
+import { isCronRequest } from "@/lib/cron-auth"
 import { prisma } from "@/lib/prisma"
 
 // GET /api/auction-ai/pipeline?code=X
@@ -7,7 +8,7 @@ import { prisma } from "@/lib/prisma"
 export async function GET(req: NextRequest) {
   try {
     const session = await auth()
-    if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+    if (!session && !isCronRequest(req)) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
     const code = req.nextUrl.searchParams.get("code")?.trim().toUpperCase()
     if (!code) return NextResponse.json({ error: "Missing code" }, { status: 400 })
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await auth()
-    if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+    if (!session && !isCronRequest(req)) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
     const { code, preset, model, stage } = await req.json()
     if (!code) return NextResponse.json({ error: "Missing code" }, { status: 400 })

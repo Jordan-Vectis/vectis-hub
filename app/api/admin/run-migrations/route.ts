@@ -1375,6 +1375,23 @@ const MIGRATIONS = [
     ALTER TABLE "MarketingPlanAction" ADD CONSTRAINT "MarketingPlanAction_planId_fkey"
       FOREIGN KEY ("planId") REFERENCES "MarketingPlan"("id") ON DELETE CASCADE ON UPDATE CASCADE;
   EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  // Auto Pipeline overnight queue — one row per sale waiting its turn.
+  `CREATE TABLE IF NOT EXISTS "PipelineQueueItem" (
+    "id" TEXT NOT NULL, "code" TEXT NOT NULL, "auctionId" TEXT,
+    "position" INTEGER NOT NULL DEFAULT 0, "status" TEXT NOT NULL DEFAULT 'QUEUED',
+    "preset" TEXT NOT NULL DEFAULT '', "model" TEXT NOT NULL DEFAULT '', "fallbackModel" TEXT NOT NULL DEFAULT '',
+    "grounded" BOOLEAN NOT NULL DEFAULT false, "autoApply" BOOLEAN NOT NULL DEFAULT true,
+    "onlyWithPhotos" BOOLEAN NOT NULL DEFAULT false, "skipHasDesc" BOOLEAN NOT NULL DEFAULT false,
+    "kpRelaxed" BOOLEAN NOT NULL DEFAULT false,
+    "stage" TEXT NOT NULL DEFAULT 'batch', "done" INTEGER NOT NULL DEFAULT 0,
+    "total" INTEGER NOT NULL DEFAULT 0, "skipped" INTEGER NOT NULL DEFAULT 0,
+    "retryAfter" TIMESTAMP(3), "lastMessage" TEXT, "logText" TEXT,
+    "startedAt" TIMESTAMP(3), "finishedAt" TIMESTAMP(3), "heartbeatAt" TIMESTAMP(3),
+    "addedBy" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "PipelineQueueItem_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "PipelineQueueItem_status_position_idx" ON "PipelineQueueItem"("status", "position")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

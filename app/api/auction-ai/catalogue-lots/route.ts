@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
+import { isCronRequest } from "@/lib/cron-auth"
 import { prisma } from "@/lib/prisma"
 
 // GET /api/auction-ai/catalogue-lots?code=F051
 // Returns catalogue lots with key points (stored as lot.description in the wizard)
 export async function GET(req: NextRequest) {
   const session = await auth()
-  if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+  if (!session && !isCronRequest(req)) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
   const code = req.nextUrl.searchParams.get("code")?.trim().toUpperCase()
   if (!code) return NextResponse.json({ error: "Missing code" }, { status: 400 })

@@ -147,6 +147,33 @@ app.prepare().then(async () => {
       setInterval(runDbBackup, 24 * 60 * 60 * 1000)
     }, msUntilMidnight)
 
+    // Auto Pipeline queue — works through the queued sales overnight so a run no
+    // longer needs the browser tab left open. Each tick does about nine minutes
+    // of work and returns; the next one carries on from the same lot. Ticking
+    // every 30s keeps the gap between slices small, and a tick is a cheap no-op
+    // whenever a slice is already in flight or the queue is empty.
+    const PIPELINE_TICK_MS = 30 * 1000
+    let pipelineTickBusy = false
+    function runPipelineQueue() {
+      const secret = process.env.CRON_SECRET
+      if (!secret) return   // silent: this loop ticks constantly, unlike the others
+      // A slice outlives the tick interval, so guard here as well as in the DB.
+      if (pipelineTickBusy) return
+      pipelineTickBusy = true
+      fetch(`http://localhost:${port}/api/cron/pipeline-queue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
+      })
+        .then(r => r.json())
+        .then(d => { if (d && d.ran) console.log(`[cron/pipeline-queue] ${d.code}: ${d.message} (${d.done}/${d.total}, ${d.stage})`) })
+        .catch(e => console.warn('[cron/pipeline-queue] error:', e.message))
+        .finally(() => { pipelineTickBusy = false })
+    }
+    setTimeout(() => {
+      runPipelineQueue()
+      setInterval(runPipelineQueue, PIPELINE_TICK_MS)
+    }, 60 * 1000)
+
     // IT mailbox poll — turns new IT@vectis.co.uk emails into Job Board jobs.
     // Every 5 minutes, first run delayed 90s. No-op until the mailbox is connected.
     const IT_MAILBOX_INTERVAL_MS = 5 * 60 * 1000

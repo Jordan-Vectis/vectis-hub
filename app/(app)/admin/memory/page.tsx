@@ -16,6 +16,36 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "pipeline_overnight_queue.md",
+    content: `---
+name: Auto Pipeline - overnight queue (server-side)
+purpose: The queue that runs several sales back to back with different settings and nothing left open. Read before touching lib/pipeline-runner.ts, the server.js cron loop, or the cron-auth guards on the AI routes.
+last_updated: 2026-08-13
+---
+
+# Auto Pipeline - overnight queue (built 2026-08-13)
+
+Jordan's ask: "can I have the ability to que different auctions with different setting so for example if I want to run a bears auction through and when it finished it starts the trains one overnight". Asked where it should run, he chose the SERVER-SIDE option over a browser-tab queue, knowing it was the bigger build.
+
+WARNING: the Auto Pipeline tab's own Run button STILL RUNS IN THE BROWSER - its loops, its 12-second gaps, its backoff. It only continues while that tab is open and the PC is awake. The queue is the way to run unattended. Do not conflate the two when diagnosing "it stopped overnight".
+
+## Shape
+
+- PipelineQueueItem - one row per queued sale, carrying its OWN settings (preset, model, fallback, grounded, autoApply, onlyWithPhotos, skipHasDesc, kpRelaxed) plus progress, retryAfter, heartbeatAt and a logText morning report. NEEDS Run Migrations. Per-lot progress still lives in PipelineRun / PipelineLot keyed by auction code - that is what makes a slice resumable.
+- lib/pipeline-runner.ts is the worker. server.js ticks /api/cron/pipeline-queue every 30 seconds; each tick does a roughly nine-minute SLICE and hands back, and the next tick carries on from the same lot.
+- UI: pipeline-queue-panel.tsx on the Auto Pipeline tab (add the loaded sale, reorder, Hold, Remove, per-sale log). Server actions in lib/actions/pipeline-queue.ts, list at GET /api/auction-ai/queue.
+
+## The things that will bite
+
+- THE RUNNER CALLS THE SAME ROUTES THE BROWSER DOES (batch, key-points-check, double-check, catalogue-lots, pipeline, pipeline/lot, photo-proxy) over localhost, authorised by isCronRequest in lib/cron-auth.ts (Bearer CRON_SECRET). This is deliberate: those routes hold the tuned prompts, the key-points authority rules, the bears clean-up and the English rule. NEVER re-implement a prompt inside the runner - change it in the route and both paths get it. isCronRequest is only ever used ALONGSIDE the session check, never instead of it, and DELETE /api/auction-ai/pipeline (the reset) is deliberately left session-only.
+- NEVER GIVES UP (Jordan's explicit instruction). A lot that errors is left UNMARKED and retried across ticks and across restarts, forever, with the same backoff the browser uses (60s doubling to a 30-minute cap for rate limits, 12s to 30s otherwise). Nothing is ever marked failed. The single exception is the pre-existing rule: a Gemini CONTENT BLOCK skips that lot because it will never succeed on retry, and RECITATION retries four times on the other model first. If a wait will not fit in the remaining slice, SliceOver carries it into retryAfter so the sale sleeps exactly that long and resumes ON THE SAME LOT.
+- READING SAVED PROGRESS IS NOT BEST-EFFORT. If GET /api/auction-ai/pipeline fails, loadLots THROWS. Treating that as "nothing done yet" would send every already-finished lot back through the AI and, with auto-apply on, overwrite good descriptions. Do not "harden" it into a silent fallback.
+- flush() splits progress from status. Progress and the log are always saved; the STATUS is only moved on a row that is not PAUSED or CANCELLED. Without that split, pressing Hold mid-slice was silently undone when the slice ended, and pressing Remove mid-slice made the error handler throw. stopRequested() is also checked between lots so Hold takes effect within seconds rather than at the end of a nine-minute slice.
+- Claiming a sale is conditional (updateMany on the expected status), and a RUNNING row whose heartbeat is older than three minutes is reclaimed - that is how a deploy restarting mid-sale resumes rather than stalling.
+- The runner writes lots itself (it has no session, so it cannot use the applyAiDescriptionOne server action) but logs through lib/lot-log.ts exactly the same way, as changedBy "Auto Pipeline (overnight...)" with source "ai_apply". RULES: every path that mutates a lot must log.
+`,
+  },
+  {
     filename: "marketing_plan.md",
     content: `---
 name: Marketing Reports -> Business Plan tab
