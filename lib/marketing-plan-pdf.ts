@@ -10,7 +10,7 @@
 
 import { PDFDocument, PDFPage, PDFImage, StandardFonts, PDFFont, rgb, RGB } from "pdf-lib"
 import { embedVectisLogo } from "@/lib/pdf-logo"
-import { fmtNum, PLAN_CHANNELS, type PlanSnapshot } from "@/lib/marketing-plan"
+import { fmtNum, higherIsBetter, PLAN_CHANNELS, type PlanSnapshot } from "@/lib/marketing-plan"
 
 // ─── Layout (A4 portrait) ───────────────────────────────────────────────────
 const PAGE_W = 595.28
@@ -72,10 +72,13 @@ function truncate(text: string, font: PDFFont, size: number, maxW: number): stri
   return s + "..."
 }
 
-/** Greedy word wrap. Returns the lines; the caller decides where they go. */
+/** Greedy word wrap. Returns the lines; the caller decides where they go.
+ *  ⚠ Split on newlines BEFORE safeAscii: a newline is outside its allowed range
+ *  and gets DELETED, not turned into a space, so sanitising first would glue the
+ *  last word of one paragraph onto the first word of the next. */
 function wrap(text: string, font: PDFFont, size: number, maxW: number): string[] {
   const out: string[] = []
-  for (const para of safeAscii(text).split(/\n+/)) {
+  for (const para of (text ?? "").split(/\n+/).map(safeAscii)) {
     let line = ""
     for (const word of para.split(/\s+/).filter(Boolean)) {
       const next = line ? `${line} ${word}` : word
@@ -138,13 +141,17 @@ function sectionTitle(ctx: Ctx, title: string): void {
 function paragraph(ctx: Ctx, text: string | null, placeholder: string): void {
   const size = 9.5
   const lead = 13
-  if (!text || !text.trim()) {
+  // Test what will actually be DRAWN, not the raw value: text that safeAscii
+  // strips to nothing (all emoji, say) would otherwise render as a blank gap
+  // with no placeholder, reading as a bug rather than as "not filled in".
+  const lines = text ? wrap(text, ctx.helv, size, CONTENT_W) : []
+  if (lines.length === 0) {
     ensure(ctx, lead + 6)
     ctx.page.drawText(safeAscii(placeholder), { x: MARGIN, y: ctx.y - 9, size, font: ctx.helvI, color: MUTE })
     ctx.y -= lead + 8
     return
   }
-  for (const line of wrap(text, ctx.helv, size, CONTENT_W)) {
+  for (const line of lines) {
     ensure(ctx, lead)
     ctx.page.drawText(line, { x: MARGIN, y: ctx.y - 9, size, font: ctx.helv, color: INK })
     ctx.y -= lead
@@ -209,7 +216,10 @@ function statBoxes(ctx: Ctx, snap: PlanSnapshot): void {
       ctx.page.drawText(truncate(s.value, ctx.helvB, 15, boxW - 18), { x: x + 9, y: ctx.y - 32, size: 15, font: ctx.helvB, color: INK })
       const d = s.delta
       const txt = d === null || !isFinite(d) ? "no comparison" : `${d >= 0 ? "up" : "down"} ${Math.abs(d * 100).toFixed(1)}%`
-      const col = d === null || !isFinite(d) ? MUTE : d >= 0 ? GREEN : RED
+      // Colour on whether the movement is GOOD NEWS, not on its sign — a falling
+      // bounce rate is an improvement, and printing it red here while the screen
+      // shows it green would have the plan contradict the page it came from.
+      const col = d === null || !isFinite(d) ? MUTE : (d >= 0) === higherIsBetter(s.label) ? GREEN : RED
       ctx.page.drawText(truncate(txt, ctx.helv, 7, boxW - 18), { x: x + 9, y: ctx.y - 42, size: 7, font: ctx.helv, color: col })
     })
     ctx.y -= boxH + gap
@@ -350,7 +360,11 @@ export async function buildMarketingPlanPdf(plan: PdfPlan, now: Date = new Date(
         (a) => {
           const t = wrap(a.title, helvB, 8.5, cols[0].w).length * 10.5
           const d = a.detail ? wrap(a.detail, helv, 7.5, cols[0].w).length * 9 : 0
-          return Math.max(17, 8 + t + d)
+          // The DONE / IN PROGRESS badge is drawn at the FOOT of the row in the
+          // same column as the title, so its height has to be reserved here —
+          // otherwise a one-line action prints the badge over its own title.
+          const badge = a.status === "DONE" || a.status === "DOING" ? 9 : 0
+          return Math.max(17, 8 + t + d + badge)
         },
         (a, h) => {
           let ty = ctx.y - 10

@@ -15,7 +15,8 @@ import {
   addPlanObjective, updatePlanObjective, deletePlanObjective,
   addPlanAction, updatePlanAction, deletePlanAction,
 } from "@/lib/actions/marketing-plans"
-import { PLAN_CHANNELS, ACTION_STATUSES, EFFORT_LEVELS, channelLabel, fmtNum, type PlanSnapshot } from "@/lib/marketing-plan"
+import { PLAN_CHANNELS, ACTION_STATUSES, EFFORT_LEVELS, channelLabel, fmtNum, higherIsBetter, type PlanSnapshot } from "@/lib/marketing-plan"
+import { maybeReloadForSkew } from "@/lib/skew-reload"
 import SuggestModal from "./suggest-modal"
 
 // ─── Types (mirror what the server page sends) ──────────────────────────────
@@ -65,19 +66,30 @@ export default function PlanWorkspace({
   const router = useRouter()
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [warn, setWarn]   = useState<string | null>(null)
   const [note, setNote]   = useState<string | null>(null)
   const [showNew, setShowNew]     = useState(false)
   const [showSuggest, setSuggest] = useState(false)
 
   // Every action goes through here so an error is always shown, never swallowed.
-  function run(fn: () => Promise<{ ok: boolean; error?: string; id?: string }>, okMsg?: string, after?: (id?: string) => void) {
-    setError(null); setNote(null)
+  // ⚠ The try/catch matters as much as the !res.ok branch: the actions return
+  // their business errors, but a REJECTION still happens on a stale-deploy
+  // action miss (the shared iPads sit open across a deploy). Without it the
+  // button simply resets and the user believes the save worked.
+  function run(fn: () => Promise<{ ok: boolean; error?: string; id?: string; warning?: string }>, okMsg?: string, after?: (id?: string) => void) {
+    setError(null); setWarn(null); setNote(null)
     start(async () => {
-      const res = await fn()
-      if (!res.ok) { setError(res.error ?? "Something went wrong"); return }
-      if (okMsg) setNote(okMsg)
-      after?.(res.id)
-      router.refresh()
+      try {
+        const res = await fn()
+        if (!res.ok) { setError(res.error ?? "Something went wrong"); return }
+        // A warning means it worked but not fully — say so instead of the tick.
+        if (res.warning) setWarn(res.warning)
+        else if (okMsg) setNote(okMsg)
+        after?.(res.id)
+        router.refresh()
+      } catch (e: any) {
+        if (!maybeReloadForSkew(e)) setError(e?.message ?? "Couldn't reach the server — nothing was saved.")
+      }
     })
   }
 
@@ -123,6 +135,11 @@ export default function PlanWorkspace({
           {error}
         </div>
       )}
+      {warn && (
+        <div className="rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+          {warn}
+        </div>
+      )}
       {note && (
         <div className="rounded-xl border border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-950/40 px-4 py-3 text-sm text-green-700 dark:text-green-300">
           {note}
@@ -138,7 +155,11 @@ export default function PlanWorkspace({
           <button onClick={() => setShowNew(true)} className={btnPrimary}>+ New plan</button>
         </div>
       ) : (
-        <PlanBody plan={plan} run={run} pending={pending} gaConfigured={gaConfigured} />
+        // ⚠ key={plan.id} is load-bearing. Switching plans is a search-param-only
+        // navigation, which Next deliberately does NOT treat as a state reset — so
+        // without this the editors below keep the PREVIOUS plan's text in useState
+        // and the next save writes it onto the newly-selected plan.
+        <PlanBody key={plan.id} plan={plan} run={run} pending={pending} gaConfigured={gaConfigured} />
       )}
 
       {showNew && (
@@ -162,7 +183,7 @@ export default function PlanWorkspace({
 }
 
 // ═══ The plan itself ═══════════════════════════════════════════════════════
-type Run = (fn: () => Promise<{ ok: boolean; error?: string; id?: string }>, okMsg?: string, after?: (id?: string) => void) => void
+type Run = (fn: () => Promise<{ ok: boolean; error?: string; id?: string; warning?: string }>, okMsg?: string, after?: (id?: string) => void) => void
 
 function PlanBody({ plan, run, pending, gaConfigured }: { plan: Plan; run: Run; pending: boolean; gaConfigured: boolean }) {
   return (
@@ -263,7 +284,7 @@ function PlanHeaderCard({ plan, run, pending, gaConfigured }: { plan: Plan; run:
 
 // ─── 1. Where we are now ────────────────────────────────────────────────────
 function WhereWeAreNow({ plan, run, pending }: { plan: Plan; run: Run; pending: boolean }) {
-  const [text, setText] = useState(plan.summary ?? "")
+  const [text, setText] = useServerText(plan.summary)
   const snap = plan.snapshot
   const dirty = text !== (plan.summary ?? "")
 
@@ -327,7 +348,9 @@ function WhereWeAreNow({ plan, run, pending }: { plan: Plan; run: Run; pending: 
 function Delta({ pct, label }: { pct: number | null; label: string }) {
   if (pct === null || !isFinite(pct)) return <span className="text-[11px] text-gray-400">no comparison</span>
   const up = pct >= 0
-  const good = label === "Bounce rate" ? !up : up
+  // Shared with the PDF so the same movement can't print red here and green there
+  // — a falling bounce rate is good news on both.
+  const good = up === higherIsBetter(label)
   return (
     <span className={`text-[11px] font-semibold ${good ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
       {up ? "↑" : "↓"} {Math.abs(pct * 100).toFixed(1)}%
@@ -562,8 +585,8 @@ function ActionRow({ a, run, pending }: { a: Action; run: Run; pending: boolean 
 
 // ─── 4. Audience & competitors ──────────────────────────────────────────────
 function AudienceAndCompetitors({ plan, run, pending }: { plan: Plan; run: Run; pending: boolean }) {
-  const [aud, setAud]   = useState(plan.audience ?? "")
-  const [comp, setComp] = useState(plan.competitors ?? "")
+  const [aud, setAud]   = useServerText(plan.audience)
+  const [comp, setComp] = useServerText(plan.competitors)
   const snap = plan.snapshot
   const where = snap?.sections.find((s) => s.id === "countries")
   const regions = snap?.sections.find((s) => s.id === "regions")
@@ -613,6 +636,22 @@ function AudienceAndCompetitors({ plan, run, pending }: { plan: Plan; run: Run; 
 }
 
 // ─── Shared bits ────────────────────────────────────────────────────────────
+
+/** A textarea whose text is edited locally but must FOLLOW the server value when
+ *  that genuinely changes — which is what happens when ✨ AI suggestions appends
+ *  to the summary or audience. Without this the box still shows the pre-suggestion
+ *  text, so the added paragraph is invisible and pressing Save writes the old text
+ *  back over it. React's documented "adjust state during render" pattern: it fires
+ *  only on a real change of the server value, so an unrelated refresh can't wipe
+ *  what someone is part-way through typing. */
+function useServerText(serverValue: string | null): [string, (v: string) => void] {
+  const initial = serverValue ?? ""
+  const [text, setText] = useState(initial)
+  const [seen, setSeen] = useState(initial)
+  if (seen !== initial) { setSeen(initial); setText(initial) }
+  return [text, setText]
+}
+
 function SectionHead({ title, hint, right }: { title: string; hint?: string; right?: ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-3 mb-3">

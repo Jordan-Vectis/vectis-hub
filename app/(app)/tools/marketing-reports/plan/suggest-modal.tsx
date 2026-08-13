@@ -11,6 +11,7 @@
 import { useState, type ReactNode } from "react"
 import { addPlanSuggestions } from "@/lib/actions/marketing-plans"
 import { channelLabel } from "@/lib/marketing-plan"
+import { maybeReloadForSkew } from "@/lib/skew-reload"
 
 type SuggestedObjective = { title: string; metric: string; baseline: string; target: string; notes: string }
 type SuggestedAction    = { channel: string; title: string; detail: string; effort: string; impact: string }
@@ -78,12 +79,21 @@ export default function SuggestModal({
       })
       if (!res.ok) { setError(res.error ?? "Could not add the suggestions"); return }
       onAdded()
+    } catch (e: any) {
+      // The action returns its business errors, but a stale-deploy action miss
+      // REJECTS. Without this the modal would just re-enable the button and the
+      // user would believe their ticked suggestions had been added.
+      if (!maybeReloadForSkew(e)) setError(e?.message ?? "Couldn't reach the server — nothing was added.")
     } finally {
       setBusy(false)
     }
   }
 
+  // Counts everything Add will actually write, the two free-text blocks included
+  // — otherwise the button can read "Add 0 to the plan" and still add the summary.
   const picked = objOn.filter(Boolean).length + actOn.filter(Boolean).length
+    + (useSummary  && data?.summary  ? 1 : 0)
+    + (useAudience && data?.audience ? 1 : 0)
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-start justify-center p-4 sm:p-8 overflow-y-auto" onClick={onClose}>

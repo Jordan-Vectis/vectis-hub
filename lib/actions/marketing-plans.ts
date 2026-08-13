@@ -10,12 +10,14 @@ import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { isGaConfigured, type GaRange } from "@/lib/ga"
-import { PLAN_CHANNELS, PLAN_STATUSES } from "@/lib/marketing-plan"
+import { PLAN_CHANNELS, PLAN_STATUSES, type PlanSnapshot } from "@/lib/marketing-plan"
 import { buildPlanSnapshot } from "@/lib/marketing-plan-snapshot"
 
 const PLAN_PATH = "/tools/marketing-reports/plan"
 
-export type ActionResult = { ok: boolean; error?: string; id?: string }
+/** `warning` = it worked, but something the user needs to know went wrong on the
+ *  way (RULES: never let "nothing happened" read as success). */
+export type ActionResult = { ok: boolean; error?: string; id?: string; warning?: string }
 
 async function requireUser() {
   const session = await auth()
@@ -53,14 +55,19 @@ export async function createMarketingPlan(input: {
     const range = asRange(input.range)
     // A plan with no figures is still a usable document, so a GA failure must
     // not block creation — it just leaves "Where we are now" empty until the
-    // user hits Refresh figures.
-    let snapshot: any = null
-    let snapshotAt: Date | null = null
-    if (isGaConfigured()) {
+    // user hits Refresh figures. ⚠ But it must not pass silently either: the
+    // caller shows the reason so "Plan created" can't hide a broken GA link.
+    let snapshot: PlanSnapshot | null = null
+    let warning: string | undefined
+    if (!isGaConfigured()) {
+      warning = "Google Analytics isn't connected on this environment, so the plan starts with no figures."
+    } else {
       try {
         snapshot = await buildPlanSnapshot(range, !!input.excludeBots, !!input.ukOnly)
-        snapshotAt = new Date()
-      } catch { /* leave the snapshot empty — the page shows a Refresh button */ }
+      } catch (e: any) {
+        console.error("createMarketingPlan snapshot:", e)
+        warning = `The plan was created, but the analytics figures couldn't be read (${e?.message ?? "unknown error"}). Use ⟳ Refresh figures to try again.`
+      }
     }
 
     const plan = await prisma.marketingPlan.create({
@@ -70,13 +77,16 @@ export async function createMarketingPlan(input: {
         rangeKey:    range,
         excludeBots: !!input.excludeBots,
         ukOnly:      !!input.ukOnly,
-        snapshot,
-        snapshotAt,
         createdBy:   session.user.name ?? session.user.email ?? null,
+        // ⚠ OMITTED, never `null`. Prisma types a nullable Json column as
+        // `NullableJsonNullValueInput | InputJsonValue` — a plain null is
+        // rejected at runtime, so passing one here would make every
+        // figures-less creation fail with a raw Prisma message.
+        ...(snapshot ? { snapshot: snapshot as any, snapshotAt: new Date() } : {}),
       },
     })
     revalidatePath(PLAN_PATH)
-    return { ok: true, id: plan.id }
+    return { ok: true, id: plan.id, warning }
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Could not create the plan" }
   }

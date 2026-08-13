@@ -44,6 +44,17 @@ The pieces:
 - AI: POST /api/marketing/plan-suggest, using the marketing_plan slot in AI_TOOLS (claudeOk, so it can be pointed at Claude from Admin -> AI Models). The long system prompt is the stable half and goes in "system", which generateAiText already cache-marks for Claude. Never move the figures up there - they change per plan and would invalidate the cache on every call.
 - PDF: GET /api/marketing/plan-pdf?id= building lib/marketing-plan-pdf.ts. A4 PORTRAIT, unlike the landscape cataloguing reports, because a plan reads as a document. Its table() takes a measure() callback per row: wrapped detail lines have variable height and a fixed row height would overprint the row beneath.
 
+## Bugs found in the audit the same day - do not undo these fixes
+
+- key={plan.id} on <PlanBody> IS LOAD-BEARING. Switching plans is a search-param-only navigation, which Next 16 deliberately does NOT treat as a state reset (layout-router keys the segment on a cache key computed WITHOUT search params). Without the key every prop-seeded useState in the editor kept the PREVIOUS plan's text, and the next save - or merely clicking into and out of the name box - wrote it onto the newly-selected plan.
+- useServerText (React's "adjust state during render" pattern) keeps the summary/audience textareas following the server value. The AI suggestions are appended server-side; without this the box still showed the pre-suggestion text and pressing Save wrote it back over the appended paragraph.
+- wrap() must split on newlines BEFORE safeAscii. safeAscii deletes anything outside \\x20-\\x7E and a newline is outside it, so sanitising first glued the last word of one paragraph onto the first word of the next.
+- The DONE / IN PROGRESS badge's height is reserved in the channel table's measure() callback. It is drawn at the foot of the row in the same column as the title, so without it a one-line action printed the badge over its own title.
+- Delta colours use higherIsBetter, not the sign - in the PDF AND on screen. A falling bounce rate is good news; it was printing red on the PDF while the page showed it green.
+- NEVER pass a plain null to the snapshot Json column. Prisma types a nullable Json field as NullableJsonNullValueInput | InputJsonValue and rejects a bare null at runtime - omit the key instead (the house pattern, see lotsSnapshot ?? undefined in the marketing drafts route). Creating a plan while GA was unavailable failed on this.
+- run() in the workspace and add() in the modal both catch rejections and call maybeReloadForSkew. The actions return their business errors, but a stale-deploy action miss REJECTS - without a catch the button simply reset and the user believed the save had happened.
+- A Google Analytics failure during creation now returns a warning shown in an AMBER box. It used to be a bare catch with a green "Plan created." over the top of it.
+
 What the AI prompt enforces: every suggestion grounded in a supplied figure and quoting it; no invented Vectis facts, budgets, tools or platforms; British English; no use of the word CRM; no internal auction codes (a letter followed by digits); vectis.co.uk as the only URL.
 
 Suggestions are DRAFTS. Nothing is written until the user ticks it and presses Add, each added row is stamped source "ai" and badged AI on screen and in the PDF, and suggested free text is APPENDED to the summary/audience rather than replacing it - accepting a suggestion must never wipe something a person typed.

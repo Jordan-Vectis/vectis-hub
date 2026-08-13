@@ -82,7 +82,12 @@ Write the JSON now.`
 
     let raw: string
     try {
-      raw = await generateAiText({ model, system: SYSTEM, prompt, json: true, maxOutputTokens: 4096 })
+      // Roomy on purpose: this asks for the app's largest JSON answer (up to 6
+      // objectives and 14 actions, each with prose), and on both providers
+      // thinking tokens come out of the same budget. A tight cap doesn't
+      // shorten the reply — it truncates it mid-object, which then fails
+      // JSON.parse and surfaces as an unrecoverable error.
+      raw = await generateAiText({ model, system: SYSTEM, prompt, json: true, maxOutputTokens: 16384 })
     } catch (e: any) {
       if (e instanceof AiNotConfiguredError) return NextResponse.json({ error: e.message }, { status: 500 })
       // A content block will never succeed on retry — 422, not 500 (RULES).
@@ -97,7 +102,12 @@ Write the JSON now.`
       return NextResponse.json({ error: "The AI didn't return usable JSON — try again." }, { status: 502 })
     }
 
-    const str = (v: any, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "")
+    // Numbers are coerced, not dropped: models routinely answer "target": 15000
+    // rather than "15,000", and discarding those left the target column blank.
+    const str = (v: any, max: number) =>
+      typeof v === "string" ? v.trim().slice(0, max)
+      : typeof v === "number" && isFinite(v) ? String(v)
+      : ""
     const level = (v: any) => (["Low", "Medium", "High"].includes(str(v, 10)) ? str(v, 10) : "")
     const channel = (v: any) => (PLAN_CHANNELS.some((c) => c.key === v) ? String(v) : "other")
 
