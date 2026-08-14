@@ -135,9 +135,14 @@ export async function listChanges(from: Date, to: Date): Promise<ChangeRow[]> {
 }
 
 /** Turn a window of changes into the block the AI summarises. Housekeeping is
- *  marked rather than dropped, so the model can weigh it instead of guessing. */
+ *  marked rather than dropped, so the model can weigh it instead of guessing.
+ *
+ *  ⚠ NO AUTHOR NAMES (Jordan, 2026-08-14: "I dont need the name of who did what
+ *  on the actual manager report"). They are deliberately withheld from the model
+ *  rather than merely discouraged in the prompt — a name that never reaches the
+ *  AI cannot end up in the report. The on-screen list still shows them. */
 export function changesToText(rows: ChangeRow[]): string {
   return rows
-    .map(r => `- ${r.committedAt.slice(0, 10)} · ${r.author ?? "unknown"}${r.housekeeping ? " [internal]" : ""}: ${r.subject}`)
+    .map(r => `- ${r.committedAt.slice(0, 10)}${r.housekeeping ? " [internal]" : ""}: ${r.subject}`)
     .join("\n")
 }

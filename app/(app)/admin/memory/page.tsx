@@ -45,6 +45,7 @@ ingestChanges() runs on every page load and is idempotent. The page SAYS SO when
 - THE CAPTURE SCRIPT MUST NEVER FAIL THE BUILD. Everything is inside one catch and it exits 0 regardless. Verified by running it with git off the PATH: it writes source "none", exits 0, and the committed seed covers the gap. A missing changelog is an annoyance; a deploy that will not build is not.
 - lib/changelog.ts uses fs, so it is SERVER ONLY - never import it from a "use client" file. Checked after the build: the seed does not appear in the browser bundle.
 - DISTINCT FROM PatchNote (/admin/announcements), which is the staff-facing one-time popup drafted from a single deploy. Same subject, completely different audience - do not merge them.
+- NO AUTHOR NAMES EVER REACH THE AI (Jordan, 2026-08-14: "I dont need the name of who did what on the actual manager report"). changesToText omits them entirely rather than the prompt merely discouraging them - a name the model never sees cannot end up in the report. The on-screen list still shows who did what; it is only the report that is anonymous.
 - The AI slot is changes_summary (claudeOk). Its prompt forbids technical wording, groups the work by what it was FOR rather than by date or person, and bans invented benefits, figures or time savings. Lines marked [internal] (memory, rules, docs, chore, merge, revert - see isHousekeeping) are hidden by default and the prompt is told not to give them their own section.
 `,
   },

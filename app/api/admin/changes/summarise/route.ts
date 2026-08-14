@@ -18,6 +18,7 @@ RULES
 - British English throughout.
 - Write for someone who has never seen the code. Never mention commits, branches, files, functions, databases, migrations, deploys or model names.
 - GROUP the work by what it is FOR (e.g. cataloguing, photography, the warehouse, marketing, health & safety), not by date and not by who did it.
+- NEVER name or otherwise identify who carried out any of the work, and never split the report by person. The report is about what the app can now do, not about who did it. You are not given names, so do not guess at, infer or allude to them.
 - Lead each group with what it means in practice — what someone can now do, or no longer has to do. The change itself is the supporting detail.
 - Lines marked [internal] are housekeeping — notes, documentation, tidying. Do NOT give them their own section. Mention them only as a single closing line about upkeep, if at all.
 - Be honest about the mix: fixes are as worth reporting as new features, and a period that was mostly fixing should read that way.

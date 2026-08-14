@@ -201,7 +201,7 @@ export default function ChangesClient({
             <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">Report for managers</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
               Writes up the {shown.length} changes above as something a manager can read — grouped by what the work was for,
-              no technical wording. Edit it before it goes anywhere.
+              no technical wording, and no names. Edit it before it goes anywhere.
             </p>
 
             {!draft ? (
