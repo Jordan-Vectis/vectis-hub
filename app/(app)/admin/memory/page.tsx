@@ -378,6 +378,26 @@ WARNING: offsetHeight reports the LAYOUT box, which a CSS transform does not aff
 **Backup gap closed:** the four induction tables are now in the nightly backup. WARNING: the **First Aid** tables are still missing from it — the same gap, deliberately not fixed in this pass.
 
 **Raised and left for Jordan:** deleting a signed record still leaves no audit row; there is no way to record "unable to sign" (so the one person whose induction most needs documenting produces no record at all); no field for the fob/card serial number the access form creates a liability against; and the inductor never counter-signs.
+
+## Auto-apply, and slides that look designed (2026-08-14, later)
+
+Jordan: "After we do a review can we get an auto apply for the feedback also the plain black slides still look terrible. There is no vectis logo images and infographics."
+
+**Auto-apply.** Every finding that names a slide gets a "Fix this" button, plus a "Fix all" that groups findings BY SLIDE so a slide with three findings is rewritten once rather than three times over the top of itself. /api/induction/ai/fix uses **FIX_SYSTEM**, a deliberately narrow prompt: resolve these exact issues and change nothing else.
+
+WARNING: that narrowness is the safety property, not fussiness. If applying one finding could come back as a wholesale rewrite, there is no way to check the result against what was reported — and the wording being rewritten is wording the company has already agreed.
+
+WARNING: findings with **no slide** against them, and everything under "what is missing", are never auto-applied. They need a person to decide what the company is committing to, and they say so on screen.
+
+WARNING: the review only returns a slide TITLE, and duplicate titles are legitimate in this deck — "Legal responsibilities" appears twice. An ambiguous match is **refused with an explanation**, never guessed at; fixing the wrong slide silently would be worse than not fixing it.
+
+**The look.** Every slide now carries the Vectis mark and an accent rule (larger on a title slide). New **layout: CARDS** turns a bullet list into tiles, splitting "Heading — detail" the way people already write bullets, used for the hazards, objectives and contacts slides. New **graphic** field: STEPS renders the slide's own bullets as a numbered flow with a ghost numeral, and EXTINGUISHERS draws the BS EN 3 UK colour code as it appears on the extinguishers in the building — red body, coloured band — instead of five more bullet points (RULES rule 4: borrow the real world's visual language).
+
+WARNING: neither graphic invents content. One restyles the slide's own words; the other draws a published standard. A decorative picture that asserts something the company has not agreed to is exactly what an induction must not have — do not add "illustrative" graphics that carry meaning of their own.
+
+WARNING: **the one-off migration that gives the already-seeded deck its layouts and graphics is guarded on "graphic" IS NULL, and the last statement stamps every remaining slide.** So the whole block can only ever touch a row once, and re-running Run Migrations can never undo a choice made afterwards. Copy that pattern for any future backfill of seeded rows — guarding on the value itself would clobber the user's edits every run.
+
+WARNING: both new columns arrived after the table existed, so loadInductionSlides tries the full select and **falls back to the columns that already exist** — without it, the deploy that adds a column blanks the entire deck until the SQL is applied, which reads as "there are no slides to show" in front of a room. For the same reason, **never use a bare findUnique on InductionSlide**: that is exactly what broke the AI rewrite route on every slide, because it selects every column including one that did not exist yet. Same trap RULES.md documents for the login query on the User table.
 `,
   },
   {
