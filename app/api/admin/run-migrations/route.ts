@@ -1452,6 +1452,7 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS "InductionSignature_formId_idx" ON "InductionSignature"("formId")`,
   `CREATE INDEX IF NOT EXISTS "InductionSignature_personName_idx" ON "InductionSignature"("personName")`,
   `CREATE INDEX IF NOT EXISTS "InductionSignature_signedAt_idx" ON "InductionSignature"("signedAt")`,
+  `ALTER TABLE "InductionSlide" ADD COLUMN IF NOT EXISTS "layout" TEXT NOT NULL DEFAULT 'CONTENT'`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

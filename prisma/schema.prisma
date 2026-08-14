@@ -2111,6 +2111,9 @@ model InductionSlide {
   // Pulls live data onto the slide instead of typed text. See LIVE_BLOCKS in lib/induction.ts.
   // NONE | FIRST_AIDERS | KITS | DEFIBS | SITE_PLAN
   liveBlock String   @default("NONE")
+  // How it is laid out on the big screen. TITLE | CONTENT | STATEMENT — see SLIDE_LAYOUTS.
+  // 21 identically-laid-out slides is what made the deck look like a document.
+  layout    String   @default("CONTENT")
   notes     String?  @db.Text // presenter notes — editor only, never on the big screen
   sortOrder Int      @default(0)
   active    Boolean  @default(true)

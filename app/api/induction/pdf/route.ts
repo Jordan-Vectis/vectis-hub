@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
     if (!rec) return NextResponse.json({ error: "That record no longer exists" }, { status: 404 })
 
     const pdfBytes = await buildInductionSignaturePdf({
+      id: rec.id,
       formTitle: rec.formTitle,
       bodySnapshot: rec.bodySnapshot,
       declarationSnapshot: rec.declarationSnapshot,

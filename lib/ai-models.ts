@@ -51,6 +51,11 @@ export const AI_TOOLS: AiTool[] = [
   { slot: "accounts_split",         group: "Accounts",     label: "Split multi-doc files",                default: "gemini-3-flash-preview" },
   { slot: "accounts_stitch",        group: "Accounts",     label: "Stitch document pages",                default: "gemini-3-flash-preview" },
   { slot: "accounts_statement",     group: "Accounts",     label: "Bank/card statement parse",            default: "gemini-3-flash-preview" },
+  // ── Facilities ──
+  // Both judge H&S wording against UK law, so they are the two slots most worth pointing at
+  // Claude when the key is present — see lib/induction-ai.ts.
+  { slot: "induction_rewrite",      group: "Facilities",   label: "Induction — rewrite & check a slide",   default: "gemini-3-flash-preview", claudeOk: true },
+  { slot: "induction_review",       group: "Facilities",   label: "Induction — review the whole deck",     default: "gemini-3-flash-preview", claudeOk: true },
   // ── Other ──
   { slot: "photo_prep_crop",        group: "Other",        label: "Photo Prep crop box (hard photos only)", default: "gemini-3-flash-preview" },
   // Image IN, image OUT ("nano banana"). Not claudeOk — Claude writes text, not pictures.

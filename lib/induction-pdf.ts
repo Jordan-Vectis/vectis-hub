@@ -26,6 +26,8 @@ const RED    = rgb(0.75, 0.15, 0.15)
 const UK_TZ = "Europe/London"
 
 export type SignatureRecord = {
+  /** Printed in the footer so a paper copy in a personnel file can be traced back to its row. */
+  id: string
   formTitle: string
   bodySnapshot: string | null
   declarationSnapshot: string | null
@@ -40,7 +42,13 @@ export type SignatureRecord = {
   signedAt: Date
 }
 
-// pdf-lib's StandardFonts are WinAnsi only — strip what they can't draw.
+// pdf-lib's StandardFonts are WinAnsi — strip only what they genuinely can't draw.
+//
+// ⚠ WinAnsi (cp1252) DOES encode the accented Latin range, so keeping it is not optional
+// politeness: this document names a specific person, and "José Fernández" printed as
+// "Jos Fernndez" is a personnel record with the wrong name on it. Characters outside cp1252
+// (ł, ș, ż) still cannot be drawn by a standard font and are dropped — an embedded TTF would
+// be needed for those.
 function safeAscii(text: string): string {
   return (text ?? "")
     .replace(/[‘’‚‛]/g, "'")
@@ -48,7 +56,7 @@ function safeAscii(text: string): string {
     .replace(/[–—]/g, "-")
     .replace(/…/g, "...")
     .replace(/ /g, " ")
-    .replace(/[^\x20-\x7E£€]/g, "")
+    .replace(/[^\x20-\x7E\xA0-\xFF£€]/g, "")
     .trimEnd()
 }
 
@@ -144,22 +152,35 @@ export async function buildInductionSignaturePdf(rec: SignatureRecord, now: Date
   const items = parseSignedItems(rec.items)
   if (items.length) {
     heading("WHAT THEY CONFIRMED")
+    // ⚠ A REQUIRED point cannot be saved unticked — signInductionForm refuses. So an unticked
+    // line is an optional point left blank, and printing every one of them in red under "were
+    // NOT confirmed" flagged perfectly good records as defective. Only a required line that is
+    // somehow unticked (an old row, or a form edited afterwards) is a genuine finding.
+    const wrongly = items.filter(it => !it.ticked && it.required === true)
     for (const it of items) {
+      const bad   = !it.ticked && it.required === true
       const mark  = it.ticked ? "[X]" : "[ ]"
-      const color = it.ticked ? INK : RED
-      const lines = wrap(it.label, helv, 9.5, CONTENT_W - 22)
+      const color = bad ? RED : it.ticked ? INK : GREY
+      const label = it.ticked ? it.label : `${it.label}  (optional - not ticked)`
+      const lines = wrap(label, helv, 9.5, CONTENT_W - 22)
       lines.forEach((l, i) => {
         ensure(13.5)
         if (i === 0) page.drawText(mark, { x: MARGIN, y: y - 9, size: 9.5, font: helvB, color })
         page.drawText(l, { x: MARGIN + 22, y: y - 9, size: 9.5, font: helv, color })
         y -= 13.5
       })
+      if (it.detail) {
+        for (const l of wrap(it.detail, helv, 8.5, CONTENT_W - 34)) {
+          ensure(12)
+          page.drawText(l, { x: MARGIN + 34, y: y - 8, size: 8.5, font: helv, color: GREY })
+          y -= 12
+        }
+      }
       y -= 2
     }
-    // An unticked line on a signed record is a real finding, not a formatting quirk.
-    if (items.some(i => !i.ticked)) {
+    if (wrongly.length) {
       ensure(16)
-      page.drawText("Lines marked [ ] were NOT confirmed.", { x: MARGIN, y: y - 9, size: 8.5, font: helvB, color: RED })
+      page.drawText("Lines marked [ ] above were REQUIRED and were not confirmed.", { x: MARGIN, y: y - 9, size: 8.5, font: helvB, color: RED })
       y -= 16
     }
   }
@@ -206,7 +227,7 @@ export async function buildInductionSignaturePdf(rec: SignatureRecord, now: Date
     body("No signature image is stored against this record.", 9, 0, RED)
   }
 
-  const label = `Vectis Hub induction record  -  printed ${stamp(now)}`
+  const label = `Vectis Hub induction record ${rec.id}  -  printed ${stamp(now)}`
   const pages = doc.getPages()
   pages.forEach((pg, i) => {
     pg.drawText(truncate(label, helv, 7, CONTENT_W - 60), { x: MARGIN, y: MARGIN - 22, size: 7, font: helv, color: MUTE })

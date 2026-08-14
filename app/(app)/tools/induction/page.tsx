@@ -16,12 +16,26 @@ async function loadForms() {
   } catch { return [] }
 }
 
+const SIGNATURE_LIMIT = 500
+
 async function loadSignatures() {
   try {
-    // Newest first. The signature PNGs are pulled in too — they are what the Records tab
-    // shows, and there are only ever a few hundred of these.
-    return await prisma.inductionSignature.findMany({ orderBy: { signedAt: "desc" }, take: 500 })
-  } catch { return [] }
+    // ⚠ Everything EXCEPT the signature image. The PNGs are tens of kilobytes each and were
+    // being sent to the device on every visit whichever tab was open — see
+    // /api/induction/signature, which fetches the one being looked at.
+    const [rows, total] = await Promise.all([
+      prisma.inductionSignature.findMany({
+        orderBy: { signedAt: "desc" },
+        take: SIGNATURE_LIMIT,
+        select: {
+          id: true, formId: true, formTitle: true, personName: true, company: true, jobTitle: true,
+          startDate: true, notes: true, takenByName: true, signedAt: true, items: true,
+        },
+      }),
+      prisma.inductionSignature.count(),
+    ])
+    return { rows, total }
+  } catch { return { rows: [], total: 0 } }
 }
 
 export default async function InductionPage() {
@@ -60,16 +74,20 @@ export default async function InductionPage() {
         slides={slides}
         forms={forms.map(f => ({
           id: f.id, key: f.key, title: f.title, intro: f.intro, body: f.body, declaration: f.declaration,
+          // Sent so the signing screen can prove, at submit time, that the wording being stored is
+          // the wording it actually showed — see signInductionForm.
+          updatedAt: f.updatedAt.toISOString(),
           askCompany: f.askCompany, askJobTitle: f.askJobTitle, askStartDate: f.askStartDate, askNotes: f.askNotes,
           active: f.active, sortOrder: f.sortOrder,
           items: f.items.map(i => ({ id: i.id, label: i.label, detail: i.detail, required: i.required, sortOrder: i.sortOrder })),
         }))}
-        signatures={signatures.map(sg => ({
+        signatures={signatures.rows.map(sg => ({
           id: sg.id, formId: sg.formId, formTitle: sg.formTitle, personName: sg.personName,
           company: sg.company, jobTitle: sg.jobTitle, startDate: sg.startDate, notes: sg.notes,
-          signature: sg.signature, takenByName: sg.takenByName, signedAt: sg.signedAt.toISOString(),
+          takenByName: sg.takenByName, signedAt: sg.signedAt.toISOString(),
           items: sg.items,
         }))}
+        signatureTotal={signatures.total}
         live={live}
         isAdmin={isAdmin}
         takenByName={takenByName}

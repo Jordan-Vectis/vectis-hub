@@ -16,6 +16,7 @@ export type SeedSlide = {
   body?: string
   videoUrl?: string
   liveBlock?: string
+  layout?: string
   notes?: string
 }
 
@@ -23,6 +24,7 @@ export const SEED_SLIDES: SeedSlide[] = [
   {
     title: "Health & Safety Induction",
     subtitle: "Vectis Auctions — Hambleton Group",
+    layout: "TITLE",
     body:
       "Welcome to Vectis.\n" +
       "This induction covers how we keep everyone safe on site: what the company must do, what is asked of you, and what to do when something goes wrong.\n" +
@@ -183,12 +185,14 @@ export const SEED_SLIDES: SeedSlide[] = [
   },
   {
     title: "Personal effects",
+    layout: "STATEMENT",
     body:
       "The company is not responsible for the loss, damage or theft of personal belongings brought onto company premises.\n" +
       "Please keep personal items secure and look after your own belongings. The company accepts no liability for personal effects brought to work, whether they are kept in work areas or personal spaces.",
   },
   {
     title: "Data protection",
+    layout: "STATEMENT",
     body:
       "The company is committed to protecting the privacy and security of personal data, in line with data protection law. Personal information is stored securely, used only for the purpose it was collected for, and shared only with authorised people.\n" +
       "You are responsible for handling personal data appropriately and following the data protection guidelines you are given.",
@@ -202,6 +206,7 @@ export const SEED_SLIDES: SeedSlide[] = [
   {
     title: "Any questions?",
     subtitle: "Then we will walk round the building and complete the forms",
+    layout: "TITLE",
     body:
       "Next:\n" +
       "- A walk round the building — exits, assembly point, alarms, fire equipment, first aid kits and welfare facilities.\n" +

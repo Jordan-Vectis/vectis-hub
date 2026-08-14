@@ -4,24 +4,41 @@ import { useMemo, useState, useTransition } from "react"
 import Link from "next/link"
 import InductionSlideView from "@/components/induction-slide"
 import InductionSign, { type SignForm } from "@/components/induction-sign"
-import { LIVE_BLOCKS, parseSignedItems } from "@/lib/induction"
+import { LIVE_BLOCKS, SLIDE_LAYOUTS, parseSignedItems } from "@/lib/induction"
 import type { DeckSlide, LiveData } from "@/lib/induction-data"
 import {
   saveInductionSlide, deleteInductionSlide, clearInductionSlideImage, moveInductionSlide,
   saveInductionForm, deleteInductionForm, saveInductionFormItem, deleteInductionFormItem,
-  deleteInductionSignature,
+  deleteInductionSignature, applyInductionSlideText,
 } from "@/lib/actions/induction"
+
+// ⚠ Standing line on every AI answer in here. The induction is a legal record and the model is
+// not an H&S adviser — the same stance the accident book takes about not being certified.
+const NOT_ADVICE = "AI suggestion — not legal advice. Anything here needs a person to agree it before it goes in front of a new starter."
+
+type AiIssue = { severity?: string; area?: string; what?: string; why?: string; fix?: string; slide?: string | null }
+
+function SeverityChip({ level }: { level?: string }) {
+  const l = (level ?? "").toLowerCase()
+  const cls = l === "high"   ? "bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300"
+            : l === "medium" ? "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300"
+            :                  "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+  return <span className={`shrink-0 text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${cls}`}>{l || "note"}</span>
+}
 
 type FormItem = { id: string; label: string; detail: string | null; required: boolean; sortOrder: number }
 type Form = {
   id: string; key: string; title: string; intro: string | null; body: string | null; declaration: string | null
+  updatedAt: string
   askCompany: boolean; askJobTitle: boolean; askStartDate: boolean; askNotes: boolean
   active: boolean; sortOrder: number; items: FormItem[]
 }
+// ⚠ No `signature` here on purpose — the drawn images are fetched one at a time when a record
+// is opened, not shipped with the page. See /api/induction/signature.
 type Sig = {
   id: string; formId: string; formTitle: string; personName: string
   company: string | null; jobTitle: string | null; startDate: string | null; notes: string | null
-  signature: string; takenByName: string | null; signedAt: string; items: unknown
+  takenByName: string | null; signedAt: string; items: unknown
 }
 
 const TABS = [
@@ -32,13 +49,14 @@ const TABS = [
 ] as const
 
 export default function InductionClient({
-  slides, forms, signatures, live, isAdmin, takenByName,
+  slides, forms, signatures, signatureTotal, live, isAdmin, takenByName,
 }: {
-  slides: DeckSlide[]; forms: Form[]; signatures: Sig[]; live: LiveData; isAdmin: boolean; takenByName: string
+  slides: DeckSlide[]; forms: Form[]; signatures: Sig[]; signatureTotal: number
+  live: LiveData; isAdmin: boolean; takenByName: string
 }) {
   const [tab, setTab] = useState<typeof TABS[number][0]>("run")
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
-  const [, start] = useTransition()
+  const [pending, start] = useTransition()
   const [signing, setSigning] = useState<Form | null>(null)
 
   function run(fn: () => Promise<{ ok: boolean; error?: string }>, okText: string) {
@@ -53,7 +71,8 @@ export default function InductionClient({
   const card  = "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl p-5"
   const btn   = "px-4 py-2 min-h-[44px] bg-amber-600 hover:bg-amber-500 text-white text-sm font-bold rounded-xl"
 
-  const activeForms = forms.filter(f => f.active)
+  const activeForms  = forms.filter(f => f.active)
+  const activeSlides = slides.filter(s => s.active).length
 
   return (
     <div className="space-y-5">
@@ -63,12 +82,21 @@ export default function InductionClient({
             className={`px-4 py-2 min-h-[44px] rounded-lg text-sm font-semibold transition-colors ${
               tab === k ? "bg-amber-600 text-white" : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
             }`}>
-            {label}{k === "records" && signatures.length > 0 ? ` (${signatures.length})` : ""}
+            {label}{k === "records" && signatureTotal > 0 ? ` (${signatureTotal})` : ""}
           </button>
         ))}
       </div>
 
-      {msg && <p className={`text-sm font-medium ${msg.ok ? "text-emerald-600" : "text-red-500"}`}>{msg.ok ? "✓ " : "✗ "}{msg.text}</p>}
+      {/* Sticky: the Slides tab is thousands of pixels long, so a confirmation at the very top
+          is invisible from slide 14 — it looked as though Save had done nothing, and the second
+          tap wiped the first message. The pending state is shown for the same reason. */}
+      {(msg || pending) && (
+        <p className={`sticky top-2 z-30 rounded-lg px-3 py-2 text-sm font-medium backdrop-blur bg-white/85 dark:bg-gray-900/85 ${
+          pending ? "text-gray-600 dark:text-gray-300"
+          : msg!.ok ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+          {pending ? "Saving…" : `${msg!.ok ? "✓ " : "✗ "}${msg!.text}`}
+        </p>
+      )}
 
       {/* ── Run ─────────────────────────────────────────────────────────── */}
       {tab === "run" && (
@@ -77,14 +105,23 @@ export default function InductionClient({
             <div className="flex-1 min-w-[260px]">
               <h2 className="text-lg font-bold text-gray-900 dark:text-white">1. Present the slides</h2>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                Opens full screen on this device — put it on the big screen. Arrow keys or space to move through,
-                N for the presenter notes, Esc to finish. {slides.filter(s => s.active).length} slides.
+                {activeSlides === 0
+                  ? "No slides are in the running order — tick one back on the Slides tab before you start."
+                  : <>Put it on the big screen and press F for full screen. Arrow keys, space or a click move through it,
+                      N shows the presenter notes, Esc finishes. {activeSlides} slides.</>}
               </p>
             </div>
-            <Link href="/tools/induction/present"
-              className="px-6 py-3 min-h-[44px] rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold inline-flex items-center">
-              ▶ Start the presentation
-            </Link>
+            {/* A live amber button with nothing behind it is found out in front of the room. */}
+            {activeSlides === 0 ? (
+              <span className="px-6 py-3 min-h-[44px] rounded-xl bg-gray-200 dark:bg-gray-800 text-gray-500 dark:text-gray-400 font-bold inline-flex items-center cursor-not-allowed">
+                ▶ Start the presentation
+              </span>
+            ) : (
+              <Link href="/tools/induction/present"
+                className="px-6 py-3 min-h-[44px] rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold inline-flex items-center">
+                ▶ Start the presentation
+              </Link>
+            )}
           </div>
 
           <div className={card}>
@@ -118,15 +155,18 @@ export default function InductionClient({
       )}
 
       {/* ── Records ─────────────────────────────────────────────────────── */}
-      {tab === "records" && <Records signatures={signatures} isAdmin={isAdmin} run={run} card={card} input={input} />}
+      {tab === "records" && <Records signatures={signatures} total={signatureTotal} isAdmin={isAdmin} run={run} card={card} input={input} />}
 
       {/* ── Slides ──────────────────────────────────────────────────────── */}
       {tab === "slides" && (
         <div className="space-y-4">
           <p className="text-sm text-gray-500 dark:text-gray-400 max-w-3xl">
-            One slide per card, in running order. A blank line starts a new paragraph and a line beginning
-            &quot;- &quot; becomes a bullet. Presenter notes are never shown on the big screen unless you press N.
+            One slide per card, in running order. Each line is its own block: a line starting &quot;- &quot; is a
+            bullet, &quot;## &quot; forces a heading, and a short line with no full stop at the end becomes a
+            heading automatically. Presenter notes are never shown on the big screen unless you press N.
           </p>
+
+          <DeckReview card={card} />
           {slides.map((sl, idx) => (
             <SlideEditor key={sl.id} slide={sl} live={live} idx={idx} total={slides.length} run={run} card={card} input={input} btn={btn} />
           ))}
@@ -134,16 +174,19 @@ export default function InductionClient({
             <p className="text-sm font-bold text-gray-900 dark:text-white">Add a slide</p>
             <input name="title" placeholder="Title" required maxLength={150} className={input} />
             <input name="subtitle" placeholder="Subtitle (optional)" maxLength={200} className={input} />
-            <textarea name="body" rows={4} placeholder="Body — a blank line starts a paragraph, a line starting with - is a bullet" maxLength={8000} className={input} />
-            <div className="grid gap-3 sm:grid-cols-2">
+            <textarea name="body" rows={4} placeholder={"Body — one line per block. \"- \" makes a bullet, \"## \" makes a heading, and a short line with no full stop becomes a heading too."} maxLength={8000} className={input} />
+            <div className="grid gap-3 sm:grid-cols-3">
               <input name="videoUrl" placeholder="Video link (optional)" maxLength={500} className={input} />
               <select name="liveBlock" defaultValue="NONE" className={input}>
                 {LIVE_BLOCKS.map(b => <option key={b.key} value={b.key}>{b.label}</option>)}
               </select>
+              <select name="layout" defaultValue="CONTENT" className={input}>
+                {SLIDE_LAYOUTS.map(l => <option key={l.key} value={l.key}>{l.label}</option>)}
+              </select>
             </div>
             <div className="flex items-center gap-4 flex-wrap">
-              <label className="text-xs text-gray-500 dark:text-gray-400">Order <input type="number" name="sortOrder" defaultValue={(slides.length + 1) * 10} className="ml-1 w-20 rounded border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1 text-sm" /></label>
-              <label className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1.5"><input type="checkbox" name="active" defaultChecked className="accent-amber-600" /> In the running order</label>
+              <label className="text-xs text-gray-500 dark:text-gray-400">Order <input type="number" name="sortOrder" defaultValue={(slides.length + 1) * 10} className="ml-1 w-20 rounded border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-2 min-h-[44px] text-sm dark:[color-scheme:dark]" /></label>
+              <label className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-2 min-h-[44px]"><input type="checkbox" name="active" defaultChecked className="accent-amber-600 h-5 w-5 shrink-0" /> In the running order</label>
               <label className="text-xs text-gray-500 dark:text-gray-400">Image <input type="file" name="image" accept="image/*" className="ml-1 file-input" /></label>
               <button className={btn + " ml-auto"}>Add slide</button>
             </div>
@@ -169,11 +212,11 @@ export default function InductionClient({
             <textarea name="body" rows={5} placeholder="The terms they read" maxLength={20000} className={input} />
             <textarea name="declaration" rows={2} placeholder="The sentence directly above the signature" maxLength={4000} className={input} />
             <div className="flex items-center gap-4 flex-wrap text-xs text-gray-600 dark:text-gray-300">
-              <label className="flex items-center gap-1.5"><input type="checkbox" name="askCompany" defaultChecked className="accent-amber-600" /> Ask for company</label>
-              <label className="flex items-center gap-1.5"><input type="checkbox" name="askJobTitle" defaultChecked className="accent-amber-600" /> Ask for job title</label>
-              <label className="flex items-center gap-1.5"><input type="checkbox" name="askStartDate" className="accent-amber-600" /> Ask for start date</label>
-              <label className="flex items-center gap-1.5"><input type="checkbox" name="askNotes" className="accent-amber-600" /> Add a questions box</label>
-              <label className="flex items-center gap-1.5"><input type="checkbox" name="active" defaultChecked className="accent-amber-600" /> Switched on</label>
+              <label className="flex items-center gap-2 min-h-[44px]"><input type="checkbox" name="askCompany" defaultChecked className="accent-amber-600 h-5 w-5 shrink-0" /> Ask for company</label>
+              <label className="flex items-center gap-2 min-h-[44px]"><input type="checkbox" name="askJobTitle" defaultChecked className="accent-amber-600 h-5 w-5 shrink-0" /> Ask for job title</label>
+              <label className="flex items-center gap-2 min-h-[44px]"><input type="checkbox" name="askStartDate" className="accent-amber-600 h-5 w-5 shrink-0" /> Ask for start date</label>
+              <label className="flex items-center gap-2 min-h-[44px]"><input type="checkbox" name="askNotes" className="accent-amber-600 h-5 w-5 shrink-0" /> Add a questions box</label>
+              <label className="flex items-center gap-2 min-h-[44px]"><input type="checkbox" name="active" defaultChecked className="accent-amber-600 h-5 w-5 shrink-0" /> Switched on</label>
               <button className={btn + " ml-auto"}>Add form</button>
             </div>
           </form>
@@ -202,6 +245,26 @@ function SlideEditor({
 }) {
   const [open, setOpen]       = useState(false)
   const [preview, setPreview] = useState(false)
+  const [ai, setAi]           = useState<{ title: string; subtitle: string; body: string; changed: boolean; issues: AiIssue[] } | null>(null)
+  const [aiBusy, setAiBusy]   = useState(false)
+  const [aiErr, setAiErr]     = useState<string | null>(null)
+
+  async function askAi() {
+    setAiBusy(true); setAiErr(null); setAi(null)
+    try {
+      const res = await fetch("/api/induction/ai/rewrite", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slideId: slide.id }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? "The rewrite failed")
+      setAi(json)
+    } catch (e: any) {
+      setAiErr(e?.message ?? "The rewrite failed")
+    } finally {
+      setAiBusy(false)
+    }
+  }
 
   return (
     <div className={card + (slide.active ? "" : " opacity-60")}>
@@ -210,8 +273,9 @@ function SlideEditor({
         <div className="flex-1 min-w-[200px]">
           <p className="font-bold text-gray-900 dark:text-white">{slide.title}</p>
           {slide.subtitle && <p className="text-xs text-amber-600 dark:text-amber-400">{slide.subtitle}</p>}
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
             {!slide.active && "Not in the running order · "}
+            {slide.layout && slide.layout !== "CONTENT" && `${SLIDE_LAYOUTS.find(l => l.key === slide.layout)?.label.split(" — ")[0]} · `}
             {slide.liveBlock !== "NONE" && `${LIVE_BLOCKS.find(b => b.key === slide.liveBlock)?.label} · `}
             {slide.videoUrl && "video · "}
             {slide.imageKey && "image · "}
@@ -227,9 +291,69 @@ function SlideEditor({
             className="px-3 py-2 min-h-[44px] rounded-lg border border-gray-300 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300">
             {preview ? "Hide" : "Preview"}
           </button>
+          <button type="button" onClick={askAi} disabled={aiBusy}
+            className="px-3 py-2 min-h-[44px] rounded-lg border border-violet-400 dark:border-violet-600 text-sm font-semibold text-violet-700 dark:text-violet-300 disabled:opacity-50">
+            {aiBusy ? "Checking…" : "✨ Rewrite & check"}
+          </button>
           <button type="button" onClick={() => setOpen(o => !o)} className={btn}>{open ? "Close" : "Edit"}</button>
         </div>
       </div>
+
+      {aiErr && <p className="mt-3 text-sm text-red-500 font-semibold">✗ {aiErr}</p>}
+
+      {ai && (
+        <div className="mt-4 rounded-2xl border-2 border-violet-300 dark:border-violet-700/60 bg-violet-50 dark:bg-violet-500/5 p-4 space-y-4">
+          <p className="text-xs text-violet-700 dark:text-violet-300 font-semibold">{NOT_ADVICE}</p>
+
+          {ai.issues.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-sm font-bold text-gray-900 dark:text-white">What it found wrong with this slide</p>
+              {ai.issues.map((it, k) => (
+                <div key={k} className="flex gap-2 items-start rounded-xl bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 p-3">
+                  <SeverityChip level={it.severity} />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{it.what}</p>
+                    {it.why && <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">{it.why}</p>}
+                    {it.area && <p className="text-[11px] uppercase tracking-wide text-gray-400 mt-1">{it.area}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              It found nothing wrong with what this slide says{ai.changed ? " — the rewrite below is wording only." : "."}
+            </p>
+          )}
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div>
+              <p className="text-[11px] uppercase tracking-wider text-gray-400 mb-1">Now</p>
+              <div className="rounded-xl bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 p-3 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line">
+                <span className="font-bold block">{slide.title}</span>
+                {slide.subtitle && <span className="block text-gray-500">{slide.subtitle}</span>}
+                {slide.body}
+              </div>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-wider text-violet-500 mb-1">Suggested</p>
+              <div className="rounded-xl bg-white dark:bg-gray-900/60 border border-violet-300 dark:border-violet-700/60 p-3 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line">
+                <span className="font-bold block">{ai.title}</span>
+                {ai.subtitle && <span className="block text-gray-500">{ai.subtitle}</span>}
+                {ai.body}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-2 flex-wrap">
+            {/* Applying is a deliberate human action — the AI never writes to a slide itself. */}
+            <button type="button"
+              onClick={() => { run(() => applyInductionSlideText(slide.id, ai.title, ai.subtitle, ai.body), "Rewrite applied."); setAi(null) }}
+              className="px-4 py-2 min-h-[44px] rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-bold">Use the suggested wording</button>
+            <button type="button" onClick={() => setAi(null)}
+              className="px-4 py-2 min-h-[44px] rounded-xl border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 text-sm font-bold">Discard</button>
+          </div>
+        </div>
+      )}
 
       {preview && (
         <div className="mt-4 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 bg-gray-50 dark:bg-gray-950/40">
@@ -243,10 +367,13 @@ function SlideEditor({
           <input name="title" defaultValue={slide.title} maxLength={150} className={input} />
           <input name="subtitle" defaultValue={slide.subtitle ?? ""} placeholder="Subtitle" maxLength={200} className={input} />
           <textarea name="body" rows={8} defaultValue={slide.body ?? ""} maxLength={8000} className={input} />
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
             <input name="videoUrl" defaultValue={slide.videoUrl ?? ""} placeholder="Video link" maxLength={500} className={input} />
             <select name="liveBlock" defaultValue={slide.liveBlock} className={input}>
               {LIVE_BLOCKS.map(b => <option key={b.key} value={b.key}>{b.label}</option>)}
+            </select>
+            <select name="layout" defaultValue={slide.layout || "CONTENT"} className={input}>
+              {SLIDE_LAYOUTS.map(l => <option key={l.key} value={l.key}>{l.label}</option>)}
             </select>
           </div>
           <div>
@@ -254,8 +381,8 @@ function SlideEditor({
             <textarea name="notes" rows={2} defaultValue={slide.notes ?? ""} maxLength={4000} className={input} />
           </div>
           <div className="flex items-center gap-4 flex-wrap">
-            <label className="text-xs text-gray-500 dark:text-gray-400">Order <input type="number" name="sortOrder" defaultValue={slide.sortOrder} className="ml-1 w-20 rounded border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1 text-sm" /></label>
-            <label className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1.5"><input type="checkbox" name="active" defaultChecked={slide.active} className="accent-amber-600" /> In the running order</label>
+            <label className="text-xs text-gray-500 dark:text-gray-400">Order <input type="number" name="sortOrder" defaultValue={slide.sortOrder} className="ml-1 w-20 rounded border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-2 min-h-[44px] text-sm dark:[color-scheme:dark]" /></label>
+            <label className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-2 min-h-[44px]"><input type="checkbox" name="active" defaultChecked={slide.active} className="accent-amber-600 h-5 w-5 shrink-0" /> In the running order</label>
             <label className="text-xs text-gray-500 dark:text-gray-400">Image <input type="file" name="image" accept="image/*" className="ml-1 file-input" /></label>
             {slide.imageKey && (
               <button type="button" onClick={() => run(() => clearInductionSlideImage(slide.id), "Image removed.")}
@@ -269,6 +396,112 @@ function SlideEditor({
             </div>
           </div>
         </form>
+      )}
+    </div>
+  )
+}
+
+// ─── Whole-deck AI review ─────────────────────────────────────────────────
+
+type ReviewResult = {
+  summary: string
+  slideCount: number
+  issues: AiIssue[]
+  missing: { topic?: string; why?: string; suggestion?: string }[]
+}
+
+function DeckReview({ card }: { card: string }) {
+  const [busy, setBusy]   = useState(false)
+  const [res, setRes]     = useState<ReviewResult | null>(null)
+  const [err, setErr]     = useState<string | null>(null)
+
+  async function run() {
+    setBusy(true); setErr(null); setRes(null)
+    try {
+      const r = await fetch("/api/induction/ai/review", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+      })
+      const json = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(json.error ?? "The review failed")
+      setRes(json)
+    } catch (e: any) {
+      setErr(e?.message ?? "The review failed")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className={card + " space-y-4"}>
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex-1 min-w-[260px]">
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white">Check the whole induction</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Reads every slide and both forms, and reports what looks wrong — factually, legally or in plain
+            readability — plus anything a new starter here ought to be told that is not covered anywhere.
+          </p>
+        </div>
+        <button type="button" onClick={run} disabled={busy}
+          className="px-6 py-3 min-h-[44px] rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold disabled:opacity-50">
+          {busy ? "Reading it all…" : "🔍 Review the induction"}
+        </button>
+      </div>
+
+      {err && <p className="text-sm text-red-500 font-semibold">✗ {err}</p>}
+
+      {res && (
+        <div className="space-y-5 border-t border-gray-200 dark:border-gray-800 pt-4">
+          <p className="text-xs text-violet-700 dark:text-violet-300 font-semibold">{NOT_ADVICE}</p>
+
+          {res.summary && <p className="text-[15px] text-gray-800 dark:text-gray-200 leading-relaxed">{res.summary}</p>}
+
+          <div>
+            <p className="text-sm font-bold text-gray-900 dark:text-white mb-2">
+              What looks wrong {res.issues.length > 0 && <span className="text-gray-400 font-normal">({res.issues.length})</span>}
+            </p>
+            {res.issues.length === 0 ? (
+              <p className="text-sm text-gray-500">It did not flag anything. That is worth a second opinion, not a full stop.</p>
+            ) : (
+              <div className="space-y-2">
+                {res.issues.map((it, k) => (
+                  <div key={k} className="flex gap-2 items-start rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+                    <SeverityChip level={it.severity} />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">{it.what}</p>
+                      {it.fix && <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">{it.fix}</p>}
+                      <p className="text-[11px] uppercase tracking-wide text-gray-400 mt-1">
+                        {it.slide ? `Slide: ${it.slide}` : "Whole induction"}{it.area ? ` · ${it.area}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="text-sm font-bold text-gray-900 dark:text-white mb-2">
+              What is missing {res.missing.length > 0 && <span className="text-gray-400 font-normal">({res.missing.length})</span>}
+            </p>
+            {res.missing.length === 0 ? (
+              <p className="text-sm text-gray-500">Nothing suggested.</p>
+            ) : (
+              <div className="space-y-2">
+                {res.missing.map((m, k) => (
+                  <div key={k} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{m.topic}</p>
+                    {m.why && <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">{m.why}</p>}
+                    {m.suggestion && <p className="text-sm text-gray-500 dark:text-gray-500 mt-1 italic">{m.suggestion}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <p className="text-xs text-gray-400">
+            Add a missing topic as a new slide at the bottom of this tab. Nothing here has changed the induction.
+          </p>
+        </div>
       )}
     </div>
   )
@@ -316,12 +549,12 @@ function FormEditor({
               <textarea name="declaration" rows={3} defaultValue={form.declaration ?? ""} maxLength={4000} className={input} />
             </div>
             <div className="flex items-center gap-4 flex-wrap text-xs text-gray-600 dark:text-gray-300">
-              <label className="flex items-center gap-1.5"><input type="checkbox" name="askCompany" defaultChecked={form.askCompany} className="accent-amber-600" /> Ask for company</label>
-              <label className="flex items-center gap-1.5"><input type="checkbox" name="askJobTitle" defaultChecked={form.askJobTitle} className="accent-amber-600" /> Ask for job title</label>
-              <label className="flex items-center gap-1.5"><input type="checkbox" name="askStartDate" defaultChecked={form.askStartDate} className="accent-amber-600" /> Ask for start date</label>
-              <label className="flex items-center gap-1.5"><input type="checkbox" name="askNotes" defaultChecked={form.askNotes} className="accent-amber-600" /> Questions box</label>
-              <label className="flex items-center gap-1.5"><input type="checkbox" name="active" defaultChecked={form.active} className="accent-amber-600" /> Switched on</label>
-              <label className="text-gray-500">Order <input type="number" name="sortOrder" defaultValue={form.sortOrder} className="ml-1 w-20 rounded border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1 text-sm" /></label>
+              <label className="flex items-center gap-2 min-h-[44px]"><input type="checkbox" name="askCompany" defaultChecked={form.askCompany} className="accent-amber-600 h-5 w-5 shrink-0" /> Ask for company</label>
+              <label className="flex items-center gap-2 min-h-[44px]"><input type="checkbox" name="askJobTitle" defaultChecked={form.askJobTitle} className="accent-amber-600 h-5 w-5 shrink-0" /> Ask for job title</label>
+              <label className="flex items-center gap-2 min-h-[44px]"><input type="checkbox" name="askStartDate" defaultChecked={form.askStartDate} className="accent-amber-600 h-5 w-5 shrink-0" /> Ask for start date</label>
+              <label className="flex items-center gap-2 min-h-[44px]"><input type="checkbox" name="askNotes" defaultChecked={form.askNotes} className="accent-amber-600 h-5 w-5 shrink-0" /> Questions box</label>
+              <label className="flex items-center gap-2 min-h-[44px]"><input type="checkbox" name="active" defaultChecked={form.active} className="accent-amber-600 h-5 w-5 shrink-0" /> Switched on</label>
+              <label className="text-gray-500">Order <input type="number" name="sortOrder" defaultValue={form.sortOrder} className="ml-1 w-20 rounded border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-2 min-h-[44px] text-sm dark:[color-scheme:dark]" /></label>
               <div className="ml-auto flex gap-2">
                 <button className={btn}>Save</button>
                 <button type="button"
@@ -339,8 +572,8 @@ function FormEditor({
                 <textarea name="label" rows={2} defaultValue={it.label} maxLength={1000} className={input} />
                 <input name="detail" defaultValue={it.detail ?? ""} placeholder="Extra line underneath (optional)" maxLength={2000} className={input} />
                 <div className="flex items-center gap-4 flex-wrap text-xs text-gray-600 dark:text-gray-300">
-                  <label className="flex items-center gap-1.5"><input type="checkbox" name="required" defaultChecked={it.required} className="accent-amber-600" /> Must be ticked before they can sign</label>
-                  <label className="text-gray-500">Order <input type="number" name="sortOrder" defaultValue={it.sortOrder} className="ml-1 w-20 rounded border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-1 text-sm" /></label>
+                  <label className="flex items-center gap-2 min-h-[44px]"><input type="checkbox" name="required" defaultChecked={it.required} className="accent-amber-600 h-5 w-5 shrink-0" /> Must be ticked before they can sign</label>
+                  <label className="text-gray-500">Order <input type="number" name="sortOrder" defaultValue={it.sortOrder} className="ml-1 w-20 rounded border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2 py-2 min-h-[44px] text-sm dark:[color-scheme:dark]" /></label>
                   <div className="ml-auto flex gap-2">
                     <button className="px-3 py-2 min-h-[44px] bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-lg">Save</button>
                     <button type="button" onClick={() => { if (confirm("Delete this point?")) run(() => deleteInductionFormItem(it.id), "Item deleted.") }}
@@ -353,7 +586,7 @@ function FormEditor({
               <input type="hidden" name="formId" value={form.id} />
               <textarea name="label" rows={2} placeholder="Add another point they must confirm" required maxLength={1000} className={input} />
               <div className="flex items-center gap-4 flex-wrap text-xs text-gray-600 dark:text-gray-300">
-                <label className="flex items-center gap-1.5"><input type="checkbox" name="required" defaultChecked className="accent-amber-600" /> Must be ticked</label>
+                <label className="flex items-center gap-2 min-h-[44px]"><input type="checkbox" name="required" defaultChecked className="accent-amber-600 h-5 w-5 shrink-0" /> Must be ticked</label>
                 <button className="ml-auto px-3 py-2 min-h-[44px] bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-lg">Add</button>
               </div>
             </form>
@@ -367,14 +600,27 @@ function FormEditor({
 // ─── Records ──────────────────────────────────────────────────────────────
 
 function Records({
-  signatures, isAdmin, run, card, input,
+  signatures, total, isAdmin, run, card, input,
 }: {
-  signatures: Sig[]; isAdmin: boolean
+  signatures: Sig[]; total: number; isAdmin: boolean
   run: (fn: () => Promise<{ ok: boolean; error?: string }>, okText: string) => void
   card: string; input: string
 }) {
   const [q, setQ] = useState("")
   const [openId, setOpenId] = useState<string | null>(null)
+  // Fetched one at a time as records are opened, and remembered for this visit.
+  const [sigImages, setSigImages] = useState<Record<string, string>>({})
+
+  async function openRecord(id: string) {
+    if (openId === id) { setOpenId(null); return }
+    setOpenId(id)
+    if (sigImages[id]) return
+    try {
+      const res = await fetch(`/api/induction/signature?id=${encodeURIComponent(id)}`)
+      const json = await res.json().catch(() => ({}))
+      if (res.ok && json.signature) setSigImages(prev => ({ ...prev, [id]: json.signature }))
+    } catch { /* the ✗ below says the image could not be loaded */ }
+  }
 
   // Grouped by person so "what has this person signed?" is one row, not a hunt through a log.
   const people = useMemo(() => {
@@ -400,7 +646,13 @@ function Records({
   return (
     <div className="space-y-4">
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search a name, company or form…" className={input + " max-w-md"} />
-      {people.length === 0 && <p className="text-sm text-gray-500">Nothing matches “{q}”.</p>}
+      {/* RULES.md: never let a silent cap read as "that is everything". */}
+      {total > signatures.length && (
+        <p className="text-sm text-amber-700 dark:text-amber-300 font-semibold">
+          Showing the most recent {signatures.length} of {total} signed records. The search only looks at those.
+        </p>
+      )}
+      {people.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-400">Nothing matches “{q}”.</p>}
 
       {people.map(p => (
         <div key={p.name} className={card}>
@@ -424,12 +676,12 @@ function Records({
                         {items.length ? ` · ${items.filter(i => i.ticked).length}/${items.length} confirmed` : ""}
                       </p>
                     </div>
-                    <button type="button" onClick={() => setOpenId(open ? null : s.id)}
+                    <button type="button" onClick={() => openRecord(s.id)}
                       className="px-3 py-2 min-h-[44px] rounded-lg border border-gray-300 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300">
                       {open ? "Hide" : "View"}
                     </button>
                     <a href={`/api/induction/pdf?id=${s.id}`} target="_blank" rel="noreferrer"
-                      className="px-3 py-2 min-h-[44px] rounded-lg bg-gray-800 dark:bg-gray-700 hover:bg-gray-700 text-white text-sm font-semibold inline-flex items-center">
+                      className="px-3 py-2 min-h-[44px] rounded-lg bg-gray-800 dark:bg-gray-700 hover:bg-gray-700 dark:hover:bg-gray-600 text-white text-sm font-semibold inline-flex items-center">
                       🖨 PDF
                     </a>
                     {isAdmin && (
@@ -447,10 +699,12 @@ function Records({
                         {s.startDate && <div><dt className="inline font-semibold">Start date: </dt><dd className="inline">{s.startDate}</dd></div>}
                       </dl>
                       {items.length > 0 && (
+                        // ⚠ An unticked line here is an OPTIONAL point left blank — a required
+                        // one cannot be saved unticked at all. Showing it in red said "refused".
                         <ul className="text-sm space-y-1">
                           {items.map((it, k) => (
-                            <li key={k} className={it.ticked ? "text-gray-700 dark:text-gray-300" : "text-red-600 dark:text-red-400"}>
-                              {it.ticked ? "✓" : "✗"} {it.label}
+                            <li key={k} className={it.ticked ? "text-emerald-700 dark:text-emerald-400" : "text-gray-500 dark:text-gray-400"}>
+                              {it.ticked ? "✓" : "○"} {it.label}{it.ticked ? "" : " — optional, not ticked"}
                             </li>
                           ))}
                         </ul>
@@ -461,8 +715,12 @@ function Records({
                           <p className="text-sm text-amber-900 dark:text-amber-200 whitespace-pre-line">{s.notes}</p>
                         </div>
                       )}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={s.signature} alt={`${p.name}'s signature`} className="h-24 w-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white" />
+                      {sigImages[s.id] ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={sigImages[s.id]} alt={`${p.name}'s signature`} className="h-24 w-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white" />
+                      ) : (
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Loading the signature…</p>
+                      )}
                     </div>
                   )}
                 </div>

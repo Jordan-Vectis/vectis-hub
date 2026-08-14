@@ -17,6 +17,9 @@ import { signInductionForm } from "@/lib/actions/induction"
 type Item = { id: string; label: string; detail: string | null; required: boolean }
 export type SignForm = {
   id: string
+  /** When this copy of the form was loaded. Sent back on submit so the server can refuse to
+   *  store a snapshot the signer never saw — see signInductionForm. */
+  updatedAt: string
   title: string
   intro: string | null
   body: string | null
@@ -50,8 +53,12 @@ export default function InductionSign({ form, takenByName, onClose }: { form: Si
 
   const missing = form.items.filter(i => i.required && !ticked.has(i.id))
 
+  // ⚠ The canvas only exists on step 2, so stepping BACK unmounts it and coming forward again
+  // mounts a fresh, blank one. `hasSig` has to be cleared with it — otherwise the Submit button
+  // stays enabled over an empty canvas and a signed record is created with a blank white
+  // signature that nothing downstream can tell apart from a real one.
   useEffect(() => {
-    if (step !== 2) return
+    if (step !== 2) { setHasSig(false); return }
     const ctx = canvasRef.current?.getContext("2d")
     if (!ctx) return
     ctx.lineWidth = 2.5; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = "#111827"
@@ -67,6 +74,13 @@ export default function InductionSign({ form, takenByName, onClose }: { form: Si
     canvasRef.current?.setPointerCapture(e.pointerId)
     drawing.current = true
     last.current = pos(e)
+    // A single dot counts as a mark. Setting this only on move meant someone whose signature is
+    // a short stab could not submit and had no idea why.
+    const ctx = canvasRef.current?.getContext("2d")
+    if (ctx && last.current) {
+      ctx.beginPath(); ctx.arc(last.current.x, last.current.y, 1.25, 0, Math.PI * 2); ctx.fill()
+    }
+    if (!hasSig) setHasSig(true)
   }
   function move(e: React.PointerEvent<HTMLCanvasElement>) {
     if (!drawing.current) return
@@ -85,6 +99,13 @@ export default function InductionSign({ form, takenByName, onClose }: { form: Si
     setHasSig(false)
   }
 
+  // Nothing is saved until Submit, so closing throws away everything they have typed and
+  // drawn. Ask first once there is anything to lose — on a tablet the ✕ is easy to catch.
+  function close() {
+    if (!name.trim() && ticked.size === 0 && !hasSig) { onClose(); return }
+    if (confirm("Close this form? Nothing has been saved, and anything filled in will be lost.")) onClose()
+  }
+
   function toggle(id: string) {
     setTicked(prev => {
       const next = new Set(prev)
@@ -93,9 +114,21 @@ export default function InductionSign({ form, takenByName, onClose }: { form: Si
     })
   }
 
+  /** Is there actually ink on the canvas? The last line of defence against storing a blank
+   *  white PNG that every downstream check would happily accept as a signature. */
+  function hasInk(c: HTMLCanvasElement): boolean {
+    try {
+      const data = c.getContext("2d")?.getImageData(0, 0, c.width, c.height).data
+      if (!data) return true          // can't tell — don't block a genuine signer
+      for (let i = 3; i < data.length; i += 4) if (data[i] !== 0) return true
+      return false
+    } catch { return true }
+  }
+
   async function submit() {
     const c = canvasRef.current
     if (!c || !hasSig || saving) return
+    if (!hasInk(c)) { setError("The signature box is empty — please sign it."); setHasSig(false); return }
     setSaving(true); setError(null)
     try {
       // Composite onto white — a transparent PNG of dark ink is invisible everywhere it is
@@ -108,6 +141,7 @@ export default function InductionSign({ form, takenByName, onClose }: { form: Si
 
       const res = await signInductionForm({
         formId: form.id,
+        formUpdatedAt: form.updatedAt,
         personName: name,
         company, jobTitle, startDate, notes,
         ticked: [...ticked],
@@ -154,17 +188,17 @@ export default function InductionSign({ form, takenByName, onClose }: { form: Si
         </span>
         <div className="flex-1 min-w-[200px]">
           <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white leading-tight">{form.title}</h2>
-          <p className="text-xs text-gray-500">Being taken by {takenByName}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Being taken by {takenByName}</p>
         </div>
         <div className="flex items-center gap-2">
           {STEPS.map((s, i) => (
             <span key={s} className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
               i === step ? "bg-amber-500 text-white"
               : i < step ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
-              : "bg-gray-100 dark:bg-gray-800 text-gray-500"}`}>{i + 1}. {s}</span>
+              : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"}`}>{i + 1}. {s}</span>
           ))}
         </div>
-        <button type="button" onClick={onClose} aria-label="Close"
+        <button type="button" onClick={close} aria-label="Close"
           className="h-11 w-11 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 text-xl leading-none">✕</button>
       </div>
 
@@ -174,6 +208,15 @@ export default function InductionSign({ form, takenByName, onClose }: { form: Si
             <div className="space-y-4">
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Please fill these in yourself, then read the form on the next screen.
+              </p>
+              {/* The DPIA says to tell people what the record is for AT THE POINT OF SIGNING.
+                  Most people signing this have no other relationship with Vectis and no Hub
+                  account, so this line is the only privacy notice they will ever get. */}
+              <p className="text-xs text-gray-500 dark:text-gray-400 rounded-xl border border-gray-200 dark:border-gray-700 p-3 leading-relaxed">
+                What you type here, and your signature, are kept by Vectis Auctions as the record that this was
+                covered with you. It is used for health and safety and employment purposes only, is visible to the
+                managers who run inductions, and is not shared with anyone outside the company. Ask the person
+                inducting you if you want to know more.
               </p>
               <div>
                 <label className={label}>Your full name</label>
@@ -194,8 +237,11 @@ export default function InductionSign({ form, takenByName, onClose }: { form: Si
               {form.askStartDate && (
                 <div>
                   <label className={label}>Start date</label>
-                  {/* .file-input styling trap applies to date inputs too — see RULES.md */}
-                  <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={input} />
+                  {/* RULES.md: a native date control draws its picker glyph and drop-down in the
+                      BROWSER's colours. color-scheme is what actually tells it we are dark —
+                      styling the text alone leaves a black glyph on a dark field. */}
+                  <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+                    className={input + " dark:[color-scheme:dark]"} />
                 </div>
               )}
             </div>
@@ -223,8 +269,8 @@ export default function InductionSign({ form, takenByName, onClose }: { form: Si
                           on ? "border-emerald-500 bg-emerald-500 text-white" : "border-gray-400 dark:border-gray-600 text-transparent"}`}>✓</span>
                         <span>
                           <span className="block text-[15px] text-gray-900 dark:text-gray-100 leading-snug">{it.label}</span>
-                          {it.detail && <span className="block text-sm text-gray-500 mt-0.5">{it.detail}</span>}
-                          {!it.required && <span className="block text-xs text-gray-400 mt-0.5">Optional</span>}
+                          {it.detail && <span className="block text-sm text-gray-500 dark:text-gray-400 mt-0.5">{it.detail}</span>}
+                          {!it.required && <span className="block text-xs text-gray-400 dark:text-gray-500 mt-0.5">Optional</span>}
                         </span>
                       </button>
                     )
@@ -236,6 +282,13 @@ export default function InductionSign({ form, takenByName, onClose }: { form: Si
                   <label className={label}>Anything you are unsure about, or want to ask?</label>
                   <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className={input}
                     placeholder="Optional — this is saved with your form and read by the health and safety team." />
+                  {/* ⚠ A box on a slide deck about defibrillators, pacemakers and lifting invites
+                      "I have a heart condition, is that a problem?" — special-category health data
+                      landing in a plain text column that everyone with the permission can read. */}
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
+                    Please do not type medical or health details here — tell the person inducting you, or your
+                    manager, in person instead.
+                  </p>
                 </div>
               )}
             </div>
@@ -276,7 +329,7 @@ export default function InductionSign({ form, takenByName, onClose }: { form: Si
       {/* Footer — one clear action, always in the same place */}
       <div className="border-t border-gray-200 dark:border-gray-800 px-5 py-4">
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
-          <button type="button" onClick={() => (step === 0 ? onClose() : setStep(step - 1))}
+          <button type="button" onClick={() => (step === 0 ? close() : setStep(step - 1))}
             className="px-5 py-3 min-h-[44px] rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-semibold">
             {step === 0 ? "Cancel" : "Back"}
           </button>
@@ -290,7 +343,7 @@ export default function InductionSign({ form, takenByName, onClose }: { form: Si
           {step === 1 && (
             <div className="flex items-center gap-3">
               {missing.length > 0 && (
-                <span className="text-sm text-gray-500">{missing.length} still to tick</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">{missing.length} still to tick</span>
               )}
               <button type="button" disabled={missing.length > 0} onClick={() => setStep(2)}
                 className="px-8 py-3 min-h-[44px] rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold disabled:opacity-40">

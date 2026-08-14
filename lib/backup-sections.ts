@@ -53,6 +53,14 @@ export const BACKUP_SECTIONS: Record<string, BackupSection> = {
     description: "Research log entries",
     tables: ["researchLogs"],
   },
+  // ⚠ InductionSignature is signed evidence that a person was given their health and safety
+  // induction, an admin can delete a row outright, and there is no soft delete — so leaving it
+  // out of the backup meant the only recovery path was a Neon point-in-time restore.
+  facilities: {
+    label: "Facilities → Induction",
+    description: "Induction slides, the forms people sign, and the signed records themselves",
+    tables: ["inductionSlides", "inductionForms", "inductionFormItems", "inductionSignatures"],
+  },
 }
 
 export const ALL_SECTION_KEYS = Object.keys(BACKUP_SECTIONS)

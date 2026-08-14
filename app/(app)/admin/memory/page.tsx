@@ -351,6 +351,33 @@ Recorded in the STORES arrays on **both** /admin/compliance and /admin/dpia, per
 ## Not built (not asked for)
 
 No completion tracking across a person (each form stands alone), no email to HR, no per-person induction "record card", and the slides are not printable. Ask before adding any of it.
+
+## AI helpers, presenter redesign and a three-agent review (2026-08-14)
+
+Jordan: "could we have a re-write with ai that also check what we are saying is correct and legal. An AI to check if anything is missing/recommendations. The slide is also very boring looking."
+
+**Two AI helpers.** Slots induction_rewrite / induction_review (lib/ai-models.ts, both claudeOk); the prompts, the UK legal standard they judge against and the deck serialiser live in **lib/induction-ai.ts**. Per slide, **Rewrite & check** rewrites it AND lists what was wrong legally or factually; across the whole deck plus both forms, **Review the induction** reports what is wrong and what is missing.
+
+WARNING: neither ever writes to a slide. The answer comes back for a person to accept or discard, and applyInductionSlideText is the only write path — it can touch title/subtitle/body and nothing else, so an AI cannot change the layout, the live block or whether a slide is even in the running order. Every panel carries a standing "not legal advice" line. Same stance as the accident book, which is deliberately not claimed to be certified.
+
+**Presenter redesign.** It looked like a document, because all 21 slides used one layout and every non-bullet line rendered bold — a heading and the paragraph under it were indistinguishable. Now: InductionSlide.**layout** (TITLE | CONTENT | STATEMENT); parseSlideBody returns "h" blocks (a short line with no full stop, or an explicit "## "); a **fit-to-height scaler** so a slide never scrolls in front of a room, with a visible warning badge when it hits the floor and would clip; chrome that fades while presenting; click-to-advance; F for full screen.
+
+WARNING: offsetHeight reports the LAYOUT box, which a CSS transform does not affect — that is why measuring while already scaled cannot feed back into itself. WARNING: the faded control bar must keep pointer-events-none, or on a tablet the tap meant to bring it back lands on "Finish". WARNING: long bullet lists use CSS **columns**, not a grid — a grid fills left-to-right, so someone scanning down the left column reads items 1, 3, 5.
+
+**Three review agents (correctness/security, record integrity, UI vs RULES.md) found real bugs. All fixed:**
+- A signature could be saved **BLANK**. The canvas only exists on step 2, so stepping Back and forward again mounted a fresh empty one while hasSig stayed true — Submit stayed enabled and the blank white PNG passed every downstream check. Now reset with the step, plus a real ink check before submit.
+- The snapshot was re-read from the DB at submit, but the screen rendered from props loaded earlier — a form edited on another device mid-signing was stored as what the person "agreed to". formUpdatedAt is now sent and a mismatch is refused.
+- items stored only the label, so the PDF printed every OPTIONAL blank in red under "were NOT confirmed" — flagging good records as defective. required and detail are now stored.
+- Seeding was racy (two tabs = 42 slides) and a partial seed was permanent (the count guard meant a failed second form could never seed again — and that one is the actual H&S sign-off). Now a pg_advisory_xact_lock plus a per-form key check.
+- ensureInductionSeed was an exported server action with **no permission check** — the only export in the file without one.
+- R2 orphans: the image uploaded before validation, and replacing one never deleted the old object. (lib/actions/first-aid.ts has the identical hole — not fixed here.)
+- takenBy recorded the IMPERSONATED user, so a record could name someone who was nowhere near it.
+- The PDF stripped accented characters, printing "José Fernández" as "Jos Fernndez" on a personnel record. WinAnsi encodes that range; only the strip was over-aggressive.
+- The Records tab shipped **every stored signature PNG on every page load**, whichever tab was open — megabytes of other people's signatures sent to a tablet about to be handed to a stranger. Now /api/induction/signature fetches one at a time, and the 500-row cap is stated on screen instead of silently hiding older records.
+
+**Backup gap closed:** the four induction tables are now in the nightly backup. WARNING: the **First Aid** tables are still missing from it — the same gap, deliberately not fixed in this pass.
+
+**Raised and left for Jordan:** deleting a signed record still leaves no audit row; there is no way to record "unable to sign" (so the one person whose induction most needs documenting produces no record at all); no field for the fob/card serial number the access form creates a liability against; and the inductor never counter-signs.
 `,
   },
   {

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { hasAppAccess } from "@/lib/apps"
 import { getEffectiveSession } from "@/lib/impersonation"
 import { uploadBufferToR2, deleteObjectsFromR2 } from "@/lib/r2"
-import { isLiveBlock } from "@/lib/induction"
+import { isLiveBlock, isSlideLayout } from "@/lib/induction"
 import { SEED_SLIDES, SEED_FORMS } from "@/lib/induction-seed"
 
 // Facilities → Induction. Everything here is behind the login and the INDUCTION app
@@ -27,10 +27,16 @@ async function requireInduction() {
     where: { id: session.user.id }, select: { allowedApps: true, role: true, name: true, email: true },
   })
   if (!hasAppAccess(dbUser?.role ?? "", dbUser?.allowedApps ?? [], "INDUCTION")) throw new Error("No access to Induction")
+  const name = dbUser?.name || dbUser?.email || "Unknown"
   return {
     id:   session.user.id,
-    name: dbUser?.name || dbUser?.email || "Unknown",
+    name,
     role: dbUser?.role ?? "",
+    // ⚠ "Taken by" must name the human who was actually stood there. getEffectiveSession
+    // returns the IMPERSONATED user, so without this a record could say it was taken by
+    // someone who was nowhere near it — and that is precisely the field an HR panel leans on.
+    takenById:   session.isImpersonating ? session.adminId : session.user.id,
+    takenByName: session.isImpersonating ? `${session.adminName} (signed in as ${name})` : name,
   }
 }
 
@@ -44,20 +50,43 @@ function refresh() {
 // once an environment has been seeded, editing lib/induction-seed.ts changes nothing.
 // Called from the page, wrapped so a missing table can never 500 the tool.
 
+// Any bigint constant will do — it just has to be the same on every caller. Two tabs opening
+// the tool at once on a fresh environment would otherwise both see an empty table and both
+// seed it, leaving 42 slides to delete by hand.
+const SEED_LOCK = 8471_2026
+
 export async function ensureInductionSeed(): Promise<void> {
   try {
-    if ((await prisma.inductionSlide.count()) === 0) {
-      await prisma.inductionSlide.createMany({
-        data: SEED_SLIDES.map((sl, i) => ({
-          title: sl.title, subtitle: sl.subtitle ?? null, body: sl.body ?? null,
-          videoUrl: sl.videoUrl ?? null, liveBlock: sl.liveBlock ?? "NONE",
-          notes: sl.notes ?? null, sortOrder: (i + 1) * 10,
-        })),
-      })
-    }
-    if ((await prisma.inductionForm.count()) === 0) {
+    // The page renders behind the INDUCTION gate, but this is an exported server action and so
+    // is callable by any signed-in user — every other export in this file checks, and so must
+    // this one.
+    await requireInduction()
+  } catch {
+    return
+  }
+  try {
+    await prisma.$transaction(async tx => {
+      // Held until the transaction ends, so the check-then-write below is atomic across tabs,
+      // devices and the two server instances.
+      await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(${SEED_LOCK})`)
+
+      if ((await tx.inductionSlide.count()) === 0) {
+        await tx.inductionSlide.createMany({
+          data: SEED_SLIDES.map((sl, i) => ({
+            title: sl.title, subtitle: sl.subtitle ?? null, body: sl.body ?? null,
+            videoUrl: sl.videoUrl ?? null, liveBlock: sl.liveBlock ?? "NONE",
+            layout: sl.layout ?? "CONTENT",
+            notes: sl.notes ?? null, sortOrder: (i + 1) * 10,
+          })),
+        })
+      }
+
+      // ⚠ Checked PER FORM by key, not by counting the table. Counting meant that if the first
+      // form was created and the second failed for any reason, the table was no longer empty
+      // and the missing one — the actual H&S sign-off — could never seed again, silently.
       for (const [i, f] of SEED_FORMS.entries()) {
-        await prisma.inductionForm.create({
+        if (await tx.inductionForm.count({ where: { key: f.key } })) continue
+        await tx.inductionForm.create({
           data: {
             key: f.key, title: f.title, intro: f.intro ?? null, body: f.body ?? null,
             declaration: f.declaration ?? null,
@@ -70,7 +99,7 @@ export async function ensureInductionSeed(): Promise<void> {
           },
         })
       }
-    }
+    })
   } catch {
     // Table not there yet (code deploys before the SQL runs) — the page shows empty and
     // seeds itself on the next load.
@@ -97,8 +126,15 @@ export async function saveInductionSlide(fd: FormData): Promise<Res> {
   try {
     await requireInduction()
     const id       = s(fd.get("id"), 40)
-    const imageKey = await saveSlideImage(fd.get("image") as File | null)
     const live     = s(fd.get("liveBlock"), 30) || "NONE"
+    const layout   = s(fd.get("layout"), 30) || "CONTENT"
+    // ⚠ Validate BEFORE uploading. Uploading first meant a save rejected for a blank title left
+    // the image sitting in R2 with nothing pointing at it, for ever.
+    if (!s(fd.get("title"), 150)) return { ok: false, error: "The slide needs a title." }
+    const previousKey = id
+      ? (await prisma.inductionSlide.findUnique({ where: { id }, select: { imageKey: true } }))?.imageKey ?? null
+      : null
+    const imageKey = await saveSlideImage(fd.get("image") as File | null)
     const data = {
       title:     s(fd.get("title"), 150),
       subtitle:  s(fd.get("subtitle"), 200) || null,
@@ -107,14 +143,18 @@ export async function saveInductionSlide(fd: FormData): Promise<Res> {
       // TypeScript does not survive the network boundary — an unknown value would render
       // as an empty slide with no explanation.
       liveBlock: isLiveBlock(live) ? live : "NONE",
+      layout:    isSlideLayout(layout) ? layout : "CONTENT",
       notes:     s(fd.get("notes"), 4000)   || null,
       sortOrder: Number(fd.get("sortOrder") ?? 0) || 0,
       active:    fd.get("active") === "on",
       ...(imageKey ? { imageKey } : {}),
     }
-    if (!data.title) return { ok: false, error: "The slide needs a title." }
     if (id) await prisma.inductionSlide.update({ where: { id }, data })
     else    await prisma.inductionSlide.create({ data })
+    // Replacing an image used to leave the old object behind on every re-upload.
+    if (imageKey && previousKey && previousKey !== imageKey) {
+      await deleteObjectsFromR2([previousKey]).catch(() => {})
+    }
     refresh()
     return { ok: true }
   } catch (e) { return fail(e) }
@@ -142,6 +182,29 @@ export async function clearInductionSlideImage(id: string): Promise<Res> {
   } catch (e) { return fail(e) }
 }
 
+/**
+ * Writes an AI rewrite onto a slide. Separate from saveInductionSlide so the AI path can only
+ * ever touch the three text fields — it must not be able to change the layout, the live block,
+ * whether the slide is in the running order, or the presenter note.
+ */
+export async function applyInductionSlideText(id: string, title: string, subtitle: string, body: string): Promise<Res> {
+  try {
+    await requireInduction()
+    const t = String(title ?? "").trim().slice(0, 150)
+    if (!t) return { ok: false, error: "The rewrite came back without a title — discard it." }
+    await prisma.inductionSlide.update({
+      where: { id },
+      data: {
+        title: t,
+        subtitle: String(subtitle ?? "").trim().slice(0, 200) || null,
+        body: String(body ?? "").trim().slice(0, 8000) || null,
+      },
+    })
+    refresh()
+    return { ok: true }
+  } catch (e) { return fail(e) }
+}
+
 /** Swaps sortOrder with the neighbour above/below, so the order is stable and 1-based drag isn't needed on a tablet. */
 export async function moveInductionSlide(id: string, dir: "up" | "down"): Promise<Res> {
   try {
@@ -150,7 +213,9 @@ export async function moveInductionSlide(id: string, dir: "up" | "down"): Promis
     const i = all.findIndex(r => r.id === id)
     if (i === -1) return { ok: false, error: "That slide no longer exists." }
     const j = dir === "up" ? i - 1 : i + 1
-    if (j < 0 || j >= all.length) return { ok: true }   // already at the end — nothing to do
+    // The arrows are disabled from the client's own index, so only a stale tab gets here —
+    // and "✓ Moved." over a slide that did not move is worse than saying nothing happened.
+    if (j < 0 || j >= all.length) return { ok: false, error: "That slide is already at the end — reload the page." }
     // Rewrite the whole run: seeded rows share tidy gaps, but a hand-edited sortOrder can
     // collide, and swapping two equal numbers would silently do nothing.
     const ids = all.map(r => r.id)
@@ -245,6 +310,8 @@ export async function deleteInductionFormItem(id: string): Promise<Res> {
 
 export type SignInput = {
   formId: string
+  /** The form's updatedAt as it was when the signing screen rendered. See the check below. */
+  formUpdatedAt?: string
   personName: string
   company?: string
   jobTitle?: string
@@ -274,6 +341,16 @@ export async function signInductionForm(input: SignInput): Promise<Res> {
       include: { items: { orderBy: { sortOrder: "asc" } } },
     })
     if (!form) return { ok: false, error: "That form no longer exists — reload the page." }
+    if (!form.active) return { ok: false, error: "That form has been switched off — reload the page." }
+
+    // ⚠ The signing screen renders from a copy of the form loaded when the page did, but the
+    // snapshot below is taken from the DB now. A tablet left open while someone edits the form
+    // on another device would therefore store wording the signer never saw, under their
+    // signature. Refuse instead: an unusable form beats a false record.
+    const renderedAt = String(input.formUpdatedAt ?? "")
+    if (renderedAt && renderedAt !== form.updatedAt.toISOString()) {
+      return { ok: false, error: "This form was edited while it was open. Reload the page and take the signature again — nothing has been saved." }
+    }
 
     // Re-check the required ticks HERE, not just in the browser: this is the record that
     // says someone confirmed each point, so it must not be possible to save one without them.
@@ -292,15 +369,19 @@ export async function signInductionForm(input: SignInput): Promise<Res> {
         formTitle: form.title,
         bodySnapshot: [form.intro, form.body].filter(Boolean).join("\n\n") || null,
         declarationSnapshot: form.declaration,
-        items: form.items.map(it => ({ label: it.label, ticked: tickedIds.has(it.id) })),
+        // `required` and `detail` are stored, not just the label: without them a blank line on a
+        // printed record cannot be told apart from a point that was skipped.
+        items: form.items.map(it => ({
+          label: it.label, detail: it.detail ?? null, required: it.required, ticked: tickedIds.has(it.id),
+        })),
         personName: name,
         company:   String(input.company   ?? "").trim().slice(0, 150) || null,
         jobTitle:  String(input.jobTitle  ?? "").trim().slice(0, 150) || null,
         startDate: String(input.startDate ?? "").trim().slice(0, 40)  || null,
         notes:     String(input.notes     ?? "").trim().slice(0, 4000) || null,
         signature: sig,
-        takenById: who.id,
-        takenByName: who.name,
+        takenById: who.takenById,
+        takenByName: who.takenByName,
       },
     })
     refresh()

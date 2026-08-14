@@ -29,19 +29,49 @@ export function liveBlockLabel(v: string): string {
 }
 
 /**
- * Slide bodies are plain text so anyone can edit them without markup:
- * a blank line starts a paragraph, a line beginning "- " is a bullet.
- * Shared by the presenter, the preview in the editor and the print view.
+ * How a slide is laid out on the big screen. 21 slides in an identical layout is
+ * what made the deck read like a document rather than a presentation.
  */
-export type BodyBlock = { type: "p" | "li"; text: string }
+export const SLIDE_LAYOUTS = [
+  { key: "CONTENT",   label: "Standard — title, then the content" },
+  { key: "TITLE",     label: "Title slide — centred, extra large" },
+  { key: "STATEMENT", label: "Statement — one point, centred, no bullets" },
+] as const
+
+export type SlideLayout = typeof SLIDE_LAYOUTS[number]["key"]
+
+export function isSlideLayout(v: string): v is SlideLayout {
+  return SLIDE_LAYOUTS.some(l => l.key === v)
+}
+
+/**
+ * Slide bodies are plain text so anyone can edit them without markup:
+ * a blank line starts a paragraph, a line beginning "- " is a bullet, and a
+ * short line with no full stop at the end is a HEADING within the slide.
+ *
+ * ⚠ The heading rule matters more than it looks. Without it every line rendered
+ * at the same weight, so on the fire-equipment slide "When to use one" was
+ * indistinguishable from the paragraph beneath it — the deck looked like a wall
+ * of bold text. "## " forces a heading if the guess ever gets it wrong.
+ */
+export type BodyBlock = { type: "p" | "li" | "h"; text: string }
+
+const MAX_HEADING_CHARS = 70
 
 export function parseSlideBody(body: string | null | undefined): BodyBlock[] {
   const out: BodyBlock[] = []
   for (const raw of (body ?? "").split("\n")) {
     const line = raw.trim()
     if (!line) continue
-    if (/^[-*•]\s+/.test(line)) out.push({ type: "li", text: line.replace(/^[-*•]\s+/, "") })
-    else out.push({ type: "p", text: line })
+    if (/^#{1,3}\s+/.test(line)) { out.push({ type: "h", text: line.replace(/^#{1,3}\s+/, "").replace(/:$/, "") }); continue }
+    if (/^[-*•]\s+/.test(line)) { out.push({ type: "li", text: line.replace(/^[-*•]\s+/, "") }); continue }
+    // A sentence ends in punctuation; a heading does not. Length guards against a
+    // fragment of prose that happens to have lost its full stop.
+    if (line.length <= MAX_HEADING_CHARS && !/[.!?]$/.test(line)) {
+      out.push({ type: "h", text: line.replace(/:$/, "") })
+      continue
+    }
+    out.push({ type: "p", text: line })
   }
   return out
 }
@@ -58,13 +88,25 @@ export function youTubeId(url: string | null | undefined): string | null {
   return m ? m[1] : null
 }
 
-export type SignedItem = { label: string; ticked: boolean }
+/**
+ * ⚠ `required` is stored per item, not looked up from the form later. Without it an unticked
+ * line cannot be told apart from a line nobody had to tick — and the PDF was printing every
+ * optional blank in red under "were NOT confirmed", which flags a perfectly good record as
+ * defective. Older rows (written before this was stored) have it undefined, which is why the
+ * PDF treats "not known" as optional rather than asserting something it cannot know.
+ */
+export type SignedItem = { label: string; detail?: string; ticked: boolean; required?: boolean }
 
 /** Signature rows store `items` as JSON; it has been through the DB so nothing is guaranteed. */
 export function parseSignedItems(value: unknown): SignedItem[] {
   if (!Array.isArray(value)) return []
   return value
     .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
-    .map(r => ({ label: String(r.label ?? ""), ticked: r.ticked === true }))
+    .map(r => ({
+      label:    String(r.label ?? ""),
+      detail:   typeof r.detail === "string" && r.detail ? r.detail : undefined,
+      ticked:   r.ticked === true,
+      required: typeof r.required === "boolean" ? r.required : undefined,
+    }))
     .filter(r => r.label)
 }

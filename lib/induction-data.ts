@@ -14,6 +14,7 @@ export type DeckSlide = {
   imageKey: string | null
   videoUrl: string | null
   liveBlock: string
+  layout: string
   notes: string | null
   sortOrder: number
   active: boolean
@@ -33,7 +34,7 @@ export async function loadInductionSlides(opts: { activeOnly?: boolean } = {}): 
     })
     return rows.map(r => ({
       id: r.id, title: r.title, subtitle: r.subtitle, body: r.body, imageKey: r.imageKey,
-      videoUrl: r.videoUrl, liveBlock: r.liveBlock, notes: r.notes, sortOrder: r.sortOrder, active: r.active,
+      videoUrl: r.videoUrl, liveBlock: r.liveBlock, layout: r.layout, notes: r.notes, sortOrder: r.sortOrder, active: r.active,
     }))
   } catch { return [] }
 }
