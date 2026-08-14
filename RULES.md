@@ -511,10 +511,25 @@ Always include both ID fields alongside `Folder`:
   "Receipt Unique ID":  l.receiptUniqueId || "",
   Barcode:              l.barcode || "",
   Description:          l.description,
+  Condition:            l.condition || "",
   Estimate:             "Estimate: £low–£high" or "",
   ImageUrls:            l.imageUrls || [],
 }
 ```
+
+### Condition check (2026-08-14)
+
+`Condition` carries the lot's **recorded** condition so the Copier can check it is actually
+**in the description**, rather than popping the old blanket reminder on every visit (which said
+the same thing whether or not anything was wrong). `checkConditionInDescription` in `lib/condition.ts`
+returns one of: `ok` · `reworded` (a grade is there, not in the recorded words) · `missing` ·
+`none-recorded` (nothing graded on the lot yet) · `unknown` (row came from a spreadsheet, which has
+no condition column — then all that can be said is whether a grade appears).
+
+⚠ Grade detection is **case-SENSITIVE** on purpose. "Mint", "Good" and "Fair" are ordinary words, so
+matching case-insensitively counts *"a good example of the type"* as a condition. Every grade
+`buildCondition` writes is capitalised, and that is what separates a real grade from prose — don't
+"fix" it to case-insensitive.
 
 ### Sort order
 

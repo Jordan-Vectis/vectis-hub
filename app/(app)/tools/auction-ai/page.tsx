@@ -12,6 +12,7 @@ import { analyseKeyPoints, HighlightedDescription, kpColour } from "@/lib/kp-ana
 import RunCostEstimate from "@/components/run-cost-estimate"
 import PipelineQueuePanel from "./pipeline-queue-panel"
 import { describeActionError } from "@/lib/action-error"
+import { checkConditionInDescription } from "@/lib/condition"
 
 // ─── Show Instruction Toggle ──────────────────────────────────────────────────
 
@@ -1202,7 +1203,11 @@ function BarcodeTab() {
 
 type SortBy = "uniqueId" | "barcode"
 
-type CopierRow = { folder: string; description: string; estimate: string; uniqueId?: string; barcode?: string; imageUrls?: string[] }
+// `condition` is the lot's RECORDED condition, sent through from the cataloguing
+// page so the Copier can check it really is in the description. It is `undefined`
+// for rows loaded from a spreadsheet, which has no such column — the check knows
+// the difference and says so rather than pretending.
+type CopierRow = { folder: string; description: string; estimate: string; uniqueId?: string; barcode?: string; imageUrls?: string[]; condition?: string }
 
 function sortRows(rows: CopierRow[], sortBy: SortBy) {
   return [...rows].sort((a, b) => {
@@ -1227,9 +1232,7 @@ function sortRows(rows: CopierRow[], sortBy: SortBy) {
 
 function CopierTab({ active }: { active: boolean }) {
   const [rows, setRows]         = useState<CopierRow[]>([])
-  const [showCondReminder, setShowCondReminder] = useState(false)
-  // Remind to add conditions to the description every time the Copier is opened.
-  useEffect(() => { if (active) setShowCondReminder(true) }, [active])
+  const [condOpen, setCondOpen] = useState(true)
   const [sortBy, setSortBy]     = useState<SortBy>("uniqueId")
   const [idx, setIdx]           = useState(0)
   const [copiedType, setCopied] = useState<"desc" | "both" | null>(null)
@@ -1252,6 +1255,9 @@ function CopierTab({ active }: { active: boolean }) {
           uniqueId:    String(r["Receipt Unique ID"] ?? r.UniqueID ?? r["Unique ID"] ?? r.uniqueId ?? ""),
           barcode:     String(r.Barcode ?? r.barcode ?? ""),
           imageUrls:   Array.isArray(r.ImageUrls) ? r.ImageUrls : [],
+          // Stays undefined on an older payload, which the check reads as "no
+          // condition data" rather than "no condition".
+          condition:   typeof r.Condition === "string" ? r.Condition : undefined,
         })))
         setIdx(0)
         localStorage.removeItem("copier_preload")
@@ -1286,6 +1292,7 @@ function CopierTab({ active }: { active: boolean }) {
           estimate:    String(r.Estimate ?? r.estimate ?? ""),
           uniqueId:    String(r["Receipt Unique ID"] ?? r.UniqueID ?? r["Unique ID"] ?? r.uniqueId ?? ""),
           barcode:     String(r.Barcode ?? r.barcode ?? ""),
+          condition:   r.Condition ?? r.condition ?? undefined,
         })))
         setIdx(0); setError(null); setJumpQuery("")
       } catch (e: any) { setError("Failed to read Excel: " + e.message) }
@@ -1324,21 +1331,39 @@ function CopierTab({ active }: { active: boolean }) {
     .filter(r => rowLabel(r).toLowerCase().includes(jumpQuery.toLowerCase()))
     .slice(0, 50)
 
+  // ── The condition check ─────────────────────────────────────────────────────
+  // This replaced a popup that fired on every visit and said the same thing
+  // whether or not anything was actually wrong. It now compares each lot's
+  // RECORDED condition against its description and reports what it finds.
+  const condChecked = sortedRows.map((r, i) => ({ row: r, i, check: checkConditionInDescription(r.description, r.condition) }))
+  const condMissing  = condChecked.filter(c => c.check.state === "missing")
+  const condReworded = condChecked.filter(c => c.check.state === "reworded")
+  const condNone     = condChecked.filter(c => c.check.state === "none-recorded")
+  const condUnknown  = condChecked.filter(c => c.check.state === "unknown")
+  const condProblems = condMissing.length + condNone.length
+  const haveConditionData = rows.some(r => r.condition !== undefined)
+
+  function CondList({ items, tone }: { items: typeof condChecked; tone: string }) {
+    if (items.length === 0) return null
+    return (
+      <div className="flex flex-wrap gap-1.5 mt-1.5">
+        {items.slice(0, 60).map(c => (
+          <button
+            key={c.i}
+            onClick={() => { setIdx(c.i); setCondOpen(false) }}
+            className={`font-mono text-[11px] px-2 py-1 rounded border ${tone}`}
+            title="Go to this lot"
+          >
+            {rowLabel(c.row)}
+          </button>
+        ))}
+        {items.length > 60 && <span className="text-[11px] text-gray-500 self-center">+{items.length - 60} more</span>}
+      </div>
+    )
+  }
+
   return (
     <div>
-      {showCondReminder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowCondReminder(false)}>
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 max-w-sm w-full text-center shadow-xl" onClick={e => e.stopPropagation()}>
-            <div className="text-4xl mb-3">📦</div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Have you added conditions to the description?</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-5">Quick reminder before you start copying — make sure each lot&apos;s condition is in its description.</p>
-            <button onClick={() => setShowCondReminder(false)}
-              className="w-full rounded-lg bg-[#C8A96E] hover:bg-[#d4b87a] text-black font-bold text-sm px-4 py-2.5">
-              Got it
-            </button>
-          </div>
-        </div>
-      )}
       <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Description Copier</h2>
       <label className="block mb-4">
         <span className="text-xs text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-1 block">Load Excel results file</span>
@@ -1347,6 +1372,68 @@ function CopierTab({ active }: { active: boolean }) {
       </label>
 
       {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
+
+      {/* Condition check — the real thing, not a reminder. */}
+      {rows.length > 0 && (
+        condProblems === 0 && condReworded.length === 0 ? (
+          <div className="mb-4 rounded-lg border border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-4 py-2.5 text-sm text-green-700 dark:text-green-300">
+            ✓ {haveConditionData
+              ? `All ${rows.length} lots have their condition in the description.`
+              : `Every one of the ${rows.length} lots mentions a condition.`}
+          </div>
+        ) : (
+          <div className="mb-4 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+            <button onClick={() => setCondOpen(o => !o)} className="w-full flex items-center gap-2 text-left">
+              <span className="text-lg">📦</span>
+              <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                {condProblems > 0
+                  ? `${condProblems} of ${rows.length} lots need a condition adding`
+                  : `${condReworded.length} of ${rows.length} lots to double-check`}
+              </span>
+              <span className="ml-auto text-xs text-amber-700 dark:text-amber-400">{condOpen ? "Hide" : "Show"}</span>
+            </button>
+
+            {condOpen && (
+              <div className="mt-2 space-y-3">
+                {condMissing.length > 0 && (
+                  <div>
+                    <p className="text-xs text-amber-800 dark:text-amber-300">
+                      <strong>{condMissing.length}</strong> {condMissing.length === 1 ? "description has" : "descriptions have"} no condition in {condMissing.length === 1 ? "it" : "them"}
+                      {haveConditionData ? " — the lot has one recorded, it just hasn't been written in." : "."} Click one to jump to it.
+                    </p>
+                    <CondList items={condMissing} tone="border-amber-400 dark:border-amber-600 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40" />
+                  </div>
+                )}
+
+                {condNone.length > 0 && (
+                  <div>
+                    <p className="text-xs text-amber-800 dark:text-amber-300">
+                      <strong>{condNone.length}</strong> {condNone.length === 1 ? "lot has" : "lots have"} no condition recorded at all, so there is nothing to add here — {condNone.length === 1 ? "it needs" : "they need"} grading first.
+                    </p>
+                    <CondList items={condNone} tone="border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30" />
+                  </div>
+                )}
+
+                {condReworded.length > 0 && (
+                  <div>
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      <strong>{condReworded.length}</strong> {condReworded.length === 1 ? "description mentions" : "descriptions mention"} a condition, but not in the words recorded on the lot. Probably fine — worth a glance.
+                    </p>
+                    <CondList items={condReworded} tone="border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800" />
+                  </div>
+                )}
+
+                {condUnknown.length > 0 && (
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    {condUnknown.length} of these came from a spreadsheet with no condition column, so all that could be checked is whether they mention a grade — {condUnknown.length === 1 ? "this one doesn" : "these don"}&apos;t.
+                    Open the Copier from the sale page instead to check them properly.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      )}
 
       {rows.length > 0 && (
         <>

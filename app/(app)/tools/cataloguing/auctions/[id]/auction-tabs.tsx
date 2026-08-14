@@ -812,6 +812,9 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
               "Receipt Unique ID":  l.receiptUniqueId || "",
               Barcode:              l.barcode || "",
               Description:          l.description,
+              // The lot's RECORDED condition, so the Copier can check it is
+              // actually in the description rather than just reminding you.
+              Condition:            l.condition || "",
               Estimate:             l.estimateLow && l.estimateHigh ? `Estimate: £${l.estimateLow}–£${l.estimateHigh}` : "",
               ImageUrls:            l.imageUrls || [],
             }))

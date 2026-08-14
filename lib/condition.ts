@@ -42,6 +42,55 @@ const GRADE = "(?:Near Mint|Good Plus|Mint|Excellent|Good|Fair|Poor)"
 // Whole string = optional prefix text + a trailing grade or "grade to grade", optional ".".
 const BOX_RE = new RegExp(`^(.*?)\\s*(${GRADE}(?:\\s+to\\s+${GRADE})?)\\.?$`)
 
+// ─── "Is the condition actually in the description?" ────────────────────────
+// The Description Copier used to pop a blanket reminder every time it opened,
+// which told nobody anything. These do the real check.
+
+/** Loose text compare — collapse whitespace, drop trailing stops, ignore case. */
+function norm(s: string): string {
+  return (s ?? "").replace(/\s+/g, " ").replace(/\.\s*$/, "").trim().toLowerCase()
+}
+
+/** Does this text contain a condition GRADE at all?
+ *  ⚠ Case-SENSITIVE on purpose. "Mint", "Good" and "Fair" are ordinary words —
+ *  matching them case-insensitively would call "a good example of the type" a
+ *  condition. Every grade written by buildCondition is capitalised, so requiring
+ *  that is what separates a real grade from prose. */
+export function containsConditionGrade(text: string): boolean {
+  return new RegExp(`\\b${GRADE}\\b`).test(text ?? "")
+}
+
+export type ConditionCheck =
+  | { state: "ok" }                       // the lot's condition is in the description
+  | { state: "reworded" }                 // a grade is there, but not the recorded wording
+  | { state: "missing" }                  // no condition anywhere in the description
+  | { state: "none-recorded" }            // nothing to add — the lot has no condition
+  | { state: "unknown" }                  // we weren't given the lot's condition
+
+/** Compare a lot's recorded condition against its description.
+ *  `condition` undefined means the caller has no condition data (e.g. rows loaded
+ *  from a spreadsheet), in which case all we can say is whether a grade appears. */
+export function checkConditionInDescription(description: string, condition?: string | null): ConditionCheck {
+  const desc = norm(description)
+  const cond = norm(condition ?? "")
+
+  if (condition === undefined) {
+    return containsConditionGrade(description) ? { state: "ok" } : { state: "unknown" }
+  }
+  if (!cond) return { state: "none-recorded" }
+  if (!desc) return { state: "missing" }
+  if (desc.includes(cond)) return { state: "ok" }
+
+  // Not verbatim. If every grade in the recorded condition appears in the
+  // description, someone has written it in their own words — worth a look, but
+  // not the same as forgetting it entirely.
+  const grades = cond.match(new RegExp(GRADE, "gi")) ?? []
+  const allGradesPresent = grades.length > 0 && grades.every(g => desc.includes(g.toLowerCase()))
+  if (allGradesPresent) return { state: "reworded" }
+
+  return containsConditionGrade(description) ? { state: "reworded" } : { state: "missing" }
+}
+
 export function buildCondition(p: ConditionParts): string {
   const item = gradeRange(p.cond1, p.cond2)
   const prefix = (p.boxPrefixMode === "custom" ? p.boxCustomPrefix.trim() : p.boxPrefixMode)
