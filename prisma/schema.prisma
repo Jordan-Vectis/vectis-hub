@@ -547,6 +547,46 @@ model PatchNoteSeen {
   @@index([userId])
 }
 
+// ─── Admin → Patches & Changes ───────────────────────────────────────────────
+// The development record: one row per change that has gone out. Filled from the
+// commit history captured at BUILD time (scripts/capture-changelog.mjs) — the
+// running app has no git and no GitHub token, so a build is the only moment the
+// history is available. Keyed by sha, so re-ingesting the same deploy is a
+// no-op and nothing is ever duplicated.
+//
+// ⚠ Distinct from PatchNote, which is the staff-facing popup on
+// /admin/announcements. This one is internal and feeds the manager report.
+model DeployChange {
+  id          String   @id @default(cuid())
+  sha         String   @unique
+  subject     String   @db.Text
+  author      String?
+  committedAt DateTime
+  source      String   @default("git") // git | git-shallow | deploy-env | seed
+  environment String?
+  createdAt   DateTime @default(now())
+
+  @@index([committedAt])
+}
+
+// A saved summary of a period's changes, written by the AI and edited by hand,
+// for handing to a manager. Kept rather than regenerated so the wording someone
+// actually sent can be found again.
+model ChangeReport {
+  id         String   @id @default(cuid())
+  title      String
+  periodFrom DateTime
+  periodTo   DateTime
+  body       String   @db.Text
+  changeCount Int     @default(0)
+  model      String? // which AI wrote the first draft
+  createdBy  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([createdAt])
+}
+
 model BidderRegistration {
   id                String           @id @default(cuid())
   auctionId         String

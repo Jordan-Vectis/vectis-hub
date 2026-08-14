@@ -32,6 +32,7 @@ const GROUPS: { label: string; cards: Card[] }[] = [
     cards: [
       { href: "/admin/home-cards",     label: "Home Page",       description: "Reorder app cards, hide unused ones, feature favourites and customise labels.", icon: "🏠" },
       { href: "/admin/announcements",  label: "Announcements",   description: "Show a banner to everyone using the app, or publish patch notes as a one-time popup.", icon: "📣" },
+      { href: "/admin/changes",        label: "Patches & Changes", description: "Everything that has gone into the Hub, and AI-written progress reports for managers.", icon: "📝" },
       { href: "/admin/documents",      label: "Document Storage", description: "Upload and organise documents and images into folders. Accessible by all staff.", icon: "🗂️" },
       { href: "/admin/invoices",       label: "Invoices",        description: "Upload and access invoices. Accepts any file type.", icon: "🧾" },
     ],

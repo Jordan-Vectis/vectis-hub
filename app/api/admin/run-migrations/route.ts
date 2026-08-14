@@ -1392,6 +1392,24 @@ const MIGRATIONS = [
     CONSTRAINT "PipelineQueueItem_pkey" PRIMARY KEY ("id")
   )`,
   `CREATE INDEX IF NOT EXISTS "PipelineQueueItem_status_position_idx" ON "PipelineQueueItem"("status", "position")`,
+  // Admin → Patches & Changes: the development record + saved manager reports.
+  `CREATE TABLE IF NOT EXISTS "DeployChange" (
+    "id" TEXT NOT NULL, "sha" TEXT NOT NULL, "subject" TEXT NOT NULL, "author" TEXT,
+    "committedAt" TIMESTAMP(3) NOT NULL, "source" TEXT NOT NULL DEFAULT 'git', "environment" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "DeployChange_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "DeployChange_sha_key" ON "DeployChange"("sha")`,
+  `CREATE INDEX IF NOT EXISTS "DeployChange_committedAt_idx" ON "DeployChange"("committedAt")`,
+  `CREATE TABLE IF NOT EXISTS "ChangeReport" (
+    "id" TEXT NOT NULL, "title" TEXT NOT NULL,
+    "periodFrom" TIMESTAMP(3) NOT NULL, "periodTo" TIMESTAMP(3) NOT NULL,
+    "body" TEXT NOT NULL, "changeCount" INTEGER NOT NULL DEFAULT 0,
+    "model" TEXT, "createdBy" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "ChangeReport_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "ChangeReport_createdAt_idx" ON "ChangeReport"("createdAt")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

@@ -42,3 +42,6 @@ yarn-error.log*
 next-env.d.ts
 
 /app/generated/prisma
+
+# generated at build by scripts/capture-changelog.mjs
+changelog-capture.json

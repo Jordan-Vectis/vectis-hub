@@ -16,6 +16,39 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "patches_and_changes.md",
+    content: `---
+name: Admin -> Patches & Changes
+purpose: The development record and the AI progress report for managers. Read before touching the build-time capture, the seed, or the ingest.
+last_updated: 2026-08-14
+---
+
+# Admin -> Patches & Changes (built 2026-08-14)
+
+Jordan asked for "a progress report of everything we have worked on for the last 2 weeks", then chose to make it permanent: "start a new section in the admin section called patches and changes that from now on will pull in all the changes we have made so I can then use AI to summarise it in a report for my managers".
+
+/admin/changes, admin only. Left: what has gone into the Hub, grouped by day, over 7 days / 2 weeks / 30 days / 3 months / 1 year. Right: "Write the report" produces an AI summary aimed at a manager, which can be edited, saved and copied.
+
+## WHERE THE DATA COMES FROM - AND WHY IT IS ODD
+
+The running app has NO git and NO GitHub token. That is deliberate - see the scope note in app/api/patch-notes/draft/route.ts. Railway only hands the app RAILWAY_GIT_COMMIT_MESSAGE, the head commit of the current deploy, so a deploy containing five commits would record one. Offered the choice, Jordan picked the build-time capture over adding a GitHub token.
+
+Three sources, all in lib/changelog.ts, all keyed on SHA so re-ingesting is a no-op:
+1. changelog-capture.json - written by scripts/capture-changelog.mjs during npm run build, the one moment Railway still has a clone. Gitignored, read at runtime with fs, never imported.
+2. lib/changelog-seed.ts - the history from 1 July 2026, COMMITTED ON PURPOSE so a shallow clone cannot leave the page empty.
+3. RAILWAY_GIT_COMMIT_* - so a deploy always records itself even if both of the above fail.
+
+ingestChanges() runs on every page load and is idempotent. The page SAYS SO when a release could only capture its own head commit, rather than letting a short list read as a quiet fortnight.
+
+## THINGS NOT TO UNDO
+
+- THE CAPTURE SCRIPT MUST NEVER FAIL THE BUILD. Everything is inside one catch and it exits 0 regardless. Verified by running it with git off the PATH: it writes source "none", exits 0, and the committed seed covers the gap. A missing changelog is an annoyance; a deploy that will not build is not.
+- lib/changelog.ts uses fs, so it is SERVER ONLY - never import it from a "use client" file. Checked after the build: the seed does not appear in the browser bundle.
+- DISTINCT FROM PatchNote (/admin/announcements), which is the staff-facing one-time popup drafted from a single deploy. Same subject, completely different audience - do not merge them.
+- The AI slot is changes_summary (claudeOk). Its prompt forbids technical wording, groups the work by what it was FOR rather than by date or person, and bans invented benefits, figures or time savings. Lines marked [internal] (memory, rules, docs, chore, merge, revert - see isHousekeeping) are hidden by default and the prompt is told not to give them their own section.
+`,
+  },
+  {
     filename: "pipeline_overnight_queue.md",
     content: `---
 name: Auto Pipeline - overnight queue (server-side)
