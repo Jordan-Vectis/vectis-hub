@@ -66,7 +66,7 @@ export default function InductionSlideView({ slide, live, big = false }: { slide
       {/* Brand line: the accent rule and the Vectis mark. Every slide carries it, so the deck
           reads as a Vectis presentation rather than white text on a black rectangle. */}
       {layout === "TITLE" ? (
-        <Logo big={big} className="mb-8" size={big ? "h-14" : "h-8"} centred />
+        <Logo big={big} className="mb-8" size={big ? "h-14" : "h-8"} />
       ) : (
         <div className={`flex items-center gap-4 mb-5 w-full ${centred ? "justify-center" : ""}`}>
           <div className={`h-1.5 rounded-full bg-gradient-to-r from-amber-400 to-amber-600 ${big ? "w-24" : "w-12"}`} />
@@ -240,23 +240,25 @@ export default function InductionSlideView({ slide, live, big = false }: { slide
 // The logo artwork is dark ink, so it needs a light plate to be visible on the deck's dark
 // background — the same reason the terms popup and the signing screen use one.
 //
-// ⚠ OPTICAL CENTRING. Centring the logo's box does not centre the logo: measured off the
-// rendered artwork, the ink fills the file edge to edge but its centre of MASS sits 1.74% of
-// the width to the right of the geometric centre — the bar and the strapline run out to the
-// right while the V's diagonal leaves white space under it. Box-centred, it reads as shifted
-// right, which is what it was doing on the title slide. So a centred logo is nudged left by
-// that measured amount. Re-measure if the artwork is ever replaced; do not eyeball a new value.
-const OPTICAL_CENTRE_OFFSET = "-1.74%"
-
-function Logo({ big, size, className = "", centred = false }: { big: boolean; size: string; className?: string; centred?: boolean }) {
+// ⚠ THE PADDING IS THE WHOLE POINT — do not tighten it to "hug" the logo.
+//
+// The artwork's ink runs edge to edge in the file (measured: 0→896 of 900), and its text block
+// — the blue bar and the red strapline — centres at 59.7% across, not 50%, because the V's
+// swash sticks out to the left. So with a TIGHT plate the eye centres the wordmark, which is
+// 10% right of the box, and the logo reads as off-centre however you align it. No nudge fixes
+// that: move the logo inside the plate and the padding goes lopsided, move the plate and a
+// white box sits off-centre under a centred title.
+//
+// A GENEROUS, even plate solves it instead: the white shape becomes the thing being centred,
+// and a rectangle is symmetric, so centring it is simply correct. That is exactly how the
+// hand-made version Jordan sent is laid out — the logo sitting in white with room around it.
+function Logo({ big, size, className = "" }: { big: boolean; size: string; className?: string }) {
   return (
-    // ⚠ A rounded RECTANGLE, not a pill. The artwork is already an oval lockup, and putting it
-    // inside a second rounded-full plate gives two competing round shapes that never look
-    // aligned however they are centred — which is the other half of "the logo looks wrong".
-    <span className={`inline-flex items-center bg-white ${big ? "rounded-xl px-5 py-2.5" : "rounded-lg px-3 py-1.5"} shadow-sm ${className}`}>
+    // A rounded rectangle, not a pill: the artwork is already an oval lockup, and a second
+    // rounded-full plate gives two competing curves that never look aligned.
+    <span className={`inline-flex items-center bg-white ${big ? "rounded-2xl px-10 py-6" : "rounded-xl px-4 py-3"} shadow-lg ${className}`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/vectis-logo.svg" alt="Vectis Auctions" className={`${size} w-auto`}
-        style={centred ? { transform: `translateX(${OPTICAL_CENTRE_OFFSET})` } : undefined} />
+      <img src="/vectis-logo.svg" alt="Vectis Auctions" className={`${size} w-auto`} />
     </span>
   )
 }
