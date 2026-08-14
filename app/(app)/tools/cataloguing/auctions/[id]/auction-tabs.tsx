@@ -126,7 +126,45 @@ function DupeCheckerModal({ lots, auctionId, onClose, onDeleted }: {
       .map(([, g]) => [...g].sort((a, b) => lotScore(b) - lotScore(a)))
   }, [lots])
 
-  const visibleGroups = dupeGroups
+  // ⚠ Sharing a unique ID does NOT make two lots the same item. The Hub no
+  // longer mints IDs — BC supplies them — so a clash usually means bad data,
+  // not a double-entered lot. Two lots with DIFFERENT barcodes are two
+  // different things on the shelf, whatever their ID says, and deleting one
+  // would destroy a real lot. Jordan hit exactly this on F109: two distinct
+  // Steiff bears, F109630 and F109631, both carrying R008767-129, with the
+  // checker offering to delete one.
+  //
+  // So a group is only a genuine duplicate when the barcodes agree — or when at
+  // most one of them has a barcode at all (the un-barcoded one being the stray
+  // re-entry). Anything else is a CLASH: shown, explained, never deletable here.
+  function isRealDuplicate(group: Lot[]): boolean {
+    const barcodes = new Set(group.map(l => (l.barcode ?? "").trim().toLowerCase()).filter(Boolean))
+    return barcodes.size <= 1
+  }
+
+  const live = dupeGroups
+    .map(g => g.filter(l => !deleted.has(l.id)))
+    .filter(g => g.length > 1)
+
+  const visibleGroups = live.filter(isRealDuplicate)
+  const clashGroups   = live.filter(g => !isRealDuplicate(g))
+
+  // The other way a lot can be double-identified: two lots on ONE barcode. This
+  // is what silently unbalances BC Match — BC has a single row for that barcode,
+  // so one of our two lots can never be matched or given its unique ID, and
+  // before this it showed up nowhere. Read-only here: which one is wrong is a
+  // judgement about the physical items, not something to guess at.
+  const barcodeClashes = useMemo(() => {
+    const map = new Map<string, Lot[]>()
+    for (const l of lots) {
+      const key = (l.barcode ?? "").trim().toLowerCase()
+      if (!key) continue
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(l)
+    }
+    return [...map.values()].filter(g => g.length > 1)
+  }, [lots])
+  const visibleBarcodeClashes = barcodeClashes
     .map(g => g.filter(l => !deleted.has(l.id)))
     .filter(g => g.length > 1)
 
@@ -168,9 +206,78 @@ function DupeCheckerModal({ lots, auctionId, onClose, onDeleted }: {
           <button onClick={onClose} className="text-gray-600 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-xl leading-none">✕</button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {/* Two lots on one barcode — the thing that unbalances BC Match. */}
+          {visibleBarcodeClashes.length > 0 && (
+            <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-300 dark:border-orange-800 rounded-lg p-4">
+              <p className="text-sm font-semibold text-orange-800 dark:text-orange-300 mb-1">
+                {visibleBarcodeClashes.length} barcode{visibleBarcodeClashes.length === 1 ? " is" : "s are"} on more than one lot
+              </p>
+              <p className="text-xs text-orange-700 dark:text-orange-400 mb-3">
+                Business Central has one row per barcode, so only one of each pair below can ever be matched or given its unique ID —
+                the other is left out of 🔗 BC Match entirely. Check the items on the shelf, correct the barcode on whichever lot is
+                wrong, then run BC Match again. Nothing is deleted from here: which one is wrong depends on the actual items.
+              </p>
+              <div className="space-y-3">
+                {visibleBarcodeClashes.map((group, gi) => (
+                  <div key={gi} className="bg-white dark:bg-[#141416] border border-orange-200 dark:border-orange-900 rounded-lg overflow-hidden">
+                    <div className="px-4 py-2 bg-orange-100 dark:bg-orange-900/30 border-b border-orange-200 dark:border-orange-900">
+                      <span className="text-xs font-mono text-orange-800 dark:text-orange-300 font-semibold">{group[0].barcode}</span>
+                      <span className="text-xs text-orange-700 dark:text-orange-500 ml-2">— on {group.length} lots</span>
+                    </div>
+                    {group.map(lot => (
+                      <div key={lot.id} className="px-4 py-2.5 border-b border-gray-200 dark:border-gray-800 last:border-0">
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="font-mono text-gray-700 dark:text-gray-300">{lot.receiptUniqueId || "no unique ID"}</span>
+                          {lot.imageUrls.length > 0 && <span className="text-blue-500">{lot.imageUrls.length} photos</span>}
+                          {lot.vendor && <span className="text-gray-500">vendor {lot.vendor}</span>}
+                        </div>
+                        <p className="text-xs text-gray-600 dark:text-gray-300 truncate mt-0.5">{lot.title || "No title"}</p>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Same ID, different barcodes — two real lots, not a duplicate. */}
+          {clashGroups.length > 0 && (
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-lg p-4">
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-1">
+                {clashGroups.length} unique {clashGroups.length === 1 ? "ID is" : "IDs are"} on more than one lot — these are NOT duplicates
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-400 mb-3">
+                Each of these is a different item with its own barcode, so nothing here can be deleted — you&apos;d lose a real lot.
+                The unique IDs come from Business Central, so a clash means the wrong ID has been written onto one of them.
+                Fix the ID on the sale page, or run 🔗 BC Match again to pull the right ones through.
+              </p>
+              <div className="space-y-3">
+                {clashGroups.map((group, gi) => (
+                  <div key={gi} className="bg-white dark:bg-[#141416] border border-amber-200 dark:border-amber-900 rounded-lg overflow-hidden">
+                    <div className="px-4 py-2 bg-amber-100 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-900">
+                      <span className="text-xs font-mono text-amber-800 dark:text-amber-300 font-semibold">{group[0].receiptUniqueId}</span>
+                      <span className="text-xs text-amber-700 dark:text-amber-500 ml-2">— on {group.length} different lots</span>
+                    </div>
+                    {group.map(lot => (
+                      <div key={lot.id} className="px-4 py-2.5 border-b border-gray-200 dark:border-gray-800 last:border-0">
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="font-mono text-gray-700 dark:text-gray-300 font-semibold">{lot.barcode || "no barcode"}</span>
+                          {lot.imageUrls.length > 0 && <span className="text-blue-500">{lot.imageUrls.length} photos</span>}
+                        </div>
+                        <p className="text-xs text-gray-600 dark:text-gray-300 truncate mt-0.5">{lot.title || "No title"}</p>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {visibleGroups.length === 0 ? (
-            <p className="text-green-400 text-sm text-center py-8">✓ No duplicates found</p>
+            clashGroups.length === 0 && visibleBarcodeClashes.length === 0
+              ? <p className="text-green-400 text-sm text-center py-8">✓ No duplicates found</p>
+              : <p className="text-gray-500 text-sm text-center py-4">No genuine duplicates to remove.</p>
           ) : (
             <div className="space-y-4">
               {visibleGroups.map((group, gi) => (
@@ -218,7 +325,9 @@ function DupeCheckerModal({ lots, auctionId, onClose, onDeleted }: {
           <span className="text-xs text-gray-600 dark:text-gray-500">
             {visibleGroups.length > 0
               ? `${visibleGroups.length} group${visibleGroups.length !== 1 ? "s" : ""} · ${totalToDelete} lot${totalToDelete !== 1 ? "s" : ""} to remove`
-              : "All clear"}
+              : clashGroups.length + visibleBarcodeClashes.length > 0
+                ? `${clashGroups.length + visibleBarcodeClashes.length} clash${clashGroups.length + visibleBarcodeClashes.length !== 1 ? "es" : ""} to fix · nothing to delete`
+                : "All clear"}
           </span>
           {visibleGroups.length > 0 && (
             <button
