@@ -1410,6 +1410,48 @@ const MIGRATIONS = [
     CONSTRAINT "ChangeReport_pkey" PRIMARY KEY ("id")
   )`,
   `CREATE INDEX IF NOT EXISTS "ChangeReport_createdAt_idx" ON "ChangeReport"("createdAt")`,
+  // Facilities → Induction: the deck as editable slides, the signable forms, and the signatures.
+  `CREATE TABLE IF NOT EXISTS "InductionSlide" (
+    "id" TEXT NOT NULL, "title" TEXT NOT NULL, "subtitle" TEXT, "body" TEXT,
+    "imageKey" TEXT, "videoUrl" TEXT, "liveBlock" TEXT NOT NULL DEFAULT 'NONE', "notes" TEXT,
+    "sortOrder" INTEGER NOT NULL DEFAULT 0, "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "InductionSlide_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "InductionSlide_sortOrder_idx" ON "InductionSlide"("sortOrder")`,
+  `CREATE TABLE IF NOT EXISTS "InductionForm" (
+    "id" TEXT NOT NULL, "key" TEXT NOT NULL, "title" TEXT NOT NULL,
+    "intro" TEXT, "body" TEXT, "declaration" TEXT,
+    "askCompany" BOOLEAN NOT NULL DEFAULT true, "askJobTitle" BOOLEAN NOT NULL DEFAULT true,
+    "askStartDate" BOOLEAN NOT NULL DEFAULT false, "askNotes" BOOLEAN NOT NULL DEFAULT false,
+    "active" BOOLEAN NOT NULL DEFAULT true, "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "InductionForm_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "InductionForm_key_key" ON "InductionForm"("key")`,
+  `CREATE TABLE IF NOT EXISTS "InductionFormItem" (
+    "id" TEXT NOT NULL, "formId" TEXT NOT NULL, "label" TEXT NOT NULL, "detail" TEXT,
+    "required" BOOLEAN NOT NULL DEFAULT true, "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    CONSTRAINT "InductionFormItem_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "InductionFormItem_formId_idx" ON "InductionFormItem"("formId")`,
+  `DO $$ BEGIN
+    ALTER TABLE "InductionFormItem" ADD CONSTRAINT "InductionFormItem_formId_fkey"
+      FOREIGN KEY ("formId") REFERENCES "InductionForm"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  // ⚠ No foreign key to InductionForm on purpose — a signed record must survive the form being
+  // edited or deleted, so the wording is snapshotted onto the row instead.
+  `CREATE TABLE IF NOT EXISTS "InductionSignature" (
+    "id" TEXT NOT NULL, "formId" TEXT NOT NULL, "formKey" TEXT NOT NULL DEFAULT '',
+    "formTitle" TEXT NOT NULL, "bodySnapshot" TEXT, "declarationSnapshot" TEXT, "items" JSONB,
+    "personName" TEXT NOT NULL, "company" TEXT, "jobTitle" TEXT, "startDate" TEXT, "notes" TEXT,
+    "signature" TEXT NOT NULL, "takenById" TEXT, "takenByName" TEXT,
+    "signedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "InductionSignature_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "InductionSignature_formId_idx" ON "InductionSignature"("formId")`,
+  `CREATE INDEX IF NOT EXISTS "InductionSignature_personName_idx" ON "InductionSignature"("personName")`,
+  `CREATE INDEX IF NOT EXISTS "InductionSignature_signedAt_idx" ON "InductionSignature"("signedAt")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

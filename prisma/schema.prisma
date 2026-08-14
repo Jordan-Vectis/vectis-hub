@@ -2096,3 +2096,89 @@ model SitePlan {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// ─── Facilities → Induction ──────────────────────────────────────────────────
+// Replaces the Induction PowerPoint. The whole point of moving it here is that it stops
+// going stale, so the slides live in the DB (admin-editable) and the ones that repeat
+// First Aid data render that data LIVE via `liveBlock` instead of retyping it.
+model InductionSlide {
+  id        String   @id @default(cuid())
+  title     String
+  subtitle  String?
+  body      String?  @db.Text // blank line = new paragraph, a "- " line = bullet
+  imageKey  String? // R2 key, induction/slides/…
+  videoUrl  String? // YouTube link, embedded on the slide
+  // Pulls live data onto the slide instead of typed text. See LIVE_BLOCKS in lib/induction.ts.
+  // NONE | FIRST_AIDERS | KITS | DEFIBS | SITE_PLAN
+  liveBlock String   @default("NONE")
+  notes     String?  @db.Text // presenter notes — editor only, never on the big screen
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sortOrder])
+}
+
+// A form a new starter reads and signs on the tablet. Admin-editable so more can be added
+// without a developer. `key` is stable so the seeded two can be found again.
+model InductionForm {
+  id           String   @id @default(cuid())
+  key          String   @unique
+  title        String
+  intro        String?  @db.Text // shown above the terms
+  body         String?  @db.Text // the terms themselves
+  declaration  String?  @db.Text // the sentence directly above the signature
+  askCompany   Boolean  @default(true)
+  askJobTitle  Boolean  @default(true)
+  askStartDate Boolean  @default(false)
+  askNotes     Boolean  @default(false) // free-text "anything you want to ask?" box
+  active       Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  items InductionFormItem[]
+}
+
+model InductionFormItem {
+  id        String  @id @default(cuid())
+  formId    String
+  label     String  @db.Text
+  detail    String? @db.Text
+  required  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  form InductionForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@index([formId])
+}
+
+// ⚠ A signed record must OUTLIVE the form it came from — the form is editable and deletable,
+// and a signature that changed meaning later (or vanished) is worthless as a record. So there
+// is deliberately NO foreign key to InductionForm, and the wording that was on screen is
+// snapshotted onto the row. Same reasoning as TermsAcceptance being decoupled from User.
+// The signer is NOT a Hub user: the tablet is logged in as an admin and handed over, which is
+// why the name/company/job title are typed in and `takenBy*` records who was logged in.
+model InductionSignature {
+  id                  String   @id @default(cuid())
+  formId              String
+  formKey             String   @default("")
+  formTitle           String
+  bodySnapshot        String?  @db.Text
+  declarationSnapshot String?  @db.Text
+  items               Json? // [{ label, ticked }] — exactly what they confirmed
+  personName          String
+  company             String?
+  jobTitle            String?
+  startDate           String?
+  notes               String?  @db.Text
+  signature           String   @db.Text // drawn signature, PNG data URL
+  takenById           String?
+  takenByName         String?
+  signedAt            DateTime @default(now())
+
+  @@index([formId])
+  @@index([personName])
+  @@index([signedAt])
+}

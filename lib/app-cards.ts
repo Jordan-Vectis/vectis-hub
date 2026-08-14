@@ -468,4 +468,17 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     group:              "FACILITIES",
     appKey:             "SITE_PLAN",
   },
+  {
+    key:                "INDUCTION",
+    href:               "/tools/induction",
+    defaultLabel:       "Induction",
+    defaultDescription: "Run the health and safety induction on the big screen, then hand the tablet over for the forms to be read and signed.",
+    icon:               "📋",
+    border:             "border-amber-500",
+    iconBg:             "text-amber-400",
+    btnBg:              "bg-amber-600 hover:bg-amber-500",
+    glow:               "hover:shadow-amber-900/40",
+    group:              "FACILITIES",
+    appKey:             "INDUCTION",
+  },
 ]

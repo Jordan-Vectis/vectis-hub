@@ -20,6 +20,7 @@ const DATA_SUBJECTS: string[] = [
   "Registered bidders for individual auctions.",
   "Website visitors (once the customer-facing site goes live to the public).",
   "Staff — every Hub user (cataloguers, warehouse, managers, admins).",
+  "People being inducted — new starters, agency staff and contractors, including from other Hambleton Group companies. ⚠ They sign in the Hub without ever having an account, so this is the one group the app holds data on that has no other footprint in it.",
 ]
 
 const DATA_CATEGORIES: { cat: string; detail: string }[] = [
@@ -29,12 +30,14 @@ const DATA_CATEGORIES: { cat: string; detail: string }[] = [
   { cat: "Staff account", detail: "Name, email, username, hashed password, role and app permissions." },
   { cat: "Staff monitoring", detail: "Cataloguing output and timings, activity/away logging, unaccounted-time gaps, device clock/timezone tamper detection, and a full lot change log (who changed what, when). See the monitoring section below." },
   { cat: "Website usage", detail: "Google Analytics visitor/usage data — applies once the public site launches; brings cookie-consent duties." },
+  { cat: "Induction records", detail: "Name, company, job title, start date, a drawn signature image, which points the person confirmed, anything they asked, and which member of staff took the record. A handwritten signature is biometric-adjacent identity data and is the strongest single identifier the Hub holds about someone with no account." },
 ]
 
 const STORES: { name: string; what: string; location: string }[] = [
   { name: "Neon (PostgreSQL)", what: "The main database — customer contacts & submissions, bidder registrations, staff accounts, catalogue lots, activity/monitoring logs, accounting records, and a copy of the Business Central extension source code (vendor code — no personal data).", location: "Confirm the Neon region. If US/non-UK, an international-transfer safeguard is needed." },
   { name: "Cloudflare R2", what: "File storage — lot photos, uploaded documents, invoices, and the nightly database backups.", location: "Confirm the R2 bucket region / jurisdiction." },
   { name: "Railway", what: "Hosting — runs the app servers (production and staging). The database itself is on Neon, not Railway.", location: "Confirm the Railway deployment region." },
+  { name: "Induction signatures (Facilities → Induction)", what: "Signed induction and building-access forms: typed name, company, job title, optional start date, a DRAWN SIGNATURE image, the exact wording agreed to, the points ticked, any question written, and the staff member signed in at the time. The signer is usually not a Hub user. Read only inside the Hub under the Induction app permission; deletion is admin-only. Set a retention period alongside the personnel file — there is no automatic deletion.", location: "Neon (same database)." },
   { name: "Accident reports (First Aid)", what: "Submitted from the PUBLIC /first-aid page with no login. Follows the statutory accident book (BI 510): injured person name/job/HOME ADDRESS, reporter name/job/address, date, place, how it happened and the injury — so SPECIAL CATEGORY health data about a named person is routine, not merely possible. Employer-only part (date reported, recorded by, RIDDOR) added in the Hub only. Retain three years. A salted hash of the sender IP is retained solely to rate-limit the form; the raw address is never stored. Read only inside the Hub under the First Aid app permission.", location: "Neon (same database)." },
 ]
 
@@ -72,6 +75,7 @@ const LAWFUL_BASIS: { cat: string; basis: string; note: string }[] = [
   { cat: "Staff accounts", basis: "Contract (employment)", note: "Needed to give staff access to do their jobs." },
   { cat: "Staff monitoring", basis: "Legitimate interests — with a balancing test", note: "⚠ The key one. Requires a documented legitimate-interests assessment, staff being clearly told, and proportionality. Do NOT rely on consent for employee monitoring (the ICO treats employee consent as rarely freely given)." },
   { cat: "Website analytics", basis: "Consent", note: "Cookie consent required before non-essential analytics run — applies when the public site launches." },
+  { cat: "Induction records", basis: "Legal obligation / Legitimate interests", note: "Health and Safety at Work Act 1974 — the employer must show people were instructed and trained, which is what these signatures evidence. Note that agency staff and contractors are NOT employees, so the employment-contract basis does not cover them; tell them at the point of signing what the record is for and how long it is kept." },
 ]
 
 // ── Step 5: risk register (likelihood × severity → overall) ───────────────────

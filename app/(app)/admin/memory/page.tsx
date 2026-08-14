@@ -287,6 +287,73 @@ WARNING: reds that remain are deliberate and correct — do NOT sweep them green
 `,
   },
   {
+    filename: "induction.md",
+    content: `---
+name: Facilities -> Induction (slides + signable forms)
+purpose: The Induction PowerPoint rebuilt as admin-editable slides with a presenter view, plus the forms a new starter reads and SIGNS on the tablet, and the signed records with a PDF export. Read before touching /tools/induction or anything that signs in the Hub.
+last_updated: 2026-08-14
+---
+
+# Facilities -> Induction (built 2026-08-14)
+
+Jordan's ask: "In the facilities I want to make an induction/onboarding section", starting from the company Induction PowerPoint ("its very out of date and could do with updating and could be inside the app"), then "I have some forms I want putting in the app they can sign".
+
+## The flow it is built around — this is why the shape is what it is
+
+**An admin runs the slides on a BIG SCREEN on one device, and hands a TABLET (logged in as themselves) to the person being inducted for the forms.** Jordan, verbatim: "We will log into the tablet as an admin and give them the forms to read and sign. The powerpoint will also be ran by an admin on a bigger screen on a separate device."
+
+WARNING - the single most important consequence: **the person signing is NOT a Hub user and has no account.** They may not even be an employee (agency, contractors, other Hambleton Group companies - the company field is a free-text box at Jordan's request: "Other companies as well its just needs to be a text field the user will type in").
+
+So this **cannot reuse the AUP terms gate** (components/terms-gate.tsx / TermsAcceptance), which keys everything to session.user.id. Only the *mechanism* was reused - read, then draw a signature on a canvas, composited onto white before saving. The name, company and job title are TYPED IN, and takenById/takenByName record which member of staff was signed in. I said "reuse it" early in the conversation and had to correct that; do not try again.
+
+## Three surfaces
+
+| | Path | What |
+|---|---|---|
+| Tool | **/tools/induction** | Four tabs: Run the induction / Records / Slides / Forms |
+| Presenter | **/tools/induction/present** | The deck full-screen (fixed inset-0 OVER the Hub shell, still inside (app) so the permission gate applies once). Arrows or space, N for presenter notes, Esc to finish. ACTIVE slides only. |
+| Signing | (no route) | components/induction-sign.tsx - a full-screen overlay. Deliberately covers the Hub nav: a new starter is holding the tablet. |
+
+Wiring: AppKey/ALL_APPS gained **INDUCTION** (lib/apps.ts) and a card in the FACILITIES group (lib/app-cards.ts). A card with no appKey never reaches the permissions page - this one has one.
+
+## The four slides that read LIVE data — the whole point of moving it off PowerPoint
+
+The deck listed the first aiders, the kit locations and the two defibrillators **by hand**, so it was wrong the moment anyone left. InductionSlide.liveBlock (NONE | FIRST_AIDERS | KITS | DEFIBS | SITE_PLAN) renders those from the **First Aid / Site Plan records at presentation time** instead. Only ACTIVE FirstAider rows - an inactive first aider has left or lapsed, and putting them on an induction slide is the exact failure being fixed.
+
+WARNING: an empty live block does NOT render nothing - it says which record is missing and where to add it. A blank slide in front of a room reads as "the screen is broken".
+
+## Slides are DB rows, seeded once
+
+lib/induction-seed.ts holds the 19 slides as starter content and seeds ONLY a completely empty table (same rule as lib/auction-ai-presets.ts) - **editing that file does not change a seeded environment**, edit the slides in the app. Body text is plain: a blank line starts a paragraph, a line starting "- " is a bullet. YouTube links embed (the deck's three videos: defib demo, manual handling, box cutter); a non-YouTube link renders as a link, never an empty black box.
+
+Carried over with the typos fixed ("the the gravel car park", "its is important"), Americanised spelling corrected, the blank slide 2 and the "Thank You" slide dropped.
+
+WARNING - left for the H&S team, not silently reworded: the original emergency slide said **do not attempt CPR unless trained**. Current UK guidance is that the 999 call handler talks an untrained bystander through compressions. That line was left OUT and the reason put in the slide's **presenter note** for the H&S team to decide. Do not quietly restore or rewrite it - it is a clinical call, not a copy-editing one.
+
+## Forms and the signed record
+
+InductionForm (key, title, intro, body, declaration, ask* toggles) + InductionFormItem (the tick list). Two seeded: **fob-terms** (the Electronic Access System letter + acceptance form merged into one - swipe in/out, no piggy-backing, wages + fire roll-call, do not remove from the holder, GBP 15 replacement) and **induction-signoff** (15 points drafted from the deck, countersigned by nobody - see below).
+
+WARNING: **InductionSignature has NO foreign key to InductionForm, on purpose.** The form stays editable and deletable; a signature whose wording changed underneath it, or vanished with the form, is worthless as evidence. The row snapshots formTitle, bodySnapshot, declarationSnapshot and items (the label + ticked state of every point). Deleting a form does not touch anything signed. The PDF prints the SNAPSHOT, never the live form.
+
+Required ticks are re-checked SERVER-SIDE in signInductionForm - the browser check is cosmetic, and this row is the record that says someone confirmed each point.
+
+Deleting a signed record is **ADMIN only**; the INDUCTION permission is enough to take a signature, never to make one disappear.
+
+## PDF
+
+lib/induction-pdf.ts + /api/induction/pdf?id= - A4 portrait, pdf-lib, Vectis letterhead (RULES: never pdfkit). Jordan: "I think its best it lives in the hub but we can export a pdf version if needed", so the Hub is the record and the PDF is the personnel-file copy. An UNticked line prints as [ ] in red with a warning under the list, and a signature image that will not decode SAYS so - a blank space under "Signature" would read as an unsigned form.
+
+## Compliance
+
+Recorded in the STORES arrays on **both** /admin/compliance and /admin/dpia, per the standing rule, plus a DPIA data-subject entry, a data-category entry and a lawful-basis row. These are the only people the Hub holds data on who have **no account and no other footprint in it**, and a drawn signature is the strongest single identifier here. Retention is not automatic - it is flagged as something to set alongside the personnel file.
+
+## Not built (not asked for)
+
+No completion tracking across a person (each form stands alone), no email to HR, no per-person induction "record card", and the slides are not printable. Ask before adding any of it.
+`,
+  },
+  {
     filename: "auto_pipeline_apply.md",
     content: `---
 name: Auto Pipeline — what "applied" means (appliedDesc)
