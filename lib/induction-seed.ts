@@ -17,6 +17,7 @@ export type SeedSlide = {
   videoUrl?: string
   liveBlock?: string
   layout?: string
+  graphic?: string
   notes?: string
 }
 
@@ -32,6 +33,7 @@ export const SEED_SLIDES: SeedSlide[] = [
   },
   {
     title: "Objectives of this induction",
+    layout: "CARDS",
     body:
       "- Understand the importance of workplace health and safety.\n" +
       "- Learn our key safety procedures and policies.\n" +
@@ -65,6 +67,7 @@ export const SEED_SLIDES: SeedSlide[] = [
   {
     title: "Potential workplace hazards",
     subtitle: "What to be aware of at Vectis",
+    layout: "CARDS",
     body:
       "- Slips, trips and falls — uneven flooring, cluttered walkways and wet surfaces.\n" +
       "- Manual handling injuries — lifting and moving auction lots or warehouse stock can cause back strain.\n" +
@@ -94,6 +97,7 @@ export const SEED_SLIDES: SeedSlide[] = [
   {
     title: "Who to speak to",
     subtitle: "Report any safety concern to any of these people",
+    layout: "CARDS",
     body:
       "- Jon Gouder — Operations Manager\n" +
       "- Joanne McDonald — Cataloguing Manager\n" +
@@ -114,6 +118,7 @@ export const SEED_SLIDES: SeedSlide[] = [
   {
     title: "Fire equipment",
     subtitle: "Five types, located throughout the building",
+    graphic: "EXTINGUISHERS",
     body:
       "- Water (Class A) — ordinary combustibles such as wood and paper.\n" +
       "- Foam (Class A and B) — liquids such as petrol and oil, and solids.\n" +
@@ -139,6 +144,7 @@ export const SEED_SLIDES: SeedSlide[] = [
   },
   {
     title: "In an emergency",
+    graphic: "STEPS",
     body:
       "- Make sure the area is safe for you as well as for the person needing help.\n" +
       "- If the person is seriously injured, unconscious or unresponsive, call 999 immediately. Give your location and describe the situation.\n" +
@@ -178,6 +184,7 @@ export const SEED_SLIDES: SeedSlide[] = [
   },
   {
     title: "Risk assessments",
+    layout: "STATEMENT",
     body:
       "The company is committed to providing a safe working environment, and employees are responsible for following the safety procedures and guidelines they are given.\n" +
       "Risk assessments are carried out regularly to identify potential hazards. The company is not liable for incidents that arise from an individual failing to follow the safety procedures.\n" +
@@ -199,6 +206,7 @@ export const SEED_SLIDES: SeedSlide[] = [
   },
   {
     title: "Waste and recycling",
+    layout: "STATEMENT",
     body:
       "The company is committed to proper waste disposal and environmental responsibility.\n" +
       "Please use the designated bins and follow the guidance on recycling and waste segregation. Hazardous materials must be reported and handled according to the safety procedures.",

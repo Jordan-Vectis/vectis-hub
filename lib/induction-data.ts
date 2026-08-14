@@ -15,6 +15,7 @@ export type DeckSlide = {
   videoUrl: string | null
   liveBlock: string
   layout: string
+  graphic: string
   notes: string | null
   sortOrder: number
   active: boolean
@@ -26,7 +27,7 @@ export type LiveData = {
   plan:   { id: string; name: string; imageKey: string } | null
 }
 
-// Everything except `layout`, which arrived after the table did.
+// Everything except `layout` and `graphic`, which arrived after the table did.
 const BASE_SELECT = {
   id: true, title: true, subtitle: true, body: true, imageKey: true,
   videoUrl: true, liveBlock: true, notes: true, sortOrder: true, active: true,
@@ -36,15 +37,17 @@ export async function loadInductionSlides(opts: { activeOnly?: boolean } = {}): 
   const where   = opts.activeOnly ? { active: true } : undefined
   const orderBy = [{ sortOrder: "asc" as const }, { createdAt: "asc" as const }]
   try {
-    const rows = await prisma.inductionSlide.findMany({ where, orderBy, select: { ...BASE_SELECT, layout: true } })
-    return rows.map(r => ({ ...r, layout: r.layout }))
+    const rows = await prisma.inductionSlide.findMany({
+      where, orderBy, select: { ...BASE_SELECT, layout: true, graphic: true },
+    })
+    return rows.map(r => ({ ...r, layout: r.layout, graphic: r.graphic || "NONE" }))
   } catch {
     // ⚠ Code reaches Railway the moment it is pushed; the SQL is applied separately. Without
     // this, the deploy that added `layout` would make the whole deck disappear until the
     // migration ran — and "there are no slides to show" in front of a room is not a fallback.
     try {
       const rows = await prisma.inductionSlide.findMany({ where, orderBy, select: BASE_SELECT })
-      return rows.map(r => ({ ...r, layout: "CONTENT" }))
+      return rows.map(r => ({ ...r, layout: "CONTENT", graphic: "NONE" }))
     } catch { return [] }
   }
 }

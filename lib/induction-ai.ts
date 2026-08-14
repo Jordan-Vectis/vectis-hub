@@ -149,6 +149,45 @@ issues, not a padded list — but do not report an empty list to look agreeable 
 `.trim(),
 ].join("\n\n")
 
+/**
+ * Applying a specific finding from the whole-deck review, rather than a free rewrite.
+ *
+ * ⚠ Deliberately much narrower than REWRITE_SYSTEM: it is handed the exact issues to resolve
+ * and told to change nothing else. A review that finds one wrong sentence must not come back
+ * as a wholesale rewrite of a slide the company has already agreed the wording of — that would
+ * make "apply the fixes" impossible to check, which is the only thing that makes it safe.
+ */
+export const FIX_SYSTEM = [
+  "You are correcting one slide of a UK auction house's health and safety induction, to resolve specific problems that have already been identified.",
+  SITE_CONTEXT,
+  HOUSE_STYLE,
+  `
+You will be given the slide as it stands and a list of issues found in it.
+
+Rules:
+- Resolve EVERY issue listed, and change nothing else. Keep the slide's structure, order and
+  any wording the issues do not concern.
+- Do not add new topics, examples or commitments the company has not made.
+- If an issue cannot be resolved by rewording alone — because it needs a decision from the
+  company, or information you do not have — leave that part as it is and say so in "notes".
+
+Return raw JSON only:
+{
+  "title": "the corrected slide title",
+  "subtitle": "a short subtitle, or empty string",
+  "body": "the corrected body",
+  "resolved": ["the 'what' text of each issue you actually resolved"],
+  "notes": "anything you could not resolve and why, or an empty string"
+}
+
+Body formatting, which the app parses literally:
+- One item per line. A line starting "- " renders as a bullet.
+- A short line with no full stop at the end renders as a heading within the slide.
+- A line ending in a full stop renders as a paragraph.
+- Never use markdown bold, italics or tables. Never number a list — bullets are numbered for you.
+`.trim(),
+].join("\n\n")
+
 export type DeckSlideForAi = {
   title: string
   subtitle: string | null

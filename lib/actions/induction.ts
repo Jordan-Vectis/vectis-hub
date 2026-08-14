@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { hasAppAccess } from "@/lib/apps"
 import { getEffectiveSession } from "@/lib/impersonation"
 import { uploadBufferToR2, deleteObjectsFromR2 } from "@/lib/r2"
-import { isLiveBlock, isSlideLayout } from "@/lib/induction"
+import { isLiveBlock, isSlideLayout, isSlideGraphic } from "@/lib/induction"
 import { SEED_SLIDES, SEED_FORMS } from "@/lib/induction-seed"
 
 // Facilities → Induction. Everything here is behind the login and the INDUCTION app
@@ -76,6 +76,7 @@ export async function ensureInductionSeed(): Promise<void> {
             title: sl.title, subtitle: sl.subtitle ?? null, body: sl.body ?? null,
             videoUrl: sl.videoUrl ?? null, liveBlock: sl.liveBlock ?? "NONE",
             layout: sl.layout ?? "CONTENT",
+            graphic: sl.graphic ?? "NONE",
             notes: sl.notes ?? null, sortOrder: (i + 1) * 10,
           })),
         })
@@ -128,6 +129,7 @@ export async function saveInductionSlide(fd: FormData): Promise<Res> {
     const id       = s(fd.get("id"), 40)
     const live     = s(fd.get("liveBlock"), 30) || "NONE"
     const layout   = s(fd.get("layout"), 30) || "CONTENT"
+    const graphic  = s(fd.get("graphic"), 30) || "NONE"
     // ⚠ Validate BEFORE uploading. Uploading first meant a save rejected for a blank title left
     // the image sitting in R2 with nothing pointing at it, for ever.
     if (!s(fd.get("title"), 150)) return { ok: false, error: "The slide needs a title." }
@@ -144,6 +146,7 @@ export async function saveInductionSlide(fd: FormData): Promise<Res> {
       // as an empty slide with no explanation.
       liveBlock: isLiveBlock(live) ? live : "NONE",
       layout:    isSlideLayout(layout) ? layout : "CONTENT",
+      graphic:   isSlideGraphic(graphic) ? graphic : "NONE",
       notes:     s(fd.get("notes"), 4000)   || null,
       sortOrder: Number(fd.get("sortOrder") ?? 0) || 0,
       active:    fd.get("active") === "on",

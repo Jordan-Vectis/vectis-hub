@@ -1453,6 +1453,21 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS "InductionSignature_personName_idx" ON "InductionSignature"("personName")`,
   `CREATE INDEX IF NOT EXISTS "InductionSignature_signedAt_idx" ON "InductionSignature"("signedAt")`,
   `ALTER TABLE "InductionSlide" ADD COLUMN IF NOT EXISTS "layout" TEXT NOT NULL DEFAULT 'CONTENT'`,
+  `ALTER TABLE "InductionSlide" ADD COLUMN IF NOT EXISTS "graphic" TEXT`,
+  // One-off: give the slides that were seeded BEFORE layouts and graphics existed their proper
+  // look, so nobody has to set 21 dropdowns by hand.
+  // ⚠ Every statement is guarded on "graphic" IS NULL — i.e. "this slide has never been through
+  // this" — and the last one stamps every remaining slide, so the whole block can only ever
+  // affect a row once. Re-running Run Migrations cannot undo a choice made afterwards.
+  `UPDATE "InductionSlide" SET "layout"='TITLE', "graphic"='NONE'
+     WHERE "graphic" IS NULL AND "title" IN ('Health & Safety Induction', 'Any questions?')`,
+  `UPDATE "InductionSlide" SET "layout"='STATEMENT', "graphic"='NONE'
+     WHERE "graphic" IS NULL AND "title" IN ('Personal effects', 'Data protection', 'Waste and recycling', 'Risk assessments')`,
+  `UPDATE "InductionSlide" SET "graphic"='EXTINGUISHERS' WHERE "graphic" IS NULL AND "title" = 'Fire equipment'`,
+  `UPDATE "InductionSlide" SET "graphic"='STEPS' WHERE "graphic" IS NULL AND "title" = 'In an emergency'`,
+  `UPDATE "InductionSlide" SET "layout"='CARDS', "graphic"='NONE'
+     WHERE "graphic" IS NULL AND "title" IN ('Potential workplace hazards', 'Objectives of this induction', 'Who to speak to')`,
+  `UPDATE "InductionSlide" SET "graphic"='NONE' WHERE "graphic" IS NULL`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

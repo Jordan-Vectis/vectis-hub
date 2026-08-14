@@ -34,6 +34,7 @@ export function liveBlockLabel(v: string): string {
  */
 export const SLIDE_LAYOUTS = [
   { key: "CONTENT",   label: "Standard — title, then the content" },
+  { key: "CARDS",     label: "Cards — every bullet becomes a tile" },
   { key: "TITLE",     label: "Title slide — centred, extra large" },
   { key: "STATEMENT", label: "Statement — one point, centred, no bullets" },
 ] as const
@@ -43,6 +44,40 @@ export type SlideLayout = typeof SLIDE_LAYOUTS[number]["key"]
 export function isSlideLayout(v: string): v is SlideLayout {
   return SLIDE_LAYOUTS.some(l => l.key === v)
 }
+
+/**
+ * Built-in illustrations. Deliberately a SHORT list of things that earn their place:
+ * STEPS restyles the slide's own bullets as a numbered flow, and EXTINGUISHERS draws the
+ * real UK colour code, which is information the bullets cannot carry as text.
+ *
+ * ⚠ Nothing here invents content — a graphic either renders the slide's own words differently
+ * or draws a standard that does not change. A decorative picture that says something the
+ * company has not agreed to is exactly what an induction must not have.
+ */
+export const SLIDE_GRAPHICS = [
+  { key: "NONE",          label: "None" },
+  { key: "STEPS",         label: "Numbered steps — the bullets as a flow" },
+  { key: "EXTINGUISHERS", label: "Fire extinguisher colour code (UK)" },
+] as const
+
+export type SlideGraphic = typeof SLIDE_GRAPHICS[number]["key"]
+
+export function isSlideGraphic(v: string): v is SlideGraphic {
+  return SLIDE_GRAPHICS.some(g => g.key === v)
+}
+
+/**
+ * The UK fire extinguisher colour code — BS EN 3: a red body with a coloured band naming the
+ * type. RULES.md rule 4: where the real world has a visual language, use it, because a wrong
+ * colour actively misinforms. These are the band colours, not decoration.
+ */
+export const EXTINGUISHER_TYPES = [
+  { name: "Water",        band: "#d0021b", ink: "#ffffff", classes: "Class A",          use: "Wood, paper, textiles and other ordinary combustibles." },
+  { name: "Foam",         band: "#f6e7c1", ink: "#111111", classes: "Class A and B",    use: "Flammable liquids such as petrol and oil, as well as solids." },
+  { name: "Dry powder",   band: "#1565c0", ink: "#ffffff", classes: "Class A, B and C", use: "Flammable gases and liquids, and safe on electrical equipment." },
+  { name: "CO₂",          band: "#111111", ink: "#ffffff", classes: "Class B",          use: "Electrical equipment and flammable liquids. Leaves no residue." },
+  { name: "Wet chemical", band: "#f5c518", ink: "#111111", classes: "Class F",          use: "Cooking oils and fats." },
+] as const
 
 /**
  * Slide bodies are plain text so anyone can edit them without markup:

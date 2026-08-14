@@ -2,9 +2,10 @@
 
 import { useMemo, useState, useTransition } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import InductionSlideView from "@/components/induction-slide"
 import InductionSign, { type SignForm } from "@/components/induction-sign"
-import { LIVE_BLOCKS, SLIDE_LAYOUTS, parseSignedItems } from "@/lib/induction"
+import { LIVE_BLOCKS, SLIDE_LAYOUTS, SLIDE_GRAPHICS, parseSignedItems } from "@/lib/induction"
 import type { DeckSlide, LiveData } from "@/lib/induction-data"
 import {
   saveInductionSlide, deleteInductionSlide, clearInductionSlideImage, moveInductionSlide,
@@ -175,13 +176,16 @@ export default function InductionClient({
             <input name="title" placeholder="Title" required maxLength={150} className={input} />
             <input name="subtitle" placeholder="Subtitle (optional)" maxLength={200} className={input} />
             <textarea name="body" rows={4} placeholder={"Body — one line per block. \"- \" makes a bullet, \"## \" makes a heading, and a short line with no full stop becomes a heading too."} maxLength={8000} className={input} />
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <input name="videoUrl" placeholder="Video link (optional)" maxLength={500} className={input} />
               <select name="liveBlock" defaultValue="NONE" className={input}>
                 {LIVE_BLOCKS.map(b => <option key={b.key} value={b.key}>{b.label}</option>)}
               </select>
               <select name="layout" defaultValue="CONTENT" className={input}>
                 {SLIDE_LAYOUTS.map(l => <option key={l.key} value={l.key}>{l.label}</option>)}
+              </select>
+              <select name="graphic" defaultValue="NONE" className={input}>
+                {SLIDE_GRAPHICS.map(g => <option key={g.key} value={g.key}>{g.label}</option>)}
               </select>
             </div>
             <div className="flex items-center gap-4 flex-wrap">
@@ -276,6 +280,7 @@ function SlideEditor({
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
             {!slide.active && "Not in the running order · "}
             {slide.layout && slide.layout !== "CONTENT" && `${SLIDE_LAYOUTS.find(l => l.key === slide.layout)?.label.split(" — ")[0]} · `}
+            {slide.graphic && slide.graphic !== "NONE" && `${SLIDE_GRAPHICS.find(g => g.key === slide.graphic)?.label.split(" — ")[0]} · `}
             {slide.liveBlock !== "NONE" && `${LIVE_BLOCKS.find(b => b.key === slide.liveBlock)?.label} · `}
             {slide.videoUrl && "video · "}
             {slide.imageKey && "image · "}
@@ -371,13 +376,16 @@ function SlideEditor({
           <input name="title" defaultValue={slide.title} maxLength={150} className={input} />
           <input name="subtitle" defaultValue={slide.subtitle ?? ""} placeholder="Subtitle" maxLength={200} className={input} />
           <textarea name="body" rows={8} defaultValue={slide.body ?? ""} maxLength={8000} className={input} />
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <input name="videoUrl" defaultValue={slide.videoUrl ?? ""} placeholder="Video link" maxLength={500} className={input} />
             <select name="liveBlock" defaultValue={slide.liveBlock} className={input}>
               {LIVE_BLOCKS.map(b => <option key={b.key} value={b.key}>{b.label}</option>)}
             </select>
             <select name="layout" defaultValue={slide.layout || "CONTENT"} className={input}>
               {SLIDE_LAYOUTS.map(l => <option key={l.key} value={l.key}>{l.label}</option>)}
+            </select>
+            <select name="graphic" defaultValue={slide.graphic || "NONE"} className={input}>
+              {SLIDE_GRAPHICS.map(g => <option key={g.key} value={g.key}>{g.label}</option>)}
             </select>
           </div>
           <div>
@@ -414,13 +422,18 @@ type ReviewResult = {
   missing: { topic?: string; why?: string; suggestion?: string }[]
 }
 
+type FixState = { status: "done" | "failed" | "skipped"; detail?: string }
+
 function DeckReview({ card }: { card: string }) {
+  const router = useRouter()
   const [busy, setBusy]   = useState(false)
   const [res, setRes]     = useState<ReviewResult | null>(null)
   const [err, setErr]     = useState<string | null>(null)
+  const [fixing, setFixing]   = useState<string | null>(null)  // slide title being worked on
+  const [fixed, setFixed]     = useState<Record<number, FixState>>({})
 
   async function run() {
-    setBusy(true); setErr(null); setRes(null)
+    setBusy(true); setErr(null); setRes(null); setFixed({})
     try {
       const r = await fetch("/api/induction/ai/review", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
@@ -434,6 +447,57 @@ function DeckReview({ card }: { card: string }) {
       setBusy(false)
     }
   }
+
+  /**
+   * Applies every listed issue for ONE slide in a single pass — a slide with three findings is
+   * rewritten once, not three times over the top of itself.
+   * ⚠ Findings with no slide against them are about the induction as a whole (something
+   * missing, something that needs a decision) and cannot be auto-applied. They are reported,
+   * never silently counted as done.
+   */
+  async function applySlide(slideTitle: string, idxs: number[]): Promise<void> {
+    if (!res) return
+    setFixing(slideTitle)
+    const mark = (status: FixState["status"], detail?: string) =>
+      setFixed(prev => ({ ...prev, ...Object.fromEntries(idxs.map(i => [i, { status, detail }])) }))
+    try {
+      const issues = idxs.map(i => ({ what: res.issues[i]?.what ?? "", fix: res.issues[i]?.fix ?? "" }))
+      const r = await fetch("/api/induction/ai/fix", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slideTitle, issues }),
+      })
+      const json = await r.json().catch(() => ({}))
+      if (!r.ok) { mark("failed", json.error ?? "The fix failed"); return }
+
+      const write = await applyInductionSlideText(json.slideId, json.title, json.subtitle, json.body)
+      if (!write.ok) { mark("failed", write.error ?? "Could not save the slide"); return }
+      mark("done", json.notes || undefined)
+    } catch (e: any) {
+      mark("failed", e?.message ?? "The fix failed")
+    } finally {
+      setFixing(null)
+      router.refresh()
+    }
+  }
+
+  /** Grouped by slide, run one after another — the AI routes are rate-limited per call. */
+  async function applyAll() {
+    if (!res) return
+    const bySlide = new Map<string, number[]>()
+    res.issues.forEach((it, i) => {
+      if (!it.slide || fixed[i]) return
+      const list = bySlide.get(it.slide) ?? []
+      list.push(i)
+      bySlide.set(it.slide, list)
+    })
+    if (bySlide.size === 0) return
+    if (!confirm(`Rewrite ${bySlide.size} slide${bySlide.size === 1 ? "" : "s"} to fix ${[...bySlide.values()].flat().length} finding${[...bySlide.values()].flat().length === 1 ? "" : "s"}? Each slide is changed straight away — check them afterwards on this tab.`)) return
+    for (const [title, idxs] of bySlide) {
+      await applySlide(title, idxs)
+    }
+  }
+
+  const applicable = res ? res.issues.map((it, i) => (it.slide && !fixed[i] ? i : -1)).filter(i => i >= 0) : []
 
   return (
     <div className={card + " space-y-4"}>
@@ -460,25 +524,53 @@ function DeckReview({ card }: { card: string }) {
           {res.summary && <p className="text-[15px] text-gray-800 dark:text-gray-200 leading-relaxed">{res.summary}</p>}
 
           <div>
-            <p className="text-sm font-bold text-gray-900 dark:text-white mb-2">
-              What looks wrong {res.issues.length > 0 && <span className="text-gray-400 font-normal">({res.issues.length})</span>}
-            </p>
+            <div className="flex items-center gap-3 flex-wrap mb-2">
+              <p className="text-sm font-bold text-gray-900 dark:text-white">
+                What looks wrong {res.issues.length > 0 && <span className="text-gray-400 font-normal">({res.issues.length})</span>}
+              </p>
+              {applicable.length > 0 && (
+                <button type="button" onClick={applyAll} disabled={!!fixing}
+                  className="ml-auto px-4 py-2 min-h-[44px] rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-bold disabled:opacity-50">
+                  {fixing ? `Rewriting ${fixing}…` : `✨ Fix all ${applicable.length} on the slides`}
+                </button>
+              )}
+            </div>
             {res.issues.length === 0 ? (
-              <p className="text-sm text-gray-500">It did not flag anything. That is worth a second opinion, not a full stop.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">It did not flag anything. That is worth a second opinion, not a full stop.</p>
             ) : (
               <div className="space-y-2">
-                {res.issues.map((it, k) => (
-                  <div key={k} className="flex gap-2 items-start rounded-xl border border-gray-200 dark:border-gray-700 p-3">
-                    <SeverityChip level={it.severity} />
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white">{it.what}</p>
-                      {it.fix && <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">{it.fix}</p>}
-                      <p className="text-[11px] uppercase tracking-wide text-gray-400 mt-1">
-                        {it.slide ? `Slide: ${it.slide}` : "Whole induction"}{it.area ? ` · ${it.area}` : ""}
-                      </p>
+                {res.issues.map((it, k) => {
+                  const state = fixed[k]
+                  return (
+                    <div key={k} className={`flex gap-2 items-start rounded-xl border p-3 ${
+                      state?.status === "done"   ? "border-emerald-300 dark:border-emerald-700/60 bg-emerald-50 dark:bg-emerald-500/5"
+                      : state?.status === "failed" ? "border-red-300 dark:border-red-700/60 bg-red-50 dark:bg-red-500/5"
+                      : "border-gray-200 dark:border-gray-700"}`}>
+                      <SeverityChip level={it.severity} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">{it.what}</p>
+                        {it.fix && <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">{it.fix}</p>}
+                        <p className="text-[11px] uppercase tracking-wide text-gray-400 mt-1">
+                          {it.slide ? `Slide: ${it.slide}` : "Whole induction — needs a person"}{it.area ? ` · ${it.area}` : ""}
+                        </p>
+                        {state?.status === "done" && (
+                          <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mt-1">
+                            ✓ The slide has been rewritten{state.detail ? ` — the AI could not do all of it: ${state.detail}` : ""}
+                          </p>
+                        )}
+                        {state?.status === "failed" && (
+                          <p className="text-xs font-semibold text-red-600 dark:text-red-400 mt-1">✗ {state.detail}</p>
+                        )}
+                      </div>
+                      {it.slide && !state && (
+                        <button type="button" onClick={() => applySlide(it.slide!, [k])} disabled={!!fixing}
+                          className="shrink-0 px-3 py-2 min-h-[44px] rounded-lg border border-violet-400 dark:border-violet-600 text-sm font-semibold text-violet-700 dark:text-violet-300 disabled:opacity-50">
+                          Fix this
+                        </button>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
@@ -503,7 +595,9 @@ function DeckReview({ card }: { card: string }) {
           </div>
 
           <p className="text-xs text-gray-400">
-            Add a missing topic as a new slide at the bottom of this tab. Nothing here has changed the induction.
+            Add a missing topic as a new slide at the bottom of this tab — those are never applied automatically,
+            because they need someone to decide what the company is committing to. Anything marked ✓ above has
+            already changed the slide; the rest of the induction is untouched.
           </p>
         </div>
       )}
