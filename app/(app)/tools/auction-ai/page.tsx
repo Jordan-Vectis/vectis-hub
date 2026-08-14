@@ -3889,9 +3889,13 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   const [recheckRunning,  setRecheckRunning]  = useState(false)
   const [recheckProgress, setRecheckProgress] = useState<{ done: number; total: number } | null>(null)
   const [recheckMsg,      setRecheckMsg]      = useState<string | null>(null)
-  const [autoApply,    setAutoApply]   = useState(() => {
-    try { return localStorage.getItem("pipeline_auto_apply") !== "false" } catch { return true }
-  })
+  // ⚠ Deliberately NOT remembered (Jordan, 2026-08-13). This used to persist to
+  // localStorage, which is per BROWSER, not per person — so whoever last chose
+  // 👁 Review all on a shared PC or iPad silently set the mode for the next
+  // person's run, and their sale quietly applied nothing. Every run now starts
+  // on ⚡ Auto-apply; choosing Review all lasts for that session only. The mode
+  // is written into the run log at the start either way.
+  const [autoApply,    setAutoApply]   = useState(true)
   // Only load/run lots that actually have photos — no-photo lots always skip in
   // Batch anyway, so this keeps the loaded count + progress to real work.
   const [onlyWithPhotos, setOnlyWithPhotos] = useState(() => {
@@ -4964,7 +4968,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
               always on screen and the highlight makes the active one obvious
               (the old single checkbox only ever showed one label). */}
           {(() => {
-            const setMode = (v: boolean) => { setAutoApply(v); try { localStorage.setItem("pipeline_auto_apply", String(v)) } catch {} }
+            // Session only — see the autoApply state above for why this is not saved.
+            const setMode = (v: boolean) => setAutoApply(v)
             return (
               <div className="inline-flex rounded-lg border border-gray-300 dark:border-gray-700 overflow-hidden text-xs font-medium">
                 <button type="button" onClick={() => setMode(true)} aria-pressed={autoApply}

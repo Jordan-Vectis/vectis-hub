@@ -270,7 +270,13 @@ A 30-agent review found one root cause and one nearly-as-bad partner. Both are f
 
 Also fixed in the same pass: autoApply is read through autoApplyRef, because the stage functions held the value from the render that STARTED the run, so toggling the mode mid-run changed the screen and localStorage but not what the run did; saveLot now checks the HTTP status and retries, where before it ignored it entirely, so a dropped appliedDesc silently put an applied lot back into review; the run log states the mode at the start; and a run with failed writes gets its own red banner instead of the same amber "N lots need reviewing" box that a deliberate review-mode run gets.
 
-WARNING — STILL OPEN, DELIBERATELY NOT CHANGED. Raise with Jordan before touching any of these: requireCataloguer demands the CATALOGUING grant while the Auction AI page is gated on AUCTION_AI, so somebody holding only AUCTION_AI would have every apply fail (admins are unaffected); pipeline_auto_apply is a single shared localStorage key per browser, so whoever last chose "Review all before applying" silently sets the mode for the next person on that PC or iPad; and Apply All can write older AI text over newer human edits, because when appliedDesc is null the load falls back to the live catalogue description.
+THREE RELATED THINGS JORDAN HAS ALREADY DECIDED (2026-08-13) — do not re-raise them:
+
+1. THE APPLY MODE IS NO LONGER REMEMBERED. It used to persist to the pipeline_auto_apply localStorage key, which is per BROWSER and not per person, so whoever last chose "Review all before applying" on a shared PC or iPad silently set the mode for the next person's run and their sale quietly applied nothing. Every run now starts on Auto-apply and "Review all" lasts for that session only. Do NOT reintroduce the localStorage read/write. The key may still exist in old browsers; nothing reads it.
+
+2. THE CATALOGUING vs AUCTION_AI PERMISSION MISMATCH IS LEFT AS IS. requireCataloguer demands the CATALOGUING grant while the Auction AI page is gated on AUCTION_AI, so in theory somebody holding only AUCTION_AI would have every apply fail. Jordan: "Its only ever used by admins who should have all permissions." Admins bypass the check entirely, so this is not worth the change. Leave requireCataloguer alone.
+
+3. APPLY ALL DELIBERATELY OVERWRITES NEWER HUMAN EDITS. Because appliedDesc falls back to the live catalogue description when it is null, Apply All can write the AI's older text over a lot a cataloguer has since corrected by hand. Jordan chose "Overwrite anyway" — Apply All always wins, because it is simple and predictable. Do NOT add a skip-if-edited guard or a side-by-side compare without asking again.
 
 # Auto Pipeline — the apply model (/tools/auction-ai, Auto Pipeline tab)
 
