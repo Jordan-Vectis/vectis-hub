@@ -103,6 +103,35 @@ export default function ChangesClient({
     } finally { setBusy(false) }
   }
 
+  // Posts what is ON SCREEN, so a draft prints with your edits in it and a saved
+  // report prints as saved — no need to save first just to print.
+  async function downloadPdf(r: { title: string; body: string; periodFrom: string; periodTo: string; changeCount: number }) {
+    setBusy(true); setError(null)
+    try {
+      const res = await fetch("/api/admin/changes/pdf", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(r),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        setError(j?.error ?? `Couldn't make the PDF (${res.status})`)
+        return
+      }
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement("a")
+      a.href = url
+      a.download = `${r.title}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      // Revoke on the next tick — Safari cancels the download if it goes too soon.
+      setTimeout(() => URL.revokeObjectURL(url), 10_000)
+    } catch (e: any) {
+      setError(e?.message ?? "Couldn't reach the server")
+    } finally { setBusy(false) }
+  }
+
   async function remove(id: string) {
     if (!confirm("Delete this saved report?")) return
     setBusy(true); setError(null)
@@ -200,8 +229,8 @@ export default function ChangesClient({
           <div className={`${card} p-4`}>
             <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">Report for managers</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
-              Writes up the {shown.length} changes above as something a manager can read — grouped by what the work was for,
-              no technical wording, and no names. Edit it before it goes anywhere.
+              Writes up all {shown.length} changes above as a log a manager can read — grouped by area, in plain English,
+              with no names. Every change is accounted for, so expect a long list. Edit it before it goes anywhere.
             </p>
 
             {!draft ? (
@@ -229,6 +258,13 @@ export default function ChangesClient({
                 />
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
                   <button className={`${btn} bg-indigo-600 hover:bg-indigo-700 text-white`} disabled={busy} onClick={save}>Save report</button>
+                  <button
+                    className={ghost}
+                    disabled={busy}
+                    onClick={() => downloadPdf({ title: title || "Vectis Hub progress report", body: draft, periodFrom: from, periodTo: to, changeCount: shown.length })}
+                  >
+                    🖨 PDF
+                  </button>
                   <button className={ghost} disabled={busy} onClick={() => navigator.clipboard.writeText(draft).then(() => setNote("Copied — paste it straight into an email."))}>Copy</button>
                   <button className={ghost} disabled={busy} onClick={generate}>Rewrite</button>
                   <button className={ghost} disabled={busy} onClick={() => setDraft(null)}>Discard</button>
@@ -276,6 +312,17 @@ export default function ChangesClient({
               {openReport.body}
             </pre>
             <div className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-100 dark:border-gray-800">
+              <button
+                className={`${btn} bg-indigo-600 hover:bg-indigo-700 text-white`}
+                disabled={busy}
+                onClick={() => downloadPdf({
+                  title: openReport.title, body: openReport.body,
+                  periodFrom: openReport.periodFrom, periodTo: openReport.periodTo,
+                  changeCount: openReport.changeCount,
+                })}
+              >
+                🖨 PDF
+              </button>
               <button className={ghost} onClick={() => navigator.clipboard.writeText(openReport.body).then(() => setNote("Copied."))}>Copy</button>
               <button className={`${btn} ml-auto text-red-500 hover:text-red-700`} disabled={busy} onClick={() => remove(openReport.id)}>Delete</button>
             </div>

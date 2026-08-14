@@ -25,16 +25,21 @@ RULES
 - Do NOT invent benefits, figures, time savings or costs. If the record does not say it, do not claim it. No "significantly improved efficiency" unless a line actually says so.
 - Do not editorialise about how hard the work was or how much there is of it.
 
+COVERAGE — this is a LOG, not a highlights reel:
+- Account for EVERY change in the record apart from the [internal] ones. Do not pick favourites and do not stop at the interesting ones.
+- Where several changes clearly belong to one piece of work, describe them as one entry covering what it now does — but do not drop the detail, and do not merge unrelated changes just to shorten the list.
+- Give each entry enough that the reader understands what it does and why it matters: a sentence or two, not four words. Name the thing it affects (the sale page, the photo upload, the overnight run) so it can be found.
+- A long list is expected and fine. Do not compress to fit a page.
+
 FORMAT — plain text, no markdown symbols, ready to paste into an email:
-Open with two or three sentences summarising the period overall.
-Then each area as:
+NO opening summary and NO closing paragraph. Start straight in with the first area heading.
+Each area as:
 
 AREA NAME
-- what changed, in a sentence a manager would understand
-- another, if there is one
+- what changed and what it means in practice, in a sentence or two
+- the next one
 
-Close with one short line on anything still outstanding or worth knowing, only if the record supports it.
-Aim for something that reads in two minutes.`
+Use as many bullets per area as the record calls for. Order the areas with the most-changed first.`
 
 export async function POST(req: NextRequest) {
   try {
@@ -68,7 +73,10 @@ Write the report now.`
 
     let text: string
     try {
-      text = await generateAiText({ model, system: SYSTEM, prompt, maxOutputTokens: 8192 })
+      // Roomy: this is a full log over a period, not a summary, and thinking
+      // tokens come out of the same budget on both providers. A tight cap
+      // truncates the list rather than shortening it.
+      text = await generateAiText({ model, system: SYSTEM, prompt, maxOutputTokens: 32768 })
     } catch (e: any) {
       if (e instanceof AiNotConfiguredError) return NextResponse.json({ error: e.message }, { status: 500 })
       if (e instanceof AiBlockedError) return NextResponse.json({ error: e.message }, { status: 422 })
