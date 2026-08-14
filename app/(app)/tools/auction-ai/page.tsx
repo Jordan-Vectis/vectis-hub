@@ -11,6 +11,7 @@ import BcImportCheckTab from "./bc-import-check-tab"
 import { analyseKeyPoints, HighlightedDescription, kpColour } from "@/lib/kp-analysis"
 import RunCostEstimate from "@/components/run-cost-estimate"
 import PipelineQueuePanel from "./pipeline-queue-panel"
+import { describeActionError } from "@/lib/action-error"
 
 // ─── Show Instruction Toggle ──────────────────────────────────────────────────
 
@@ -3909,6 +3910,17 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   const logRef   = useRef<HTMLDivElement>(null)
   const cancelRef = useRef(false)
   const pauseRef  = useRef(false)
+  // ⚠ handleRun is ONE async call that can span hours, so the stage functions
+  // would otherwise keep the autoApply value from the render that started the
+  // run — switching the toggle mid-run changed the screen and localStorage but
+  // not what the run actually did. Read the ref, never the state, when applying.
+  const autoApplyRef = useRef(autoApply)
+  useEffect(() => { autoApplyRef.current = autoApply }, [autoApply])
+  // How many catalogue writes failed this run. Without this a run where every
+  // single apply failed ended with "🎉 Pipeline complete!" — see applyDescription.
+  const applyFailRef = useRef(0)
+  const [applyFailures, setApplyFailures] = useState(0)
+  const [staleDeployMsg, setStaleDeployMsg] = useState<string | null>(null)
   const lastBlockRef = useRef("")   // the exact "BLOCKED: …" message from the last blocked lot
   const localModel = globalModel
 
@@ -3943,12 +3955,66 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     setTimeout(() => logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" }), 50)
   }
 
-  async function saveLot(lotId: string, fields: Record<string, any>) {
-    await fetch("/api/auction-ai/pipeline/lot", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: code.trim().toUpperCase(), lotId, label: lots.find(l => l.id === lotId)?.label ?? "", ...fields }),
-    }).catch(() => {/* silent */})
+  // ⚠ Not fire-and-forget. This is where appliedDesc is recorded, and a lost
+  // save is indistinguishable from a lot that was never applied — the lot comes
+  // back in Review & Apply after a reload. Retry, and SAY SO if it still fails.
+  async function saveLot(lotId: string, fields: Record<string, any>): Promise<boolean> {
+    const label = lots.find(l => l.id === lotId)?.label ?? ""
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const res = await fetch("/api/auction-ai/pipeline/lot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: code.trim().toUpperCase(), lotId, label, ...fields }),
+      }).catch(() => null)
+      if (res?.ok) return true
+      if (attempt < 3) await new Promise(r => setTimeout(r, 2000 * attempt))
+    }
+    addLog(`  ⚠ ${label} — progress not saved${fields.appliedDesc ? " (the applied text wasn't recorded, so this lot will show as needing review again)" : ""}`)
+    return false
+  }
+
+  // ── The ONE place the pipeline writes a description to the catalogue ────────
+  // Every stage and the Review & Apply buttons go through here. Before this,
+  // each site had its own `catch { addLog(…) }`, which meant:
+  //   · a deploy landing mid-run made every remaining apply fail silently, the
+  //     run still said "🎉 Pipeline complete!", and the whole sale landed in
+  //     Review & Apply — the exact fault Jordan reported on a 512-lot sale;
+  //   · the apply sat OUTSIDE withRetry, so one transient blip lost that lot
+  //     while the Gemini call beside it retried forever.
+  // Returns whether the catalogue actually accepted the write. Callers must only
+  // record appliedDesc when it returns true.
+  async function applyDescription(aid: string, lotId: string, label: string, text: string, what: string): Promise<boolean> {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      if (cancelRef.current) return false
+      try {
+        await applyAiDescriptionOne(aid, { id: lotId, description: text })
+        return true
+      } catch (e: any) {
+        const info = describeActionError(e)
+        // A stale deploy will fail for EVERY remaining lot — the action ids this
+        // page holds no longer exist on the server. Stop the run rather than
+        // grinding through hundreds of guaranteed failures, and say plainly that
+        // nothing is being written. Deliberately NOT maybeReloadForSkew: a
+        // reload mid-run would abandon it. Progress is in the database, so
+        // reloading and pressing Resume picks up where this left off.
+        if (info.staleDeploy) {
+          cancelRef.current = true
+          applyFailRef.current++
+          setApplyFailures(applyFailRef.current)
+          const msg = "The app was updated while this run was going, so it can no longer write to the catalogue. Nothing is lost — reload this page, load the sale again and press Resume."
+          setStaleDeployMsg(msg)
+          setError(msg)
+          addLog(`✗ ${label} — ${what} stopped: the app was updated mid-run. Reload and resume.`)
+          return false
+        }
+        if (attempt < 3) { await new Promise(r => setTimeout(r, 1500 * attempt)); continue }
+        applyFailRef.current++
+        setApplyFailures(applyFailRef.current)
+        addLog(`  ⚠ ${label} — ${what} failed to apply: ${info.message}${info.digest ? ` (ref ${info.digest})` : ""}`)
+        return false
+      }
+    }
+    return false
   }
 
   async function advanceStage(newStage: PipelineStage) {
@@ -4156,11 +4222,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         // In "Review all before applying" mode nothing is written, so appliedDesc stays
         // as the original description and the lot stays in Review & Apply.
         let applied = false
-        if (autoApply && auctionId && desc) {
-          try {
-            await applyAiDescriptionOne(auctionId, { id: lot.id, description: desc })
-            applied = true
-          } catch (e: any) { addLog(`  ⚠ ${lot.label} — failed to apply to catalogue: ${e?.message ?? "unknown error"}`) }
+        if (autoApplyRef.current && auctionId && desc) {
+          applied = await applyDescription(auctionId, lot.id, lot.label, desc, "description")
         }
         updated[idx] = { ...updated[idx], batchStatus: "ok", currentDesc: desc, estimate: result.estimate ?? "", batchDesc: desc, kpRevised: desc,
           ...(applied ? { appliedDesc: desc } : {}),
@@ -4175,7 +4238,7 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         if (auctionId && low > 0 && high > 0) {
           try {
             await applyAiEstimateOne(auctionId, { id: lot.id, aiEstimateLow: low, aiEstimateHigh: high })
-          } catch (e: any) { addLog(`  ⚠ ${lot.label} — failed to save AI estimate: ${e?.message ?? "unknown error"}`) }
+          } catch (e: any) { addLog(`  ⚠ ${lot.label} — failed to save AI estimate: ${describeActionError(e).message}`) }
         }
         // Save to pipeline + existing saved runs. appliedDesc MUST be persisted here:
         // the load re-derives "already applied?" from it, and when it is missing it falls
@@ -4264,11 +4327,8 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         // is still held for the manual gate — kpRevised drives the review UI either way.
         if (verdict === "issues" && revised) {
           let applied = false
-          if (autoApply && aid) {
-            try {
-              await applyAiDescriptionOne(aid, { id: lot.id, description: revised })
-              applied = true
-            } catch (e: any) { addLog(`  ⚠ ${lot.label} — DC fix failed to apply: ${e?.message ?? "unknown error"}`) }
+          if (autoApplyRef.current && aid) {
+            applied = await applyDescription(aid, lot.id, lot.label, revised, "double-check fix")
           }
           updated[idx] = { ...updated[idx], dcStatus: verdict, contradictions, unsupported, kpRevised: revised, dcDesc: revised,
             ...(applied ? { currentDesc: revised, appliedDesc: revised } : {}),
@@ -4351,14 +4411,9 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           // catalogue in auto-apply mode — in "Review all before applying" mode we must
           // hold it for Review & Apply and leave appliedDesc (the on-catalogue text)
           // untouched, so all reviewed lots surface below.
-          if (autoApply) {
-            try {
-              await applyAiDescriptionOne(aid, { id: lot.id, description: revised })
-              applied = true
-              addLog(`  ⚑ ${lot.label} — key points inserted & applied`)
-            } catch {
-              addLog(`  ⚑ ${lot.label} — key points inserted but auto-apply failed`)
-            }
+          if (autoApplyRef.current) {
+            applied = await applyDescription(aid, lot.id, lot.label, revised, "key points")
+            if (applied) addLog(`  ⚑ ${lot.label} — key points inserted & applied`)
           } else {
             addLog(`  ⚑ ${lot.label} — key points inserted (held for review)`)
           }
@@ -4454,12 +4509,22 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
     setPaused(false)
     setRunning(true)
     setError(null)
+    setStaleDeployMsg(null)
+    applyFailRef.current = 0
+    setApplyFailures(0)
 
     // Save initial pipeline record
     await fetch("/api/auction-ai/pipeline", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code: code.trim().toUpperCase(), stage, model: localModel, preset }),
     }).catch(() => {})
+
+    // State the mode in the log. "Ran in review mode" and "ran in auto-apply and
+    // every write failed" produced the same end screen, which is a large part of
+    // why this complaint kept coming back with nothing to go on afterwards.
+    addLog(autoApplyRef.current
+      ? "▶ Mode: ⚡ Auto-apply — each stage writes straight to the catalogue"
+      : "▶ Mode: 👁 Review all before applying — nothing will be written until you press Apply")
 
     try {
       let current = lots
@@ -4486,7 +4551,19 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         await advanceStage("complete")
       }
 
-      if (!cancelRef.current) addLog("🎉 Pipeline complete!")
+      // ⚠ Only a run that actually wrote what it was asked to write gets the
+      // party popper. A run where every apply failed used to end here with
+      // "🎉 Pipeline complete!" and a full Review & Apply list, which reads as
+      // normal behaviour rather than as a failure.
+      if (!cancelRef.current) {
+        const fails = applyFailRef.current
+        if (!autoApplyRef.current)  addLog("🎉 Pipeline complete — nothing applied yet, review & apply below")
+        else if (fails === 0)       addLog("🎉 Pipeline complete!")
+        else {
+          addLog(`⚠ Pipeline finished, but ${fails} catalogue ${fails === 1 ? "write" : "writes"} failed — those lots are listed below and still need applying.`)
+          setError(`${fails} ${fails === 1 ? "lot was" : "lots were"} generated but could not be written to the catalogue. They're in Review & Apply below.`)
+        }
+      }
     } catch (e: any) {
       if (!cancelRef.current) { addLog(`✗ Unexpected error: ${e.message}`); setError(e.message) }
     } finally {
@@ -4605,28 +4682,51 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
   }
 
   // ── Review & apply ──────────────────────────────────────────────────────────
-  async function acceptKP(lot: PLot) {
-    if (!auctionId || !lot.kpRevised) return
+  // ⚠ This used to `catch {}` — no log, no message. So pressing "Apply All" on a
+  // page that had gone stale across a deploy churned through every lot, wrote
+  // nothing, put them all back, and left the button reading exactly the same
+  // count. That is the "I pressed apply and nothing happened" report. Failures
+  // are now counted and stated; applyDescription stops the loop on a stale
+  // deploy rather than repeating a guaranteed failure hundreds of times.
+  async function acceptKP(lot: PLot): Promise<boolean> {
+    if (!auctionId || !lot.kpRevised) return false
     const text = lot.kpRevised
     const prevApplied = lot.appliedDesc
     // Optimistically mark as applied — sets appliedDesc === kpRevised so it leaves the review list
     setLots(prev => prev.map(l => l.id === lot.id ? { ...l, kpStatus: "fixed", currentDesc: text, appliedDesc: text } : l))
-    try {
-      await applyAiDescriptionOne(auctionId, { id: lot.id, description: text })
-      // Persist BOTH the revised text and what was applied, so a reload knows it's done
-      // (the load compares kpRevised vs appliedDesc — both now come from the pipeline DB).
-      await saveLot(lot.id, { kpStatus: "fixed", revised: text, description: text, appliedDesc: text })
-    } catch {
+    const ok = await applyDescription(auctionId, lot.id, lot.label, text, "description")
+    if (!ok) {
       setLots(prev => prev.map(l => l.id === lot.id ? { ...l, appliedDesc: prevApplied } : l))
+      return false
     }
+    // Persist BOTH the revised text and what was applied, so a reload knows it's done
+    // (the load compares kpRevised vs appliedDesc — both now come from the pipeline DB).
+    await saveLot(lot.id, { kpStatus: "fixed", revised: text, description: text, appliedDesc: text })
+    return true
   }
 
   async function acceptAllKP() {
     const toApply = lots.filter(needsReview)
     if (!auctionId || toApply.length === 0) return
     setAccepting(true)
-    for (const lot of toApply) await acceptKP(lot)
+    setError(null)
+    cancelRef.current = false
+    applyFailRef.current = 0
+    setApplyFailures(0)
+    let ok = 0, failed = 0
+    addLog(`── Applying ${toApply.length} lots to the catalogue`)
+    for (const lot of toApply) {
+      if (cancelRef.current) break            // applyDescription hit a stale deploy
+      if (await acceptKP(lot)) ok++; else failed++
+      setProgress({ done: ok + failed, total: toApply.length })
+    }
+    setProgress(null)
     setAccepting(false)
+    // RULES: never let "nothing happened" look like success.
+    if (failed > 0 && ok === 0)      addLog(`✗ Nothing was applied — all ${failed} failed. See the messages above.`)
+    else if (failed > 0)             addLog(`⚠ Applied ${ok}, but ${failed} failed — those are still listed below.`)
+    else                             addLog(`✓ Applied ${ok} lot${ok === 1 ? "" : "s"} to the catalogue`)
+    if (failed > 0 && !staleDeployMsg) setError(`${failed} of ${toApply.length} lots could not be applied — see the run log for the reason.`)
   }
 
   // ── Photo viewer ─────────────────────────────────────────────────────────────
@@ -4895,7 +4995,26 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
           )}
         </div>
 
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {/* A stale page can't write to the catalogue at all, and no amount of
+            pressing Apply will change that — so this gets a full banner with the
+            one action that fixes it, not a line of red text. */}
+        {staleDeployMsg && (
+          <div className="rounded-xl border border-amber-400 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-4 py-3">
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-1">⚠ The app was updated while this was running</p>
+            <p className="text-sm text-amber-700 dark:text-amber-300">
+              Nothing was lost — every description is saved. This page just can&apos;t write to the catalogue any more.
+              Reload, load the sale again, and press Resume to carry on from where it stopped.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-2 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold"
+            >
+              ⟳ Reload the page
+            </button>
+          </div>
+        )}
+
+        {error && !staleDeployMsg && <p className="text-sm text-red-400">{error}</p>}
 
         {lots.length > 0 && (
           <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 pt-1">
@@ -5073,7 +5192,18 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
 
       {stage === "complete" && (
         <>
-          {pipelineIncomplete ? (
+          {/* ⚠ Auto-apply having FAILED is a different thing from a run that was
+              deliberately set to hold everything for review, and they used to
+              show the identical amber "N lots need reviewing" box. Say which. */}
+          {applyFailures > 0 ? (
+            <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-red-950/30 border border-red-600/50 text-red-300 text-sm">
+              <span className="text-xl">✗</span>
+              <div>
+                <p className="font-semibold">Auto-apply was on, but {applyFailures} {applyFailures === 1 ? "description" : "descriptions"} couldn&apos;t be written to the catalogue.</p>
+                <p className="opacity-90 mt-0.5">Nothing is lost — they&apos;re all in Review &amp; Apply below. The run log says why each one failed.</p>
+              </div>
+            </div>
+          ) : pipelineIncomplete ? (
             <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-950/30 border border-amber-600/50 text-amber-300 text-sm">
               <span className="text-xl">⚠</span>
               <span>Pipeline did not fully complete — some lots were not processed. Use the buttons below to re-run the missing stages.</span>

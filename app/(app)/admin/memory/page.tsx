@@ -254,9 +254,23 @@ WARNING: reds that remain are deliberate and correct — do NOT sweep them green
     filename: "auto_pipeline_apply.md",
     content: `---
 name: Auto Pipeline — what "applied" means (appliedDesc)
-purpose: Why lots reappear in Review & Apply after an auto-apply run. PipelineLot.appliedDesc is the ONLY record that a lot was applied — persist it on every auto-apply path. Read before touching the pipeline stages or needsReview.
-last_updated: 2026-08-10
+purpose: Why lots reappear in Review & Apply after an auto-apply run. PipelineLot.appliedDesc is the ONLY record that a lot was applied — persist it on every auto-apply path. Includes the 2026-08-13 root-cause fix for "auto-apply isn't applying". Read before touching the pipeline stages, the apply path or needsReview.
+last_updated: 2026-08-13
 ---
+
+# WHY "AUTO-APPLY ISN'T APPLYING" KEPT COMING BACK (root cause, fixed 2026-08-13)
+
+Jordan, on a 512-lot Trains sale with Auto-apply selected: all three stages finished, then "512 lots need reviewing & applying" and an Apply All button. His run log held the answer — every catalogue write had failed with Server Action "60b949e1..." was not found on the server, i.e. DEPLOY SKEW (deploys had landed while his tab was open).
+
+A 30-agent review found one root cause and one nearly-as-bad partner. Both are fixed in app/(app)/tools/auction-ai/page.tsx.
+
+1. EVERY APPLY HAD ITS OWN catch THAT ONLY WROTE A LOG LINE — no skew detection, no retry, no counting, no stopping. One deploy turned the rest of the sale into silent no-ops while the run still ended "Pipeline complete!". The apply also sat OUTSIDE withRetry, so the Gemini call retried forever while the catalogue write got zero retries. There is now ONE applyDescription() helper that every stage AND both Review & Apply buttons go through: three retries for transients, and on a stale deploy it sets cancelRef, raises a full amber banner with a Reload button, and STOPS the run instead of repeating a guaranteed failure hundreds of times. It deliberately does NOT call maybeReloadForSkew — reloading mid-run would abandon the run; the stage state is in the database, so Reload then Load Auction then Resume carries on from where it stopped.
+
+2. acceptKP's CATCH WAS COMPLETELY EMPTY. Pressing Apply All (512) on a stale page churned through all 512 lots, wrote nothing, put them all back and left the button reading the same number — the literal "I pressed apply and nothing happened". acceptKP now returns success/failure, and acceptAllKP tallies and states the outcome.
+
+Also fixed in the same pass: autoApply is read through autoApplyRef, because the stage functions held the value from the render that STARTED the run, so toggling the mode mid-run changed the screen and localStorage but not what the run did; saveLot now checks the HTTP status and retries, where before it ignored it entirely, so a dropped appliedDesc silently put an applied lot back into review; the run log states the mode at the start; and a run with failed writes gets its own red banner instead of the same amber "N lots need reviewing" box that a deliberate review-mode run gets.
+
+WARNING — STILL OPEN, DELIBERATELY NOT CHANGED. Raise with Jordan before touching any of these: requireCataloguer demands the CATALOGUING grant while the Auction AI page is gated on AUCTION_AI, so somebody holding only AUCTION_AI would have every apply fail (admins are unaffected); pipeline_auto_apply is a single shared localStorage key per browser, so whoever last chose "Review all before applying" silently sets the mode for the next person on that PC or iPad; and Apply All can write older AI text over newer human edits, because when appliedDesc is null the load falls back to the live catalogue description.
 
 # Auto Pipeline — the apply model (/tools/auction-ai, Auto Pipeline tab)
 
