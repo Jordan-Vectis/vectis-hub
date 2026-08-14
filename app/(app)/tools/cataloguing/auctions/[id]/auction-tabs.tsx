@@ -244,7 +244,9 @@ type BCMatchRow = {
   ourReceipt: string | null
   ourUniqueId: string | null
   lotId:      string | null
-  status:     "match" | "mismatch" | "not_found" | "our_only"
+  // "duplicate" = two or more of OUR lots carry this barcode, so BC's single row
+  // for it can't be attributed to one of them. Never imported.
+  status:     "match" | "mismatch" | "not_found" | "our_only" | "duplicate"
 }
 
 function BCMatchModal({ lots, auctionId, onClose }: {
@@ -260,11 +262,27 @@ function BCMatchModal({ lots, auctionId, onClose }: {
   const [importResult, setImportResult]   = useState<{ updated: number; skipped: number } | null>(null)
   const [tableFilter, setTableFilter]     = useState<BCMatchRow["status"] | "all">("all")
 
-  const barcodeMap = useMemo(() => {
-    const m = new Map<string, Lot>()
-    for (const l of lots) if (l.barcode) m.set(l.barcode.toLowerCase().trim(), l)
+  // ⚠ Map to a LIST, not a single lot. Keying straight to one lot silently
+  // dropped the loser whenever two of our lots shared a barcode: BC's one row
+  // matched whichever won, and the other lot appeared in no category at all —
+  // not in the BC rows, and not in "in our system but not in BC" either, because
+  // its barcode IS in the file. That is how F109 read "594 BC rows · 595 our
+  // lots" with every count reconciling to 594 and nothing flagged.
+  const byBarcode = useMemo(() => {
+    const m = new Map<string, Lot[]>()
+    for (const l of lots) {
+      const key = (l.barcode ?? "").toLowerCase().trim()
+      if (!key) continue
+      const list = m.get(key)
+      if (list) list.push(l)
+      else m.set(key, [l])
+    }
     return m
   }, [lots])
+
+  /** Lots that can never be matched, because they carry no barcode at all. */
+  const noBarcodeCount = useMemo(() => lots.filter(l => !(l.barcode ?? "").trim()).length, [lots])
+  const ourBarcodedCount = useMemo(() => lots.filter(l => (l.barcode ?? "").trim()).length, [lots])
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -276,21 +294,35 @@ function BCMatchModal({ lots, auctionId, onClose }: {
         const wb  = XLSX.read(ev.target!.result, { type: "binary" })
         const ws  = wb.Sheets[wb.SheetNames[0]]
         const raw = XLSX.utils.sheet_to_json<Record<string, string | number>>(ws)
-        const parsed: BCMatchRow[] = (raw.map(r => {
+        const parsed: BCMatchRow[] = raw.flatMap((r): BCMatchRow[] => {
           const barcode    = String(r["Internal Barcode"] ?? "").trim()
           const bcReceipt  = String(r["Receipt No."]      ?? "").trim()
           const bcUniqueId = String(r["UniqueID"]         ?? "").trim()
-          if (!barcode) return null
-          const lot = barcodeMap.get(barcode.toLowerCase())
-          if (!lot) return { barcode, bcReceipt, bcUniqueId, ourReceipt: null, ourUniqueId: null, lotId: null, status: "not_found" as const }
+          if (!barcode) return []
+          const ours = byBarcode.get(barcode.toLowerCase()) ?? []
+          if (ours.length === 0) {
+            return [{ barcode, bcReceipt, bcUniqueId, ourReceipt: null, ourUniqueId: null, lotId: null, status: "not_found" as const }]
+          }
+          // Two of our lots on one barcode — BC's row can't be attributed to
+          // either, so show BOTH and import neither. Guessing would write BC's
+          // Unique ID onto the wrong lot, which is the exact class of mistake
+          // the barcode-only rule exists to prevent.
+          if (ours.length > 1) {
+            return ours.map(lot => ({
+              barcode, bcReceipt, bcUniqueId,
+              ourReceipt: lot.receipt, ourUniqueId: lot.receiptUniqueId, lotId: lot.id,
+              status: "duplicate" as const,
+            }))
+          }
+          const lot = ours[0]
           const receiptMatch = (lot.receipt ?? "").trim().toUpperCase() === bcReceipt.toUpperCase()
-          return { barcode, bcReceipt, bcUniqueId, ourReceipt: lot.receipt, ourUniqueId: lot.receiptUniqueId, lotId: lot.id, status: receiptMatch ? "match" as const : "mismatch" as const }
-        }).filter(Boolean)) as BCMatchRow[]
+          return [{ barcode, bcReceipt, bcUniqueId, ourReceipt: lot.receipt, ourUniqueId: lot.receiptUniqueId, lotId: lot.id, status: receiptMatch ? "match" as const : "mismatch" as const }]
+        })
 
         // Reverse check — our lots whose barcode doesn't appear in the BC export at all
         const bcBarcodeSet = new Set(parsed.map(r => r.barcode.toLowerCase()))
         const ourOnly: BCMatchRow[] = lots
-          .filter(l => l.barcode && !bcBarcodeSet.has(l.barcode.toLowerCase().trim()))
+          .filter(l => (l.barcode ?? "").trim() && !bcBarcodeSet.has(l.barcode!.toLowerCase().trim()))
           .map(l => ({
             barcode:    l.barcode!,
             bcReceipt:  "",
@@ -325,6 +357,14 @@ function BCMatchModal({ lots, auctionId, onClose }: {
   const mismatched = rows.filter(r => r.status === "mismatch")
   const notFound   = rows.filter(r => r.status === "not_found")
   const ourOnly    = rows.filter(r => r.status === "our_only")
+  const duplicate  = rows.filter(r => r.status === "duplicate")
+
+  // ⚠ Make the arithmetic answer for itself. Every one of our barcoded lots must
+  // land in exactly one bucket; if it doesn't, say so rather than leaving a
+  // one-lot shortfall for someone to spot by eye. That shortfall is what Jordan
+  // caught on F109 — "595 lots yet its only doing something with 594".
+  const accountedLots = matched.length + mismatched.length + duplicate.length + ourOnly.length
+  const unaccounted   = ourBarcodedCount - accountedLots
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={onClose}>
@@ -347,8 +387,26 @@ function BCMatchModal({ lots, auctionId, onClose }: {
               {fileName ? `📄 ${fileName}` : "Choose BC Lines .xlsx…"}
             </button>
             <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile} />
-            {rows.length > 0 && <span className="text-xs text-gray-500">{rows.filter(r => r.status !== "our_only").length} BC rows · {lots.filter(l => l.barcode).length} our lots</span>}
+            {rows.length > 0 && <span className="text-xs text-gray-500">{rows.filter(r => r.status !== "our_only").length} BC rows · {ourBarcodedCount} our lots</span>}
           </div>
+
+          {/* Anything that can't be matched at all, said plainly up front. */}
+          {rows.length > 0 && (noBarcodeCount > 0 || unaccounted !== 0) && (
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3 text-sm text-amber-700 dark:text-amber-300 space-y-1">
+              {noBarcodeCount > 0 && (
+                <p>
+                  <strong>{noBarcodeCount}</strong> {noBarcodeCount === 1 ? "lot has" : "lots have"} no barcode, so {noBarcodeCount === 1 ? "it can" : "they can"}&apos;t
+                  be matched to BC at all and {noBarcodeCount === 1 ? "isn" : "aren"}&apos;t counted below.
+                </p>
+              )}
+              {unaccounted !== 0 && (
+                <p>
+                  <strong>{Math.abs(unaccounted)}</strong> of our lots {unaccounted > 0 ? "don&apos;t appear" : "appear more than once"} in
+                  the figures below. That shouldn&apos;t happen — please tell IT which sale this is.
+                </p>
+              )}
+            </div>
+          )}
 
           {error && (
             <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3 text-sm text-red-700 dark:text-red-400">{error}</div>
@@ -357,9 +415,10 @@ function BCMatchModal({ lots, auctionId, onClose }: {
           {rows.length > 0 && (
             <>
               {/* Summary cards — click to filter table */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 {([
                   { status: "match"     as const, count: matched.length,    label: "Receipt matches — ready to import", active: "bg-green-100 dark:bg-green-900/60 ring-2 ring-green-500",  inactive: "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-900/50",  num: "text-green-700 dark:text-green-400",  txt: "text-green-600 dark:text-green-500"  },
+                  { status: "duplicate" as const, count: duplicate.length,   label: "Same barcode on two lots — skipped", active: "bg-orange-100 dark:bg-orange-900/60 ring-2 ring-orange-500", inactive: "bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/50", num: "text-orange-700 dark:text-orange-400", txt: "text-orange-600 dark:text-orange-500" },
                   { status: "mismatch"  as const, count: mismatched.length,  label: "Receipt mismatch — skipped",         active: "bg-yellow-100 dark:bg-yellow-900/60 ring-2 ring-yellow-500", inactive: "bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 hover:bg-yellow-100 dark:hover:bg-yellow-900/50", num: "text-yellow-700 dark:text-yellow-400", txt: "text-yellow-600 dark:text-yellow-500" },
                   { status: "not_found" as const, count: notFound.length,    label: "In BC but not our system",           active: "bg-gray-200 dark:bg-gray-700/60 ring-2 ring-gray-400",       inactive: "bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800/60",           num: "text-gray-700 dark:text-gray-400",    txt: "text-gray-600 dark:text-gray-500"    },
                   { status: "our_only"  as const, count: ourOnly.length,     label: "In our system but not in BC",        active: "bg-violet-100 dark:bg-violet-900/60 ring-2 ring-violet-500", inactive: "bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 hover:bg-violet-100 dark:hover:bg-violet-900/50", num: "text-violet-700 dark:text-violet-400", txt: "text-violet-600 dark:text-violet-500" },
@@ -412,6 +471,7 @@ function BCMatchModal({ lots, auctionId, onClose }: {
                           {r.status === "mismatch"  && <span className="text-yellow-600 dark:text-yellow-400 font-semibold">⚠ Mismatch</span>}
                           {r.status === "not_found" && <span className="text-gray-500 font-semibold">✗ Not in our system</span>}
                           {r.status === "our_only"  && <span className="text-violet-600 dark:text-violet-400 font-semibold">✗ Not in BC</span>}
+                          {r.status === "duplicate" && <span className="text-orange-600 dark:text-orange-400 font-semibold" title="Two of our lots share this barcode, so there is no way to tell which one BC's row belongs to. Fix the barcode on one of them, then match again.">⚠ Barcode on 2 lots</span>}
                         </td>
                       </tr>
                     ))}
