@@ -422,7 +422,6 @@ export default function LottingUpPage() {
   const [target,    setTarget]    = useState<SaleTarget>({ auction: null, tote: null })
   const [barcodes,  setBarcodes]  = useState<Record<string, string>>({})
   const [added,     setAdded]     = useState<Record<string, string>>({})
-  const [fillStart, setFillStart] = useState("")
   const [saving,    setSaving]    = useState(false)
   const [confirm,   setConfirm]   = useState<{ gid: string; title: string; barcode: string }[] | null>(null)
   const [report,    setReport]    = useState<{ created: number; skipped: { barcode: string; reason: string }[] } | null>(null)
@@ -549,6 +548,11 @@ export default function LottingUpPage() {
 
   const uncertainItems = useMemo(
     () => groups.flatMap(g => g.items.filter(i => i.uncertain).map(i => ({ g, i }))),
+    [groups],
+  )
+
+  const archivePriced = useMemo(
+    () => groups.reduce((s, g) => s + g.items.filter(i => i.pricedFrom === "archive").length, 0),
     [groups],
   )
 
@@ -690,15 +694,21 @@ export default function LottingUpPage() {
 
   // ── Adding to a sale ──
 
-  function fillBarcodes() {
-    const start = fillStart.trim().toUpperCase()
+  /**
+   * Number every un-added lot BELOW this one, running on from its barcode.
+   * Driven from the lot in hand rather than a box at the top of the page.
+   */
+  function fillBarcodesFrom(startIdx: number) {
+    const start = (barcodes[groups[startIdx]?.gid] ?? "").trim().toUpperCase()
     if (!start) return
     const next = { ...barcodes }
     let code = start
-    for (const g of pending) {
-      next[g.gid] = code
+    for (let i = startIdx + 1; i < groups.length; i++) {
+      const g = groups[i]
+      if (added[g.gid]) continue          // already created — don't reuse its number
       const bumped = bumpBarcode(code)
-      if (!bumped) break          // no trailing digits — leave the rest blank
+      if (!bumped) break                  // no trailing digits — leave the rest blank
+      next[g.gid] = bumped
       code = bumped
     }
     setBarcodes(next)
@@ -939,6 +949,12 @@ export default function LottingUpPage() {
                 {uncertainItems.length} item{uncertainItems.length === 1 ? "" : "s"} to check
               </span>
             )}
+            {archivePriced > 0 && (
+              <span title="Priced from our own sold archive (median of single-item hammer results) rather than the model's guess"
+                className="text-[11px] px-2 py-0.5 rounded-full border border-[#2AB4A6]/40 bg-[#2AB4A6]/10 text-[#2AB4A6]">
+                {archivePriced} priced from our sold archive
+              </span>
+            )}
             <span className="text-[11px] text-gray-600">
               — band judged on the real estimate, not the quote figure
             </span>
@@ -1010,38 +1026,7 @@ export default function LottingUpPage() {
           {/* Right — the plan */}
           <div className="space-y-4">
 
-            {/* Barcodes + Add all */}
-            {ready ? (
-              <div className="bg-[#1C1C1E] border border-[#2AB4A6]/20 rounded-xl px-4 py-3 flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-gray-400">Barcodes</span>
-                <input
-                  value={fillStart}
-                  onChange={e => setFillStart(e.target.value.toUpperCase())}
-                  placeholder="First barcode…"
-                  className="bg-[#2C2C2E] border border-gray-700 rounded-lg px-3 py-2 text-xs text-gray-200 w-40 focus:outline-none focus:border-[#2AB4A6]"
-                />
-                <button
-                  onClick={fillBarcodes}
-                  disabled={!fillStart.trim() || !pending.length}
-                  title="Assign sequential barcodes down the lots that haven't been added yet"
-                  className="text-xs text-[#2AB4A6] border border-[#2AB4A6]/50 hover:bg-[#2AB4A6]/10 disabled:opacity-40 px-3 py-2 rounded-lg">
-                  ⊕ Fill down
-                </button>
-                <span className="text-[11px] text-gray-600">
-                  {pending.length} lot{pending.length === 1 ? "" : "s"} still to add
-                </span>
-                <button
-                  onClick={() => setConfirm(
-                    pending
-                      .filter(g => (barcodes[g.gid] ?? "").trim())
-                      .map(g => ({ gid: g.gid, title: g.title, barcode: (barcodes[g.gid] ?? "").trim().toUpperCase() }))
-                  )}
-                  disabled={saving || !pending.some(g => (barcodes[g.gid] ?? "").trim())}
-                  className="ml-auto text-xs bg-[#2AB4A6] hover:bg-[#24a090] disabled:opacity-40 text-black font-semibold px-4 py-2.5 rounded-lg transition-colors">
-                  Add all to {target.auction!.code.toUpperCase()}
-                </button>
-              </div>
-            ) : (
+            {!ready && (
               <p className="text-xs text-gray-600 bg-[#1C1C1E] border border-gray-800 rounded-xl px-4 py-3">
                 Choose a sale and scan a tote at the top of the page to add these lots to a sale.
               </p>
@@ -1205,6 +1190,35 @@ export default function LottingUpPage() {
                             {it.uncertain && (
                               <p className="text-[11px] text-amber-300/80 pl-[28px] pt-0.5">{it.uncertain}</p>
                             )}
+                            {/* What our own sold archive says. When it priced the
+                                item, show the AI figure it replaced — the gap is
+                                the whole point. */}
+                            {it.archive && (
+                              <p className="text-[11px] pl-[28px] pt-0.5">
+                                {it.pricedFrom === "archive" ? (
+                                  <>
+                                    <span className="text-[#2AB4A6]">
+                                      our archive: {money(it.archive.median)} median of {it.archive.count} sale
+                                      {it.archive.count === 1 ? "" : "s"}
+                                    </span>
+                                    {(it.aiValueLow !== it.valueLow || it.aiValueHigh !== it.valueHigh) && (
+                                      <span className="text-gray-600">
+                                        {" "}· AI said {money(it.aiValueLow)}–{money(it.aiValueHigh).replace("£", "")}
+                                      </span>
+                                    )}
+                                  </>
+                                ) : (
+                                  <span className="text-gray-600">
+                                    only {it.archive.count} comparable sale{it.archive.count === 1 ? "" : "s"} —
+                                    kept the AI figure
+                                  </span>
+                                )}
+                                {it.archive.groupedExcluded > 0 && (
+                                  <span className="text-gray-700"> · {it.archive.groupedExcluded} group lot
+                                    {it.archive.groupedExcluded === 1 ? "" : "s"} ignored</span>
+                                )}
+                              </p>
+                            )}
                           </div>
                         )
                       })}
@@ -1235,13 +1249,24 @@ export default function LottingUpPage() {
                               const b = (added[groups[i].gid] ?? barcodes[groups[i].gid] ?? "").trim()
                               if (b) { src = b; break }
                             }
-                            const next = bumpBarcode(src || fillStart)
+                            const next = bumpBarcode(src)
                             if (next) setBarcodes(p => ({ ...p, [g.gid]: next }))
                           }}
                           title="Next barcode number, from the lot above"
                           className="text-xs text-[#2AB4A6] border border-[#2AB4A6]/50 hover:bg-[#2AB4A6]/10 px-3 py-2 rounded-lg">
                           ⊕ Next
                         </button>
+                        {/* Fill the rest FROM HERE — the barcode you just scanned is
+                            the one you're holding, so this belongs on the lot, not
+                            in a box at the top of the page. */}
+                        {(barcodes[g.gid] ?? "").trim() && gIdx < groups.length - 1 && (
+                          <button
+                            onClick={() => fillBarcodesFrom(gIdx)}
+                            title="Number the lots below this one sequentially from this barcode"
+                            className="text-xs text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 px-3 py-2 rounded-lg">
+                            ↓ Number the rest
+                          </button>
+                        )}
                         <button
                           onClick={() => addLots([g])}
                           disabled={saving || !(barcodes[g.gid] ?? "").trim()}
@@ -1254,6 +1279,31 @@ export default function LottingUpPage() {
                 )
               })}
             </div>
+
+            {/* Add-all — sticky, so it's reachable from wherever you are in the
+                list rather than living at the top out of sight. Gives way to the
+                selection bar when items are ticked. */}
+            {ready && selected.size === 0 && pending.some(g => (barcodes[g.gid] ?? "").trim()) && (
+              <div className="sticky bottom-4 z-10 bg-[#2C2C2E] border border-[#2AB4A6]/50 rounded-xl px-4 py-3 flex items-center gap-3 flex-wrap shadow-2xl">
+                <span className="text-sm text-white font-medium">
+                  {pending.filter(g => (barcodes[g.gid] ?? "").trim()).length} lot
+                  {pending.filter(g => (barcodes[g.gid] ?? "").trim()).length === 1 ? "" : "s"} barcoded
+                </span>
+                <span className="text-xs text-gray-500">
+                  {pending.filter(g => !(barcodes[g.gid] ?? "").trim()).length} still without a barcode
+                </span>
+                <button
+                  onClick={() => setConfirm(
+                    pending
+                      .filter(g => (barcodes[g.gid] ?? "").trim())
+                      .map(g => ({ gid: g.gid, title: g.title, barcode: (barcodes[g.gid] ?? "").trim().toUpperCase() }))
+                  )}
+                  disabled={saving}
+                  className="ml-auto text-xs bg-[#2AB4A6] hover:bg-[#24a090] disabled:opacity-40 text-black font-semibold px-4 py-2.5 rounded-lg transition-colors">
+                  Add them to {target.auction!.code.toUpperCase()}
+                </button>
+              </div>
+            )}
 
             {/* Selection action bar */}
             {selected.size > 0 && (

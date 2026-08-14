@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
+import {
+  findComparables, summariseComparables,
+  type ComparableSummary, type ComparableQuery,
+} from "@/lib/comparables"
 
 export const maxDuration = 300
 
@@ -11,8 +15,15 @@ export type LotItem = {
   uid:       string   // stable id so the page can move items between lots
   name:      string
   qty:       number
+  /** The figure in use — from our sold archive when we have one, else the AI's. */
   valueLow:  number
   valueHigh: number
+  /** What the model guessed, kept so the page can show what was overridden. */
+  aiValueLow:  number
+  aiValueHigh: number
+  pricedFrom:  "archive" | "ai"
+  /** What our own sold archive says — null when nothing comparable was found. */
+  archive:   ComparableSummary | null
   photo:     number   // 0-based index of the photo this item is in
   bounds:    { y: number; h: number }   // % of that photo's height
   /** Empty when the model is confident. Otherwise what it is unsure about. */
@@ -152,10 +163,28 @@ in a lot; the cataloguer will check it in the hand.
 ════════════════════════════════════════════════════════════════
 VALUES
 ════════════════════════════════════════════════════════════════
-• All values are GBP whole numbers, based on typical Vectis hammer results — realistic, not hopeful.
+• All values are GBP whole numbers, based on typical Vectis HAMMER results — what the thing actually
+  sells for in the room. NOT retail, NOT shop asking prices, NOT eBay "buy it now". Those run high
+  and are the single most common way this job is got wrong. When in doubt, go lower.
 • Each item entry carries its own valueLow / valueHigh. If qty is 12, those values cover all 12.
 • The item values in a lot MUST add up to that lot's estimateLow / estimateHigh. If the lot is worth
   more together than the pieces are apart, spread that premium across the items so the sums match.
+
+════════════════════════════════════════════════════════════════
+IDENTIFY IT SO WE CAN LOOK UP WHAT WE ACTUALLY MADE
+════════════════════════════════════════════════════════════════
+Every item also carries the fields we search our own sold archive with. Fill them in as precisely as
+the photo allows — a good catalogue number is worth more than a good guess at the price:
+
+  "maker":           "<the manufacturer, e.g. LEGO, Corgi, Hornby, Dinky, Steiff>"
+  "model":           "<the model or set name, e.g. Boba Fett Helmet, James Bond DB5>"
+  "catalogueNumber": "<the maker's reference if you can read it, e.g. 75277, R351, 261>"
+  "searchTerms":     ["<2-5 words that would appear in a lot description for this>"]
+
+• Leave a field as "" when you genuinely cannot tell — a wrong catalogue number is worse than none,
+  because it will match somebody else's item and price this one off it.
+• searchTerms should be the words a cataloguer would type: the range, the subject, the scale.
+  Not adjectives like "rare" or "excellent".
 
 ════════════════════════════════════════════════════════════════
 VERTICAL POSITION — per item, so the photo can be marked up
@@ -183,6 +212,8 @@ Return ONLY valid JSON — no markdown, no commentary:
         {
           "name": "<item>", "qty": 1,
           "valueLow": 20, "valueHigh": 30,
+          "maker": "LEGO", "model": "Boba Fett Helmet",
+          "catalogueNumber": "75277", "searchTerms": ["Star Wars", "helmet", "buildable"],
           "photo": 1, "yTop": 10, "yBottom": 22,
           "uncertain": ""
         }
@@ -206,13 +237,30 @@ const clampPct = (v: number) => Math.max(0, Math.min(100, v))
 
 type RawItem = {
   name?: string; qty?: number; valueLow?: number; valueHigh?: number
+  maker?: string; model?: string; catalogueNumber?: string; searchTerms?: string[]
   photo?: number; yTop?: number; yBottom?: number; uncertain?: string
 }
+
+// How many single-item sales we need before we trust the archive over the model.
+// Below this it's noise; at or above it, our own results beat a guess every time.
+const MIN_COMPARABLES = 3
+
+// Guard rails on the lookup: ILIKE over 192k rows isn't free, and a bench photo
+// can yield a lot of items.
+const MAX_LOOKUPS   = 40
+const LOOKUP_BATCH  = 5
+
 type RawGroup = {
   id?: number; title?: string; kind?: string; notes?: string
   items?: (RawItem | string)[]
   estimateLow?: number; estimateHigh?: number
 }
+
+// The identification fields ride along until the archive lookup, then get dropped
+// — the page has no use for them and they'd only bloat the payload.
+type WorkingItem   = LotItem & { _query: ComparableQuery }
+type WorkingGroup  = Omit<LotGroup, "items">        & { items: WorkingItem[] }
+type WorkingResult = Omit<LottingUpResult, "groups"> & { groups: WorkingGroup[] }
 
 /**
  * Turn whatever the model returned into a clean result. Item values are the
@@ -224,11 +272,11 @@ function normalise(
   lo: number,
   hi: number,
   photoCount: number,
-): LottingUpResult {
+): WorkingResult {
   let uid = 0
 
-  const groups: LotGroup[] = (parsed.groups ?? []).map((g, gi) => {
-    const items: LotItem[] = (g.items ?? []).map(raw => {
+  const groups: WorkingGroup[] = (parsed.groups ?? []).map((g, gi) => {
+    const items: WorkingItem[] = (g.items ?? []).map(raw => {
       const it: RawItem = typeof raw === "string" ? { name: raw } : (raw ?? {})
       const yTop    = clampPct(num(it.yTop, 0))
       const yBottom = Math.max(yTop + 1, clampPct(num(it.yBottom, 100)))
@@ -238,14 +286,25 @@ function normalise(
       // point the overlay at a photo that isn't there.
       const photo   = Math.max(0, Math.min(photoCount - 1, Math.round(num(it.photo, 1)) - 1))
       return {
-        uid:       `i${uid++}`,
-        name:      String(it.name ?? "Unidentified item").trim() || "Unidentified item",
-        qty:       Math.max(1, Math.round(num(it.qty, 1))),
-        valueLow:  vLow,
-        valueHigh: vHigh,
+        uid:         `i${uid++}`,
+        name:        String(it.name ?? "Unidentified item").trim() || "Unidentified item",
+        qty:         Math.max(1, Math.round(num(it.qty, 1))),
+        valueLow:    vLow,
+        valueHigh:   vHigh,
+        aiValueLow:  vLow,
+        aiValueHigh: vHigh,
+        pricedFrom:  "ai" as const,
+        archive:     null,
         photo,
-        bounds:    { y: yTop, h: yBottom - yTop },
-        uncertain: String(it.uncertain ?? "").trim(),
+        bounds:      { y: yTop, h: yBottom - yTop },
+        uncertain:   String(it.uncertain ?? "").trim(),
+        // Carried only as far as the archive lookup, then dropped.
+        _query: {
+          maker:           String(it.maker ?? "").trim(),
+          model:           String(it.model ?? "").trim(),
+          catalogueNumber: String(it.catalogueNumber ?? "").trim(),
+          searchTerms:     Array.isArray(it.searchTerms) ? it.searchTerms.map(String) : [],
+        },
       }
     }).filter(it => it.name)
 
@@ -277,8 +336,8 @@ function normalise(
   }).filter(g => g.items.length > 0)
 
   // Photo order, then top of the photo down — the order a cataloguer works a bench.
-  const firstOf = (g: LotGroup) => Math.min(...g.items.map(i => i.photo))
-  const topOf   = (g: LotGroup) => Math.min(...g.items.filter(i => i.photo === firstOf(g)).map(i => i.bounds.y))
+  const firstOf = (g: WorkingGroup) => Math.min(...g.items.map(i => i.photo))
+  const topOf   = (g: WorkingGroup) => Math.min(...g.items.filter(i => i.photo === firstOf(g)).map(i => i.bounds.y))
   groups.sort((a, b) => (firstOf(a) - firstOf(b)) || (topOf(a) - topOf(b)))
   groups.forEach((g, i) => { g.id = i + 1; g.colour = COLOURS[i % COLOURS.length] })
 
@@ -290,6 +349,66 @@ function normalise(
     totalEstimateLow:  groups.reduce((s, g) => s + g.estimateLow,  0),
     totalEstimateHigh: groups.reduce((s, g) => s + g.estimateHigh, 0),
     groups,
+  }
+}
+
+/**
+ * Re-price every item against WHAT WE ACTUALLY MADE, then rebuild the totals.
+ *
+ * ⚠ This is the accuracy fix. Asking a model what a toy is worth gets you its
+ * memory of retail and asking prices, which run high — the same trap the
+ * Valuations tool documents. WarehouseItem carries 192k+ synced BC rows with a
+ * real hammerPrice, so where our own archive has enough single-item sales we use
+ * that instead and keep the model's figure alongside for comparison.
+ *
+ * Group lots are already excluded by summariseComparables — a "group of six to
+ * include…" price is for the group and would inflate a per-item figure.
+ *
+ * The archive is a BONUS: any failure here loses the archive, never the plan.
+ */
+async function applyArchive(result: WorkingResult): Promise<LottingUpResult> {
+  const all = result.groups.flatMap(g => g.items)
+
+  // Only worth a lookup when we have something to search on. "Miscellaneous
+  // loose parts" has no maker and no number — it would match half the archive.
+  const worth = all
+    .filter(i => i._query.maker || i._query.catalogueNumber)
+    .slice(0, MAX_LOOKUPS)
+
+  for (let i = 0; i < worth.length; i += LOOKUP_BATCH) {
+    await Promise.all(worth.slice(i, i + LOOKUP_BATCH).map(async item => {
+      try {
+        const summary = summariseComparables(await findComparables(item._query))
+        if (!summary) return
+        item.archive = summary
+        if (summary.count >= MIN_COMPARABLES) {
+          // Archive figures are per single item; this entry may cover several.
+          item.valueLow   = Math.max(0, Math.round(summary.low  * item.qty))
+          item.valueHigh  = Math.max(item.valueLow, Math.round(summary.high * item.qty))
+          item.pricedFrom = "archive"
+        }
+      } catch (e) {
+        console.error("[lotting-up] comparables lookup failed:", e)
+      }
+    }))
+  }
+
+  // Values moved, so every total has to be rebuilt from them.
+  const groups: LotGroup[] = result.groups.map(g => {
+    const items = g.items.map(({ _query, ...keep }) => keep)   // eslint-disable-line @typescript-eslint/no-unused-vars
+    return {
+      ...g,
+      items,
+      estimateLow:  items.reduce((s, i) => s + i.valueLow,  0),
+      estimateHigh: items.reduce((s, i) => s + i.valueHigh, 0),
+    }
+  })
+
+  return {
+    ...result,
+    groups,
+    totalEstimateLow:  groups.reduce((s, g) => s + g.estimateLow,  0),
+    totalEstimateHigh: groups.reduce((s, g) => s + g.estimateHigh, 0),
   }
 }
 
@@ -350,12 +469,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "The model did not return usable JSON — try again." }, { status: 502 })
     }
 
-    const out = normalise(parsed, lo, hi, files.length)
-    if (!out.groups.length) {
+    const working = normalise(parsed, lo, hi, files.length)
+    if (!working.groups.length) {
       return NextResponse.json({ error: "No items could be identified in those photos." }, { status: 422 })
     }
 
-    return NextResponse.json(out)
+    return NextResponse.json(await applyArchive(working))
   } catch (e: any) {
     console.error("[lotting-up]", e)
     return NextResponse.json({ error: e?.message ?? "Analysis failed" }, { status: 500 })
