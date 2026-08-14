@@ -13,6 +13,8 @@ export type AuctionRow = {
   auctionDate: string | null
   auctionType: string
   lots: number
+  /** Lots carrying at least one photo — shown against the total as "400/500". */
+  lotsWithPhotos: number
   catalogued: boolean
   addedToBC: boolean
   photography: boolean
@@ -48,6 +50,22 @@ function matches(row: AuctionRow, search: string, type: string, status: string):
   return true
 }
 
+/** "400/500" — how much of a sale has been photographed. Green once every lot
+ *  has one, amber while there are still some to do, so the gap is visible at a
+ *  glance down the column rather than needing the two numbers compared. */
+function PhotoCount({ withPhotos, lots }: { withPhotos: number; lots: number }) {
+  if (lots === 0) return <span className="text-gray-600">—</span>
+  const done = withPhotos >= lots
+  return (
+    <span
+      className={done ? "text-green-600 dark:text-green-400 font-medium" : "text-amber-600 dark:text-amber-400"}
+      title={done ? "Every lot has at least one photo" : `${lots - withPhotos} lots still have no photo`}
+    >
+      {withPhotos}/{lots}
+    </span>
+  )
+}
+
 function AuctionTable({ rows }: { rows: AuctionRow[] }) {
   return (
     <table className="w-full text-sm">
@@ -58,6 +76,7 @@ function AuctionTable({ rows }: { rows: AuctionRow[] }) {
           <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Date</th>
           <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Type</th>
           <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Lots</th>
+          <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Lots with photos</th>
           <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Catalogued</th>
           <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Added to BC</th>
           <th className="text-center px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Photography</th>
@@ -91,6 +110,7 @@ function AuctionTable({ rows }: { rows: AuctionRow[] }) {
               {auction.auctionType}
             </td>
             <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{auction.lots}</td>
+            <td className="px-4 py-3"><PhotoCount withPhotos={auction.lotsWithPhotos} lots={auction.lots} /></td>
             {(["catalogued", "addedToBC", "photography", "aiRan"] as const).map(f => (
               <td key={f} className="px-4 py-3 text-center">
                 {auction[f]

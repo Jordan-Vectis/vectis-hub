@@ -32,6 +32,16 @@ export default async function AuctionsPage() {
 
   const totalLots = auctions.reduce((sum, a) => sum + a._count.lots, 0)
 
+  // How many of each sale's lots actually have a photo on them. One grouped
+  // count for the whole page rather than a query per sale. Scoped to the sales
+  // already listed, so it inherits the department filtering above.
+  const photoCounts = await prisma.catalogueLot.groupBy({
+    by: ["auctionId"],
+    where: { auctionId: { in: auctions.map(a => a.id) }, imageUrls: { isEmpty: false } },
+    _count: { _all: true },
+  })
+  const withPhotos = new Map(photoCounts.map(g => [g.auctionId, g._count._all]))
+
   const rows: AuctionRow[] = auctions.map(a => ({
     id: a.id,
     code: a.code,
@@ -39,6 +49,7 @@ export default async function AuctionsPage() {
     auctionDate: a.auctionDate ? new Date(a.auctionDate).toISOString() : null,
     auctionType: a.auctionType,
     lots: a._count.lots,
+    lotsWithPhotos: withPhotos.get(a.id) ?? 0,
     catalogued: !!(a as any).catalogued,
     addedToBC: !!(a as any).addedToBC,
     photography: !!(a as any).photography,
