@@ -79,12 +79,13 @@ export default function Presenter({ slides, live }: { slides: DeckSlide[]; live:
 
   // The controls fade out while nobody is touching anything, so the room sees the slide and
   // not a toolbar. Any movement brings them back.
+  const wake = useCallback(() => {
+    setChrome(true)
+    if (hideTimer.current) clearTimeout(hideTimer.current)
+    hideTimer.current = setTimeout(() => setChrome(false), 3500)
+  }, [])
+
   useEffect(() => {
-    const wake = () => {
-      setChrome(true)
-      if (hideTimer.current) clearTimeout(hideTimer.current)
-      hideTimer.current = setTimeout(() => setChrome(false), 3500)
-    }
     wake()
     window.addEventListener("mousemove", wake)
     window.addEventListener("keydown", wake)
@@ -95,7 +96,7 @@ export default function Presenter({ slides, live }: { slides: DeckSlide[]; live:
       window.removeEventListener("keydown", wake)
       window.removeEventListener("touchstart", wake)
     }
-  }, [])
+  }, [wake])
 
   function toggleFullscreen() {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
@@ -125,9 +126,15 @@ export default function Presenter({ slides, live }: { slides: DeckSlide[]; live:
         style={{ background: "radial-gradient(60rem 40rem at 12% -10%, rgba(245,158,11,0.13), transparent 60%), radial-gradient(50rem 35rem at 100% 110%, rgba(245,158,11,0.08), transparent 60%)" }} />
 
       {/* Controls — fade out while presenting, come back on any movement */}
-      {/* ⚠ pointer-events-none while faded: an invisible bar still takes the tap. On a tablet,
-          touching the top-left to bring the controls back was landing on ✕ Finish. */}
-      <div className={`relative z-10 flex items-center gap-3 px-4 py-2 shrink-0 transition-opacity duration-500 ${chrome ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+      {/* ⚠ Two layers, and both halves matter.
+          The BUTTONS go pointer-events-none while faded, or an invisible bar still takes the
+          tap — on a tablet, touching the top-left to bring the controls back landed on ✕ Finish.
+          But making them inert alone means the first tap or click on the bar does nothing at
+          all and the user taps twice wondering why. So the WRAPPER stays live and its only job,
+          while faded, is to bring the controls back — the way a video player's chrome behaves. */}
+      <div className="relative z-10 shrink-0"
+        onPointerDown={chrome ? undefined : e => { e.preventDefault(); e.stopPropagation(); wake() }}>
+      <div className={`flex items-center gap-3 px-4 py-2 transition-opacity duration-500 ${chrome ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
         <button type="button" onClick={() => router.push("/tools/induction")}
           className="px-3 py-2 min-h-[44px] rounded-lg text-sm font-semibold text-gray-500 hover:text-gray-900 dark:hover:text-white">✕ Finish</button>
         <span className="text-sm text-gray-500 dark:text-gray-400 font-semibold tabular-nums">{i + 1} / {total}</span>
@@ -151,6 +158,7 @@ export default function Presenter({ slides, live }: { slides: DeckSlide[]; live:
           className="px-4 py-2 min-h-[44px] rounded-lg border border-gray-300 dark:border-white/15 text-sm font-semibold text-gray-700 dark:text-gray-200 disabled:opacity-30">← Back</button>
         <button type="button" onClick={next} disabled={i >= total - 1}
           className="px-5 py-2 min-h-[44px] rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold disabled:opacity-30">Next →</button>
+      </div>
       </div>
 
       {/* The slide. Clicking the right two-thirds advances, the left third goes back — a

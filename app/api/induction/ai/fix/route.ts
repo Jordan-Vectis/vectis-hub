@@ -4,7 +4,7 @@ import { hasAppAccess } from "@/lib/apps"
 import { prisma } from "@/lib/prisma"
 import { getToolModel } from "@/lib/ai-models"
 import { generateAiText, AiBlockedError, AiNotConfiguredError } from "@/lib/ai-provider"
-import { FIX_SYSTEM } from "@/lib/induction-ai"
+import { FIX_SYSTEM, parseAiJson, STRICTER_JSON } from "@/lib/induction-ai"
 
 export const maxDuration = 120
 export const runtime = "nodejs"
@@ -64,10 +64,19 @@ export async function POST(req: NextRequest) {
     ].filter(Boolean).join("\n")
 
     const raw = await generateAiText({ model, system: FIX_SYSTEM, prompt, json: true, maxOutputTokens: 4000 })
-
-    let parsed: any
-    try { parsed = JSON.parse(raw) } catch {
-      return NextResponse.json({ error: "The AI did not return usable JSON — try again." }, { status: 502 })
+    let parsed = parseAiJson(raw)
+    if (!parsed) {
+      // One automatic retry with a blunter instruction. A slide body is multi-line, and an
+      // unreadable reply is usually a real newline inside a JSON string rather than anything
+      // wrong with the request — so failing the whole fix on the first attempt threw away work
+      // that succeeds on the second.
+      const retry = await generateAiText({
+        model, system: FIX_SYSTEM, prompt: `${prompt}\n\n${STRICTER_JSON}`, json: true, maxOutputTokens: 4000,
+      })
+      parsed = parseAiJson(retry)
+    }
+    if (!parsed) {
+      return NextResponse.json({ error: "The AI's answer could not be read, twice. Try again, or use Rewrite & check on that slide." }, { status: 502 })
     }
 
     return NextResponse.json({

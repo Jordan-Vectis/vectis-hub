@@ -188,6 +188,63 @@ Body formatting, which the app parses literally:
 `.trim(),
 ].join("\n\n")
 
+/**
+ * Parse a model's JSON reply, tolerating the three ways they get it wrong.
+ *
+ * ⚠ This is not defensive padding — it is the actual failure that was seen. These prompts ask
+ * for a slide BODY, which is multi-line by definition, and a model writing JSON freehand
+ * regularly puts a real newline inside the string instead of \n. That is invalid JSON, so
+ * JSON.parse threw and a perfectly good rewrite was thrown away with "the AI did not return
+ * usable JSON". Two of the four fixes on the first real run died this way.
+ *
+ * Returns null only if it genuinely cannot be read.
+ */
+export function parseAiJson(raw: string): any | null {
+  const text = (raw ?? "").trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/, "")
+    .trim()
+  if (!text) return null
+
+  const tries = [text]
+  // Models sometimes wrap the object in a sentence. Take the outermost braces.
+  const first = text.indexOf("{")
+  const last  = text.lastIndexOf("}")
+  if (first > 0 || (last >= 0 && last < text.length - 1)) {
+    if (first >= 0 && last > first) tries.push(text.slice(first, last + 1))
+  }
+
+  for (const candidate of tries) {
+    try { return JSON.parse(candidate) } catch { /* try the repair below */ }
+    try { return JSON.parse(escapeRawControlChars(candidate)) } catch { /* next candidate */ }
+  }
+  return null
+}
+
+/** Escapes literal newlines, carriage returns and tabs that appear INSIDE a JSON string. */
+function escapeRawControlChars(s: string): string {
+  let out = ""
+  let inString = false
+  let escaped = false
+  for (const ch of s) {
+    if (escaped) { out += ch; escaped = false; continue }
+    if (ch === "\\") { out += ch; escaped = true; continue }
+    if (ch === '"') { inString = !inString; out += ch; continue }
+    if (inString && ch === "\n") { out += "\\n"; continue }
+    if (inString && ch === "\r") { out += "\\r"; continue }
+    if (inString && ch === "\t") { out += "\\t"; continue }
+    out += ch
+  }
+  return out
+}
+
+/** Appended to a retry when the first reply could not be read at all. */
+export const STRICTER_JSON = [
+  "Your previous reply could not be parsed as JSON.",
+  "Reply with ONE JSON object and nothing else — no code fences, no commentary before or after.",
+  "Every newline inside a string value must be written as \\n, never as a real line break.",
+].join(" ")
+
 export type DeckSlideForAi = {
   title: string
   subtitle: string | null

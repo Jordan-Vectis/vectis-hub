@@ -485,7 +485,8 @@ function DeckReview({ card }: { card: string }) {
     if (!res) return
     const bySlide = new Map<string, number[]>()
     res.issues.forEach((it, i) => {
-      if (!it.slide || fixed[i]) return
+      // Anything already applied is skipped; a FAILED one is included so "Fix all" retries it.
+      if (!it.slide || fixed[i]?.status === "done") return
       const list = bySlide.get(it.slide) ?? []
       list.push(i)
       bySlide.set(it.slide, list)
@@ -497,7 +498,7 @@ function DeckReview({ card }: { card: string }) {
     }
   }
 
-  const applicable = res ? res.issues.map((it, i) => (it.slide && !fixed[i] ? i : -1)).filter(i => i >= 0) : []
+  const applicable = res ? res.issues.map((it, i) => (it.slide && fixed[i]?.status !== "done" ? i : -1)).filter(i => i >= 0) : []
 
   return (
     <div className={card + " space-y-4"}>
@@ -562,10 +563,12 @@ function DeckReview({ card }: { card: string }) {
                           <p className="text-xs font-semibold text-red-600 dark:text-red-400 mt-1">✗ {state.detail}</p>
                         )}
                       </div>
-                      {it.slide && !state && (
+                      {/* A failed fix keeps its button — the usual cause is the AI's answer
+                          coming back unreadable, which the next attempt normally clears. */}
+                      {it.slide && (!state || state.status === "failed") && (
                         <button type="button" onClick={() => applySlide(it.slide!, [k])} disabled={!!fixing}
                           className="shrink-0 px-3 py-2 min-h-[44px] rounded-lg border border-violet-400 dark:border-violet-600 text-sm font-semibold text-violet-700 dark:text-violet-300 disabled:opacity-50">
-                          Fix this
+                          {state?.status === "failed" ? "Try again" : "Fix this"}
                         </button>
                       )}
                     </div>

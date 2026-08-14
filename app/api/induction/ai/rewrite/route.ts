@@ -4,7 +4,7 @@ import { hasAppAccess } from "@/lib/apps"
 import { prisma } from "@/lib/prisma"
 import { getToolModel } from "@/lib/ai-models"
 import { generateAiText, AiBlockedError, AiNotConfiguredError } from "@/lib/ai-provider"
-import { REWRITE_SYSTEM } from "@/lib/induction-ai"
+import { REWRITE_SYSTEM, parseAiJson, STRICTER_JSON } from "@/lib/induction-ai"
 
 export const maxDuration = 120
 export const runtime = "nodejs"
@@ -59,9 +59,17 @@ export async function POST(req: NextRequest) {
       maxOutputTokens: 4000,
     })
 
-    let parsed: any
-    try { parsed = JSON.parse(raw) } catch {
-      return NextResponse.json({ error: "The AI did not return usable JSON — try again." }, { status: 502 })
+    // A slide body is multi-line, and a model writing JSON freehand often puts a real newline
+    // inside the string — parseAiJson repairs that; the retry covers the rest.
+    let parsed = parseAiJson(raw)
+    if (!parsed) {
+      const retry = await generateAiText({
+        model, system: REWRITE_SYSTEM, prompt: `${prompt}\n\n${STRICTER_JSON}`, json: true, maxOutputTokens: 4000,
+      })
+      parsed = parseAiJson(retry)
+    }
+    if (!parsed) {
+      return NextResponse.json({ error: "The AI's answer could not be read, twice. Try again." }, { status: 502 })
     }
 
     return NextResponse.json({

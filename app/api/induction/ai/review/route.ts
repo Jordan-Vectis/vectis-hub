@@ -4,7 +4,7 @@ import { hasAppAccess } from "@/lib/apps"
 import { prisma } from "@/lib/prisma"
 import { getToolModel } from "@/lib/ai-models"
 import { generateAiText, AiBlockedError, AiNotConfiguredError } from "@/lib/ai-provider"
-import { REVIEW_SYSTEM, describeDeck } from "@/lib/induction-ai"
+import { REVIEW_SYSTEM, describeDeck, parseAiJson, STRICTER_JSON } from "@/lib/induction-ai"
 
 export const maxDuration = 300
 export const runtime = "nodejs"
@@ -48,25 +48,26 @@ export async function POST(req: NextRequest) {
        "They must confirm:", ...f.items.map(i => `- ${i.label}`)].filter(Boolean).join("\n")
     ).join("\n\n---\n\n")
 
-    const raw = await generateAiText({
-      model,
-      system: REVIEW_SYSTEM,
-      prompt: [
+    const promptText = [
         "THE INDUCTION SLIDES, in the order they are presented:",
         deck,
         "",
         "THE FORMS THE NEW STARTER READS AND SIGNS AFTERWARDS:",
         formText || "(none)",
         "",
-        "Review the whole thing and reply with the JSON described.",
-      ].join("\n"),
-      json: true,
-      maxOutputTokens: 8000,
-    })
+      "Review the whole thing and reply with the JSON described.",
+    ].join("\n")
 
-    let parsed: any
-    try { parsed = JSON.parse(raw) } catch {
-      return NextResponse.json({ error: "The AI did not return usable JSON — try again." }, { status: 502 })
+    const raw = await generateAiText({ model, system: REVIEW_SYSTEM, prompt: promptText, json: true, maxOutputTokens: 8000 })
+    let parsed = parseAiJson(raw)
+    if (!parsed) {
+      const retry = await generateAiText({
+        model, system: REVIEW_SYSTEM, prompt: `${promptText}\n\n${STRICTER_JSON}`, json: true, maxOutputTokens: 8000,
+      })
+      parsed = parseAiJson(retry)
+    }
+    if (!parsed) {
+      return NextResponse.json({ error: "The AI's answer could not be read, twice. Try again." }, { status: 502 })
     }
 
     return NextResponse.json({
