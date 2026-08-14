@@ -283,10 +283,14 @@ function SlideEditor({
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <button type="button" onClick={() => run(() => moveInductionSlide(slide.id, "up"), "Moved.")} disabled={idx === 0}
-            className="px-3 py-2 min-h-[44px] rounded-lg border border-gray-300 dark:border-gray-700 text-sm disabled:opacity-30">↑</button>
-          <button type="button" onClick={() => run(() => moveInductionSlide(slide.id, "down"), "Moved.")} disabled={idx === total - 1}
-            className="px-3 py-2 min-h-[44px] rounded-lg border border-gray-300 dark:border-gray-700 text-sm disabled:opacity-30">↓</button>
+          {/* ⚠ These carried NO text colour, so the arrows inherited the near-black default and
+              were invisible on the dark theme — two empty boxes. Dark is the default here. */}
+          <button type="button" title="Move up" aria-label="Move this slide up"
+            onClick={() => run(() => moveInductionSlide(slide.id, "up"), "Moved.")} disabled={idx === 0}
+            className="px-3 py-2 min-h-[44px] rounded-lg border border-gray-300 dark:border-gray-700 text-sm font-bold text-gray-700 dark:text-gray-200 disabled:opacity-30">↑</button>
+          <button type="button" title="Move down" aria-label="Move this slide down"
+            onClick={() => run(() => moveInductionSlide(slide.id, "down"), "Moved.")} disabled={idx === total - 1}
+            className="px-3 py-2 min-h-[44px] rounded-lg border border-gray-300 dark:border-gray-700 text-sm font-bold text-gray-700 dark:text-gray-200 disabled:opacity-30">↓</button>
           <button type="button" onClick={() => setPreview(p => !p)}
             className="px-3 py-2 min-h-[44px] rounded-lg border border-gray-300 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300">
             {preview ? "Hide" : "Preview"}

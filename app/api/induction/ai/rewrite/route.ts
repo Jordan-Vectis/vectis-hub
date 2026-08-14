@@ -26,7 +26,14 @@ export async function POST(req: NextRequest) {
     const { slideId, model: clientModel } = await req.json().catch(() => ({}))
     if (!slideId) return NextResponse.json({ error: "No slide given" }, { status: 400 })
 
-    const slide = await prisma.inductionSlide.findUnique({ where: { id: String(slideId) } })
+    // ⚠ Explicit select, never a bare findUnique. A bare one selects EVERY column, including
+    // any added by a deploy whose SQL has not been applied yet — which is how this route died
+    // with "the column InductionSlide.layout does not exist". Same trap RULES.md documents for
+    // the login query on the User table. It needs five fields; ask for five fields.
+    const slide = await prisma.inductionSlide.findUnique({
+      where: { id: String(slideId) },
+      select: { title: true, subtitle: true, body: true, liveBlock: true, videoUrl: true },
+    })
     if (!slide) return NextResponse.json({ error: "That slide no longer exists" }, { status: 404 })
 
     const model = await getToolModel("induction_rewrite", clientModel)
