@@ -13,7 +13,11 @@
 // Everything blocking is something a buyer or BC would actually see.
 
 import { useEffect, useMemo, useState } from "react"
-import { buildToteMap, checkLot as checkToteLot, type BcTote, type ToteCheckIssue } from "@/lib/tote-check"
+// ⚠ We do NOT re-run the tote check here. /api/catalogue/tote-check already runs it
+// server-side with lib/tote-check.ts and returns the lots that failed — this screen just
+// reads that answer. (It first tried to rebuild a tote map from a `totes` field the route
+// has never returned, so the check silently reported "BC data unavailable" on every sale.)
+import type { ToteCheckIssue } from "@/lib/tote-check"
 import { checkConditionInDescription } from "@/lib/condition"
 // ⚠ The SAME rule the Generate Titles button uses. Writing a second copy here from the
 // description in RULES.md got both the newline handling and the truncation wrong, and
@@ -54,7 +58,7 @@ const TOTE_LABEL: Record<ToteCheckIssue, string> = {
   unique_id_mismatch: "Unique ID ≠ receipt",
 }
 
-function checkOne(lot: LotItem, toteMap: Map<string, BcTote> | null): Issue[] {
+function checkOne(lot: LotItem, toteIssues: Map<string, ToteCheckIssue[]> | null): Issue[] {
   const out: Issue[] = []
   const desc = (lot.description ?? "").trim()
 
@@ -82,8 +86,8 @@ function checkOne(lot: LotItem, toteMap: Map<string, BcTote> | null): Issue[] {
     else if (actual !== expected)         out.push({ key: "title", label: "Title doesn't match the description", severity: "blocking" })
   }
 
-  if (toteMap) {
-    for (const issue of checkToteLot(lot, toteMap).issues) {
+  if (toteIssues) {
+    for (const issue of toteIssues.get(lot.id) ?? []) {
       // "No tote" and "no receipt/vendor" are blocking in their own right; the rest are
       // disagreements with BC, which are exactly what this screen is for.
       out.push({ key: `tote_${issue}`, label: TOTE_LABEL[issue] ?? issue, severity: "blocking" })
@@ -148,7 +152,8 @@ export default function LockingCheckTab({ lots, auctionId, onOpenLot }: {
 }) {
   const [filter, setFilter] = useState<"blocking" | "look" | "all">("blocking")
   const [only, setOnly] = useState<string | null>(null)   // drill into one criterion
-  const [toteMap, setToteMap] = useState<Map<string, BcTote> | null>(null)
+  const [toteIssues, setToteIssues] = useState<Map<string, ToteCheckIssue[]> | null>(null)
+  const [lastSync, setLastSync] = useState<string | null>(null)
   const [bcState, setBcState] = useState<"loading" | "ready" | "failed">("loading")
 
   // The BC side of the check. ⚠ If it cannot be loaded the tote/vendor checks are SKIPPED and
@@ -160,8 +165,13 @@ export default function LockingCheckTab({ lots, auctionId, onOpenLot }: {
       .then(r => r.json())
       .then(j => {
         if (!live) return
-        if (Array.isArray(j?.totes)) { setToteMap(buildToteMap(j.totes)); setBcState("ready") }
-        else setBcState("failed")
+        // `rows` is the lots WITH tote issues — an empty array means every lot is clean, which
+        // is a successful check, not a failed one.
+        if (j && !j.error && Array.isArray(j.rows)) {
+          setToteIssues(new Map(j.rows.map((r: { id: string; issues: ToteCheckIssue[] }) => [r.id, r.issues])))
+          setLastSync(typeof j.lastSync === "string" ? j.lastSync : null)
+          setBcState("ready")
+        } else setBcState("failed")
       })
       .catch(() => { if (live) setBcState("failed") })
     return () => { live = false }
@@ -169,14 +179,14 @@ export default function LockingCheckTab({ lots, auctionId, onOpenLot }: {
 
   const results = useMemo(
     () => lots.map(lot => {
-      const issues = checkOne(lot, toteMap)
+      const issues = checkOne(lot, toteIssues)
       return {
         lot, issues,
         blocking: issues.filter(i => i.severity === "blocking"),
         look:     issues.filter(i => i.severity === "look"),
       }
     }),
-    [lots, toteMap],
+    [lots, toteIssues],
   )
 
   const blocking = results.filter(r => r.blocking.length > 0)
@@ -214,7 +224,14 @@ export default function LockingCheckTab({ lots, auctionId, onOpenLot }: {
       </div>
 
       {bcState === "loading" && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">Loading the BC tote data…</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Checking tote, vendor and receipt against BC…</p>
+      )}
+      {/* A stale sync makes a pile of "tote not found in BC" read as 600 mistakes rather than
+          as data that has not been refreshed — say when it was last pulled. */}
+      {bcState === "ready" && lastSync && (
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          BC tote data last synced {new Date(lastSync).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}.
+        </p>
       )}
       {bcState === "failed" && (
         <div className="px-4 py-3 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 text-sm text-amber-800 dark:text-amber-300">

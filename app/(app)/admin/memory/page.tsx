@@ -338,6 +338,8 @@ WARNING: the title check exists because editing a description does NOT regenerat
 
 Worth a look: flagged in Review (reviewFlag); AI flagged a possible cataloguer mistake (aiFlagNote); no category; title over 83 characters; leftover AI text (markdown asterisks, a FLAG: line); and a condition that is graded on the lot but missing from the description, via checkConditionInDescription.
 
+WARNING: the BC part is NOT re-run here — it READS /api/catalogue/tote-check. That route already runs lib/tote-check.ts server-side and returns { checked, clean, rows, lastSync }, where rows is only the lots that FAILED. The first version guessed at a "totes" field the route has never returned, so the screen quietly reported "BC data unavailable" on every sale while the data was perfectly up to date. An empty rows array means every lot is clean, which is a successful check and not a failed one. The last sync time is displayed so a pile of "tote not found in BC" reads as a stale sync rather than as 600 mistakes.
+
 WARNING: it REUSES the existing checkers — lib/tote-check.ts is the same code behind the Tote Check tab, lib/condition.ts is the Description Copier's. Do not grow a second copy of either here; they would drift and the two screens would start disagreeing about the same sale.
 
 WARNING: if the BC tote data fails to load, the tote, vendor and receipt checks are SKIPPED, an amber notice says so, and the "nothing is blocking" banner is withheld. Silently passing every lot would have the screen declare a sale ready when the part it could not test is the part most likely to be wrong.
