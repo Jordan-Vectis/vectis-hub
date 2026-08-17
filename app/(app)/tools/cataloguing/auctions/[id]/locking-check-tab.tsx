@@ -100,7 +100,12 @@ function checkOne(lot: LotItem, toteIssues: Map<string, ToteCheckIssue[]> | null
   if (!lot.category?.trim())   out.push({ key: "category",   label: "No category", severity: "look" })
   if ((lot.title ?? "").length > TITLE_MAX)
     out.push({ key: "titleLong", label: `Title over ${TITLE_MAX} characters`, severity: "look" })
-  if (desc.includes("**") || /^\s*FLAG:/mi.test(desc))
+  // ⚠ "*** collection only ***" is the cataloguers' OWN notation, not markdown — and it
+  // contains "**", so a bare includes("**") flagged every one of those lots as leftover AI
+  // text. Strip the house markers first; anything still holding a "**" pair is genuine
+  // markdown the AI left behind (which nothing renders — see the bears clean-up).
+  const withoutHouseMarkers = desc.replace(/\*\*\*[^*]*\*\*\*/g, " ")
+  if (withoutHouseMarkers.includes("**") || /^\s*FLAG:/mi.test(desc))
     out.push({ key: "artefact", label: "Leftover AI text in the description", severity: "look" })
 
   // Reuses the Description Copier's checker — a graded condition that never made it into the
