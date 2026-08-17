@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import AuctionTabs from "./auction-tabs"
-import RegisteredBiddersPanel from "./registered-bidders-panel"
 import { getDepartmentAccess, auctionWhere, canSeeAuction } from "@/lib/departments"
 import { logAccessDenied } from "@/lib/access-log"
 
@@ -100,28 +99,13 @@ export default async function AuctionDetailPage({
     }
   }
 
-  const registrations = auction.bidderRegistrations.map(r => ({
-    id: r.id,
-    contactId: r.contactId,
-    registeredAt: r.registeredAt.toISOString(),
-    customer: {
-      id: r.customerAccount.id,
-      firstName: r.customerAccount.firstName,
-      lastName: r.customerAccount.lastName,
-      email: r.customerAccount.email,
-      phone: r.customerAccount.phone,
-    },
-  }))
 
   return (
     <div className="h-full flex flex-col min-h-0">
-      {/* Registered Bidders banner */}
-      <RegisteredBiddersPanel
-        auctionId={auction.id}
-        auctionName={auction.name}
-        registrations={registrations}
-      />
-
+      {/* ⚠ The Registered Bidders banner was removed from this page on 2026-08-14 (Jordan's
+          call) — it sat above everything and pushed the whole sale page down. The panel
+          component and the bidderRegistrations query are still here and still used elsewhere;
+          only this page stopped showing it. */}
       <div className="flex-1 min-h-0">
       <AuctionTabs
         userId={session.user.id}

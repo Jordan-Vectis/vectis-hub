@@ -1357,6 +1357,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
   const [condMsg, setCondMsg]         = useState<string | null>(null)
   const [condPending, startCond]      = useTransition()
 
+  const none = selected.size === 0
   const selectedIds = () => (selected.size > 0 ? Array.from(selected) : [])
   const scopeWord = () => (selected.size > 0 ? `the ${selected.size} selected lot${selected.size !== 1 ? "s" : ""}` : "every lot in this auction")
 
@@ -2002,16 +2003,25 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
           </div>
         )}
 
-        {/* Selection bar — appears when lots are ticked; everything here acts on them */}
-        {selected.size > 0 && !bcLocked && (
-          <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-[#2AB4A6]/50 bg-[#2AB4A6]/5 px-3 py-2">
-            <span className="text-xs font-bold text-[#2AB4A6] bg-[#2AB4A6]/15 rounded-lg px-2.5 py-1.5 whitespace-nowrap">
-              {selected.size} selected
+        {/* Selection bar — ALWAYS shown (Jordan, 2026-08-14: "make the options that appear when
+            you select just be visible at all times"). It used to appear only once lots were
+            ticked, which is why people asked for actions that were already there — you cannot
+            look for a button you have never seen. With nothing selected the buttons are simply
+            disabled, so the row's height never changes and the table below it does not move. */}
+        {!bcLocked && (
+          <div className={`flex flex-wrap items-center gap-1.5 rounded-xl border px-3 py-2 transition-colors ${
+            selected.size > 0 ? "border-[#2AB4A6]/50 bg-[#2AB4A6]/5" : "border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-white/[0.02]"}`}>
+            {/* ⚠ Nothing ticked = every button off. Several of these handlers fall back to
+                "every lot in this auction" when the selection is empty, which was harmless
+                while the row only existed during a selection and is emphatically not now. */}
+            <span className={`text-xs font-bold rounded-lg px-2.5 py-1.5 whitespace-nowrap ${
+              selected.size > 0 ? "text-[#2AB4A6] bg-[#2AB4A6]/15" : "text-gray-500 dark:text-gray-400 bg-gray-200/60 dark:bg-white/5"}`}>
+              {selected.size > 0 ? `${selected.size} selected` : "Tick lots to use these"}
             </span>
             {(() => {
               const anyUnticked = lots.some(l => selected.has(l.id) && !l.addedToBC)
               return (
-                <button onClick={handleToggleAddedToBC} disabled={bcPending}
+                <button onClick={handleToggleAddedToBC} disabled={bcPending || none}
                   className={`${TB_BTN} border-emerald-700 text-emerald-500 dark:text-emerald-400 hover:bg-emerald-500/10`}>
                   {bcPending ? "Updating…" : anyUnticked ? "📦 Mark added to BC" : "↺ Unmark added to BC"}
                 </button>
@@ -2020,32 +2030,32 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
             {(() => {
               const anyNotExcluded = lots.some(l => selected.has(l.id) && !l.aiExcluded)
               return (
-                <button onClick={handleBulkToggleAiExcluded} disabled={excludePending}
+                <button onClick={handleBulkToggleAiExcluded} disabled={excludePending || none}
                   className={`${TB_BTN} border-amber-700 text-amber-500 dark:text-amber-400 hover:bg-amber-500/10`}>
                   {excludePending ? "Updating…" : anyNotExcluded ? "🚫 Exclude from AI" : "✓ Unexclude from AI"}
                 </button>
               )
             })()}
-            <button onClick={handleGenerateTitles} disabled={titlesPending}
+            <button onClick={handleGenerateTitles} disabled={titlesPending || none}
               className={`${TB_BTN} border-blue-700 text-blue-500 dark:text-blue-400 hover:bg-blue-500/10`}>
               {titlesPending ? "Generating…" : "✏️ Generate Titles"}
             </button>
-            <button onClick={() => onTransfer(Array.from(selected))}
+            <button onClick={() => onTransfer(Array.from(selected))} disabled={none}
               className={`${TB_BTN} border-indigo-700 text-indigo-500 dark:text-indigo-400 hover:bg-indigo-500/10`}>
               ↗ Transfer to another auction
             </button>
             <span className="mx-1 h-5 border-l border-[#2AB4A6]/30" />
-            <button onClick={() => handleBulkClearPhotos(false)} disabled={photosClearing}
+            <button onClick={() => handleBulkClearPhotos(false)} disabled={photosClearing || none}
               className={`${TB_BTN} border-orange-700 text-orange-500 dark:text-orange-400 hover:bg-orange-500/10`}
               title="Removes photos from these lots but keeps files in storage">
               {photosClearing ? "Removing…" : "📷🔗 Unlink photos"}
             </button>
-            <button onClick={() => handleBulkClearPhotos(true)} disabled={photosClearing}
+            <button onClick={() => handleBulkClearPhotos(true)} disabled={photosClearing || none}
               className={`${TB_BTN} border-red-700 text-red-500 dark:text-red-400 hover:bg-red-500/10`}
               title="Permanently deletes photo files from storage">
               {photosClearing ? "Removing…" : "📷🗑 Delete photos from storage"}
             </button>
-            <button onClick={handleBulkDelete} disabled={bulkDeleting}
+            <button onClick={handleBulkDelete} disabled={bulkDeleting || none}
               className={`${TB_BTN} border-red-700 text-red-500 dark:text-red-400 hover:bg-red-500/10`}>
               {bulkDeleting ? "Deleting…" : "🗑 Delete lots"}
             </button>
