@@ -130,7 +130,12 @@ down, every coordinate is then wrong, and the macro types into the wrong field o
 wrong control. The damage is silent and it happens at night when nobody is watching.
 
 - Applies to every screen the macro touches, and to the **Description Copier** in particular
-  (it is read while the macro types into BC).
+  (it is read while the macro types into BC). On that page the **lot card and its Copy
+  Description buttons come FIRST** — banners, warnings and summaries go *below* them, not
+  above. Anything above the card moves the card.
+- **The page's height must not vary with the data.** A banner that grows with the number of
+  flagged lots shifts everything under it on some sales and not others, which is just as bad
+  as adding it above. Keep such things collapsed by default, or below the working area.
 - A new banner, warning, section or button goes at the **bottom** of the block it belongs to.
   If something genuinely must sit at the top, **ask first** — it means re-recording the macro.
 - Collapsible sections must default to **closed** if opening them would shift anything below.

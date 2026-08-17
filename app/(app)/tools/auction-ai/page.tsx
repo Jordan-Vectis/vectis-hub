@@ -1386,96 +1386,6 @@ function CopierTab({ active }: { active: boolean }) {
 
       {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
 
-      {/* Condition check — the real thing, not a reminder. */}
-      {rows.length > 0 && (
-        condProblems === 0 && condReworded.length === 0 ? (
-          // ⚠ Same padding as the amber banner below on purpose: collapsed, both are one line
-          // of the same height, so the lot card sits at the same place on the screen whether
-          // or not a sale has anything flagged. The macro relies on that.
-          <div className="mb-4 rounded-lg border border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-4 py-3 text-sm text-green-700 dark:text-green-300">
-            ✓ {haveConditionData
-              ? `All ${rows.length} lots have their condition in the description.`
-              : `Every one of the ${rows.length} lots mentions a condition.`}
-          </div>
-        ) : (
-          <div className="mb-4 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
-            <button onClick={() => setCondOpen(o => !o)} className="w-full flex items-center gap-2 text-left">
-              <span className="text-lg">📦</span>
-              <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-                {condProblems > 0
-                  ? `${condProblems} of ${rows.length} lots need a condition adding`
-                  : `${condReworded.length} of ${rows.length} lots to double-check`}
-              </span>
-              <span className="ml-auto text-xs text-amber-700 dark:text-amber-400">{condOpen ? "Hide" : "Show"}</span>
-            </button>
-
-            {condOpen && (
-              <div className="mt-2 space-y-3">
-                {condMissing.length > 0 && (
-                  <div>
-                    <p className="text-xs text-amber-800 dark:text-amber-300">
-                      <strong>{condMissing.length}</strong> {condMissing.length === 1 ? "description has" : "descriptions have"} no condition in {condMissing.length === 1 ? "it" : "them"}
-                      {haveConditionData ? " — the lot has one recorded, it just hasn't been written in." : "."} Click one to jump to it.
-                    </p>
-                    <CondList items={condMissing} tone="border-amber-400 dark:border-amber-600 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40" />
-                  </div>
-                )}
-
-                {condNone.length > 0 && (
-                  <div>
-                    <p className="text-xs text-amber-800 dark:text-amber-300">
-                      <strong>{condNone.length}</strong> {condNone.length === 1 ? "lot has" : "lots have"} no condition recorded at all, so there is nothing to add here — {condNone.length === 1 ? "it needs" : "they need"} grading first.
-                    </p>
-                    <CondList items={condNone} tone="border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30" />
-                  </div>
-                )}
-
-                {condReworded.length > 0 && (
-                  <div>
-                    <p className="text-xs text-amber-700 dark:text-amber-400">
-                      <strong>{condReworded.length}</strong> {condReworded.length === 1 ? "description mentions" : "descriptions mention"} a condition, but not in the words recorded on the lot. Probably fine — worth a glance.
-                    </p>
-                    <CondList items={condReworded} tone="border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800" />
-                  </div>
-                )}
-
-                {condUnknown.length > 0 && (
-                  <p className="text-xs text-gray-600 dark:text-gray-400">
-                    {condUnknown.length} of these came from a spreadsheet with no condition column, so all that could be checked is whether they mention a grade — {condUnknown.length === 1 ? "this one doesn" : "these don"}&apos;t.
-                    Open the Copier from the sale page instead to check them properly.
-                  </p>
-                )}
-
-                {/* ⚠ NEW SECTIONS GO AT THE BOTTOM — see RULES.md "Never move what is already
-                    on screen". The macro drives this by screen position; anything inserted
-                    above existing content shifts it and breaks the run. */}
-                {condNoDesc.length > 0 && (
-                  <div>
-                    <p className="text-xs text-amber-800 dark:text-amber-300">
-                      <strong>{condNoDesc.length}</strong> have no description at all yet — often the ones excluded from the AI.
-                      These need writing before there is anything to copy, so the condition is not the problem here.
-                    </p>
-                    <CondList items={condNoDesc} tone="border-amber-400 dark:border-amber-600 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40" />
-                  </div>
-                )}
-
-                {/* Nothing to do here — the description already grades it. Shown because the
-                    lot's own condition field being blank is worth tidying, elsewhere. */}
-                {condOnlyDesc.length > 0 && (
-                  <div>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
-                      <strong>{condOnlyDesc.length}</strong> state a condition typed straight into the description rather than
-                      graded on the lot. Nothing to add — these are fine to copy. Only the lot&apos;s own condition field is
-                      blank, which is worth tidying on the sale page.
-                    </p>
-                    <CondList items={condOnlyDesc} tone="border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800" />
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )
-      )}
 
       {rows.length > 0 && (
         <>
@@ -1581,6 +1491,100 @@ function CopierTab({ active }: { active: boolean }) {
 
           </div>
         </>
+      )}
+
+      {/* ⚠ BELOW the lot card, never above it. RULES.md rule 6: the macro drives this page
+          by screen position, so anything sitting above the card moves the card. Collapsed
+          by default as well, so its height cannot vary with how many lots are flagged. */}
+      {/* Condition check — the real thing, not a reminder. */}
+      {rows.length > 0 && (
+        condProblems === 0 && condReworded.length === 0 ? (
+          // ⚠ Same padding as the amber banner below on purpose: collapsed, both are one line
+          // of the same height, so the lot card sits at the same place on the screen whether
+          // or not a sale has anything flagged. The macro relies on that.
+          <div className="mb-4 rounded-lg border border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-4 py-3 text-sm text-green-700 dark:text-green-300">
+            ✓ {haveConditionData
+              ? `All ${rows.length} lots have their condition in the description.`
+              : `Every one of the ${rows.length} lots mentions a condition.`}
+          </div>
+        ) : (
+          <div className="mb-4 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+            <button onClick={() => setCondOpen(o => !o)} className="w-full flex items-center gap-2 text-left">
+              <span className="text-lg">📦</span>
+              <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                {condProblems > 0
+                  ? `${condProblems} of ${rows.length} lots need a condition adding`
+                  : `${condReworded.length} of ${rows.length} lots to double-check`}
+              </span>
+              <span className="ml-auto text-xs text-amber-700 dark:text-amber-400">{condOpen ? "Hide" : "Show"}</span>
+            </button>
+
+            {condOpen && (
+              <div className="mt-2 space-y-3">
+                {condMissing.length > 0 && (
+                  <div>
+                    <p className="text-xs text-amber-800 dark:text-amber-300">
+                      <strong>{condMissing.length}</strong> {condMissing.length === 1 ? "description has" : "descriptions have"} no condition in {condMissing.length === 1 ? "it" : "them"}
+                      {haveConditionData ? " — the lot has one recorded, it just hasn't been written in." : "."} Click one to jump to it.
+                    </p>
+                    <CondList items={condMissing} tone="border-amber-400 dark:border-amber-600 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40" />
+                  </div>
+                )}
+
+                {condNone.length > 0 && (
+                  <div>
+                    <p className="text-xs text-amber-800 dark:text-amber-300">
+                      <strong>{condNone.length}</strong> {condNone.length === 1 ? "lot has" : "lots have"} no condition recorded at all, so there is nothing to add here — {condNone.length === 1 ? "it needs" : "they need"} grading first.
+                    </p>
+                    <CondList items={condNone} tone="border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30" />
+                  </div>
+                )}
+
+                {condReworded.length > 0 && (
+                  <div>
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      <strong>{condReworded.length}</strong> {condReworded.length === 1 ? "description mentions" : "descriptions mention"} a condition, but not in the words recorded on the lot. Probably fine — worth a glance.
+                    </p>
+                    <CondList items={condReworded} tone="border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800" />
+                  </div>
+                )}
+
+                {condUnknown.length > 0 && (
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    {condUnknown.length} of these came from a spreadsheet with no condition column, so all that could be checked is whether they mention a grade — {condUnknown.length === 1 ? "this one doesn" : "these don"}&apos;t.
+                    Open the Copier from the sale page instead to check them properly.
+                  </p>
+                )}
+
+                {/* ⚠ NEW SECTIONS GO AT THE BOTTOM — see RULES.md "Never move what is already
+                    on screen". The macro drives this by screen position; anything inserted
+                    above existing content shifts it and breaks the run. */}
+                {condNoDesc.length > 0 && (
+                  <div>
+                    <p className="text-xs text-amber-800 dark:text-amber-300">
+                      <strong>{condNoDesc.length}</strong> have no description at all yet — often the ones excluded from the AI.
+                      These need writing before there is anything to copy, so the condition is not the problem here.
+                    </p>
+                    <CondList items={condNoDesc} tone="border-amber-400 dark:border-amber-600 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40" />
+                  </div>
+                )}
+
+                {/* Nothing to do here — the description already grades it. Shown because the
+                    lot's own condition field being blank is worth tidying, elsewhere. */}
+                {condOnlyDesc.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      <strong>{condOnlyDesc.length}</strong> state a condition typed straight into the description rather than
+                      graded on the lot. Nothing to add — these are fine to copy. Only the lot&apos;s own condition field is
+                      blank, which is worth tidying on the sale page.
+                    </p>
+                    <CondList items={condOnlyDesc} tone="border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800" />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )
       )}
     </div>
   )

@@ -334,6 +334,8 @@ His **AutoHotkey macro** drives the overnight BC import **by screen coordinates*
 
 Rules, now written up as **RULES.md → Design philosophy rule 6**:
 - A new banner, warning, section or button goes at the **BOTTOM** of the block it belongs to. Never above, never between.
+- On the **Description Copier** specifically: the lot card and its **Copy Description** buttons come FIRST, and the condition banner sits BELOW them. Anything above the card moves the card.
+- **The page's height must not vary with the data.** A banner whose height depends on how many lots are flagged shifts everything beneath it on some sales and not others — just as damaging as putting it above. Keep it collapsed by default, or below the working area, or both.
 - Applies to every screen the macro touches, and to the **Description Copier** especially, since that is read while the macro types into BC.
 - Making an existing element **taller** counts too — an extra line of text, a label that wraps.
 - A collapsible section must default to **closed** if opening it would shift anything below it.
