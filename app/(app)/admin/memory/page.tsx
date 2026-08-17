@@ -1269,6 +1269,12 @@ Fixes, all in lib/kp-analysis.tsx:
 
 Result on the same 435 lots: **130 lots down to 8, and 160 failing key points down to 8.** The remaining 8 are genuine — the digits really are absent from the description, and one has the AI writing white tag 670442 where the key point says 670446, which is exactly what the check exists to catch.
 
+## The verdict now NAMES the part (2026-08-14)
+
+Jordan: "Are we able to improve it so instead of just saying not found it says exactly which part?" KpMatch gained **missing: string[]** — the exact tokens that could not be found — and the Review tab prints them: "not found: 670446", "reworded — wording differs on: ...", "partly worded — missing: ...". describeToken turns a token back into the cataloguer's own spelling (our internal 15in becomes 15", a lower-cased code becomes CB125094).
+
+Why it matters: one key point line can carry four bears. F109305's single line covers all four Steiff seasons, and the AI wrote white tag 670466 where the cataloguer had 670446 — one transposed digit, turning the whole line red with nothing to say which of the four was wrong.
+
 WARNING — method worth reusing: do not debug a matcher one lot at a time. Pull the whole sale from /api/auction-ai/catalogue-lots?code=, run the old and the new matcher over every lot, and tally the failures BY TOKEN SHAPE (replace digit runs with #). The dominant shape is the bug, and the before/after tally is the proof.`,
   },
   {

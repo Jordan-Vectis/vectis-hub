@@ -18,7 +18,10 @@ import React from "react"
 export type KpAnalysisMode = "strict" | "relaxed"
 
 export type KpStatus = "found" | "partial" | "reworded" | "missing"
-export type KpMatch  = { line: string; status: KpStatus }
+/** `missing` names the exact parts that could not be found, for display. "not found" on its
+ *  own makes the reader re-read the whole line and diff it by eye against the description;
+ *  "not found: 7" points straight at the edition number the AI got wrong. */
+export type KpMatch  = { line: string; status: KpStatus; missing: string[] }
 export type Range    = { start: number; end: number; kp: number }
 
 export const KP_COLOURS = [
@@ -165,6 +168,18 @@ function hardTokenRegex(token: string): RegExp {
   return new RegExp(`${/^\d/.test(token) ? "" : "\\b"}${esc(token)}\\b`, "gi")
 }
 
+/** Turn an internal token back into something a person recognises from the key point:
+ *  the unit normalisation is ours, not theirs (they wrote 15", we made it "15in"), and
+ *  tokenising lower-cases, which makes a product code look wrong. */
+function describeToken(token: string): string {
+  const inches = token.match(/^([\d.]+)in$/)
+  if (inches) return `${inches[1]}"`
+  const metric = token.match(/^([\d.]+)(cm|mm)$/)
+  if (metric) return `${metric[1]}${metric[2]}`
+  if (/^[a-z]+[\d]/.test(token)) return token.toUpperCase()   // a product code
+  return token
+}
+
 export function analyseKeyPoints(description: string, keyPoints: string, mode: KpAnalysisMode = "strict"): { matches: KpMatch[]; ranges: Range[] } {
   const lines = keyPoints.split("\n").map(l => l.trim()).filter(Boolean)
   const matches: KpMatch[] = []
@@ -192,7 +207,7 @@ export function analyseKeyPoints(description: string, keyPoints: string, mode: K
     } catch { /* fall through to word matching */ }
 
     if (phraseMatched) {
-      matches.push({ line, status: "found" })
+      matches.push({ line, status: "found", missing: [] })
       continue
     }
 
@@ -202,10 +217,11 @@ export function analyseKeyPoints(description: string, keyPoints: string, mode: K
     // carry on — a key point that is ONLY a number ("5") has no significant
     // words but does have a hard token to check.
     if (words.length === 0 && mode !== "relaxed") {
-      matches.push({ line, status: "missing" })
+      matches.push({ line, status: "missing", missing: [] })
       continue
     }
 
+    const missingWords: string[] = []
     let matched = 0
     for (const w of words) {
       const re = wordRegex(w)
@@ -218,11 +234,13 @@ export function analyseKeyPoints(description: string, keyPoints: string, mode: K
         if (m.index === re.lastIndex) re.lastIndex++
       }
       if (any) matched++
+      else missingWords.push(describeToken(w))
     }
     const ratio = words.length > 0 ? matched / words.length : 0
 
     if (mode === "relaxed") {
       const hard = hardTokens(normalised)
+      const missingHard: string[] = []
       let hardFound = 0
       for (const t of hard) {
         const re = hardTokenRegex(t)
@@ -235,21 +253,30 @@ export function analyseKeyPoints(description: string, keyPoints: string, mode: K
           if (m.index === re.lastIndex) re.lastIndex++
         }
         if (any) hardFound++
+        else missingHard.push(describeToken(t))
       }
 
-      if (ratio === 1 && hardFound === hard.length) matches.push({ line, status: "found" })
+      if (ratio === 1 && hardFound === hard.length) matches.push({ line, status: "found", missing: [] })
       else if (hard.length > 0) {
         // Numbers/codes/sizes can't legally be reworded — all present means the
         // point was likely rephrased around them (human checks the wording); any
         // absent means a fact is genuinely missing.
-        matches.push({ line, status: hardFound === hard.length ? "reworded" : "missing" })
+        // ⚠ A missing FACT is what to name. When the facts are all there and only the
+        // wording moved, naming the words is what "check the wording" means in practice.
+        matches.push(hardFound === hard.length
+          ? { line, status: "reworded", missing: missingWords }
+          : { line, status: "missing",  missing: missingHard })
       } else {
-        matches.push({ line, status: ratio >= 0.5 ? "reworded" : "missing" })
+        matches.push({ line, status: ratio >= 0.5 ? "reworded" : "missing", missing: missingWords })
       }
       continue
     }
 
-    matches.push({ line, status: ratio === 1 ? "found" : ratio >= 0.5 ? "partial" : "missing" })
+    matches.push({
+      line,
+      status: ratio === 1 ? "found" : ratio >= 0.5 ? "partial" : "missing",
+      missing: ratio === 1 ? [] : missingWords,
+    })
   }
 
   ranges.sort((a, b) => a.start - b.start || a.end - b.end)

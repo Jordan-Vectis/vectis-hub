@@ -491,9 +491,26 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
                             : m.status === "missing" ? "text-red-700 dark:text-red-300 font-medium"
                             : "text-amber-700 dark:text-amber-300 font-medium"
                           }>{m.line}</span>
-                          {m.status === "partial" && <span className="text-xs text-amber-500/80 shrink-0 mt-0.5">partly worded — check</span>}
-                          {m.status === "reworded" && <span className="text-xs text-amber-500/80 shrink-0 mt-0.5" title="The numbers, codes and sizes are all present but the wording differs — read the description to check the facts survived.">reworded — check wording</span>}
-                          {m.status === "missing" && <span className="text-xs text-red-500/80 shrink-0 mt-0.5">not found</span>}
+                          {/* ⚠ Name the part, not just the verdict. "not found" made the reader
+                              diff a whole line against the description by eye; "not found: 7"
+                              points straight at the edition number the AI got wrong. */}
+                          {m.status === "partial" && (
+                            <span className="text-xs text-amber-500/80 shrink-0 mt-0.5">
+                              partly worded{m.missing.length > 0 ? ` — missing: ${m.missing.slice(0, 4).join(", ")}` : " — check"}
+                            </span>
+                          )}
+                          {m.status === "reworded" && (
+                            <span className="text-xs text-amber-500/80 shrink-0 mt-0.5"
+                              title="The numbers, codes and sizes are all present but the wording differs — read the description to check the facts survived.">
+                              reworded{m.missing.length > 0 ? ` — wording differs on: ${m.missing.slice(0, 4).join(", ")}` : " — check wording"}
+                            </span>
+                          )}
+                          {m.status === "missing" && (
+                            <span className="text-xs text-red-500/80 shrink-0 mt-0.5"
+                              title={m.missing.length > 0 ? "These parts of the key point could not be found anywhere in the description." : undefined}>
+                              not found{m.missing.length > 0 ? `: ${m.missing.slice(0, 5).join(", ")}` : ""}
+                            </span>
+                          )}
                         </li>
                       ))}
                     </ul>
