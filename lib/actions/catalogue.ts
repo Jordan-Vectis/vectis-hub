@@ -1,6 +1,7 @@
 "use server"
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
+import { titleFromDescription } from "@/lib/lot-title"
 import { auth } from "@/auth"
 import { uploadBufferToR2, deleteObjectsFromR2 } from "@/lib/r2"
 import {
@@ -13,12 +14,8 @@ import { buildToteMap, checkLot, toteLookupVariants } from "@/lib/tote-check"
 import { ukDayStartUtc } from "@/lib/cataloguing-reports"
 import { getDepartmentAccessForSession, canSeeAuction } from "@/lib/departments"
 
-// First 83 characters of the description — no sentence splitting, full stops do not break title
-function titleFromDescription(desc: string): string {
-  const text = (desc ?? "").replace(/[\r\n]+/g, " ").trim()
-  if (!text) return "Untitled"
-  return text.length > 83 ? text.slice(0, 82) + "…" : text
-}
+// titleFromDescription lives in lib/lot-title.ts so the Locking Check can VERIFY against the
+// exact rule this generates with — see the note there.
 
 /**
  * Does this cataloguer write their own descriptions?

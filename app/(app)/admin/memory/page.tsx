@@ -342,7 +342,9 @@ WARNING: it REUSES the existing checkers — lib/tote-check.ts is the same code 
 
 WARNING: if the BC tote data fails to load, the tote, vendor and receipt checks are SKIPPED, an amber notice says so, and the "nothing is blocking" banner is withheld. Silently passing every lot would have the screen declare a sale ready when the part it could not test is the part most likely to be wrong.
 
-A tally strip lists the problems most-common-first, so a sale can be fixed in bulk rather than lot by lot.
+A CHECKLIST lists every criterion with passed / in-scope, e.g. "Has a condition - 496 / 496"; clicking a failing row filters the table to just those lots. WARNING: the denominator is the lots the criterion APPLIES to, so the condition row excludes AI-excluded lots rather than reading 496/635 and looking broken. A criterion skipped because the BC data is missing shows a dash and "not checked", never a tick.
+
+WARNING: titleFromDescription now lives in lib/lot-title.ts and BOTH the Generate Titles action and this check import it. It used to live privately inside lib/actions/catalogue.ts, so this screen wrote its own copy from the description in RULES.md — and got it wrong twice over: it kept the newlines (the generator collapses them to spaces) and truncated at 83 instead of 82 plus the ellipsis. The result was 634 of 635 correct titles reported as mismatched. Never re-derive in a checker a rule that already exists in code; import the real one.
 `,
   },
   {

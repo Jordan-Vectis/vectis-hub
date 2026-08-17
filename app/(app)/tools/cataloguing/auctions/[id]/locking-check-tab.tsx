@@ -15,6 +15,10 @@
 import { useEffect, useMemo, useState } from "react"
 import { buildToteMap, checkLot as checkToteLot, type BcTote, type ToteCheckIssue } from "@/lib/tote-check"
 import { checkConditionInDescription } from "@/lib/condition"
+// ⚠ The SAME rule the Generate Titles button uses. Writing a second copy here from the
+// description in RULES.md got both the newline handling and the truncation wrong, and
+// reported 634 of 635 correct titles as mismatched.
+import { titleFromDescription, TITLE_MAX } from "@/lib/lot-title"
 
 interface LotItem {
   id: string
@@ -38,14 +42,7 @@ interface LotItem {
 type Severity = "blocking" | "look"
 interface Issue { key: string; label: string; severity: Severity }
 
-/** RULES.md: a lot title is the first 83 characters of the description, truncated with "…".
- *  No sentence splitting — a full stop does not end the title. */
-const TITLE_MAX = 83
-function titleFromDescription(description: string): string {
-  const d = (description ?? "").trim()
-  if (!d) return "Untitled"
-  return d.length <= TITLE_MAX ? d : `${d.slice(0, TITLE_MAX)}…`
-}
+
 
 const TOTE_LABEL: Record<ToteCheckIssue, string> = {
   no_tote:            "No tote on the lot",
@@ -112,12 +109,45 @@ function checkOne(lot: LotItem, toteMap: Map<string, BcTote> | null): Issue[] {
   return out
 }
 
+
+/**
+ * Every criterion this screen checks, in one list — so the checklist counts and the per-lot
+ * issues can never disagree: a lot passes a criterion when checkOne emitted no issue with that
+ * key. `scope` narrows the denominator (an AI-excluded lot is not counted for "has a condition",
+ * so 496/496 reads honestly rather than 496/635).
+ */
+const CRITERIA: {
+  key: string; label: string; severity: Severity
+  scope?: (l: LotItem) => boolean
+  needsBc?: boolean
+}[] = [
+  { key: "description", label: "Has a description",                        severity: "blocking" },
+  { key: "condition",   label: "Has a condition — AI-excluded lots exempt", severity: "blocking", scope: l => !l.aiExcluded },
+  { key: "tote",        label: "Tote, vendor and receipt match BC",         severity: "blocking", needsBc: true },
+  { key: "title",       label: "Title matches the current description",     severity: "blocking", scope: l => !!(l.description ?? "").trim() },
+  { key: "estimate",    label: "Estimates make sense",                      severity: "blocking" },
+  { key: "photo",       label: "Has at least one photo",                    severity: "blocking" },
+  { key: "barcode",     label: "Has a barcode",                             severity: "blocking" },
+  { key: "category",    label: "Has a category",                            severity: "look" },
+  { key: "reviewFlag",  label: "No unresolved Review flag",                 severity: "look" },
+  { key: "aiFlag",      label: "No unresolved AI flag",                     severity: "look" },
+  { key: "titleLong",   label: `Title within ${TITLE_MAX} characters`,      severity: "look" },
+  { key: "artefact",    label: "No leftover AI text in the description",    severity: "look" },
+  { key: "condDesc",    label: "Condition appears in the description",      severity: "look",
+    scope: l => !l.aiExcluded && !!(l.description ?? "").trim() },
+]
+
+/** Tote issues are emitted as tote_<issue>, so that criterion matches on the prefix. */
+const hasIssueFor = (issues: Issue[], key: string) =>
+  key === "tote" ? issues.some(i => i.key.startsWith("tote_")) : issues.some(i => i.key === key)
+
 export default function LockingCheckTab({ lots, auctionId, onOpenLot }: {
   lots: LotItem[]
   auctionId: string
   onOpenLot: (id: string) => void
 }) {
   const [filter, setFilter] = useState<"blocking" | "look" | "all">("blocking")
+  const [only, setOnly] = useState<string | null>(null)   // drill into one criterion
   const [toteMap, setToteMap] = useState<Map<string, BcTote> | null>(null)
   const [bcState, setBcState] = useState<"loading" | "ready" | "failed">("loading")
 
@@ -153,17 +183,18 @@ export default function LockingCheckTab({ lots, auctionId, onOpenLot }: {
   const lookOnly = results.filter(r => r.blocking.length === 0 && r.look.length > 0)
   const ready    = results.filter(r => r.issues.length === 0)
 
-  const shown = filter === "blocking" ? blocking : filter === "look" ? lookOnly : results
+  const base  = filter === "blocking" ? blocking : filter === "look" ? lookOnly : results
+  const shown = only ? results.filter(r => hasIssueFor(r.issues, only)) : base
 
-  // Which problems are most common — tells you what to fix in bulk rather than lot by lot.
-  const tally = useMemo(() => {
-    const m = new Map<string, { label: string; severity: Severity; n: number }>()
-    for (const r of results) for (const i of r.issues) {
-      const e = m.get(i.key) ?? { label: i.label.replace(/\s*\(£.*\)$/, ""), severity: i.severity, n: 0 }
-      e.n++; m.set(i.key, e)
-    }
-    return [...m.values()].sort((a, b) => b.n - a.n)
-  }, [results])
+  // The checklist: one row per criterion, passed / in-scope.
+  const checklist = useMemo(
+    () => CRITERIA.map(c => {
+      const inScope = results.filter(r => !c.scope || c.scope(r.lot))
+      const failed  = inScope.filter(r => hasIssueFor(r.issues, c.key))
+      return { ...c, total: inScope.length, failed: failed.length, passed: inScope.length - failed.length }
+    }),
+    [results],
+  )
 
   return (
     <div className="space-y-5 max-w-6xl">
@@ -198,21 +229,48 @@ export default function LockingCheckTab({ lots, auctionId, onOpenLot }: {
         </div>
       )}
 
-      {tally.length > 0 && (
-        <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
-          <p className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">What is wrong, most common first</p>
-          <div className="flex flex-wrap gap-2">
-            {tally.map(t => (
-              <span key={t.label} className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
-                t.severity === "blocking"
-                  ? "bg-red-100 dark:bg-red-500/15 text-red-700 dark:text-red-300"
-                  : "bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300"}`}>
-                {t.label} · {t.n}
-              </span>
-            ))}
-          </div>
+      {/* Every criterion, passed / in scope. Click one to see just the lots failing it. */}
+      <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+        <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-200 dark:border-gray-800">
+          <p className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">Every check, and how many lots pass it</p>
+          {only && (
+            <button onClick={() => setOnly(null)} className="ml-auto text-xs font-semibold text-[#2AB4A6] hover:underline">
+              Clear ({CRITERIA.find(c => c.key === only)?.label})
+            </button>
+          )}
         </div>
-      )}
+        <ul>
+          {checklist.map(c => {
+            const skipped = c.needsBc && bcState !== "ready"
+            const ok = !skipped && c.failed === 0
+            return (
+              <li key={c.key}>
+                <button
+                  onClick={() => { if (c.failed > 0 && !skipped) setOnly(only === c.key ? null : c.key) }}
+                  disabled={skipped || c.failed === 0}
+                  className={`w-full flex items-center gap-3 px-4 py-2 text-left border-t border-gray-100 dark:border-gray-800/60 first:border-t-0 ${
+                    c.failed > 0 && !skipped ? "hover:bg-gray-50 dark:hover:bg-white/[0.03] cursor-pointer" : "cursor-default"} ${
+                    only === c.key ? "bg-gray-50 dark:bg-white/[0.05]" : ""}`}>
+                  <span className={`w-5 text-center ${skipped ? "text-gray-500" : ok ? "text-green-500" : c.severity === "blocking" ? "text-red-500" : "text-amber-500"}`}>
+                    {skipped ? "–" : ok ? "✓" : c.severity === "blocking" ? "✗" : "⚠"}
+                  </span>
+                  <span className="text-sm text-gray-700 dark:text-gray-300 flex-1">
+                    {c.label}
+                    {c.severity === "look" && <span className="ml-2 text-[10px] uppercase tracking-wide text-gray-400">worth a look</span>}
+                  </span>
+                  {skipped ? (
+                    <span className="text-xs text-gray-500">not checked — BC data unavailable</span>
+                  ) : (
+                    <span className={`text-sm font-semibold tabular-nums ${ok ? "text-green-500" : c.severity === "blocking" ? "text-red-400" : "text-amber-400"}`}>
+                      {c.passed} / {c.total}
+                    </span>
+                  )}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
 
       {results.length > 0 && (
         <>

@@ -908,11 +908,17 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
           editingLotId
             ? <LotEditView key={editingLotId} lot={editingLot} auctionId={auction.id}
                 allLots={lots} entryDir={navDir} onEdit={openLot} onDone={closeLot} />
+            /* ⚠ onDelete is "reload the list", and it must be router.refresh() — NOT a push to
+               the URL we are already on. The App Router dedupes a push to the current route, so
+               the transition wrapping each bulk action never settled (every button stuck on
+               "Updating…") and the client cache was never invalidated either, which is why the
+               change only appeared after a manual reload despite the write having succeeded.
+               One cause, both symptoms (Jordan, 2026-08-14). */
             : <ManageLotsTab lots={lots} auctionId={auction.id} auction={auction}
                 allAuctions={allAuctions}
                 bcLocked={bcLocked}
                 onEdit={openLot}
-                onDelete={() => router.push(`/tools/cataloguing/auctions/${auction.id}`)}
+                onDelete={() => router.refresh()}
                 onTransfer={ids => setTransferLotIds(ids)} />
         )}
 
