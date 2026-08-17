@@ -319,6 +319,33 @@ WARNING: reds that remain are deliberate and correct — do NOT sweep them green
 `,
   },
   {
+    filename: "locking_check.md",
+    content: `---
+name: Locking Check — the final gate before BC and the website
+purpose: The pre-lock screen and what it checks. Two tiers, and it reuses the existing checkers rather than growing its own copies. Read before adding a check to it.
+last_updated: 2026-08-14
+---
+
+Jordan, 2026-08-14: "I want this as the final screen I can check before I sync everything up with BC and put it live on our separate website."
+
+TWO TIERS, and the distinction is the whole point. **Blocking** means it would reach BC or the website WRONG. **Worth a look** means nobody has confirmed it, and it never blocks.
+
+Blocking: no description; no photos; no barcode; no condition UNLESS the lot is aiExcluded; estimate missing, backwards (70 to 50) or zero; the title not matching the first 83 characters of the CURRENT description; and every issue lib/tote-check.ts reports for tote, vendor and receipt against BC.
+
+WARNING: the condition exemption is Jordan's rule — an AI-excluded lot is hand-written and its condition is typed into the description rather than graded on the lot, so requiring a graded condition there would flag every one of them.
+
+WARNING: the title check exists because editing a description does NOT regenerate the title. The stale title is what goes to BC and onto the website, and nothing else notices.
+
+Worth a look: flagged in Review (reviewFlag); AI flagged a possible cataloguer mistake (aiFlagNote); no category; title over 83 characters; leftover AI text (markdown asterisks, a FLAG: line); and a condition that is graded on the lot but missing from the description, via checkConditionInDescription.
+
+WARNING: it REUSES the existing checkers — lib/tote-check.ts is the same code behind the Tote Check tab, lib/condition.ts is the Description Copier's. Do not grow a second copy of either here; they would drift and the two screens would start disagreeing about the same sale.
+
+WARNING: if the BC tote data fails to load, the tote, vendor and receipt checks are SKIPPED, an amber notice says so, and the "nothing is blocking" banner is withheld. Silently passing every lot would have the screen declare a sale ready when the part it could not test is the part most likely to be wrong.
+
+A tally strip lists the problems most-common-first, so a sale can be fixed in bulk rather than lot by lot.
+`,
+  },
+  {
     filename: "manual_cataloguer.md",
     content: `---
 name: Cataloguers who write their own descriptions (User.manualDescriptions)

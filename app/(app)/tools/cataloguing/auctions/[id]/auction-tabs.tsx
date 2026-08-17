@@ -43,6 +43,8 @@ interface Lot {
   tote: string | null; receipt: string | null; receiptUniqueId: string | null; category: string | null
   subCategory: string | null; brand: string | null; notes: string | null
   status: string; aiUpgraded: boolean; addedToBC: boolean; aiExcluded: boolean; createdByName: string | null; imageUrls: string[]
+  aiFlagNote: string | null   // AI-flagged possible cataloguer mistake — surfaced by the Locking Check
+  reviewFlag: string | null   // reason text set from the Review tab
   createdAt: string          // ISO — when the lot was created ("Date Added" column)
   extraDetails: string | null
 }
@@ -942,10 +944,19 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
               receiptUniqueId: l.receiptUniqueId,
               title:           l.title,
               description:     l.description,
+              condition:       l.condition,
               estimateLow:     l.estimateLow,
               estimateHigh:    l.estimateHigh,
               imageUrls:       l.imageUrls,
+              aiExcluded:      l.aiExcluded,
+              vendor:          l.vendor,
+              tote:            l.tote,
+              receipt:         l.receipt,
+              category:        l.category,
+              aiFlagNote:      l.aiFlagNote,
+              reviewFlag:      l.reviewFlag,
             }))}
+            auctionId={auction.id}
             onOpenLot={openLotInManager}
           />
         )}

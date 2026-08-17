@@ -166,6 +166,8 @@ export default async function AuctionDetailPage({
           createdAt: l.createdAt.toISOString(),
           imageUrls: l.imageUrls,
           extraDetails: l.extraDetails ?? null,
+          aiFlagNote:   l.aiFlagNote ?? null,
+          reviewFlag:   l.reviewFlag ?? null,
         }))}
       />
       </div>
