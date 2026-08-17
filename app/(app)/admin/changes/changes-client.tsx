@@ -70,8 +70,15 @@ export default function ChangesClient({
   // ever and turned a real signal into wallpaper. What matters is whether anything shown
   // here falls PAST the point the committed history covers; if it doesn't, the list is
   // complete whatever the capture managed. The date comes from the seed, never hardcoded.
+  //
+  // ⚠ ONE change past the seed is normal and complete: the seed is refreshed as part of the
+  // push, so a release's own headline commit is always a moment newer than it. Warning on
+  // that would put the banner up after every single deploy — the wallpaper this replaced.
+  // TWO or more means a push went out without the seed being refreshed, which is the case
+  // where work really is missing.
   const completeTo = capture?.completeTo ?? null
-  const thinFrom = completeTo && changes.some(c => c.committedAt > completeTo) ? completeTo : null
+  const past       = completeTo ? changes.filter(c => c.committedAt > completeTo) : []
+  const thinFrom   = past.length > 1 ? completeTo : null
 
   // Group by day so a period reads as a diary rather than one long list.
   const byDay = shown.reduce<Record<string, Change[]>>((acc, c) => {

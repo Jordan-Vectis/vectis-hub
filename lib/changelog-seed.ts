@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"bae623ca23e3e7fa4e205255bce5e35eb8a6be8f","author":"Jordan Orange","date":"2026-08-17T13:47:49+01:00","subject":"Patches & Changes: record the whole day's work, not one line per release"},
   {"sha":"4cb74e1033c2c71bd60744db8fefd80378012cb4","author":"Jordan Orange","date":"2026-08-17T13:28:33+01:00","subject":"Review tab: mark key points as the mistake, and fix all AI-flagged in one go"},
   {"sha":"62cc369bc69b353c2e0b09746e67468b49234ca1","author":"Jordan Orange","date":"2026-08-17T12:53:20+01:00","subject":"Locking Check: let the AI suggest the missing conditions, for a person to accept"},
   {"sha":"2651a17923bcce9e9462cdbf82ba3757ca828e0e","author":"Jordan Orange","date":"2026-08-17T12:43:29+01:00","subject":"Locking Check: \"*** collection only ***\" is not leftover AI text"},
