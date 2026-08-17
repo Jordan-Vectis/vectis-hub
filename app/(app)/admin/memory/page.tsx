@@ -69,7 +69,19 @@ WARNING: the Auto Pipeline tab's own Run button STILL RUNS IN THE BROWSER - its 
 
 - PipelineQueueItem - one row per queued sale, carrying its OWN settings (preset, model, fallback, grounded, autoApply, onlyWithPhotos, skipHasDesc, kpRelaxed) plus progress, retryAfter, heartbeatAt and a logText morning report. NEEDS Run Migrations. Per-lot progress still lives in PipelineRun / PipelineLot keyed by auction code - that is what makes a slice resumable.
 - lib/pipeline-runner.ts is the worker. server.js ticks /api/cron/pipeline-queue every 30 seconds; each tick does a roughly nine-minute SLICE and hands back, and the next tick carries on from the same lot.
-- UI: pipeline-queue-panel.tsx on the Auto Pipeline tab (add the loaded sale, reorder, Hold, Remove, per-sale log). Server actions in lib/actions/pipeline-queue.ts, list at GET /api/auction-ai/queue.
+- UI (MOVED 2026-08-14): its own page at **/tools/auction-ai/overnight** (overnight-client.tsx), with a per-run page at **/tools/auction-ai/overnight/[code]** (run-client.tsx). Server actions in lib/actions/pipeline-queue.ts, list at GET /api/auction-ai/queue, per-lot detail from GET /api/auction-ai/pipeline?code=.
+
+## The queue is GONE from the Auto Pipeline tab (2026-08-14)
+
+Jordan: "I really dont like how this overnight que works... revert the Auto Pipeline to not have the overnight que stuff then make a new page called Overnight AI runs or something similar... I think you should be able to list out all the runs then click inside of them to see what is actually happening."
+
+pipeline-queue-panel.tsx is **deleted** and the Auto Pipeline tab carries a signpost link only. WARNING: do not put a queue back on that tab. Two things were wrong with it living there. The thing you check in the morning was buried at the bottom of the thing you drive by hand — and, the real fault, **a queued sale silently inherited whatever the Auto Pipeline tab happened to be set to at that moment**, so what a sale would run with depended on a screen somewhere else entirely. The new page's queue form **states its own settings**: sale, instruction, model, fallback and every toggle.
+
+Opening a run now shows it lot by lot, because everything needed was already stored per lot on PipelineLot and nothing was reading it: each stage's outcome, what Double Check contradicted or found unsupported, which key points were missing and which were put back, the text produced, and whether it actually reached the catalogue. WARNING: "written to the catalogue" on that page uses the SAME appliedDesc comparison as Review & Apply — do not re-derive it from the live catalogue description (see the appliedDesc entry for why that silently resurrects applied lots).
+
+Jordan chose a route UNDER Auction AI, so it inherits the AUCTION_AI gate from app/(app)/tools/auction-ai/layout.tsx — do not add a second gate. The sidebar entry is a Link, not a tab: the tabs are client state on one 6,000-line route, and a morning check should not have to load it.
+
+WARNING: the MACHINERY is untouched — the runner, the nine-minute slices, the cron loop, the retries, the cron-auth guards. This changed where you drive it from, not how it runs.
 
 ## The things that will bite
 

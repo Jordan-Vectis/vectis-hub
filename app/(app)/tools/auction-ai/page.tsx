@@ -10,7 +10,7 @@ import { MacroTab } from "./macro-tab"
 import BcImportCheckTab from "./bc-import-check-tab"
 import { analyseKeyPoints, HighlightedDescription, kpColour } from "@/lib/kp-analysis"
 import RunCostEstimate from "@/components/run-cost-estimate"
-import PipelineQueuePanel from "./pipeline-queue-panel"
+import Link from "next/link"
 import { describeActionError } from "@/lib/action-error"
 import { checkConditionInDescription } from "@/lib/condition"
 
@@ -5270,17 +5270,25 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         </div>
       )}
 
-      {/* Run it later instead — on the server, with nothing left open. The
-          settings above are captured onto the queued sale, so each sale keeps
-          the instruction and toggles it was queued with. */}
-      <PipelineQueuePanel
-        code={code.trim().toUpperCase()}
-        canAdd={!!code.trim()}
-        settings={{
-          preset, model: localModel, fallbackModel,
-          grounded, autoApply, onlyWithPhotos, skipHasDesc, kpRelaxed,
-        }}
-      />
+      {/* ⚠ The overnight queue used to be a panel HERE, and it was moved out to its own page
+          (2026-08-14, Jordan: "I really dont like how this overnight que works"). Two things were
+          wrong with it living on this tab: the thing you check in the morning was buried inside
+          the thing you drive by hand, and a queued sale silently inherited whatever THIS tab
+          happened to be set to. The new page states its own settings. Do not put it back — this
+          is a signpost, not a queue. */}
+      <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-4 mt-6 flex items-center gap-4 flex-wrap">
+        <div className="flex-1 min-w-[260px]">
+          <p className="text-sm font-bold text-gray-900 dark:text-white">Want it to run without you here?</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+            The Run button above works in this tab — it only carries on while the tab is open and the PC is awake.
+            To queue sales to run on the server overnight, use Overnight AI runs.
+          </p>
+        </div>
+        <Link href="/tools/auction-ai/overnight"
+          className="px-4 py-2.5 rounded-xl text-sm font-bold bg-[#C8A96E] hover:bg-[#b9995c] text-black">
+          🌙 Overnight AI runs
+        </Link>
+      </div>
 
       {stage === "complete" && (
         <>
@@ -6272,6 +6280,18 @@ export default function AuctionAIPage() {
                       </button>
                     )
                   })}
+                  {/* Overnight AI runs is a real PAGE, not a tab — the tabs are client state on
+                      this one route, and a queue you check in the morning shouldn't need this
+                      6,000-line page loaded to look at. Rendered inside the Run group so it sits
+                      with the Auto Pipeline it belongs to. */}
+                  {group.label === "Run" && (
+                    <Link href="/tools/auction-ai/overnight"
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded text-sm font-medium transition-colors text-left text-gray-400 hover:text-white border border-transparent">
+                      <span className="text-base leading-none">🌙</span>
+                      <span className="truncate">Overnight AI runs</span>
+                      <span className="ml-auto text-[10px] text-gray-600">↗</span>
+                    </Link>
+                  )}
                 </div>
               </div>
             )
