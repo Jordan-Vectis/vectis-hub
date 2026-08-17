@@ -174,6 +174,26 @@ app.prepare().then(async () => {
       setInterval(runPipelineQueue, PIPELINE_TICK_MS)
     }, 60 * 1000)
 
+    // Held photos — photos uploaded through Photography → Upload photos (any sale) whose
+    // barcode / unique ID wasn't a lot yet. Attaches any whose lot has since appeared. Every
+    // 5 minutes, first run delayed 80s. A cheap no-op when nothing is waiting.
+    const HELD_PHOTOS_INTERVAL_MS = 5 * 60 * 1000
+    function runHeldPhotoSweep() {
+      const secret = process.env.CRON_SECRET
+      if (!secret) return
+      fetch(`http://localhost:${port}/api/cron/held-photos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
+      })
+        .then(r => r.json())
+        .then(d => { if (d && d.attached) console.log(`[cron/held-photos] attached ${d.attached} photo(s) to ${d.lots} lot(s), ${d.stillWaiting} still waiting`) })
+        .catch(e => console.warn('[cron/held-photos] error:', e.message))
+    }
+    setTimeout(() => {
+      runHeldPhotoSweep()
+      setInterval(runHeldPhotoSweep, HELD_PHOTOS_INTERVAL_MS)
+    }, 80 * 1000)
+
     // IT mailbox poll — turns new IT@vectis.co.uk emails into Job Board jobs.
     // Every 5 minutes, first run delayed 90s. No-op until the mailbox is connected.
     const IT_MAILBOX_INTERVAL_MS = 5 * 60 * 1000

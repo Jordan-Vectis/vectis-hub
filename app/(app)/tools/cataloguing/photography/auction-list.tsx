@@ -149,10 +149,16 @@ export default function PhotographyAuctionList({ active, completed }: Props) {
             double-checked by AI before anything is saved.
           </p>
         </div>
-        <Link href="/tools/cataloguing/photography/debug"
-          className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-purple-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">
-          🔧 Barcode debug
-        </Link>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Link href="/tools/cataloguing/photography/any-sale"
+            className="text-sm font-semibold px-3.5 py-2 rounded-lg border border-purple-400 dark:border-purple-500/70 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-colors whitespace-nowrap">
+            📷 Upload without picking a sale
+          </Link>
+          <Link href="/tools/cataloguing/photography/debug"
+            className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-purple-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">
+            🔧 Barcode debug
+          </Link>
+        </div>
       </div>
 
       {/* Stats */}

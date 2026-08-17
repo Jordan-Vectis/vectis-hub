@@ -1475,6 +1475,20 @@ const MIGRATIONS = [
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "kpFixNote" TEXT`,
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "kpFixedBy" TEXT`,
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "kpFixedAt" TIMESTAMP(3)`,
+  // Photography → Upload photos (any sale): photos whose code isn't a lot yet, held until it is.
+  `CREATE TABLE IF NOT EXISTS "HeldLotPhoto" (
+     "id" TEXT NOT NULL,
+     "code" TEXT NOT NULL,
+     "fileName" TEXT NOT NULL,
+     "r2Key" TEXT NOT NULL,
+     "uploadedBy" TEXT,
+     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     "attachedAt" TIMESTAMP(3),
+     "attachedLotId" TEXT,
+     CONSTRAINT "HeldLotPhoto_pkey" PRIMARY KEY ("id")
+   )`,
+  `CREATE INDEX IF NOT EXISTS "HeldLotPhoto_code_idx" ON "HeldLotPhoto"("code")`,
+  `CREATE INDEX IF NOT EXISTS "HeldLotPhoto_attachedAt_idx" ON "HeldLotPhoto"("attachedAt")`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

@@ -6,277 +6,49 @@ import { uploadLotPhoto, uploadLotLabelPhoto } from "@/lib/actions/catalogue"
 import { describeActionError } from "@/lib/action-error"
 
 interface Props {
-  auctionId: string
+  // The sale these photos belong to — or NULL on Photography → Upload photos (any sale),
+  // which has no sale at all. There, one folder can legitimately span several sales, so
+  // every lot carries its own auctionId and the upload uses THAT.
+  auctionId: string | null
   // imageUrls is what the "already on this lot" check reads — see nameFromKey below.
-  lots: { id: string; barcode: string | null; receiptUniqueId?: string | null; imageUrls?: string[] }[]
+  lots: {
+    id: string; barcode: string | null; receiptUniqueId?: string | null; imageUrls?: string[]
+    auctionId?: string      // required when the page has no auctionId of its own
+    auctionCode?: string    // shown on the group card so you can see which sale a photo went to
+  }[]
   onUploaded: () => void
+  // Called once the upload finishes, with the groups whose code matched no lot anywhere.
+  // The sale's own tab leaves this unset (nothing sensible to do with them there); the
+  // any-sale uploader holds those photos until a lot with that code turns up.
+  onUnmatched?: (unmatched: { code: string; photos: File[] }[]) => Promise<void> | void
 }
 
-// uploadLotPhoto stores every photo at lot-photos/{auctionId}/{lotId}/{Date.now()}-{safeName},
-// where safeName is the original filename with anything outside [A-Za-z0-9._-] replaced by "_".
-// The original name is therefore recoverable from the stored key, which is what lets the
-// "skip photos already on the lot" tickbox work with no schema change and no extra lookups.
-// Compare on the basename only — an endsWith() test on the whole key would match
-// "IMG_1.jpg" against a stored "X-IMG_1.jpg".
-const safeName    = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, "_")
-const nameFromKey = (key: string)  => (key.split("/").pop() ?? "").replace(/^\d+-/, "")
-const DEDUPE_LS_KEY = "photo_upload_skip_duplicates"
+// ⚠ The label-reading + grouping engine is SHARED with Photography → Upload Photos.
+// It lives in lib/photo-scan.ts — never grow a second copy here.
+import {
+  safeName, nameFromKey, DEDUPE_LS_KEY, MODEL_LS_KEY, BATCH_SIZE, AI_CONCURRENCY,
+  resolvePhoto, buildGroups, parseBarcode, mapPool, toJpegBlob,
+  resetZxReader, isZxReaderStalled, isVectisCodeStr, readVectisWithZxingCpp,
+} from "@/lib/photo-scan"
+import type { LotGroup, PhotoInfo, DiscrepancyType, Discrepancy, UploadResult } from "@/lib/photo-scan"
+import Thumb from "@/components/photo-thumb"
 
-interface LotGroup {
-  lotId:    string | null
-  label:    string
-  photos:   File[]
-  labelPhoto?:      File      // the photo that started this group — shown in the review, never uploaded
-  labelIndex?:      number    // index of the label photo in scanFiles (scan mode only)
-  photoIndices?:    number[]  // scanFiles indices parallel to `photos` (scan mode only — drives the manual tools)
-  needsCode?:       boolean   // a label with no code yet — the user must type it in the final review
-  aiRead?:          boolean   // the barcode scanner missed this label; AI read the printed code
-  edited?:          boolean   // the user marked/typed this label by hand
-}
-
-// One record per photo (scan mode). Scanner + AI results, plus the RESOLVED
-// decision the grouping is built from. Kept as the source of truth so the
-// discrepancy step and the final-review manual tools can re-flow the lots by
-// editing decisions rather than rebuilding groups by hand.
-interface PhotoInfo {
-  scannerCode: string | null   // local barcode reader result (Vectis format), or null
-  aiIsLabel:   boolean         // AI classified this photo as a barcode label
-  aiCode:      string | null   // AI's guess at the printed code (Vectis format), or null
-  aiAnswered:  boolean         // AI actually returned an answer for this photo
-  unreadable:  boolean         // the browser couldn't decode the image (HEIC on Windows)
-  // resolved:
-  isLabel:     boolean         // final: this photo starts a lot
-  code:        string | null   // final code for the label (may be user-typed); null = needs a code
-  source:      "agree" | "scanner" | "ai" | "manual" | "none"
-}
-
-type DiscrepancyType = "mismatch" | "scanner-not-ai" | "ai-not-scanner"
-interface Discrepancy {
-  index:       number
-  type:        DiscrepancyType
-  scannerCode: string | null
-  aiCode:      string | null
-  resolved:    boolean
-}
-
+// Screen state — this tab's own, not part of the shared engine.
 type Phase = "idle" | "scanning" | "discrepancies" | "preview" | "uploading" | "done"
 type Mode  = "scan" | "filename"
 
-// Reconcile one photo's scanner + AI reads into a starting decision, and say
-// whether it is a discrepancy a human should look at. The SCANNER wins a code
-// disagreement by default (Code 128 has a checksum; AI misreads printed text
-// more often), but every genuine disagreement is surfaced for review.
-function resolvePhoto(
-  scannerCode: string | null, aiAnswered: boolean, aiIsLabel: boolean, aiCode: string | null,
-): { isLabel: boolean; code: string | null; source: PhotoInfo["source"]; discrepancy: DiscrepancyType | null } {
-  const s = scannerCode
-  const a = aiCode
-  if (s && a) {
-    if (s.toLowerCase() === a.toLowerCase()) return { isLabel: true, code: s, source: "agree", discrepancy: null }
-    return { isLabel: true, code: s, source: "scanner", discrepancy: "mismatch" }
-  }
-  if (s && !a) {
-    // Scanner read a Vectis code. If AI actively says "item photo", that's a
-    // conflict (a sticker in an item photo?) — default to keeping the label
-    // (a Vectis code was decoded) but flag it. Otherwise they agree.
-    if (aiAnswered && !aiIsLabel) return { isLabel: true, code: s, source: "scanner", discrepancy: "scanner-not-ai" }
-    return { isLabel: true, code: s, source: "scanner", discrepancy: null }
-  }
-  if (!s && a) {
-    // AI read a code the scanner missed — a real blurry label, or an AI
-    // misread. Default to accepting it, but flag for review.
-    return { isLabel: true, code: a, source: "ai", discrepancy: "ai-not-scanner" }
-  }
-  // Neither read a code.
-  if (aiIsLabel) return { isLabel: true, code: null, source: "ai", discrepancy: null }  // unreadable label — a gap, not a conflict; typed in the final review
-  return { isLabel: false, code: null, source: "none", discrepancy: null }
-}
 
-// Derive the lot groups from the per-photo decisions. A photo whose decision is
-// isLabel starts a lot (its photo is the label, never uploaded); following
-// non-label photos join it; photos before the first label go to preGroup.
-function buildGroups(
-  files: File[], infos: PhotoInfo[], lotMap: Map<string, string>,
-): { groups: LotGroup[]; preGroup: File[] } {
-  const groups: LotGroup[] = []
-  const preGroup: File[] = []
-  let current: LotGroup | null = null
-  for (let i = 0; i < files.length; i++) {
-    const info = infos[i]
-    if (info.isLabel) {
-      const code  = info.code
-      const lotId = code ? (lotMap.get(code.toLowerCase().trim()) ?? null) : null
-      current = {
-        lotId,
-        label: code ?? `Needs code — ${files[i].name}`,
-        photos: [], photoIndices: [],
-        labelPhoto: files[i], labelIndex: i,
-        needsCode: !code,
-        aiRead: info.source === "ai" && !!code,   // AI read a code the scanner missed (not the unread-label case)
-        edited: info.source === "manual",
-      }
-      groups.push(current)
-    } else if (current) {
-      current.photos.push(files[i])
-      current.photoIndices!.push(i)
-    } else {
-      preGroup.push(files[i])
-    }
-  }
-  return { groups, preGroup }
-}
-
-// Per-lot outcome, shown live while uploading and on the results screen.
-interface UploadResult {
-  label:    string
-  uploaded: number
-  failed:   number
-  already:  number   // skipped — this filename is already on the lot
-  errors:   string[]
-}
-
-// Photos per AI request, and how many requests run at once. A big sale is
-// 1000+ photos, so these drive how long the AI review takes.
-const BATCH_SIZE     = 8
-const AI_CONCURRENCY = 3
-const MODEL_LS_KEY   = "smart_scan_model"
-
-// ── Filename barcode / unique-ID parser ───────────────────────────────────────
-// Strips the extension then removes any trailing _N suffix so that:
-//   "F066001.jpg"      → "F066001"
-//   "F066001_2.jpg"    → "F066001"
-//   "R000016-413_1.jpg"→ "R000016-413"
-function parseBarcode(filename: string): string {
-  const noExt = filename.replace(/\.[^.]+$/, "")  // strip extension
-  return noExt.replace(/_\d+$/, "")               // strip trailing _N suffix
-}
-
-// Order-preserving concurrency pool: results land at their item's index no
-// matter which worker finishes first, so the sequential grouping stays correct.
-async function mapPool<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<R>,
-  onProgress?: (done: number) => void
-): Promise<R[]> {
-  const results = new Array<R>(items.length)
-  let next = 0
-  let done = 0
-  async function worker() {
-    while (next < items.length) {
-      const i = next++
-      results[i] = await fn(items[i])
-      done++
-      onProgress?.(done)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
-  return results
-}
-
-function loadImgElement(file: File): Promise<HTMLImageElement> {
-  return new Promise((res, rej) => {
-    const url = URL.createObjectURL(file)
-    const el  = new Image()
-    el.onload  = () => { URL.revokeObjectURL(url); res(el) }
-    el.onerror = () => { URL.revokeObjectURL(url); rej(new Error("load failed")) }
-    el.src = url
-  })
-}
-
-// Shrink a photo to a small JPEG before sending it to the AI check — a 1000px
-// image is plenty to spot/read a label and keeps each batch small. Returns null
-// when the browser can't decode the file (HEIC on Windows); the caller sends
-// the original instead, since Gemini reads HEIC natively.
-async function toJpegBlob(file: File, maxW = 1000): Promise<Blob | null> {
-  try {
-    const img = await loadImgElement(file)
-    const scale = Math.min(1, maxW / img.naturalWidth)
-    const c = document.createElement("canvas")
-    c.width  = Math.max(1, Math.round(img.naturalWidth * scale))
-    c.height = Math.max(1, Math.round(img.naturalHeight * scale))
-    const ctx = c.getContext("2d")!
-    ctx.drawImage(img, 0, 0, c.width, c.height)
-    return await new Promise<Blob | null>(res => c.toBlob(b => res(b), "image/jpeg", 0.75))
-  } catch {
-    return null
-  }
-}
-
-// ── Barcode reader: zxing-cpp (WASM) ──────────────────────────────────────────
-// Far stronger than the pure-JS @zxing/library at photographed / skewed / soft
-// labels (it does its own robust localisation, rotation and downscaling on the
-// whole file). Its 1.1MB module is self-hosted from /public (not a CDN),
-// configured once and loaded lazily on first use.
-let zxWasmConfigured = false
-// Reads are SERIALISED (one at a time) via a promise chain — the WASM module has
-// one shared linear memory, so letting the concurrent scan workers call it at
-// once could race and hand back a WRONG code (the worst possible bug here).
-let zxChain: Promise<unknown> = Promise.resolve()
-function serialiseZx<T>(fn: () => Promise<T>): Promise<T> {
-  const next = zxChain.then(fn, fn)
-  zxChain = next.then(() => {}, () => {})
-  return next
-}
-// If the engine ever stalls (wasm fetch/instantiate wedged), a serialised queue
-// would wait on it FOREVER and the whole unattended scan would hang. So a read
-// gets a hard time limit, and a stall switches the reader OFF for the rest of
-// the run — every remaining photo then just has no scanner code and AI reads
-// them. Never let one stuck read hold up a 2000-photo folder.
-const ZX_READ_TIMEOUT_MS = 30_000   // a normal read is well under a second
-let zxReaderStalled = false
-function resetZxReader() { zxReaderStalled = false }
-function isZxReaderStalled() { return zxReaderStalled }
-function isVectisCodeStr(s: string): boolean {
-  const t = s.replace(/[^\x20-\x7E]/g, "").trim()
-  return /^[A-Za-z]\d{6,7}$/.test(t) || /^[A-Za-z]\d{4,7}-\d{1,6}$/.test(t)
-}
-async function readVectisWithZxingCpp(file: File): Promise<string | null> {
-  if (zxReaderStalled) return null
-  const mod = await import("zxing-wasm/reader")
-  if (!zxWasmConfigured) {
-    mod.prepareZXingModule({
-      overrides: { locateFile: (p: string, prefix: string) => (p.endsWith(".wasm") ? "/zxing_reader.wasm" : prefix + p) },
-      fireImmediately: false,
-    })
-    zxWasmConfigured = true
-  }
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const results = await serialiseZx(() => Promise.race([
-    mod.readBarcodes(file, { tryHarder: true, tryRotate: true, tryInvert: true, tryDownscale: true }),
-    new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Error("zx-timeout")), ZX_READ_TIMEOUT_MS) }),
-  ]).finally(() => clearTimeout(timer))).catch((e: any) => {
-    // A timeout means the engine is wedged — don't queue every other photo
-    // behind it, and don't start a second read that could race the stuck one.
-    if (e?.message === "zx-timeout") zxReaderStalled = true
-    return [] as any[]
-  })
-  for (const r of results as any[]) {
-    const t = (r?.text ?? "").replace(/[^\x20-\x7E]/g, "").trim().toUpperCase()
-    if (isVectisCodeStr(t)) return t
-  }
-  return null
-}
-
-// Thumbnail with a fallback tile for images the browser can't display
-// (typically HEIC on Windows) — the file still uploads fine.
-function Thumb({ url, name }: { url: string; name: string }) {
-  const [failed, setFailed] = useState(false)
-  if (failed) {
-    return (
-      <div title={name}
-        className="w-14 h-14 rounded-md bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 flex items-center justify-center text-lg flex-shrink-0">
-        🖼️
-      </div>
-    )
-  }
-  return (
-    <img src={url} alt={name} title={name} loading="lazy" onError={() => setFailed(true)}
-      className="w-14 h-14 rounded-md object-cover border border-gray-300 dark:border-gray-700 flex-shrink-0" />
+export default function PhotoUploadTab({ auctionId, lots, onUploaded, onUnmatched }: Props) {
+  // Which sale each lot is in, and what that sale is called. With a page-level auctionId
+  // every lot is in it; without one, the lot's own auctionId is the only right answer —
+  // saving a photo against the wrong sale is the one failure that must not be possible.
+  const lotSale = useMemo(
+    () => new Map(lots.map(l => [l.id, { auctionId: l.auctionId ?? auctionId ?? "", code: l.auctionCode ?? "" }])),
+    [lots, auctionId],
   )
-}
+  // "this sale" is a lie on the any-sale uploader — say what was actually searched.
+  const scope = auctionId ? "this sale" : "any open sale"
 
-export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   const scanInputRef               = useRef<HTMLInputElement>(null)
   const filenameInputRef           = useRef<HTMLInputElement>(null)
   const [mode, setMode]            = useState<Mode | null>(null)
@@ -921,7 +693,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
         try {
           const fd = new FormData()
           fd.set("photo", photo)
-          const res = await uploadLotPhoto(group.lotId!, auctionId, fd)
+          const res = await uploadLotPhoto(group.lotId!, lotSale.get(group.lotId!)?.auctionId ?? "", fd)
           if (res.ok) { ok++; okLotIds.add(group.lotId!); have.add(fileName); seen.set(group.lotId!, have) }
           else { errs.push(`${photo.name} — ${res.error}`); failedList.push(`${group.label}/${photo.name} — ${res.error}`) }
         } catch (e: any) {
@@ -947,7 +719,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
         try {
           const lfd = new FormData()
           lfd.set("photo", group.labelPhoto)
-          await uploadLotLabelPhoto(group.lotId!, auctionId, lfd)
+          await uploadLotLabelPhoto(group.lotId!, lotSale.get(group.lotId!)?.auctionId ?? "", lfd)
         } catch { /* ignore — the lot's photos matter, the label is a bonus */ }
       }
 
@@ -964,6 +736,15 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
     setAlreadyCount(alreadyTotal)
     setPhase("done")
     onUploaded()
+
+    // Photos whose code is not a lot ANYWHERE. Handed to the caller last, deliberately:
+    // holding them must never delay or risk the matched uploads, which are the real work.
+    if (onUnmatched) {
+      const held = unmatchedGroups.filter(g => g.photos.length > 0).map(g => ({ code: g.label, photos: g.photos }))
+      if (held.length > 0) {
+        try { await onUnmatched(held) } catch { /* the caller shows its own failure */ }
+      }
+    }
   }
 
   const matchedGroups   = groups.filter(g => g.lotId && g.photos.length > 0)
@@ -1011,6 +792,13 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
           <span className="text-xs text-gray-600 dark:text-gray-500">
             {g.photos.length} photo{g.photos.length !== 1 ? "s" : ""}
           </span>
+          {/* Which sale this lot turned out to be in. Only ever set by the any-sale
+              uploader — on a sale's own tab there is nothing to say. */}
+          {g.lotId && lotSale.get(g.lotId)?.code && (
+            <span className="text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 rounded-full px-2 py-0.5 font-mono">
+              {lotSale.get(g.lotId)!.code}
+            </span>
+          )}
           {g.needsCode && (
             <span className="text-xs bg-orange-200 text-orange-800 dark:bg-orange-900/40 dark:text-orange-400 rounded-full px-2 py-0.5">
               🔎 label found but not read — type the code
@@ -1018,7 +806,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
           )}
           {!g.lotId && !g.needsCode && (
             <span className="text-xs bg-yellow-200 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-400 rounded-full px-2 py-0.5">
-              not a lot in this sale — won&apos;t save
+              not a lot in {scope}{onUnmatched ? " — held for later" : " — won't save"}
             </span>
           )}
           {g.aiRead && !g.edited && (
@@ -1413,7 +1201,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Stat label="Lots matched" value={matchedGroups.length} tone="good" />
             <Stat label="Photos to save" value={totalPhotos} />
-            <Stat label="Not in this sale" value={unmatchedGroups.length} tone={unmatchedGroups.length > 0 ? "warn" : "plain"} />
+            <Stat label={auctionId ? "Not in this sale" : "No lot found"} value={unmatchedGroups.length} tone={unmatchedGroups.length > 0 ? "warn" : "plain"} />
             <Stat label="Need a look" value={needsALook} tone={needsALook > 0 ? "warn" : "good"} />
           </div>
 
@@ -1458,7 +1246,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             <Notice tone="warn">
               <p className="font-medium mb-1">
                 {unmatchedGroups.length} label{unmatchedGroups.length !== 1 ? "s" : ""} {unmatchedGroups.length !== 1 ? "aren't" : "isn't"} a
-                lot in this sale — their photos won&apos;t save:
+                lot in {scope} — their photos {onUnmatched ? "are held until the lot exists" : "won't save"}:
               </p>
               <p className="font-mono">{unmatchedGroups.map(g => g.label).join(", ")}</p>
               <p className="mt-1">Check you picked the right sale, and that these lots have been created.</p>
@@ -1683,7 +1471,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
             <Stat label="Already there" value={alreadyCount} sub={alreadyCount > 0 ? "same filename, not duplicated" : undefined} />
             <Stat label="Photos failed" value={skipped.length} tone={skipped.length > 0 ? "bad" : "plain"} />
             <Stat label="Not saved (unmatched)" value={unmatchedGroups.length} tone={unmatchedGroups.length > 0 ? "warn" : "plain"}
-              sub={unmatchedGroups.length > 0 ? "labels not on a lot in this sale" : undefined} />
+              sub={unmatchedGroups.length > 0 ? (onUnmatched ? "held until the lot exists" : `labels not on a lot in ${scope}`) : undefined} />
           </div>
 
           {uploadResults.length > 0 && (
@@ -1733,7 +1521,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
               <p className="font-medium mb-1">Still to sort out:</p>
               <ul className="space-y-0.5">
                 {unmatchedGroups.length > 0 && (
-                  <li>· {unmatchedGroups.length} label{unmatchedGroups.length !== 1 ? "s" : ""} not on any lot in this sale
+                  <li>· {unmatchedGroups.length} label{unmatchedGroups.length !== 1 ? "s" : ""} not on any lot in {scope}
                     (<span className="font-mono">{unmatchedGroups.slice(0, 6).map(g => g.label).join(", ")}{unmatchedGroups.length > 6 ? "…" : ""}</span>)</li>
                 )}
                 {needsCodeGroups.length > 0 && (

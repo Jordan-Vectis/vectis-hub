@@ -3086,6 +3086,32 @@ Server actions/API routes have no layout, so they must self-check the grant. lib
 Admin-only cards vs grantable apps (2026-07-15): a card in APP_CARD_DEFS with NO appKey is admin-only — the hub renders it only for ADMIN and it gets NO tick box on the permissions page, because /admin/users/[id] and Roles & Defaults build their list from ALL_APPS filtered by an appKey→group map derived from the cards. So "an app is missing from permissions" almost always means "that card has no appKey", not a rendering bug. To make one grantable: add the key to AppKey + ALL_APPS in lib/apps.ts, set appKey on the card, switch its page + API gates to hasAppAccess. Done for Admin Centre 2026-07-15 (appKey ADMIN_CENTRE; card key stays LOT_LOOKUP). Still deliberately admin-only with no toggle: Admin (role-driven) and Job Board. Note BC_API_VIEWER is a card that shares BC_WAREHOUSE's appKey — card key and appKey need not match.`,
   },
   {
+    filename: "reference_photo_upload_any_sale.md",
+    content: `---
+name: Photography -> Upload photos (any sale)
+description: The existing uploader with no sale picked - matches codes across every UNCOMPLETED sale, and holds photos whose lot does not exist yet. Read before touching either uploader or lib/photo-scan.ts.
+metadata:
+  type: reference
+---
+
+Built 2026-08-17. Jordan: "Can I have a none auction specific ways to upload photos that automatches what auction the photos belong to", then decisively: "Its literally needs to be just like the existing photography section but auction less and checks it against all uncompleted sales to find matching ids". So it is NOT a new uploader - it is the existing one with the sale taken out. /tools/cataloguing/photography/any-sale, linked from the Photography list ("Upload without picking a sale").
+
+⚠ ONE ENGINE, TWO SCREENS. lib/photo-scan.ts (BROWSER ONLY - canvas, zxing WASM) is the shared label-reading and grouping engine: resolvePhoto, buildGroups, parseBarcode, mapPool, toJpegBlob, readVectisWithZxingCpp, the types, safeName/nameFromKey. It was extracted out of photo-upload-tab.tsx when this was built, and components/photo-thumb.tsx is the shared HEIC-safe thumbnail. NEVER grow a second copy - two groupers that disagree would silently put a photo on the wrong lot.
+
+PhotoUploadTab now takes auctionId: string | null, and each lot may carry its OWN auctionId + auctionCode. A lotSale map resolves lotId -> sale and the upload uses THAT, never the page's. A scope string ("this sale" / "any open sale") keeps the wording honest, and matched cards show a purple sale-code chip.
+
+⚠ UNCOMPLETED SALES ONLY: where { ...auctionWhere(access), complete: false } - the same active/completed split the Photography list already draws. A finished sale must not quietly take new photos. 18 open sales / ~6,300 lots as built; the page loads ONLY id, barcode, receiptUniqueId and imageUrls, because descriptions and key points would multiply the payload and nothing on the screen reads them. Departments still apply (RULES.md) and the sales being searched are listed on the page, so a narrower scope is visible rather than mysterious.
+
+⚠⚠ PHOTOS WHOSE LOT DOES NOT EXIST YET ARE HELD, NEVER DROPPED. Jordan chose this over "list them, don't upload" and gave the reason: "its photos on lots exported by the end of day part of the app". Photography legitimately runs AHEAD of the record - a file named with BC's own unique ID matches nothing while the Hub lot's receiptUniqueId is still NULL, because nothing writes it until BC Match runs.
+
+- HeldLotPhoto (NEEDS Run Migrations): code, fileName, r2Key, uploadedBy, attachedAt, attachedLotId. The photo goes to R2 FIRST, then the row - a failure can never lose it silently.
+- lib/held-photos.ts -> attachHeldPhotos(codes?) attaches anything whose lot now exists. Matching is on BARCODE OR receiptUniqueId, case-insensitively - the same two-way rule as the filename matcher (RULES.md).
+- ⚠ RAW SQL ON PURPOSE: Prisma's mode "insensitive" works on equals/contains but NOT on in, so the obvious { barcode: { in: codes, mode: "insensitive" } } is a RUNTIME validation error, not a compile one. Uses upper(btrim(col)) = ANY($1::text[]), verified against production data.
+- ⚠ A code matching TWO lots is left waiting, never guessed. Historic duplicate barcodes exist, and attaching to the wrong lot is worse than not attaching.
+- FOUR attach points so nobody has to remember: on hold, on page load, inside bulkAssignUniqueIds (⚠ the moment BC's IDs first exist - this is the End of Day case), and a 5-minute server.js -> /api/cron/held-photos sweep.
+- The waiting list shows thumbnails grouped by code with a Check now button and a per-photo discard. ⚠ Discard only deletes the R2 object when the photo was NEVER attached - otherwise it is a lot's photo now.`,
+  },
+  {
     filename: "reference_smart_scan_photo_upload.md",
     content: `---
 name: Smart Scan Photo Upload
@@ -3222,7 +3248,8 @@ type: reference
 - [New Claude Account Setup](reference_new_claude_account.md) — Steps to replicate this full Claude Code setup on a new account (permissions, hooks, memory, project files)
 - [App Access Control](reference_app_access_control.md) — hasAppAccess + per-app layouts, NOT role lists; "app missing from permissions" = card has no appKey
 - [Smart Scan Photo Upload](reference_smart_scan_photo_upload.md) — Upload Photos smart scan grouping rules, failure modes, and the 2026-07-15 rework
-- [Photography Section](reference_photography_section.md) — /tools/cataloguing/photography; Upload Photos removed from Auction Manager; new sidebar sections are hidden from users with configured sections`,
+- [Photography Section](reference_photography_section.md) — /tools/cataloguing/photography; Upload Photos removed from Auction Manager; new sidebar sections are hidden from users with configured sections
+- [Upload photos — any sale](reference_photo_upload_any_sale.md) — the same uploader with no sale picked: matches codes across every UNCOMPLETED sale, shared engine in lib/photo-scan.ts, and photos whose lot doesn't exist yet are HELD and attach on BC Match`,
   },
 ]
 

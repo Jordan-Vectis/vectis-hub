@@ -13,6 +13,7 @@ import { evaluateIdleGate, logIdleDecision, clockLooksTampered } from "@/lib/idl
 import { buildToteMap, checkLot, toteLookupVariants } from "@/lib/tote-check"
 import { ukDayStartUtc } from "@/lib/cataloguing-reports"
 import { getDepartmentAccessForSession, canSeeAuction } from "@/lib/departments"
+import { attachHeldPhotos } from "@/lib/held-photos"
 
 // titleFromDescription lives in lib/lot-title.ts so the Locking Check can VERIFY against the
 // exact rule this generates with — see the note there.
@@ -1694,6 +1695,67 @@ export async function uploadLotPhoto(
   }
 }
 
+// Photography → Upload photos (any sale): keep a photo whose code isn't a lot yet.
+//
+// ⚠ It is stored in R2 IMMEDIATELY and only then recorded, so a failure can never lose the
+// photo silently. See lib/held-photos.ts for why holding is right rather than discarding:
+// a file named with BC's unique ID matches nothing until 🔗 BC Match has run.
+// Returns rather than throws (production redacts thrown server-action messages).
+export async function holdLotPhoto(
+  code: string, formData: FormData
+): Promise<{ ok: true; attached: number } | { ok: false; error: string }> {
+  try {
+    const session = await requireCataloguer()
+    const clean = (code ?? "").replace(/[^\x20-\x7E]/g, "").trim().toUpperCase()
+    if (!clean) return { ok: false, error: "No barcode or unique ID for these photos" }
+
+    const file = formData.get("photo") as File
+    if (!file || file.size === 0) return { ok: false, error: "No file provided" }
+
+    const buf  = Buffer.from(await file.arrayBuffer())
+    const name = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
+    const key  = await uploadBufferToR2(buf, `held-photos/${clean}/${Date.now()}-${name}`, file.type || "image/jpeg")
+
+    await prisma.heldLotPhoto.create({
+      data: { code: clean, fileName: name, r2Key: key, uploadedBy: changedByOf(session) },
+    })
+
+    // The lot may well have been created while the folder was being scanned — try at once
+    // rather than making the photographer wait for a sweep.
+    const res = await attachHeldPhotos([clean])
+    return { ok: true, attached: res.attached }
+  } catch (e: any) {
+    console.error("holdLotPhoto error:", e)
+    return { ok: false, error: e?.message ?? "Could not hold the photo" }
+  }
+}
+
+/** Manual "check now" behind the waiting list, and the button on the any-sale uploader. */
+export async function sweepHeldPhotos(): Promise<{ ok: boolean; attached: number; stillWaiting: number; error?: string }> {
+  try {
+    await requireCataloguer()
+    const res = await attachHeldPhotos()
+    return { ok: true, attached: res.attached, stillWaiting: res.stillWaiting }
+  } catch (e: any) {
+    return { ok: false, attached: 0, stillWaiting: 0, error: e?.message ?? "Could not check" }
+  }
+}
+
+/** Throw a held photo away — it was a mis-read code, or the lot is never coming. */
+export async function discardHeldPhoto(id: string): Promise<ActionResult> {
+  try {
+    await requireCataloguer()
+    const row = await prisma.heldLotPhoto.findUnique({ where: { id }, select: { r2Key: true, attachedAt: true } })
+    if (!row) return { ok: false, error: "Already gone" }
+    // ⚠ Never delete the R2 object of a photo that has been attached — it is a lot's photo now.
+    if (!row.attachedAt) { try { await deleteObjectsFromR2([row.r2Key]) } catch { /* row goes anyway */ } }
+    await prisma.heldLotPhoto.delete({ where: { id } })
+    return { ok: true }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Could not discard it" }
+  }
+}
+
 // Store the barcode LABEL photo that assigned this lot's photos during a smart
 // scan. Deliberately kept in its own column, never pushed into imageUrls — it
 // is an internal check aid and must not reach the website, BC or AI runs.
@@ -1833,12 +1895,20 @@ export async function bulkAssignUniqueIds(
   let skipped = 0
   const ctx: LotLogCtx = { changedBy: changedByOf(session), source: "bulk", batchId: newBatchId() }
 
+  const assigned: string[] = []
   for (const { barcode, uniqueId } of pairs) {
     const lotId = barcodeMap.get(barcode.toLowerCase().trim())
     if (!lotId || !uniqueId.trim()) { skipped++; continue }
     await updateLotLogged(lotId, { receiptUniqueId: uniqueId.trim() }, ctx)
+    assigned.push(uniqueId.trim())
     updated++
   }
+
+  // ⚠ THIS is the moment BC's own unique IDs first exist on these lots — and therefore the
+  // moment a photo filed under one of them can finally find its lot. Photos shot against an
+  // End of Day sheet sit in the waiting list until exactly here. Never let a failure to
+  // attach fail the match itself; the periodic sweep would pick them up regardless.
+  try { await attachHeldPhotos(assigned) } catch { /* the sweep will get them */ }
 
   revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
   return { updated, skipped }
