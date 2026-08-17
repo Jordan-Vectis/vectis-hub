@@ -1470,6 +1470,11 @@ const MIGRATIONS = [
   `UPDATE "InductionSlide" SET "graphic"='NONE' WHERE "graphic" IS NULL`,
   // A cataloguer who writes their own descriptions — every lot they create is excluded from AI.
   `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "manualDescriptions" BOOLEAN NOT NULL DEFAULT false`,
+  // Review tab — a key-point mismatch confirmed as a cataloguer mistake (the key points were
+  // wrong, the description is right), so the lot stops counting as needing attention.
+  `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "kpFixNote" TEXT`,
+  `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "kpFixedBy" TEXT`,
+  `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "kpFixedAt" TIMESTAMP(3)`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

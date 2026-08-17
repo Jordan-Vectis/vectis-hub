@@ -1416,6 +1416,105 @@ export async function saveLotDescription(lotId: string, auctionId: string, descr
   }
 }
 
+// Review tab — "the KEY POINTS were wrong, not the description."
+//
+// A cataloguer who types R4328 into the key points and R3428 into the description leaves the
+// lot stuck on "needs attention" for ever, because the matcher is correct: that key point
+// genuinely is not in the description. Editing the description cannot clear it — the wrong
+// text is in the key points. This records the checker's verdict so it stops counting, and,
+// when they correct the key points, leaves the CORRECTED text behind for any later AI run
+// (the key points are what Batch, Key Points Check and Double Check are all measured against).
+//
+// ⚠ Passing `keyPoints` REWRITES the cataloguer's own record of the item. That is only ever
+// done by a person looking at the lot, and every change is in the Lot Change Log.
+// NOT BC-locked — same as the other Review-tab actions.
+export async function resolveKeyPointsMistake(
+  lotId: string,
+  auctionId: string,
+  opts: { keyPoints?: string | null; note?: string } = {},
+): Promise<ActionResult> {
+  try {
+    const session = await requireCataloguer()
+    const corrected = typeof opts.keyPoints === "string" && opts.keyPoints.trim().length > 0
+    const data: Record<string, any> = {
+      kpFixNote: (opts.note?.trim() || (corrected
+        ? "Key points corrected — the cataloguer's notes were wrong"
+        : "Cataloguer mistake — the key points were wrong, the description is right")).slice(0, 500),
+      kpFixedBy: changedByOf(session),
+      kpFixedAt: new Date(),
+    }
+    if (corrected) data.keyPoints = opts.keyPoints!.trim()
+    await updateLotLogged(lotId, data, { changedBy: changedByOf(session), source: "review_tab" })
+    revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+    return { ok: true }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Couldn't save that." }
+  }
+}
+
+// Review tab — apply the reviewed corrections for a batch of AI-flagged lots in one go.
+// ⚠ Everything here has been through a person: the fixes are generated, listed on screen, and
+// only the rows still ticked reach this action. Nothing is written unseen.
+// NOT BC-locked, in line with the other Review-tab actions.
+export async function applyFlagFixes(
+  auctionId: string,
+  fixes: { lotId: string; description: string; keyPoints?: string | null }[],
+): Promise<{ ok: boolean; applied: number; errors: string[]; failed: string[] }> {
+  const errors: string[] = []
+  const failed: string[] = []
+  try {
+    const session = await requireCataloguer()
+    const batchId = newBatchId()
+    const clean = fixes.filter(f => f.lotId && (f.description ?? "").trim())
+
+    // Sequential, not Promise.all — each write reads the lot back to diff it for the change log,
+    // and one bad row must not lose the rest of the batch.
+    let applied = 0
+    for (const f of clean) {
+      try {
+        const kp = (f.keyPoints ?? "").trim()
+        await updateLotLogged(f.lotId, {
+          description: f.description,
+          title:       titleFromDescription(f.description),
+          aiFlagNote:  null,
+          // Correcting the key points is also the verdict "the cataloguer's notes were wrong",
+          // so record it — otherwise the lot lands straight back in "needs attention" with the
+          // old key point still absent from the new description.
+          ...(kp ? {
+            keyPoints: kp,
+            kpFixNote: "Key points corrected while fixing an AI-flagged mistake",
+            kpFixedBy: changedByOf(session),
+            kpFixedAt: new Date(),
+          } : {}),
+        }, { changedBy: changedByOf(session), source: "review_tab", batchId })
+        applied++
+      } catch (e: any) {
+        failed.push(f.lotId)
+        errors.push(`${f.lotId}: ${e?.message ?? "failed"}`)
+      }
+    }
+
+    revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+    return { ok: errors.length === 0, applied, errors, failed }
+  } catch (e: any) {
+    return { ok: false, applied: 0, errors: [e?.message ?? "Couldn't apply the fixes."], failed: fixes.map(f => f.lotId) }
+  }
+}
+
+// Undo the above — the warning comes back. Never touches the key points text: if they were
+// corrected, that correction stands (undoing a verdict must not silently restore wrong data).
+export async function clearKeyPointsMistake(lotId: string, auctionId: string): Promise<ActionResult> {
+  try {
+    const session = await requireCataloguer()
+    await updateLotLogged(lotId, { kpFixNote: null, kpFixedBy: null, kpFixedAt: null },
+      { changedBy: changedByOf(session), source: "review_tab" })
+    revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+    return { ok: true }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Couldn't undo that." }
+  }
+}
+
 export async function saveLotExtraDetails(lotId: string, auctionId: string, extraDetails: string) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)

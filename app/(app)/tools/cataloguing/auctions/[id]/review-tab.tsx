@@ -1,8 +1,10 @@
 "use client"
 
-import { useEffect, useMemo, useState, useTransition } from "react"
-import { setLotReviewFlag, saveLotDescription, saveAiFlagNote } from "@/lib/actions/catalogue"
+import { useEffect, useMemo, useRef, useState, useTransition } from "react"
+import { setLotReviewFlag, saveLotDescription, saveAiFlagNote, resolveKeyPointsMistake, clearKeyPointsMistake, applyFlagFixes } from "@/lib/actions/catalogue"
 import { analyseKeyPoints, HighlightedDescription, kpColour } from "@/lib/kp-analysis"
+// ⚠ The one title rule, shared with the Generate Titles action — never re-derive it here.
+import { titleFromDescription } from "@/lib/lot-title"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,6 +30,11 @@ type ReviewLot = {
   reviewFlaggedBy: string | null
   reviewFlaggedAt: string | null
   aiFlagNote: string | null
+  // Set when a checker confirmed the KEY POINTS were wrong rather than the description.
+  // Optional — the columns may not exist until Run Migrations has been clicked.
+  kpFixNote?: string | null
+  kpFixedBy?: string | null
+  kpFixedAt?: string | null
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -41,6 +48,37 @@ function fmtEstimate(low: number | null, high: number | null): string | null {
   if (low != null && high != null) return `£${low.toLocaleString("en-GB")}–£${high.toLocaleString("en-GB")}`
   return `£${(low ?? high)!.toLocaleString("en-GB")}`
 }
+
+// ─── Bulk "Fix all AI-flagged" ────────────────────────────────────────────────
+// One row per flagged lot. Every fix is generated and listed BEFORE anything is written
+// (Jordan, 2026-08-17: preview, then apply) — 36 factual rewrites landing unread is exactly
+// what the flag exists to prevent.
+type BulkFix = {
+  lot: ReviewLot
+  status: "queued" | "working" | "ready" | "failed"
+  keep: boolean
+  description?: string
+  keyPoints?: string | null   // non-null only when the AI corrected the cataloguer's notes
+  note?: string
+  error?: string
+  attempt?: number
+  waiting?: number            // seconds being waited out after a rate limit
+}
+
+// The key-point lines that actually differ, paired old → new, so the reader sees the one
+// changed value instead of diffing two blocks of notes by eye.
+function changedKpLines(before: string, after: string): { before: string; after: string }[] {
+  const a = (before ?? "").split("\n")
+  const b = (after ?? "").split("\n")
+  const out: { before: string; after: string }[] = []
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const l = (a[i] ?? "").trim(), r = (b[i] ?? "").trim()
+    if (l !== r) out.push({ before: l, after: r })
+  }
+  return out
+}
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -62,6 +100,16 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
   const [editDescText, setEditDescText] = useState("")
   const [fullscreenImg, setFullscreenImg] = useState<string | null>(null)
   const [fixingId, setFixingId] = useState<string | null>(null)
+  const [kpFixId, setKpFixId]     = useState<string | null>(null)
+  const [kpFixText, setKpFixText] = useState("")
+  const [kpErr, setKpErr]         = useState<string | null>(null)
+  const [bulkOpen, setBulkOpen]         = useState(false)
+  const [bulkFixes, setBulkFixes]       = useState<BulkFix[]>([])
+  const [bulkRunning, setBulkRunning]   = useState(false)
+  const [bulkApplying, setBulkApplying] = useState(false)
+  const [bulkResult, setBulkResult]     = useState<string | null>(null)
+  const [expandedFix, setExpandedFix]   = useState<string | null>(null)
+  const stopRef = useRef(false)
   const [pending, start] = useTransition()
 
   useEffect(() => {
@@ -103,15 +151,26 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
   // The buckets are exclusive — a lot with a missing key point AND a partial one
   // counts as "needs attention" only, so the two counts plus the all-good lots
   // add up to the total.
+  //
+  // ⚠ A lot whose key points a checker has confirmed WRONG (kpFixedAt) no longer counts for
+  //  either. The matcher isn't mistaken on those — the key point really is absent — but the
+  //  description is the correct one and there is nothing left to do, so leaving it in the
+  //  count means it gets re-read on every pass for ever. A missing description or photos
+  //  still counts; that verdict was only ever about the key points.
+  function kpResolved(l: ReviewLot): boolean {
+    return !!l.kpFixedAt
+  }
+
   function needsAttention(l: ReviewLot): boolean {
     if (l.reviewFlag) return true
     if (!l.description?.trim() || l.imageUrls.length === 0) return true
+    if (kpResolved(l)) return false
     const a = analysed.get(l.id)
     return !!a && a.matches.some(m => m.status === "missing")
   }
 
   function wordingOnly(l: ReviewLot): boolean {
-    if (needsAttention(l)) return false
+    if (needsAttention(l) || kpResolved(l)) return false
     const a = analysed.get(l.id)
     return !!a && a.matches.some(m => m.status === "partial" || m.status === "reworded")
   }
@@ -188,6 +247,47 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
     })
   }
 
+  // "The key points were wrong, not the description."
+  // Two outcomes, both recorded: pass the edited text to CORRECT the cataloguer's key points
+  // (much the better one — every later AI run is measured against them), or pass null to leave
+  // their notes untouched and simply record the verdict so the warning stops.
+  function saveKpFix(lot: ReviewLot, keyPoints: string | null) {
+    setKpErr(null)
+    start(async () => {
+      try {
+        const res = await resolveKeyPointsMistake(lot.id, auctionId, keyPoints == null ? {} : { keyPoints })
+        if (!res?.ok) { setKpErr(res?.error ?? "Couldn't save — please try again."); return }
+        setLots(prev => prev.map(l => l.id === lot.id ? {
+          ...l,
+          keyPoints: keyPoints != null ? keyPoints.trim() : l.keyPoints,
+          kpFixNote: keyPoints != null
+            ? "Key points corrected — the cataloguer's notes were wrong"
+            : "Cataloguer mistake — the key points were wrong, the description is right",
+          kpFixedBy: "You",
+          kpFixedAt: new Date().toISOString(),
+        } : l))
+        setKpFixId(null)
+        setKpFixText("")
+      } catch {
+        setKpErr("Couldn't save — the app may have just updated. Please reload the page and try again.")
+      }
+    })
+  }
+
+  function undoKpFix(lot: ReviewLot) {
+    setKpErr(null)
+    start(async () => {
+      try {
+        const res = await clearKeyPointsMistake(lot.id, auctionId)
+        if (!res?.ok) { setKpErr(res?.error ?? "Couldn't undo that."); return }
+        setLots(prev => prev.map(l => l.id === lot.id
+          ? { ...l, kpFixNote: null, kpFixedBy: null, kpFixedAt: null } : l))
+      } catch {
+        setKpErr("Couldn't undo — the app may have just updated. Please reload the page and try again.")
+      }
+    })
+  }
+
   // Ask the AI to rewrite the description applying the flagged correction, then
   // drop it into the editor for a quick review — we never write AI output to the
   // catalogue unseen. The user clicks "Save description" to commit (which clears
@@ -211,6 +311,118 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
       setFixingId(null)
     }
   }
+
+  // ── Fix all AI-flagged ──────────────────────────────────────────────────────
+  // Generate every correction first and list them; nothing is written until Apply.
+  function patchFix(lotId: string, p: Partial<BulkFix>) {
+    setBulkFixes(prev => prev.map(f => f.lot.id === lotId ? { ...f, ...p } : f))
+  }
+
+  async function runBulkFix(flagged: ReviewLot[]) {
+    stopRef.current = false
+    setBulkRunning(true)
+    for (const lot of flagged) {
+      if (stopRef.current) { patchFix(lot.id, { status: "failed", error: "Stopped", keep: false }); continue }
+      patchFix(lot.id, { status: "working", waiting: undefined })
+
+      for (let attempt = 1; ; attempt++) {
+        if (stopRef.current) { patchFix(lot.id, { status: "failed", error: "Stopped", keep: false }); break }
+        try {
+          const res = await fetch("/api/auction-ai/autofix-flag", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ keyPoints: lot.keyPoints, description: lot.description, flagNote: lot.aiFlagNote }),
+          })
+          const data = await res.json()
+          if (!res.ok) throw new Error(data.error ?? "Auto-fix failed")
+          patchFix(lot.id, {
+            status: "ready", attempt, waiting: undefined,
+            description: data.description,
+            keyPoints:   data.keyPoints ?? null,
+            note:        data.note ?? "",
+          })
+          break
+        } catch (e: any) {
+          const msg: string = e?.message ?? "Auto-fix failed"
+          // Rate limits are transient — wait it out rather than dropping the lot (RULES.md).
+          // The countdown is on screen and Stop is always available, so this can't hang silently.
+          if (/RATE_LIMITED|429/i.test(msg) && attempt < 8) {
+            const wait = Math.min(20 * attempt, 60)
+            for (let s = wait; s > 0 && !stopRef.current; s--) {
+              patchFix(lot.id, { status: "working", waiting: s, attempt })
+              await sleep(1000)
+            }
+            continue
+          }
+          patchFix(lot.id, { status: "failed", error: msg, keep: false, waiting: undefined })
+          break
+        }
+      }
+      await sleep(400)   // gentle spacing between lots
+    }
+    setBulkRunning(false)
+  }
+
+  function openBulkFix() {
+    const flagged = lots.filter(l => l.aiFlagNote)
+    if (flagged.length === 0) return
+    setBulkFixes(flagged.map(lot => ({ lot, status: "queued", keep: true })))
+    setBulkResult(null)
+    setExpandedFix(null)
+    setBulkOpen(true)
+    void runBulkFix(flagged)
+  }
+
+  function retryFailed() {
+    const again = bulkFixes.filter(f => f.status === "failed").map(f => f.lot)
+    if (!again.length) return
+    again.forEach(l => patchFix(l.id, { status: "queued", keep: true, error: undefined }))
+    void runBulkFix(again)
+  }
+
+  function applyBulk() {
+    const ready = bulkFixes.filter(f => f.status === "ready" && f.keep && f.description?.trim())
+    if (!ready.length) return
+    setBulkApplying(true)
+    setBulkResult(null)
+    start(async () => {
+      try {
+        const res = await applyFlagFixes(auctionId, ready.map(f => ({
+          lotId: f.lot.id, description: f.description!, keyPoints: f.keyPoints ?? null,
+        })))
+        const failed = new Set(res.failed ?? [])
+        setLots(prev => prev.map(l => {
+          const f = ready.find(r => r.lot.id === l.id)
+          if (!f || failed.has(l.id)) return l
+          return {
+            ...l,
+            description: f.description!,
+            title:       titleFromDescription(f.description!),
+            aiFlagNote:  null,
+            ...(f.keyPoints ? {
+              keyPoints: f.keyPoints,
+              kpFixNote: "Key points corrected while fixing an AI-flagged mistake",
+              kpFixedBy: "You",
+              kpFixedAt: new Date().toISOString(),
+            } : {}),
+          }
+        }))
+        setBulkFixes(prev => prev.filter(f => failed.has(f.lot.id) || !(f.status === "ready" && f.keep)))
+        setBulkResult(res.errors.length
+          ? `Saved ${res.applied} of ${ready.length}. ${res.errors.length} couldn't be saved — they're still listed.`
+          : `✓ Saved ${res.applied} lot${res.applied === 1 ? "" : "s"}.`)
+      } catch {
+        setBulkResult("Couldn't save — the app may have just updated. Please reload the page and try again.")
+      } finally {
+        setBulkApplying(false)
+      }
+    })
+  }
+
+  const bulkReady   = bulkFixes.filter(f => f.status === "ready").length
+  const bulkKept    = bulkFixes.filter(f => f.status === "ready" && f.keep).length
+  const bulkFailed  = bulkFixes.filter(f => f.status === "failed").length
+  const bulkDoneCnt = bulkFixes.filter(f => f.status === "ready" || f.status === "failed").length
 
   if (loading) return <p className="text-sm text-gray-500 dark:text-gray-400 py-8 text-center">Loading lots…</p>
 
@@ -303,6 +515,15 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
             >
               ⚠️ AI-flagged only
             </button>
+            {aiFlagCount > 0 && (
+              <button
+                onClick={openBulkFix}
+                title="Work through every AI-flagged lot in one go. Each correction is listed for you to read before anything is saved."
+                className="px-3 py-2 text-sm font-semibold rounded-lg border border-emerald-500 bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-600/20 transition-colors whitespace-nowrap"
+              >
+                ✨ Fix all AI-flagged ({aiFlagCount})
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -325,9 +546,12 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
         const a = analysed.get(lot.id)!
         const est   = fmtEstimate(lot.estimateLow, lot.estimateHigh)
         const aiEst = fmtEstimate(lot.aiEstimateLow, lot.aiEstimateHigh)
-        const missing  = a.matches.filter(m => m.status === "missing").length
-        const partial  = a.matches.filter(m => m.status === "partial").length
-        const reworded = a.matches.filter(m => m.status === "reworded").length
+        // A confirmed key-points mistake retires the three warning pills — the per-line ⚠ stays
+        // in the list below, so you can still see WHICH key point was the wrong one.
+        const kpDone   = kpResolved(lot)
+        const missing  = kpDone ? 0 : a.matches.filter(m => m.status === "missing").length
+        const partial  = kpDone ? 0 : a.matches.filter(m => m.status === "partial").length
+        const reworded = kpDone ? 0 : a.matches.filter(m => m.status === "reworded").length
         const isFlagOpen = flagOpenId === lot.id
 
         return (
@@ -362,6 +586,12 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
                   <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium"
                     title="All the numbers, codes and sizes in these key points are present, but the wording differs — read the description to check the facts survived.">
                     ✍ {reworded} reworded — check wording
+                  </span>
+                )}
+                {kpDone && (
+                  <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-medium"
+                    title={lot.kpFixNote ?? undefined}>
+                    ✓ Key points were the mistake
                   </span>
                 )}
                 <span className="text-xs px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">{lot.status}</span>
@@ -514,6 +744,70 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
                         </li>
                       ))}
                     </ul>
+
+                    {/* ── "The key points are wrong, not the description" ──────────────
+                        Editing the description cannot clear a key-point warning: the wrong
+                        text is in the KEY POINTS. Correcting them here both clears it and
+                        leaves the right facts for the next AI run to be measured against. */}
+                    {kpResolved(lot) ? (
+                      <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 flex items-start justify-between gap-3 flex-wrap">
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                          ✓ {lot.kpFixNote}
+                          <span className="text-gray-500 dark:text-gray-500">
+                            {lot.kpFixedBy ? ` — ${lot.kpFixedBy}` : ""}
+                            {lot.kpFixedAt ? ` · ${new Date(lot.kpFixedAt).toLocaleDateString("en-GB")}` : ""}
+                          </span>
+                        </p>
+                        <button onClick={() => undoKpFix(lot)} disabled={pending}
+                          className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline disabled:opacity-50">
+                          Undo
+                        </button>
+                      </div>
+                    ) : kpFixId === lot.id ? (
+                      <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
+                          Correct the cataloguer's key points below — every AI run is checked against these,
+                          so putting them right stops the same warning coming back.
+                        </p>
+                        <textarea
+                          value={kpFixText}
+                          onChange={e => setKpFixText(e.target.value)}
+                          rows={Math.min(8, Math.max(3, kpFixText.split("\n").length + 1))}
+                          autoFocus
+                          className="w-full bg-white dark:bg-[#2C2C2E] border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                        />
+                        <div className="flex gap-2 items-center flex-wrap">
+                          <button
+                            onClick={() => saveKpFix(lot, kpFixText)}
+                            disabled={pending || !kpFixText.trim() || kpFixText.trim() === (lot.keyPoints ?? "").trim()}
+                            title={kpFixText.trim() === (lot.keyPoints ?? "").trim() ? "Nothing has been changed yet" : undefined}
+                            className="px-3 py-1.5 text-sm font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white transition-colors">
+                            {pending ? "Saving…" : "Save corrected key points"}
+                          </button>
+                          <button
+                            onClick={() => saveKpFix(lot, null)}
+                            disabled={pending}
+                            title="Records that the key points were the mistake and leaves them exactly as the cataloguer wrote them. The warning stops."
+                            className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-emerald-500 disabled:opacity-40 transition-colors">
+                            Leave them — just mark it as a mistake
+                          </button>
+                          <button onClick={() => { setKpFixId(null); setKpFixText(""); setKpErr(null) }}
+                            className="px-3 py-1.5 text-sm text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+                            Cancel
+                          </button>
+                        </div>
+                        {kpErr && <p className="text-sm text-red-600 dark:text-red-400 font-medium">{kpErr}</p>}
+                      </div>
+                    ) : a.matches.some(m => m.status !== "found") ? (
+                      <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                        <button
+                          onClick={() => { setKpFixId(lot.id); setKpFixText(lot.keyPoints ?? ""); setKpErr(null) }}
+                          title="Use this when the description is right and it is the cataloguer's key points that are wrong — a mistyped catalogue number, for instance."
+                          className="text-sm text-gray-500 dark:text-gray-500 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
+                          ✏ The key points are wrong, not the description…
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 )}
 
@@ -593,6 +887,164 @@ export default function ReviewTab({ auctionId, kpMode = "strict" }: { auctionId:
           </div>
         )
       })}
+
+      {/* ── Fix all AI-flagged: generate everything, then read it, then save ───────── */}
+      {bulkOpen && (
+        <div className="fixed inset-0 z-[55] flex items-start justify-center bg-black/70 p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-white dark:bg-[#1C1C1E] border border-gray-300 dark:border-gray-700 rounded-2xl w-full max-w-6xl my-4 flex flex-col max-h-[92vh]">
+
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">✨ Fix all AI-flagged lots</h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+                  {bulkRunning
+                    ? `Working out the corrections — ${bulkDoneCnt} of ${bulkFixes.length} done. Nothing is saved yet.`
+                    : `${bulkReady} correction${bulkReady === 1 ? "" : "s"} ready to read${bulkFailed ? `, ${bulkFailed} failed` : ""}. Nothing is saved until you press Save.`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {bulkRunning && (
+                  <button onClick={() => { stopRef.current = true }}
+                    className="px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400">
+                    Stop
+                  </button>
+                )}
+                <button onClick={() => { stopRef.current = true; setBulkOpen(false) }}
+                  className="text-gray-400 hover:text-gray-700 dark:hover:text-white text-2xl leading-none px-2">✕</button>
+              </div>
+            </div>
+
+            {/* Progress bar while generating */}
+            {bulkRunning && (
+              <div className="h-1 bg-gray-200 dark:bg-gray-800 shrink-0">
+                <div className="h-full bg-emerald-500 transition-all duration-300"
+                  style={{ width: `${bulkFixes.length ? (bulkDoneCnt / bulkFixes.length) * 100 : 0}%` }} />
+              </div>
+            )}
+
+            {/* Rows */}
+            <div className="overflow-y-auto px-5 py-4 space-y-3 flex-1">
+              {bulkFixes.length === 0 && (
+                <p className="text-sm text-gray-500 dark:text-gray-400 py-6 text-center">Nothing left to fix.</p>
+              )}
+              {bulkFixes.map(f => {
+                const kpLines = f.keyPoints ? changedKpLines(f.lot.keyPoints ?? "", f.keyPoints) : []
+                const open = expandedFix === f.lot.id
+                return (
+                  <div key={f.lot.id}
+                    className={`rounded-xl border px-4 py-3 ${
+                      f.status === "failed" ? "border-red-300 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20"
+                      : f.status === "ready" && f.keep ? "border-emerald-300 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-950/15"
+                      : "border-gray-200 dark:border-gray-800"
+                    }`}>
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={f.keep && f.status === "ready"}
+                        disabled={f.status !== "ready" || bulkApplying}
+                        onChange={e => patchFix(f.lot.id, { keep: e.target.checked })}
+                        className="mt-1 w-5 h-5 shrink-0 accent-emerald-600 disabled:opacity-30"
+                      />
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-sm font-bold text-gray-900 dark:text-white">
+                            {f.lot.barcode ?? f.lot.receiptUniqueId ?? f.lot.id}
+                          </span>
+                          {f.status === "queued"  && <span className="text-xs text-gray-500">waiting…</span>}
+                          {f.status === "working" && (
+                            <span className="text-xs text-amber-500">
+                              {f.waiting ? `rate limited — retrying in ${f.waiting}s (attempt ${f.attempt})` : "working it out…"}
+                            </span>
+                          )}
+                          {f.status === "ready" && f.note && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
+                              {f.note}
+                            </span>
+                          )}
+                          {f.keyPoints && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300"
+                              title="The wrong fact is in the cataloguer's key points, so those are corrected too — otherwise the next AI run puts it straight back.">
+                              ✏ also corrects the key points
+                            </span>
+                          )}
+                        </div>
+
+                        {/* The AI's own flag — the reason this lot is here */}
+                        <p className="text-xs text-orange-700 dark:text-orange-300/90 whitespace-pre-wrap">{f.lot.aiFlagNote}</p>
+
+                        {f.status === "failed" && (
+                          <p className="text-xs text-red-600 dark:text-red-400 font-medium">{f.error}</p>
+                        )}
+
+                        {/* Key points: only the lines that changed */}
+                        {kpLines.length > 0 && (
+                          <div className="text-sm space-y-0.5 pt-1">
+                            {kpLines.map((l, i) => (
+                              <div key={i} className="flex flex-wrap items-baseline gap-2">
+                                <span className="line-through text-red-600/80 dark:text-red-400/80">{l.before || "(blank)"}</span>
+                                <span className="text-gray-400">→</span>
+                                <span className="font-semibold text-emerald-700 dark:text-emerald-300">{l.after || "(removed)"}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {f.status === "ready" && (
+                          <button onClick={() => setExpandedFix(open ? null : f.lot.id)}
+                            className="text-xs text-gray-500 hover:text-[#C8A96E] underline">
+                            {open ? "Hide the description change" : "Show the description change"}
+                          </button>
+                        )}
+                        {open && (
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pt-1">
+                            <div>
+                              <p className="text-xs uppercase tracking-wider text-gray-500 mb-1">Now</p>
+                              <p className="text-xs whitespace-pre-wrap text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-black/30 rounded-lg p-2 border border-gray-200 dark:border-gray-800">{f.lot.description}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-1">After the fix</p>
+                              <p className="text-xs whitespace-pre-wrap text-gray-800 dark:text-gray-200 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg p-2 border border-emerald-200 dark:border-emerald-900">{f.description}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-800 flex items-center gap-3 flex-wrap">
+              <button
+                onClick={applyBulk}
+                disabled={bulkRunning || bulkApplying || bulkKept === 0}
+                className="px-5 py-2.5 text-sm font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white transition-colors">
+                {bulkApplying ? "Saving…" : `Save ${bulkKept} lot${bulkKept === 1 ? "" : "s"}`}
+              </button>
+              {bulkFailed > 0 && !bulkRunning && (
+                <button onClick={retryFailed} disabled={bulkApplying}
+                  className="px-4 py-2.5 text-sm rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-40">
+                  Try the {bulkFailed} that failed again
+                </button>
+              )}
+              <button onClick={() => { stopRef.current = true; setBulkOpen(false) }}
+                className="px-4 py-2.5 text-sm rounded-lg border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400">
+                Close
+              </button>
+              {bulkResult && (
+                <p className={`text-sm font-medium ${bulkResult.startsWith("✓") ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                  {bulkResult}
+                </p>
+              )}
+              {!bulkRunning && bulkKept === 0 && bulkReady === 0 && bulkFixes.length > 0 && (
+                <p className="text-sm text-gray-500 dark:text-gray-400">Nothing is ticked to save.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Fullscreen image overlay */}
       {fullscreenImg && (

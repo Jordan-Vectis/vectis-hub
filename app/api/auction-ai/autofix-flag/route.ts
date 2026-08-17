@@ -1,74 +1,107 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
-import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getToolModel } from "@/lib/ai-models"
+import { generateAiText, AiBlockedError, AiNotConfiguredError } from "@/lib/ai-provider"
+import { parseModelJson } from "@/lib/model-json"
 
 export const maxDuration = 60
 
 // POST /api/auction-ai/autofix-flag
-// Takes a lot's key points + current description + the AI flag note (which
-// describes a likely error and what's probably correct) and returns a corrected
-// description that applies ONLY that fix. Used by the Cataloguing → Review tab
-// "Auto-fix" button. The caller reviews the result before saving.
-const PROMPT = `You are correcting a catalogue lot DESCRIPTION for a British auction house.
+// { keyPoints, description, flagNote, model? } → { description, keyPoints, where, note }
+//
+// Takes a lot's key points + current description + the AI flag note (which describes a likely
+// error and what is probably correct) and returns the corrected text, applying ONLY that fix.
+// Used by the Cataloguing → Review tab's per-lot "Auto-fix" and the bulk "Fix all AI-flagged".
+// ⚠ The caller ALWAYS reviews the result before saving — nothing here writes to a lot.
+//
+// ⚠⚠ Why it returns KEY POINTS as well (2026-08-17). Correcting only the description leaves the
+// wrong fact in the cataloguer's key points, and the Key Points stage exists to force every key
+// point back INTO the description — so the next pipeline run undoes the fix, and the Review tab
+// reports the corrected description as missing a key point in the meantime. The description is
+// downstream; where the flagged error lives in the key points, that is what has to change.
+const PROMPT = `You are correcting a catalogue lot for a British auction house.
 
 You are given:
-- Key points: the cataloguer's raw notes.
-- Description: the current catalogue description.
-- Flag: an AI review note identifying a likely factual error (e.g. a wrong catalogue / set / model number or product name) and what is probably correct.
+- Key points: the cataloguer's raw notes, taken with the item in hand.
+- Description: the catalogue description written from those notes.
+- Flag: an AI review note identifying a likely factual error (e.g. a wrong catalogue / set / model
+  number, running number or product name) and what is probably correct.
 
-Rewrite the description so the flagged error is corrected — and ONLY that. Rules:
-- Change only what the Flag identifies as wrong. Keep everything else identical: wording, structure, order, and line breaks.
-- Keep the SAME format and the same lines/paragraphs. Join lines with newlines (\\n), never collapse them to spaces.
+Work out WHERE the flagged error actually is, then correct it — and only it.
+
+- If the wrong fact appears in the KEY POINTS, correct it there as well as in the description.
+  This is common: a mistyped catalogue number in the notes is copied into the description.
+- If the key points are already right and only the description is wrong, return the key points
+  completely unchanged.
+- Never "tidy", reformat, reorder or reword the key points. They are the cataloguer's own record.
+  Change the single wrong value and nothing else, keeping one key point per line exactly as given.
+
+Rules for the description:
+- Change only what the Flag identifies as wrong. Keep everything else identical: wording,
+  structure, order, and line breaks.
+- Keep the SAME lines and paragraphs. Join lines with newlines, never collapse them to spaces.
 - British English throughout.
-- Do NOT add a condition statement — condition is recorded separately and must not appear in the description.
+- Do NOT add a condition statement — condition is recorded separately and must not appear.
 - Do NOT invent facts or add new claims; only apply the correction the Flag describes.
 - If the Flag is too vague to apply confidently, make the smallest sensible correction.
 
-Respond with ONLY the corrected description text — no preamble, no quotes, no explanation.`
+Reply with raw JSON only:
+{"description":"<the corrected description>",
+ "keyPoints":"<the corrected key points, or exactly the key points you were given if they were right>",
+ "where":"key-points"|"description"|"both",
+ "note":"<one short sentence naming what you changed, e.g. 'R4328 corrected to R3428'>"}`
 
 export async function POST(req: NextRequest) {
   try {
     const session = await auth()
     if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
 
-    const apiKey = process.env.GEMINI_API_KEY
-    if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
-
     const { keyPoints = "", description = "", flagNote = "", model: modelId = "" } = await req.json()
     if (!description?.trim() || !flagNote?.trim()) {
       return NextResponse.json({ error: "Missing description or flag note" }, { status: 400 })
     }
 
-    const genai = new GoogleGenerativeAI(apiKey)
-    const model = genai.getGenerativeModel({ model: await getToolModel("catalogue_flags", modelId), systemInstruction: PROMPT })
+    const kpIn   = String(keyPoints).trim()
+    const descIn = String(description).trim()
 
-    const prompt = `Key points:\n${String(keyPoints).trim()}\n\nDescription:\n${String(description).trim()}\n\nFlag:\n${String(flagNote).trim()}`
+    const model = await getToolModel("catalogue_flags", modelId)
+    const raw = await generateAiText({
+      model,
+      system: PROMPT,
+      prompt: `Key points:\n${kpIn || "(none)"}\n\nDescription:\n${descIn}\n\nFlag:\n${String(flagNote).trim()}`,
+      json: true,
+      maxOutputTokens: 2000,
+    })
 
-    let result: any
-    try {
-      result = await model.generateContent(prompt)
-    } catch (e: any) {
-      const msg = e?.message ?? String(e)
-      if (/429|resource.?exhausted|quota|rate.?limit/i.test(msg)) throw new Error(`RATE_LIMITED: ${msg}`)
-      throw e
+    const parsed = parseModelJson(raw)
+    if (!parsed || typeof parsed !== "object" || !String(parsed.description ?? "").trim()) {
+      return NextResponse.json({ error: "The AI's answer could not be read — try again." }, { status: 502 })
     }
 
-    const response = result.response
-    if (response.promptFeedback?.blockReason) {
-      return NextResponse.json({ error: `Blocked: ${response.promptFeedback.blockReason}` }, { status: 422 })
-    }
-    const finishReason = response.candidates?.[0]?.finishReason
-    if (finishReason && finishReason !== "STOP" && finishReason !== "MAX_TOKENS") {
-      return NextResponse.json({ error: `Could not complete (${finishReason})` }, { status: 422 })
-    }
+    const fixedDesc = String(parsed.description).trim()
+    // ⚠ Only ever report key points as changed when they REALLY differ. A model that echoes them
+    // back with a stray space would otherwise rewrite the cataloguer's notes for no reason, and
+    // the caller would show a "correction" that corrects nothing.
+    const fixedKp   = String(parsed.keyPoints ?? "").trim()
+    const kpChanged = !!fixedKp && fixedKp !== kpIn
 
-    const fixed = response.text().trim()
-    if (!fixed) return NextResponse.json({ error: "Empty AI response" }, { status: 422 })
-
-    return NextResponse.json({ description: fixed })
+    return NextResponse.json({
+      model,
+      description: fixedDesc,
+      keyPoints:   kpChanged ? fixedKp : null,
+      descChanged: fixedDesc !== descIn,
+      where:       kpChanged ? (fixedDesc !== descIn ? "both" : "key-points") : "description",
+      note:        String(parsed.note ?? "").trim().slice(0, 300),
+    })
   } catch (e: any) {
-    const msg = e?.message ?? "Unknown error"
-    return NextResponse.json({ error: msg }, { status: msg.startsWith("RATE_LIMITED:") ? 429 : 500 })
+    if (e instanceof AiNotConfiguredError) return NextResponse.json({ error: e.message }, { status: 500 })
+    if (e instanceof AiBlockedError) return NextResponse.json({ error: e.message }, { status: 422 })
+    const msg: string = e?.message ?? "Unknown error"
+    // The client backs off on this prefix — keep it (see RULES.md, batch retry loop).
+    if (/429|resource.?exhausted|quota|rate.?limit/i.test(msg)) {
+      return NextResponse.json({ error: `RATE_LIMITED: ${msg}` }, { status: 429 })
+    }
+    console.error("auction-ai/autofix-flag error:", e)
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

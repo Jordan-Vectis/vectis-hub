@@ -653,6 +653,12 @@ model CatalogueLot {
   reviewFlaggedBy String?
   reviewFlaggedAt DateTime?
   aiFlagNote      String?   @db.Text // AI-flagged potential cataloguer mistake from the batch pipeline run
+  // Review tab — "the KEY POINTS were wrong, not the description". Set when a checker
+  // confirms a key-point mismatch is a cataloguer mistake, so the lot stops being counted
+  // as needing attention. kpFixNote says which of the two happened (corrected / left as-is).
+  kpFixNote       String?   @db.Text
+  kpFixedBy       String?
+  kpFixedAt       DateTime?
   createdByName   String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
