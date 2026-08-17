@@ -1232,7 +1232,11 @@ function sortRows(rows: CopierRow[], sortBy: SortBy) {
 
 function CopierTab({ active }: { active: boolean }) {
   const [rows, setRows]         = useState<CopierRow[]>([])
-  const [condOpen, setCondOpen] = useState(true)
+  // ⚠ CLOSED by default, and it must stay that way. RULES.md rule 6: the macro drives this
+  // page by screen coordinates. Open, this banner's height depends on how many lots are
+  // flagged — so the lot card below it lands somewhere different on every sale, and the macro
+  // types into the wrong place. Collapsed it is one line, always, whatever the counts.
+  const [condOpen, setCondOpen] = useState(false)
   const [sortBy, setSortBy]     = useState<SortBy>("uniqueId")
   const [idx, setIdx]           = useState(0)
   const [copiedType, setCopied] = useState<"desc" | "both" | null>(null)
@@ -1385,7 +1389,10 @@ function CopierTab({ active }: { active: boolean }) {
       {/* Condition check — the real thing, not a reminder. */}
       {rows.length > 0 && (
         condProblems === 0 && condReworded.length === 0 ? (
-          <div className="mb-4 rounded-lg border border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-4 py-2.5 text-sm text-green-700 dark:text-green-300">
+          // ⚠ Same padding as the amber banner below on purpose: collapsed, both are one line
+          // of the same height, so the lot card sits at the same place on the screen whether
+          // or not a sale has anything flagged. The macro relies on that.
+          <div className="mb-4 rounded-lg border border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-4 py-3 text-sm text-green-700 dark:text-green-300">
             ✓ {haveConditionData
               ? `All ${rows.length} lots have their condition in the description.`
               : `Every one of the ${rows.length} lots mentions a condition.`}
@@ -1445,8 +1452,8 @@ function CopierTab({ active }: { active: boolean }) {
                 {condNoDesc.length > 0 && (
                   <div>
                     <p className="text-xs text-amber-800 dark:text-amber-300">
-                      <strong>{condNoDesc.length}</strong> {condNoDesc.length === 1 ? "lot has" : "lots have"} no description at all yet — often the ones excluded
-                      from the AI. {condNoDesc.length === 1 ? "It needs" : "They need"} writing before there is anything to copy, so the condition is not the problem here.
+                      <strong>{condNoDesc.length}</strong> have no description at all yet — often the ones excluded from the AI.
+                      These need writing before there is anything to copy, so the condition is not the problem here.
                     </p>
                     <CondList items={condNoDesc} tone="border-amber-400 dark:border-amber-600 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40" />
                   </div>
@@ -1457,9 +1464,9 @@ function CopierTab({ active }: { active: boolean }) {
                 {condOnlyDesc.length > 0 && (
                   <div>
                     <p className="text-xs text-gray-600 dark:text-gray-400">
-                      <strong>{condOnlyDesc.length}</strong> {condOnlyDesc.length === 1 ? "description states" : "descriptions state"} a condition that was typed
-                      straight in rather than graded on the lot. Nothing to add here — {condOnlyDesc.length === 1 ? "it is" : "they are"} fine to copy. Only the
-                      lot&apos;s own condition field is blank, which is worth tidying on the sale page.
+                      <strong>{condOnlyDesc.length}</strong> state a condition typed straight into the description rather than
+                      graded on the lot. Nothing to add — these are fine to copy. Only the lot&apos;s own condition field is
+                      blank, which is worth tidying on the sale page.
                     </p>
                     <CondList items={condOnlyDesc} tone="border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800" />
                   </div>
