@@ -17,10 +17,6 @@ interface Props {
     auctionCode?: string    // shown on the group card so you can see which sale a photo went to
   }[]
   onUploaded: () => void
-  // Called once the upload finishes, with the groups whose code matched no lot anywhere.
-  // The sale's own tab leaves this unset (nothing sensible to do with them there); the
-  // any-sale uploader holds those photos until a lot with that code turns up.
-  onUnmatched?: (unmatched: { code: string; photos: File[] }[]) => Promise<void> | void
 }
 
 // ⚠ The label-reading + grouping engine is SHARED with Photography → Upload Photos.
@@ -38,7 +34,7 @@ type Phase = "idle" | "scanning" | "discrepancies" | "preview" | "uploading" | "
 type Mode  = "scan" | "filename"
 
 
-export default function PhotoUploadTab({ auctionId, lots, onUploaded, onUnmatched }: Props) {
+export default function PhotoUploadTab({ auctionId, lots, onUploaded }: Props) {
   // Which sale each lot is in, and what that sale is called. With a page-level auctionId
   // every lot is in it; without one, the lot's own auctionId is the only right answer —
   // saving a photo against the wrong sale is the one failure that must not be possible.
@@ -736,15 +732,6 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded, onUnmatche
     setAlreadyCount(alreadyTotal)
     setPhase("done")
     onUploaded()
-
-    // Photos whose code is not a lot ANYWHERE. Handed to the caller last, deliberately:
-    // holding them must never delay or risk the matched uploads, which are the real work.
-    if (onUnmatched) {
-      const held = unmatchedGroups.filter(g => g.photos.length > 0).map(g => ({ code: g.label, photos: g.photos }))
-      if (held.length > 0) {
-        try { await onUnmatched(held) } catch { /* the caller shows its own failure */ }
-      }
-    }
   }
 
   const matchedGroups   = groups.filter(g => g.lotId && g.photos.length > 0)
@@ -806,7 +793,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded, onUnmatche
           )}
           {!g.lotId && !g.needsCode && (
             <span className="text-xs bg-yellow-200 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-400 rounded-full px-2 py-0.5">
-              not a lot in {scope}{onUnmatched ? " — held for later" : " — won't save"}
+              not a lot in {scope} — won&apos;t save
             </span>
           )}
           {g.aiRead && !g.edited && (
@@ -1246,7 +1233,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded, onUnmatche
             <Notice tone="warn">
               <p className="font-medium mb-1">
                 {unmatchedGroups.length} label{unmatchedGroups.length !== 1 ? "s" : ""} {unmatchedGroups.length !== 1 ? "aren't" : "isn't"} a
-                lot in {scope} — their photos {onUnmatched ? "are held until the lot exists" : "won't save"}:
+                lot in {scope} — their photos won&apos;t save:
               </p>
               <p className="font-mono">{unmatchedGroups.map(g => g.label).join(", ")}</p>
               <p className="mt-1">Check you picked the right sale, and that these lots have been created.</p>
@@ -1471,7 +1458,7 @@ export default function PhotoUploadTab({ auctionId, lots, onUploaded, onUnmatche
             <Stat label="Already there" value={alreadyCount} sub={alreadyCount > 0 ? "same filename, not duplicated" : undefined} />
             <Stat label="Photos failed" value={skipped.length} tone={skipped.length > 0 ? "bad" : "plain"} />
             <Stat label="Not saved (unmatched)" value={unmatchedGroups.length} tone={unmatchedGroups.length > 0 ? "warn" : "plain"}
-              sub={unmatchedGroups.length > 0 ? (onUnmatched ? "held until the lot exists" : `labels not on a lot in ${scope}`) : undefined} />
+              sub={unmatchedGroups.length > 0 ? `labels not on a lot in ${scope}` : undefined} />
           </div>
 
           {uploadResults.length > 0 && (

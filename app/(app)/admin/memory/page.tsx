@@ -3102,14 +3102,11 @@ PhotoUploadTab now takes auctionId: string | null, and each lot may carry its OW
 
 ⚠ UNCOMPLETED SALES ONLY: where { ...auctionWhere(access), complete: false } - the same active/completed split the Photography list already draws. A finished sale must not quietly take new photos. 18 open sales / ~6,300 lots as built; the page loads ONLY id, barcode, receiptUniqueId and imageUrls, because descriptions and key points would multiply the payload and nothing on the screen reads them. Departments still apply (RULES.md) and the sales being searched are listed on the page, so a narrower scope is visible rather than mysterious.
 
-⚠⚠ PHOTOS WHOSE LOT DOES NOT EXIST YET ARE HELD, NEVER DROPPED. Jordan chose this over "list them, don't upload" and gave the reason: "its photos on lots exported by the end of day part of the app". Photography legitimately runs AHEAD of the record - a file named with BC's own unique ID matches nothing while the Hub lot's receiptUniqueId is still NULL, because nothing writes it until BC Match runs.
+⚠⚠ A PHOTO THAT MATCHES NOTHING IS NOT SAVED AND NOT KEPT ANYWHERE. Jordan, 2026-08-17: "No dont store them if they dont match just forget about them". The uploader already lists those groups on the review and results screens ("not a lot in any open sale - won't save"), so nothing is hidden; they simply do not upload, and the photographer re-uploads once the lot exists.
 
-- HeldLotPhoto (NEEDS Run Migrations): code, fileName, r2Key, uploadedBy, attachedAt, attachedLotId. The photo goes to R2 FIRST, then the row - a failure can never lose it silently.
-- lib/held-photos.ts -> attachHeldPhotos(codes?) attaches anything whose lot now exists. Matching is on BARCODE OR receiptUniqueId, case-insensitively - the same two-way rule as the filename matcher (RULES.md).
-- ⚠ RAW SQL ON PURPOSE: Prisma's mode "insensitive" works on equals/contains but NOT on in, so the obvious { barcode: { in: codes, mode: "insensitive" } } is a RUNTIME validation error, not a compile one. Uses upper(btrim(col)) = ANY($1::text[]), verified against production data.
-- ⚠ A code matching TWO lots is left waiting, never guessed. Historic duplicate barcodes exist, and attaching to the wrong lot is worse than not attaching.
-- FOUR attach points so nobody has to remember: on hold, on page load, inside bulkAssignUniqueIds (⚠ the moment BC's IDs first exist - this is the End of Day case), and a 5-minute server.js -> /api/cron/held-photos sweep.
-- The waiting list shows thumbnails grouped by code with a Check now button and a per-photo discard. ⚠ Discard only deletes the R2 object when the photo was NEVER attached - otherwise it is a lot's photo now.`,
+⚠ DO NOT REBUILD THE HOLDING AREA. A HeldLotPhoto table, lib/held-photos.ts, an /api/cron/held-photos sweep, an attach hook inside bulkAssignUniqueIds and a "waiting for their lot" list were all built first, on his earlier answer that photos should be held until their lot appeared (the reasoning being that a file named with BC's unique ID matches nothing while the Hub lot's receiptUniqueId is still NULL until BC Match runs). He reversed it the same day and ALL of it was removed - the table was never created, so nothing was left behind. Do not propose it again without him raising it.
+
+One thing worth keeping from that work, because it is a general trap: Prisma's mode "insensitive" works on equals/contains but NOT on in, so { barcode: { in: codes, mode: "insensitive" } } is a RUNTIME validation error, not a compile one. Use upper(btrim(col)) = ANY($1::text[]) in raw SQL if a case-insensitive multi-code lookup is ever needed.`,
   },
   {
     filename: "reference_smart_scan_photo_upload.md",

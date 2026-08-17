@@ -411,25 +411,6 @@ model Logistics {
   submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 }
 
-// A photo uploaded through Photography → Upload photos (any sale) whose code matched no lot
-// in any open sale at the time. Held rather than thrown away, because photography legitimately
-// runs AHEAD of the record: a lot's receiptUniqueId is NULL until 🔗 BC Match imports BC's own
-// IDs, so a file named with BC's unique ID matches nothing until that has run. Every held photo
-// is attached automatically the moment a lot with its code appears.
-model HeldLotPhoto {
-  id            String    @id @default(cuid())
-  code          String    // barcode or unique ID, upper-cased — matched against BOTH lot fields
-  fileName      String
-  r2Key         String
-  uploadedBy    String?
-  createdAt     DateTime  @default(now())
-  attachedAt    DateTime?
-  attachedLotId String?
-
-  @@index([code])
-  @@index([attachedAt])
-}
-
 model CatalogueAuction {
   id                  String                   @id @default(cuid())
   code                String                   @unique

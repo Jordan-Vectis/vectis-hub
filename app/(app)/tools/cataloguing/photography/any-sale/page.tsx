@@ -4,7 +4,6 @@ import { redirect } from "next/navigation"
 import Link from "next/link"
 import { getCataloguingSidebarItems } from "@/lib/apps"
 import { getDepartmentAccess, auctionWhere } from "@/lib/departments"
-import { attachHeldPhotos, listHeldPhotos } from "@/lib/held-photos"
 import AnySaleUploadClient from "./any-sale-client"
 
 export const dynamic = "force-dynamic"
@@ -47,11 +46,6 @@ export default async function AnySaleUploadPage() {
     },
   })
 
-  // Opening the page is a good moment to catch up: a lot created since the last sweep may
-  // already have photos waiting for it.
-  try { await attachHeldPhotos() } catch { /* the list below still renders */ }
-  const held = await listHeldPhotos()
-
   const lots = auctions.flatMap(a =>
     a.lots.map(l => ({
       id: l.id,
@@ -81,7 +75,6 @@ export default async function AnySaleUploadPage() {
       <AnySaleUploadClient
         lots={lots}
         sales={auctions.map(a => ({ code: a.code, name: a.name, lots: a.lots.length }))}
-        held={held.map(h => ({ ...h, createdAt: h.createdAt.toISOString() }))}
       />
     </div>
   )
