@@ -210,6 +210,32 @@ export default function OvernightClient() {
   )
 }
 
+/** The three pipeline stages at a glance, using the Auto Pipeline tab's own icons so a run
+ *  reads the same whichever screen you are on: ⚡ Batch · ✓ Key Points · 🔎 Double Check. */
+function StagePips({ stage, running }: { stage: string; running: boolean }) {
+  const order = ["batch", "kpcheck", "doublecheck", "complete"]
+  const at = order.indexOf(stage)
+  return (
+    <span className="inline-flex items-center gap-1">
+      {([["batch", "⚡", "Batch run"], ["kpcheck", "✓", "Key points"], ["doublecheck", "🔎", "Double check"]] as const).map(([key, icon, label]) => {
+        const i = order.indexOf(key)
+        const done   = i < at
+        const active = i === at
+        return (
+          <span key={key} title={`${label}${done ? " — done" : active ? (running ? " — running" : " — up next") : " — not reached"}`}
+            className={`text-[11px] leading-none px-1.5 py-1 rounded ${
+              done   ? "bg-green-500/15 text-green-500"
+              : active ? `bg-[#C8A96E]/20 text-[#C8A96E] ${running ? "animate-pulse" : ""}`
+              : "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600"}`}>
+            {icon}
+          </span>
+        )
+      })}
+      <span className="text-[11px] text-gray-500 dark:text-gray-400 ml-1">{STAGE_LABEL[stage] ?? stage}</span>
+    </span>
+  )
+}
+
 function Banner({ tone, children }: { tone: "amber" | "red" | "green"; children: React.ReactNode }) {
   const cls = tone === "red"
     ? "border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300"
@@ -268,9 +294,7 @@ function RunCard({
             <span className={`text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${tone.chip}`}>
               {queueStatusLabel(item)}
             </span>
-            {item.status !== "DONE" && !fresh && (
-              <span className="text-[11px] text-gray-500 dark:text-gray-400">{STAGE_LABEL[item.stage] ?? item.stage}</span>
-            )}
+            {!fresh && <StagePips stage={item.stage} running={item.status === "RUNNING"} />}
           </div>
 
           <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1.5">

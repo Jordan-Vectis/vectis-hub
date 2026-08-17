@@ -5270,25 +5270,12 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
         </div>
       )}
 
-      {/* ⚠ The overnight queue used to be a panel HERE, and it was moved out to its own page
-          (2026-08-14, Jordan: "I really dont like how this overnight que works"). Two things were
-          wrong with it living on this tab: the thing you check in the morning was buried inside
-          the thing you drive by hand, and a queued sale silently inherited whatever THIS tab
-          happened to be set to. The new page states its own settings. Do not put it back — this
-          is a signpost, not a queue. */}
-      <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-4 mt-6 flex items-center gap-4 flex-wrap">
-        <div className="flex-1 min-w-[260px]">
-          <p className="text-sm font-bold text-gray-900 dark:text-white">Want it to run without you here?</p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            The Run button above works in this tab — it only carries on while the tab is open and the PC is awake.
-            To queue sales to run on the server overnight, use Overnight AI runs.
-          </p>
-        </div>
-        <Link href="/tools/auction-ai/overnight"
-          className="px-4 py-2.5 rounded-xl text-sm font-bold bg-[#C8A96E] hover:bg-[#b9995c] text-black">
-          🌙 Overnight AI runs
-        </Link>
-      </div>
+      {/* ⚠ The overnight queue used to be a panel HERE. It moved to its own page on 2026-08-14
+          (Jordan: "I really dont like how this overnight que works"), and the signpost that
+          briefly replaced it was removed too ("this doesnt need to be here") — the sidebar link
+          is enough. Two things were wrong with the queue living on this tab: the thing you check
+          in the morning was buried inside the thing you drive by hand, and a queued sale
+          silently inherited whatever THIS tab happened to be set to. Do not put either back. */}
 
       {stage === "complete" && (
         <>

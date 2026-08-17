@@ -129,6 +129,38 @@ export default function RunClient({ code }: { code: string }) {
   // counts stage passes (batch + key points + double check), so a 601-lot sale reads ~1693 there.
   const described = lots.filter(l => latestText(l)).length
 
+  // ── Stage summaries, same shape and same wording as the Auto Pipeline tab's stage cards.
+  // ⚠ Deliberately mirrors that tab: it is the same three stages doing the same work, and two
+  // different visual languages for one pipeline is how people end up unsure whether "issues"
+  // here means what "issues" means there. Keep them in step if either changes.
+  const stageSummaries = useMemo(() => {
+    const count = (f: (l: Lot) => boolean) => lots.filter(f).length
+    return {
+      batch: {
+        total: lots.length,
+        ok:      count(l => l.batchStatus === "ok"),
+        skipped: count(l => l.batchStatus === "skipped"),
+        failed:  count(l => l.batchStatus === "failed"),
+      },
+      kpcheck: {
+        total: lots.length,
+        ok:    count(l => l.kpStatus === "ok"),
+        fixed: count(l => l.kpStatus === "fixed"),
+        error: count(l => l.kpStatus === "error"),
+      },
+      doublecheck: {
+        total: lots.length,
+        ok:     count(l => l.dcStatus === "ok"),
+        issues: count(l => l.dcStatus === "issues"),
+        error:  count(l => l.dcStatus === "error"),
+      },
+    }
+  }, [lots])
+
+  const STAGE_ORDER = ["batch", "kpcheck", "doublecheck", "complete"]
+  const currentStage = item?.stage ?? stage
+  const stageIndex = STAGE_ORDER.indexOf(currentStage)
+
   return (
     <div className="p-6 lg:p-8 max-w-[1500px] mx-auto">
       <Link href="/tools/auction-ai/overnight" className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 inline-flex items-center gap-1">← All overnight runs</Link>
@@ -188,6 +220,20 @@ export default function RunClient({ code }: { code: string }) {
         <div className="rounded-xl border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-700 dark:text-red-300 mb-4">{error}</div>
       )}
 
+      {item?.status === "DONE" && (
+        <div className="rounded-xl border border-green-600/50 bg-green-950/20 px-4 py-3 text-sm text-green-400 mb-4 flex items-start gap-3">
+          <span className="text-xl leading-none">🎉</span>
+          <div>
+            <p className="font-semibold">{code} finished.</p>
+            <p className="opacity-90 mt-0.5">
+              {counts.applied} description{counts.applied === 1 ? "" : "s"} written to the catalogue
+              {counts.attention > 0 ? ` · ${counts.attention} worth a look below` : ""}
+              {item.skipped > 0 ? ` · ${item.skipped} the AI refused` : ""}.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Where it has got to */}
       {item && (
         <div className={`rounded-2xl border p-5 mb-5 ${tone.card}`}>
@@ -234,6 +280,55 @@ export default function RunClient({ code }: { code: string }) {
         </div>
       )}
 
+      {/* The three stages, exactly as they read on the Auto Pipeline tab */}
+      {lots.length > 0 && (
+        <div className="grid gap-3 md:grid-cols-3 mb-5">
+          {([
+            { key: "batch",       label: "1. Batch Run",        icon: "⚡" },
+            { key: "kpcheck",     label: "2. Key Points Check", icon: "✓"  },
+            { key: "doublecheck", label: "3. Double Check",     icon: "🔎" },
+          ] as const).map(({ key, label, icon }) => {
+            const s = stageSummaries[key]
+            const isActive   = currentStage === key && item?.status === "RUNNING"
+            const isDone     = STAGE_ORDER.indexOf(key) < stageIndex
+            const isUpcoming = STAGE_ORDER.indexOf(key) > stageIndex
+            const processed  = s.ok + ("skipped" in s ? s.skipped : 0) + ("fixed" in s ? s.fixed : 0) + ("issues" in s ? s.issues : 0)
+            return (
+              <div key={key} className={`rounded-xl border p-4 space-y-2 transition-colors ${
+                isActive     ? "border-[#C8A96E]/60 bg-[#C8A96E]/10"
+                : isDone     ? "border-green-700/50 bg-green-950/20"
+                : isUpcoming ? "border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/20 opacity-50"
+                : "border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#1C1C1E]"
+              }`}>
+                <div className="flex items-center gap-2">
+                  <span>{icon}</span>
+                  <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{label}</p>
+                  {isDone    && <span className="ml-auto text-xs text-green-400">✓ Done</span>}
+                  {isActive  && <span className="ml-auto text-xs text-[#C8A96E] animate-pulse">Running…</span>}
+                </div>
+                {processed > 0 ? (
+                  <div className="space-y-0.5 text-xs">
+                    <p className="text-gray-500">{processed} of {s.total} ran</p>
+                    {s.ok > 0 && (
+                      <p className="text-green-400">
+                        ✓ {s.ok} {key === "kpcheck" ? "all key points present" : key === "doublecheck" ? "no issues found" : "generated OK"}
+                      </p>
+                    )}
+                    {"fixed"  in s && s.fixed  > 0 && <p className="text-amber-400">⚑ {s.fixed} missing key points added</p>}
+                    {"issues" in s && s.issues > 0 && <p className="text-yellow-400">⚑ {s.issues} descriptions corrected — see below</p>}
+                    {"skipped" in s && s.skipped > 0 && <p className="text-red-400">✗ {s.skipped} content blocked by AI</p>}
+                    {"failed"  in s && s.failed  > 0 && <p className="text-red-400">✗ {s.failed} failed</p>}
+                    {"error"   in s && s.error   > 0 && <p className="text-red-400">✗ {s.error} errored</p>}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500">{isUpcoming ? "Not reached yet" : "Nothing yet"}</p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {/* The run log */}
       {item?.logText && (
         <div className="rounded-2xl border border-gray-200 dark:border-gray-800 mb-5">
@@ -243,9 +338,19 @@ export default function RunClient({ code }: { code: string }) {
             <span className="text-xs text-gray-400">{showLog ? "Hide" : "Show"}</span>
           </button>
           {showLog && (
-            <pre className="max-h-80 overflow-y-auto border-t border-gray-200 dark:border-gray-800 px-5 py-3 text-[11px] leading-relaxed text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-              {item.logText}
-            </pre>
+            /* Colour-coded the same way the Auto Pipeline tab colours its log, so a wall of
+               timestamps can be skimmed for the ✗ lines. */
+            <div className="max-h-80 overflow-y-auto border-t border-gray-200 dark:border-gray-800 px-5 py-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
+              {item.logText.split("\n").map((line, i) => (
+                <p key={i} className={
+                  line.includes("✗") || line.includes("ERROR") ? "text-red-400"
+                  : line.includes("🎉") || line.includes("complete") ? "text-[#C8A96E]"
+                  : line.includes("↺") || line.includes("↻") || line.includes("⚠") ? "text-amber-400"
+                  : line.includes("✓") ? "text-green-400"
+                  : "text-gray-600 dark:text-gray-400"
+                }>{line}</p>
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -307,7 +412,7 @@ export default function RunClient({ code }: { code: string }) {
                           {isApplied(l)
                             ? <span className="text-xs font-semibold text-green-600 dark:text-green-400">✓ Written</span>
                             : latestText(l)
-                            ? <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">Held for review</span>
+                            ? <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">⏳ Held for review</span>
                             : <span className="text-xs text-gray-400">—</span>}
                         </td>
                         <td className="px-4 py-2.5 text-right">
@@ -347,15 +452,18 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: "am
 
 /** Each stage has its own vocabulary — "issues" on Double Check is a finding, not a failure,
  *  and "fixed" on Key Points means it put something back that had been dropped. */
+/** Each stage has its own vocabulary — "issues" on Double Check is a finding, not a failure,
+ *  and "fixed" on Key Points means it put something back that had been dropped.
+ *  ⚠ Symbols match the Auto Pipeline tab: ✓ fine · ⚑ changed something · ✗ failed or blocked. */
 function StageChip({ stage, status }: { stage: "batch" | "kp" | "dc"; status: string | null }) {
-  if (!status) return <span className="text-xs text-gray-400">not run</span>
+  if (!status) return <span className="text-xs text-gray-400">⏳ not run</span>
   const map: Record<string, { label: string; cls: string }> = {
-    ok:      { label: stage === "dc" ? "nothing to flag" : "done", cls: "text-green-600 dark:text-green-400" },
-    fixed:   { label: "put back missing detail", cls: "text-sky-600 dark:text-sky-400" },
-    issues:  { label: "flagged something", cls: "text-amber-600 dark:text-amber-400" },
-    skipped: { label: "skipped", cls: "text-gray-500 dark:text-gray-400" },
-    failed:  { label: "failed", cls: "text-red-600 dark:text-red-400" },
-    error:   { label: "errored", cls: "text-red-600 dark:text-red-400" },
+    ok:      { label: `✓ ${stage === "dc" ? "no issues found" : stage === "kp" ? "all key points present" : "generated OK"}`, cls: "text-green-600 dark:text-green-400" },
+    fixed:   { label: "⚑ missing key points added", cls: "text-amber-600 dark:text-amber-400" },
+    issues:  { label: "⚑ description corrected", cls: "text-yellow-600 dark:text-yellow-400" },
+    skipped: { label: "✗ content blocked by AI", cls: "text-red-600 dark:text-red-400" },
+    failed:  { label: "✗ failed", cls: "text-red-600 dark:text-red-400" },
+    error:   { label: "✗ errored", cls: "text-red-600 dark:text-red-400" },
   }
   const s = map[status] ?? { label: status, cls: "text-gray-500 dark:text-gray-400" }
   return <span className={`text-xs font-semibold ${s.cls}`}>{s.label}</span>
