@@ -55,13 +55,28 @@ function normaliseUnits(line: string): string {
     .replace(/(\d+)\s*(?:″|")/g, "$1in")
     .replace(/(\d+)[\s-]*(?:inches|inch)\b/gi, "$1in")
     .replace(/(\d+)[\s-]*(cm|mm)s?\b/gi, "$1$2")
+    // ⚠ A unit token running straight into another number is TWO measurements with the
+    // separator missed — the cataloguer typed 13"33cm instead of 13"/33cm. Without this
+    // they fuse into one token ("13in33cm") that no rule can match: not inches, not
+    // metric, not a number, not a code — so it falls through to a literal match against
+    // a description that is never normalised, and can only ever fail. Split them and each
+    // half gets its own tolerant regex. 9"/23cm was fine only because the slash split it.
+    .replace(/(\d+(?:in|cm|mm))(?=\d)/gi, "$1 ")
 }
+
+// ⚠ The full stop is a TOKEN character, not a separator, and is then stripped from the
+// ends. Splitting on it tore "14.5in" into "14" and "5in", and a bare "5" can never be
+// told apart from the tail of a bigger number — so every decimal size ("14.5\"/37cm",
+// which is most of a Charlie Bears sale) came back "not found" even when the description
+// had the identical text. Stripping the ends keeps a sentence's closing full stop out.
+const TOKEN_SPLIT = /[^a-z0-9£"'.]+/i
+const trimEdges = (w: string) => w.replace(/^['".£]+|['".]+$/g, "")
 
 function significantWords(line: string): string[] {
   return line
     .toLowerCase()
-    .split(/[^a-z0-9£"']+/i)
-    .map(w => w.replace(/^['"]+|['"]+$/g, ""))
+    .split(TOKEN_SPLIT)
+    .map(trimEdges)
     .filter(w => (w.length >= 3 || /^\d{2,}$/.test(w)) && !STOPWORDS.has(w))
 }
 
@@ -104,12 +119,13 @@ function startsInsideNumber(text: string, index: number): boolean {
 
 function wordRegex(word: string): RegExp {
   // Size tokens (from normaliseUnits) match any notation in the description,
-  // including hyphenated ("13-inch") and plural ("34cms") forms.
-  const inches = word.match(/^(\d+)in$/)
-  if (inches) return new RegExp(`\\b${inches[1]}[\\s-]*(?:"|″|in\\b|inch(?:es)?\\b)`, "gi")
-  const metric = word.match(/^(\d+)(cm|mm)$/)
-  if (metric) return new RegExp(`\\b${metric[1]}[\\s-]*${metric[2]}s?\\b`, "gi")
+  // including hyphenated ("13-inch"), plural ("34cms") and decimal ("14.5\"") forms.
+  const inches = word.match(/^([\d.]+)in$/)
+  if (inches) return new RegExp(`\\b${esc(inches[1])}[\\s-]*(?:"|″|in\\b|inch(?:es)?\\b)`, "gi")
+  const metric = word.match(/^([\d.]+)(cm|mm)$/)
+  if (metric) return new RegExp(`\\b${esc(metric[1])}[\\s-]*${metric[2]}s?\\b`, "gi")
   if (/^\d+$/.test(word)) return new RegExp(numberPattern(word), "gi")
+  if (/^[\d.]+$/.test(word)) return new RegExp(`${esc(word)}(?![\\d,]?\\d)\\w{0,4}\\b`, "gi")
 
   let stem = word
   for (const suf of ["ing", "ed", "es", "s"]) {
@@ -126,22 +142,27 @@ function wordRegex(word: string): RegExp {
 function hardTokens(line: string): string[] {
   return line
     .toLowerCase()
-    .split(/[^a-z0-9£"']+/i)
-    .map(w => w.replace(/^['"£]+|['"]+$/g, ""))
+    .split(TOKEN_SPLIT)
+    .map(trimEdges)
     .filter(w => /\d/.test(w))
 }
 
 function hardTokenRegex(token: string): RegExp {
-  const inches = token.match(/^(\d+)in$/)
-  if (inches) return new RegExp(`\\b${inches[1]}[\\s-]*(?:"|″|in\\b|inch(?:es)?\\b)`, "gi")
-  const metric = token.match(/^(\d+)(cm|mm)$/)
-  if (metric) return new RegExp(`\\b${metric[1]}[\\s-]*${metric[2]}s?\\b`, "gi")
+  // Sizes accept a decimal — 14.5" is ordinary in a bears sale.
+  const inches = token.match(/^([\d.]+)in$/)
+  if (inches) return new RegExp(`\\b${esc(inches[1])}[\\s-]*(?:"|″|in\\b|inch(?:es)?\\b)`, "gi")
+  const metric = token.match(/^([\d.]+)(cm|mm)$/)
+  if (metric) return new RegExp(`\\b${esc(metric[1])}[\\s-]*${metric[2]}s?\\b`, "gi")
   if (/^\d+$/.test(token)) return new RegExp(numberPattern(token), "gi")
+  if (/^[\d.]+$/.test(token)) return new RegExp(`${esc(token)}(?![\\d,]?\\d)\\w{0,4}\\b`, "gi")
   // Alphanumeric code (CB114790, R000016…) — tolerate a stray space after the
   // letter prefix ("CB 114790").
   const code = token.match(/^([a-z]+)(\d[\w/-]*)$/)
   if (code) return new RegExp(`\\b${esc(code[1])}\\s*${esc(code[2])}\\b`, "gi")
-  return new RegExp(`\\b${esc(token)}\\b`, "gi")
+  // ⚠ Same reason numberPattern drops its leading \b: a token that STARTS with a digit
+  // ("202054a", from a key point that wrote "CB 202054A") has to be findable inside the
+  // joined-up "CB202054A", where \b cannot sit between "B" and "2".
+  return new RegExp(`${/^\d/.test(token) ? "" : "\\b"}${esc(token)}\\b`, "gi")
 }
 
 export function analyseKeyPoints(description: string, keyPoints: string, mode: KpAnalysisMode = "strict"): { matches: KpMatch[]; ranges: Range[] } {

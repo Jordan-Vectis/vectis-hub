@@ -1253,7 +1253,23 @@ Cause: the cataloguer writes the product code SPACED (CB 151518) and the AI writ
 
 Fix: NO leading word boundary in numberPattern. The only thing it was protecting against is a DIGIT immediately before the match, which startsInsideNumber now checks (it replaces falseNumberTail and still catches the "250 inside 1,250" comma case). Letters before a number are legitimate — that is a product code. Verified: 151518 matches CB151518; does not match inside 9151518; 250 does not match the tail of 1,250 nor the front of 2500; 16 does not match the tail of CB151516; 41cm and 6,000 unchanged.
 
-WARNING: this sits in the SHARED number matcher, so it fixed strict mode as well as relaxed — do not assume a key-point matching bug is confined to one mode.`,
+WARNING: this sits in the SHARED number matcher, so it fixed strict mode as well as relaxed — do not assume a key-point matching bug is confined to one mode.
+
+## Then the big one: the full stop was a SEPARATOR, so every decimal size failed
+
+Measured over the whole F109 sale — 435 lots that have both key points and a description, pulled from /api/auction-ai/catalogue-lots and run through the matcher in the browser: **130 lots had a failing key point, and 137 of the 160 failures were a single shape.** All decimals. Key point "14.5 inch/37cm", description "14.5 inch/37cm", identical text, still red.
+
+Cause: tokenising split on the full stop, so "14.5in" became "14" and "5in". The bare "5" then did match inside "14.5" in the description — and was rejected by the very guard that stops "250" matching inside "1,250", because that guard treats a comma OR a full stop with a digit before it as "inside a bigger number". So a decimal size could never pass, in either mode.
+
+Fixes, all in lib/kp-analysis.tsx:
+- The full stop is now a TOKEN character (TOKEN_SPLIT), stripped only from the ends (trimEdges), so "14.5in" survives as one token while a sentence's closing full stop still goes.
+- The inches and metric branches of BOTH wordRegex and hardTokenRegex accept decimals, plus a decimal branch for a bare "14.5".
+- hardTokenRegex's fallback drops its leading word boundary when the token starts with a digit — "202054a", from a key point written "CB 202054A", has to be findable inside "CB202054A".
+- normaliseUnits splits a fused size: the cataloguer typed 13"33cm with no slash, which fused into one token nothing could match. Only the slash in 9"/23cm was saving the ordinary case.
+
+Result on the same 435 lots: **130 lots down to 8, and 160 failing key points down to 8.** The remaining 8 are genuine — the digits really are absent from the description, and one has the AI writing white tag 670442 where the key point says 670446, which is exactly what the check exists to catch.
+
+WARNING — method worth reusing: do not debug a matcher one lot at a time. Pull the whole sale from /api/auction-ai/catalogue-lots?code=, run the old and the new matcher over every lot, and tally the failures BY TOKEN SHAPE (replace digit runs with #). The dominant shape is the bug, and the before/after tally is the proof.`,
   },
   {
     filename: "idle_report.md",
