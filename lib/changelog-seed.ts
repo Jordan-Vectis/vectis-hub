@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"b9d0dc143be0c2cfd7c4b9008679ccbc0beb9269","author":"Jordan Orange","date":"2026-08-17T16:55:05+01:00","subject":"Idle gate: a stale lot-start marker can no longer hide an absence"},
   {"sha":"c6ac73eb55f22a1520e8e3595660fe1d22c69046","author":"Jordan Orange","date":"2026-08-17T16:29:23+01:00","subject":"Idle gap ends when the lot was started, not when it was saved"},
   {"sha":"b9b42fdcd34eba6a98f3ba780d2d9e3da30022bf","author":"Jordan Orange","date":"2026-08-17T16:03:07+01:00","subject":"Auction Manager: star the sales you're working on"},
   {"sha":"da729e97e159f0d5bb16249d8e591ec4141528e5","author":"Jordan Orange","date":"2026-08-17T15:48:24+01:00","subject":"Photos that match no lot are simply not saved"},
