@@ -22,7 +22,12 @@ import { readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 
 const OUT   = path.join(process.cwd(), "lib", "changelog-seed.ts")
-const SINCE = "2026-07-01"     // where the record starts — see the file's own header
+// ⚠ Keep the explicit T00:00:00. A bare "2026-07-01" is an APPROXIMATE date to git: it
+// resolves using the CURRENT TIME OF DAY, so the cutoff slides forward as the day goes on
+// and an afternoon run silently drops that morning's commits from the far end. Measured
+// 2026-08-17: the bare form returned 462 commits at 15:05 where midnight returns 482. The
+// "never shrink" guard below caught it, which is precisely what that guard is for.
+const SINCE = "2026-07-01T00:00:00"     // where the record starts — see the file's own header
 const SEP   = ""
 const REC   = ""
 

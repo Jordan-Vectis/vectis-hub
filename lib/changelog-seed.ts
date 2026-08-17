@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"2287216f8267e8e10f8405e72b2b73eae89f27c1","author":"Jordan Orange","date":"2026-08-17T15:39:23+01:00","subject":"Photography: upload photos without picking a sale first"},
+  {"sha":"cef506f1eb337e909738e277082aaa977d6955ce","author":"Jordan Orange","date":"2026-08-17T13:48:32+01:00","subject":"Patches & Changes: don't warn about a release's own headline change"},
   {"sha":"bae623ca23e3e7fa4e205255bce5e35eb8a6be8f","author":"Jordan Orange","date":"2026-08-17T13:47:49+01:00","subject":"Patches & Changes: record the whole day's work, not one line per release"},
   {"sha":"4cb74e1033c2c71bd60744db8fefd80378012cb4","author":"Jordan Orange","date":"2026-08-17T13:28:33+01:00","subject":"Review tab: mark key points as the mistake, and fix all AI-flagged in one go"},
   {"sha":"62cc369bc69b353c2e0b09746e67468b49234ca1","author":"Jordan Orange","date":"2026-08-17T12:53:20+01:00","subject":"Locking Check: let the AI suggest the missing conditions, for a person to accept"},
@@ -481,4 +483,17 @@ export const CHANGELOG_SEED: SeedCommit[] = [
   {"sha":"6235235190d3ccc9285939c8a8d9055a5047569f","author":"Jordan Orange","date":"2026-07-01T15:04:10+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
   {"sha":"f372d601925895c52a8b5712d8c364a8c7288ea2","author":"Jordan Orange","date":"2026-07-01T15:04:08+01:00","subject":"Lot change log: capture every lot mutation (create/edit/delete/photo)"},
   {"sha":"31cc1877ce30bd7c5cd89909477f4ab386385df4","author":"Jack Collings","date":"2026-07-01T14:22:07+01:00","subject":"Add Sale Statistics tool (BC auction-line stats)"},
+  {"sha":"ece6cf1ecdd48f4eddf3f1f03fc93286f0cd362e","author":"Jordan Orange","date":"2026-07-01T12:07:14+01:00","subject":"Auction AI instructions: favourites (pinned to top, shared, synced)"},
+  {"sha":"43b76a81235ea364c18ca23d35e1bd67208d36a6","author":"Jordan Orange","date":"2026-07-01T11:52:59+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
+  {"sha":"866d53884f5c1c6d97b83f1ad27e4ac0bc47838b","author":"Jordan Orange","date":"2026-07-01T11:52:58+01:00","subject":"Auction AI: honour cataloguer key points in both Batch and Pipeline"},
+  {"sha":"f9e3e7021fd0ee5f87ef73b6142fac43797f67cf","author":"Jack Collings","date":"2026-07-01T11:49:15+01:00","subject":"BC services diagnostic: report env, raw service doc + known-endpoint probe"},
+  {"sha":"fece3866b18e16f5d752db2dce4d50fedc49f547","author":"Jack Collings","date":"2026-07-01T11:40:19+01:00","subject":"Add BC services discovery route"},
+  {"sha":"54ef9af7c2917b312468a10eb0233a0786edc7a7","author":"Jordan Orange","date":"2026-07-01T11:38:33+01:00","subject":"Auction AI instructions: Export all / Import to sync between environments"},
+  {"sha":"6892328620ed08a638050a147a7e2cc8f433a373","author":"Jordan Orange","date":"2026-07-01T10:48:12+01:00","subject":"Auction AI instructions: one true source (DB), no code/DB drift"},
+  {"sha":"f2e73c6d5172849347cec5e3b33fafa3634ff6cc","author":"Jordan Orange","date":"2026-07-01T10:11:10+01:00","subject":"Memory: sync opening-message rule (don't blame cataloguers) + phantom/stat lessons"},
+  {"sha":"fcc8c20efa5120297657162c15a6c42d00082cac","author":"Jordan Orange","date":"2026-07-01T09:58:33+01:00","subject":"Reports: fix all 13 review findings (perf, stats accuracy, phantom counts, hardening)"},
+  {"sha":"1f60fe2af5939be51fa2aab968e16359f7c920ba","author":"Jordan Orange","date":"2026-07-01T09:33:41+01:00","subject":"Memory: add phantom cataloguing-count entry to /admin/memory viewer"},
+  {"sha":"dd9d6e150819f53f9f1f0d019e658a144d1f1f32","author":"Jordan Orange","date":"2026-07-01T09:23:28+01:00","subject":"Reports: exclude orphaned (deleted-lot) logs at query time"},
+  {"sha":"4c7933185302450d658f010d26cda83d09617042","author":"Jordan Orange","date":"2026-07-01T09:08:22+01:00","subject":"Reports: instrument the tablet Save activation (find the auto-trigger)"},
+  {"sha":"a26b66a219944072f9c2434d487b6bf0c5381de6","author":"Jordan Orange","date":"2026-07-01T09:03:00+01:00","subject":"Memory: correct phantom-log note — scanner ruled out, trigger unknown"},
 ]
