@@ -1475,6 +1475,22 @@ const MIGRATIONS = [
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "kpFixNote" TEXT`,
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "kpFixedBy" TEXT`,
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "kpFixedAt" TIMESTAMP(3)`,
+  // Auction Manager ⭐ — the sales a person is working on, pinned to the top. Per user.
+  `CREATE TABLE IF NOT EXISTS "CatalogueAuctionFavourite" (
+     "userId"    TEXT NOT NULL,
+     "auctionId" TEXT NOT NULL,
+     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     CONSTRAINT "CatalogueAuctionFavourite_pkey" PRIMARY KEY ("userId", "auctionId")
+   )`,
+  `CREATE INDEX IF NOT EXISTS "CatalogueAuctionFavourite_auctionId_idx" ON "CatalogueAuctionFavourite"("auctionId")`,
+  `DO $$ BEGIN
+    ALTER TABLE "CatalogueAuctionFavourite" ADD CONSTRAINT "CatalogueAuctionFavourite_userId_fkey"
+      FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  `DO $$ BEGIN
+    ALTER TABLE "CatalogueAuctionFavourite" ADD CONSTRAINT "CatalogueAuctionFavourite_auctionId_fkey"
+      FOREIGN KEY ("auctionId") REFERENCES "CatalogueAuction"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

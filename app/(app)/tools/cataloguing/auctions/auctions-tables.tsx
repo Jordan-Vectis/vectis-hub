@@ -1,10 +1,11 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import Link from "next/link"
 import CompleteToggle from "./complete-toggle"
 import AuctionNotesButton from "./auction-notes-button"
 import { AUCTION_TYPES, auctionTypeEmoji, auctionTypeLabel } from "@/lib/auction-types"
+import { toggleAuctionFavourite } from "@/lib/actions/catalogue"
 
 export type AuctionRow = {
   id: string
@@ -21,6 +22,8 @@ export type AuctionRow = {
   aiRan: boolean
   complete: boolean
   notes: string | null
+  /** Starred by the person looking at the page — ⚠ per user, not a property of the sale. */
+  favourite: boolean
 }
 
 const STATUS_FILTERS = [
@@ -66,11 +69,34 @@ function PhotoCount({ withPhotos, lots }: { withPhotos: number; lots: number }) 
   )
 }
 
-function AuctionTable({ rows }: { rows: AuctionRow[] }) {
+/** The star. Sized for a finger, not a mouse — this list is used on the shared iPads. */
+function FavouriteStar({ on, onClick }: { on: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={on ? "Remove from Currently working on" : "Add to Currently working on"}
+      title={on ? "Remove from Currently working on" : "Pin to Currently working on (only you see this)"}
+      className={`w-11 h-11 -my-2 flex items-center justify-center text-lg leading-none rounded-lg transition-colors ${
+        on
+          ? "text-amber-400 hover:text-amber-300"
+          : "text-gray-400 dark:text-gray-600 hover:text-amber-400 dark:hover:text-amber-400"
+      }`}
+    >
+      {on ? "★" : "☆"}
+    </button>
+  )
+}
+
+function AuctionTable({ rows, isFav, onToggleFav }: {
+  rows: AuctionRow[]
+  isFav: (id: string) => boolean
+  onToggleFav: (id: string) => void
+}) {
   return (
     <table className="w-full text-sm">
       <thead>
         <tr className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1C1E]">
+          <th className="w-12 px-2 py-3"></th>
           <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Code</th>
           <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Name</th>
           <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Date</th>
@@ -91,6 +117,9 @@ function AuctionTable({ rows }: { rows: AuctionRow[] }) {
             key={auction.id}
             className="border-b border-gray-200 dark:border-gray-800 last:border-0 hover:bg-gray-100 dark:hover:bg-[#2C2C2E] transition-colors"
           >
+            <td className="px-2 py-3 text-center">
+              <FavouriteStar on={isFav(auction.id)} onClick={() => onToggleFav(auction.id)} />
+            </td>
             <td className="px-4 py-3">
               <Link
                 href={`/tools/cataloguing/auctions/${auction.id}`}
@@ -136,8 +165,45 @@ export default function AuctionsTables({ active, completed }: { active: AuctionR
   const [type, setType] = useState("ALL")
   const [status, setStatus] = useState("ALL")
 
+  // Starred sales are held here as well as on the server so the star flips the instant it is
+  // pressed — waiting on a round-trip before anything moves reads as a dead button, especially
+  // on the iPads. The server action revalidates and the effect re-syncs from the fresh props.
+  const favFromProps = useMemo(
+    () => new Set([...active, ...completed].filter(r => r.favourite).map(r => r.id)),
+    [active, completed],
+  )
+  const [favs, setFavs] = useState<Set<string>>(favFromProps)
+  useEffect(() => { setFavs(favFromProps) }, [favFromProps])
+  const [, startFav] = useTransition()
+
+  const isFav = (id: string) => favs.has(id)
+
+  function flip(id: string) {
+    setFavs(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  function toggleFav(id: string) {
+    flip(id)
+    startFav(async () => {
+      const res = await toggleAuctionFavourite(id)
+      // Put it back if the save didn't happen — a star that stays on after a failed write
+      // would quietly disagree with what is actually saved.
+      if (!res?.ok) flip(id)
+    })
+  }
+
   const filteredActive    = useMemo(() => active.filter(r => matches(r, search, type, status)),    [active, search, type, status])
   const filteredCompleted = useMemo(() => completed.filter(r => matches(r, search, type, status)), [completed, search, type, status])
+
+  // Starred sales are lifted out of their normal section and pinned to the top — including a
+  // completed one, since a sale you are still fixing up is exactly what this is for.
+  const pinned          = [...filteredActive, ...filteredCompleted].filter(r => isFav(r.id))
+  const restActive      = filteredActive.filter(r => !isFav(r.id))
+  const restCompleted   = filteredCompleted.filter(r => !isFav(r.id))
 
   const hasFilter = !!search || type !== "ALL" || status !== "ALL"
 
@@ -174,19 +240,34 @@ export default function AuctionsTables({ active, completed }: { active: AuctionR
         )}
       </div>
 
+      {/* ⭐ Currently working on — only ever visible to the person who starred them */}
+      {pinned.length > 0 && (
+        <>
+          <h2 className="text-sm font-semibold text-amber-600 dark:text-amber-400 mb-2 flex items-center gap-2">
+            ★ Currently working on ({pinned.length})
+            <span className="font-normal text-xs text-gray-500 dark:text-gray-500">only you see these</span>
+          </h2>
+          <div className="bg-white dark:bg-[#1C1C1E] rounded-xl border border-amber-300 dark:border-amber-500/40 overflow-hidden mb-8">
+            <AuctionTable rows={pinned} isFav={isFav} onToggleFav={toggleFav} />
+          </div>
+        </>
+      )}
+
       {/* Active auctions */}
       <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-        Active Auctions{hasFilter && ` (${filteredActive.length})`}
+        Active Auctions{hasFilter && ` (${restActive.length})`}
       </h2>
       <div className="bg-white dark:bg-[#1C1C1E] rounded-xl border border-gray-300 dark:border-gray-700 overflow-hidden mb-8">
-        {filteredActive.length === 0 ? (
+        {restActive.length === 0 ? (
           <div className="text-center py-10 text-gray-600 dark:text-gray-500 text-sm">
             {hasFilter
               ? "No active auctions match your filters."
-              : "No active auctions. Create one, or tick Complete to bring one back here."}
+              : filteredActive.length > 0
+                ? "Every active auction is starred, so they are all in Currently working on above."
+                : "No active auctions. Create one, or tick Complete to bring one back here."}
           </div>
         ) : (
-          <AuctionTable rows={filteredActive} />
+          <AuctionTable rows={restActive} isFav={isFav} onToggleFav={toggleFav} />
         )}
       </div>
 
@@ -194,15 +275,17 @@ export default function AuctionsTables({ active, completed }: { active: AuctionR
       {completed.length > 0 && (
         <>
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-            Completed Auctions{hasFilter && ` (${filteredCompleted.length})`}
+            Completed Auctions{hasFilter && ` (${restCompleted.length})`}
           </h2>
           <div className="bg-white dark:bg-[#1C1C1E] rounded-xl border border-gray-300 dark:border-gray-700 overflow-hidden opacity-80">
-            {filteredCompleted.length === 0 ? (
+            {restCompleted.length === 0 ? (
               <div className="text-center py-10 text-gray-600 dark:text-gray-500 text-sm">
-                No completed auctions match your filters.
+                {filteredCompleted.length > 0
+                  ? "Every completed auction that matches is starred, so they are above."
+                  : "No completed auctions match your filters."}
               </div>
             ) : (
-              <AuctionTable rows={filteredCompleted} />
+              <AuctionTable rows={restCompleted} isFav={isFav} onToggleFav={toggleFav} />
             )}
           </div>
         </>

@@ -1694,6 +1694,37 @@ export async function uploadLotPhoto(
   }
 }
 
+// Auction Manager ⭐ — star a sale so it sits in "Currently working on" at the top.
+//
+// ⚠ PER USER. Nothing about a starred sale is visible to anyone else, and starring is NOT a
+// status: it must never be confused with catalogued / photographed / complete, which describe
+// the sale itself. Deliberately not BC-locked — it changes nothing about the sale.
+// Returns rather than throws (production redacts thrown server-action messages).
+export async function toggleAuctionFavourite(
+  auctionId: string,
+): Promise<{ ok: boolean; favourite: boolean; error?: string }> {
+  try {
+    const session = await auth()
+    if (!session?.user?.id) return { ok: false, favourite: false, error: "Not signed in" }
+    const userId = session.user.id
+
+    const existing = await prisma.catalogueAuctionFavourite.findUnique({
+      where: { userId_auctionId: { userId, auctionId } },
+      select: { userId: true },
+    })
+    if (existing) {
+      await prisma.catalogueAuctionFavourite.delete({ where: { userId_auctionId: { userId, auctionId } } })
+      revalidatePath("/tools/cataloguing/auctions")
+      return { ok: true, favourite: false }
+    }
+    await prisma.catalogueAuctionFavourite.create({ data: { userId, auctionId } })
+    revalidatePath("/tools/cataloguing/auctions")
+    return { ok: true, favourite: true }
+  } catch (e: any) {
+    return { ok: false, favourite: false, error: e?.message ?? "Couldn't change that." }
+  }
+}
+
 // Store the barcode LABEL photo that assigned this lot's photos during a smart
 // scan. Deliberately kept in its own column, never pushed into imageUrls — it
 // is an internal check aid and must not reach the website, BC or AI runs.

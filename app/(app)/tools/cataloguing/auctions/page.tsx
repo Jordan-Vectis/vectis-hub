@@ -42,6 +42,18 @@ export default async function AuctionsPage() {
   })
   const withPhotos = new Map(photoCounts.map(g => [g.auctionId, g._count._all]))
 
+  // The sales THIS person has starred. Migration-safe: the table arrives with the deploy but
+  // only exists once the migrations have run, and an empty set simply means nobody has
+  // starred anything yet — never an error page.
+  let favourites = new Set<string>()
+  try {
+    const rows = await prisma.catalogueAuctionFavourite.findMany({
+      where:  { userId: session.user.id },
+      select: { auctionId: true },
+    })
+    favourites = new Set(rows.map(r => r.auctionId))
+  } catch { /* not migrated yet */ }
+
   const rows: AuctionRow[] = auctions.map(a => ({
     id: a.id,
     code: a.code,
@@ -56,6 +68,7 @@ export default async function AuctionsPage() {
     aiRan: !!(a as any).aiRan,
     complete: !!a.complete,
     notes: a.notes ?? null,
+    favourite: favourites.has(a.id),
   }))
   const active    = rows.filter(r => !r.complete)
   const completed = rows.filter(r => r.complete)

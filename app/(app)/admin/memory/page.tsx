@@ -16,6 +16,28 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "auction_favourites.md",
+    content: `---
+name: Auction Manager - Currently working on (favourites)
+purpose: Per-user starred sales pinned to the top of Auction Manager. Read before touching the auctions list or adding another "status" to a sale.
+metadata:
+  type: reference
+---
+
+Built 2026-08-17. Jordan: "can I have a quick way to favourite auctions so I can separate ones at the top of the page that im currently working on". /tools/cataloguing/auctions.
+
+A star in a new FIRST column on every row. Starred sales are lifted out of their normal section into a "★ Currently working on" block pinned above Active Auctions, with an amber border.
+
+⚠⚠ PER USER - AND NOT A STATUS. CatalogueAuctionFavourite (NEEDS Run Migrations): compound primary key (userId, auctionId) plus createdAt, both foreign keys cascading - the same join-table shape as UserDepartment. Nothing about a starred sale is visible to anyone else, and the header says "only you see these" so nobody mistakes it for a shared flag.
+
+⚠ It is NOT a sale status. catalogued / photography / addedToBC / aiRan / complete are columns on CatalogueAuction describing the SALE; a favourite describes one person's attention. Never add it to STATUS_FILTERS, the overview PDF, or anything that reports on a sale.
+
+- toggleAuctionFavourite(auctionId) in lib/actions/catalogue.ts RETURNS { ok, favourite, error? } rather than throwing (production redacts thrown server-action messages). Deliberately NOT BC-locked: it changes nothing about the sale.
+- The page reads the user's favourites inside a try/catch - the table only exists once the migrations have been run, and an empty set has to mean "nothing starred", never an error page.
+- The star flips in LOCAL STATE FIRST and reverts if the write fails. Waiting on a round-trip before anything moves reads as a dead button on the shared iPads. The button is a 44px touch target (design rule 5).
+- A COMPLETED sale can be starred too and pins the same way - a sale you are still fixing up is exactly the case. Both the Active and Completed tables have the pinned rows removed so nothing appears twice, and each section explains itself when everything in it is starred rather than looking empty.`,
+  },
+  {
     filename: "patches_and_changes.md",
     content: `---
 name: Admin -> Patches & Changes

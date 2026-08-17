@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"da729e97e159f0d5bb16249d8e591ec4141528e5","author":"Jordan Orange","date":"2026-08-17T15:48:24+01:00","subject":"Photos that match no lot are simply not saved"},
   {"sha":"6a24705174bdcef2b938b71137dc2358a7d30980","author":"Jordan Orange","date":"2026-08-17T15:40:40+01:00","subject":"Changelog seed: pin the start date, git's bare date drifts through the day"},
   {"sha":"2287216f8267e8e10f8405e72b2b73eae89f27c1","author":"Jordan Orange","date":"2026-08-17T15:39:23+01:00","subject":"Photography: upload photos without picking a sale first"},
   {"sha":"cef506f1eb337e909738e277082aaa977d6955ce","author":"Jordan Orange","date":"2026-08-17T13:48:32+01:00","subject":"Patches & Changes: don't warn about a release's own headline change"},

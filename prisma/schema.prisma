@@ -72,6 +72,7 @@ model User {
   bcToken             BCToken?
   devices             Device[]
   departmentLinks     UserDepartment[]
+  auctionFavourites   CatalogueAuctionFavourite[]
   auctionAccess       CatalogueAuctionAccess[]
   lotDrafts           CatalogueLotDraft[]
 }
@@ -411,6 +412,21 @@ model Logistics {
   submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 }
 
+// A sale someone has starred on Auction Manager, so the ones they are working on sit at the
+// top. ⚠ PER USER, deliberately — "the ones I'm currently working on" is personal, and a
+// shared list would have every cataloguer's sales fighting for the same pinned section.
+model CatalogueAuctionFavourite {
+  userId    String
+  auctionId String
+  createdAt DateTime @default(now())
+
+  user    User             @relation(fields: [userId],    references: [id], onDelete: Cascade)
+  auction CatalogueAuction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, auctionId])
+  @@index([auctionId])
+}
+
 model CatalogueAuction {
   id                  String                   @id @default(cuid())
   code                String                   @unique
@@ -443,6 +459,7 @@ model CatalogueAuction {
   extraAccess         CatalogueAuctionAccess[]
   lotDrafts           CatalogueLotDraft[]
   bcCorrections       CatalogueBcCorrection[]
+  favouritedBy        CatalogueAuctionFavourite[]
 }
 
 // One-off access to a single sale for someone outside its department — the
