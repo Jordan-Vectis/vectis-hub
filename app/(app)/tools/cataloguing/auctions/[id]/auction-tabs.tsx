@@ -49,6 +49,17 @@ interface Lot {
 
 // "Date Added" — short and scannable in a table column, and the time matters
 // (several lots a day from the same person), so both are shown.
+/** The lot's creation date as yyyy-mm-dd, to compare against an <input type="date">.
+ *  ⚠ Built from the LOCAL date parts, not toISOString() — that converts to UTC, so anything
+ *  catalogued after 01:00 BST would filter under the previous day. Matches what the Date Added
+ *  column shows, which is also local. */
+function ukDay(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ""
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
 function fmtDateAdded(iso: string) {
   const d = new Date(iso)
   if (isNaN(d.getTime())) return "—"
@@ -1429,6 +1440,8 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
   const [fTote,          setFTote]          = useState("")
   const [fCategory,      setFCategory]      = useState("")
   const [fPhotos,        setFPhotos]        = useState("")   // "any" | "none" | ""
+  const [fAddedBy,       setFAddedBy]       = useState("")   // exact createdByName
+  const [fDateAdded,     setFDateAdded]     = useState("")   // yyyy-mm-dd, matched in UK local time
   // One AI filter covering both flags: "" | "upgraded" | "not_upgraded" | "excluded" | "not_excluded"
   const [fAi,            setFAi]            = useState("")
   const [fAddedToBC,     setFAddedToBC]     = useState("")   // "yes" | "no" | ""
@@ -1449,7 +1462,9 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
          fAi === "not_upgraded" ? !l.aiUpgraded :
          fAi === "excluded"     ?  l.aiExcluded : !l.aiExcluded)) &&
       (fAddedToBC === ""  || (fAddedToBC  === "yes" ? l.addedToBC  : !l.addedToBC )) &&
-      (fKeyPoints === ""  || (fKeyPoints  === "yes" ? !!l.keyPoints?.trim() : !l.keyPoints?.trim()))
+      (fKeyPoints === ""  || (fKeyPoints  === "yes" ? !!l.keyPoints?.trim() : !l.keyPoints?.trim())) &&
+      (fAddedBy === ""    || (l.createdByName ?? "") === fAddedBy) &&
+      (fDateAdded === ""  || ukDay(l.createdAt) === fDateAdded)
     )
     return f.sort((a, b) => {
       let cmp = 0
@@ -1477,9 +1492,16 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
       }
       return sortDir === "asc" ? cmp : -cmp
     })
-  }, [lots, fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAi, fAddedToBC, fKeyPoints, sortCol, sortDir])
+  }, [lots, fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAi, fAddedToBC, fKeyPoints, fAddedBy, fDateAdded, sortCol, sortDir])
 
-  const filtersActive = [fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAi, fAddedToBC, fKeyPoints].some(f => f !== "")
+  // Everyone who has actually added a lot to THIS sale — a dropdown beats free text when the
+  // question is "what did Keiran do", and it cannot be mistyped.
+  const cataloguersInSale = useMemo(
+    () => Array.from(new Set(lots.map(l => l.createdByName).filter((n): n is string => !!n))).sort((a, b) => a.localeCompare(b)),
+    [lots],
+  )
+
+  const filtersActive = [fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAi, fAddedToBC, fKeyPoints, fAddedBy, fDateAdded].some(f => f !== "")
 
   function clearFilters() {
     setFBarcode(""); setFUniqueId(""); setFTitle(""); setFVendor(""); setFReceipt("")
@@ -1506,6 +1528,7 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
           // fAi is the combined filter; older saved shapes carried fAiUpgraded/fAiExcluded.
           setFAi(s.fAi ?? (s.fAiExcluded === "yes" ? "excluded" : s.fAiUpgraded === "yes" ? "upgraded" : ""))
           setFAddedToBC(s.fAddedToBC ?? ""); setFKeyPoints(s.fKeyPoints ?? "")
+          setFAddedBy(s.fAddedBy ?? ""); setFDateAdded(s.fDateAdded ?? "")
           // s.sortCol may be the removed "status" column from an older session
           if (s.sortCol && s.sortCol !== "status") setSortCol(s.sortCol); if (s.sortDir) setSortDir(s.sortDir)
         }
@@ -1519,10 +1542,10 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
     try {
       sessionStorage.setItem(FILTER_KEY, JSON.stringify({
         fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory,
-        fPhotos, fAi, fAddedToBC, fKeyPoints, sortCol, sortDir,
+        fPhotos, fAi, fAddedToBC, fKeyPoints, fAddedBy, fDateAdded, sortCol, sortDir,
       }))
     } catch {}
-  }, [FILTER_KEY, fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAi, fAddedToBC, fKeyPoints, sortCol, sortDir])
+  }, [FILTER_KEY, fBarcode, fUniqueId, fTitle, fVendor, fReceipt, fTote, fCategory, fPhotos, fAi, fAddedToBC, fKeyPoints, fAddedBy, fDateAdded, sortCol, sortDir])
 
   // ── Undo stack (this user's recent mass actions on this auction) ────────────
   const [undos, setUndos] = useState<{ id: string; label: string; at: string }[]>([])
@@ -2361,8 +2384,18 @@ function ManageLotsTab({ lots, auctionId, auction, allAuctions, bcLocked, onEdit
                   <option value="none">No photos</option>
                 </select>
               </td>
-              <td className="px-2 py-1.5" />{/* Added By */}
-              <td className="px-2 py-1.5" />{/* Date Added */}
+              <td className="px-2 py-1.5">
+                <select value={fAddedBy} onChange={e => setFAddedBy(e.target.value)} className={COL_SELECT}>
+                  <option value="">All</option>
+                  {cataloguersInSale.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </td>
+              <td className="px-2 py-1.5">
+                {/* RULES rule 2: a native date control draws its picker in the BROWSER's
+                    colours — color-scheme is what tells it we are dark. */}
+                <input type="date" value={fDateAdded} onChange={e => setFDateAdded(e.target.value)}
+                  className={`${COL_INPUT} dark:[color-scheme:dark]`} />
+              </td>
               <td className="px-2 py-1.5">
                 <select value={fKeyPoints} onChange={e => setFKeyPoints(e.target.value)} className={COL_SELECT}>
                   <option value="">All</option>
