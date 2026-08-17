@@ -25,20 +25,53 @@ export type IdleGateEval = {
   since:       Date | null   // the last save the gap is measured from
   thresholdMs: number
   nowMs:       number        // the server clock at evaluation
+  /** The instant the gap was measured TO — the same as nowMs unless measureTo was "lot-start". */
+  measuredToMs: number
 }
 
-export async function evaluateIdleGate(userId: string): Promise<IdleGateEval> {
+/**
+ * ⚠⚠ WHERE THE GAP ENDS (2026-08-17). Jordan: *"someone goes for their lunch comes back makes
+ * a lot then the idle timer triggers after making the first lot even though they might of
+ * spent 10 mins doing the lot"*.
+ *
+ * "now"       — the gap ends at this instant. Right for the popup at LOT START, because
+ *               "now" IS the start of the lot.
+ * "lot-start" — the gap ends when this cataloguer last started a lot (CataloguerLotStart,
+ *               stamped by the server). Right for the SAVE-time gate, which would otherwise
+ *               fold the lot's own working minutes into the break: back from lunch at 13:25,
+ *               ten minutes on a lot, saved 13:35, measured as a 70-minute absence.
+ *
+ * ⚠ Falls back to "now" when there is no marker, which is exactly the old behaviour — so a
+ * deploy before the migration, or a save from a path that never reported a start, is no worse
+ * than before. A marker OLDER than the last save is ignored: a save has happened since, so it
+ * cannot be describing the lot being saved now.
+ */
+export type MeasureTo = "now" | "lot-start"
+
+export async function evaluateIdleGate(userId: string, measureTo: MeasureTo = "now"): Promise<IdleGateEval> {
   const nowMs = Date.now()
   const u = await prisma.user.findUnique({ where: { id: userId }, select: { showScanTimer: true, timerRedMins: true } })
   const thresholdMs = (u?.timerRedMins ?? 30) * 60_000
-  if (u?.showScanTimer === false) return { reason: "TIMER_OFF", blocked: false, idleMs: 0, since: null, thresholdMs, nowMs }
+  if (u?.showScanTimer === false) return { reason: "TIMER_OFF", blocked: false, idleMs: 0, since: null, thresholdMs, nowMs, measuredToMs: nowMs }
 
   const lastSave = await prisma.catalogueTimingLog.findFirst({ where: { userId }, orderBy: { savedAt: "desc" }, select: { savedAt: true } })
-  if (!lastSave) return { reason: "NO_HISTORY", blocked: false, idleMs: 0, since: null, thresholdMs, nowMs }
+  if (!lastSave) return { reason: "NO_HISTORY", blocked: false, idleMs: 0, since: null, thresholdMs, nowMs, measuredToMs: nowMs }
 
   const sinceMs = lastSave.savedAt.getTime()
-  const { gate, idleMs, reason } = assessGap(sinceMs, nowMs, thresholdMs)
-  if (!gate) return { reason: reason === "OVER_THRESHOLD" ? "UNDER_THRESHOLD" : reason, blocked: false, idleMs, since: lastSave.savedAt, thresholdMs, nowMs }
+
+  // Where does the gap end?
+  let endMs = nowMs
+  if (measureTo === "lot-start") {
+    try {
+      const marker = await prisma.cataloguerLotStart.findUnique({ where: { userId }, select: { startedAt: true } })
+      const startedMs = marker?.startedAt.getTime() ?? 0
+      // Only usable if it sits between the last save and now. Outside that it is stale.
+      if (startedMs > sinceMs && startedMs <= nowMs) endMs = startedMs
+    } catch { /* table not migrated yet — measure to now, i.e. the old behaviour */ }
+  }
+
+  const { gate, idleMs, reason } = assessGap(sinceMs, endMs, thresholdMs)
+  if (!gate) return { reason: reason === "OVER_THRESHOLD" ? "UNDER_THRESHOLD" : reason, blocked: false, idleMs, since: lastSave.savedAt, thresholdMs, nowMs, measuredToMs: endMs }
 
   // Over-threshold — already accounted for? A logged idle only clears the gate if
   // it actually COVERS at least half the gap (same rule as the idle-gaps report),
@@ -51,14 +84,17 @@ export async function evaluateIdleGate(userId: string): Promise<IdleGateEval> {
     where: {
       userId,
       reason: { not: UNALLOCATED_REASON.key },
+      // ⚠ nowMs, not endMs — a reason logged DURING the lot (the wizard's within-lot check)
+      // still accounts for the break, and must not fall outside the window just because the
+      // gap itself is now measured to the lot's start.
       idleStartedAt: { gte: new Date(sinceMs - 5 * 60_000), lte: new Date(nowMs + 5 * 60_000) },
     },
     select: { idleDurationMs: true },
   })
   const coveredMs = windowIdle.reduce((s, l) => s + l.idleDurationMs, 0)
-  if (coveredMs >= idleMs / 2) return { reason: "CLEARED_BY_REASON", blocked: false, idleMs, since: lastSave.savedAt, thresholdMs, nowMs }
+  if (coveredMs >= idleMs / 2) return { reason: "CLEARED_BY_REASON", blocked: false, idleMs, since: lastSave.savedAt, thresholdMs, nowMs, measuredToMs: endMs }
 
-  return { reason: "BLOCKED", blocked: true, idleMs, since: lastSave.savedAt, thresholdMs, nowMs }
+  return { reason: "BLOCKED", blocked: true, idleMs, since: lastSave.savedAt, thresholdMs, nowMs, measuredToMs: endMs }
 }
 
 // Record the gate's decision for a save, alongside what the DEVICE claimed

@@ -574,7 +574,10 @@ export default function LotWizardTab({
   async function checkIdleOnLotStart() {
     if (!showScanTimer || idlePopup) return
     try {
-      const r = await fetch("/api/catalogue/last-activity")
+      // ⚠ event=lot-start also stamps the server's lot-start marker, which is what the
+      // save-time gate measures the gap TO — so the minutes spent on this lot are not
+      // counted as time away. Only this call may send it; see the route's note.
+      const r = await fetch("/api/catalogue/last-activity?event=lot-start")
       if (r.ok) {
         const j = await r.json()
         const serverMs = Number(j?.lastMs) || 0

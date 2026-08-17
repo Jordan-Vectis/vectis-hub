@@ -16,6 +16,36 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "idle_gap_ends_at_lot_start.md",
+    content: `---
+name: The idle gap ends at LOT START, not at the save
+purpose: Why evaluateIdleGate takes a measureTo, and why the lot-start marker must be stamped by the server. Read before touching the idle gate or the last-activity endpoint.
+metadata:
+  type: reference
+---
+
+2026-08-17. Jordan: "It should be when it started as the problem is lets say someone goes for their lunch comes back makes a lot then the idle timer triggers after making the first lot even though they might of spent 10 mins doing the lot".
+
+THE BUG. evaluateIdleGate measured lastSave -> Date.now(). createLot calls it AT SAVE TIME, so every lot's own working minutes were counted as part of the preceding break. Measured against the real maths: a 20-minute break followed by a 35-minute lot reported a 55-MINUTE gap and prompted on a 30-minute threshold - a false accusation. Jordan's lunch example reported 70 minutes for a 60-minute break.
+
+THE FIX. evaluateIdleGate(userId, measureTo):
+- "now" (default) - right for the popup at LOT START, because "now" IS the start.
+- "lot-start" - used by the createLot gate; the gap ends at the server-stamped marker.
+
+⚠⚠ CataloguerLotStart IS STAMPED BY THE SERVER (one row per user, overwritten), via GET /api/catalogue/last-activity?event=lot-start. NEVER take the start from the device, and never derive it as now minus a client-reported durationMs: a tampered device could claim a three-hour lot and erase a real three-hour gap - the same class of bypass the server-authoritative gate was built to close.
+
+⚠ ONLY checkIdleOnLotStart MAY PASS ?event=lot-start - it fires on the first keystroke of a new barcode. The other caller, confirmIdleWithServer (used mid-lot and at save), must NOT: the marker would creep forward all through the lot and erase the very gap it exists to measure.
+
+Deliberate details, all of which matter:
+- A marker OLDER than the last save, or in the future, is IGNORED - a save has happened since, so it cannot describe the lot being saved now. Falls back to "now", which is exactly the old behaviour, so a deploy before the migration is no worse than before.
+- The CLEARED_BY_REASON window still runs to nowMs, not the measured end - a reason logged DURING the lot (the within-lot check) must still account for the break.
+- IdleGateEval gained measuredToMs; nowMs stays the true server clock because clockLooksTampered compares the device's claim against it.
+
+⚠ THE WITHIN-LOT CHECK WAS LEFT ALONE. checkWithinLotIdle / maybePromptIdleBeforeSave measure to NOW on purpose - they ask "have you wandered off during this lot?", and measuring those to lot start would give ~0 and reopen the hole the 2026-07-20 second check closed. (Jack owns the wizard's idle code - coordinate on conflicts.)
+
+⚠ THE REPORTS WERE ALREADY CORRECT - lib/cataloguing-reports.ts treats a lot as occupying [savedAt - durationMs, savedAt]. Only the live gate was wrong. And CatalogueTimingLog.savedAt is the FINISH time (@default(now()), never passed in by the client); a lot's start is savedAt minus durationMs.`,
+  },
+  {
     filename: "auction_favourites.md",
     content: `---
 name: Auction Manager - Currently working on (favourites)

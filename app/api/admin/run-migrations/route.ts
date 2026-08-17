@@ -1475,6 +1475,17 @@ const MIGRATIONS = [
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "kpFixNote" TEXT`,
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "kpFixedBy" TEXT`,
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "kpFixedAt" TIMESTAMP(3)`,
+  // When a cataloguer last STARTED a lot, stamped by the server — the idle gap is measured
+  // to here rather than to the save, so a lot's own working time isn't counted as a break.
+  `CREATE TABLE IF NOT EXISTS "CataloguerLotStart" (
+     "userId"    TEXT NOT NULL,
+     "startedAt" TIMESTAMP(3) NOT NULL,
+     CONSTRAINT "CataloguerLotStart_pkey" PRIMARY KEY ("userId")
+   )`,
+  `DO $$ BEGIN
+    ALTER TABLE "CataloguerLotStart" ADD CONSTRAINT "CataloguerLotStart_userId_fkey"
+      FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
   // Auction Manager ⭐ — the sales a person is working on, pinned to the top. Per user.
   `CREATE TABLE IF NOT EXISTS "CatalogueAuctionFavourite" (
      "userId"    TEXT NOT NULL,

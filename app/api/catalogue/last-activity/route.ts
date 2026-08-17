@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { evaluateIdleGate } from "@/lib/idle-gate"
@@ -9,10 +9,27 @@ import { evaluateIdleGate } from "@/lib/idle-gate"
 // on-screen popup fires on server time and can NOT be silenced by changing the
 // phone's clock or timezone. `lastMs`/`serverNow` still let the client reconcile
 // its local heartbeat and fall back to a server-anchored clock when needed.
-export async function GET() {
+//
+// ⚠⚠ ?event=lot-start ALSO STAMPS THE LOT-START MARKER. Only checkIdleOnLotStart may pass it
+// — that call happens on the first keystroke of a new barcode, which is genuinely the moment
+// the lot begins. The other caller (confirmIdleWithServer, used mid-lot and at save) must NOT,
+// or the marker would creep forward all through the lot and erase the very gap it exists to
+// measure. The time written is the SERVER's, never anything the device sent.
+export async function GET(req: NextRequest) {
   try {
     const session = await auth()
     if (!session) return NextResponse.json({ error: "Unauthorised" }, { status: 401 })
+
+    if (req.nextUrl.searchParams.get("event") === "lot-start") {
+      try {
+        const startedAt = new Date()
+        await prisma.cataloguerLotStart.upsert({
+          where:  { userId: session.user.id },
+          create: { userId: session.user.id, startedAt },
+          update: { startedAt },
+        })
+      } catch { /* table not migrated yet — the gate falls back to measuring to now */ }
+    }
 
     const [lastIdle, gate] = await Promise.all([
       prisma.idleLog.findFirst({
