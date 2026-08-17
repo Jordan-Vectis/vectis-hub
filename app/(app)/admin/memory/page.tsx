@@ -343,24 +343,23 @@ WARNING — worth revisiting: this also marks Photo Only, Import, Mass Create an
     filename: "screen_position_and_copier_conditions.md",
     content: `---
 name: NEVER move what is already on screen + the Copier's condition check
-purpose: The macro drives BC by screen coordinates, so new UI must go UNDERNEATH existing elements. Plus why the Description Copier was flagging 139 lots that were perfectly fine. Read before adding anything to a screen the macro touches.
+purpose: The Description Copier's layout is frozen because the macro reads it by screen coordinates — and ONLY that page. Plus why the Copier was flagging 139 lots that were perfectly fine. Read before changing the Copier's layout.
 last_updated: 2026-08-14
 ---
 
-# WARNING: NEVER MOVE WHAT IS ALREADY ON SCREEN
+# WARNING: the DESCRIPTION COPIER's layout is frozen — and ONLY that page
 
 Jordan, 2026-08-14: "Its also very important this appears underneath what was already there as moving elements on the screen will break the macro this should be marked as a very important rule."
 
-His **AutoHotkey macro** drives the overnight BC import **by screen coordinates** — it clicks and types at fixed positions. Anything inserted above existing content pushes that content down, every coordinate below it is then wrong, and the macro types into the wrong field or clicks the wrong control. It fails **silently, overnight, with nobody watching**.
+His **AutoHotkey macro** reads the **Description Copier** by **screen coordinates** while it types into BC. Move anything on that page and the macro types into the wrong field — **silently, overnight, with nobody watching**.
 
-Rules, now written up as **RULES.md → Design philosophy rule 6**:
-- A new banner, warning, section or button goes at the **BOTTOM** of the block it belongs to. Never above, never between.
-- On the **Description Copier** specifically: the lot card and its **Copy Description** buttons come FIRST, and the condition banner sits BELOW them. Anything above the card moves the card.
-- **The page's height must not vary with the data.** A banner whose height depends on how many lots are flagged shifts everything beneath it on some sales and not others — just as damaging as putting it above. Keep it collapsed by default, or below the working area, or both.
-- Applies to every screen the macro touches, and to the **Description Copier** especially, since that is read while the macro types into BC.
+WARNING — scope, which he gave the same day: "The macro only touched the description copier everything else is fine to be moved around." **Every other screen in the Hub can be rearranged freely**; layout there is an ordinary design decision. Do not apply this rule beyond the Copier — an earlier draft did, and it would have made every future screen needlessly conservative.
+
+On the Copier itself, written up as RULES.md → Design philosophy rule 6:
+- The **lot card and its Copy Description buttons come FIRST**. Banners, warnings and summaries go BELOW them. Anything above the card moves the card.
+- **The page's height must not vary with the data.** A banner that grows with the number of flagged lots shifts everything beneath it on some sales and not others — just as damaging as putting it above. Keep it collapsed by default, or below the working area, or both.
 - Making an existing element **taller** counts too — an extra line of text, a label that wraps.
-- A collapsible section must default to **closed** if opening it would shift anything below it.
-- If something genuinely must sit at the top, **ASK FIRST** — it means re-recording the macro.
+- If something genuinely must sit above the card, **ASK FIRST** — it means re-recording the macro.
 
 # The Copier was flagging 139 lots with nothing wrong with them
 

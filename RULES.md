@@ -120,26 +120,23 @@ Much of this app is used on shared tablets, standing up.
 - **A drag inside a scrolling panel needs `touch-action: none`**, or the panel scrolls instead and
   the control feels dead.
 
-### 6. ⚠ NEVER MOVE WHAT IS ALREADY ON SCREEN — add underneath
-**New UI goes BELOW the existing elements, never inserted above or between them.** This is not
-a preference about layout; it breaks a working process.
+### 6. ⚠ The DESCRIPTION COPIER's layout is frozen — nothing above the lot card
+**Scope: the Description Copier (`/tools/auction-ai` → Description Copier) and nothing else.**
+Jordan's **AutoHotkey macro** reads that one page by **screen coordinates** while it types into
+BC. Move anything on it and the macro types into the wrong field — silently, overnight, with
+nobody watching. Every other screen in the Hub can be rearranged freely; layout there is an
+ordinary design decision (Jordan, 2026-08-14: *"The macro only touched the description copier
+everything else is fine to be moved around"*).
 
-Jordan's **AutoHotkey macro** drives the overnight BC import **by screen coordinates** — it
-clicks and types at fixed positions. Anything added above existing content pushes that content
-down, every coordinate is then wrong, and the macro types into the wrong field or clicks the
-wrong control. The damage is silent and it happens at night when nobody is watching.
-
-- Applies to every screen the macro touches, and to the **Description Copier** in particular
-  (it is read while the macro types into BC). On that page the **lot card and its Copy
-  Description buttons come FIRST** — banners, warnings and summaries go *below* them, not
-  above. Anything above the card moves the card.
+On the Copier specifically:
+- **The lot card and its Copy Description buttons come FIRST.** Banners, warnings and
+  summaries go *below* them. Anything above the card moves the card.
 - **The page's height must not vary with the data.** A banner that grows with the number of
-  flagged lots shifts everything under it on some sales and not others, which is just as bad
-  as adding it above. Keep such things collapsed by default, or below the working area.
-- A new banner, warning, section or button goes at the **bottom** of the block it belongs to.
-  If something genuinely must sit at the top, **ask first** — it means re-recording the macro.
-- Collapsible sections must default to **closed** if opening them would shift anything below.
-- The same goes for making an existing element taller (extra lines of text, a wrapped label).
+  flagged lots shifts everything under it on some sales and not others — just as damaging as
+  putting it above. Keep such things collapsed by default, or below the working area.
+- Making an existing element **taller** counts too (an extra line of text, a label that wraps).
+- If something genuinely must sit above the card, **ask first** — it means re-recording the
+  macro.
 
 ### 7. Never let "nothing happened" look like success
 - *The failure:* Change Vendor reported "✓ Changed 0 lots" when it had changed nothing, so a real
