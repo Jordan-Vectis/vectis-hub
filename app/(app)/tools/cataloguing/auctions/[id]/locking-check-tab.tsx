@@ -18,7 +18,8 @@ import { useEffect, useMemo, useState } from "react"
 // reads that answer. (It first tried to rebuild a tote map from a `totes` field the route
 // has never returned, so the check silently reported "BC data unavailable" on every sale.)
 import type { ToteCheckIssue } from "@/lib/tote-check"
-import { checkConditionInDescription } from "@/lib/condition"
+import { checkConditionInDescription, CONDITION_GRADES } from "@/lib/condition"
+import { bulkSetLotConditions } from "@/lib/actions/catalogue"
 // ⚠ The SAME rule the Generate Titles button uses. Writing a second copy here from the
 // description in RULES.md got both the newline handling and the truncation wrong, and
 // reported 634 of 635 correct titles as mismatched.
@@ -150,13 +151,24 @@ const CRITERIA: {
 const hasIssueFor = (issues: Issue[], key: string) =>
   key === "tote" ? issues.some(i => i.key.startsWith("tote_")) : issues.some(i => i.key === key)
 
-export default function LockingCheckTab({ lots, auctionId, onOpenLot }: {
+export default function LockingCheckTab({ lots, auctionId, onOpenLot, onRefresh }: {
   lots: LotItem[]
   auctionId: string
   onOpenLot: (id: string) => void
+  onRefresh: () => void
 }) {
   const [filter, setFilter] = useState<"blocking" | "look" | "all">("blocking")
   const [only, setOnly] = useState<string | null>(null)   // drill into one criterion
+
+  // ── AI condition suggestions ──────────────────────────────────────────────
+  // ⚠ SUGGESTIONS. Nothing here reaches a lot until the button that writes them is pressed,
+  // and each row can be edited or cleared first. RULES.md keeps condition a human judgement;
+  // Jordan reversed that only as far as "the AI may propose one for a person to accept".
+  const [suggesting, setSuggesting] = useState(false)
+  const [sugProgress, setSugProgress] = useState({ done: 0, total: 0 })
+  const [suggestions, setSuggestions] = useState<Record<string, { grade: string; reason: string; confidence: string }>>({})
+  const [savingConds, setSavingConds] = useState(false)
+  const [condMsg, setCondMsg] = useState<string | null>(null)
   const [toteIssues, setToteIssues] = useState<Map<string, ToteCheckIssue[]> | null>(null)
   const [lastSync, setLastSync] = useState<string | null>(null)
   const [bcState, setBcState] = useState<"loading" | "ready" | "failed">("loading")
@@ -210,6 +222,63 @@ export default function LockingCheckTab({ lots, auctionId, onOpenLot }: {
     }),
     [results],
   )
+
+  const needsCondition = useMemo(
+    () => lots.filter(l => !l.aiExcluded && !(l.condition ?? "").trim()),
+    [lots],
+  )
+
+  async function suggestConditions() {
+    if (suggesting) return
+    setSuggesting(true); setCondMsg(null)
+    setSugProgress({ done: 0, total: needsCondition.length })
+    try {
+      for (const [i, lot] of needsCondition.entries()) {
+        // Photos are the evidence — the route refuses to grade without them.
+        const images = (await Promise.all(
+          lot.imageUrls.slice(0, 4).map(async key => {
+            try {
+              const r = await fetch(`/api/catalogue/photo-proxy?key=${encodeURIComponent(key)}`)
+              if (!r.ok) return null
+              const buf = await r.arrayBuffer()
+              return { data: btoa(String.fromCharCode(...new Uint8Array(buf))), mimeType: r.headers.get("content-type") || "image/jpeg" }
+            } catch { return null }
+          }),
+        )).filter(Boolean) as { data: string; mimeType: string }[]
+
+        try {
+          const res = await fetch("/api/auction-ai/suggest-condition", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ label: lot.barcode ?? lot.receiptUniqueId ?? "", description: lot.description, images }),
+          })
+          const j = await res.json()
+          if (j?.grade) setSuggestions(prev => ({ ...prev, [lot.id]: { grade: j.grade, reason: j.reason ?? "", confidence: j.confidence ?? "low" } }))
+        } catch { /* one lot failing must not stop the run */ }
+        setSugProgress({ done: i + 1, total: needsCondition.length })
+      }
+    } finally {
+      setSuggesting(false)
+    }
+  }
+
+  async function applySuggestions() {
+    const updates = Object.entries(suggestions)
+      .filter(([, v]) => v.grade.trim())
+      .map(([id, v]) => ({ id, condition: v.grade.trim() }))
+    if (updates.length === 0) return
+    if (!confirm(`Write ${updates.length} condition${updates.length === 1 ? "" : "s"} onto the lots?
+
+Each one is the AI's suggestion — only accept what you have read.`)) return
+    setSavingConds(true); setCondMsg(null)
+    try {
+      const res = await bulkSetLotConditions(auctionId, updates)
+      setCondMsg(`✓ Wrote ${res.updated} condition${res.updated === 1 ? "" : "s"}.`)
+      setSuggestions({})
+      onRefresh()
+    } catch (e: any) {
+      setCondMsg(e?.message ?? "Could not save the conditions")
+    } finally { setSavingConds(false) }
+  }
 
   return (
     <div className="space-y-5 max-w-6xl">
@@ -293,6 +362,82 @@ export default function LockingCheckTab({ lots, auctionId, onOpenLot }: {
           })}
         </ul>
       </div>
+
+      {/* Conditions the AI can propose. ⚠ Below the checklist and nothing is written until the
+          accept button is pressed — the grade a lot ends up with is always a person's call. */}
+      {needsCondition.length > 0 && (
+        <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
+          <div className="flex items-start gap-4 flex-wrap">
+            <div className="flex-1 min-w-[280px]">
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                {needsCondition.length} lot{needsCondition.length === 1 ? "" : "s"} have no condition
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                The AI can suggest a grade from each lot&apos;s photographs, using our grading system. It reads the photos,
+                not the description, and says how sure it is. <strong>Nothing is written to a lot until you accept it</strong> —
+                and it cannot see hidden damage, missing parts or the inside of a box, so read them.
+              </p>
+            </div>
+            <button onClick={suggestConditions} disabled={suggesting}
+              className="px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-bold disabled:opacity-50">
+              {suggesting ? `Grading… ${sugProgress.done}/${sugProgress.total}` : "✨ Suggest conditions"}
+            </button>
+          </div>
+
+          {condMsg && <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">{condMsg}</p>}
+
+          {Object.keys(suggestions).length > 0 && (
+            <>
+              <div className="max-h-96 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-800">
+                <table className="w-full text-sm">
+                  <tbody>
+                    {needsCondition.filter(l => suggestions[l.id]).map(lot => {
+                      const sg = suggestions[lot.id]
+                      return (
+                        <tr key={lot.id} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
+                          <td className="px-3 py-2 font-mono text-xs text-gray-500 whitespace-nowrap">{lot.barcode || lot.receiptUniqueId}</td>
+                          <td className="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-xs truncate">{lot.title}</td>
+                          <td className="px-3 py-2">
+                            <select value={sg.grade}
+                              onChange={e => setSuggestions(prev => ({ ...prev, [lot.id]: { ...prev[lot.id], grade: e.target.value } }))}
+                              className="rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#2C2C2E] px-2 py-1.5 text-sm text-gray-900 dark:text-white">
+                              <option value="">— leave blank —</option>
+                              {CONDITION_GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+                              {sg.grade.includes(" to ") && <option value={sg.grade}>{sg.grade}</option>}
+                            </select>
+                          </td>
+                          <td className="px-3 py-2">
+                            {/* Low confidence is the AI telling you it could not see enough — the
+                                one it is most likely to have got wrong. */}
+                            <span className={`text-[11px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                              sg.confidence === "high" ? "bg-green-100 dark:bg-green-500/15 text-green-700 dark:text-green-300"
+                              : sg.confidence === "medium" ? "bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                              : "bg-red-100 dark:bg-red-500/15 text-red-700 dark:text-red-300"}`}>
+                              {sg.confidence}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">{sg.reason}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <button onClick={applySuggestions} disabled={savingConds}
+                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold disabled:opacity-50">
+                  {savingConds ? "Saving…" : `Accept ${Object.values(suggestions).filter(v => v.grade.trim()).length} and write them to the lots`}
+                </button>
+                <button onClick={() => setSuggestions({})} disabled={savingConds}
+                  className="px-3 py-2.5 text-sm font-semibold text-gray-500 hover:text-gray-800 dark:hover:text-gray-200">
+                  Discard
+                </button>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Set any row to &quot;leave blank&quot; to skip it.</span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {results.length > 0 && (
         <>

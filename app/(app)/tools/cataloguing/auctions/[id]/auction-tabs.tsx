@@ -964,6 +964,7 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
             }))}
             auctionId={auction.id}
             onOpenLot={openLotInManager}
+            onRefresh={() => router.refresh()}
           />
         )}
 

@@ -229,6 +229,24 @@ export async function generateTitlesFromDescriptions(auctionId: string, lotIds: 
 }
 
 
+/**
+ * Write an accepted condition onto each lot. ⚠ Only ever called from the review list where a
+ * PERSON has accepted each suggestion — the AI route that produces them writes nothing itself.
+ * Logged like every other lot mutation (RULES: every path logs), with its own source so an
+ * AI-suggested grade is identifiable in the change log for ever.
+ */
+export async function bulkSetLotConditions(auctionId: string, updates: { id: string; condition: string }[]) {
+  const session = await requireCataloguer()
+  await requireNotBCLocked(auctionId, session)
+  const batchId = newBatchId()
+  const clean = updates.filter(u => u.id && (u.condition ?? "").trim())
+  await Promise.all(clean.map(u =>
+    updateLotLogged(u.id, { condition: u.condition.trim() }, { changedBy: changedByOf(session), source: "ai_condition", batchId })
+  ))
+  revalidatePath(`/tools/cataloguing/auctions/${auctionId}`)
+  return { ok: true as const, updated: clean.length }
+}
+
 export async function setStartingBids(auctionId: string, updates: { id: string; startingBid: number }[]) {
   const session = await requireCataloguer()
   await requireNotBCLocked(auctionId, session)

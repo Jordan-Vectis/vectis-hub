@@ -61,6 +61,8 @@ export const AI_TOOLS: AiTool[] = [
   // Image IN, image OUT ("nano banana"). Not claudeOk — Claude writes text, not pictures.
   { slot: "photo_prep_edit",        group: "Other",        label: "Photo Prep AI edit (image editing)",   default: "gemini-3.1-flash-image" },
   { slot: "condition_extract",      group: "Other",        label: "Condition report extract",             default: "gemini-3-flash-preview" },
+  // Grades a lot from its photographs. ⚠ SUGGESTS only — a person accepts it. See the route.
+  { slot: "condition_suggest",      group: "Cataloguing",  label: "Suggest a condition from photos",      default: "gemini-3-flash-preview", claudeOk: true },
   { slot: "patch_notes_draft",      group: "Other",        label: "Patch notes draft (summarise a deploy)", default: "gemini-3-flash-preview", claudeOk: true },
   { slot: "changes_summary",        group: "Other",        label: "Patches & Changes — report for managers", default: "gemini-3-flash-preview", claudeOk: true },
   { slot: "jordan_fun",             group: "Other",        label: "Jordan's secret menu (chat, cooking, air fryer)", default: "gemini-3-flash-preview" },
