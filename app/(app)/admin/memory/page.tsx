@@ -91,6 +91,14 @@ Fixed without touching the runner: addToPipelineQueue creates the row as **PAUSE
 
 WARNING: PAUSED now means two different things — **never started** versus **held mid-run** — and they are told apart by startedAt being null. Always label through **queueStatusLabel(item)** / isNotStarted(item) in lib/pipeline-queue.ts, never off QUEUE_STATUS_LABEL directly, or a brand-new sale reads as "Paused" like something went wrong.
 
+## The overnight pages deliberately MIRROR the Auto Pipeline tab's visual language (2026-08-14)
+
+Jordan: "Can it have some of the symbols and ui features of the autopipeline tab". So the run page carries the same three stage cards — ⚡ Batch Run, ✓ Key Points Check, 🔎 Double Check — with the tab's own states (gold and pulsing while running, green with a tick once past, dimmed until reached) and the same per-stage wording: "N generated OK", "N missing key points added", "N descriptions corrected", "N content blocked by AI". The lot table uses those symbols instead of prose, the run log is colour-coded the way the tab colours its own, a finished run gets the same celebration summary, and the list shows the three stages as pips.
+
+WARNING: keep the two in step. Two visual languages for one pipeline is how someone ends up unsure whether "issues" on one screen means what "issues" means on the other.
+
+WARNING: the signpost block that briefly sat on the Auto Pipeline tab pointing at the new page was ALSO removed ("this doesnt need to be here") — the sidebar link is the only pointer now. Do not re-add either the queue panel or a signpost to that tab.
+
 ## WARNING: PipelineQueueItem.total is STAGE PASSES, not lots
 
 A 601-lot sale reads about 1693, because outstanding() counts every stage pass still to do: 601 batch + 491 key-point + 601 double-check. Jordan hit this as "its saying lots done 1693 when there is only 601 lots in that auction?" — the figure was right and the LABEL was wrong. Call it steps, and if a real lot figure is wanted, count the PipelineLot rows that actually have text. Do NOT "fix" the runner's maths: counting stage passes is what keeps the number meaning the same thing across resumed slices.
