@@ -567,7 +567,13 @@ async function runStages(
       })
 
       if (result) {
-        const { verdict, contradictions, unsupported, revised } = result
+        const { verdict, contradictions, unsupported, revised, flag } = result
+        // It tried to rewrite a product code the cataloguer recorded. The route kept the
+        // cataloguer's; surface the doubt instead of acting on it.
+        if (flag) {
+          try { await prisma.catalogueLot.update({ where: { id: lot.id }, data: { aiFlagNote: flag } }) } catch { /* advisory */ }
+          addLog(`  ⚑ ${lot.label} — flagged: ${flag}`)
+        }
         if (verdict === "issues" && revised) {
           let applied = false
           if (item.autoApply) {

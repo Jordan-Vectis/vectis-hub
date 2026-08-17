@@ -4410,7 +4410,13 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       }, err => err.startsWith("BLOCKED:"))
 
       if (result) {
-        const { verdict, contradictions, unsupported, revised } = result
+        const { verdict, contradictions, unsupported, revised, flag } = result
+        // It tried to rewrite a product code the cataloguer recorded. The route kept the
+        // cataloguer's; raise it as a possible cataloguer mistake for a human to settle.
+        if (flag) {
+          try { await saveAiFlagNote(lot.id, flag) } catch { /* advisory — never fail the run for it */ }
+          addLog(`  ⚑ ${lot.label} — flagged: ${flag}`)
+        }
 
         // DC is the LAST stage. Auto-apply means auto-apply (Jordan, 2026-08-10): its
         // cleaned text goes straight onto the catalogue like Batch and Key Points, so a

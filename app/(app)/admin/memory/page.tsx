@@ -1269,7 +1269,17 @@ Fixes, all in lib/kp-analysis.tsx:
 
 Result on the same 435 lots: **130 lots down to 8, and 160 failing key points down to 8.** The remaining 8 are genuine — the digits really are absent from the description, and one has the AI writing white tag 670442 where the key point says 670446, which is exactly what the check exists to catch.
 
-## WARNING: the KEY POINTS stage was overwriting the cataloguer's product codes (2026-08-14)
+## WARNING: DOUBLE CHECK was overwriting the cataloguer's product codes (2026-08-14)
+
+WARNING — read the results columns correctly before blaming a stage. In the pipeline results table, "Fixed" followed by the contradictions text is DOUBLE CHECK (dcStatus === "issues"), and "Accepted" followed by the kpAdded text is KEY POINTS (kpStatus === "fixed"). See dcCell and kpCell in the Auto Pipeline tab. Claude read them the other way round from a screenshot and blamed the wrong stage; Jordan caught it.
+
+On F109109 the DOUBLE CHECK stage replaced the cataloguer's CB252575 with CB104670, reporting "the tags in the photo clearly identify it as 'Scribbles 2010 Signing Bear'". Key Points behaved impeccably on that same lot — it corrected the code spacing and inserted LE 2500 exactly.
+
+WARNING: Double Check DOES receive the photos. Its route takes images plus the key points and returns a rewritten description. So unlike the Key Points stage it was not inventing evidence — it really did read the swing tag. It was still wrong: CB252575 is the 2010 Anniversary edition, and the cataloguer had it right. Reading a tag in a photograph is not grounds to overwrite the person who held the item.
+
+The guard now lives in the Double Check route as well, so the browser run and the overnight runner both inherit it. One code introduced against one removed puts the cataloguer's spelling back and keeps the rest of the rewrite; anything murkier drops the rewrite; either way an aiFlagNote records "Double Check read the photo as X, but the key points record Y — check it against the item, and correct the key points if the photo is right."
+
+## The same guard on the KEY POINTS stage (2026-08-14)
 
 F109109, a Charlie Bears trio. The Batch stage produced the correct CB252575. The KEY POINTS stage then replaced it with CB104670 and recorded itself as Fixed, explaining: "the tags in the photo clearly identify it as 'Scribbles 2010 Signing Bear'". The cataloguer was right — CB252575 is the 2010 Anniversary edition; CB104670 is the ordinary Scribbles.
 

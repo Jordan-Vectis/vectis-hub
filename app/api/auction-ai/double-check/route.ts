@@ -5,6 +5,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { DOUBLE_CHECK_INSTRUCTION } from "@/lib/double-check-instruction"
 import { parseModelJson, extractJsonField } from "@/lib/model-json"
 import { getToolModel } from "@/lib/ai-models"
+import { auditCodes } from "@/lib/product-codes"
 
 export const maxDuration = 60
 
@@ -82,7 +83,38 @@ export async function POST(req: NextRequest) {
       verdict = revised ? "issues" : "ok"
     }
 
-    return NextResponse.json({ verdict, contradictions, unsupported, revised,
+    // ── It may not rewrite a product code the cataloguer recorded ────────────
+    // ⚠ Unlike the Key Points stage, this one CAN see the photos, so a discrepancy it
+    // reports may be perfectly real — on F109109 it read the swing tag as CB104670 where the
+    // cataloguer had recorded CB252575 (the 2010 Anniversary edition, which the cataloguer
+    // had right). But reading a tag in a photograph is not grounds to overwrite the person
+    // who held the item.
+    //
+    // ⚠ Jordan's rule (2026-08-14): flag it as a POSSIBLE CATALOGUER MISTAKE, never let the
+    // pipeline change the code. So the cataloguer's value goes back and the doubt is
+    // reported — which is also what the batch route's FLAG line does for the same situation.
+    let flag = ""
+    if (revised && keyPoints?.trim()) {
+      const audit = auditCodes(keyPoints, description, revised)
+      if (audit.invented.length > 0) {
+        const listed = audit.invented.map(c => c.asWritten).join(", ")
+        if (audit.invented.length === 1 && audit.lost.length === 1) {
+          const seen = audit.invented[0], recorded = audit.lost[0]
+          revised = revised.split(seen.asWritten).join(recorded.asWritten)
+          flag = `Double Check read the photo as product code ${seen.asWritten}, but the key points record `
+               + `${recorded.asWritten}. The cataloguer's code has been kept — check it against the item, `
+               + `and correct the key points if the photo is right.`
+        } else {
+          // Too tangled to repair a code at a time — keep what came in.
+          revised = ""
+          flag = `Double Check introduced product code${audit.invented.length === 1 ? "" : "s"} ${listed}, which `
+               + `${audit.invented.length === 1 ? "does" : "do"} not appear in the key points. Its rewrite of this `
+               + `lot was not applied. Check the codes against the item.`
+        }
+      }
+    }
+
+    return NextResponse.json({ verdict, contradictions, unsupported, revised, flag,
       debug: { prompt: textPart.text, response: rawResponse, imageCount: imageParts.length } })
   } catch (e: any) {
     const msg: string = e.message ?? "Unknown error"
