@@ -5,6 +5,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { KEY_POINTS_INSTRUCTION, KEY_POINTS_INSTRUCTION_RELAXED } from "@/lib/key-points-instruction"
 import { parseModelJson, extractJsonField } from "@/lib/model-json"
 import { getToolModel } from "@/lib/ai-models"
+import { auditCodes } from "@/lib/product-codes"
 
 export const maxDuration = 60
 
@@ -61,13 +62,17 @@ export async function POST(req: NextRequest) {
     let missing   = ""
     let added     = ""
     let found     = ""
+    let modelFlag = ""
 
     const parsed = parseModelJson(raw)
     if (parsed && typeof parsed === "object") {
-      revised = parsed.description?.trim() || revised
-      missing = parsed.missing?.trim()     || ""
-      added   = parsed.added?.trim()       || ""
-      found   = parsed.found?.trim()       || ""
+      revised   = parsed.description?.trim() || revised
+      missing   = parsed.missing?.trim()     || ""
+      added     = parsed.added?.trim()       || ""
+      found     = parsed.found?.trim()       || ""
+      // Its sanctioned outlet for "I think this key point is wrong" — instead of quietly
+      // editing the cataloguer's code, which is what it used to do.
+      modelFlag = parsed.flag?.trim()        || ""
     } else {
       // Could not parse the JSON (e.g. an invalid \' escape from the model). Pull the
       // description out directly if we can; otherwise KEEP the original description.
@@ -76,8 +81,44 @@ export async function POST(req: NextRequest) {
       if (extracted) revised = extracted
     }
 
+    // ── The stage may not invent a product code ──────────────────────────────
+    // ⚠ This route sends NO images (see the body above — label, keyPoints, description).
+    // So a code in the output that was in neither input was not read off a tag; it came from
+    // training data. On F109109 it swapped the cataloguer's CB252575 for CB104670 and
+    // justified it as "the tags in the photo clearly identify it as…". The instruction already
+    // forbids this; the model did it anyway, so it is enforced here.
+    //
+    // ⚠ Jordan's call (2026-08-14): FLAG it as a possible cataloguer mistake — never let the
+    // pipeline overwrite the cataloguer's code. So the cataloguer's value is put back and the
+    // doubt is reported for a human, which is what the batch route's FLAG line already does.
+    let flag = ""
+    const audit = auditCodes(keyPoints, description, revised)
+    if (audit.invented.length > 0) {
+      const invented = audit.invented.map(c => c.asWritten).join(", ")
+      if (audit.invented.length === 1 && audit.lost.length === 1) {
+        // One code went missing, one appeared: an unambiguous substitution. Put the
+        // cataloguer's own spelling back and keep the rest of the stage's edit.
+        const wrong = audit.invented[0], right = audit.lost[0]
+        revised = revised.split(wrong.asWritten).join(right.asWritten)
+        flag = `The AI replaced product code ${right.asWritten} with ${wrong.asWritten}. `
+             + `${right.asWritten} — the cataloguer's — has been kept. It cannot see the photos, so if `
+             + `${right.asWritten} is wrong it needs checking against the item by hand.`
+      } else {
+        // Anything less clear-cut: don't guess which code replaced which — drop the whole
+        // edit. An edit that invented a code has not earned the benefit of the doubt.
+        revised = description.trim()
+        flag = `The AI introduced product code${audit.invented.length === 1 ? "" : "s"} ${invented}, which `
+             + `${audit.invented.length === 1 ? "is" : "are"} in neither the key points nor the description. `
+             + `Its changes to this lot were not applied. Check the codes against the item.`
+      }
+    }
+
+    // The check we enforced outranks what the model volunteered — it is the one backed by
+    // evidence rather than by the model's confidence.
+    if (!flag && modelFlag) flag = modelFlag
+
     const changed = revised !== description.trim()
-    return NextResponse.json({ revised, changed, missing, added, found,
+    return NextResponse.json({ revised, changed, missing, added, found, flag,
       debug: { prompt, response: rawResponse } })
   } catch (e: any) {
     const msg: string = e.message ?? "Unknown error"

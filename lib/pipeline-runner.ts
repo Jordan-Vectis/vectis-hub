@@ -495,7 +495,13 @@ async function runStages(
       })
 
       if (result) {
-        const { revised, changed, missing, added } = result
+        const { revised, changed, missing, added, flag } = result
+        // The stage tried to change a product code it cannot have seen (it gets no photos).
+        // The cataloguer's value was kept by the route; surface the doubt in the Review tab.
+        if (flag) {
+          try { await prisma.catalogueLot.update({ where: { id: lot.id }, data: { aiFlagNote: flag } }) } catch { /* advisory */ }
+          addLog(`  ⚑ ${lot.label} — flagged: ${flag}`)
+        }
         let newDesc = lot.currentDesc
         let applied = false
         if (changed && revised) {

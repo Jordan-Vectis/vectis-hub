@@ -1269,6 +1269,23 @@ Fixes, all in lib/kp-analysis.tsx:
 
 Result on the same 435 lots: **130 lots down to 8, and 160 failing key points down to 8.** The remaining 8 are genuine — the digits really are absent from the description, and one has the AI writing white tag 670442 where the key point says 670446, which is exactly what the check exists to catch.
 
+## WARNING: the KEY POINTS stage was overwriting the cataloguer's product codes (2026-08-14)
+
+F109109, a Charlie Bears trio. The Batch stage produced the correct CB252575. The KEY POINTS stage then replaced it with CB104670 and recorded itself as Fixed, explaining: "the tags in the photo clearly identify it as 'Scribbles 2010 Signing Bear'". The cataloguer was right — CB252575 is the 2010 Anniversary edition; CB104670 is the ordinary Scribbles.
+
+WARNING: that stage is TEXT-ONLY. /api/auction-ai/key-points-check is sent {label, keyPoints, description, model, mode} and NO images whatsoever. It fabricated the photographic evidence to justify a code it recognised from training data. Its instruction already said product codes are "sacred — copy them character-for-character from the key points". It did it anyway. That is precisely why the fix belongs in code and not in more prompt text.
+
+The invariant that makes it checkable: a stage which may only insert facts from the key points, and which cannot see anything, has no possible source for a product code that appears in neither the description it was given nor the key points. lib/product-codes.ts auditCodes() enforces it inside the ROUTE, so the browser run and the overnight runner both inherit it:
+- exactly one code invented and exactly one REMOVED — an unambiguous substitution — puts the cataloguer's own spelling back and keeps the rest of the edit;
+- anything less clear-cut drops the whole edit, because an edit that invented a code has not earned the benefit of the doubt;
+- either way an aiFlagNote is written, so it surfaces in the Review tab as an amber warning.
+
+WARNING — Jordan's explicit call: FLAG it as a possible cataloguer mistake, NEVER let the pipeline overwrite the cataloguer's code. Both key-point instructions gained a "flag" field in their JSON contract as the sanctioned way to say "I think this is wrong", plus an explicit "YOU CANNOT SEE ANY PHOTOGRAPHS" rule.
+
+WARNING — two traps found only by testing against the real lot, each of which broke the repair:
+1. "LE 2500" parses as a product code (two letters plus four digits) and appears in nearly every bears key point. Counted as a code it made a second entry look lost, turning a clean one-for-one substitution into an "ambiguous" case that threw the good edit away. NOT_A_CODE_PREFIX excludes LE, NO, LOT, EST and REF.
+2. "Lost" has to mean REMOVED from the description, not merely absent from it. A key-point code the description never carried is just a missing fact, which is the stage's ordinary business.
+
 ## The verdict now NAMES the part (2026-08-14)
 
 Jordan: "Are we able to improve it so instead of just saying not found it says exactly which part?" KpMatch gained **missing: string[]** — the exact tokens that could not be found — and the Review tab prints them: "not found: 670446", "reworded — wording differs on: ...", "partly worded — missing: ...". describeToken turns a token back into the cataloguer's own spelling (our internal 15in becomes 15", a lower-cased code becomes CB125094).

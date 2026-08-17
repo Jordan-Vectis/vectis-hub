@@ -4492,7 +4492,14 @@ function PipelineTab({ model: globalModel, fallbackModel }: { model: string; fal
       }, err => err.startsWith("BLOCKED:"))
 
       if (result) {
-        const { revised, changed, missing, added, found } = result
+        const { revised, changed, missing, added, found, flag } = result
+        // The stage tried to change a product code it cannot have seen — it is sent no
+        // photos. The route kept the cataloguer's value; raise the doubt in the Review tab
+        // rather than letting the pipeline overwrite them (Jordan's call, 2026-08-14).
+        if (flag) {
+          try { await saveAiFlagNote(lot.id, flag) } catch { /* advisory — never fail the run for it */ }
+          addLog(`  ⚑ ${lot.label} — flagged: ${flag}`)
+        }
         let newDesc = lot.currentDesc
         let applied = false
         if (changed && revised) {
