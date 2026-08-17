@@ -120,7 +120,23 @@ Much of this app is used on shared tablets, standing up.
 - **A drag inside a scrolling panel needs `touch-action: none`**, or the panel scrolls instead and
   the control feels dead.
 
-### 6. Never let "nothing happened" look like success
+### 6. ⚠ NEVER MOVE WHAT IS ALREADY ON SCREEN — add underneath
+**New UI goes BELOW the existing elements, never inserted above or between them.** This is not
+a preference about layout; it breaks a working process.
+
+Jordan's **AutoHotkey macro** drives the overnight BC import **by screen coordinates** — it
+clicks and types at fixed positions. Anything added above existing content pushes that content
+down, every coordinate is then wrong, and the macro types into the wrong field or clicks the
+wrong control. The damage is silent and it happens at night when nobody is watching.
+
+- Applies to every screen the macro touches, and to the **Description Copier** in particular
+  (it is read while the macro types into BC).
+- A new banner, warning, section or button goes at the **bottom** of the block it belongs to.
+  If something genuinely must sit at the top, **ask first** — it means re-recording the macro.
+- Collapsible sections must default to **closed** if opening them would shift anything below.
+- The same goes for making an existing element taller (extra lines of text, a wrapped label).
+
+### 7. Never let "nothing happened" look like success
 - *The failure:* Change Vendor reported "✓ Changed 0 lots" when it had changed nothing, so a real
   problem read as done. If a count is zero, say so plainly and say why.
 

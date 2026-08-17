@@ -63,8 +63,10 @@ export function containsConditionGrade(text: string): boolean {
 export type ConditionCheck =
   | { state: "ok" }                       // the lot's condition is in the description
   | { state: "reworded" }                 // a grade is there, but not the recorded wording
-  | { state: "missing" }                  // no condition anywhere in the description
-  | { state: "none-recorded" }            // nothing to add — the lot has no condition
+  | { state: "missing" }                  // the description exists but omits the condition
+  | { state: "no-description" }           // there is no description at all — a different job
+  | { state: "only-in-description" }      // nothing recorded on the lot, but the description grades it
+  | { state: "none-recorded" }            // nothing anywhere — it genuinely needs grading
   | { state: "unknown" }                  // we weren't given the lot's condition
 
 /** Compare a lot's recorded condition against its description.
@@ -77,8 +79,19 @@ export function checkConditionInDescription(description: string, condition?: str
   if (condition === undefined) {
     return containsConditionGrade(description) ? { state: "ok" } : { state: "unknown" }
   }
-  if (!cond) return { state: "none-recorded" }
-  if (!desc) return { state: "missing" }
+  // ⚠ No description at all — a lot excluded from the AI, or simply not written yet. Saying
+  // "the description has no condition in it" of a lot that has no description sends someone
+  // to fix the wrong thing.
+  if (!desc) return { state: "no-description" }
+
+  // ⚠ An empty condition field used to return "none-recorded" WITHOUT looking at the
+  // description, so a cataloguer who typed "Condition appears Good to Excellent." into the
+  // description instead of using the grade dropdown was told the lot needed grading and that
+  // there was "nothing to add here". The description is the thing the Copier cares about, and
+  // it already had one. Only a lot with a condition NOWHERE genuinely needs grading.
+  if (!cond) {
+    return containsConditionGrade(description) ? { state: "only-in-description" } : { state: "none-recorded" }
+  }
   if (desc.includes(cond)) return { state: "ok" }
 
   // Not verbatim. If every grade in the recorded condition appears in the

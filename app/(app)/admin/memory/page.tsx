@@ -319,6 +319,39 @@ WARNING: reds that remain are deliberate and correct — do NOT sweep them green
 `,
   },
   {
+    filename: "screen_position_and_copier_conditions.md",
+    content: `---
+name: NEVER move what is already on screen + the Copier's condition check
+purpose: The macro drives BC by screen coordinates, so new UI must go UNDERNEATH existing elements. Plus why the Description Copier was flagging 139 lots that were perfectly fine. Read before adding anything to a screen the macro touches.
+last_updated: 2026-08-14
+---
+
+# WARNING: NEVER MOVE WHAT IS ALREADY ON SCREEN
+
+Jordan, 2026-08-14: "Its also very important this appears underneath what was already there as moving elements on the screen will break the macro this should be marked as a very important rule."
+
+His **AutoHotkey macro** drives the overnight BC import **by screen coordinates** — it clicks and types at fixed positions. Anything inserted above existing content pushes that content down, every coordinate below it is then wrong, and the macro types into the wrong field or clicks the wrong control. It fails **silently, overnight, with nobody watching**.
+
+Rules, now written up as **RULES.md → Design philosophy rule 6**:
+- A new banner, warning, section or button goes at the **BOTTOM** of the block it belongs to. Never above, never between.
+- Applies to every screen the macro touches, and to the **Description Copier** especially, since that is read while the macro types into BC.
+- Making an existing element **taller** counts too — an extra line of text, a label that wraps.
+- A collapsible section must default to **closed** if opening it would shift anything below it.
+- If something genuinely must sit at the top, **ASK FIRST** — it means re-recording the macro.
+
+# The Copier was flagging 139 lots with nothing wrong with them
+
+"139 of 635 lots need a condition adding … they need grading first" — on lots whose descriptions already ended "Condition appears Good to Excellent."
+
+checkConditionInDescription (lib/condition.ts) returned **none-recorded** the moment the lot's condition FIELD was empty, **without ever looking at the description**. Two real cases were being mislabelled, both of which Jordan predicted:
+
+1. **The condition was typed into the description instead of being graded on the lot.** The description is the only thing the Copier copies, and it already stated the condition — nothing to add. New state **only-in-description**: shown as a quiet note, NOT counted as a problem, because the only thing outstanding is the lot's own blank condition field, which is tidied elsewhere.
+2. **No description at all** — typically a lot excluded from the AI. Saying "the description has no condition in it" about a lot with no description sends someone to fix the wrong thing. New state **no-description**, counted and worded as needing a description written.
+
+WARNING: order matters in that function — check for an empty DESCRIPTION before an empty CONDITION, or a lot with neither is reported as a grading problem when it has not been written yet.
+`,
+  },
+  {
     filename: "induction.md",
     content: `---
 name: Facilities -> Induction (slides + signable forms)

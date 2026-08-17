@@ -1340,7 +1340,16 @@ function CopierTab({ active }: { active: boolean }) {
   const condReworded = condChecked.filter(c => c.check.state === "reworded")
   const condNone     = condChecked.filter(c => c.check.state === "none-recorded")
   const condUnknown  = condChecked.filter(c => c.check.state === "unknown")
-  const condProblems = condMissing.length + condNone.length
+  // ⚠ Written into the description but never graded on the lot. NOT a Copier problem — the
+  // description, which is all this tool copies, already states the condition. Counting these
+  // as "need a condition adding" is what put 139 lots in that banner with nothing wrong with
+  // any of them (Jordan, 2026-08-14).
+  const condOnlyDesc = condChecked.filter(c => c.check.state === "only-in-description")
+  // No description written yet — usually a lot excluded from the AI. It needs a description,
+  // not a condition, so saying "the description has no condition in it" sends you to the
+  // wrong screen.
+  const condNoDesc   = condChecked.filter(c => c.check.state === "no-description")
+  const condProblems = condMissing.length + condNone.length + condNoDesc.length
   const haveConditionData = rows.some(r => r.condition !== undefined)
 
   function CondList({ items, tone }: { items: typeof condChecked; tone: string }) {
@@ -1428,6 +1437,32 @@ function CopierTab({ active }: { active: boolean }) {
                     {condUnknown.length} of these came from a spreadsheet with no condition column, so all that could be checked is whether they mention a grade — {condUnknown.length === 1 ? "this one doesn" : "these don"}&apos;t.
                     Open the Copier from the sale page instead to check them properly.
                   </p>
+                )}
+
+                {/* ⚠ NEW SECTIONS GO AT THE BOTTOM — see RULES.md "Never move what is already
+                    on screen". The macro drives this by screen position; anything inserted
+                    above existing content shifts it and breaks the run. */}
+                {condNoDesc.length > 0 && (
+                  <div>
+                    <p className="text-xs text-amber-800 dark:text-amber-300">
+                      <strong>{condNoDesc.length}</strong> {condNoDesc.length === 1 ? "lot has" : "lots have"} no description at all yet — often the ones excluded
+                      from the AI. {condNoDesc.length === 1 ? "It needs" : "They need"} writing before there is anything to copy, so the condition is not the problem here.
+                    </p>
+                    <CondList items={condNoDesc} tone="border-amber-400 dark:border-amber-600 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40" />
+                  </div>
+                )}
+
+                {/* Nothing to do here — the description already grades it. Shown because the
+                    lot's own condition field being blank is worth tidying, elsewhere. */}
+                {condOnlyDesc.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      <strong>{condOnlyDesc.length}</strong> {condOnlyDesc.length === 1 ? "description states" : "descriptions state"} a condition that was typed
+                      straight in rather than graded on the lot. Nothing to add here — {condOnlyDesc.length === 1 ? "it is" : "they are"} fine to copy. Only the
+                      lot&apos;s own condition field is blank, which is worth tidying on the sale page.
+                    </p>
+                    <CondList items={condOnlyDesc} tone="border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800" />
+                  </div>
                 )}
               </div>
             )}
