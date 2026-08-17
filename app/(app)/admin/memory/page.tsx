@@ -2652,7 +2652,9 @@ Hi Claude. Before we start, here are the rules for working with me:
 
 **Keep responses short.** One paragraph max unless explaining something technical. Lead with the action or answer, skip preamble. No summaries at the end, no "here's what I did" recaps.
 
-**Don't suggest console commands.** Any admin operation that needs to be triggered manually must have a proper UI button.
+**Don't give me commands to run — any of them.** Any admin operation that needs triggering manually must have a proper UI button. This also covers DIAGNOSTICS: don't paste a node/npm/browser-console line "so you can see the check for yourself". Run it yourself and tell me the result. (2026-08-17: a scratch test script got pasted at me as if it were something to run.)
+
+**Refresh the changelog seed as part of EVERY push** (npm run changelog:seed, commit the result). Railway's build has no .git at all, so a release can only record its own headline commit — the committed seed is the ONLY route by which anything else reaches Admin → Patches & Changes. It went stale by 33 commits and a full day's work showed as one line (2026-08-17).
 
 **Match the complexity of the solution to the simplicity of the request.** If I say "put a copy on the site", embed it statically — don't build a syncing system.
 
@@ -2964,11 +2966,11 @@ When Jordan says something simple like "take a copy and put it on the site", do 
 
 ---
 
-Don't suggest Jordan open the browser console or run commands to fix things.
+Don't give Jordan commands to run - not to fix things, and not to check them either.
 
-**Why:** Jordan called this out as a bad suggestion when I told him to run fetch() in the console to trigger a migration.
+**Why:** He called this out when I told him to run fetch() in the console to trigger a migration. It happened again on 2026-08-17 in a subtler form: I finished a message with a "node ...scratchpad/gap2.mjs" line as evidence for a fix. It was a throwaway test on my own machine that he could not usefully run, and he had to ask "WHats that node thing you pasted?" - the harness renders shell-tagged blocks with a Run button, so it read as an instruction.
 
-**How to apply:** Any admin operation that might need to be triggered manually must have a proper UI button (like the Run Migrations button).`,
+**How to apply:** Any admin operation that might need triggering manually must have a proper UI button (like the Run Migrations button). And VERIFICATION IS CLAUDE'S JOB, NOT HIS - run the check, then report the result in prose. Never paste a node/npm/console line as proof or as an invitation. If a check is worth him having permanently, it belongs behind a button in the app, not in a message.`,
   },
   {
     filename: "feedback_memory_workflow.md",
@@ -3169,6 +3171,8 @@ description: How the cataloguing Upload Photos smart scan works — sequential b
 metadata:
   type: reference
 ---
+
+⚠⚠ THE ENGINE DESCRIBED BELOW MOVED TO lib/photo-scan.ts ON 2026-08-17 - resolvePhoto, buildGroups, parseBarcode, mapPool, toJpegBlob, readVectisWithZxingCpp, the types and safeName/nameFromKey are all there now, with components/photo-thumb.tsx for the HEIC-safe tile. It is SHARED with Photography -> Upload photos (any sale), which runs the same grouping with no sale picked. NEVER grow a second copy - two groupers that disagree would silently put a photo on the wrong lot. PhotoUploadTab also now takes auctionId: string | null, and each lot may carry its own auctionId/auctionCode; the upload uses the LOT's sale, never the page's.
 
 FAILED-PHOTO REASON WHEN THE ACTION THROWS (2026-08-13). uploadLotPhoto catches its own errors and RETURNS { ok:false, error }, so anything that reaches the client's catch is FRAMEWORK level — a stale deploy, a dropped connection, or an error Next has redacted. Jordan hit this on an 860-photo upload: one photo failed and the reason shown was the four-line "An error occurred in the Server Components render... omitted in production builds..." boilerplate, which tells nobody anything.
 
