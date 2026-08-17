@@ -50,6 +50,12 @@ model User {
   timerYellowMins Int         @default(4)
   timerRedMins    Int         @default(30) // "warn after" mins — house default
   isITStaff       Boolean     @default(false) // can be assigned IT Job Board jobs
+  // This person writes their descriptions themselves, so EVERY lot they create is marked
+  // aiExcluded — enforced server-side in the lot-creation paths, not left to them ticking a
+  // box. The wizard also hides Key Points for them and goes straight to the description.
+  // ⚠ Added because cataloguers were typing a description and forgetting the tick, leaving
+  // hand-written lots open to being overwritten by an AI run.
+  manualDescriptions Boolean  @default(false)
   // Lot Wizard "remember last" fields — follow the user across devices (e.g. shared iPads)
   lastTote        String?
   lastVendor      String?

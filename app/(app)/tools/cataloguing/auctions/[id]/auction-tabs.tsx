@@ -702,7 +702,7 @@ function TransferLotsModal({ selectedIds, sourceAuctionId, allAuctions, onClose,
 export type SaleAccessUser = { id: string; name: string }
 export type SaleAccessEntry = { userId: string; name: string; grantedBy: string | null }
 
-export default function AuctionTabs({ auction, lots, userId, userName, userRole, showScanTimer, showLotTimer, timerRedMins, allAuctions, extraAccess = [], assignableUsers = [] }: { auction: Auction; lots: Lot[]; userId: string; userName: string; userRole: string; showScanTimer?: boolean; showLotTimer?: boolean; timerRedMins?: number; allAuctions: AuctionSummary[]; extraAccess?: SaleAccessEntry[]; assignableUsers?: SaleAccessUser[] }) {
+export default function AuctionTabs({ auction, lots, userId, userName, userRole, showScanTimer, showLotTimer, timerRedMins, manualDescriptions, allAuctions, extraAccess = [], assignableUsers = [] }: { auction: Auction; lots: Lot[]; userId: string; userName: string; userRole: string; showScanTimer?: boolean; showLotTimer?: boolean; timerRedMins?: number; manualDescriptions?: boolean; allAuctions: AuctionSummary[]; extraAccess?: SaleAccessEntry[]; assignableUsers?: SaleAccessUser[] }) {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const bcLocked     = auction.addedToBC && userRole !== "ADMIN"
@@ -887,7 +887,7 @@ export default function AuctionTabs({ auction, lots, userId, userName, userRole,
           ) : (
             <LotWizardTab auctionId={auction.id} auction={auction}
               userId={userId} userName={userName}
-              onCreated={() => router.refresh()} showScanTimer={showScanTimer} showLotTimer={showLotTimer} timerRedMins={timerRedMins} />
+              onCreated={() => router.refresh()} showScanTimer={showScanTimer} showLotTimer={showLotTimer} timerRedMins={timerRedMins} manualDescriptions={manualDescriptions} />
           )}
         </div>
 

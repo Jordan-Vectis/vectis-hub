@@ -129,6 +129,7 @@ export default async function AuctionDetailPage({
         userRole={session.user.role}
         showScanTimer={currentUser?.showScanTimer ?? true}
         showLotTimer={currentUser?.showLotTimer ?? false}
+        manualDescriptions={(currentUser as any)?.manualDescriptions ?? false}
         timerRedMins={currentUser?.timerRedMins ?? 30}
         allAuctions={allAuctions.map(a => ({ id: a.id, code: a.code, name: a.name, auctionDate: a.auctionDate }))}
         extraAccess={extraAccess}

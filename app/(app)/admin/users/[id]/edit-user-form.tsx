@@ -18,6 +18,7 @@ interface Props {
   appPermissions: Record<string, any> | null
   showScanTimer: boolean
   showLotTimer: boolean
+  manualDescriptions: boolean
   timerRedMins: number
   departments: { id: string; name: string }[]
   roles:       string[]
@@ -28,7 +29,7 @@ function roleLabel(key: string): string {
   return key.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 }
 
-export default function EditUserForm({ userId, name, email, username, role, departmentIds, allowedApps, appPermissions, showScanTimer: initialShowScanTimer, showLotTimer: initialShowLotTimer, timerRedMins: initialRed, departments, roles, isSelf }: Props) {
+export default function EditUserForm({ userId, name, email, username, role, departmentIds, allowedApps, appPermissions, showScanTimer: initialShowScanTimer, showLotTimer: initialShowLotTimer, manualDescriptions: initialManualDescriptions, timerRedMins: initialRed, departments, roles, isSelf }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   // Departments are saved on their own — a person can be in more than one, and
@@ -91,6 +92,7 @@ export default function EditUserForm({ userId, name, email, username, role, depa
   // Cataloguing settings
   const [showScanTimer,    setShowScanTimer]    = useState(initialShowScanTimer)
   const [showLotTimer,     setShowLotTimer]     = useState(initialShowLotTimer)
+  const [manualDescriptions, setManualDescriptions] = useState(initialManualDescriptions)
   const [timerRedMins,     setTimerRedMins]     = useState(initialRed)
   const [catPending, startCatTransition]        = useTransition()
   const [catMsg, setCatMsg]                     = useState<string | null>(null)
@@ -194,7 +196,7 @@ export default function EditUserForm({ userId, name, email, username, role, depa
       const res = await fetch(`/api/admin/users/${userId}/settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ showScanTimer, showLotTimer, timerRedMins }),
+        body: JSON.stringify({ showScanTimer, showLotTimer, timerRedMins, manualDescriptions }),
       })
       setCatMsg(res.ok ? "Saved" : "Failed to save")
       if (res.ok) setTimeout(() => setCatMsg(null), 2000)
@@ -436,6 +438,30 @@ export default function EditUserForm({ userId, name, email, username, role, depa
             <div>
               <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">Lot make timer (blue)</span>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Shows a little blue count-up timer while this user is cataloguing a lot, starting when the barcode is entered.</p>
+            </div>
+          </label>
+
+          {/* ⚠ Added at the BOTTOM of this section — RULES.md rule 6. */}
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <div
+              onClick={() => setManualDescriptions(v => !v)}
+              className={`w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
+                manualDescriptions ? "bg-blue-600 border-blue-600" : "border-gray-300 dark:border-gray-600 group-hover:border-blue-400"
+              }`}
+            >
+              {manualDescriptions && (
+                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 12 12">
+                  <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+            </div>
+            <div>
+              <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">Writes their own descriptions (exclude from AI)</span>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                The wizard hides Key Points for this user and asks for the description directly, and <strong>every lot they
+                create is marked excluded from AI</strong> — so a hand-written description can never be overwritten by an AI
+                run, whether or not anyone remembered to tick the box on the lot.
+              </p>
             </div>
           </label>
 

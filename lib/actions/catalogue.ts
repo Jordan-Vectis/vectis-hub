@@ -20,6 +20,25 @@ function titleFromDescription(desc: string): string {
   return text.length > 83 ? text.slice(0, 82) + "…" : text
 }
 
+/**
+ * Does this cataloguer write their own descriptions?
+ *
+ * ⚠ If so, EVERY lot they create is marked aiExcluded — here on the server, not by them
+ * remembering to tick a box. Cataloguers were typing a description and leaving the box
+ * unticked, so hand-written lots sat in the AI's scope and could be overwritten by a run.
+ * The wizard also hides Key Points for them, but that is only the visible half; this is the
+ * half that guarantees it whichever screen the lot came from.
+ *
+ * Migration-safe: the column arrives with the SQL, not the deploy, so a missing column
+ * behaves exactly as before rather than breaking lot creation.
+ */
+async function writesOwnDescriptions(userId: string): Promise<boolean> {
+  try {
+    const u = await prisma.user.findUnique({ where: { id: userId }, select: { manualDescriptions: true } })
+    return !!u?.manualDescriptions
+  } catch { return false }
+}
+
 async function requireCataloguer() {
   const session = await auth()
   if (!session) throw new Error("Access denied")
@@ -1103,8 +1122,10 @@ export async function createLot(auctionId: string, formData: FormData) {
   // numbering systems racing each other for no benefit. receiptUniqueId now
   // stays NULL until BC Match imports BC's value (bulkAssignUniqueIds, matched
   // by barcode). The BARCODE is the lot's identifier until then.
+  // ⚠ Forced on for a cataloguer who writes their own descriptions — see writesOwnDescriptions.
+  const forcedExcluded = await writesOwnDescriptions(session.user.id)
   const lot = await prisma.catalogueLot.create({
-    data: { ...data, auctionId, createdByName, imageUrls, receiptUniqueId: null },
+    data: { ...data, aiExcluded: data.aiExcluded || forcedExcluded, auctionId, createdByName, imageUrls, receiptUniqueId: null },
     include: { auction: { select: { code: true } } },
   })
 
@@ -1161,7 +1182,8 @@ export async function createPhotoOnlyLot(auctionId: string, formData: FormData) 
 
   const createdByName = session.user.name ?? session.user.email ?? "Unknown"
   const lot = await prisma.catalogueLot.create({
-    data: { auctionId, title: "", description: "", tote: toteNumber || null, notes, status: "ENTERED", imageUrls, createdByName },
+    data: { auctionId, title: "", description: "", tote: toteNumber || null, notes, status: "ENTERED", imageUrls, createdByName,
+      aiExcluded: await writesOwnDescriptions(session.user.id) },
     include: { auction: { select: { code: true } } },
   })
 
@@ -1637,6 +1659,7 @@ export async function importLots(auctionId: string, rows: {
 
   // ⚠ NO unique IDs minted on import (2026-08-06) — they come from 🔗 BC Match
   // after the lots reach BC, matched by barcode. See createLot.
+  const forcedExcluded = await writesOwnDescriptions(session.user.id)
   for (const r of rows) {
     const receiptUniqueId: string | null = null
 
@@ -1645,6 +1668,7 @@ export async function importLots(auctionId: string, rows: {
         auctionId,
         createdByName,
         title:          r.title || "",
+        aiExcluded:     forcedExcluded,
         keyPoints:      r.keyPoints || r.description || "",
         barcode:        r.barcode?.toUpperCase() || null,
         description:    "",
@@ -1988,9 +2012,11 @@ export async function massCreateLots(
 
   // ⚠ NO unique IDs minted on mass-create (2026-08-06) — they come from
   // 🔗 BC Match after the lots reach BC, matched by barcode. See createLot.
+  const forcedExcluded = await writesOwnDescriptions(session.user.id)
   const data = Array.from({ length: opts.count }, (_, i) => ({
     auctionId,
     createdByName,
+    aiExcluded:      forcedExcluded,
     barcode:         `${prefix}${String(maxBarcode + i + 1).padStart(3, "0")}`,
     title:           "",
     keyPoints:       "",
@@ -2123,11 +2149,13 @@ export async function createLotsFromLottingUp(
     const vendor  = details.vendor.trim()             || null
     const tote    = details.tote.trim().toUpperCase() || null
     const receipt = details.receipt.trim().toUpperCase() || null
+    const forcedLottingExcluded = await writesOwnDescriptions(session.user.id)
 
     await prisma.catalogueLot.createMany({
       data: queue.map(l => ({
         auctionId,
         createdByName,
+        aiExcluded:      forcedLottingExcluded,
         barcode:         l.barcode,
         title:           (l.title ?? "").slice(0, 83),
         keyPoints:       l.keyPoints ?? "",

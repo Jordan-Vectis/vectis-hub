@@ -1468,6 +1468,8 @@ const MIGRATIONS = [
   `UPDATE "InductionSlide" SET "layout"='CARDS', "graphic"='NONE'
      WHERE "graphic" IS NULL AND "title" IN ('Potential workplace hazards', 'Objectives of this induction', 'Who to speak to')`,
   `UPDATE "InductionSlide" SET "graphic"='NONE' WHERE "graphic" IS NULL`,
+  // A cataloguer who writes their own descriptions — every lot they create is excluded from AI.
+  `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "manualDescriptions" BOOLEAN NOT NULL DEFAULT false`,
 ]
 
 // Fingerprint of every statement above. Changes the moment a migration is added,

@@ -399,6 +399,7 @@ export default function LotWizardTab({
   showScanTimer = true,
   showLotTimer = false,
   timerRedMins = 30,
+  manualDescriptions = false,
 }: {
   auctionId: string
   auction: { code: string; name: string }
@@ -409,6 +410,8 @@ export default function LotWizardTab({
   showScanTimer?: boolean
   showLotTimer?: boolean
   timerRedMins?: number
+  /** This cataloguer writes their own descriptions: no Key Points, always excluded from AI. */
+  manualDescriptions?: boolean
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -904,7 +907,10 @@ export default function LotWizardTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const [keyPoints,   setKeyPoints]   = useState("")
-  const [aiExcluded,  setAiExcluded]  = useState(false)
+  // ⚠ Locked ON for a cataloguer who writes their own descriptions — the whole point is that
+  // it cannot be left unticked. The server enforces it too (writesOwnDescriptions), so this is
+  // only the visible half.
+  const [aiExcluded,  setAiExcluded]  = useState(manualDescriptions)
   const [manualDesc,  setManualDesc]  = useState("")
   // Spell FLAGGING for Key Points / Description (step 3) — lists unrecognised words,
   // ignoring brand names + codes/numbers. See lib/spellcheck.ts.
@@ -1919,11 +1925,20 @@ export default function LotWizardTab({
 
         {step === 3 && (
           <div className="max-w-lg space-y-4">
-            <label className={`flex items-center gap-3 cursor-pointer px-3 py-2.5 rounded-lg border transition-colors w-fit ${aiExcluded ? "bg-amber-950/40 border-amber-600/60 text-amber-300" : "border-gray-700 text-gray-500 hover:border-gray-500"}`}>
-              <input type="checkbox" checked={aiExcluded} onChange={e => setAiExcluded(e.target.checked)}
-                className="w-4 h-4 accent-amber-500" />
-              <span className={tablet ? "text-base font-medium" : "text-sm font-medium"}>Exclude from AI — description typed manually</span>
-            </label>
+            {/* ⚠ Hidden for a cataloguer set to write their own descriptions: there is no choice
+                to make, and the box being tickable is exactly how hand-written lots ended up
+                inside the AI's scope. They get the description field and nothing else. */}
+            {manualDescriptions ? (
+              <p className={`px-3 py-2.5 rounded-lg border border-amber-600/60 bg-amber-950/40 text-amber-300 w-fit ${tablet ? "text-base" : "text-sm"} font-medium`}>
+                ✍ You write your own descriptions — this lot is excluded from AI automatically.
+              </p>
+            ) : (
+              <label className={`flex items-center gap-3 cursor-pointer px-3 py-2.5 rounded-lg border transition-colors w-fit ${aiExcluded ? "bg-amber-950/40 border-amber-600/60 text-amber-300" : "border-gray-700 text-gray-500 hover:border-gray-500"}`}>
+                <input type="checkbox" checked={aiExcluded} onChange={e => setAiExcluded(e.target.checked)}
+                  className="w-4 h-4 accent-amber-500" />
+                <span className={tablet ? "text-base font-medium" : "text-sm font-medium"}>Exclude from AI — description typed manually</span>
+              </label>
+            )}
             {aiExcluded ? (
               <div>
                 <label className={`${lbl} block mb-1`}>Description <span className="text-gray-500">(typed manually — will not be sent to AI)</span></label>

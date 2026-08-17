@@ -319,6 +319,27 @@ WARNING: reds that remain are deliberate and correct — do NOT sweep them green
 `,
   },
   {
+    filename: "manual_cataloguer.md",
+    content: `---
+name: Cataloguers who write their own descriptions (User.manualDescriptions)
+purpose: A per-user tick that hides Key Points in the wizard and marks EVERY lot that person creates as excluded from AI — enforced on the server, not by them remembering the box. Read before touching any lot-creation path.
+last_updated: 2026-08-14
+---
+
+Jordan, 2026-08-14: "I need to be able to tick cataloguers as excluded from ai so they dont get the key points field and it just auto excludes them for every lot they make in the wizard. This is in an effort to combat a bug as cataloguers are making lots like this where they have somehow typed the description but it hasnt been marked as excluded from ai."
+
+**User.manualDescriptions** (Boolean, default false), ticked in Admin → Users → the person → Cataloguing Settings, at the bottom of that section.
+
+WARNING: the SERVER is the enforcement; the wizard is only the visible half. writesOwnDescriptions(userId) in lib/actions/catalogue.ts is ORed into aiExcluded on EVERY creation path: createLot (wizard and tablet), createPhotoOnlyLot, importLots, massCreateLots and createLotsFromLottingUp. Hiding the tickbox on its own would have left the original bug alive on every other screen — the whole point is that it cannot be forgotten.
+
+In the Lot Wizard, step 3 shows the description field directly for these users: no Key Points, no tickbox, just a line saying their lots are excluded automatically. The flag is threaded page → auction-tabs → lot-wizard-tab.
+
+WARNING: the lookup is wrapped in try/catch because the column arrives with the SQL and not with the deploy — a missing column behaves exactly as before rather than breaking lot creation. For the same family of reasons auth.ts still uses an explicit select; a User column plus a bare select is the documented LOGIN LOCKOUT.
+
+WARNING — worth revisiting: this also marks Photo Only, Import, Mass Create and Lotting Up lots as excluded, because the choice was "every lot they create". Those paths exist to create lots FOR the AI to describe, so if such a person uses Photo Only their lots will never get an AI description. This was flagged at the time; narrow it to createLot only if it bites.
+`,
+  },
+  {
     filename: "screen_position_and_copier_conditions.md",
     content: `---
 name: NEVER move what is already on screen + the Copier's condition check
