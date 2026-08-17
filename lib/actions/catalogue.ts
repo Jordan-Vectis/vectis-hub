@@ -1108,7 +1108,10 @@ export async function createLot(auctionId: string, formData: FormData) {
   // ⚠ Measured to when this lot was STARTED, not to now. Measuring to the save folds the
   // lot's own working minutes into the break — back from lunch at 13:25, ten minutes on a
   // lot, saved 13:35, reported as a 70-minute absence (Jordan, 2026-08-17).
-  const idleGate  = await evaluateIdleGate(session.user.id, "lot-start")
+  const idleGate  = await evaluateIdleGate(
+    session.user.id, "lot-start",
+    parseInt(formData.get("durationMs") as string ?? "") || null,
+  )
   const clientNow = parseInt(formData.get("clientNow") as string ?? "") || null
   const clientTz  = ((formData.get("clientTz") as string) || "").trim() || null
   const userAgent = (await headers()).get("user-agent")

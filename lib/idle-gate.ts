@@ -48,7 +48,13 @@ export type IdleGateEval = {
  */
 export type MeasureTo = "now" | "lot-start"
 
-export async function evaluateIdleGate(userId: string, measureTo: MeasureTo = "now"): Promise<IdleGateEval> {
+export async function evaluateIdleGate(
+  userId: string,
+  measureTo: MeasureTo = "now",
+  /** The client's reported duration for the lot being saved. Advisory only — see the note
+   *  where it is used: it can push the measured end LATER, never earlier. */
+  lotDurationMs?: number | null,
+): Promise<IdleGateEval> {
   const nowMs = Date.now()
   const u = await prisma.user.findUnique({ where: { id: userId }, select: { showScanTimer: true, timerRedMins: true } })
   const thresholdMs = (u?.timerRedMins ?? 30) * 60_000
@@ -66,7 +72,20 @@ export async function evaluateIdleGate(userId: string, measureTo: MeasureTo = "n
       const marker = await prisma.cataloguerLotStart.findUnique({ where: { userId }, select: { startedAt: true } })
       const startedMs = marker?.startedAt.getTime() ?? 0
       // Only usable if it sits between the last save and now. Outside that it is stale.
-      if (startedMs > sinceMs && startedMs <= nowMs) endMs = startedMs
+      if (startedMs > sinceMs && startedMs <= nowMs) {
+        endMs = startedMs
+        // ⚠ A marker can be STALE-EARLY: a lot started, abandoned without saving, a long
+        // absence, and the next lot's start not re-stamping (checkIdleOnLotStart bails when a
+        // popup is already open). Measuring to that old start would hide the absence.
+        //
+        // The client's own reported lot duration corrects it — but is used ONLY as a LATER
+        // bound, and only when a marker already exists. A device can therefore only ever push
+        // the end LATER, which makes the gap BIGGER; it can never shrink one. Claim a
+        // three-hour lot and this picks the marker and ignores you. Without a marker there is
+        // no client input at all: it falls back to now.
+        if (lotDurationMs != null && lotDurationMs >= 0) endMs = Math.max(endMs, nowMs - lotDurationMs)
+        endMs = Math.min(endMs, nowMs)
+      }
     } catch { /* table not migrated yet — measure to now, i.e. the old behaviour */ }
   }
 

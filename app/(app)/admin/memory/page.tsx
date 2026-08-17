@@ -38,6 +38,7 @@ THE FIX. evaluateIdleGate(userId, measureTo):
 
 Deliberate details, all of which matter:
 - A marker OLDER than the last save, or in the future, is IGNORED - a save has happened since, so it cannot describe the lot being saved now. Falls back to "now", which is exactly the old behaviour, so a deploy before the migration is no worse than before.
+- ⚠ A MARKER CAN BE STALE-EARLY: a lot started, abandoned without saving, a long absence, and the next lot's start not re-stamping (checkIdleOnLotStart bails when a popup is already open). Measuring to that old start would HIDE the absence. The client's reported durationMs corrects it, used ONLY as a LATER bound and ONLY when a marker exists: endMs = max(marker, now - durationMs). A device can therefore only ever push the end LATER, which makes the gap BIGGER - claim a three-hour lot and it picks the marker and ignores you; claim a zero-length lot and the gap grows. With no marker there is no client input at all. Six cases regression-checked, including both attacks.
 - The CLEARED_BY_REASON window still runs to nowMs, not the measured end - a reason logged DURING the lot (the within-lot check) must still account for the break.
 - IdleGateEval gained measuredToMs; nowMs stays the true server clock because clockLooksTampered compares the device's claim against it.
 
