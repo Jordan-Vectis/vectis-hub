@@ -25,7 +25,14 @@ export type CaptureInfo = {
   source: CaptureSource
   capturedAt: string | null
   count: number
+  /** The newest commit the COMMITTED seed carries — the record is complete up to here.
+   *  Past it, a deploy can only vouch for its own headline change. Read from the seed
+   *  rather than hardcoded, so refreshing the seed moves the date on its own. */
+  completeTo: string | null
 }
+
+/** Seed is newest-first (git log order), so entry 0 is how far the record is complete. */
+export const SEED_COMPLETE_TO: string | null = CHANGELOG_SEED[0]?.date ?? null
 
 function readCaptureFile(): { source: CaptureSource; capturedAt: string | null; commits: RawCommit[] } | null {
   try {
@@ -75,7 +82,7 @@ export async function ingestChanges(): Promise<CaptureInfo> {
   const now = currentDeployCommit()
   if (now) rows.push({ commit: now, source: "deploy-env" })
 
-  if (rows.length === 0) return { source: "none", capturedAt: null, count: 0 }
+  if (rows.length === 0) return { source: "none", capturedAt: null, count: 0, completeTo: SEED_COMPLETE_TO }
 
   // Only insert what's missing. createMany + skipDuplicates leans on the unique
   // sha, so a re-ingest costs one insert attempt and changes nothing.
@@ -105,6 +112,7 @@ export async function ingestChanges(): Promise<CaptureInfo> {
     source: capture?.source ?? (now ? "deploy-env" : "seed"),
     capturedAt: capture?.capturedAt ?? null,
     count: await prisma.deployChange.count(),
+    completeTo: SEED_COMPLETE_TO,
   }
 }
 

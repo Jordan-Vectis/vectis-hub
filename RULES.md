@@ -258,6 +258,30 @@ Default branch for all new work is **`staging`** unless told otherwise.
 
 Before every git push, ask yourself: "Did the user explicitly name `main`?" If not, push to `staging` only.
 
+### ⚠ Refresh the changelog seed before pushing
+
+```bash
+npm run changelog:seed
+```
+
+Run it and commit the result **as part of every push**, or the work will not appear in
+Admin → **Patches & Changes**.
+
+**Railway's build has no `.git` directory.** `scripts/capture-changelog.mjs` therefore falls
+through to `RAILWAY_GIT_COMMIT_SHA` / `_MESSAGE` and records **exactly one commit per release** —
+the headline one. The running app has no git and no GitHub token (deliberate), so the *only*
+complete history it can ever see is the one **committed into the repo**: `lib/changelog-seed.ts`.
+That file had gone stale by 33 commits (Jordan, 2026-08-17: *"We have made so many changes today
+but the patches tab only has 1 thing"* — a full day's work showed as a single line).
+
+`scripts/refresh-changelog-seed.mjs` regenerates it from the full local history. It refuses to
+write from a shallow clone and refuses to shrink the file, so it can only ever add. Ingest is
+keyed on `sha`, so re-seeding never duplicates anything.
+
+⚠ The page's "the record is complete up to X" banner reads that date **from the seed's newest
+entry** — never hardcode it. It only appears when changes shown actually fall past that date, so
+a stale seed is visible and a fresh one is silent.
+
 ---
 
 ## General

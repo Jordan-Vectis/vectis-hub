@@ -1,16 +1,59 @@
-// The commit history from 1 July 2026 up to the day Patches & Changes was built.
+// The commit history from 1 July 2026 up to 2026-08-17, committed into the repo.
 //
-// Committed on purpose: Railway may shallow-clone, in which case the build-time
-// capture only sees the tip and the page would open empty. This guarantees the
-// record starts with real history rather than starting from nothing. Everything
-// after this arrives from scripts/capture-changelog.mjs on each deploy, keyed by
-// sha so re-ingesting is a no-op.
+// ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
+// has no .git, so scripts/capture-changelog.mjs falls back to the deploy
+// environment and records just ONE commit per release — the amber banner on
+// Admin → Patches & Changes is reporting exactly that. Everything between
+// deploys reaches the page through this file and no other route.
 //
-// Not maintained by hand — there is no reason to edit or extend this list.
+// ⚠ Regenerate it BEFORE pushing, or the work you just did will not appear:
+//     npm run changelog:seed
+// Never edit it by hand. Ingest is keyed on sha, so re-seeding only ever adds
+// what is missing — it can't duplicate or overwrite anything.
 
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"4cb74e1033c2c71bd60744db8fefd80378012cb4","author":"Jordan Orange","date":"2026-08-17T13:28:33+01:00","subject":"Review tab: mark key points as the mistake, and fix all AI-flagged in one go"},
+  {"sha":"62cc369bc69b353c2e0b09746e67468b49234ca1","author":"Jordan Orange","date":"2026-08-17T12:53:20+01:00","subject":"Locking Check: let the AI suggest the missing conditions, for a person to accept"},
+  {"sha":"2651a17923bcce9e9462cdbf82ba3757ca828e0e","author":"Jordan Orange","date":"2026-08-17T12:43:29+01:00","subject":"Locking Check: \"*** collection only ***\" is not leftover AI text"},
+  {"sha":"766423d57e77ed7d5ae1cba3f5fecf731c78d48c","author":"Jordan Orange","date":"2026-08-17T12:38:43+01:00","subject":"Locking Check: read the tote check's answer instead of guessing its shape"},
+  {"sha":"0b3d4becf96bdbdec8e28b71f8c3e8c9da8a6dc5","author":"Jordan Orange","date":"2026-08-17T12:33:35+01:00","subject":"Locking Check: one title rule, and a checklist with pass counts"},
+  {"sha":"bf8bb369867911a19e4b354b3623d1f3af7da6d3","author":"Jordan Orange","date":"2026-08-17T12:22:14+01:00","subject":"Locking Check: make it the real gate before BC and the website"},
+  {"sha":"e725d9216db3ba5b44d45d8fb8dc8ff9e9fa29c7","author":"Jordan Orange","date":"2026-08-17T12:13:30+01:00","subject":"Narrow the layout rule to the Description Copier only"},
+  {"sha":"2e2cf87b87d16d9d4864d4ffd640f1a5235b7b7d","author":"Jordan Orange","date":"2026-08-17T12:07:15+01:00","subject":"Sale page: drop the bidders banner, keep the bulk actions on screen"},
+  {"sha":"2dfff912f67aaf07059844a6a0fdf2e9b348fe12","author":"Jordan Orange","date":"2026-08-17T11:54:42+01:00","subject":"Manage Lots: filter by who added a lot and when"},
+  {"sha":"4392f323b34a44999073cacbdbf66deaf0234274","author":"Jordan Orange","date":"2026-08-17T11:47:15+01:00","subject":"Cataloguers who write their own descriptions: tick the person, not the lot"},
+  {"sha":"df241cfb43caf760a2297fffeec595944beb2641","author":"Jordan Orange","date":"2026-08-17T11:29:12+01:00","subject":"Description Copier: the condition banner goes below the lot card"},
+  {"sha":"c63b8de0670c63d9cccda4205a60adf514dbe3cc","author":"Jordan Orange","date":"2026-08-17T11:22:28+01:00","subject":"Description Copier: the condition banner starts collapsed, so the page stops moving"},
+  {"sha":"b034e52909c4f3af90020a2cbd7c48baf99e2913","author":"Jordan Orange","date":"2026-08-17T11:14:03+01:00","subject":"Description Copier: stop flagging lots that are perfectly fine, and a rule about layout"},
+  {"sha":"70cae872821cb1c5a4f02e0155e85280fe29a86d","author":"Jordan Orange","date":"2026-08-17T10:58:00+01:00","subject":"Double Check: flag a disputed product code, don't overwrite the cataloguer"},
+  {"sha":"6cf8d16c320f8961336394734b61c8ce25e97fa0","author":"Jordan Orange","date":"2026-08-17T10:52:04+01:00","subject":"Key Points stage: stop it overwriting the cataloguer's product codes"},
+  {"sha":"cd87b6aee1501cb530160f2d5462b0265a52fd9d","author":"Jordan Orange","date":"2026-08-17T10:26:44+01:00","subject":"Key points: say which part is missing, not just that something is"},
+  {"sha":"9ad7357b22e06f889283f9d6467fffde06702ae6","author":"Jordan Orange","date":"2026-08-17T10:17:44+01:00","subject":"Key points: the full stop was a separator, so every decimal size failed"},
+  {"sha":"81487ffd0b6074e8fc233669e72e44061100e6c3","author":"Jordan Orange","date":"2026-08-17T10:04:03+01:00","subject":"Key points: a product code written with a space could never match"},
+  {"sha":"f375050b5b2d59637960b29f6054db52de76b97c","author":"Jordan Orange","date":"2026-08-17T09:48:41+01:00","subject":"Memory: the overnight pages mirror the Auto Pipeline's symbols, and nothing goes back on that tab"},
+  {"sha":"521a22893d84247ae120bfb2920ebfbac8d41692","author":"Jordan Orange","date":"2026-08-17T09:47:59+01:00","subject":"Overnight runs: same symbols and stage cards as the Auto Pipeline tab"},
+  {"sha":"5a94f8be7e8eb1ea5ecfacfa4368094251aed4a8","author":"Jordan Orange","date":"2026-08-17T09:39:04+01:00","subject":"Overnight runs: nothing starts until you press Start, and \"steps\" is not \"lots\""},
+  {"sha":"42c71a319fe019d3dd2601f4fe5dc9f93955685e","author":"Jordan Orange","date":"2026-08-17T09:26:29+01:00","subject":"Overnight AI runs: its own page, and you can see inside a run"},
+  {"sha":"99cfe9b70e37fcfd40c403dd2596a5ecc820bf6b","author":"Jordan Orange","date":"2026-08-14T16:20:13+01:00","subject":"Memory: why the logo looked off-centre, and what actually fixed it"},
+  {"sha":"8d4bb9b61b14e090f471a4e2146096a14c1314fa","author":"Jordan Orange","date":"2026-08-14T16:19:27+01:00","subject":"Induction: give the logo room to breathe, which is what fixes the centring"},
+  {"sha":"7e21259e43b880c7821a350dfe8b77227d936fac","author":"Jordan Orange","date":"2026-08-14T15:01:48+01:00","subject":"Induction: centre the logo optically, and stop two round shapes fighting"},
+  {"sha":"fdd6c2d7eea30713fc3cffa62c2729ba9c2542de","author":"Jordan Orange","date":"2026-08-14T14:58:10+01:00","subject":"Memory: the AI JSON parsing trap and the auto-apply rules"},
+  {"sha":"91f882ec7da132f8c8f9ae61a3f6cc3cbf977937","author":"Jordan Orange","date":"2026-08-14T14:57:33+01:00","subject":"Induction: stop throwing away good AI answers, and let a failed fix be retried"},
+  {"sha":"e38301ec0d7bac5c8ca9ea5b579f82ba46624d0f","author":"Jordan Orange","date":"2026-08-14T14:47:57+01:00","subject":"Memory: record the induction AI helpers, the redesign and the review fixes"},
+  {"sha":"bc8d59d1167c4484a99a026492fcc94ded582f5d","author":"Jordan Orange","date":"2026-08-14T14:46:10+01:00","subject":"Induction: apply the review's fixes, and slides that look designed"},
+  {"sha":"0e4d4459859caf9c8c71f304a47248801d4f5e95","author":"Jordan Orange","date":"2026-08-14T13:43:17+01:00","subject":"Induction: fix the AI rewrite before the migration, and the invisible reorder arrows"},
+  {"sha":"21c9b84ab3ad183f5190868519525f0ac2a2e7f2","author":"Jordan Orange","date":"2026-08-14T13:37:44+01:00","subject":"Induction: keep the deck readable between the deploy and the migration"},
+  {"sha":"5dcd551b643f7b1ff021cca4438c1e0c2b0084df","author":"Jordan Orange","date":"2026-08-14T13:37:00+01:00","subject":"Induction: AI rewrite/review, a presenter that looks like a presentation, and the review fixes"},
+  {"sha":"54e01ab8799e80e0ca2e6ed2c3537b77f542a893","author":"Jordan Orange","date":"2026-08-14T13:08:12+01:00","subject":"Facilities → Induction: the deck as editable slides, plus forms new starters sign"},
+  {"sha":"35b6b4b863956fa2ac13b4ced093424863c613a2","author":"Jordan Orange","date":"2026-08-14T12:28:58+01:00","subject":"Memory: record today's work in the opening message and shared record"},
+  {"sha":"a3a38039906879e3441fdbe84ceac48bf99b7e21","author":"Jordan Orange","date":"2026-08-14T12:06:08+01:00","subject":"Patches & Changes: printable PDF, and the report is a log not a summary"},
+  {"sha":"278b7e7353b3101883277108dff78bfab2281f1b","author":"Jordan Orange","date":"2026-08-14T11:55:03+01:00","subject":"Description Copier: actually check the conditions"},
+  {"sha":"b61fb6a3d1fc9acab7ad1180cb92756fb36e9883","author":"Jordan Orange","date":"2026-08-14T11:23:16+01:00","subject":"Duplicate Checker: stop it offering to delete real lots"},
+  {"sha":"d47a9377a0ab712fd91d82257776b4ecb2fef38b","author":"Jordan Orange","date":"2026-08-14T11:13:34+01:00","subject":"BC Match: stop a duplicate barcode losing a lot silently"},
+  {"sha":"d5934d72e368e1c92223bb392df54154251359e6","author":"Jordan Orange","date":"2026-08-14T10:39:15+01:00","subject":"Keep names out of the manager report"},
+  {"sha":"68f6479f55f3ab573da5e03da6b322940af7e6bb","author":"Jordan Orange","date":"2026-08-14T10:28:44+01:00","subject":"Add Admin -> Patches & Changes"},
   {"sha":"7f84f83802baebb269c80dfbb39c4005351b38d9","author":"Jordan Orange","date":"2026-08-14T10:00:04+01:00","subject":"Every pipeline run starts on Auto-apply"},
   {"sha":"3aa6504d4ce10f46a47973c37aa8a20112af22aa","author":"Jack Collings","date":"2026-08-14T09:53:19+01:00","subject":"Lotting Up: price from our own sold archive, and barcode where you're looking"},
   {"sha":"72fe1ff824182b6b19879e0390b226d46fe6d918","author":"Jordan Orange","date":"2026-08-14T09:45:38+01:00","subject":"Stop the Auto Pipeline silently failing to apply"},
@@ -437,11 +480,4 @@ export const CHANGELOG_SEED: SeedCommit[] = [
   {"sha":"6235235190d3ccc9285939c8a8d9055a5047569f","author":"Jordan Orange","date":"2026-07-01T15:04:10+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
   {"sha":"f372d601925895c52a8b5712d8c364a8c7288ea2","author":"Jordan Orange","date":"2026-07-01T15:04:08+01:00","subject":"Lot change log: capture every lot mutation (create/edit/delete/photo)"},
   {"sha":"31cc1877ce30bd7c5cd89909477f4ab386385df4","author":"Jack Collings","date":"2026-07-01T14:22:07+01:00","subject":"Add Sale Statistics tool (BC auction-line stats)"},
-  {"sha":"ece6cf1ecdd48f4eddf3f1f03fc93286f0cd362e","author":"Jordan Orange","date":"2026-07-01T12:07:14+01:00","subject":"Auction AI instructions: favourites (pinned to top, shared, synced)"},
-  {"sha":"43b76a81235ea364c18ca23d35e1bd67208d36a6","author":"Jordan Orange","date":"2026-07-01T11:52:59+01:00","subject":"Merge branch 'staging' of https://github.com/Jordan-Vectis/vectis-hub into staging"},
-  {"sha":"866d53884f5c1c6d97b83f1ad27e4ac0bc47838b","author":"Jordan Orange","date":"2026-07-01T11:52:58+01:00","subject":"Auction AI: honour cataloguer key points in both Batch and Pipeline"},
-  {"sha":"f9e3e7021fd0ee5f87ef73b6142fac43797f67cf","author":"Jack Collings","date":"2026-07-01T11:49:15+01:00","subject":"BC services diagnostic: report env, raw service doc + known-endpoint probe"},
-  {"sha":"fece3866b18e16f5d752db2dce4d50fedc49f547","author":"Jack Collings","date":"2026-07-01T11:40:19+01:00","subject":"Add BC services discovery route"},
-  {"sha":"54ef9af7c2917b312468a10eb0233a0786edc7a7","author":"Jordan Orange","date":"2026-07-01T11:38:33+01:00","subject":"Auction AI instructions: Export all / Import to sync between environments"},
-  {"sha":"6892328620ed08a638050a147a7e2cc8f433a373","author":"Jordan Orange","date":"2026-07-01T10:48:12+01:00","subject":"Auction AI instructions: one true source (DB), no code/DB drift"},
 ]

@@ -18,7 +18,7 @@ type Report = {
   changeCount: number; model: string | null
   createdBy: string | null; createdAt: string
 }
-type Capture = { source: string; capturedAt: string | null; count: number } | null
+type Capture = { source: string; capturedAt: string | null; count: number; completeTo?: string | null } | null
 
 const card  = "bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800"
 const btn   = "px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
@@ -64,6 +64,14 @@ export default function ChangesClient({
 
   const shown = showInternal ? changes : changes.filter(c => !c.housekeeping)
   const internalCount = changes.length - changes.filter(c => !c.housekeeping).length
+
+  // ⚠ Only warn when the record is ACTUALLY thin. Railway's build has no .git, so every
+  // release reports source "deploy-env" — warning on that alone left the banner up for
+  // ever and turned a real signal into wallpaper. What matters is whether anything shown
+  // here falls PAST the point the committed history covers; if it doesn't, the list is
+  // complete whatever the capture managed. The date comes from the seed, never hardcoded.
+  const completeTo = capture?.completeTo ?? null
+  const thinFrom = completeTo && changes.some(c => c.committedAt > completeTo) ? completeTo : null
 
   // Group by day so a period reads as a diary rather than one long list.
   const byDay = shown.reduce<Record<string, Change[]>>((acc, c) => {
@@ -162,10 +170,11 @@ export default function ChangesClient({
 
       {/* How complete is this record? Say it plainly rather than letting a short
           list read as "not much happened". */}
-      {capture && (capture.source === "git-shallow" || capture.source === "deploy-env" || capture.source === "none") && (
+      {thinFrom && (
         <Banner tone="warn">
-          This release could only record its own headline change, so anything that went out alongside it is missing from the
-          list below. Everything up to 13 August is complete. Worth mentioning to IT if it keeps happening.
+          The record is complete up to <strong>{fmtDate(thinFrom)}</strong>. After that a release can only vouch for its own
+          headline change, so smaller changes that went out alongside one may be missing from the list below.
+          Worth mentioning to IT — it means the history hasn&apos;t been refreshed since that date.
         </Banner>
       )}
 

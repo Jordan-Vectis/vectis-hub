@@ -38,7 +38,18 @@ Three sources, all in lib/changelog.ts, all keyed on SHA so re-ingesting is a no
 2. lib/changelog-seed.ts - the history from 1 July 2026, COMMITTED ON PURPOSE so a shallow clone cannot leave the page empty.
 3. RAILWAY_GIT_COMMIT_* - so a deploy always records itself even if both of the above fail.
 
-ingestChanges() runs on every page load and is idempotent. The page SAYS SO when a release could only capture its own head commit, rather than letting a short list read as a quiet fortnight.
+ingestChanges() runs on every page load and is idempotent.
+
+## ⚠⚠ MEASURED 2026-08-17: RAILWAY'S BUILD HAS NO .git AT ALL
+
+Jordan: "We have made so many changes today but the patches tab only has 1 thing". A full day - 22 commits - showed as ONE line, and the author rendered as the GitHub handle "Jordan-Vectis" instead of "Jordan Orange". That handle is the tell: it is RAILWAY_GIT_AUTHOR, so fromGit() returned NOTHING and fromEnv() supplied the row. It is not a shallow clone - there is NO GIT IN THE BUILD AT ALL, which means source 1's whole premise ("the one moment Railway still has a clone") is WRONG. Do not try to fix this with git fetch --unshallow: there is no repository there to deepen.
+
+THEREFORE lib/changelog-seed.ts IS THE ONLY ROUTE by which the app can ever see a change that is not a deploy's headline commit. It had gone stale by 33 commits.
+
+- npm run changelog:seed (scripts/refresh-changelog-seed.mjs) regenerates it from the full LOCAL history. ⚠ RUN IT AND COMMIT THE RESULT AS PART OF EVERY PUSH - now a rule in RULES.md under the branch/deploy rules. Ingest is keyed on sha, so re-seeding only ever adds what is missing.
+- Two guards, both deliberate: it REFUSES to write from a shallow clone, and REFUSES to shrink the file. Writing a 1-commit seed would delete the committed history and leave the page emptier than before - far worse than not refreshing at all.
+- The "record is complete up to X" banner now reads its date from SEED_COMPLETE_TO (the seed's newest entry) and only appears when the changes on screen actually fall PAST that date. It previously keyed off the capture source alone with a HARDCODED "13 August", so it was permanently on and permanently wrong - a real signal turned into wallpaper. ⚠ Never hardcode that date again.
+- The permanent alternative - a read-only GitHub token so the app tops itself up - remains REJECTED (2026-07-17). Refreshing the seed is the agreed price of the app having no credentials.
 
 ## THINGS NOT TO UNDO
 
