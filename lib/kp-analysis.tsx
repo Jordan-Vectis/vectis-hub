@@ -68,6 +68,14 @@ function significantWords(line: string): string[] {
 // Exact number matching: 6000 also matches 6,000; a letter suffix is fine (250th,
 // 34cm) but further digits are not — "250" must never pass on "2500", which the old
 // generic \w{0,4} suffix allowed and silently hid missing points.
+//
+// ⚠ NO LEADING \b, deliberately. A cataloguer writes the code spaced — "CB 151518" —
+// and the AI writes it joined: "Product code CB151518". The tokeniser splits the key
+// point on the space, so the token is the bare "151518", and \b cannot match between
+// "B" and "1" (both word characters). Every Charlie Bears key point therefore came
+// back "not found" however good the description was — which is what "relaxed key
+// points doesn't work at all" actually was. Everything that \b was protecting against
+// is a DIGIT before the match, which startsInsideNumber checks instead.
 function numberPattern(digits: string): string {
   let pattern = digits
   if (digits.length > 3) {
@@ -79,14 +87,18 @@ function numberPattern(digits: string): string {
     }
     pattern = out.join("")
   }
-  return `\\b${pattern}(?![\\d,]?\\d)\\w{0,4}\\b`
+  return `${pattern}(?![\\d,]?\\d)\\w{0,4}\\b`
 }
 
-// numberPattern's \b can't see through a comma, so "250" would still match the
-// tail of "1,250". No lookbehind (old Safari on the shared iPads throws at regex
-// COMPILE time) — check the two preceding characters instead. Applies to any
-// match that starts with a digit.
-function falseNumberTail(text: string, index: number): boolean {
+// Would this match start part-way through a bigger number? Two ways that happens:
+// a digit immediately before it ("151518" inside "9151518"), or a comma/decimal
+// point with a digit before that ("250" inside "1,250"). Letters before it are
+// FINE and are the point of the change above — that is a product code.
+// No lookbehind: old Safari on the shared iPads throws at regex COMPILE time.
+// Applies to any match that starts with a digit.
+function startsInsideNumber(text: string, index: number): boolean {
+  if (index === 0) return false
+  if (/\d/.test(text[index - 1])) return true
   return index >= 2 && /[,.]/.test(text[index - 1]) && /\d/.test(text[index - 2])
 }
 
@@ -148,7 +160,7 @@ export function analyseKeyPoints(description: string, keyPoints: string, mode: K
       while ((m = re.exec(description)) !== null) {
         // A purely numeric line must not phrase-match the tail of a larger
         // comma-grouped figure ("250" inside "1,250") — try the next occurrence.
-        if (/^\d/.test(m[0]) && falseNumberTail(description, m.index)) {
+        if (/^\d/.test(m[0]) && startsInsideNumber(description, m.index)) {
           if (m.index === re.lastIndex) re.lastIndex++
           continue
         }
@@ -179,7 +191,7 @@ export function analyseKeyPoints(description: string, keyPoints: string, mode: K
       let any = false
       let m: RegExpExecArray | null
       while ((m = re.exec(description)) !== null) {
-        if (/^\d/.test(m[0]) && falseNumberTail(description, m.index)) continue
+        if (/^\d/.test(m[0]) && startsInsideNumber(description, m.index)) continue
         any = true
         ranges.push({ start: m.index, end: m.index + m[0].length, kp: kpIdx })
         if (m.index === re.lastIndex) re.lastIndex++
@@ -196,7 +208,7 @@ export function analyseKeyPoints(description: string, keyPoints: string, mode: K
         let any = false
         let m: RegExpExecArray | null
         while ((m = re.exec(description)) !== null) {
-          if (/^\d/.test(m[0]) && falseNumberTail(description, m.index)) continue
+          if (/^\d/.test(m[0]) && startsInsideNumber(description, m.index)) continue
           any = true
           ranges.push({ start: m.index, end: m.index + m[0].length, kp: kpIdx })
           if (m.index === re.lastIndex) re.lastIndex++
