@@ -83,6 +83,18 @@ Jordan chose a route UNDER Auction AI, so it inherits the AUCTION_AI gate from a
 
 WARNING: the MACHINERY is untouched — the runner, the nine-minute slices, the cron loop, the retries, the cron-auth guards. This changed where you drive it from, not how it runs.
 
+## Adding a sale does NOT start it (2026-08-14)
+
+Jordan: "They seem to be auto starting without me saying to?" — and he was right. There was never a start gate anywhere. The runner picks up ANY row with status QUEUED on its next tick, which is every 30 seconds with no time-of-day check, so adding a sale to the queue WAS the instruction to run it. "Overnight" only ever meant "does not need your browser open", never "waits until tonight".
+
+Fixed without touching the runner: addToPipelineQueue creates the row as **PAUSED**, which the runner never picks up, and startPipelineQueueItem / startAllPipelineQueueItems move it to QUEUED. WARNING: never create these as QUEUED again.
+
+WARNING: PAUSED now means two different things — **never started** versus **held mid-run** — and they are told apart by startedAt being null. Always label through **queueStatusLabel(item)** / isNotStarted(item) in lib/pipeline-queue.ts, never off QUEUE_STATUS_LABEL directly, or a brand-new sale reads as "Paused" like something went wrong.
+
+## WARNING: PipelineQueueItem.total is STAGE PASSES, not lots
+
+A 601-lot sale reads about 1693, because outstanding() counts every stage pass still to do: 601 batch + 491 key-point + 601 double-check. Jordan hit this as "its saying lots done 1693 when there is only 601 lots in that auction?" — the figure was right and the LABEL was wrong. Call it steps, and if a real lot figure is wanted, count the PipelineLot rows that actually have text. Do NOT "fix" the runner's maths: counting stage passes is what keeps the number meaning the same thing across resumed slices.
+
 ## The things that will bite
 
 - THE RUNNER CALLS THE SAME ROUTES THE BROWSER DOES (batch, key-points-check, double-check, catalogue-lots, pipeline, pipeline/lot, photo-proxy) over localhost, authorised by isCronRequest in lib/cron-auth.ts (Bearer CRON_SECRET). This is deliberate: those routes hold the tuned prompts, the key-points authority rules, the bears clean-up and the English rule. NEVER re-implement a prompt inside the runner - change it in the route and both paths get it. isCronRequest is only ever used ALONGSIDE the session check, never instead of it, and DELETE /api/auction-ai/pipeline (the reset) is deliberately left session-only.

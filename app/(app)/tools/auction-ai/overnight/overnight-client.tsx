@@ -11,8 +11,9 @@ import Link from "next/link"
 import {
   addToPipelineQueue, movePipelineQueueItem, setPipelineQueuePaused,
   removeFromPipelineQueue, clearFinishedQueueItems,
+  startPipelineQueueItem, startAllPipelineQueueItems,
 } from "@/lib/actions/pipeline-queue"
-import { QUEUE_STATUS_LABEL, STAGE_LABEL, type QueueItem } from "@/lib/pipeline-queue"
+import { STAGE_LABEL, queueStatusLabel, isNotStarted, type QueueItem } from "@/lib/pipeline-queue"
 
 type Auction = { code: string; name: string | null; auctionDate: string | null }
 
@@ -32,7 +33,10 @@ function duration(from: string | null, to: string | null): string {
   return `${h}h ${mins % 60}m`
 }
 
-export function statusTone(status: string): { chip: string; card: string } {
+export function statusTone(status: string, notStarted = false): { chip: string; card: string } {
+  // A sale nobody has started yet is not "paused" in the amber, something-is-up sense —
+  // it is simply sitting there waiting for a person, which should read as neutral.
+  if (notStarted) return { chip: "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300", card: "border-dashed border-gray-300 dark:border-gray-700" }
   switch (status) {
     case "RUNNING":   return { chip: "bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300", card: "border-green-400 dark:border-green-700/70 bg-green-50/50 dark:bg-green-950/20" }
     case "PAUSED":    return { chip: "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300", card: "border-amber-300 dark:border-amber-800" }
@@ -89,9 +93,10 @@ export default function OvernightClient() {
     } finally { setBusy(false) }
   }
 
-  const running  = items.filter(i => i.status === "RUNNING")
-  const waiting  = items.filter(i => i.status === "QUEUED" || i.status === "PAUSED")
-  const finished = items.filter(i => i.status === "DONE" || i.status === "CANCELLED")
+  const running    = items.filter(i => i.status === "RUNNING")
+  const notStarted = items.filter(isNotStarted)
+  const waiting    = items.filter(i => !isNotStarted(i) && (i.status === "QUEUED" || i.status === "PAUSED"))
+  const finished   = items.filter(i => i.status === "DONE" || i.status === "CANCELLED")
 
   return (
     <div className="p-6 lg:p-8 max-w-[1400px] mx-auto">
@@ -102,8 +107,8 @@ export default function OvernightClient() {
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">🌙 Overnight AI runs</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-3xl leading-relaxed">
               Sales queued to run on the server, one after another, each on its own instruction and settings.
-              Nothing needs to be left open — add a sale, go home, and read what happened here in the morning.
-              Open any run to see it lot by lot.
+              Nothing needs to be left open — start them, go home, and read what happened here in the morning.
+              Open any run to see it lot by lot. <strong>A sale you add sits still until you press Start.</strong>
             </p>
           </div>
           <button
@@ -137,7 +142,7 @@ export default function OvernightClient() {
           busy={busy}
           onCancel={() => setAdding(false)}
           onSubmit={async (code, settings) => {
-            await run(() => addToPipelineQueue(code, settings), `${code} added — it will start when the sales ahead of it finish.`)
+            await run(() => addToPipelineQueue(code, settings), `${code} added. It won't run until you press Start.`)
             setAdding(false)
           }}
         />
@@ -149,8 +154,8 @@ export default function OvernightClient() {
         <div className="mt-6 rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 p-10 text-center">
           <p className="text-gray-700 dark:text-gray-200 font-semibold">Nothing is queued.</p>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Press <strong>Queue a sale</strong>, pick the sale and the instruction it should run on, and it will
-            start on its own.
+            Press <strong>Queue a sale</strong>, pick the sale and the instruction it should run on. It waits until
+            you press <strong>Start</strong> — adding a sale never sets it running.
           </p>
         </div>
       ) : (
@@ -159,7 +164,26 @@ export default function OvernightClient() {
             {running.map(i => <RunCard key={i.id} item={i} name={nameFor(i.code)} busy={busy} run={run} />)}
           </Section>
 
-          <Section title="Waiting" count={waiting.length} empty="Nothing else is waiting.">
+          {/* ⚠ Nothing here runs until someone presses Start — a sale is added held back on
+              purpose. Say so on the section, not just on the button. */}
+          <Section
+            title="Not started"
+            count={notStarted.length}
+            empty="Nothing is waiting to be started."
+            note="These will not run until you start them."
+            action={notStarted.length > 1 ? (
+              <button onClick={() => run(() => startAllPipelineQueueItems(), "Started — they will run one after another.")} disabled={busy}
+                className="px-4 py-2 rounded-lg text-xs font-bold bg-green-600 hover:bg-green-500 text-white disabled:opacity-40">
+                ▶ Start all {notStarted.length}
+              </button>
+            ) : undefined}>
+            {notStarted.map((i, idx) => (
+              <RunCard key={i.id} item={i} name={nameFor(i.code)} busy={busy} run={run}
+                canMoveUp={idx > 0} canMoveDown={idx < notStarted.length - 1} />
+            ))}
+          </Section>
+
+          <Section title="Started — waiting their turn" count={waiting.length} empty="Nothing else is waiting.">
             {waiting.map((i, idx) => (
               <RunCard key={i.id} item={i} name={nameFor(i.code)} busy={busy} run={run}
                 place={i.status === "QUEUED" ? idx + 1 : undefined}
@@ -195,14 +219,15 @@ function Banner({ tone, children }: { tone: "amber" | "red" | "green"; children:
   return <div className={`rounded-xl border px-4 py-3 text-sm mb-3 ${cls}`}>{children}</div>
 }
 
-function Section({ title, count, empty, action, children }: {
-  title: string; count: number; empty?: string; action?: React.ReactNode; children: React.ReactNode
+function Section({ title, count, empty, note, action, children }: {
+  title: string; count: number; empty?: string; note?: string; action?: React.ReactNode; children: React.ReactNode
 }) {
   return (
     <div>
       <div className="flex items-center gap-3 mb-3">
         <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">{title}</h2>
         {count > 0 && <span className="text-xs font-semibold text-gray-400">{count}</span>}
+        {count > 0 && note && <span className="text-xs text-gray-500 dark:text-gray-400">{note}</span>}
         {action && <span className="ml-auto">{action}</span>}
       </div>
       {count === 0 ? <p className="text-sm text-gray-400">{empty}</p> : <div className="space-y-3">{children}</div>}
@@ -223,7 +248,8 @@ function RunCard({
   canMoveUp?: boolean
   canMoveDown?: boolean
 }) {
-  const tone    = statusTone(item.status)
+  const fresh   = isNotStarted(item)
+  const tone    = statusTone(item.status, fresh)
   const pct     = item.total > 0 ? Math.min(100, Math.round((item.done / item.total) * 100)) : 0
   const waiting = item.retryAfter && new Date(item.retryAfter).getTime() > Date.now()
   const ghost   = "px-2.5 py-2 min-h-[36px] rounded-lg text-xs font-semibold bg-gray-100 dark:bg-[#2C2C2E] text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white disabled:opacity-40"
@@ -240,9 +266,9 @@ function RunCard({
             </Link>
             {name && <span className="text-sm text-gray-500 dark:text-gray-400 truncate">{name}</span>}
             <span className={`text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${tone.chip}`}>
-              {QUEUE_STATUS_LABEL[item.status] ?? item.status}
+              {queueStatusLabel(item)}
             </span>
-            {item.status !== "DONE" && (
+            {item.status !== "DONE" && !fresh && (
               <span className="text-[11px] text-gray-500 dark:text-gray-400">{STAGE_LABEL[item.stage] ?? item.stage}</span>
             )}
           </div>
@@ -265,10 +291,18 @@ function RunCard({
                 onClick={() => run(() => movePipelineQueueItem(item.id, "up"))} title="Run this one sooner">↑</button>
               <button className={ghost} disabled={busy || !canMoveDown || item.status === "RUNNING"}
                 onClick={() => run(() => movePipelineQueueItem(item.id, "down"))} title="Run this one later">↓</button>
-              <button className={ghost} disabled={busy}
-                onClick={() => run(() => setPipelineQueuePaused(item.id, item.status !== "PAUSED"))}>
-                {item.status === "PAUSED" ? "Resume" : "Hold"}
-              </button>
+              {fresh ? (
+                <button className="px-3 py-2 min-h-[36px] rounded-lg text-xs font-bold bg-green-600 hover:bg-green-500 text-white disabled:opacity-40"
+                  disabled={busy}
+                  onClick={() => run(() => startPipelineQueueItem(item.id), `${item.code} started.`)}>
+                  ▶ Start
+                </button>
+              ) : (
+                <button className={ghost} disabled={busy}
+                  onClick={() => run(() => setPipelineQueuePaused(item.id, item.status !== "PAUSED"))}>
+                  {item.status === "PAUSED" ? "Resume" : "Hold"}
+                </button>
+              )}
             </>
           )}
           <Link href={`/tools/auction-ai/overnight/${encodeURIComponent(item.code)}`}
@@ -283,10 +317,15 @@ function RunCard({
         </div>
       </div>
 
-      {item.total > 0 && (
+      {item.total > 0 && !fresh && (
         <div className="mt-3">
+          {/* ⚠ NOT a lot count. `total` is every stage pass the sale still has to do — a lot
+              goes through batch, key points and double check — so a 601-lot sale reads ~1693.
+              It was labelled "lots" here and read as nonsense. */}
           <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 mb-1">
-            <span>{item.done} of {item.total} lots{item.skipped > 0 ? ` · ${item.skipped} skipped` : ""}</span>
+            <span title="Each lot goes through up to three stages, so this counts stage passes rather than lots">
+              {item.done} of {item.total} steps{item.skipped > 0 ? ` · ${item.skipped} refused` : ""}
+            </span>
             <span className="tabular-nums">{pct}%</span>
           </div>
           <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden">

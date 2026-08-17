@@ -11,8 +11,8 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { setPipelineQueuePaused, removeFromPipelineQueue } from "@/lib/actions/pipeline-queue"
-import { QUEUE_STATUS_LABEL, STAGE_LABEL, type QueueItem } from "@/lib/pipeline-queue"
+import { setPipelineQueuePaused, removeFromPipelineQueue, startPipelineQueueItem } from "@/lib/actions/pipeline-queue"
+import { STAGE_LABEL, queueStatusLabel, isNotStarted, type QueueItem } from "@/lib/pipeline-queue"
 import { fmtWhen, statusTone } from "../overnight-client"
 
 const POLL_MS = 10_000
@@ -122,8 +122,12 @@ export default function RunClient({ code }: { code: string }) {
     })
   }, [lots, filter, q])
 
-  const tone = item ? statusTone(item.status) : statusTone("")
-  const pct  = item && item.total > 0 ? Math.min(100, Math.round((item.done / item.total) * 100)) : 0
+  const fresh = !!item && isNotStarted(item)
+  const tone  = item ? statusTone(item.status, fresh) : statusTone("")
+  const pct   = item && item.total > 0 ? Math.min(100, Math.round((item.done / item.total) * 100)) : 0
+  // The number of lots the pipeline has actually written something for. ⚠ NOT item.total, which
+  // counts stage passes (batch + key points + double check), so a 601-lot sale reads ~1693 there.
+  const described = lots.filter(l => latestText(l)).length
 
   return (
     <div className="p-6 lg:p-8 max-w-[1500px] mx-auto">
@@ -135,7 +139,7 @@ export default function RunClient({ code }: { code: string }) {
             {code}
             {item && (
               <span className={`text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full ${tone.chip}`}>
-                {QUEUE_STATUS_LABEL[item.status] ?? item.status}
+                {queueStatusLabel(item)}
               </span>
             )}
           </h1>
@@ -155,11 +159,19 @@ export default function RunClient({ code }: { code: string }) {
 
         {item && item.status !== "DONE" && item.status !== "CANCELLED" && (
           <div className="flex items-center gap-2">
-            <button disabled={busy}
-              onClick={() => run(() => setPipelineQueuePaused(item.id, item.status !== "PAUSED"))}
-              className="px-4 py-2.5 rounded-xl text-sm font-semibold bg-gray-100 dark:bg-[#2C2C2E] text-gray-700 dark:text-gray-200 disabled:opacity-40">
-              {item.status === "PAUSED" ? "▶ Resume" : "⏸ Hold"}
-            </button>
+            {fresh ? (
+              <button disabled={busy}
+                onClick={() => run(() => startPipelineQueueItem(item.id))}
+                className="px-5 py-2.5 rounded-xl text-sm font-bold bg-green-600 hover:bg-green-500 text-white disabled:opacity-40">
+                ▶ Start this sale
+              </button>
+            ) : (
+              <button disabled={busy}
+                onClick={() => run(() => setPipelineQueuePaused(item.id, item.status !== "PAUSED"))}
+                className="px-4 py-2.5 rounded-xl text-sm font-semibold bg-gray-100 dark:bg-[#2C2C2E] text-gray-700 dark:text-gray-200 disabled:opacity-40">
+                {item.status === "PAUSED" ? "▶ Resume" : "⏸ Hold"}
+              </button>
+            )}
             <button disabled={busy}
               onClick={() => {
                 if (!confirm(`Take ${code} off the queue?\n\nAnything already written to the catalogue stays — this only stops further work.`)) return
@@ -180,17 +192,29 @@ export default function RunClient({ code }: { code: string }) {
       {item && (
         <div className={`rounded-2xl border p-5 mb-5 ${tone.card}`}>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Stat label="Lots done" value={item.total > 0 ? `${item.done} / ${item.total}` : "—"} />
+            <Stat label="Lots described so far" value={String(described)} />
             <Stat label="Applied to the catalogue" value={String(counts.applied)} />
             <Stat label="Need a look" value={String(counts.attention)} tone={counts.attention > 0 ? "amber" : undefined} />
             <Stat label="Refused by the AI" value={String(item.skipped)} tone={item.skipped > 0 ? "amber" : undefined} />
           </div>
-          {item.total > 0 && (
+          {item.total > 0 && !fresh && (
             <div className="mt-4">
               <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden">
                 <div className={`h-full transition-all ${item.status === "RUNNING" ? "bg-green-500" : "bg-[#C8A96E]"}`} style={{ width: `${pct}%` }} />
               </div>
+              {/* ⚠ Spell out what this number counts. It is stage passes, not lots: every lot
+                  goes through batch, key points and double check, so a 601-lot sale reads about
+                  1693 here, which read as a bug when it was labelled "lots done". */}
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1.5">
+                {item.done} of {item.total} steps done ({pct}%) — each lot goes through up to three stages,
+                so this counts stages rather than lots.
+              </p>
             </div>
+          )}
+          {fresh && (
+            <p className="text-sm text-gray-600 dark:text-gray-300 mt-4">
+              This sale has not been started. It will not run until you press <strong>Start this sale</strong>.
+            </p>
           )}
           <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-3">
             {item.preset || "no instruction"} · {item.model || "default model"}

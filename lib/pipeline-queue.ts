@@ -14,6 +14,22 @@ export const QUEUE_STATUS_LABEL: Record<string, string> = {
   CANCELLED: "Cancelled",
 }
 
+/**
+ * ⚠ PAUSED means two different things, and the difference matters to whoever is reading the
+ * list: a sale that has NEVER been started (that is how a new one is added — nothing runs until
+ * someone presses Start) versus one that was running and got held. `startedAt` is what tells
+ * them apart. Always label through here rather than off QUEUE_STATUS_LABEL directly.
+ */
+export function queueStatusLabel(item: { status: string; startedAt: string | Date | null }): string {
+  if (item.status === "PAUSED") return item.startedAt ? "Held" : "Not started"
+  return QUEUE_STATUS_LABEL[item.status] ?? item.status
+}
+
+/** True when the sale is waiting for a person, not for its turn. */
+export function isNotStarted(item: { status: string; startedAt: string | Date | null }): boolean {
+  return item.status === "PAUSED" && !item.startedAt
+}
+
 export const STAGE_LABEL: Record<string, string> = {
   batch:       "Batch run",
   kpcheck:     "Key points",

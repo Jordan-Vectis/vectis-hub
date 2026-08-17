@@ -41,6 +41,12 @@ export async function addToPipelineQueue(code: string, settings: QueueSettings):
       data: {
         code:  upper,
         position: (last?.position ?? -1) + 1,
+        // ⚠ Added HELD BACK, not ready to run (Jordan, 2026-08-14: "They seem to be auto starting
+        // without me saying to?"). The runner only ever picks up QUEUED and RUNNING rows, so
+        // PAUSED is what keeps a new sale still until someone presses Start — no runner change.
+        // "Never started" is told apart from "paused mid-run" by startedAt being null, which is
+        // what the UI labels off. Do NOT create these as QUEUED again.
+        status: "PAUSED",
         preset:         str(settings.preset, 80),
         model:          str(settings.model, 80),
         fallbackModel:  str(settings.fallbackModel, 80),
@@ -101,6 +107,36 @@ export async function setPipelineQueuePaused(id: string, paused: boolean): Promi
     return { ok: true }
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Could not change the queue" }
+  }
+}
+
+/** Let a sale run. Until this is pressed the runner never touches it. */
+export async function startPipelineQueueItem(id: string): Promise<QueueResult> {
+  try {
+    await requireUser()
+    const item = await prisma.pipelineQueueItem.findUnique({ where: { id }, select: { status: true } })
+    if (!item) return { ok: false, error: "Not in the queue any more." }
+    if (item.status === "DONE") return { ok: false, error: "That sale has already finished." }
+    if (item.status === "RUNNING") return { ok: true }
+    await prisma.pipelineQueueItem.update({ where: { id }, data: { status: "QUEUED", retryAfter: null } })
+    return { ok: true }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Could not start the sale" }
+  }
+}
+
+/** Release everything that is sitting waiting to be started, in its current order. */
+export async function startAllPipelineQueueItems(): Promise<QueueResult & { started?: number }> {
+  try {
+    await requireUser()
+    const res = await prisma.pipelineQueueItem.updateMany({
+      where: { status: "PAUSED" },
+      data:  { status: "QUEUED", retryAfter: null },
+    })
+    if (res.count === 0) return { ok: false, error: "There was nothing waiting to start." }
+    return { ok: true, started: res.count }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Could not start the queue" }
   }
 }
 
