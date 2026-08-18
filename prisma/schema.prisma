@@ -1407,6 +1407,11 @@ model WarehouseTote {
   vendorName  String?
   status      String?
   catalogued  Boolean?
+  // What is IN the tote, straight from BC's own tote screen (the eva/tot custom API returns
+  // articleCategory / articleSubcategory — confirmed against a live row, not guessed).
+  // Shown on the Admin Centre's totes table so an admin can see what a customer sent in.
+  category    String?
+  subCategory String?
   // SystemCreatedAt from Receipt_Totes_Excel — when the tote was created in BC.
   // This is the date the Manager Portal's "Stock from" reads to work out how far
   // behind cataloguing is running. NOT syncedAt, which is just our sync stamp.

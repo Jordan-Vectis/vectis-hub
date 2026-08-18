@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"c5acdf7b7ecdeaa848af1d3d808b0de2779e5dda","author":"Jordan Orange","date":"2026-08-18T12:16:28+01:00","subject":"Admin Centre: a sale dropdown, and results that start collapsed"},
   {"sha":"b34a33ccd55e4b315a7de50ca060870aa64738df","author":"Jordan Orange","date":"2026-08-18T11:59:03+01:00","subject":"Admin Centre: one page, four things you can search by"},
   {"sha":"fcbe1665f6be794709bd8661392fb3b8ae9d5bb7","author":"Jordan Orange","date":"2026-08-18T11:13:20+01:00","subject":"Stop flagging a size just because the manufacturer says otherwise"},
   {"sha":"4391991d1e21ce9ff82259619bc2d3d531718725","author":"Jordan Orange","date":"2026-08-18T10:42:41+01:00","subject":"Photography: soonest sale first"},

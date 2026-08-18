@@ -47,6 +47,41 @@ export async function GET(req: NextRequest) {
       : []
     const toteReceiptNos = [...new Set(totesInfo.map((t) => t.receiptNo).filter((r): r is string => !!r))]
 
+    // ── The customer's totes ─────────────────────────────────────────────────
+    // Shown for EVERY kind of search (Jordan, 2026-08-18: "based off whatever you search it
+    // smart matches to find everything a customer may have"), not just a tote search:
+    //   receipt  → every tote booked in on that receipt
+    //   tote     → the whole receipt that tote belongs to, so its siblings show too
+    //   customer → every tote for that customer number
+    // ⚠ Migration-safe: category/subCategory arrive with the deploy but the columns only exist
+    // once the migrations have run, so a failure falls back to the columns that always existed.
+    const toteWhere =
+      type === "receipt" ? { receiptNo: ci(q) }
+      : type === "tote"  ? (toteReceiptNos.length
+                              ? { OR: [{ toteNo: ci(q) }, { receiptNo: { in: toteReceiptNos } }] }
+                              : { toteNo: ci(q) })
+      : { vendorNo: ci(q) }
+
+    const TOTE_BASE = {
+      toteNo: true, location: true, receiptNo: true, vendorName: true, catalogued: true,
+      bcCreatedAt: true,
+    } as const
+    let totes: any[] = []
+    try {
+      totes = await prisma.warehouseTote.findMany({
+        where: toteWhere,
+        select: { ...TOTE_BASE, category: true, subCategory: true },
+        orderBy: [{ bcCreatedAt: "desc" }, { toteNo: "asc" }],
+        take: 500,
+      })
+    } catch {
+      try {
+        totes = await prisma.warehouseTote.findMany({
+          where: toteWhere, select: TOTE_BASE, orderBy: { toteNo: "asc" }, take: 500,
+        })
+      } catch { totes = [] }
+    }
+
     // ── Hub cataloguing (CatalogueLot) ───────────────────────────────────────
     let hubWhere: any
     if (type === "receipt") {
@@ -198,9 +233,11 @@ export async function GET(req: NextRequest) {
       // this — the old separate hub[]/bc[] arrays were dropped with the
       // two-panel layout.
       rows: [...merged, ...bcOnly],
-      totes: totesInfo.map((t) => ({
+      totes: totes.map((t) => ({
         toteNo: t.toteNo, location: t.location ?? "", receiptNo: t.receiptNo ?? "",
         vendorName: t.vendorName ?? "", catalogued: t.catalogued === true,
+        createdAt: t.bcCreatedAt ? new Date(t.bcCreatedAt).toISOString() : "",
+        category: t.category ?? "", subCategory: t.subCategory ?? "",
       })),
       capped: { hub: hubCapped, bc: bcCapped },
     })

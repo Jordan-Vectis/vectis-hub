@@ -21,7 +21,10 @@ type Row = {
   inBC: boolean; bcCataloguedBy: string; bcCatalogued: boolean
   bcSaleCode: string; bcSaleName: string; bcSaleDate: string; bcLotNo: string; bcLocation: string
 }
-type ToteInfo = { toteNo: string; location: string; receiptNo: string; vendorName: string; catalogued: boolean }
+type ToteInfo = {
+  toteNo: string; location: string; receiptNo: string; vendorName: string; catalogued: boolean
+  createdAt: string; category: string; subCategory: string
+}
 type Result = {
   type: string; q: string
   rows: Row[]; totes: ToteInfo[]
@@ -103,9 +106,8 @@ export default function FindLotsTab({ controlled }: { controlled?: FindControlle
   const active = MODES.find(m => m.key === mode)!
   const rows   = data?.rows ?? []
   const groups = groupByAuction(rows)
-  const both   = rows.filter(r => r.inHub && r.inBC).length
-  const hubOnly = rows.filter(r => r.inHub && !r.inBC).length
-  const bcOnly  = rows.filter(r => !r.inHub && r.inBC).length
+  const totes  = data?.totes ?? []
+  const totesDone = totes.filter(t => t.catalogued).length
 
   return (
     <div className="space-y-6">
@@ -170,26 +172,58 @@ export default function FindLotsTab({ controlled }: { controlled?: FindControlle
 
       {data && (
         <>
-          {/* ── What you are looking at ── */}
-          <div className="rounded-2xl border-2 border-indigo-200 dark:border-indigo-500/30 bg-indigo-50 dark:bg-indigo-500/10 px-6 py-5">
-            <h2 className="text-lg font-bold text-indigo-900 dark:text-indigo-200">How a lot gets here</h2>
-            <div className="flex flex-wrap items-center gap-3 mt-3 text-base text-indigo-900 dark:text-indigo-100">
-              <span className="px-4 py-2 rounded-xl bg-white dark:bg-indigo-500/20 font-semibold">1 · A cataloguer enters the lot in the Hub</span>
-              <span className="text-2xl text-indigo-400">→</span>
-              <span className="px-4 py-2 rounded-xl bg-white dark:bg-indigo-500/20 font-semibold">2 · The lot is pushed across to Business Central</span>
+          {/* ── Their totes ──────────────────────────────────────────────────
+              Straight from BC's own tote screen. Shown first because it is what the
+              customer physically sent in, before any of it became lots. */}
+          <div className="rounded-2xl border-2 border-gray-200 dark:border-gray-800 overflow-hidden bg-white dark:bg-[#1C1C1E]">
+            <div className="bg-gray-50 dark:bg-gray-900/70 px-6 py-4 border-b-2 border-gray-200 dark:border-gray-800 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">📦 Totes</h2>
+              <span className="text-base text-gray-600 dark:text-gray-400">
+                {totes.length === 0
+                  ? "none found"
+                  : <>{totes.length} tote{totes.length === 1 ? "" : "s"}
+                      {totesDone > 0 && <> · <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{totesDone} catalogued</span></>}
+                      {totes.length - totesDone > 0 && <> · <span className="text-amber-600 dark:text-amber-400 font-semibold">{totes.length - totesDone} still to do</span></>}
+                    </>}
+              </span>
             </div>
-            <p className="text-base text-indigo-800 dark:text-indigo-200/90 mt-3">
-              Each row below is <strong>one item</strong>, showing where it has got to. They are matched by the
-              barcode on the label, which is why the two systems&apos; numbers differ
-              (<span className="font-mono">F090447</span> in the Hub, <span className="font-mono">R008414-7</span> in BC).
-            </p>
-          </div>
-
-          {/* ── Where everything has got to ── */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Stat value={both}    label="In both — fully through" tone="text-emerald-600 dark:text-emerald-400" />
-            <Stat value={hubOnly} label="Catalogued in the Hub, not yet in BC" tone="text-amber-600 dark:text-amber-400" />
-            <Stat value={bcOnly}  label="In BC, never catalogued in the Hub" tone="text-orange-600 dark:text-orange-400" />
+            {totes.length === 0 ? (
+              <p className="px-6 py-6 text-base text-gray-500 dark:text-gray-400">
+                No totes found for this search in the Business Central data.
+              </p>
+            ) : (
+              // ⚠ Scrolls inside itself past ~10 rows. A busy customer has hundreds of totes
+              // (measured: 341 on C002603), and an unbounded table would push the auctions —
+              // the other half of the answer — clean off the screen.
+              <div className="overflow-x-auto max-h-[26rem] overflow-y-auto">
+                <table className="w-full text-base">
+                  <thead className="sticky top-0 z-10 bg-gray-100 dark:bg-gray-900 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    <tr>
+                      <th className="text-left px-6 py-3 font-semibold">Tote</th>
+                      <th className="text-left px-6 py-3 font-semibold">Created</th>
+                      <th className="text-left px-6 py-3 font-semibold">Category</th>
+                      <th className="text-left px-6 py-3 font-semibold">Sub-category</th>
+                      <th className="text-left px-6 py-3 font-semibold">Catalogued</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800/60">
+                    {totes.map(t => (
+                      <tr key={t.toteNo} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                        <td className="px-6 py-4 font-mono font-semibold text-gray-900 dark:text-white">{t.toteNo}</td>
+                        <td className="px-6 py-4 text-gray-700 dark:text-gray-300">{formatSaleDate(t.createdAt) || "—"}</td>
+                        <td className="px-6 py-4 text-gray-700 dark:text-gray-300">{t.category || "—"}</td>
+                        <td className="px-6 py-4 text-gray-700 dark:text-gray-300">{t.subCategory || "—"}</td>
+                        <td className="px-6 py-4">
+                          {t.catalogued
+                            ? <span className="text-emerald-600 dark:text-emerald-400 font-semibold">✓ Catalogued</span>
+                            : <span className="text-amber-600 dark:text-amber-400 font-semibold">Not yet</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -392,15 +426,6 @@ export default function FindLotsTab({ controlled }: { controlled?: FindControlle
           })}
         </>
       )}
-    </div>
-  )
-}
-
-function Stat({ value, label, tone }: { value: number; label: string; tone: string }) {
-  return (
-    <div className={`${CARD} px-6 py-5`}>
-      <p className={`text-4xl font-bold ${tone}`}>{value.toLocaleString()}</p>
-      <p className="text-base text-gray-600 dark:text-gray-400 mt-1">{label}</p>
     </div>
   )
 }

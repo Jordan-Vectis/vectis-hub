@@ -67,6 +67,17 @@ export async function POST(req: NextRequest) {
     hasBcCreatedAt = !!row?.exists
   } catch { hasBcCreatedAt = false }
 
+  // Same guard for the category columns (added 2026-08-18 for the Admin Centre's totes table).
+  let hasCategory = false
+  try {
+    const [row] = await prisma.$queryRaw<{ exists: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'WarehouseTote' AND column_name = 'category'
+      ) AS "exists"`
+    hasCategory = !!row?.exists
+  } catch { hasCategory = false }
+
   try {
     const startUrl: string = nextLink ?? await bcTotApiUrl(token, "receiptTotes")
 
@@ -92,6 +103,10 @@ export async function POST(req: NextRequest) {
         if (!toteNo) continue
         const location = String(r.toteLocation ?? "").trim()
         const created  = bcDate(r.systemCreatedAt)
+        // ⚠ Field names confirmed against a live receiptTotes row, not guessed:
+        // articleCategory / articleSubcategory (both can be an empty string).
+        const category    = String(r.articleCategory    ?? "").trim()
+        const subCategory = String(r.articleSubcategory ?? "").trim()
         const common = {
           receiptNo:  r.receiptNo ?? null,
           vendorNo:   r.vendorNo  ?? null,
@@ -99,6 +114,8 @@ export async function POST(req: NextRequest) {
           // Don't null out values another sync already captured
           ...(location ? { location } : {}),
           ...(hasBcCreatedAt && created ? { bcCreatedAt: created } : {}),
+          ...(hasCategory && category    ? { category }    : {}),
+          ...(hasCategory && subCategory ? { subCategory } : {}),
         }
         upserts.push(prisma.warehouseTote.upsert({
           where:  { toteNo },

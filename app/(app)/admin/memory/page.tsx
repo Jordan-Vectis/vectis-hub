@@ -961,6 +961,20 @@ It was three tabs, each hiding the other two and each with its own search box - 
 - ⚠ Their search() functions now take the query as ARGUMENTS (search(q, mode)), not from state - a controlled run happens in the same tick the props arrive, when state still holds the previous search.
 - ⚠ onClick={search} had to become onClick={() => search()}: with an argument-taking search, the bare form passes the MOUSE EVENT as the query. TypeScript caught it; it would have searched for [object Object].
 
+## ⚠ THE RESULTS LAYOUT: TOTES FIRST, THEN THE SALES (2026-08-18)
+
+Jordan: "For starters remove the how a lot gets here section. Then in its place we should have a totes section... So based off whatever you search it smart matches to find everything a customer may have. The tote table needs to just have the tote number the date it was created the main and sub category and if it had been ticked as catalogued. Then underneath that a table of all the auctions with a expandable list that shows all the lots and details we have now." He also had the three stat tiles removed (in both / not yet in BC / BC only).
+
+GONE: the "How a lot gets here" explainer panel, and the three Stat tiles (the Stat helper was deleted with them).
+
+TOTES TABLE, FIRST. Tote / Created / Category / Sub-category / Catalogued, with a count and a catalogued-vs-still-to-do split in the header. Shown for EVERY search type, not just a tote search - receipt gives every tote on that receipt, tote gives the whole receipt so its siblings show, customer gives every tote for that customer number.
+
+⚠ WarehouseTote.category / subCategory are NEW COLUMNS (NEEDS Run Migrations), filled by sync/totes-all from the eva/tot custom API. ⚠ The field names - articleCategory / articleSubcategory - were READ OFF A LIVE BC ROW, not guessed. bcTotApiUrl(token, "receiptTotes") returns camelCase: receiptNo, toteNo, vendorNo, articleCategory, articleSubcategory, articleSubcategory2, contentsDescription, catalogued, cataloguedAt, cataloguedBy, toteLocation, systemCreatedAt. Both columns are written behind an information_schema guard - the same deploy-before-migration pattern bcCreatedAt already used - and the lookup route falls back to a select without them. THE CATEGORIES STAY BLANK until a totes-all sync has run since the migration.
+
+⚠ The date shown is bcCreatedAt (BC's systemCreatedAt), NOT syncedAt - 20,182 of 21,789 totes have one.
+
+⚠ THE TOTES TABLE SCROLLS INSIDE ITSELF (max-h-[26rem], sticky header). A busy customer has hundreds of totes - measured 341 on C002603 - and an unbounded table pushes the sales section, the other half of the answer, off the screen.
+
 ## ⚠ SALE GROUPS ARE COLLAPSED BY DEFAULT (2026-08-18)
 
 Jordan: "Just show all the sales they have lots in and how many then make the list expandable to see all the details of the individual lots?" A customer's lots can span a dozen sales and hundreds of rows, and the first question is WHICH SALES their stuff is in, not show me every lot.
