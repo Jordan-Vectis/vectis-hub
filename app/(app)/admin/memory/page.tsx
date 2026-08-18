@@ -16,6 +16,31 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "sandbox_environment.md",
+    content: `---
+name: Sandbox - staging's code, production's data
+purpose: The third environment and the one setting that keeps it safe. Read before touching env vars or the server.js cron loops.
+metadata:
+  type: reference
+---
+
+https://vectis-hub-sandbox.up.railway.app - created 2026-08-18. Jordan: "what I need is another staging environment that has mains data so I can test these things properly". Staging's own data had drifted far enough from production that screens looked fine there and wrong on live - the Admin Centre's holding-pen sales were only visible on real data.
+
+- Neon branch "Sandbox", parent production, "Branch data and schema", auto-delete Never. Copy-on-write, so it costs almost nothing and cannot affect production. REFRESH IT by deleting the branch and re-branching from production - seconds.
+- Railway environment duplicated from staging, deploying the STAGING branch (so one push updates both), with DATABASE_URL pointed at the Neon branch and its own NEXTAUTH_URL.
+- Added to the Environments dropdown (components/env-selector.tsx - a hardcoded list, not derived from anything).
+
+⚠⚠ THE BACKGROUND JOBS ARE OFF ONLY BECAUSE CRON_SECRET IS UNSET. server.js starts five loops on boot and EACH ONE RETURNS IMMEDIATELY when CRON_SECRET is missing. That single absence is the entire safety mechanism. With production data in front of it and a secret present, the sandbox would: poll the REAL IT and condition-report mailboxes and turn live customer emails into Job Board jobs / Condition Reports alongside production doing the same; write DATABASE BACKUPS INTO THE REAL R2 BUCKET; and run the BC warehouse sync and the overnight pipeline queue. NEVER set CRON_SECRET on the sandbox, and never "fix" a cron that looks broken there by adding one.
+
+⚠ IT SHARES THE R2 BUCKET. Photos READ fine, which is the point - real lots with real pictures. But a delete in the sandbox deletes the ACTUAL FILE, because it is the same bucket. Don't delete photos there, or split the bucket first.
+
+⚠⚠ BC IS ALREADY CONNECTED THERE, AND TO REAL BC. BCToken is a DATABASE table (one row per user), not a Railway variable, so Jordan's real token came across with the branched data - he did NOT have to reconnect, and my telling him he would was wrong. The Hub only READS from BC and Push to BC is a sheet pasted in by hand, so nothing writes automatically, but the sandbox is NOT sealed off from BC the way it is from the mailboxes.
+
+⚠ STAGING'S NEON BRANCH IS ALSO A CHILD OF PRODUCTION, so staging is not empty - it is production's data frozen at whenever that branch was created. That is exactly why it stopped being a useful test bed.
+
+The Neon branch inherits production's schema, which can be behind the code - the app's own pending-migrations banner covers that.`,
+  },
+  {
     filename: "measurement_flags.md",
     content: `---
 name: Measurement flags - we measure the item
