@@ -27,7 +27,12 @@ type Result = {
   capped: boolean
 }
 
-export default function BySaleTab() {
+// Driven by the Admin Centre page's single search bar when `controlled` is set: it supplies the
+// sale code and, optionally, a lot number to filter to. The tab then hides its own pick-a-sale
+// card. `nonce` bumps on every Search press so the same sale can be reloaded.
+export type SaleControlled = { sale: string; lot: string; nonce: number }
+
+export default function BySaleTab({ controlled }: { controlled?: SaleControlled } = {}) {
   const [sales, setSales]         = useState<Sale[]>([])
   const [salesError, setSalesErr] = useState<string | null>(null)
   const [sale, setSale]           = useState("")
@@ -65,6 +70,15 @@ export default function BySaleTab() {
     finally { setLoading(false) }
   }
 
+  useEffect(() => {
+    if (!controlled?.sale.trim()) { setData(null); return }
+    setSale(controlled.sale)
+    setLotFilter(controlled.lot)
+    setPerson(null)
+    void load(controlled.sale)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [controlled?.nonce])
+
   const rows = useMemo(() => data?.rows ?? [], [data])
   const shown = useMemo(() => {
     const lot = lotFilter.trim().toLowerCase()
@@ -85,8 +99,8 @@ export default function BySaleTab() {
 
   return (
     <div className="space-y-6">
-      {/* ── 1 · Pick the sale, 2 · search it by lot number ── */}
-      <div className={`${CARD} p-6`}>
+      {/* ── 1 · Pick the sale, 2 · search it by lot number (hidden when the page owns the search) ── */}
+      {!controlled && <div className={`${CARD} p-6`}>
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_14rem] gap-5">
           <div>
             <label htmlFor="sale-select" className="block text-lg font-semibold text-gray-900 dark:text-white mb-1">
@@ -163,7 +177,41 @@ export default function BySaleTab() {
             {error}
           </p>
         )}
-      </div>
+      </div>}
+
+      {controlled && loading && <p className="text-lg text-gray-500 dark:text-gray-400">Loading the sale…</p>}
+      {controlled && error && (
+        <p className="px-4 py-3 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 text-base text-red-700 dark:text-red-300">
+          {error}
+        </p>
+      )}
+      {/* Controlled: the lot filter still needs to be adjustable without retyping the sale. */}
+      {controlled && data && (
+        <div className={`${CARD} px-6 py-4 flex flex-wrap items-end gap-4`}>
+          <div>
+            <label htmlFor="lot-search" className="block text-base font-semibold text-gray-900 dark:text-white mb-1">Lot number</label>
+            <p className={`${HINT} mb-2`}>Blank shows the whole sale.</p>
+            <input
+              id="lot-search"
+              value={lotFilter}
+              onChange={e => setLotFilter(e.target.value)}
+              onFocus={e => e.currentTarget.select()}
+              placeholder="247"
+              inputMode="numeric"
+              autoComplete="off"
+              className={`${INPUT} text-2xl sm:w-48`}
+            />
+          </div>
+          {(lotFilter || person !== null) && (
+            <button
+              onClick={() => { setLotFilter(""); setPerson(null) }}
+              className="px-6 py-3 rounded-xl border-2 border-gray-300 dark:border-gray-700 text-base font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+            >
+              Show the whole sale
+            </button>
+          )}
+        </div>
+      )}
 
       {data && (
         <>

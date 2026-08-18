@@ -932,9 +932,9 @@ Sanity-checked on real shapes: 340 lots × 6 photos ≈ **$0.88** on Gemini 2.5 
   {
     filename: "admin_centre.md",
     content: `---
-name: Admin Centre (/tools/lot-lookup) — three tabs, big UI
-purpose: The Admin Centre is tabbed (Find a customer's lots + Who catalogued this lot? + Who catalogued this sale?) and deliberately oversized for non-technical admins. Read before touching it.
-last_updated: 2026-08-06
+name: Admin Centre (/tools/lot-lookup) - ONE page, four buttons, big UI
+purpose: The Admin Centre is a SINGLE page - four search-by buttons (Receipt, Tote, Customer, Sale or lot), one box, results inline. The tabs are gone. Deliberately oversized for non-technical admins. Read before touching it.
+last_updated: 2026-08-18
 ---
 
 # Admin Centre — /tools/lot-lookup (rebuilt 2026-08-04, third tab 2026-08-06)
@@ -944,6 +944,23 @@ Gated on the **\`ADMIN_CENTRE\`** app key via \`hasAppAccess\` — the page redi
 ## ⚠ The audience is the design constraint
 
 The brief: *"this is getting used by non technical admins so really make everything nice and big and clear."* So this tool deliberately **breaks the Hub's usual 10–12px table style**: base/lg body text, \`py-3\` table rows, \`px-8 py-8\` answer panels, 2px borders, big hit targets, and plain-English wording ("Where from", "Changed to", "Not recorded") instead of raw field/source keys. Shared classes live in **\`app/(app)/tools/lot-lookup/ui.ts\`** — use them rather than re-styling, and **don't "tidy" this back down to the compact house style.** Full width (\`max-w-[1800px] mx-auto\`).
+
+## ⚠⚠ ONE PAGE, FOUR BUTTONS - THE TABS ARE GONE (2026-08-18)
+
+Jordan: "I want to combine all the options on this page to be a single page so keep the find a customers lots and the 3 options but all the data needs to show up on a single page. We also need to be able to search by auction and lot number on the first page. I want to make this as simple and idiot proof as possible." Asked which shape, he chose: "Keep the 3 buttons and add a new one for lot number/auction."
+
+It was three tabs, each hiding the other two and each with its own search box - so you had to know which tab answered your question before you could ask it. Now: ONE search bar, FOUR buttons (Receipt / Tote / Customer / Sale or lot), and the answer renders underneath on the same page.
+
+- ⚠ The three tab components still hold ALL the rendering and their result markup was deliberately left untouched - it is the part checked against real BC data. lookup-client.tsx passes each a 'controlled' prop, which hides that component's own search card and runs the query given to it. A 'nonce' bumps on every Search press so pressing it twice re-runs the same query.
+- ⚠ Their search() functions now take the query as ARGUMENTS (search(q, mode)), not from state - a controlled run happens in the same tick the props arrive, when state still holds the previous search.
+- ⚠ onClick={search} had to become onClick={() => search()}: with an argument-taking search, the bare form passes the MOUSE EVENT as the query. TypeScript caught it; it would have searched for [object Object].
+
+THE "SALE OR LOT" BOX - parseLotQuery. One box, three shapes people actually type, exported and unit-checked:
+- F109 -> the whole of sale F109 (BySaleTab)
+- F109 400 / F109/400 / F109-400 -> sale F109, lot 400 (BySaleTab filtered to that lot)
+- F109400 / R009478-28 -> that one lot (WhoCataloguedTab)
+
+⚠ A BARCODE IS A SALE CODE WITH THE LOT RUN TOGETHER, so it must be tried as a lot lookup rather than split - splitting would ask BC for "sale F109, lot 400" when the barcode need not follow that pattern. ⚠ The catch-all requires AT LEAST ONE DIGIT, or a typed word like "what" was accepted as a barcode and searched for instead of being refused. The page SAYS BACK what it understood before you press Search ("Will look up sale F109, lot 400"), and says plainly when it can't read it.
 
 ## The files
 

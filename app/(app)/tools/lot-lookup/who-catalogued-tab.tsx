@@ -6,7 +6,7 @@
 // entered the lot, when, and which sale it went into — then, underneath, the
 // cross-check against Business Central and everyone who has changed it since.
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   CARD, INPUT, BTN_PRIMARY, HINT,
   actionLabel, sourceLabel, fieldLabel, formatWhen, formatDay, saleLine,
@@ -28,15 +28,20 @@ type BcItem = {
 }
 type Result = { q: string; lots: HubLot[]; bc: BcItem[]; historyCapped: boolean }
 
-export default function WhoCataloguedTab() {
+// Driven by the Admin Centre page's single search bar when `controlled` is set — the tab then
+// hides its own search card. `nonce` bumps on every Search press so the same query can re-run.
+export type WhoControlled = { value: string; nonce: number }
+
+export default function WhoCataloguedTab({ controlled }: { controlled?: WhoControlled } = {}) {
   const [value, setValue]     = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const [data, setData]       = useState<Result | null>(null)
   const [openHistory, setOpenHistory] = useState<Record<string, boolean>>({})
 
-  async function search() {
-    const q = value.trim()
+  // ⚠ Query passed in, not read from state — a controlled run happens as the props arrive.
+  async function search(q0?: string) {
+    const q = (q0 ?? value).trim()
     if (!q || loading) return
     setLoading(true); setError(null)
     try {
@@ -48,6 +53,13 @@ export default function WhoCataloguedTab() {
     finally { setLoading(false) }
   }
 
+  useEffect(() => {
+    if (!controlled?.value.trim()) { setData(null); return }
+    setValue(controlled.value)
+    void search(controlled.value)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [controlled?.nonce])
+
   const nothingFound = data && data.lots.length === 0 && data.bc.length === 0
   // BC rows that don't line up with a Hub lot are still worth showing on their own.
   const hubIds = new Set(data?.lots.flatMap(l => [l.barcode.toUpperCase(), l.receiptUniqueId.toUpperCase()]).filter(Boolean) ?? [])
@@ -55,8 +67,8 @@ export default function WhoCataloguedTab() {
 
   return (
     <div className="space-y-6">
-      {/* ── Search ── */}
-      <div className={`${CARD} p-6`}>
+      {/* ── Search (hidden when the page owns the search bar) ── */}
+      {!controlled && <div className={`${CARD} p-6`}>
         <label htmlFor="who-input" className="block text-lg font-semibold text-gray-900 dark:text-white mb-1">
           Scan or type the barcode on the item
         </label>
@@ -76,7 +88,7 @@ export default function WhoCataloguedTab() {
             autoComplete="off"
             className={INPUT}
           />
-          <button onClick={search} disabled={loading || !value.trim()} className={`${BTN_PRIMARY} whitespace-nowrap`}>
+          <button onClick={() => search()} disabled={loading || !value.trim()} className={`${BTN_PRIMARY} whitespace-nowrap`}>
             {loading ? "Looking…" : "Who catalogued it?"}
           </button>
         </div>
@@ -85,7 +97,14 @@ export default function WhoCataloguedTab() {
             {error}
           </p>
         )}
-      </div>
+      </div>}
+
+      {controlled && loading && <p className="text-lg text-gray-500 dark:text-gray-400">Looking…</p>}
+      {controlled && error && (
+        <p className="px-4 py-3 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 text-base text-red-700 dark:text-red-300">
+          {error}
+        </p>
+      )}
 
       {/* ── Nothing found ── */}
       {nothingFound && (

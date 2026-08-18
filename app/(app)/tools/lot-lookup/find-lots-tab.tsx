@@ -12,7 +12,7 @@
 // It is deliberately NOT CatalogueLot.addedToBC — that is a manual tick the
 // cataloguers rarely make, so it read "no" for lots plainly sitting in BC.
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { CARD, INPUT, BTN_PRIMARY, HINT, formatSaleDate } from "./ui"
 
 type Row = {
@@ -56,25 +56,41 @@ function groupByAuction(rows: Row[]) {
   return [...m.values()].sort((a, b) => (a.code || "~~~").localeCompare(b.code || "~~~"))
 }
 
-export default function FindLotsTab() {
-  const [mode, setMode]       = useState<Mode>("receipt")
+// `controlled` is set by the Admin Centre page, which owns the one search bar for the whole
+// screen. When present this tab hides its own search card and simply runs what it is given —
+// `nonce` bumps on every Search press so pressing it twice re-runs the same query.
+export type FindControlled = { mode: Mode; value: string; nonce: number }
+
+export default function FindLotsTab({ controlled }: { controlled?: FindControlled } = {}) {
+  const [mode, setMode]       = useState<Mode>(controlled?.mode ?? "receipt")
   const [value, setValue]     = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const [data, setData]       = useState<Result | null>(null)
 
-  async function search() {
-    const q = value.trim()
+  // ⚠ Takes the query as ARGUMENTS rather than reading state — a controlled run happens in the
+  // same tick as the props arriving, and state would still hold the previous search.
+  async function search(q0?: string, m0?: Mode) {
+    const q = (q0 ?? value).trim()
+    const m = m0 ?? mode
     if (!q || loading) return
     setLoading(true); setError(null)
     try {
-      const res  = await fetch(`/api/lot-lookup?type=${mode}&q=${encodeURIComponent(q)}`)
+      const res  = await fetch(`/api/lot-lookup?type=${m}&q=${encodeURIComponent(q)}`)
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? res.statusText)
       setData(json)
     } catch (e: any) { setError(e.message); setData(null) }
     finally { setLoading(false) }
   }
+
+  useEffect(() => {
+    if (!controlled?.value.trim()) { setData(null); return }
+    setMode(controlled.mode)
+    setValue(controlled.value)
+    void search(controlled.value, controlled.mode)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [controlled?.nonce])
 
   const active = MODES.find(m => m.key === mode)!
   const rows   = data?.rows ?? []
@@ -85,8 +101,8 @@ export default function FindLotsTab() {
 
   return (
     <div className="space-y-6">
-      {/* ── Search ── */}
-      <div className={`${CARD} p-6`}>
+      {/* ── Search (hidden when the page owns the search bar) ── */}
+      {!controlled && <div className={`${CARD} p-6`}>
         <p className="text-lg font-semibold text-gray-900 dark:text-white mb-4">What are you searching by?</p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
           {MODES.map(m => (
@@ -126,7 +142,7 @@ export default function FindLotsTab() {
             autoComplete="off"
             className={INPUT}
           />
-          <button onClick={search} disabled={loading || !value.trim()} className={`${BTN_PRIMARY} whitespace-nowrap`}>
+          <button onClick={() => search()} disabled={loading || !value.trim()} className={`${BTN_PRIMARY} whitespace-nowrap`}>
             {loading ? "Searching…" : "Search"}
           </button>
         </div>
@@ -135,7 +151,14 @@ export default function FindLotsTab() {
             {error}
           </p>
         )}
-      </div>
+      </div>}
+
+      {controlled && loading && <p className="text-lg text-gray-500 dark:text-gray-400">Searching…</p>}
+      {controlled && error && (
+        <p className="px-4 py-3 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 text-base text-red-700 dark:text-red-300">
+          {error}
+        </p>
+      )}
 
       {data && (
         <>
