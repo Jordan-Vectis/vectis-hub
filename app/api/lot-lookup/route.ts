@@ -279,8 +279,52 @@ export async function GET(req: NextRequest) {
     // BC items nothing in the Hub claimed — in BC but never catalogued here.
     // Only ones the ORIGINAL search returned, so an unrelated barcode-match
     // can't wander into the results.
+    // ⚠⚠ THE HUB ALWAYS WINS (Jordan, 2026-08-18: "the lot is in the hub which it should always
+    // be using first and only checking BC for backups — if there is overlaps the hub should
+    // always win"). A BC row left over here can still be a lot we catalogued: BC files 2,039
+    // barcodes under more than one receipt, so F109050 came back as an EMPTY placeholder on one
+    // customer while our real, described, catalogued lot sat under another. Showing "waiting to
+    // be catalogued" for a barcode we have plainly done is the worst answer of the three.
+    // So: look every leftover barcode up in the Hub, ACROSS ALL CUSTOMERS, and use ours if we
+    // have it. BC only fills the gaps.
+    const leftoverBarcodes = bcItems
+      .slice(0, LIMIT)
+      .filter(w => !claimed.has(w.uniqueId))
+      .map(w => w.barcode)
+      .filter((b): b is string => !!b)
+    const hubByBarcode = new Map<string, (typeof hubLots)[number]>()
+    if (leftoverBarcodes.length) {
+      const extra = await prisma.catalogueLot.findMany({
+        where: { barcode: { in: variants(leftoverBarcodes) } },
+        select: {
+          id: true, title: true, barcode: true, receiptUniqueId: true, receipt: true, tote: true, vendor: true,
+          status: true, addedToBC: true, category: true, createdByName: true,
+          auction: { select: { code: true, name: true, auctionDate: true } },
+        },
+        take: LIMIT * 2,
+      })
+      for (const l of extra) if (l.barcode) hubByBarcode.set(upper(l.barcode), l)
+    }
+
     const bcOnly = bcItems.slice(0, LIMIT).filter(w => !claimed.has(w.uniqueId)).map(w => {
-      const sale = resolveSale(null, w.barcode, w)
+      // Ours if we have that barcode at all — see the note above.
+      const hub  = w.barcode ? hubByBarcode.get(upper(w.barcode)) : undefined
+      const sale = resolveSale(hub?.auction ?? null, w.barcode, w)
+      if (hub) {
+        return {
+          key: `bc:${w.uniqueId}`,
+          barcode: hub.barcode ?? w.barcode ?? "",
+          uniqueId: hub.receiptUniqueId ?? w.uniqueId,
+          title: hub.title || w.description || "",
+          saleCode: sale.code, saleName: sale.name, saleDate: sale.date,
+          tote: hub.tote || w.toteNo || "",
+          catalogued: true,
+          cataloguedBy: hub.createdByName || bcPersonName(w.cataloguedBy, w.cataloguedByUser, w.bcCreatedBy),
+          lotNo: w.currentLotNo || w.lotNo || "",
+          location: w.location ?? "",
+          needsAttention: isProblemPen(w.auctionCode ?? ""),
+        }
+      }
       return {
         key: `bc:${w.uniqueId}`,
         barcode: w.barcode ?? "",

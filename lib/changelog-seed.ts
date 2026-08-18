@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"c401090e4a582b719215c71847db15d560418ab4","author":"Jordan Orange","date":"2026-08-18T16:05:33+01:00","subject":"Admin Centre: name whoever catalogued it, and never cross customers"},
   {"sha":"2a4cf7431630a986559493021619f303cd40f7d3","author":"Jordan Orange","date":"2026-08-18T15:48:22+01:00","subject":"Add the Sandbox environment to the switcher"},
   {"sha":"19766f612ba95bf16c14444bc24905e36bba556d","author":"Jordan Orange","date":"2026-08-18T13:13:23+01:00","subject":"Admin Centre: answer the question the customer is actually asking"},
   {"sha":"372bbe84135fa26e484aaddda62134b1826b86a4","author":"Jordan Orange","date":"2026-08-18T12:38:22+01:00","subject":"Memory: BC's tote number is populated on 89% of items, not almost never"},
