@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"94cc5513b75768cd2976c0d0ab78d702da4e02f9","author":"Jordan Orange","date":"2026-08-18T16:13:02+01:00","subject":"Admin Centre: the Hub always wins, BC only fills the gaps"},
   {"sha":"c401090e4a582b719215c71847db15d560418ab4","author":"Jordan Orange","date":"2026-08-18T16:05:33+01:00","subject":"Admin Centre: name whoever catalogued it, and never cross customers"},
   {"sha":"2a4cf7431630a986559493021619f303cd40f7d3","author":"Jordan Orange","date":"2026-08-18T15:48:22+01:00","subject":"Add the Sandbox environment to the switcher"},
   {"sha":"19766f612ba95bf16c14444bc24905e36bba556d","author":"Jordan Orange","date":"2026-08-18T13:13:23+01:00","subject":"Admin Centre: answer the question the customer is actually asking"},

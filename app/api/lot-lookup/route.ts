@@ -281,64 +281,49 @@ export async function GET(req: NextRequest) {
     // can't wander into the results.
     // ⚠⚠ THE HUB ALWAYS WINS (Jordan, 2026-08-18: "the lot is in the hub which it should always
     // be using first and only checking BC for backups — if there is overlaps the hub should
-    // always win"). A BC row left over here can still be a lot we catalogued: BC files 2,039
-    // barcodes under more than one receipt, so F109050 came back as an EMPTY placeholder on one
-    // customer while our real, described, catalogued lot sat under another. Showing "waiting to
-    // be catalogued" for a barcode we have plainly done is the worst answer of the three.
-    // So: look every leftover barcode up in the Hub, ACROSS ALL CUSTOMERS, and use ours if we
-    // have it. BC only fills the gaps.
-    const leftoverBarcodes = bcItems
-      .slice(0, LIMIT)
-      .filter(w => !claimed.has(w.uniqueId))
-      .map(w => w.barcode)
-      .filter((b): b is string => !!b)
-    const hubByBarcode = new Map<string, (typeof hubLots)[number]>()
+    // always win").
+    //
+    // ⚠ WHICH MEANS: IF THE HUB KNOWS THE BARCODE, A LEFTOVER BC ROW FOR IT IS NOT A NEW ITEM.
+    // BC files 2,039 barcodes under more than one receipt, and its A995 placeholders grabbed
+    // barcodes that belong to other people's lots. Measured on tote T024817 (receipt R008537):
+    // 142 BC rows, 110 of whose barcodes the Hub holds — only 17 genuinely on that receipt, and
+    // 93 on a DIFFERENT receipt, tote and customer. Those 93 were dragging another customer's
+    // tote onto the screen. Either way the BC row is wrong, so it is dropped: if the Hub lot is
+    // in this search the real row is already above, and if it isn't, the item is not here at all.
+    //
+    // ⚠ The count is REPORTED, never silently swallowed — see design rule 7.
+    const leftovers = bcItems.slice(0, LIMIT).filter(w => !claimed.has(w.uniqueId))
+    const leftoverBarcodes = leftovers.map(w => w.barcode).filter((b): b is string => !!b)
+    const hubKnowsBarcode = new Set<string>()
     if (leftoverBarcodes.length) {
-      const extra = await prisma.catalogueLot.findMany({
-        where: { barcode: { in: variants(leftoverBarcodes) } },
-        select: {
-          id: true, title: true, barcode: true, receiptUniqueId: true, receipt: true, tote: true, vendor: true,
-          status: true, addedToBC: true, category: true, createdByName: true,
-          auction: { select: { code: true, name: true, auctionDate: true } },
-        },
-        take: LIMIT * 2,
+      const known = await prisma.catalogueLot.findMany({
+        where:  { barcode: { in: variants(leftoverBarcodes) } },
+        select: { barcode: true },
+        take:   LIMIT * 2,
       })
-      for (const l of extra) if (l.barcode) hubByBarcode.set(upper(l.barcode), l)
+      for (const l of known) if (l.barcode) hubKnowsBarcode.add(upper(l.barcode))
     }
 
-    const bcOnly = bcItems.slice(0, LIMIT).filter(w => !claimed.has(w.uniqueId)).map(w => {
-      // Ours if we have that barcode at all — see the note above.
-      const hub  = w.barcode ? hubByBarcode.get(upper(w.barcode)) : undefined
-      const sale = resolveSale(hub?.auction ?? null, w.barcode, w)
-      if (hub) {
+    const phantoms = leftovers.filter(w => w.barcode && hubKnowsBarcode.has(upper(w.barcode))).length
+
+    const bcOnly = leftovers
+      .filter(w => !(w.barcode && hubKnowsBarcode.has(upper(w.barcode))))
+      .map(w => {
+        const sale = resolveSale(null, w.barcode, w)
         return {
           key: `bc:${w.uniqueId}`,
-          barcode: hub.barcode ?? w.barcode ?? "",
-          uniqueId: hub.receiptUniqueId ?? w.uniqueId,
-          title: hub.title || w.description || "",
+          barcode: w.barcode ?? "",
+          uniqueId: w.uniqueId,
+          title: w.description ?? "",
           saleCode: sale.code, saleName: sale.name, saleDate: sale.date,
-          tote: hub.tote || w.toteNo || "",
-          catalogued: true,
-          cataloguedBy: hub.createdByName || bcPersonName(w.cataloguedBy, w.cataloguedByUser, w.bcCreatedBy),
+          tote: w.toteNo ?? "",
+          catalogued: w.catalogued === true,
+          cataloguedBy: bcPersonName(w.cataloguedBy, w.cataloguedByUser, w.bcCreatedBy),
           lotNo: w.currentLotNo || w.lotNo || "",
           location: w.location ?? "",
           needsAttention: isProblemPen(w.auctionCode ?? ""),
         }
-      }
-      return {
-        key: `bc:${w.uniqueId}`,
-        barcode: w.barcode ?? "",
-        uniqueId: w.uniqueId,
-        title: w.description ?? "",
-        saleCode: sale.code, saleName: sale.name, saleDate: sale.date,
-        tote: w.toteNo ?? "",
-        catalogued: w.catalogued === true,
-        cataloguedBy: bcPersonName(w.cataloguedBy, w.cataloguedByUser, w.bcCreatedBy),
-        lotNo: w.currentLotNo || w.lotNo || "",
-        location: w.location ?? "",
-        needsAttention: isProblemPen(w.auctionCode ?? ""),
-      }
-    })
+      })
 
     const hubCapped = hubLots.length > LIMIT
     const bcCapped  = bcItems.length > LIMIT
@@ -356,6 +341,7 @@ export async function GET(req: NextRequest) {
         category: t.category ?? "", subCategory: t.subCategory ?? "",
       })),
       capped: { hub: hubCapped, bc: bcCapped },
+      phantoms,
     })
   } catch (e: any) {
     console.error("lot-lookup error:", e)

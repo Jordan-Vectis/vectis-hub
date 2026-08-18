@@ -32,6 +32,8 @@ type Result = {
   type: string; q: string
   rows: Row[]; totes: ToteInfo[]
   capped: { hub: boolean; bc: boolean }
+  /** BC rows left out because our own system has that barcode on a different receipt. */
+  phantoms?: number
 }
 
 type Mode = "receipt" | "tote" | "vendor"
@@ -256,6 +258,13 @@ export default function FindLotsTab({ controlled }: { controlled?: FindControlle
               </button>
             )}
           </div>
+
+          {/* ⚠ Never silently swallow the ones dropped — design rule 7. */}
+          {!!data.phantoms && data.phantoms > 0 && (
+            <p className="px-5 py-4 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 text-base text-gray-600 dark:text-gray-400">
+              {data.phantoms} Business Central {data.phantoms === 1 ? "record was" : "records were"} left out — {data.phantoms === 1 ? "its barcode belongs" : "their barcodes belong"} to a lot we have on a different receipt, so {data.phantoms === 1 ? "it isn&apos;t" : "they aren&apos;t"} part of this one.
+            </p>
+          )}
 
           {(data.capped.hub || data.capped.bc) && (
             <p className="px-5 py-4 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-base text-amber-800 dark:text-amber-300">
