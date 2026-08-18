@@ -13,6 +13,7 @@ import { evaluateIdleGate, logIdleDecision, clockLooksTampered } from "@/lib/idl
 import { buildToteMap, checkLot, toteLookupVariants } from "@/lib/tote-check"
 import { ukDayStartUtc } from "@/lib/cataloguing-reports"
 import { getDepartmentAccessForSession, canSeeAuction } from "@/lib/departments"
+import { shouldKeepFlag } from "@/lib/measurement-check"
 
 // titleFromDescription lives in lib/lot-title.ts so the Locking Check can VERIFY against the
 // exact rule this generates with — see the note there.
@@ -1401,7 +1402,16 @@ export async function setLotReviewFlag(lotId: string, auctionId: string, flag: s
 export async function saveAiFlagNote(lotId: string, flagNote: string | null): Promise<ActionResult> {
   try {
     const session = await requireCataloguer()
-    await updateLotLogged(lotId, { aiFlagNote: flagNote ?? null }, { changedBy: changedByOf(session), source: "ai_flag" })
+    let note = flagNote?.trim() || null
+    // ⚠ A size that merely disagrees with the manufacturer's published spec is NOT a mistake —
+    // we measure the item, and it may have been cut down or modified. Gated here as well as in
+    // lib/pipeline-runner.ts, because this is the path the browser Auto Pipeline tab and the
+    // Re-check Cataloguer Flags button write through. See lib/measurement-check.ts.
+    if (note) {
+      const lot = await prisma.catalogueLot.findUnique({ where: { id: lotId }, select: { keyPoints: true } })
+      if (!shouldKeepFlag(note, lot?.keyPoints ?? "")) note = null
+    }
+    await updateLotLogged(lotId, { aiFlagNote: note }, { changedBy: changedByOf(session), source: "ai_flag" })
     return { ok: true }
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Couldn't update the flag." }

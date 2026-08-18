@@ -20,6 +20,7 @@
 // (RECITATION excepted — it is stochastic, so it retries on the other model).
 
 import { prisma } from "@/lib/prisma"
+import { shouldKeepFlag } from "@/lib/measurement-check"
 import { logLotFieldChanges } from "@/lib/lot-log"
 import { HEARTBEAT_STALE_MS } from "@/lib/pipeline-queue"
 
@@ -452,7 +453,9 @@ async function runStages(
           try { await applyEstimate(lot.id, low, high, ctx) }
           catch (e: any) { addLog(`  ⚠ ${lot.label} — couldn't save the AI estimate: ${e?.message ?? e}`) }
         }
-        if (result.flag) {
+        // ⚠ A size that merely disagrees with the manufacturer is NOT a mistake — we measure
+        // the item. shouldKeepFlag drops those and keeps everything else. See lib/measurement-check.ts.
+        if (result.flag && shouldKeepFlag(result.flag, lot.keyPoints)) {
           try { await prisma.catalogueLot.update({ where: { id: lot.id }, data: { aiFlagNote: result.flag } }) } catch { /* advisory */ }
         }
         lot.batchStatus = "ok"
@@ -498,7 +501,7 @@ async function runStages(
         const { revised, changed, missing, added, flag } = result
         // The stage tried to change a product code it cannot have seen (it gets no photos).
         // The cataloguer's value was kept by the route; surface the doubt in the Review tab.
-        if (flag) {
+        if (flag && shouldKeepFlag(flag, lot.keyPoints)) {
           try { await prisma.catalogueLot.update({ where: { id: lot.id }, data: { aiFlagNote: flag } }) } catch { /* advisory */ }
           addLog(`  ⚑ ${lot.label} — flagged: ${flag}`)
         }
@@ -570,7 +573,7 @@ async function runStages(
         const { verdict, contradictions, unsupported, revised, flag } = result
         // It tried to rewrite a product code the cataloguer recorded. The route kept the
         // cataloguer's; surface the doubt instead of acting on it.
-        if (flag) {
+        if (flag && shouldKeepFlag(flag, lot.keyPoints)) {
           try { await prisma.catalogueLot.update({ where: { id: lot.id }, data: { aiFlagNote: flag } }) } catch { /* advisory */ }
           addLog(`  ⚑ ${lot.label} — flagged: ${flag}`)
         }

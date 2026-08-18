@@ -16,6 +16,35 @@ const JORDAN_ONLY = new Set(["jordan_secret_menu.md"])
 
 const ENTRIES: Entry[] = [
   {
+    filename: "measurement_flags.md",
+    content: `---
+name: Measurement flags - we measure the item
+purpose: Why a size differing from the manufacturer is never a cataloguer mistake, and the two traps in telling a size complaint from a code complaint. Read before touching any flag prompt or lib/measurement-check.ts.
+metadata:
+  type: reference
+---
+
+2026-08-17. Jordan: "I need the cataloguer mistake checker to not do this in the bears auctions it creates loads of flags because the size is different to the manufacturer but we re-measure it in case the bear has been cut or modified. It only needs to flag it if they put like 10 inches is 100cm or something like that."
+
+THE PRINCIPLE. A size in the key points is the cataloguer's OWN measurement of that item, taken with it in hand. Bears especially are re-measured BECAUSE one may have been cut down, re-stuffed or restored. A size differing from the manufacturer's published spec is therefore EXPECTED, and flagging it buries the real mistakes. The only measurement error worth anyone's time is one that CONTRADICTS ITSELF.
+
+Two halves, on purpose:
+1. MEASUREMENT_FLAG_RULE in lib/flag-rules.ts - one shared block wired into all FOUR flag prompts (Batch route, Re-check Cataloguer Flags route, lib/key-points-instruction.ts in BOTH modes, lib/double-check-instruction.ts). ⚠ Flag guidance is spread across those four and drifts; add shared flag rules to flag-rules.ts, not to one prompt.
+2. lib/measurement-check.ts - the arithmetic, in code rather than trusted to a model (they are unreliable at exactly this sum). shouldKeepFlag(note, keyPoints) gates EVERY write: the three sites in lib/pipeline-runner.ts and saveAiFlagNote (the path the browser Auto Pipeline tab and Re-check Flags write through).
+
+⚠ THE TWO TRAPS, BOTH FOUND BY MEASURING AGAINST THE 104 LIVE FLAGS:
+- A CLOSING QUOTATION MARK AFTER DIGITS IS NOT AN INCHES MARK. Flags quote what they dispute - 'it should be "2150"' - and 2150" matched an inches pattern, so TWO GENUINE PRODUCT-CODE TYPOS (215O->2150, R40127->R40217) were being dropped as "measurements". The unit must now be SPELLED OUT (cm/mm/in/inch), or be part of a real inch-to-cm pair.
+- A CODE COMPLAINT NAMES TWO CODES; A SIZE COMPLAINT NAMES ONE. "CBCB232301B is a typo for CB232301B" mentions a size too, and dropping it would bin a real catch. So two or more distinct product codes in the note KEEPS it (codeSet from lib/product-codes.ts).
+
+After both fixes: 1 of 104 existing flags drops, and it is a true size-vs-spec one. Jordan's screenshot flag (F109400, 16"/41cm vs a claimed 15.5"/39cm) drops; 10 inches / 100cm survives.
+
+⚠ TOLERANCE IS DELIBERATELY GENEROUS - max(2cm, 20%). Cataloguers round to the nearest centimetre and sometimes to five; the errors that actually happen (a unit slip, transposed digits) are factors out, not percentages. Tightening it re-creates the flood this exists to stop.
+
+⚠ THE RULE IS GLOBAL, NOT BEARS-ONLY. Re-measuring is how the whole saleroom works; the same false flag would appear on a diecast model's length. Bears were simply where the volume showed.
+
+⚠ The gate applies ON WRITE, so flags already on lots stay until that lot is re-run. Clearing the existing ones would need a UI action - not built.`,
+  },
+  {
     filename: "idle_gap_ends_at_lot_start.md",
     content: `---
 name: The idle gap ends at LOT START, not at the save

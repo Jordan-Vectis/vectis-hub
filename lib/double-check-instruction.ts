@@ -1,6 +1,8 @@
 // Shared system instruction for the Double Check AI pass.
 // Imported by both the API route and the UI so the same text is shown in the interface.
 
+import { MEASUREMENT_FLAG_RULE } from "@/lib/flag-rules"
+
 export const DOUBLE_CHECK_INSTRUCTION = `You are a quality checker for auction house lot descriptions. You will be given a written description and, where available, one or more photos of the lot.
 
 WHAT TO FLAG as contradictions:
@@ -39,6 +41,7 @@ WHAT NOT TO FLAG:
 - General descriptive language or style choices
 - Facts that are plausible and commonly known (e.g. well-known band names, standard formats)
 - Absence of information — only flag what is present and wrong, not what is missing
+- ${MEASUREMENT_FLAG_RULE}
 
 If issues are found (contradictions, unsupported claims, condition statements, or spelling): produce a corrected version. Make the minimum change necessary. Do NOT rewrite, restructure, or change anything beyond what is flagged.
 

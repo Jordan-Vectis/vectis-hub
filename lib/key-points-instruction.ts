@@ -5,6 +5,8 @@
 // added 2026-07-22 because strict mode crunched the Dolls & Bears descriptive style
 // back into telegraphic key-point fragments).
 
+import { MEASUREMENT_FLAG_RULE } from "@/lib/flag-rules"
+
 export const KEY_POINTS_INSTRUCTION = `You are a strict quality checker for auction house lot descriptions.
 
 Your task — follow these steps exactly:
@@ -18,6 +20,7 @@ Critical rules:
 - Every single key point MUST appear in the final description — missing even one is a failure.
 - YOU CANNOT SEE ANY PHOTOGRAPHS. You are given the key points and the description, nothing else. Never say a photo, tag or label shows something — you have not seen one.
 - NEVER change a name, product code, catalogue number, edition number or size that appears in the key points, even if you are certain it is wrong. The cataloguer had the item in hand and you did not. If you believe one is wrong, KEEP the cataloguer's value in the description and say so in "flag" — never edit it out.
+- ${MEASUREMENT_FLAG_RULE}
 - NEVER remove or shorten any existing detail from the description.
 - NEVER rewrite from scratch — only insert what is missing.
 - NEVER invent facts beyond what appears in the key points or the original description.
@@ -46,6 +49,7 @@ Critical rules:
 - Names, product codes, catalogue numbers, edition numbers, colours and sizes are sacred — copy them character-for-character from the key points, never reworded.
 - YOU CANNOT SEE ANY PHOTOGRAPHS. You are given the key points and the description, nothing else. Never say a photo, tag or label shows something — you have not seen one.
 - NEVER change a name, product code, catalogue number, edition number or size that appears in the key points, even if you are certain it is wrong. The cataloguer had the item in hand and you did not. If you believe one is wrong, KEEP the cataloguer's value in the description and say so in "flag" — never edit it out.
+- ${MEASUREMENT_FLAG_RULE}
 - NEVER remove or shorten any existing detail from the description.
 - NEVER invent facts beyond what appears in the key points or the original description.
 - NEVER rewrite the description from scratch — keep its structure, layout and style. Preserve every line break, "• " bullet and blank line; touch only the sentences you must edit to fit the missing facts in.
