@@ -18,6 +18,7 @@ const KNOWN_ENDPOINTS = [
   { label: "Items",                  value: "items" },
   { label: "Customers",              value: "customers" },
   { label: "Attendance Register",    value: "AttendenceRegister" },
+  { label: "Valuations",             value: "Valuations" },
 ]
 
 // ─── Types ────────────────────────────────────────────────────────────────────
