@@ -1,4 +1,4 @@
-// The commit history from 1 July 2026 up to 2026-08-17, committed into the repo.
+// The commit history from 1 July 2026 up to 2026-08-18, committed into the repo.
 //
 // ⚠ THIS IS THE ONLY COMPLETE HISTORY THE RUNNING APP CAN SEE. Railway's build
 // has no .git, so scripts/capture-changelog.mjs falls back to the deploy
@@ -14,6 +14,9 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"9e68536ea8c745fe670cf32516cee46d054ba6c3","author":"Jack Collings","date":"2026-08-18T09:41:53+01:00","subject":"BC API Viewer: add Valuations to the known endpoints"},
+  {"sha":"7c423b541f897d527d4145f9ad3ca8d975f812e9","author":"Jack Collings","date":"2026-08-18T09:41:52+01:00","subject":"Submissions: drop the Submission Details card from the new-submission form"},
+  {"sha":"34b1a41af084aee7eb0a951fccff99c240060b0d","author":"Jordan Orange","date":"2026-08-17T17:12:28+01:00","subject":"Memory: today's four features, and two rules that were learned the hard way"},
   {"sha":"f92d3408fdb7c4b693fd47b268364b6674711538","author":"Jordan Orange","date":"2026-08-17T16:57:17+01:00","subject":"Changelog: bring the record up to date before releasing"},
   {"sha":"b9d0dc143be0c2cfd7c4b9008679ccbc0beb9269","author":"Jordan Orange","date":"2026-08-17T16:55:05+01:00","subject":"Idle gate: a stale lot-start marker can no longer hide an absence"},
   {"sha":"c6ac73eb55f22a1520e8e3595660fe1d22c69046","author":"Jordan Orange","date":"2026-08-17T16:29:23+01:00","subject":"Idle gap ends when the lot was started, not when it was saved"},
