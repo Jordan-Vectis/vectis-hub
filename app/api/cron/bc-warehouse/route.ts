@@ -125,6 +125,33 @@ export async function POST(req: NextRequest) {
     results.auctionNames = res.ok ? { namesWritten: data.namesWritten ?? 0 } : { error: data.error ?? `HTTP ${res.status}` }
   } catch (e: any) { results.auctionNames = { error: e.message } }
 
+  // ── Remove records deleted in BC ────────────────────────────────────────────
+  // The stages above are upsert-only, so a row deleted in BC would otherwise live in the
+  // cache forever (the R008537 ghosts). Checks suspect receipts against LIVE BC; deletes
+  // nothing on an empty or failed answer. See the route for the full safety rules.
+  {
+    let rdMore = true, rdItems = 0, rdPasses = 0
+    let rdNext: string | null = null
+    while (rdMore && rdPasses < 100) {
+      try {
+        const res: Response = await fetch(`${base}/api/warehouse/sync/reconcile-deleted`, {
+          method: "POST", headers,
+          body:   JSON.stringify({ nextLink: rdNext }),
+        })
+        const data: any = await res.json().catch(() => ({}))
+        if (!res.ok) { results.reconcileDeleted = { error: data.error ?? `HTTP ${res.status}` }; break }
+        rdItems += data.itemsProcessed ?? 0
+        rdMore   = data.more === true
+        rdNext   = data.nextLink ?? null
+        rdPasses++
+      } catch (e: any) {
+        results.reconcileDeleted = { error: e.message }
+        break
+      }
+    }
+    if (!results.reconcileDeleted) results.reconcileDeleted = { removed: rdItems, passes: rdPasses }
+  }
+
   console.log("[cron/bc-warehouse]", JSON.stringify(results))
   return NextResponse.json({ ok: true, results })
 }
