@@ -1216,7 +1216,13 @@ model WarehouseItem {
 
   // Status
   catalogued        Boolean? // EVA_Catalogued
-  cataloguedBy      String? // EVA_CataloguedBy
+  cataloguedBy      String? // EVA_CataloguedBy — a short CODE ("KS"), and often EMPTY
+  // ⚠ EVA_CataloguedBy is blank on tens of thousands of rows. These two carry a Windows
+  // username ("JAKE.KENYON") and are what actually answers "who catalogued this" — measured
+  // 2026-08-18: of 200 catalogued lines with a blank CataloguedBy, 98 had CataloguedByUser
+  // and ALL 200 had CreatedBy. Resolved to a real name by bcPersonName().
+  cataloguedByUser  String? // EVA_CataloguedByUser
+  bcCreatedBy       String? // EVA_CreatedBy
   cataloguedAt      DateTime? // EVA_CataloguedDateTime
   noOfPhotos        Int? // EVA_NoOfPhotos
   goodsReceived     Boolean? // EVA_GoodsReceived

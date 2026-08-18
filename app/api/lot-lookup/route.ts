@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { hasAppAccess } from "@/lib/apps"
-import { lookupCataloguerByCode } from "@/lib/cataloguer-directory"
+import { bcPersonName } from "@/lib/cataloguer-directory"
 
 export const dynamic = "force-dynamic"
 
@@ -133,7 +133,8 @@ export async function GET(req: NextRequest) {
     // ── Business Central (synced cache) ──────────────────────────────────────
     const BC_SELECT = {
       uniqueId: true, description: true, receiptNo: true, vendorNo: true, vendorName: true,
-      catalogued: true, cataloguedBy: true, auctionCode: true, auctionName: true, auctionDate: true,
+      catalogued: true, cataloguedBy: true, cataloguedByUser: true, bcCreatedBy: true,
+      auctionCode: true, auctionName: true, auctionDate: true,
       lotNo: true, currentLotNo: true, location: true, toteNo: true, barcode: true,
     } as const
 
@@ -180,11 +181,39 @@ export async function GET(req: NextRequest) {
     const bcPool = new Map<string, (typeof bcItems)[number]>()
     for (const w of [...bcItems, ...bcByIdentifier]) bcPool.set(w.uniqueId, w)
 
-    const bcByBarcode  = new Map<string, (typeof bcItems)[number]>()
+    // ⚠⚠ A BARCODE IS NOT UNIQUE IN BC. Measured on production 2026-08-18: 2,039 barcodes appear
+    // under MORE THAN ONE RECEIPT — F109050 exists as R009300-1 (customer C209142, the real lot)
+    // AND as R008537-51 (customer C223610, an empty A995 placeholder). A plain Map keyed on
+    // barcode let whichever row was written last win, so a Hub lot could be shown carrying a
+    // DIFFERENT CUSTOMER's BC record. Keep every candidate and pick deliberately below.
+    const bcByBarcode  = new Map<string, (typeof bcItems)[number][]>()
     const bcByUniqueId = new Map<string, (typeof bcItems)[number]>()
     for (const w of bcPool.values()) {
-      if (w.barcode) bcByBarcode.set(upper(w.barcode), w)
+      if (w.barcode) {
+        const k = upper(w.barcode)
+        const list = bcByBarcode.get(k) ?? []
+        list.push(w)
+        bcByBarcode.set(k, list)
+      }
       bcByUniqueId.set(upper(w.uniqueId), w)
+    }
+
+    // Which of several BC rows sharing a barcode actually belongs to THIS Hub lot?
+    // The receipt decides it — that is the customer's own paperwork, and two records for the
+    // same barcode under different receipts are two different customers' items. Never fall back
+    // to "whichever one" when the receipt disagrees: attaching one customer's lot to another's
+    // record is worse than showing no BC data at all.
+    function pickBcFor(lot: { barcode: string | null; receipt: string | null; receiptUniqueId: string | null; vendor: string | null }) {
+      const byUid = lot.receiptUniqueId ? bcByUniqueId.get(upper(lot.receiptUniqueId)) : undefined
+      if (byUid) return byUid                                   // the unique ID is exact
+      const candidates = lot.barcode ? (bcByBarcode.get(upper(lot.barcode)) ?? []) : []
+      if (candidates.length === 0) return null
+      if (candidates.length === 1) return candidates[0]
+      const same = (a?: string | null, b?: string | null) =>
+        !!a && !!b && a.trim().toUpperCase() === b.trim().toUpperCase()
+      return candidates.find(w => same(w.receiptNo, lot.receipt))
+          ?? candidates.find(w => same(w.vendorNo, lot.vendor))
+          ?? null                                               // ambiguous — say nothing
     }
 
     // ── Which sale is each lot actually going into? ──────────────────────────
@@ -228,10 +257,7 @@ export async function GET(req: NextRequest) {
     // ── One row per physical item ────────────────────────────────────────────
     const claimed = new Set<string>()
     const merged = hubLots.slice(0, LIMIT).map(l => {
-      // Barcode first — that is the label on the item — then the unique ID.
-      const bc = (l.barcode && bcByBarcode.get(upper(l.barcode)))
-        || (l.receiptUniqueId && bcByUniqueId.get(upper(l.receiptUniqueId)))
-        || null
+      const bc = pickBcFor(l)
       if (bc) claimed.add(bc.uniqueId)
       const sale = resolveSale(l.auction, l.barcode ?? bc?.barcode, bc)
       return {
@@ -243,7 +269,7 @@ export async function GET(req: NextRequest) {
         // The Hub's tote is what the cataloguer typed; BC's is the tote it was made from.
         tote: l.tote || bc?.toteNo || "",
         catalogued: true,   // it is in our system, so it has been catalogued
-        cataloguedBy: l.createdByName || (bc ? (lookupCataloguerByCode(bc.cataloguedBy)?.name ?? bc.cataloguedBy ?? "") : ""),
+        cataloguedBy: l.createdByName || (bc ? bcPersonName(bc.cataloguedBy, bc.cataloguedByUser, bc.bcCreatedBy) : ""),
         lotNo: bc ? (bc.currentLotNo || bc.lotNo || "") : "",
         location: bc?.location ?? "",
         needsAttention: isProblemPen(bc?.auctionCode ?? ""),
@@ -263,7 +289,7 @@ export async function GET(req: NextRequest) {
         saleCode: sale.code, saleName: sale.name, saleDate: sale.date,
         tote: w.toteNo ?? "",
         catalogued: w.catalogued === true,
-        cataloguedBy: lookupCataloguerByCode(w.cataloguedBy)?.name ?? w.cataloguedBy ?? "",
+        cataloguedBy: bcPersonName(w.cataloguedBy, w.cataloguedByUser, w.bcCreatedBy),
         lotNo: w.currentLotNo || w.lotNo || "",
         location: w.location ?? "",
         needsAttention: isProblemPen(w.auctionCode ?? ""),

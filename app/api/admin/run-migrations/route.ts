@@ -1475,6 +1475,9 @@ const MIGRATIONS = [
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "kpFixNote" TEXT`,
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "kpFixedBy" TEXT`,
   `ALTER TABLE "CatalogueLot" ADD COLUMN IF NOT EXISTS "kpFixedAt" TIMESTAMP(3)`,
+  // Who catalogued a BC line, for the ~50k rows where EVA_CataloguedBy is blank.
+  `ALTER TABLE "WarehouseItem" ADD COLUMN IF NOT EXISTS "cataloguedByUser" TEXT`,
+  `ALTER TABLE "WarehouseItem" ADD COLUMN IF NOT EXISTS "bcCreatedBy" TEXT`,
   // What's in a tote (BC's articleCategory / articleSubcategory) — shown on the Admin Centre.
   `ALTER TABLE "WarehouseTote" ADD COLUMN IF NOT EXISTS "category" TEXT`,
   `ALTER TABLE "WarehouseTote" ADD COLUMN IF NOT EXISTS "subCategory" TEXT`,

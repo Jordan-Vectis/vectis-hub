@@ -159,6 +159,10 @@ export async function POST(req: NextRequest) {
             sizeClassification: r.EVA_SHIP_EVA_SizeClassification ?? null,
             catalogued:       parseBool(r.EVA_Catalogued),
             cataloguedBy:     r.EVA_CataloguedBy        ?? null,
+            // ⚠ CataloguedBy is blank on tens of thousands of lines; these two are what
+            // actually name the person. Field names read off a live BC row, not guessed.
+            cataloguedByUser: r.EVA_CataloguedByUser    ?? null,
+            bcCreatedBy:      r.EVA_CreatedBy           ?? null,
             cataloguedAt:     parseDate(r.EVA_CataloguedDateTime),
             noOfPhotos:       r.EVA_NoOfPhotos != null ? parseInt(r.EVA_NoOfPhotos) : null,
             goodsReceived:    parseBool(r.EVA_GoodsReceived),
@@ -192,6 +196,10 @@ export async function POST(req: NextRequest) {
             sizeClassification: r.EVA_SHIP_EVA_SizeClassification ?? null,
             catalogued:       parseBool(r.EVA_Catalogued),
             cataloguedBy:     r.EVA_CataloguedBy        ?? null,
+            // ⚠ CataloguedBy is blank on tens of thousands of lines; these two are what
+            // actually name the person. Field names read off a live BC row, not guessed.
+            cataloguedByUser: r.EVA_CataloguedByUser    ?? null,
+            bcCreatedBy:      r.EVA_CreatedBy           ?? null,
             cataloguedAt:     parseDate(r.EVA_CataloguedDateTime),
             noOfPhotos:       r.EVA_NoOfPhotos != null ? parseInt(r.EVA_NoOfPhotos) : null,
             goodsReceived:    parseBool(r.EVA_GoodsReceived),

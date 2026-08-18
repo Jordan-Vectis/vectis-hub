@@ -78,3 +78,46 @@ export function lookupCataloguerByCode(code: string | null | undefined): (Catalo
   const entry = CATALOGUER_DIRECTORY[key]
   return entry ? { code: key, ...entry } : null
 }
+
+// BC's EVA_CataloguedByUser / EVA_CreatedBy hold a WINDOWS USERNAME ("JAKE.KENYON"), not the
+// short code above. Measured on production 2026-08-18: of 200 catalogued receipt lines whose
+// EVA_CataloguedBy was blank, EVA_CataloguedByUser was filled on 98 and EVA_CreatedBy on all
+// 200 — so these are the fallbacks that put a name on the ~50,000 rows the code alone misses.
+//
+// Resolved through the directory's EMAIL (jake.kenyon@… ↔ JAKE.KENYON) so the answer is the
+// person's real name rather than a shouty username; anything unknown is just tidied up.
+export function lookupCataloguerByUsername(username: string | null | undefined): (CataloguerEntry & { code: string }) | null {
+  const u = (username ?? "").trim().toLowerCase()
+  if (!u) return null
+  for (const [code, entry] of Object.entries(CATALOGUER_DIRECTORY)) {
+    if (entry.email.split("@")[0].toLowerCase() === u) return { code, ...entry }
+  }
+  return null
+}
+
+/** "JAKE.KENYON" → "Jake Kenyon" when we don't know them; blank stays blank. */
+export function prettifyUsername(username: string | null | undefined): string {
+  const u = (username ?? "").trim()
+  if (!u) return ""
+  if (!/[.\s_]/.test(u) && u === u.toUpperCase() && u.length <= 4) return u   // looks like a code, leave it
+  return u
+    .split(/[._\s]+/)
+    .filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ")
+}
+
+/** The one place that turns whatever BC recorded into a person's name. */
+export function bcPersonName(
+  cataloguedBy?: string | null, cataloguedByUser?: string | null, createdBy?: string | null,
+): string {
+  const byCode = lookupCataloguerByCode(cataloguedBy)
+  if (byCode) return byCode.name
+  for (const u of [cataloguedByUser, createdBy]) {
+    const known = lookupCataloguerByUsername(u)
+    if (known) return known.name
+    const pretty = prettifyUsername(u)
+    if (pretty) return pretty
+  }
+  return (cataloguedBy ?? "").trim()
+}
