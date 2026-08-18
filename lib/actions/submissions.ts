@@ -34,7 +34,8 @@ export async function createSubmission(formData: FormData) {
   const customerName = formData.get("customerName") as string
   const customerEmail = formData.get("customerEmail") as string | null
   const customerPhone = formData.get("customerPhone") as string | null
-  const channel = formData.get("channel") as SubmissionChannel
+  // The new-submission form no longer asks for a channel; staff-entered submissions default to WALK_IN.
+  const channel = (formData.get("channel") as SubmissionChannel) || "WALK_IN"
   const notes = formData.get("notes") as string | null
   const itemNames = formData.getAll("itemName") as string[]
   const itemDescriptions = formData.getAll("itemDescription") as string[]

@@ -124,32 +124,6 @@ export default function NewSubmissionPage() {
           </div>
         </section>
 
-        {/* Submission details */}
-        <section className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
-          <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-4">Submission Details</h2>
-          <div className="space-y-4">
-            <div>
-              <label className={labelCls}>How did they contact us? *</label>
-              <select name="channel" required className={inputCls}>
-                <option value="">Select channel...</option>
-                <option value="EMAIL">Email</option>
-                <option value="WEB_FORM">Web Form</option>
-                <option value="PHONE">Phone</option>
-                <option value="WALK_IN">Walk-in</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Notes</label>
-              <textarea
-                name="notes"
-                rows={3}
-                placeholder="Any general notes about this submission..."
-                className={`${inputCls} resize-none`}
-              />
-            </div>
-          </div>
-        </section>
-
         {/* Items */}
         <section className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
           <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-4">Items</h2>
