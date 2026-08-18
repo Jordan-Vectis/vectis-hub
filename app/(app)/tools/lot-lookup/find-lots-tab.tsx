@@ -67,6 +67,13 @@ export default function FindLotsTab({ controlled }: { controlled?: FindControlle
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const [data, setData]       = useState<Result | null>(null)
+  // Which sale groups are open. ⚠ Collapsed by DEFAULT (Jordan, 2026-08-18: "Just show all the
+  // sales they have lots in and how many then make the list expandable to see all the details of
+  // the individual lots?") — a customer's lots can span a dozen sales and hundreds of rows, and
+  // the question is usually "which sales is their stuff in?" before it is ever "show me every lot".
+  // A search that lands on ONE sale opens it, because collapsing a single answer is just a click
+  // in the way. The key is the same one used for the group's React key.
+  const [open, setOpen] = useState<Record<string, boolean>>({})
 
   // ⚠ Takes the query as ARGUMENTS rather than reading state — a controlled run happens in the
   // same tick as the props arriving, and state would still hold the previous search.
@@ -80,6 +87,7 @@ export default function FindLotsTab({ controlled }: { controlled?: FindControlle
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? res.statusText)
       setData(json)
+      setOpen({})   // a new search starts collapsed again
     } catch (e: any) { setError(e.message); setData(null) }
     finally { setLoading(false) }
   }
@@ -184,12 +192,26 @@ export default function FindLotsTab({ controlled }: { controlled?: FindControlle
             <Stat value={bcOnly}  label="In BC, never catalogued in the Hub" tone="text-orange-600 dark:text-orange-400" />
           </div>
 
-          <p className="text-base text-gray-600 dark:text-gray-400">
-            Showing results for {active.label.toLowerCase()}{" "}
-            <span className="font-mono font-semibold text-gray-900 dark:text-white">{data.q}</span>
-            {" · "}{rows.length.toLocaleString()} item{rows.length === 1 ? "" : "s"}
-            {" · "}<span className={HINT}>Business Central as of the last warehouse sync</span>
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-base text-gray-600 dark:text-gray-400">
+              Showing results for {active.label.toLowerCase()}{" "}
+              <span className="font-mono font-semibold text-gray-900 dark:text-white">{data.q}</span>
+              {" · "}<span className="font-semibold text-gray-900 dark:text-white">{groups.length} sale{groups.length === 1 ? "" : "s"}</span>
+              {" · "}{rows.length.toLocaleString()} item{rows.length === 1 ? "" : "s"}
+              {" · "}<span className={HINT}>Business Central as of the last warehouse sync</span>
+            </p>
+            {groups.length > 1 && (
+              <button
+                onClick={() => {
+                  const anyOpen = groups.some(g => open[`${g.code}||${g.name}`])
+                  setOpen(anyOpen ? {} : Object.fromEntries(groups.map(g => [`${g.code}||${g.name}`, true])))
+                }}
+                className="px-5 py-3 rounded-xl border-2 border-gray-300 dark:border-gray-700 text-base font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+              >
+                {groups.some(g => open[`${g.code}||${g.name}`]) ? "Collapse them all" : "Open them all"}
+              </button>
+            )}
+          </div>
 
           {(data.capped.hub || data.capped.bc) && (
             <p className="px-5 py-4 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-base text-amber-800 dark:text-amber-300">
@@ -239,12 +261,22 @@ export default function FindLotsTab({ controlled }: { controlled?: FindControlle
             const gBoth     = g.rows.filter(r => r.inHub && r.inBC).length
             const gHubOnly  = g.rows.filter(r => r.inHub && !r.inBC).length
             const gBcOnly   = g.rows.filter(r => !r.inHub && r.inBC).length
+            const key       = `${g.code}||${g.name}`
+            // One sale in the whole result opens itself — see the note on `open`.
+            const isOpen    = open[key] ?? groups.length === 1
             return (
-              <div key={`${g.code}||${g.name}`} className="rounded-2xl border-2 border-gray-200 dark:border-gray-800 overflow-hidden bg-white dark:bg-[#1C1C1E]">
-                {/* Auction header band */}
-                <div className="bg-gray-50 dark:bg-gray-900/70 px-6 py-5 border-b-2 border-gray-200 dark:border-gray-800">
+              <div key={key} className="rounded-2xl border-2 border-gray-200 dark:border-gray-800 overflow-hidden bg-white dark:bg-[#1C1C1E]">
+                {/* Auction header band — the whole thing is the expand/collapse control */}
+                <button
+                  onClick={() => setOpen(o => ({ ...o, [key]: !isOpen }))}
+                  aria-expanded={isOpen}
+                  className={`w-full text-left bg-gray-50 dark:bg-gray-900/70 px-6 py-5 hover:bg-gray-100 dark:hover:bg-gray-900 transition ${
+                    isOpen ? "border-b-2 border-gray-200 dark:border-gray-800" : ""
+                  }`}
+                >
                   <p className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Auction</p>
                   <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 mt-1">
+                    <span className={`text-2xl leading-none text-gray-400 dark:text-gray-500 transition-transform ${isOpen ? "rotate-90 inline-block" : "inline-block"}`}>›</span>
                     {g.code
                       ? <>
                           <span className="text-3xl font-bold font-mono text-gray-900 dark:text-white">{g.code}</span>
@@ -256,14 +288,17 @@ export default function FindLotsTab({ controlled }: { controlled?: FindControlle
                     <span className="text-gray-800 dark:text-gray-200 font-semibold">
                       📅 {when || "No auction date set"}
                     </span>
-                    <span className="text-gray-600 dark:text-gray-400">{g.rows.length} item{g.rows.length === 1 ? "" : "s"}</span>
+                    <span className="text-gray-900 dark:text-white font-bold">{g.rows.length} item{g.rows.length === 1 ? "" : "s"}</span>
                     {gBoth    > 0 && <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{gBoth} in both</span>}
                     {gHubOnly > 0 && <span className="text-amber-600 dark:text-amber-400 font-semibold">{gHubOnly} not in BC yet</span>}
                     {gBcOnly  > 0 && <span className="text-orange-600 dark:text-orange-400 font-semibold">{gBcOnly} BC only</span>}
+                    <span className="ml-auto text-indigo-600 dark:text-indigo-400 font-semibold">
+                      {isOpen ? "Hide the lots" : `Show the ${g.rows.length} lot${g.rows.length === 1 ? "" : "s"}`}
+                    </span>
                   </div>
-                </div>
+                </button>
 
-                <div className="overflow-x-auto">
+                <div className={`overflow-x-auto ${isOpen ? "" : "hidden"}`}>
                   <table className="w-full text-base">
                     <thead className="bg-gray-50/60 dark:bg-gray-900/40 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
                       <tr>

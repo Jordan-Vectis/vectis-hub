@@ -945,22 +945,29 @@ Gated on the **\`ADMIN_CENTRE\`** app key via \`hasAppAccess\` — the page redi
 
 The brief: *"this is getting used by non technical admins so really make everything nice and big and clear."* So this tool deliberately **breaks the Hub's usual 10–12px table style**: base/lg body text, \`py-3\` table rows, \`px-8 py-8\` answer panels, 2px borders, big hit targets, and plain-English wording ("Where from", "Changed to", "Not recorded") instead of raw field/source keys. Shared classes live in **\`app/(app)/tools/lot-lookup/ui.ts\`** — use them rather than re-styling, and **don't "tidy" this back down to the compact house style.** Full width (\`max-w-[1800px] mx-auto\`).
 
-## ⚠⚠ ONE PAGE, FOUR BUTTONS - THE TABS ARE GONE (2026-08-18)
+## ⚠⚠ ONE PAGE, FIVE BUTTONS - THE TABS ARE GONE (2026-08-18)
 
-Jordan: "I want to combine all the options on this page to be a single page so keep the find a customers lots and the 3 options but all the data needs to show up on a single page. We also need to be able to search by auction and lot number on the first page. I want to make this as simple and idiot proof as possible." Asked which shape, he chose: "Keep the 3 buttons and add a new one for lot number/auction."
+Jordan: "I want to combine all the options on this page to be a single page so keep the find a customers lots and the 3 options but all the data needs to show up on a single page. We also need to be able to search by auction and lot number on the first page. I want to make this as simple and idiot proof as possible." Asked which shape, he chose "Keep the 3 buttons and add a new one for lot number/auction", then on seeing it: "this needs to be like how it was before with a drop down list of the auctions and then an optional lot number box."
 
-It was three tabs, each hiding the other two and each with its own search box - so you had to know which tab answered your question before you could ask it. Now: ONE search bar, FOUR buttons (Receipt / Tote / Customer / Sale or lot), and the answer renders underneath on the same page.
+It was three tabs, each hiding the other two and each with its own search box - so you had to know which tab answered your question before you could ask it. Now ONE page: pick what you have, fill in the one thing it asks for, and the answer renders underneath.
+
+- Receipt number / Tote number / Customer number -> one box -> FindLotsTab
+- SALE AND LOT NUMBER -> a DROPDOWN of real BC sales plus an OPTIONAL lot number -> BySaleTab (filtered to the lot when given)
+- BARCODE -> one box (barcode or unique ID) -> WhoCataloguedTab
+
+⚠ EACH BUTTON ASKS FOR EXACTLY ONE KIND OF THING - that is the design. A single "sale or lot" box was built first, with a parser that read F109 / F109 400 / F109400; Jordan rejected it in favour of the dropdown, because a box where you must know which of three formats to type is the opposite of idiot-proof. parseLotQuery was DELETED - don't reintroduce it. The sale list is fetched once from /api/lot-lookup/sale?sales=1 the first time that button is opened, so every code offered is one that actually has lots; a free-text fallback stays underneath for a brand-new sale or if the list fails to load.
 
 - ⚠ The three tab components still hold ALL the rendering and their result markup was deliberately left untouched - it is the part checked against real BC data. lookup-client.tsx passes each a 'controlled' prop, which hides that component's own search card and runs the query given to it. A 'nonce' bumps on every Search press so pressing it twice re-runs the same query.
 - ⚠ Their search() functions now take the query as ARGUMENTS (search(q, mode)), not from state - a controlled run happens in the same tick the props arrive, when state still holds the previous search.
 - ⚠ onClick={search} had to become onClick={() => search()}: with an argument-taking search, the bare form passes the MOUSE EVENT as the query. TypeScript caught it; it would have searched for [object Object].
 
-THE "SALE OR LOT" BOX - parseLotQuery. One box, three shapes people actually type, exported and unit-checked:
-- F109 -> the whole of sale F109 (BySaleTab)
-- F109 400 / F109/400 / F109-400 -> sale F109, lot 400 (BySaleTab filtered to that lot)
-- F109400 / R009478-28 -> that one lot (WhoCataloguedTab)
+## ⚠ SALE GROUPS ARE COLLAPSED BY DEFAULT (2026-08-18)
 
-⚠ A BARCODE IS A SALE CODE WITH THE LOT RUN TOGETHER, so it must be tried as a lot lookup rather than split - splitting would ask BC for "sale F109, lot 400" when the barcode need not follow that pattern. ⚠ The catch-all requires AT LEAST ONE DIGIT, or a typed word like "what" was accepted as a barcode and searched for instead of being refused. The page SAYS BACK what it understood before you press Search ("Will look up sale F109, lot 400"), and says plainly when it can't read it.
+Jordan: "Just show all the sales they have lots in and how many then make the list expandable to see all the details of the individual lots?" A customer's lots can span a dozen sales and hundreds of rows, and the first question is WHICH SALES their stuff is in, not show me every lot.
+
+So in Find lots each auction band is a BUTTON: code, name, date, item count and the in-both / not-in-BC / BC-only counts, with "Show the N lots" on the right. The item table is hidden until it is opened.
+
+⚠ A result with only ONE sale OPENS ITSELF (open[key] ?? groups.length === 1) - collapsing a single answer is just a click in the way. A new search resets everything to collapsed. An "Open them all" / "Collapse them all" button appears once there is more than one sale, next to a summary line that now leads with the number of SALES.
 
 ## The files
 

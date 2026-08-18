@@ -1,15 +1,22 @@
 "use client"
 
-// Admin Centre — ONE page, one search bar, four things you can search by.
+// Admin Centre — ONE page, one place to search, five things you can search by.
 //
 // Jordan, 2026-08-18: *"I want to combine all the options on this page to be a single page so
 // keep the find a customers lots and the 3 options but all the data needs to show up on a single
 // page. We also need to be able to search by auction and lot number on the first page. I want to
-// make this as simple and idiot proof as possible."*
+// make this as simple and idiot proof as possible."* Then, on the sale search:
+// *"this needs to be like how it was before with a drop down list of the auctions and then an
+// optional lot number box."*
 //
 // It used to be three tabs, each hiding the other two and each with its own search box — so you
 // had to know which tab answered your question before you could ask it. Now: pick what you have
-// in your hand, type it, press Search, and the answer appears underneath. Nothing is hidden.
+// in your hand, fill in the one thing it asks for, and the answer appears underneath.
+//
+// ⚠ EACH BUTTON ASKS FOR EXACTLY ONE KIND OF THING. That is the whole design: no box where you
+// have to know which of three formats to type. The sale search is a DROPDOWN of real sales from
+// BC (so the code is always one that exists) plus an optional lot number; a barcode has its own
+// button and its own box.
 //
 // ⚠ The three tab components still hold all the rendering. They take a `controlled` prop from
 // here, which hides their own search card and runs the query this page gives them. Their result
@@ -18,79 +25,70 @@
 // ⚠ Deliberately LARGE type and hit targets (see ui.ts). The people using this are not the ones
 // who read 11px tables. Do not compact it.
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import FindLotsTab from "./find-lots-tab"
 import WhoCataloguedTab from "./who-catalogued-tab"
 import BySaleTab from "./by-sale-tab"
-import { CARD, INPUT, BTN_PRIMARY, HINT } from "./ui"
+import { CARD, INPUT, BTN_PRIMARY, HINT, formatSaleDate } from "./ui"
 
-type Mode = "receipt" | "tote" | "vendor" | "lot"
+type Mode = "receipt" | "tote" | "vendor" | "sale" | "code"
+type Sale = { code: string; name: string; date: string; lots: number }
 
-const MODES: { key: Mode; icon: string; label: string; blurb: string; placeholder: string; example: string }[] = [
-  { key: "receipt", icon: "🧾", label: "Receipt number",  blurb: "Everything booked in on one receipt", placeholder: "R000009", example: "R000009" },
-  { key: "tote",    icon: "📦", label: "Tote number",     blurb: "Everything on that tote's receipt",   placeholder: "T001868", example: "T001868" },
-  { key: "vendor",  icon: "👤", label: "Customer number", blurb: "Everything for one customer",         placeholder: "C224652", example: "C224652" },
-  { key: "lot",     icon: "🔨", label: "Sale or lot",     blurb: "A whole sale, one lot, or a barcode", placeholder: "F109 400", example: "F109 400" },
+const MODES: { key: Mode; icon: string; label: string; blurb: string }[] = [
+  { key: "receipt", icon: "🧾", label: "Receipt number",     blurb: "Everything booked in on one receipt" },
+  { key: "tote",    icon: "📦", label: "Tote number",        blurb: "Everything on that tote's receipt" },
+  { key: "vendor",  icon: "👤", label: "Customer number",    blurb: "Everything for one customer" },
+  { key: "sale",    icon: "🔨", label: "Sale and lot number", blurb: "Pick a sale, then a lot if you want one" },
+  { key: "code",    icon: "🏷️", label: "Barcode",            blurb: "One lot, by barcode or unique ID" },
 ]
 
-// What did they type into the Sale-or-lot box?
-//
-// ⚠ Three shapes, all of which people actually use, and telling them apart is the whole point of
-// this box. A BARCODE is a sale code with the lot run together (F109400), so it has to be tried
-// as a lot lookup rather than split — splitting it would ask BC for "sale F109, lot 400" when
-// the barcode may not follow that pattern at all.
-export type LotQuery =
-  | { kind: "sale";     sale: string; lot: string }   // F109  ·  F109 400  ·  F109/400
-  | { kind: "lot";      value: string }               // F109400  ·  R009478-28
-  | { kind: "unknown" }
-
-export function parseLotQuery(raw: string): LotQuery {
-  const q = (raw ?? "").trim().replace(/\s+/g, " ")
-  if (!q) return { kind: "unknown" }
-
-  // A unique ID (R009478-28) is always a single lot.
-  if (/^[A-Za-z]\d{4,7}-\d{1,6}$/.test(q)) return { kind: "lot", value: q }
-
-  // Sale code and lot number given separately: "F109 400", "F109/400", "F109-400".
-  const split = q.match(/^([A-Za-z]{1,3}\d{2,4})\s*[\s/\\.-]\s*(\d{1,5})$/)
-  if (split) return { kind: "sale", sale: split[1].toUpperCase(), lot: split[2] }
-
-  // A bare sale code: F109, DM0126.
-  if (/^[A-Za-z]{1,3}\d{2,4}$/.test(q)) return { kind: "sale", sale: q.toUpperCase(), lot: "" }
-
-  // Anything else that looks like an identifier — a full barcode.
-  // ⚠ Must contain a digit: without that, typing a word ("what") was accepted as a barcode and
-  // searched for, instead of saying plainly that it wasn't understood.
-  if (/^(?=.*\d)[A-Za-z0-9-]{4,}$/.test(q)) return { kind: "lot", value: q.toUpperCase() }
-
-  return { kind: "unknown" }
-}
-
-/** Plain English for what the page decided, shown back so nobody has to guess. */
-function readAs(q: LotQuery): string {
-  if (q.kind === "sale") return q.lot ? `sale ${q.sale}, lot ${q.lot}` : `the whole of sale ${q.sale}`
-  if (q.kind === "lot")  return `lot ${q.value}`
-  return ""
+const PLACEHOLDER: Partial<Record<Mode, string>> = {
+  receipt: "R000009", tote: "T001868", vendor: "C224652", code: "F109400",
 }
 
 export default function LookupClient() {
   const [mode, setMode]   = useState<Mode>("receipt")
-  const [value, setValue] = useState("")
+  const [value, setValue] = useState("")          // the free-text modes
+  const [sale, setSale]   = useState("")          // the sale dropdown
+  const [lot, setLot]     = useState("")          // optional lot number
   // Bumped on every Search press, so pressing it twice re-runs the same query.
-  const [run, setRun]     = useState<{ mode: Mode; value: string; nonce: number } | null>(null)
+  const [run, setRun] = useState<{ mode: Mode; value: string; sale: string; lot: string; nonce: number } | null>(null)
 
-  const active  = MODES.find(m => m.key === mode)!
-  const parsed  = parseLotQuery(value)
-  const canGo   = value.trim().length > 0 && (mode !== "lot" || parsed.kind !== "unknown")
+  // The sale list comes from BC itself, so every code offered is one that actually has lots
+  // against it. Loaded once, the first time the sale search is opened.
+  const [sales, setSales]         = useState<Sale[]>([])
+  const [salesError, setSalesErr] = useState<string | null>(null)
+  const [salesLoaded, setLoaded]  = useState(false)
+  useEffect(() => {
+    if (mode !== "sale" || salesLoaded) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res  = await fetch("/api/lot-lookup/sale?sales=1")
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error ?? res.statusText)
+        if (!cancelled) { setSales(json.sales ?? []); setLoaded(true) }
+      } catch (e: any) { if (!cancelled) { setSalesErr(e.message); setLoaded(true) } }
+    })()
+    return () => { cancelled = true }
+  }, [mode, salesLoaded])
+
+  const active = MODES.find(m => m.key === mode)!
+  const canGo  = mode === "sale" ? !!sale.trim() : !!value.trim()
 
   function search() {
     if (!canGo) return
-    setRun(prev => ({ mode, value: value.trim(), nonce: (prev?.nonce ?? 0) + 1 }))
+    setRun(prev => ({
+      mode, value: value.trim(), sale: sale.trim().toUpperCase(), lot: lot.trim(),
+      nonce: (prev?.nonce ?? 0) + 1,
+    }))
   }
 
-  // What the results below are actually showing.
-  const ranLot = run?.mode === "lot" ? parseLotQuery(run.value) : null
+  function pick(m: Mode) {
+    setMode(m)
+    setValue(""); setSale(""); setLot("")
+  }
 
   return (
     <div className="px-6 py-8 max-w-[1800px] mx-auto space-y-6">
@@ -106,11 +104,11 @@ export default function LookupClient() {
       {/* ── The one search ────────────────────────────────────────────────── */}
       <div className={`${CARD} p-6`}>
         <p className="text-lg font-semibold text-gray-900 dark:text-white mb-4">1 · What have you got?</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3 mb-6">
           {MODES.map(m => (
             <button
               key={m.key}
-              onClick={() => { setMode(m.key); setValue("") }}
+              onClick={() => pick(m.key)}
               aria-pressed={mode === m.key}
               className={`flex items-start gap-3 text-left px-5 py-4 rounded-xl border-2 transition ${
                 mode === m.key
@@ -129,40 +127,95 @@ export default function LookupClient() {
           ))}
         </div>
 
-        <label htmlFor="lookup-input" className="block text-lg font-semibold text-gray-900 dark:text-white mb-1">
-          2 · Type the {active.label.toLowerCase()}
-        </label>
-        <p className={`${HINT} mb-4`}>
-          {mode === "lot"
-            ? <>For example <span className="font-mono">F109</span> for a whole sale, <span className="font-mono">F109 400</span> for one lot, or a barcode like <span className="font-mono">F109400</span></>
-            : <>For example <span className="font-mono">{active.example}</span>{mode === "vendor" && <> — or type part of a customer&apos;s name to search Business Central</>}</>}
-        </p>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <input
-            id="lookup-input"
-            value={value}
-            onChange={e => setValue(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") search() }}
-            onFocus={e => e.currentTarget.select()}
-            placeholder={active.placeholder}
-            autoFocus
-            autoComplete="off"
-            className={INPUT}
-          />
-          <button onClick={search} disabled={!canGo} className={`${BTN_PRIMARY} whitespace-nowrap`}>
-            Search
-          </button>
-        </div>
+        {mode === "sale" ? (
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_14rem] gap-5">
+              <div>
+                <label htmlFor="sale-select" className="block text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                  2 · Which sale?
+                </label>
+                <p className={`${HINT} mb-3`}>Straight from Business Central — newest first.</p>
+                <select
+                  id="sale-select"
+                  value={sales.some(s => s.code === sale) ? sale : ""}
+                  onChange={e => setSale(e.target.value)}
+                  className={INPUT}
+                >
+                  <option value="">{salesLoaded ? "Choose a sale…" : "Loading the sales…"}</option>
+                  {sales.map(s => (
+                    <option key={s.code} value={s.code}>
+                      {[s.code, s.name].filter(Boolean).join(" — ")}
+                      {formatSaleDate(s.date) ? ` · ${formatSaleDate(s.date)}` : ""}
+                      {` · ${s.lots} lots`}
+                    </option>
+                  ))}
+                </select>
+                {/* Free-text fallback: a brand-new sale, or one the list didn't load. */}
+                <input
+                  value={sale}
+                  onChange={e => setSale(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") search() }}
+                  placeholder="…or type the sale code, e.g. F109"
+                  aria-label="Sale code"
+                  autoComplete="off"
+                  className={`${INPUT} mt-3 sm:max-w-sm`}
+                />
+              </div>
 
-        {/* Say out loud what a Sale-or-lot entry was understood as, BEFORE searching. */}
-        {mode === "lot" && value.trim() && (
-          parsed.kind === "unknown"
-            ? <p className="mt-4 text-base text-amber-700 dark:text-amber-300">
-                That doesn&apos;t look like a sale code, a lot number or a barcode. Try <span className="font-mono">F109</span>, <span className="font-mono">F109 400</span> or <span className="font-mono">F109400</span>.
+              <div className="lg:border-l-2 lg:border-gray-100 lg:dark:border-gray-800 lg:pl-5">
+                <label htmlFor="lot-number" className="block text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                  3 · Lot number
+                </label>
+                <p className={`${HINT} mb-3`}>Optional. Leave it blank for the whole sale.</p>
+                <input
+                  id="lot-number"
+                  value={lot}
+                  onChange={e => setLot(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") search() }}
+                  onFocus={e => e.currentTarget.select()}
+                  placeholder="400"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  className={`${INPUT} text-2xl`}
+                />
+              </div>
+            </div>
+            {salesError && (
+              <p className="mt-3 text-base text-amber-700 dark:text-amber-300">
+                Couldn&apos;t load the sale list ({salesError}) — type the sale code instead.
               </p>
-            : <p className="mt-4 text-base text-gray-600 dark:text-gray-300">
-                Will look up <span className="font-semibold text-gray-900 dark:text-white">{readAs(parsed)}</span>.
-              </p>
+            )}
+            <button onClick={search} disabled={!canGo} className={`${BTN_PRIMARY} mt-5 w-full sm:w-auto`}>
+              {lot.trim() ? `Find lot ${lot.trim()}` : sale.trim() ? `Show the whole of ${sale.trim().toUpperCase()}` : "Search"}
+            </button>
+          </>
+        ) : (
+          <>
+            <label htmlFor="lookup-input" className="block text-lg font-semibold text-gray-900 dark:text-white mb-1">
+              2 · Type the {active.label.toLowerCase()}
+            </label>
+            <p className={`${HINT} mb-4`}>
+              For example <span className="font-mono">{PLACEHOLDER[mode]}</span>
+              {mode === "vendor" && <> — or type part of a customer&apos;s name to search Business Central</>}
+              {mode === "code"   && <> — a barcode or a unique ID like <span className="font-mono">R009478-28</span></>}
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input
+                id="lookup-input"
+                value={value}
+                onChange={e => setValue(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") search() }}
+                onFocus={e => e.currentTarget.select()}
+                placeholder={PLACEHOLDER[mode]}
+                autoFocus
+                autoComplete="off"
+                className={INPUT}
+              />
+              <button onClick={search} disabled={!canGo} className={`${BTN_PRIMARY} whitespace-nowrap`}>
+                Search
+              </button>
+            </div>
+          </>
         )}
       </div>
 
@@ -171,21 +224,21 @@ export default function LookupClient() {
         <div className={`${CARD} p-10 text-center`}>
           <p className="text-2xl">🔎</p>
           <p className="text-lg text-gray-600 dark:text-gray-400 mt-2">
-            Pick what you have above, type it in, and the answer appears here.
+            Pick what you have above, fill it in, and the answer appears here.
           </p>
         </div>
       )}
 
-      {run && run.mode !== "lot" && (
-        <FindLotsTab controlled={{ mode: run.mode as "receipt" | "tote" | "vendor", value: run.value, nonce: run.nonce }} />
+      {run && (run.mode === "receipt" || run.mode === "tote" || run.mode === "vendor") && (
+        <FindLotsTab controlled={{ mode: run.mode, value: run.value, nonce: run.nonce }} />
       )}
 
-      {run && run.mode === "lot" && ranLot?.kind === "sale" && (
-        <BySaleTab controlled={{ sale: ranLot.sale, lot: ranLot.lot, nonce: run.nonce }} />
+      {run && run.mode === "sale" && (
+        <BySaleTab controlled={{ sale: run.sale, lot: run.lot, nonce: run.nonce }} />
       )}
 
-      {run && run.mode === "lot" && ranLot?.kind === "lot" && (
-        <WhoCataloguedTab controlled={{ value: ranLot.value, nonce: run.nonce }} />
+      {run && run.mode === "code" && (
+        <WhoCataloguedTab controlled={{ value: run.value, nonce: run.nonce }} />
       )}
     </div>
   )
