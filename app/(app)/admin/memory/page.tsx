@@ -1033,7 +1033,7 @@ The two side-by-side Hub / BC panels are **gone**. They made the journey impossi
 
 ### ⚠ "Made from tote" — trust the HUB's tote, not BC's
 
-There is a **Made from tote** column. BC's \`WarehouseItem.toteNo\` is \`EVA_CFA_TOT_CreatedFromToteNo\`, which *sounds* authoritative but is almost always empty — measured on receipt R008414 (2026-08-04): **all 44 Hub lots had \`CatalogueLot.tote\`, only 2 of 52 BC items had \`toteNo\`** (and those two agreed). So the column shows the **Hub's** tote, falls back to BC's (marked "from BC"), and flags an amber "⚠ BC says …" when they disagree. Don't flip the preference back to BC.
+There is a **Made from tote** column. It shows the HUB's tote, falls back to BC's WarehouseItem.toteNo (marked "from BC"), and flags an amber "⚠ BC says …" when they disagree. CATALOGUED BY works the same way: CatalogueLot.createdByName first, then BC's resolved name (marked "recorded in BC"). Don't flip either preference round - the Hub is where the work was actually done. ⚠ A PREVIOUS VERSION OF THIS NOTE SAID BC's toteNo IS "ALMOST ALWAYS EMPTY" - THAT WAS WRONG, generalised from one receipt (R008414: only 2 of 52 BC items had one). Measured across the WHOLE synced table on 2026-08-18: 192,858 of 216,244 items have a toteNo (89%) and 165,764 have a cataloguedBy. The BC fallback is doing real work on most rows; do not remove it as pointless.
 
 ### ⚠ The lot number is \`currentLotNo\`, NOT \`lotNo\`
 
