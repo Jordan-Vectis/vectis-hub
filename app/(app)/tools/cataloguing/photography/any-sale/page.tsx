@@ -37,7 +37,8 @@ export default async function AnySaleUploadPage() {
 
   const auctions = await prisma.catalogueAuction.findMany({
     where:   { ...auctionWhere(access), complete: false },
-    orderBy: { auctionDate: "desc" },
+    // Soonest first, matching the Photography list this page is reached from.
+    orderBy: { auctionDate: { sort: "asc", nulls: "last" } },
     select: {
       id: true, code: true, name: true,
       // Only what the uploader needs. Descriptions and key points would multiply the payload

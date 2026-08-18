@@ -14,6 +14,7 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"03db1a737ea1301a54f32cace6701a46ec98322c","author":"Jack Collings","date":"2026-08-18T09:42:01+01:00","subject":"Refresh changelog seed"},
   {"sha":"9e68536ea8c745fe670cf32516cee46d054ba6c3","author":"Jack Collings","date":"2026-08-18T09:41:53+01:00","subject":"BC API Viewer: add Valuations to the known endpoints"},
   {"sha":"7c423b541f897d527d4145f9ad3ca8d975f812e9","author":"Jack Collings","date":"2026-08-18T09:41:52+01:00","subject":"Submissions: drop the Submission Details card from the new-submission form"},
   {"sha":"34b1a41af084aee7eb0a951fccff99c240060b0d","author":"Jordan Orange","date":"2026-08-17T17:12:28+01:00","subject":"Memory: today's four features, and two rules that were learned the hard way"},

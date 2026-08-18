@@ -24,9 +24,13 @@ export default async function PhotographyPage() {
 
   const access = await getDepartmentAccess(session.user.id, dbUser?.role ?? "")
 
+  // ⚠ SOONEST FIRST (Jordan, 2026-08-17). Active sales are all in the future, so ascending
+  // puts the one being shot next at the top — the whole point of this screen. Undated sales
+  // sort to the bottom rather than jumping the queue on a null.
+  // The Completed list is reversed below: for a finished sale, most-recently-held first.
   const auctions = await prisma.catalogueAuction.findMany({
     where:   auctionWhere(access),
-    orderBy: { auctionDate: "desc" },
+    orderBy: { auctionDate: { sort: "asc", nulls: "last" } },
     select: {
       id: true, code: true, name: true, auctionDate: true, auctionType: true,
       complete: true, photography: true, addedToBC: true,
@@ -53,8 +57,16 @@ export default async function PhotographyPage() {
 
   return (
     <PhotographyAuctionList
+      // Soonest first — the next sale to photograph is at the top.
       active={rows.filter(r => !r.complete)}
-      completed={rows.filter(r => r.complete)}
+      // Completed sales are in the past, so "soonest" means nothing there: newest first,
+      // which is the one most likely to be looked back at. ⚠ Sorted, not reversed — reversing
+      // the ascending list would drag the undated ones from the bottom to the very top.
+      completed={rows.filter(r => r.complete).sort((a, b) => {
+        if (!a.auctionDate) return 1
+        if (!b.auctionDate) return -1
+        return b.auctionDate.localeCompare(a.auctionDate)   // ISO strings sort chronologically
+      })}
     />
   )
 }
