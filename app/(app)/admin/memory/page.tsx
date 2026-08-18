@@ -961,6 +961,24 @@ It was three tabs, each hiding the other two and each with its own search box - 
 - ⚠ Their search() functions now take the query as ARGUMENTS (search(q, mode)), not from state - a controlled run happens in the same tick the props arrive, when state still holds the previous search.
 - ⚠ onClick={search} had to become onClick={() => search()}: with an argument-taking search, the bare form passes the MOUSE EVENT as the query. TypeScript caught it; it would have searched for [object Object].
 
+## ⚠⚠ WHAT THIS TOOL IS FOR - READ THIS BEFORE CHANGING ANYTHING HERE
+
+Jordan, 2026-08-18, after several rounds of patching the layout without knowing the job: "we obviously get customers who ring in asking questions about there totes and lots like what auction they are in etc so the point of the admin centre is 1 hub to search to find all these answers", "Our admins are not great with computers so this all needs to be simple as possible", and the decisive one: "this customer... had some of her lots made directly in BC and some made in our system. All the admin needs to know is what auction the lots are going into, they might need to know who catalogued it and details like that. So if a lot starts in our system you can use that as what auctions its in using our own dates and sale names; if its a BC only thing that needs to be pulled in as well."
+
+SO: ONE LIST OF THE CUSTOMER'S LOTS, GROUPED BY THE AUCTION THEY ARE GOING INTO, AND THE ADMIN NEVER NEEDS TO KNOW WHICH SYSTEM A LOT CAME FROM. Anything that exposes the Hub-vs-BC split is a bug in this screen, however accurate it is.
+
+⚠⚠ BC's auctionCode IS OFTEN A HOLDING PEN, NOT AN AUCTION. Measured on production 2026-08-18: A995 "Temp F109 Bears" (570 items), A992 "Temp F110 - Dolls and bears day 2" (424), A999 "Lost/Missing/Re-Receipted & Lots with BC Issues" (130), A996 "Temp F119 Trains" (2), A998 "Unsold Mover" (2). Grouping by BC's field put "A995 - Temp F109 Bears - 1 Jan 2099" on screen as though it were a sale. For customer C223610 that produced THREE groups - 93 placeholder lots in a fake auction, 49 in F109, 1 loose - for what is really ONE sale.
+
+⚠ THE BARCODE NAMES THE SALE, AND BEATS BC's FIELD. F109034 -> F109. Measured across the 211,229 BC rows with a real auction code, the barcode prefix agrees 199,901 times (94.6%), and ALL 692 A995 placeholders carry an F109 barcode - the sale they are actually for.
+
+resolveSale() in the route therefore goes: OUR auction if we catalogued it -> else the sale the barcode names PROVIDED WE HOLD THAT SALE (self-validating; a stray prefix cannot invent one) -> else BC's code ONLY if it is not a holding pen -> else "Not in a sale yet". The name and date always come from OUR CatalogueAuction record once the code is known. Result for C223610: 142 lots under "F109 Dolls & Bears - Day 1", plus the one genuinely unallocated.
+
+⚠ A999 is the exception that DOES matter - it is BC's problem pile, so needsAttention marks those rows and their sale block amber. Don't lump it in with the Temps.
+
+⚠ THE ROW SHOWS THE ANSWER, NOT THE PLUMBING. Columns are Lot / Item / Tote / Catalogued by / Where it is up to. The old "1 - In the Hub" / "2 - In Business Central" pair, the "In BC" / "Never catalogued here" cells and the "17 in both / 32 BC only" chips are GONE - they were internal state dressed up as an answer. The lot number leads, because that is what a customer rings up asking for.
+
+⚠ formatSaleDate now blanks dates more than 5 YEARS IN THE FUTURE as well as pre-1990 ones. BC uses 0001-01-01 for "no date" on real rows and 2099-01-01 on the holding pens, and the latter was printing as "1 Jan 2099".
+
 ## ⚠ THE RESULTS LAYOUT: TOTES FIRST, THEN THE SALES (2026-08-18)
 
 Jordan: "For starters remove the how a lot gets here section. Then in its place we should have a totes section... So based off whatever you search it smart matches to find everything a customer may have. The tote table needs to just have the tote number the date it was created the main and sub category and if it had been ticked as catalogued. Then underneath that a table of all the auctions with a expandable list that shows all the lots and details we have now." He also had the three stat tiles removed (in both / not yet in BC / BC only).

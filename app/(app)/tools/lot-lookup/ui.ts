@@ -66,7 +66,12 @@ export function formatWhen(iso: string): string {
 export function formatSaleDate(value: string): string {
   if (!value) return ""
   const d = new Date(value)
-  if (isNaN(d.getTime()) || d.getFullYear() < 1990) return ""
+  if (isNaN(d.getTime())) return ""
+  // ⚠ BC uses 0001-01-01 for "no date" and, on its holding-pen sales, 2099-01-01. Both were
+  // reaching the screen — "1 Jan 2099" printed as though a customer's lots were selling in 73
+  // years. Anything absurd in EITHER direction is treated as no date at all.
+  const year = d.getFullYear()
+  if (year < 1990 || year > new Date().getFullYear() + 5) return ""
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/London" })
 }
 

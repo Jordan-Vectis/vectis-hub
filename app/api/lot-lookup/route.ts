@@ -34,6 +34,24 @@ export async function GET(req: NextRequest) {
     if (!TYPES.includes(type)) return NextResponse.json({ error: "Invalid search type" }, { status: 400 })
 
     const ci = (value: string) => ({ equals: value, mode: "insensitive" as const })
+
+    // ⚠⚠ BC's auctionCode is NOT always an auction. Measured on production 2026-08-18, the A9xx
+    // codes are holding pens: A995 "Temp F109 Bears" (570 items), A992 "Temp F110 - Dolls and
+    // bears day 2" (424), A999 "Lost/Missing/Re-Receipted & Lots with BC Issues" (130), A996
+    // "Temp F119 Trains", A998 "Unsold Mover". Grouping by them put "A995 · 1 Jan 2099" on screen
+    // as though it were a sale, which means nothing to an admin with a customer on the phone.
+    const isHoldingPen = (code: string) => /^A9\d\d$/i.test((code ?? "").trim())
+    // A999 is the one that MATTERS — it is BC's problem pile, not a waiting room.
+    const isProblemPen = (code: string) => (code ?? "").trim().toUpperCase() === "A999"
+
+    // ⚠ The barcode carries the sale: F109034 → F109. Measured across the 211,229 BC rows that
+    // have a real auction code, the barcode prefix agrees with it 199,901 times (94.6%) — and
+    // ALL 692 A995 placeholders carry an F109 barcode, which is the sale they are really for.
+    // So the barcode beats BC's own field whenever that field is a holding pen.
+    const saleFromBarcode = (barcode: string | null | undefined) => {
+      const m = (barcode ?? "").trim().match(/^([A-Za-z]\d{3})/)
+      return m ? m[1].toUpperCase() : ""
+    }
     // BC sometimes stores an unresolved auction name as the literal "null" — treat as blank.
     const cleanName = (n: string | null | undefined) => (n && n !== "null" ? n : "")
 
@@ -169,7 +187,45 @@ export async function GET(req: NextRequest) {
       bcByUniqueId.set(upper(w.uniqueId), w)
     }
 
-    // ── One row per physical item, both systems on it ────────────────────────
+    // ── Which sale is each lot actually going into? ──────────────────────────
+    // Our auction if we catalogued it; otherwise the sale its barcode names, PROVIDED we hold
+    // that sale (so a stray prefix can't invent one); otherwise BC's code if it isn't a holding
+    // pen; otherwise nothing, and it shows as not allocated yet.
+    const codeCandidates = new Set<string>()
+    for (const l of hubLots) { const c2 = saleFromBarcode(l.barcode); if (c2) codeCandidates.add(c2) }
+    for (const w of bcPool.values()) { const c2 = saleFromBarcode(w.barcode); if (c2) codeCandidates.add(c2) }
+    const knownAuctions = codeCandidates.size
+      ? await prisma.catalogueAuction.findMany({
+          where:  { code: { in: [...codeCandidates] } },
+          select: { code: true, name: true, auctionDate: true },
+        })
+      : []
+    const auctionByCode = new Map(knownAuctions.map(a => [a.code.toUpperCase(), a]))
+
+    type Sale = { code: string; name: string; date: string }
+    function resolveSale(
+      hubAuction: { code: string; name: string | null; auctionDate: Date | null } | null | undefined,
+      barcode: string | null | undefined,
+      bc: { auctionCode: string | null; auctionName: string | null; auctionDate: string | null } | null,
+    ): Sale {
+      // 1 · Ours — always wins, and always with OUR name and date.
+      if (hubAuction?.code) {
+        return { code: hubAuction.code, name: cleanName(hubAuction.name), date: hubAuction.auctionDate?.toISOString() ?? "" }
+      }
+      // 2 · The sale the barcode names, if we hold it — this is what rescues the placeholders.
+      const fromBarcode = auctionByCode.get(saleFromBarcode(barcode))
+      if (fromBarcode) {
+        return { code: fromBarcode.code, name: cleanName(fromBarcode.name), date: fromBarcode.auctionDate?.toISOString() ?? "" }
+      }
+      // 3 · BC's own code, but only when it is a real sale rather than a waiting room.
+      const bcCode = (bc?.auctionCode ?? "").trim()
+      if (bcCode && !isHoldingPen(bcCode)) {
+        return { code: bcCode, name: cleanName(bc?.auctionName), date: bc?.auctionDate ?? "" }
+      }
+      return { code: "", name: "", date: "" }
+    }
+
+    // ── One row per physical item ────────────────────────────────────────────
     const claimed = new Set<string>()
     const merged = hubLots.slice(0, LIMIT).map(l => {
       // Barcode first — that is the label on the item — then the unique ID.
@@ -177,52 +233,42 @@ export async function GET(req: NextRequest) {
         || (l.receiptUniqueId && bcByUniqueId.get(upper(l.receiptUniqueId)))
         || null
       if (bc) claimed.add(bc.uniqueId)
+      const sale = resolveSale(l.auction, l.barcode ?? bc?.barcode, bc)
       return {
         key: l.id,
         barcode: l.barcode ?? bc?.barcode ?? "",
         uniqueId: l.receiptUniqueId ?? bc?.uniqueId ?? "",
         title: l.title || bc?.description || "",
-        // BC's toteNo is EVA_CFA_TOT_CreatedFromToteNo — the tote the item was
-        // actually made from. The Hub's is what the cataloguer typed in.
-        bcTote: bc?.toteNo ?? "",
-        hubTote: l.tote ?? "",
-        inHub: true,
-        hubCataloguedBy: l.createdByName ?? "",
-        hubSaleCode: l.auction?.code ?? "",
-        hubSaleName: cleanName(l.auction?.name),
-        hubSaleDate: l.auction?.auctionDate?.toISOString() ?? "",
-        inBC: !!bc,
-        bcCataloguedBy: bc ? (lookupCataloguerByCode(bc.cataloguedBy)?.name ?? bc.cataloguedBy ?? "") : "",
-        bcCatalogued: bc?.catalogued === true,
-        bcSaleCode: bc?.auctionCode ?? "",
-        bcSaleName: cleanName(bc?.auctionName),
-        bcSaleDate: bc?.auctionDate ?? "",
-        bcLotNo: bc ? (bc.currentLotNo || bc.lotNo || "") : "",
-        bcLocation: bc?.location ?? "",
+        saleCode: sale.code, saleName: sale.name, saleDate: sale.date,
+        // The Hub's tote is what the cataloguer typed; BC's is the tote it was made from.
+        tote: l.tote || bc?.toteNo || "",
+        catalogued: true,   // it is in our system, so it has been catalogued
+        cataloguedBy: l.createdByName || (bc ? (lookupCataloguerByCode(bc.cataloguedBy)?.name ?? bc.cataloguedBy ?? "") : ""),
+        lotNo: bc ? (bc.currentLotNo || bc.lotNo || "") : "",
+        location: bc?.location ?? "",
+        needsAttention: isProblemPen(bc?.auctionCode ?? ""),
       }
     })
 
     // BC items nothing in the Hub claimed — in BC but never catalogued here.
     // Only ones the ORIGINAL search returned, so an unrelated barcode-match
     // can't wander into the results.
-    const bcOnly = bcItems.slice(0, LIMIT).filter(w => !claimed.has(w.uniqueId)).map(w => ({
-      key: `bc:${w.uniqueId}`,
-      barcode: w.barcode ?? "",
-      uniqueId: w.uniqueId,
-      title: w.description ?? "",
-      bcTote: w.toteNo ?? "",
-      hubTote: "",
-      inHub: false,
-      hubCataloguedBy: "", hubSaleCode: "", hubSaleName: "", hubSaleDate: "",
-      inBC: true,
-      bcCataloguedBy: lookupCataloguerByCode(w.cataloguedBy)?.name ?? w.cataloguedBy ?? "",
-      bcCatalogued: w.catalogued === true,
-      bcSaleCode: w.auctionCode ?? "",
-      bcSaleName: cleanName(w.auctionName),
-      bcSaleDate: w.auctionDate ?? "",
-      bcLotNo: w.currentLotNo || w.lotNo || "",
-      bcLocation: w.location ?? "",
-    }))
+    const bcOnly = bcItems.slice(0, LIMIT).filter(w => !claimed.has(w.uniqueId)).map(w => {
+      const sale = resolveSale(null, w.barcode, w)
+      return {
+        key: `bc:${w.uniqueId}`,
+        barcode: w.barcode ?? "",
+        uniqueId: w.uniqueId,
+        title: w.description ?? "",
+        saleCode: sale.code, saleName: sale.name, saleDate: sale.date,
+        tote: w.toteNo ?? "",
+        catalogued: w.catalogued === true,
+        cataloguedBy: lookupCataloguerByCode(w.cataloguedBy)?.name ?? w.cataloguedBy ?? "",
+        lotNo: w.currentLotNo || w.lotNo || "",
+        location: w.location ?? "",
+        needsAttention: isProblemPen(w.auctionCode ?? ""),
+      }
+    })
 
     const hubCapped = hubLots.length > LIMIT
     const bcCapped  = bcItems.length > LIMIT

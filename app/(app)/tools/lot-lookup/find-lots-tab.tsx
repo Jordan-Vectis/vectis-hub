@@ -16,10 +16,13 @@ import { useEffect, useState } from "react"
 import { CARD, INPUT, BTN_PRIMARY, HINT, formatSaleDate } from "./ui"
 
 type Row = {
-  key: string; barcode: string; uniqueId: string; title: string; bcTote: string; hubTote: string
-  inHub: boolean; hubCataloguedBy: string; hubSaleCode: string; hubSaleName: string; hubSaleDate: string
-  inBC: boolean; bcCataloguedBy: string; bcCatalogued: boolean
-  bcSaleCode: string; bcSaleName: string; bcSaleDate: string; bcLotNo: string; bcLocation: string
+  key: string; barcode: string; uniqueId: string; title: string
+  // ⚠ ONE sale per lot, already worked out server-side — ours if we catalogued it, else the sale
+  // its barcode names, else BC's if that isn't a holding pen. The admin never sees which system
+  // it came from, which is the whole point of this screen.
+  saleCode: string; saleName: string; saleDate: string
+  tote: string; catalogued: boolean; cataloguedBy: string; lotNo: string; location: string
+  needsAttention: boolean
 }
 type ToteInfo = {
   toteNo: string; location: string; receiptNo: string; vendorName: string; catalogued: boolean
@@ -43,20 +46,27 @@ const MODES: { key: Mode; label: string; blurb: string; placeholder: string }[] 
 function groupByAuction(rows: Row[]) {
   const m = new Map<string, { code: string; name: string; date: string; rows: Row[] }>()
   for (const r of rows) {
-    const code = r.hubSaleCode || r.bcSaleCode
-    const name = r.hubSaleCode ? r.hubSaleName : r.bcSaleName
-    const date = r.hubSaleCode ? r.hubSaleDate : r.bcSaleDate
-    const key  = `${code}||${name}`
-    if (!m.has(key)) m.set(key, { code, name, date, rows: [] })
+    const key = `${r.saleCode}||${r.saleName}`
+    if (!m.has(key)) m.set(key, { code: r.saleCode, name: r.saleName, date: r.saleDate, rows: [] })
     const g = m.get(key)!
-    if (!g.date && date) g.date = date   // BC leaves the date off some rows of the same sale
+    if (!g.date && r.saleDate) g.date = r.saleDate   // BC leaves the date off some rows of a sale
     g.rows.push(r)
   }
   for (const g of m.values()) {
     g.rows.sort((a, b) =>
+      (a.lotNo || "").localeCompare(b.lotNo || "", "en-GB", { numeric: true }) ||
       (a.barcode || a.uniqueId).localeCompare(b.barcode || b.uniqueId, "en-GB", { numeric: true }))
   }
-  return [...m.values()].sort((a, b) => (a.code || "~~~").localeCompare(b.code || "~~~"))
+  // Sales with a date first, soonest first — that is what the customer is ringing about.
+  // Anything not allocated to a sale sinks to the bottom.
+  return [...m.values()].sort((a, b) => {
+    if (!a.code) return 1
+    if (!b.code) return -1
+    if (a.date && b.date) return a.date.localeCompare(b.date)
+    if (a.date) return -1
+    if (b.date) return 1
+    return a.code.localeCompare(b.code)
+  })
 }
 
 // `controlled` is set by the Admin Centre page, which owns the one search bar for the whole
@@ -189,7 +199,7 @@ export default function FindLotsTab({ controlled }: { controlled?: FindControlle
             </div>
             {totes.length === 0 ? (
               <p className="px-6 py-6 text-base text-gray-500 dark:text-gray-400">
-                No totes found for this search in the Business Central data.
+                No totes found for this search.
               </p>
             ) : (
               // ⚠ Scrolls inside itself past ~10 rows. A busy customer has hundreds of totes
@@ -232,7 +242,7 @@ export default function FindLotsTab({ controlled }: { controlled?: FindControlle
               <span className="font-mono font-semibold text-gray-900 dark:text-white">{data.q}</span>
               {" · "}<span className="font-semibold text-gray-900 dark:text-white">{groups.length} sale{groups.length === 1 ? "" : "s"}</span>
               {" · "}{rows.length.toLocaleString()} item{rows.length === 1 ? "" : "s"}
-              {" · "}<span className={HINT}>Business Central as of the last warehouse sync</span>
+              {" · "}<span className={HINT}>as of the last warehouse sync</span>
             </p>
             {groups.length > 1 && (
               <button
@@ -284,22 +294,25 @@ export default function FindLotsTab({ controlled }: { controlled?: FindControlle
               <div className="text-6xl mb-4">🤷</div>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Nothing found for “{data.q}”</h2>
               <p className="text-base text-gray-600 dark:text-gray-400">
-                Neither the Hub nor Business Central has anything against that {active.label.toLowerCase()}.
+                Nothing found at all for that {active.label.toLowerCase()}.
               </p>
             </div>
           )}
 
-          {/* ── One block per auction ── */}
+          {/* ── One block per auction ──────────────────────────────────────
+              ⚠ The sale on each row is already resolved server-side. Nothing here says which
+              system a lot came from: an admin with a customer on the phone needs the auction,
+              the date and who catalogued it, not our plumbing. */}
           {groups.map(g => {
-            const when      = formatSaleDate(g.date)
-            const gBoth     = g.rows.filter(r => r.inHub && r.inBC).length
-            const gHubOnly  = g.rows.filter(r => r.inHub && !r.inBC).length
-            const gBcOnly   = g.rows.filter(r => !r.inHub && r.inBC).length
-            const key       = `${g.code}||${g.name}`
+            const when     = formatSaleDate(g.date)
+            const problems = g.rows.filter(r => r.needsAttention).length
+            const key      = `${g.code}||${g.name}`
             // One sale in the whole result opens itself — see the note on `open`.
-            const isOpen    = open[key] ?? groups.length === 1
+            const isOpen   = open[key] ?? groups.length === 1
             return (
-              <div key={key} className="rounded-2xl border-2 border-gray-200 dark:border-gray-800 overflow-hidden bg-white dark:bg-[#1C1C1E]">
+              <div key={key} className={`rounded-2xl border-2 overflow-hidden bg-white dark:bg-[#1C1C1E] ${
+                problems > 0 ? "border-amber-300 dark:border-amber-500/50" : "border-gray-200 dark:border-gray-800"
+              }`}>
                 {/* Auction header band — the whole thing is the expand/collapse control */}
                 <button
                   onClick={() => setOpen(o => ({ ...o, [key]: !isOpen }))}
@@ -316,16 +329,18 @@ export default function FindLotsTab({ controlled }: { controlled?: FindControlle
                           <span className="text-3xl font-bold font-mono text-gray-900 dark:text-white">{g.code}</span>
                           {g.name && <span className="text-xl text-gray-700 dark:text-gray-300">{g.name}</span>}
                         </>
-                      : <span className="text-2xl font-bold text-gray-500 dark:text-gray-400">Not in an auction yet</span>}
+                      : <span className="text-2xl font-bold text-gray-500 dark:text-gray-400">Not in a sale yet</span>}
                   </div>
                   <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-3 text-base">
                     <span className="text-gray-800 dark:text-gray-200 font-semibold">
-                      📅 {when || "No auction date set"}
+                      📅 {when || (g.code ? "No date set yet" : "Waiting to be put in a sale")}
                     </span>
-                    <span className="text-gray-900 dark:text-white font-bold">{g.rows.length} item{g.rows.length === 1 ? "" : "s"}</span>
-                    {gBoth    > 0 && <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{gBoth} in both</span>}
-                    {gHubOnly > 0 && <span className="text-amber-600 dark:text-amber-400 font-semibold">{gHubOnly} not in BC yet</span>}
-                    {gBcOnly  > 0 && <span className="text-orange-600 dark:text-orange-400 font-semibold">{gBcOnly} BC only</span>}
+                    <span className="text-gray-900 dark:text-white font-bold">{g.rows.length} lot{g.rows.length === 1 ? "" : "s"}</span>
+                    {problems > 0 && (
+                      <span className="text-amber-600 dark:text-amber-400 font-semibold">
+                        ⚠ {problems} need{problems === 1 ? "s" : ""} looking at
+                      </span>
+                    )}
                     <span className="ml-auto text-indigo-600 dark:text-indigo-400 font-semibold">
                       {isOpen ? "Hide the lots" : `Show the ${g.rows.length} lot${g.rows.length === 1 ? "" : "s"}`}
                     </span>
@@ -336,84 +351,47 @@ export default function FindLotsTab({ controlled }: { controlled?: FindControlle
                   <table className="w-full text-base">
                     <thead className="bg-gray-50/60 dark:bg-gray-900/40 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
                       <tr>
+                        <th className="text-left px-6 py-3 font-semibold">Lot</th>
                         <th className="text-left px-6 py-3 font-semibold">Item</th>
-                        <th className="text-left px-6 py-3 font-semibold">Made from tote</th>
+                        <th className="text-left px-6 py-3 font-semibold">Tote</th>
                         <th className="text-left px-6 py-3 font-semibold">Catalogued by</th>
-                        <th className="text-left px-6 py-3 font-semibold">1 · In the Hub</th>
-                        <th className="text-left px-6 py-3 font-semibold">2 · In Business Central</th>
+                        <th className="text-left px-6 py-3 font-semibold">Where it is up to</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800/60">
                       {g.rows.map(r => (
                         <tr key={r.key} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 align-top">
+                          {/* The lot number is what a customer actually asks for. */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {r.lotNo && r.lotNo !== "0"
+                              ? <span className="text-2xl font-bold font-mono text-gray-900 dark:text-white">{r.lotNo}</span>
+                              : <span className="text-gray-400 dark:text-gray-600">Not numbered yet</span>}
+                          </td>
                           <td className="px-6 py-4">
                             <p className="font-mono font-semibold text-gray-900 dark:text-white">{r.barcode || r.uniqueId || "—"}</p>
-                            {r.barcode && r.uniqueId && (
-                              <p className="font-mono text-sm text-gray-500 dark:text-gray-500">{r.uniqueId}</p>
-                            )}
-                            <p className="text-gray-700 dark:text-gray-300 max-w-lg mt-0.5">{r.title || "No description"}</p>
+                            <p className="text-gray-700 dark:text-gray-300 max-w-lg mt-0.5">{r.title || "No description yet"}</p>
                           </td>
-                          {/* ⚠ The HUB's tote is the reliable one — measured on
-                              receipt R008414: all 44 Hub lots had it, only 2 of
-                              52 BC items did (and they agreed). So prefer the
-                              Hub's, fall back to BC's, flag a disagreement. */}
                           <td className="px-6 py-4 whitespace-nowrap">
-                            {r.hubTote || r.bcTote
-                              ? <>
-                                  <span className="font-mono font-semibold text-cyan-700 dark:text-cyan-300">
-                                    {r.hubTote || r.bcTote}
-                                  </span>
-                                  {!r.hubTote && r.bcTote && (
-                                    <span className="block text-sm text-gray-500">from BC</span>
-                                  )}
-                                  {r.hubTote && r.bcTote && r.hubTote.toUpperCase() !== r.bcTote.toUpperCase() && (
-                                    <span className="block text-sm text-amber-600 dark:text-amber-400 font-semibold">
-                                      ⚠ BC says {r.bcTote}
-                                    </span>
-                                  )}
-                                </>
+                            {r.tote
+                              ? <span className="font-mono font-semibold text-cyan-700 dark:text-cyan-300">{r.tote}</span>
                               : <span className="text-gray-400 dark:text-gray-600">Not recorded</span>}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            {r.hubCataloguedBy
-                              ? <span className="font-medium text-gray-900 dark:text-white">{r.hubCataloguedBy}</span>
-                              : r.bcCataloguedBy
-                                ? <>
-                                    <span className="font-medium text-gray-900 dark:text-white">{r.bcCataloguedBy}</span>
-                                    <span className="block text-sm text-gray-500">recorded in BC</span>
-                                  </>
-                                : <span className="text-gray-400 dark:text-gray-600">Not recorded</span>}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {r.inHub
-                              ? <span className="text-emerald-600 dark:text-emerald-400 font-semibold">✓ Catalogued</span>
-                              : <span className="text-orange-600 dark:text-orange-400 font-semibold">✗ Never catalogued here</span>}
+                            {r.cataloguedBy
+                              ? <span className="font-medium text-gray-900 dark:text-white">{r.cataloguedBy}</span>
+                              : <span className="text-gray-400 dark:text-gray-600">Not recorded</span>}
                           </td>
                           <td className="px-6 py-4">
-                            {r.inBC ? (
-                              <>
-                                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">✓ In BC</span>
-                                {/* Spelled out — a bare "166 · 5F3" means nothing to an admin. */}
-                                <span className="block text-sm text-gray-600 dark:text-gray-400 mt-1">
-                                  <span className="text-gray-500 dark:text-gray-500">Lot number:</span>{" "}
-                                  {r.bcLotNo && r.bcLotNo !== "0"
-                                    ? <span className="font-mono font-semibold text-gray-800 dark:text-gray-200">{r.bcLotNo}</span>
-                                    : "not numbered yet"}
-                                </span>
-                                <span className="block text-sm text-gray-600 dark:text-gray-400">
-                                  <span className="text-gray-500 dark:text-gray-500">Location:</span>{" "}
-                                  {r.bcLocation
-                                    ? <span className="font-mono font-semibold text-gray-800 dark:text-gray-200">{r.bcLocation}</span>
-                                    : "not recorded"}
-                                </span>
-                                {r.bcSaleCode && g.code && r.bcSaleCode !== g.code && (
-                                  <span className="block text-sm text-amber-600 dark:text-amber-400 font-semibold mt-0.5">
-                                    ⚠ BC has it in {r.bcSaleCode}
-                                  </span>
-                                )}
-                              </>
-                            ) : (
-                              <span className="text-amber-600 dark:text-amber-400 font-semibold">Not pushed across yet</span>
+                            {r.needsAttention
+                              ? <span className="text-amber-600 dark:text-amber-400 font-semibold">⚠ Needs looking at</span>
+                              : r.catalogued
+                                ? <span className="text-emerald-600 dark:text-emerald-400 font-semibold">✓ Catalogued</span>
+                                : <span className="text-amber-600 dark:text-amber-400 font-semibold">Waiting to be catalogued</span>}
+                            {r.location && (
+                              <span className="block text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                <span className="text-gray-500 dark:text-gray-500">Where:</span>{" "}
+                                <span className="font-mono font-semibold text-gray-800 dark:text-gray-200">{r.location}</span>
+                              </span>
                             )}
                           </td>
                         </tr>
