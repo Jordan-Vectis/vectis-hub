@@ -14,6 +14,8 @@
 export type SeedCommit = { sha: string; author: string; date: string; subject: string }
 
 export const CHANGELOG_SEED: SeedCommit[] = [
+  {"sha":"1d967b7075c67cc0974ff2ed123bd2273018064b","author":"Jack Collings","date":"2026-08-19T13:04:01+01:00","subject":"Saved Flagged Lots: the real key-point analysis, and a photo viewer you can zoom"},
+  {"sha":"25a8ccadd696bd3be31f8d71a422a157ae1febce","author":"Jack Collings","date":"2026-08-19T12:55:19+01:00","subject":"Refresh changelog seed"},
   {"sha":"4f6fbb28534b9db64bba2ab443f6d5d9e15bbc7e","author":"Jack Collings","date":"2026-08-19T12:55:17+01:00","subject":"Make Saved Flagged Lots correct at production scale"},
   {"sha":"8900a179c314db6236315db38172a387ddb27cdd","author":"Jack Collings","date":"2026-08-19T12:46:08+01:00","subject":"Refresh changelog seed"},
   {"sha":"b55b9ead7c64ad9267bb0a610f5fce66799a203e","author":"Jack Collings","date":"2026-08-19T12:46:06+01:00","subject":"Saved Flagged Lots — freeze the Review tab's flags before an AI run overwrites them"},
