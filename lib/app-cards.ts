@@ -283,6 +283,22 @@ export const APP_CARD_DEFS: AppCardDef[] = [
     allUsers:           true,
   },
   {
+    key:                "TRAINING",
+    href:               "/tools/training",
+    defaultLabel:       "Training",
+    defaultDescription: "Learn any panel of the Hub — a deck to read or present, then practice tasks set on real records that mark themselves.",
+    icon:               "🎓",
+    border:             "border-purple-500",
+    iconBg:             "text-purple-400",
+    btnBg:              "bg-purple-600 hover:bg-purple-500",
+    glow:               "hover:shadow-purple-900/40",
+    group:              "IT_ADMIN",
+    // Deliberately allUsers and no appKey. Training somebody on a tool is how they end up
+    // being given it — gating the training behind the tool's own permission is backwards.
+    // Writing a course is still admin-only, checked in lib/actions/training.ts.
+    allUsers:           true,
+  },
+  {
     key:                "IT_HELP",
     href:               "/tools/it-help",
     defaultLabel:       "IT Help",

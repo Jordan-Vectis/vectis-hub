@@ -2246,3 +2246,101 @@ model InductionSignature {
   @@index([personName])
   @@index([signedAt])
 }
+
+// ─── IT & Admin → Training ───────────────────────────────────────────────────
+// A course per panel of the Hub. Same reasoning as the Induction deck: the content lives
+// in the DB and is editable in the app, so a lesson can be corrected the day the panel it
+// describes changes. A screenshot-laden document in a shared folder is wrong within a month
+// and nobody ever finds out.
+model TrainingModule {
+  id        String   @id @default(cuid())
+  // Matches the Hub card key where there is one (ADMIN_CENTRE, CATALOGUING…), so a module
+  // can be found again after a rename and the seed can never duplicate one.
+  key       String   @unique
+  title     String
+  icon      String   @default("📘")
+  blurb     String?  @db.Text
+  href      String? // the panel this teaches — drives "Open it" and the practice pane
+  // The AppKey that gates the panel itself. Training is readable by everyone; this is only
+  // used to tell someone they cannot open the tool they are being taught.
+  appKey    String?
+  accent    String   @default("indigo")
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  slides    TrainingSlide[]
+  exercises TrainingExercise[]
+
+  @@index([sortOrder])
+}
+
+// One slide of a module's deck. Same shape as InductionSlide on purpose — the presenter and
+// the body parser are shared — plus `tryHref`, which is the thing an induction slide never
+// needs: a lesson about a screen should be able to open that screen.
+model TrainingSlide {
+  id        String   @id @default(cuid())
+  moduleId  String
+  title     String
+  subtitle  String?
+  body      String?  @db.Text // blank line = new paragraph, a "- " line = bullet
+  imageKey  String? // R2 key, training/slides/…
+  videoUrl  String?
+  layout    String   @default("CONTENT") // TITLE | CONTENT | CARDS | STATEMENT
+  graphic   String   @default("NONE")
+  tryHref   String?
+  tryLabel  String?
+  notes     String?  @db.Text // presenter notes — editor only, never on the big screen
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  module TrainingModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@index([moduleId, sortOrder])
+}
+
+// A "now you do it" task. ⚠ `params.mode = "PICK"` is the important one: the server chooses a
+// real, currently-existing lot/sale when the exercise is served and derives the right answer
+// from the live data. An exercise with a barcode typed into it stops working the moment that
+// lot is deleted or the sale is archived — which is exactly how training material rots.
+model TrainingExercise {
+  id        String   @id @default(cuid())
+  moduleId  String
+  title     String
+  brief     String   @db.Text // supports {{q}} — replaced with whatever was picked
+  panel     String? // which tab to open beside it (Admin Centre: find | who | sale)
+  kind      String   @default("FREE_TEXT")
+  params    Json?
+  expected  String? // FREE_TEXT / CHOICE only — everything else is derived live
+  hint      String?  @db.Text
+  explain   String?  @db.Text // shown once answered — why the answer is what it is
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  module TrainingModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@index([moduleId, sortOrder])
+}
+
+// Who has been through what. No foreign key to TrainingModule's rows being edited matters
+// here — the record is "this person passed this module", and passedIds is a plain array so a
+// deleted exercise simply stops counting rather than breaking the row.
+model TrainingProgress {
+  userId      String
+  moduleId    String
+  userName    String    @default("")
+  slidesSeen  Int       @default(0)
+  deckDoneAt  DateTime?
+  passedIds   String[]  @default([])
+  attempts    Int       @default(0)
+  lastAt      DateTime  @default(now())
+  completedAt DateTime?
+
+  @@id([userId, moduleId])
+  @@index([moduleId])
+}
